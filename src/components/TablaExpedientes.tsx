@@ -1,0 +1,133 @@
+"use client";
+
+import Link from "next/link";
+import { useExpedientes } from "@/context/expedientes-context";
+import { ETAPAS } from "@/lib/etapas";
+import type { EtapaId } from "@/lib/types";
+import { formatoFecha, formatoPesos } from "@/lib/formato";
+
+/**
+ * Vista de LISTA de expedientes (tipo HubSpot).
+ * Tabla con las columnas clave del traspaso y la etapa editable en línea.
+ * Responsive: en móvil se desplaza horizontalmente.
+ */
+export function TablaExpedientes() {
+  const { expedientes, moverEtapa, cargado, error } = useExpedientes();
+
+  if (error) {
+    return (
+      <p className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
+        {error}
+      </p>
+    );
+  }
+
+  if (!cargado) {
+    return (
+      <p className="px-1 py-8 text-sm text-carbon/50">Cargando expedientes…</p>
+    );
+  }
+
+  if (expedientes.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-carbon/15 p-8 text-center text-sm text-carbon/40">
+        Aún no hay expedientes. Crea el primero con “+ Nuevo expediente”.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
+      <table className="w-full min-w-[820px] border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-carbon/10 bg-crema/60 text-left">
+            <Th>Expediente</Th>
+            <Th>Fraccionamiento</Th>
+            <Th>Teléfono</Th>
+            <Th>Etapa</Th>
+            <Th alineado="derecha">Valor estimado</Th>
+            <Th alineado="derecha">Saldo deuda</Th>
+            <Th>Último mov.</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {expedientes.map((exp) => (
+            <tr
+              key={exp.id}
+              className="border-b border-carbon/5 transition hover:bg-crema/40"
+            >
+              {/* Expediente: cliente + folio */}
+              <td className="px-3 py-2.5">
+                <Link
+                  href={`/expediente/${exp.id}`}
+                  className="font-titular font-medium text-verde-profundo hover:text-sauce"
+                >
+                  {exp.cliente}
+                </Link>
+                <span className="ml-2 font-mono text-[10px] text-carbon/40">
+                  {exp.id}
+                </span>
+              </td>
+
+              <td className="px-3 py-2.5 text-carbon/70">
+                {exp.fraccionamiento}
+              </td>
+
+              <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
+                {exp.telefono || "—"}
+              </td>
+
+              {/* Etapa editable en línea */}
+              <td className="px-3 py-2.5">
+                <select
+                  value={exp.etapa}
+                  onChange={(e) =>
+                    moverEtapa(exp.id, e.target.value as EtapaId)
+                  }
+                  className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce focus:ring-2 focus:ring-sauce/30"
+                  aria-label={`Cambiar etapa de ${exp.cliente}`}
+                >
+                  {ETAPAS.map((etapa) => (
+                    <option key={etapa.id} value={etapa.id}>
+                      {etapa.nombre}
+                    </option>
+                  ))}
+                </select>
+              </td>
+
+              <td className="px-3 py-2.5 text-right font-mono text-sauce">
+                {formatoPesos(exp.valorEstimado)}
+              </td>
+
+              <td className="px-3 py-2.5 text-right font-mono text-carbon/70">
+                {formatoPesos(exp.saldoDeuda)}
+              </td>
+
+              <td className="px-3 py-2.5 text-xs text-carbon/50">
+                {formatoFecha(exp.ultimoMovimiento)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Th({
+  children,
+  alineado = "izquierda",
+}: {
+  children: React.ReactNode;
+  alineado?: "izquierda" | "derecha";
+}) {
+  return (
+    <th
+      className={`px-3 py-2.5 text-[10px] font-medium uppercase tracking-wide text-carbon/50 ${
+        alineado === "derecha" ? "text-right" : "text-left"
+      }`}
+    >
+      {children}
+    </th>
+  );
+}

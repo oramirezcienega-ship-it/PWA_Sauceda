@@ -1,5 +1,5 @@
 import { Encabezado } from "@/components/Encabezado";
-import { TableroExpedientes } from "@/components/TableroExpedientes";
+import { VistaExpedientes } from "@/components/VistaExpedientes";
 import { AccionesTablero } from "@/components/AccionesTablero";
 
 /**
@@ -24,7 +24,7 @@ export default function PaginaTablero() {
           <AccionesTablero />
         </div>
 
-        <TableroExpedientes />
+        <VistaExpedientes />
       </div>
     </main>
   );
