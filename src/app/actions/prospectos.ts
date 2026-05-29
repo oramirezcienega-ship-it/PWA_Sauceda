@@ -10,6 +10,7 @@ import {
   type FilaProspecto,
 } from "@/lib/supabase/mapeo";
 import { ORIGENES } from "@/lib/origenes";
+import { registrarActividad } from "@/lib/actividades";
 import type {
   DatosProspecto,
   Expediente,
@@ -90,6 +91,11 @@ export async function crearProspecto(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+  await registrarActividad(sb, {
+    prospectoId: id,
+    tipo: "creacion",
+    titulo: "Prospecto creado",
+  });
   return aProspecto(data as FilaProspecto);
 }
 

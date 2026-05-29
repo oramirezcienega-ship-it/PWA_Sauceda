@@ -3,6 +3,12 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.010 — Zona de Actividades (bitácora) — 29/05/26
+- Timeline de actividades en el detalle del expediente y del prospecto:
+  creación, cambios de etapa, mensajes, formularios enviados/respondidos.
+- Registro manual de actividades (notas, llamadas, correos, reuniones).
+- Migración 0008 crea la tabla de actividades.
+
 ## 1.009 — Módulo de Mensajes — 29/05/26
 - Panel de Mensajes: plantillas reutilizables (título + texto) con parámetros
   del cliente ({nombre}, etc.).

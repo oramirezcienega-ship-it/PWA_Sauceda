@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { registrarActividad } from "@/lib/actividades";
 import type { DatosMensaje, Mensaje, MensajeEnviado } from "@/lib/types";
 
 /**
@@ -120,6 +121,12 @@ export async function enviarMensaje(
     .from("mensajes_enviados")
     .insert({ expediente_id: expedienteId, titulo, texto });
   if (error) throw new Error(error.message);
+  await registrarActividad(sb, {
+    expedienteId,
+    tipo: "mensaje",
+    titulo: `Mensaje enviado: ${titulo}`,
+    detalle: texto,
+  });
 }
 
 export async function listarMensajesDeExpediente(

@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { registrarActividad } from "@/lib/actividades";
 import type {
   DatosFormulario,
   EnvioConFormulario,
@@ -160,6 +161,11 @@ export async function enviarFormulario(
     expediente_id: expedienteId,
   });
   if (error) return { ok: false, mensaje: error.message };
+  await registrarActividad(sb, {
+    expedienteId,
+    tipo: "formulario",
+    titulo: "Formulario enviado al cliente",
+  });
   return { ok: true };
 }
 
@@ -287,4 +293,10 @@ export async function responderFormulario(
     })
     .eq("id", envioId);
   if (error) throw new Error(error.message);
+
+  await registrarActividad(sb, {
+    expedienteId: (envio as { expediente_id: string }).expediente_id,
+    tipo: "formulario",
+    titulo: "El cliente respondió un formulario",
+  });
 }

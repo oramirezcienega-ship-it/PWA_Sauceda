@@ -17,3 +17,14 @@ export function formatoFecha(iso: string): string {
     year: "numeric",
   }).format(new Date(iso));
 }
+
+/** Formatea fecha y hora. Ej: 28 may 2026, 14:35 */
+export function formatoFechaHora(iso: string): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}

@@ -8,6 +8,7 @@ import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { FormulariosExpediente } from "./FormulariosExpediente";
 import { MensajesExpediente } from "./MensajesExpediente";
+import { Actividades } from "./Actividades";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
 /**
@@ -255,6 +256,9 @@ export function DetalleExpediente({ id }: { id: string }) {
         telefono={expediente.telefono}
         token={expediente.token}
       />
+
+      {/* Bitácora de actividades */}
+      <Actividades expedienteId={expediente.id} />
 
       {/* Situación y notas */}
       <div className="mt-4 space-y-4">

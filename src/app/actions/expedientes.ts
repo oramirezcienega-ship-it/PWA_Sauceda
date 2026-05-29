@@ -3,7 +3,8 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
-import { ETAPAS } from "@/lib/etapas";
+import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
+import { registrarActividad } from "@/lib/actividades";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
@@ -99,6 +100,12 @@ export async function crearExpediente(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+  await registrarActividad(sb, {
+    expedienteId: id,
+    prospectoId: datos.prospectoId,
+    tipo: "creacion",
+    titulo: "Expediente creado",
+  });
   return aExpediente(data as FilaExpediente);
 }
 
@@ -142,6 +149,11 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     .update({ etapa, ultimo_movimiento: hoyISO() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  await registrarActividad(sb, {
+    expedienteId: id,
+    tipo: "etapa",
+    titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
+  });
 }
 
 /** Elimina un expediente. */

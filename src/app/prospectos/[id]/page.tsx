@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Encabezado } from "@/components/Encabezado";
 import { EliminarProspecto } from "@/components/EliminarProspecto";
+import { Actividades } from "@/components/Actividades";
 import { EtapaBadge } from "@/components/EtapaBadge";
 import { obtenerProspecto } from "@/app/actions/prospectos";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
@@ -132,6 +133,9 @@ export default async function PaginaProspecto({
             </Link>
           ))}
         </div>
+
+        {/* Bitácora de actividades del prospecto */}
+        <Actividades prospectoId={prospecto.id} />
       </div>
     </main>
   );

@@ -182,3 +182,28 @@ export interface MensajeEnviado {
   titulo: string;
   texto: string;
 }
+
+// ------------------------------------------------------------
+// MÓDULO ACTIVIDADES (bitácora)
+// ------------------------------------------------------------
+
+export type TipoActividad =
+  | "nota"
+  | "llamada"
+  | "correo"
+  | "reunion"
+  | "mensaje"
+  | "formulario"
+  | "etapa"
+  | "creacion"
+  | "sistema";
+
+/** Una entrada de la bitácora de actividades. */
+export interface Actividad {
+  id: string;
+  tipo: TipoActividad;
+  titulo: string;
+  detalle: string;
+  /** Fecha/hora ISO. */
+  fecha: string;
+}
