@@ -89,6 +89,16 @@ export default async function PaginaProspecto({
           />
         </dl>
 
+        {(prospecto.campaignName ||
+          prospecto.adsetName ||
+          prospecto.adName) && (
+          <dl className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-carbon/10 bg-carbon/10 sm:grid-cols-3">
+            <Dato etiqueta="Campaign" valor={prospecto.campaignName || "—"} />
+            <Dato etiqueta="Adset" valor={prospecto.adsetName || "—"} />
+            <Dato etiqueta="Ad" valor={prospecto.adName || "—"} />
+          </dl>
+        )}
+
         {prospecto.notas && (
           <div className="mt-4 rounded-xl border border-carbon/10 bg-white p-4">
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-carbon/50">

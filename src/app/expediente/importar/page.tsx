@@ -7,8 +7,8 @@ import { ImportadorCSV } from "@/components/ImportadorCSV";
 import { importarExpedientes } from "@/app/actions/expedientes";
 
 const PLANTILLA =
-  "nombre,primer_apellido,segundo_apellido,fraccionamiento,telefono,etapa,situacion,valor_estimado,saldo_deuda,notas\n" +
-  "Juan,Pérez,López,Brisas del Campestre,477 111 2233,nuevo-lead,Quiere traspasar,950000,400000,\n";
+  "nombre,primer_apellido,segundo_apellido,fraccionamiento,telefono,etapa,situacion,valor_estimado,saldo_deuda,notas,campaign_name,adset_name,ad_name\n" +
+  "Juan,Pérez,López,Brisas del Campestre,477 111 2233,nuevo-lead,Quiere traspasar,950000,400000,,Campaña Mayo,Adset León,Anuncio 1\n";
 
 /** Importación de expedientes por CSV: /expediente/importar */
 export default function PaginaImportarExpedientes() {
@@ -46,6 +46,9 @@ export default function PaginaImportarExpedientes() {
               { clave: "valor_estimado" },
               { clave: "saldo_deuda" },
               { clave: "notas" },
+              { clave: "campaign_name" },
+              { clave: "adset_name" },
+              { clave: "ad_name" },
             ]}
             plantilla={PLANTILLA}
             onImportar={importarExpedientes}

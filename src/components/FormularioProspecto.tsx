@@ -15,6 +15,9 @@ const VACIO: DatosProspecto = {
   ciudad: "León, Gto.",
   origen: "otro",
   valorCampana: 0,
+  adName: "",
+  adsetName: "",
+  campaignName: "",
   notas: "",
 };
 
@@ -174,6 +177,38 @@ export function FormularioProspecto({
           className={`${INPUT} font-mono`}
         />
       </Campo>
+
+      <fieldset className="rounded-lg border border-carbon/10 p-3">
+        <legend className="px-1 text-xs font-medium uppercase tracking-wide text-carbon/50">
+          Atribución de campaña (Meta)
+        </legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Campo etiqueta="Campaign name">
+            <input
+              type="text"
+              value={datos.campaignName}
+              onChange={(e) => actualizar("campaignName", e.target.value)}
+              className={INPUT}
+            />
+          </Campo>
+          <Campo etiqueta="Adset name">
+            <input
+              type="text"
+              value={datos.adsetName}
+              onChange={(e) => actualizar("adsetName", e.target.value)}
+              className={INPUT}
+            />
+          </Campo>
+          <Campo etiqueta="Ad name">
+            <input
+              type="text"
+              value={datos.adName}
+              onChange={(e) => actualizar("adName", e.target.value)}
+              className={INPUT}
+            />
+          </Campo>
+        </div>
+      </fieldset>
 
       <Campo etiqueta="Notas">
         <textarea

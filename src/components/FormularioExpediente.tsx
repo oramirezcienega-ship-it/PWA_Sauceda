@@ -16,6 +16,9 @@ const VACIO: DatosExpediente = {
   valorEstimado: 0,
   saldoDeuda: 0,
   notas: "",
+  adName: "",
+  adsetName: "",
+  campaignName: "",
   prospectoId: null,
 };
 
@@ -213,6 +216,38 @@ export function FormularioExpediente({
           className={INPUT}
         />
       </Campo>
+
+      <fieldset className="rounded-lg border border-carbon/10 p-3">
+        <legend className="px-1 text-xs font-medium uppercase tracking-wide text-carbon/50">
+          Atribución de campaña (Meta)
+        </legend>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Campo etiqueta="Campaign name">
+            <input
+              type="text"
+              value={datos.campaignName}
+              onChange={(e) => actualizar("campaignName", e.target.value)}
+              className={INPUT}
+            />
+          </Campo>
+          <Campo etiqueta="Adset name">
+            <input
+              type="text"
+              value={datos.adsetName}
+              onChange={(e) => actualizar("adsetName", e.target.value)}
+              className={INPUT}
+            />
+          </Campo>
+          <Campo etiqueta="Ad name">
+            <input
+              type="text"
+              value={datos.adName}
+              onChange={(e) => actualizar("adName", e.target.value)}
+              className={INPUT}
+            />
+          </Campo>
+        </div>
+      </fieldset>
 
       <div className="flex gap-3 pt-2">
         <button

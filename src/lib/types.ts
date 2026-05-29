@@ -54,6 +54,10 @@ export interface Expediente {
   ultimoMovimiento: string;
   /** Notas internas del asesor (NO se muestran al cliente). */
   notas: string;
+  /** Atribución de campaña Meta. */
+  adName: string;
+  adsetName: string;
+  campaignName: string;
   /** Token aleatorio para el enlace privado de seguimiento del cliente. */
   token: string;
   /** Prospecto (persona) dueño del expediente. Null si aún no se enlaza. */
@@ -105,6 +109,10 @@ export interface Prospecto {
   origen: OrigenAdquisicion;
   /** Costo/valor de adquisición de la campaña, en pesos. */
   valorCampana: number;
+  /** Atribución de campaña Meta. */
+  adName: string;
+  adsetName: string;
+  campaignName: string;
   notas: string;
 }
 

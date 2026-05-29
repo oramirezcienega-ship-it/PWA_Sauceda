@@ -243,3 +243,23 @@ create index if not exists actividades_expediente_idx
 create index if not exists actividades_prospecto_idx
   on public.actividades (prospecto_id);
 
+-- ===== supabase/migrations/0009_atribucion_campana.sql =====
+-- ============================================================
+-- Campos de atribución de campaña (Meta) en prospectos y expedientes,
+-- con sincronización bidireccional desde la app.
+-- ============================================================
+
+alter table public.prospectos
+  add column if not exists ad_name text not null default '';
+alter table public.prospectos
+  add column if not exists adset_name text not null default '';
+alter table public.prospectos
+  add column if not exists campaign_name text not null default '';
+
+alter table public.expedientes
+  add column if not exists ad_name text not null default '';
+alter table public.expedientes
+  add column if not exists adset_name text not null default '';
+alter table public.expedientes
+  add column if not exists campaign_name text not null default '';
+

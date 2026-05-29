@@ -71,6 +71,9 @@ function Formulario() {
         valorEstimado: 0,
         saldoDeuda: 0,
         notas: "",
+        adName: "",
+        adsetName: "",
+        campaignName: "",
         prospectoId: prospectoInicial,
       }
     : undefined;

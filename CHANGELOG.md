@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.013 — Atribución de campaña (ad/adset/campaign) — 29/05/26
+- Campos ad_name, adset_name y campaign_name en expedientes y prospectos,
+  con sincronización bidireccional. Disponibles en los formularios, en la
+  importación CSV y visibles en la ficha del prospecto. Migración 0009.
+
 ## 1.012 — Filtros de etapa (multi) y fecha en expedientes — 29/05/26
 - Filtro de etapas con multi-selección (chips).
 - Filtro por fecha de último movimiento: Hoy, Ayer, Últimos 7 días, Este mes,

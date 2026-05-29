@@ -133,6 +133,9 @@ export async function actualizarExpediente(
         primer_apellido: datos.primerApellido,
         segundo_apellido: datos.segundoApellido,
         telefono: datos.telefono,
+        ad_name: datos.adName,
+        adset_name: datos.adsetName,
+        campaign_name: datos.campaignName,
       })
       .eq("id", datos.prospectoId);
   }
@@ -211,6 +214,9 @@ export async function importarExpedientes(
       valor_estimado: aEntero(f.valor_estimado ?? f.valor),
       saldo_deuda: aEntero(f.saldo_deuda ?? f.saldo),
       notas: (f.notas ?? "").trim(),
+      ad_name: (f.ad_name ?? "").trim(),
+      adset_name: (f.adset_name ?? "").trim(),
+      campaign_name: (f.campaign_name ?? "").trim(),
       ultimo_movimiento: hoyISO(),
     });
   });

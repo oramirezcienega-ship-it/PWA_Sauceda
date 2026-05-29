@@ -35,6 +35,9 @@ export interface FilaExpediente {
   valor_estimado: number;
   saldo_deuda: number;
   notas: string;
+  ad_name: string;
+  adset_name: string;
+  campaign_name: string;
   token: string;
   ultimo_movimiento: string;
   prospecto_id: string | null;
@@ -61,6 +64,9 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     valorEstimado: Number(fila.valor_estimado),
     saldoDeuda: Number(fila.saldo_deuda),
     notas: fila.notas,
+    adName: fila.ad_name ?? "",
+    adsetName: fila.adset_name ?? "",
+    campaignName: fila.campaign_name ?? "",
     token: fila.token,
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
@@ -81,6 +87,9 @@ export function aFila(datos: DatosExpediente) {
     valor_estimado: datos.valorEstimado,
     saldo_deuda: datos.saldoDeuda,
     notas: datos.notas,
+    ad_name: datos.adName,
+    adset_name: datos.adsetName,
+    campaign_name: datos.campaignName,
     prospecto_id: datos.prospectoId,
   };
 }
@@ -101,6 +110,9 @@ export interface FilaProspecto {
   ciudad: string;
   origen: OrigenAdquisicion;
   valor_campana: number;
+  ad_name: string;
+  adset_name: string;
+  campaign_name: string;
   notas: string;
 }
 
@@ -122,6 +134,9 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     ciudad: fila.ciudad,
     origen: fila.origen,
     valorCampana: Number(fila.valor_campana),
+    adName: fila.ad_name ?? "",
+    adsetName: fila.adset_name ?? "",
+    campaignName: fila.campaign_name ?? "",
     notas: fila.notas,
   };
 }
@@ -138,6 +153,9 @@ export function aFilaProspecto(datos: DatosProspecto) {
     ciudad: datos.ciudad,
     origen: datos.origen,
     valor_campana: datos.valorCampana,
+    ad_name: datos.adName,
+    adset_name: datos.adsetName,
+    campaign_name: datos.campaignName,
     notas: datos.notas,
   };
 }

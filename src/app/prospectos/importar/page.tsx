@@ -7,8 +7,8 @@ import { ImportadorCSV } from "@/components/ImportadorCSV";
 import { importarProspectos } from "@/app/actions/prospectos";
 
 const PLANTILLA =
-  "nombre,primer_apellido,segundo_apellido,telefono,correo,direccion,ciudad,origen,valor_campana\n" +
-  "Juan,Pérez,López,477 111 2233,juan@correo.com,Calle 1,León,facebook,350\n";
+  "nombre,primer_apellido,segundo_apellido,telefono,correo,direccion,ciudad,origen,valor_campana,campaign_name,adset_name,ad_name\n" +
+  "Juan,Pérez,López,477 111 2233,juan@correo.com,Calle 1,León,facebook,350,Campaña Mayo,Adset León,Anuncio 1\n";
 
 /** Importación de prospectos por CSV: /prospectos/importar */
 export default function PaginaImportarProspectos() {
@@ -46,6 +46,9 @@ export default function PaginaImportarProspectos() {
               { clave: "ciudad" },
               { clave: "origen" },
               { clave: "valor_campana" },
+              { clave: "campaign_name" },
+              { clave: "adset_name" },
+              { clave: "ad_name" },
             ]}
             plantilla={PLANTILLA}
             onImportar={importarProspectos}

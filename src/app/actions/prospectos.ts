@@ -123,6 +123,9 @@ export async function actualizarProspecto(
       primer_apellido: datos.primerApellido,
       segundo_apellido: datos.segundoApellido,
       telefono: datos.telefono,
+      ad_name: datos.adName,
+      adset_name: datos.adsetName,
+      campaign_name: datos.campaignName,
     })
     .eq("prospecto_id", id);
 
@@ -180,6 +183,9 @@ export async function importarProspectos(
       ciudad: (f.ciudad ?? "").trim(),
       origen: origen as OrigenAdquisicion,
       valor_campana: parseInt((f.valor_campana ?? "").replace(/[^\d]/g, ""), 10) || 0,
+      ad_name: (f.ad_name ?? "").trim(),
+      adset_name: (f.adset_name ?? "").trim(),
+      campaign_name: (f.campaign_name ?? "").trim(),
     });
   });
 
