@@ -109,7 +109,8 @@ export type TipoPregunta =
   | "numero"
   | "opcion-multiple"
   | "si-no"
-  | "fecha";
+  | "fecha"
+  | "archivo";
 
 /** Una pregunta dentro de un formulario. */
 export interface Pregunta {

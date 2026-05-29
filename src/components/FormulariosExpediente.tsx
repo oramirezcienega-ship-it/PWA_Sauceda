@@ -6,6 +6,7 @@ import {
   enviarFormulario,
   listarEnviosDeExpediente,
   listarFormularios,
+  urlArchivoFormulario,
 } from "@/app/actions/formularios";
 import type { EnvioConFormulario, Formulario } from "@/lib/types";
 
@@ -127,7 +128,24 @@ export function FormulariosExpediente({
                     <div key={p.id}>
                       <dt className="text-xs text-carbon/50">{p.etiqueta}</dt>
                       <dd className="text-carbon/80">
-                        {env.respuestas[p.id] || "—"}
+                        {!env.respuestas[p.id] ? (
+                          "—"
+                        ) : p.tipo === "archivo" ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const url = await urlArchivoFormulario(
+                                env.respuestas[p.id],
+                              );
+                              window.open(url, "_blank");
+                            }}
+                            className="text-sauce underline hover:text-verde-profundo"
+                          >
+                            Ver archivo
+                          </button>
+                        ) : (
+                          env.respuestas[p.id]
+                        )}
                       </dd>
                     </div>
                   ))}

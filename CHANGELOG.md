@@ -3,6 +3,12 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.003 — Subir PDF y fotos en los formularios — 29/05/26
+- Nuevo tipo de pregunta "Archivo (PDF/foto)".
+- El cliente puede subir archivos desde su portal (bucket privado de
+  Supabase Storage); el admin los ve con URL firmada temporal.
+- Migración 0005 crea el bucket de Storage.
+
 ## 1.002 — Sincronizar nombre, respuestas junto a campos y retirar formularios — 29/05/26
 - Al cambiar el nombre del cliente en el expediente, se actualiza también
   el nombre del prospecto enlazado.

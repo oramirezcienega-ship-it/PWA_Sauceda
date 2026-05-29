@@ -8,6 +8,7 @@ export const TIPOS_PREGUNTA: { id: TipoPregunta; nombre: string }[] = [
   { id: "opcion-multiple", nombre: "Opción múltiple" },
   { id: "si-no", nombre: "Sí / No" },
   { id: "fecha", nombre: "Fecha" },
+  { id: "archivo", nombre: "Archivo (PDF/foto)" },
 ];
 
 export const TIPO_PREGUNTA_NOMBRE: Record<TipoPregunta, string> =

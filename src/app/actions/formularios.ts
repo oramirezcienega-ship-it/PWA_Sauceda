@@ -195,6 +195,47 @@ export async function obtenerEnviosPorToken(
   return (data as FilaEnvio[]).map(aEnvioConFormulario);
 }
 
+/**
+ * Sube un archivo (PDF/foto) de un formulario al bucket privado.
+ * Validado por el token del expediente. Devuelve la ruta del archivo.
+ */
+export async function subirArchivoFormulario(
+  token: string,
+  formData: FormData,
+): Promise<string> {
+  const sb = supabaseServidor();
+
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("id")
+    .eq("token", token)
+    .maybeSingle();
+  if (!exp) throw new Error("No autorizado.");
+
+  const file = formData.get("archivo");
+  if (!(file instanceof File)) throw new Error("Archivo inválido.");
+
+  const ext = (file.name.split(".").pop() || "dat").toLowerCase();
+  const ruta = `${token}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await sb.storage
+    .from("formularios")
+    .upload(ruta, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(error.message);
+  return ruta;
+}
+
+/** Genera una URL firmada temporal para ver un archivo (solo admin). */
+export async function urlArchivoFormulario(ruta: string): Promise<string> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb.storage
+    .from("formularios")
+    .createSignedUrl(ruta, 3600);
+  if (error) throw new Error(error.message);
+  return data.signedUrl;
+}
+
 /** El cliente responde un formulario (validado por el token de su expediente). */
 export async function responderFormulario(
   token: string,

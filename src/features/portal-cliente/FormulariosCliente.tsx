@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { responderFormulario } from "@/app/actions/formularios";
+import {
+  responderFormulario,
+  subirArchivoFormulario,
+} from "@/app/actions/formularios";
 import type { EnvioConFormulario, Pregunta } from "@/lib/types";
 
 /**
@@ -96,6 +99,7 @@ function TarjetaFormulario({
         {envio.formulario.preguntas.map((p) => (
           <CampoPregunta
             key={p.id}
+            token={token}
             pregunta={p}
             valor={respuestas[p.id] ?? ""}
             onChange={(v) => set(p.id, v)}
@@ -121,10 +125,12 @@ function TarjetaFormulario({
 }
 
 function CampoPregunta({
+  token,
   pregunta,
   valor,
   onChange,
 }: {
+  token: string;
   pregunta: Pregunta;
   valor: string;
   onChange: (v: string) => void;
@@ -160,6 +166,8 @@ function CampoPregunta({
           onChange={(e) => onChange(e.target.value)}
           className={base}
         />
+      ) : pregunta.tipo === "archivo" ? (
+        <CampoArchivo token={token} valor={valor} onChange={onChange} />
       ) : pregunta.tipo === "si-no" ? (
         <select
           value={valor}
@@ -192,5 +200,54 @@ function CampoPregunta({
         />
       )}
     </label>
+  );
+}
+
+/** Campo de subida de archivo (PDF/foto) para el portal del cliente. */
+function CampoArchivo({
+  token,
+  valor,
+  onChange,
+}: {
+  token: string;
+  valor: string;
+  onChange: (v: string) => void;
+}) {
+  const [subiendo, setSubiendo] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function subir(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setSubiendo(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("archivo", archivo);
+      const ruta = await subirArchivoFormulario(token, fd);
+      onChange(ruta);
+      setNombre(archivo.name);
+    } catch {
+      setError("No se pudo subir el archivo.");
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  return (
+    <div>
+      <input
+        type="file"
+        accept="application/pdf,image/*"
+        onChange={subir}
+        className="block w-full text-sm text-carbon/70 file:mr-3 file:rounded-md file:border-0 file:bg-sauce file:px-3 file:py-2 file:text-sm file:text-crema"
+      />
+      {subiendo && <p className="mt-1 text-xs text-carbon/50">Subiendo…</p>}
+      {!subiendo && valor && (
+        <p className="mt-1 text-xs text-sauce">✓ {nombre || "Archivo subido"}</p>
+      )}
+      {error && <p className="mt-1 text-xs text-rojo">{error}</p>}
+    </div>
   );
 }
