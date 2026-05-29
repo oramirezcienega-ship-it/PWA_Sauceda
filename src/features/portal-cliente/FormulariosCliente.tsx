@@ -203,7 +203,7 @@ function CampoPregunta({
   );
 }
 
-/** Campo de subida de archivo (PDF/foto) para el portal del cliente. */
+/** Campo de subida de archivos (PDF/fotos) para el portal del cliente. */
 function CampoArchivo({
   token,
   valor,
@@ -214,38 +214,51 @@ function CampoArchivo({
   onChange: (v: string) => void;
 }) {
   const [subiendo, setSubiendo] = useState(false);
-  const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const rutas = valor ? valor.split(",").filter(Boolean) : [];
 
   async function subir(e: React.ChangeEvent<HTMLInputElement>) {
-    const archivo = e.target.files?.[0];
-    if (!archivo) return;
+    const archivos = Array.from(e.target.files ?? []);
+    if (archivos.length === 0) return;
     setSubiendo(true);
     setError(null);
     try {
-      const fd = new FormData();
-      fd.append("archivo", archivo);
-      const ruta = await subirArchivoFormulario(token, fd);
-      onChange(ruta);
-      setNombre(archivo.name);
+      const nuevas = await Promise.all(
+        archivos.map(async (archivo) => {
+          const fd = new FormData();
+          fd.append("archivo", archivo);
+          return subirArchivoFormulario(token, fd);
+        }),
+      );
+      onChange([...rutas, ...nuevas].join(","));
     } catch {
-      setError("No se pudo subir el archivo.");
+      setError("No se pudo subir alguno de los archivos.");
     } finally {
       setSubiendo(false);
+      e.target.value = ""; // permite volver a seleccionar/agregar más
     }
   }
 
   return (
     <div>
+      {/* Sin "capture": el celular ofrece Cámara, Galería o Archivos. */}
       <input
         type="file"
+        multiple
         accept="application/pdf,image/*"
         onChange={subir}
         className="block w-full text-sm text-carbon/70 file:mr-3 file:rounded-md file:border-0 file:bg-sauce file:px-3 file:py-2 file:text-sm file:text-crema"
       />
+      <p className="mt-1 text-[11px] text-carbon/50">
+        Puedes tomar foto, elegir de tu galería o subir un PDF. Se pueden
+        agregar varios.
+      </p>
       {subiendo && <p className="mt-1 text-xs text-carbon/50">Subiendo…</p>}
-      {!subiendo && valor && (
-        <p className="mt-1 text-xs text-sauce">✓ {nombre || "Archivo subido"}</p>
+      {!subiendo && rutas.length > 0 && (
+        <p className="mt-1 text-xs text-sauce">
+          ✓ {rutas.length} archivo{rutas.length === 1 ? "" : "s"} cargado
+          {rutas.length === 1 ? "" : "s"}
+        </p>
       )}
       {error && <p className="mt-1 text-xs text-rojo">{error}</p>}
     </div>

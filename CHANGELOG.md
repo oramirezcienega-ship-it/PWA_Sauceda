@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.005 — Fotos múltiples y elección cámara/galería en formularios — 29/05/26
+- El campo de archivo permite subir varios a la vez y el celular ofrece
+  cámara, galería o archivos (PDF). El admin ve cada archivo por separado.
+
 ## 1.004 — Evitar formularios duplicados — 29/05/26
 - Al enviar un formulario ya pendiente al mismo cliente, se avisa y no se
   duplica (causa de que un formulario "siguiera apareciendo" tras retirar

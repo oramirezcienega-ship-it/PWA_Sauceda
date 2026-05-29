@@ -143,18 +143,25 @@ export function FormulariosExpediente({
                         {!env.respuestas[p.id] ? (
                           "—"
                         ) : p.tipo === "archivo" ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const url = await urlArchivoFormulario(
-                                env.respuestas[p.id],
-                              );
-                              window.open(url, "_blank");
-                            }}
-                            className="text-sauce underline hover:text-verde-profundo"
-                          >
-                            Ver archivo
-                          </button>
+                          <span className="flex flex-wrap gap-2">
+                            {env.respuestas[p.id]
+                              .split(",")
+                              .filter(Boolean)
+                              .map((ruta, i) => (
+                                <button
+                                  key={ruta}
+                                  type="button"
+                                  onClick={async () => {
+                                    const url =
+                                      await urlArchivoFormulario(ruta);
+                                    window.open(url, "_blank");
+                                  }}
+                                  className="text-sauce underline hover:text-verde-profundo"
+                                >
+                                  Ver archivo {i + 1}
+                                </button>
+                              ))}
+                          </span>
                         ) : (
                           env.respuestas[p.id]
                         )}
