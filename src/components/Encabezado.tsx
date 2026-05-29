@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { CerrarSesion } from "./CerrarSesion";
 
 /**
- * Encabezado de marca SAUCEDA.
- * Logo en Fraunces (display) + tagline. Verde como color dominante del 30%.
+ * Encabezado de marca SAUCEDA (panel del admin).
+ * Logo en Fraunces (display) + tagline + cerrar sesión.
+ * Verde como color dominante del 30%.
  */
 export function Encabezado() {
   return (
@@ -16,9 +18,12 @@ export function Encabezado() {
             Bienes Raíces
           </span>
         </Link>
-        <span className="hidden font-titular text-sm italic text-crema/80 sm:block">
-          Tradición con tecnología.
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="hidden font-titular text-sm italic text-crema/80 sm:block">
+            Tradición con tecnología.
+          </span>
+          <CerrarSesion />
+        </div>
       </div>
     </header>
   );

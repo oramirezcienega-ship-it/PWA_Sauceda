@@ -25,8 +25,21 @@ Cada incremento entra a `main` mediante un Pull Request.
 2. Copia `.env.example` a `.env.local` y rellena:
    - `SUPABASE_URL` — Project Settings → API → Project URL
    - `SUPABASE_SERVICE_ROLE_KEY` — Project Settings → API → `service_role` (¡secreta!)
-3. En **Netlify**, agrega esas mismas dos variables en
-   *Site settings → Environment variables* y vuelve a desplegar.
+   - `NEXT_PUBLIC_SUPABASE_URL` — la misma Project URL (para el login)
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Project Settings → API → `anon public`
+3. En **Netlify**, agrega esas mismas variables en
+   *Site settings → Environment variables* y vuelve a desplegar (sin caché).
+
+## Acceso del admin (Supabase Auth)
+
+El panel del admin requiere iniciar sesión; el portal del cliente
+(`/seguimiento/[token]`) sigue siendo público.
+
+1. Crea tu usuario del equipo en Supabase → **Authentication → Users →
+   Add user** (correo + contraseña). No hay registro público.
+2. Opcional pero recomendado: en **Authentication → Sign In / Providers**
+   desactiva *Allow new users to sign up*.
+3. Entra en `/login` con ese correo y contraseña.
 
 > Cada módulo del BPM tiene sus propias tablas. Hoy existe el módulo de
 > **operación** (`expedientes`); los módulos futuros (captación, documentos
@@ -51,3 +64,5 @@ npm run dev     # http://localhost:3000
 - **Incremento 2** — Persistencia local (localStorage) + alta/edición/eliminación.
 - **Incremento 3** — Supabase como base de datos real + portal del cliente
   (seguimiento de solo lectura por enlace privado).
+- **Incremento 4** — Login del admin con Supabase Auth (middleware protege
+  el panel; el portal del cliente queda público).

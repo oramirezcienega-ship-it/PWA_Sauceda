@@ -1,6 +1,7 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
+import { usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
@@ -8,7 +9,16 @@ import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
  * Server actions del módulo OPERACIÓN.
  * Toda la lectura/escritura de expedientes en Supabase pasa por aquí
  * (en el servidor). El navegador nunca habla directo con la base de datos.
+ *
+ * Las acciones del admin exigen sesión (ver `requireAdmin`). La única
+ * acción pública es `obtenerPorToken` (portal del cliente).
  */
+
+/** Verifica que haya un admin autenticado; si no, corta la operación. */
+async function requireAdmin() {
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+}
 
 /** Fecha de hoy en formato ISO corto (YYYY-MM-DD). */
 function hoyISO(): string {
@@ -26,6 +36,7 @@ function siguienteId(ids: string[]): string {
 
 /** Lista todos los expedientes (panel del admin). */
 export async function listarExpedientes(): Promise<Expediente[]> {
+  await requireAdmin();
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("expedientes")
@@ -53,6 +64,7 @@ export async function obtenerPorToken(
 export async function crearExpediente(
   datos: DatosExpediente,
 ): Promise<Expediente> {
+  await requireAdmin();
   const sb = supabaseServidor();
 
   // Genera el folio correlativo a partir de los existentes.
@@ -76,6 +88,7 @@ export async function actualizarExpediente(
   id: string,
   datos: DatosExpediente,
 ): Promise<Expediente> {
+  await requireAdmin();
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("expedientes")
@@ -89,6 +102,7 @@ export async function actualizarExpediente(
 
 /** Cambia la etapa de un expediente. */
 export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
+  await requireAdmin();
   const sb = supabaseServidor();
   const { error } = await sb
     .from("expedientes")
@@ -99,6 +113,7 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
 
 /** Elimina un expediente. */
 export async function eliminarExpediente(id: string): Promise<void> {
+  await requireAdmin();
   const sb = supabaseServidor();
   const { error } = await sb.from("expedientes").delete().eq("id", id);
   if (error) throw new Error(error.message);
