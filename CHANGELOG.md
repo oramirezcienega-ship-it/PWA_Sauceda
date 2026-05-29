@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.007 — Sincronización bidireccional de campos compartidos — 29/05/26
+- Los campos que comparten expediente y prospecto (nombre y teléfono) se
+  reflejan en ambos: editar cualquiera actualiza al otro.
+
 ## 1.006 — Nombre separado y parámetros en formularios — 29/05/26
 - El nombre se separa en Nombre / Primer apellido / Segundo apellido en
   expedientes y prospectos (migración 0006 separa lo existente). Las vistas

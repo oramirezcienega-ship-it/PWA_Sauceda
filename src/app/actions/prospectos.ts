@@ -107,6 +107,19 @@ export async function actualizarProspecto(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+
+  // Sincroniza los campos compartidos (nombre + teléfono) hacia los
+  // expedientes enlazados a este prospecto.
+  await sb
+    .from("expedientes")
+    .update({
+      cliente: datos.nombre,
+      primer_apellido: datos.primerApellido,
+      segundo_apellido: datos.segundoApellido,
+      telefono: datos.telefono,
+    })
+    .eq("prospecto_id", id);
+
   return aProspecto(data as FilaProspecto);
 }
 

@@ -117,7 +117,7 @@ export async function actualizarExpediente(
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza el nombre del prospecto enlazado con el del expediente.
+  // Sincroniza los campos compartidos (nombre + teléfono) con el prospecto.
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
@@ -125,6 +125,7 @@ export async function actualizarExpediente(
         nombre: datos.cliente,
         primer_apellido: datos.primerApellido,
         segundo_apellido: datos.segundoApellido,
+        telefono: datos.telefono,
       })
       .eq("id", datos.prospectoId);
   }
