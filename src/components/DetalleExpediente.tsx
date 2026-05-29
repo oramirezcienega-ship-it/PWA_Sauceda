@@ -7,6 +7,7 @@ import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { FormulariosExpediente } from "./FormulariosExpediente";
+import { MensajesExpediente } from "./MensajesExpediente";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
 /**
@@ -247,6 +248,13 @@ export function DetalleExpediente({ id }: { id: string }) {
       {/* Formularios del cliente: enviar, retirar y ver respuestas
           (la información recopilada queda junto a los campos del expediente). */}
       <FormulariosExpediente expedienteId={expediente.id} />
+
+      {/* Mensajes al cliente */}
+      <MensajesExpediente
+        expedienteId={expediente.id}
+        telefono={expediente.telefono}
+        token={expediente.token}
+      />
 
       {/* Situación y notas */}
       <div className="mt-4 space-y-4">

@@ -1,7 +1,12 @@
-import type { EnvioConFormulario, Expediente } from "@/lib/types";
+import type {
+  EnvioConFormulario,
+  Expediente,
+  MensajeEnviado,
+} from "@/lib/types";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { formatoFecha } from "@/lib/formato";
 import { FormulariosCliente } from "./FormulariosCliente";
+import { MensajesCliente } from "./MensajesCliente";
 
 /**
  * Portal del cliente — vista de SEGUIMIENTO (solo lectura).
@@ -14,11 +19,20 @@ export function SeguimientoCliente({
   expediente,
   token,
   envios = [],
+  mensajes = [],
 }: {
   expediente: Expediente;
   token?: string;
   envios?: EnvioConFormulario[];
+  mensajes?: MensajeEnviado[];
 }) {
+  const parametros = {
+    nombre: expediente.cliente,
+    primer_apellido: expediente.primerApellido,
+    segundo_apellido: expediente.segundoApellido,
+    nombre_completo: expediente.nombreCompleto,
+    fraccionamiento: expediente.fraccionamiento,
+  };
   const etapaActual = ETAPAS_POR_ID[expediente.etapa];
   const total = ETAPAS.length;
   const completadas = etapaActual.orden + 1;
@@ -76,18 +90,15 @@ export function SeguimientoCliente({
           </p>
         </div>
 
+        {/* Mensajes del asesor */}
+        <MensajesCliente mensajes={mensajes} parametros={parametros} />
+
         {/* Formularios pendientes / respondidos */}
         {token && (
           <FormulariosCliente
             token={token}
             envios={envios}
-            parametros={{
-              nombre: expediente.cliente,
-              primer_apellido: expediente.primerApellido,
-              segundo_apellido: expediente.segundoApellido,
-              nombre_completo: expediente.nombreCompleto,
-              fraccionamiento: expediente.fraccionamiento,
-            }}
+            parametros={parametros}
           />
         )}
 

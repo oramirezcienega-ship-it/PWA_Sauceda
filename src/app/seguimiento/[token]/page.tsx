@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { obtenerPorToken } from "@/app/actions/expedientes";
 import { obtenerEnviosPorToken } from "@/app/actions/formularios";
+import { obtenerMensajesPorToken } from "@/app/actions/mensajes";
 import { SeguimientoCliente } from "@/features/portal-cliente/SeguimientoCliente";
 
 // Siempre dinámica: depende del token y consulta la base de datos en cada visita.
@@ -19,6 +20,9 @@ export default async function PaginaSeguimiento({
   // Si la tabla de formularios aún no existe, no rompemos el portal.
   const envios = expediente
     ? await obtenerEnviosPorToken(params.token).catch(() => [])
+    : [];
+  const mensajes = expediente
+    ? await obtenerMensajesPorToken(params.token).catch(() => [])
     : [];
 
   if (!expediente) {
@@ -50,6 +54,7 @@ export default async function PaginaSeguimiento({
       expediente={expediente}
       token={params.token}
       envios={envios}
+      mensajes={mensajes}
     />
   );
 }

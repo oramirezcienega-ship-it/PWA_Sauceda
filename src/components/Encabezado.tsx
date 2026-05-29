@@ -42,6 +42,12 @@ export function Encabezado() {
             >
               Formularios
             </Link>
+            <Link
+              href="/mensajes"
+              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
+            >
+              Mensajes
+            </Link>
           </nav>
         </div>
         <CerrarSesion />

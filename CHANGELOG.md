@@ -3,6 +3,13 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.009 — Módulo de Mensajes — 29/05/26
+- Panel de Mensajes: plantillas reutilizables (título + texto) con parámetros
+  del cliente ({nombre}, etc.).
+- En el expediente: enviar mensajes (desde plantilla o personalizados) que
+  aparecen en el portal del cliente; retirar; y notificar por WhatsApp.
+- Migración 0007 crea las tablas de mensajes.
+
 ## 1.008 — Logo de la marca — 29/05/26
 - Logotipo SVG (public/logo.svg) en el encabezado, el login y el portal del
   cliente. Reemplazable por el logo oficial conservando el nombre del archivo.

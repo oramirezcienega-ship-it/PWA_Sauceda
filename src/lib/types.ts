@@ -160,3 +160,25 @@ export interface EnvioFormulario {
 export interface EnvioConFormulario extends EnvioFormulario {
   formulario: Formulario;
 }
+
+// ------------------------------------------------------------
+// MÓDULO MENSAJES
+// ------------------------------------------------------------
+
+/** Plantilla de mensaje reutilizable. */
+export interface Mensaje {
+  id: string;
+  titulo: string;
+  texto: string;
+}
+
+/** Datos editables de un mensaje (el `id` lo administra la app). */
+export type DatosMensaje = Omit<Mensaje, "id">;
+
+/** Mensaje enviado a un expediente (visible en el portal del cliente). */
+export interface MensajeEnviado {
+  id: string;
+  expedienteId: string;
+  titulo: string;
+  texto: string;
+}
