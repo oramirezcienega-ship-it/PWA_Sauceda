@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.018 — Versión visible en el encabezado — 29/05/26
+- Se muestra la versión (ej. v1.018) en el encabezado del panel, para saber
+  qué versión se está usando.
+
 ## 1.017 — Detalle del expediente en 2 columnas — 29/05/26
 - Izquierda: avance + mover de etapa, prospecto, portal del cliente
   (copiar/WhatsApp), formularios del cliente y mensajes al cliente.

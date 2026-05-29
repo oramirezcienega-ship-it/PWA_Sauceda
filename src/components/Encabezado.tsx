@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CerrarSesion } from "./CerrarSesion";
+import { VERSION } from "@/lib/version";
 
 /**
  * Encabezado de marca SAUCEDA (panel del admin).
@@ -50,7 +51,15 @@ export function Encabezado() {
             </Link>
           </nav>
         </div>
-        <CerrarSesion />
+        <div className="flex items-center gap-3">
+          <span
+            className="font-mono text-[11px] text-crema/50"
+            title="Versión de la app"
+          >
+            v{VERSION}
+          </span>
+          <CerrarSesion />
+        </div>
       </div>
     </header>
   );
