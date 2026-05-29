@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
-import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
+import { etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
+import { AvanceTraspaso } from "./AvanceTraspaso";
 import { FormulariosExpediente } from "./FormulariosExpediente";
 import { MensajesExpediente } from "./MensajesExpediente";
 import { RespuestasExpediente } from "./RespuestasExpediente";
@@ -155,28 +156,7 @@ export function DetalleExpediente({ id }: { id: string }) {
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
               Avance del traspaso
             </p>
-            <ol className="flex flex-wrap gap-2">
-              {ETAPAS.map((etapa) => {
-                const actual = etapa.id === expediente.etapa;
-                const completada =
-                  etapa.orden <
-                  ETAPAS.find((e) => e.id === expediente.etapa)!.orden;
-                return (
-                  <li
-                    key={etapa.id}
-                    className={`rounded-full px-3 py-1 text-xs ${
-                      actual
-                        ? "bg-verde-profundo text-crema"
-                        : completada
-                          ? "bg-sauce/20 text-verde-profundo"
-                          : "bg-carbon/5 text-carbon/40"
-                    }`}
-                  >
-                    {etapa.nombre}
-                  </li>
-                );
-              })}
-            </ol>
+            <AvanceTraspaso etapa={expediente.etapa} />
 
             {/* Mover de etapa */}
             <div className="mt-4 flex gap-3 border-t border-carbon/5 pt-4">

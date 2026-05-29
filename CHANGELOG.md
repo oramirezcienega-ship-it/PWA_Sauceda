@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.019 — Avance del traspaso como stepper horizontal — 29/05/26
+- El avance se muestra como pasos numerados conectados: verde (✓) las
+  completadas, azul la actual, gris las siguientes. "Perdido" como estado aparte.
+
 ## 1.018 — Versión visible en el encabezado — 29/05/26
 - Se muestra la versión (ej. v1.018) en el encabezado del panel, para saber
   qué versión se está usando.
