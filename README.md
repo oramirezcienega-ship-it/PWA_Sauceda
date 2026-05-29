@@ -66,3 +66,6 @@ npm run dev     # http://localhost:3000
   (seguimiento de solo lectura por enlace privado).
 - **Incremento 4** — Login del admin con Supabase Auth (middleware protege
   el panel; el portal del cliente queda público).
+- **Incremento 5** — Vista de lista (tipo HubSpot) con selector Lista/Tablero.
+- **Incremento 6** — Búsqueda (cliente/fraccionamiento) y filtro por etapa.
+- **Incremento 7** — Captación de leads por WhatsApp (webhook Meta Cloud API).

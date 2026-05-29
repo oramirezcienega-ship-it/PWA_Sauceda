@@ -57,8 +57,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Aplica a todo menos archivos estáticos y assets de la PWA.
+  // Aplica a todo menos las rutas /api (tienen su propia seguridad),
+  // archivos estáticos y assets de la PWA.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons).*)",
   ],
 };
