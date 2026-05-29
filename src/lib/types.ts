@@ -48,3 +48,9 @@ export interface Expediente {
   /** Notas internas del asesor. */
   notas: string;
 }
+
+/**
+ * Datos editables de un expediente (lo que captura el formulario).
+ * El `id` y la fecha de `ultimoMovimiento` los administra la app, no el usuario.
+ */
+export type DatosExpediente = Omit<Expediente, "id" | "ultimoMovimiento">;

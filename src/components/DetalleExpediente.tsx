@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
@@ -9,28 +11,36 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 /**
  * Vista de detalle de un expediente.
  * Muestra toda la información del caso, el avance por etapas y permite
- * mover el expediente a otra etapa (anterior / siguiente / directo).
+ * mover el expediente de etapa, editarlo o eliminarlo.
  */
 export function DetalleExpediente({ id }: { id: string }) {
-  const { obtenerExpediente, moverEtapa } = useExpedientes();
+  const router = useRouter();
+  const { obtenerExpediente, moverEtapa, eliminarExpediente, cargado } =
+    useExpedientes();
   const expediente = obtenerExpediente(id);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
 
-  // Expediente inexistente (p. ej. id inválido en la URL).
+  // Expediente inexistente. Mientras carga el estado persistido evitamos
+  // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
   if (!expediente) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <p className="font-titular text-2xl text-verde-profundo">
-          Expediente no encontrado
+          {cargado ? "Expediente no encontrado" : "Cargando…"}
         </p>
-        <p className="mt-2 text-sm text-carbon/60">
-          El expediente <span className="font-mono">{id}</span> no existe.
-        </p>
-        <Link
-          href="/"
-          className="mt-6 inline-block rounded-md bg-sauce px-4 py-2 text-sm text-crema hover:bg-verde-profundo"
-        >
-          ← Volver al tablero
-        </Link>
+        {cargado && (
+          <>
+            <p className="mt-2 text-sm text-carbon/60">
+              El expediente <span className="font-mono">{id}</span> no existe.
+            </p>
+            <Link
+              href="/"
+              className="mt-6 inline-block rounded-md bg-sauce px-4 py-2 text-sm text-crema hover:bg-verde-profundo"
+            >
+              ← Volver al tablero
+            </Link>
+          </>
+        )}
       </div>
     );
   }
@@ -62,8 +72,48 @@ export function DetalleExpediente({ id }: { id: string }) {
         </span>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <EtapaBadge etapa={expediente.etapa} />
+
+        {/* Acciones del expediente: editar / eliminar */}
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/expediente/${expediente.id}/editar`}
+            className="rounded-md border border-carbon/15 bg-white px-3 py-1.5 text-xs text-carbon/70 transition hover:border-sauce hover:text-sauce"
+          >
+            Editar
+          </Link>
+          {!confirmarBorrado ? (
+            <button
+              type="button"
+              onClick={() => setConfirmarBorrado(true)}
+              className="rounded-md border border-rojo/30 bg-white px-3 py-1.5 text-xs text-rojo transition hover:bg-rojo/10"
+            >
+              Eliminar
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-2 rounded-md border border-rojo/30 bg-rojo/5 px-2 py-1 text-xs">
+              <span className="text-carbon/70">¿Eliminar?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  eliminarExpediente(expediente.id);
+                  router.push("/");
+                }}
+                className="rounded bg-rojo px-2 py-1 font-medium text-crema hover:opacity-90"
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmarBorrado(false)}
+                className="rounded px-2 py-1 text-carbon/60 hover:text-carbon"
+              >
+                No
+              </button>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Avance por etapas */}

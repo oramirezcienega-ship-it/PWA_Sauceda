@@ -1,5 +1,6 @@
 import { Encabezado } from "@/components/Encabezado";
 import { TableroExpedientes } from "@/components/TableroExpedientes";
+import { AccionesTablero } from "@/components/AccionesTablero";
 
 /**
  * Panel de operación: tablero de expedientes de traspaso INFONAVIT.
@@ -11,13 +12,16 @@ export default function PaginaTablero() {
       <Encabezado />
 
       <div className="mx-auto max-w-6xl px-4 pt-5">
-        <div className="mb-5">
-          <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
-            Panel de operación
-          </h1>
-          <p className="mt-1 text-sm text-carbon/60">
-            Tablero de expedientes de traspaso INFONAVIT · León, Gto.
-          </p>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
+              Panel de operación
+            </h1>
+            <p className="mt-1 text-sm text-carbon/60">
+              Tablero de expedientes de traspaso INFONAVIT · León, Gto.
+            </p>
+          </div>
+          <AccionesTablero />
         </div>
 
         <TableroExpedientes />
