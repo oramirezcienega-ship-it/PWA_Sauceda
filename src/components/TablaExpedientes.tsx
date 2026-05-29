@@ -3,35 +3,26 @@
 import Link from "next/link";
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS } from "@/lib/etapas";
-import type { EtapaId } from "@/lib/types";
+import type { EtapaId, Expediente } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
 /**
  * Vista de LISTA de expedientes (tipo HubSpot).
  * Tabla con las columnas clave del traspaso y la etapa editable en línea.
+ * Recibe la lista ya filtrada; usa el contexto solo para mover de etapa.
  * Responsive: en móvil se desplaza horizontalmente.
  */
-export function TablaExpedientes() {
-  const { expedientes, moverEtapa, cargado, error } = useExpedientes();
-
-  if (error) {
-    return (
-      <p className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
-        {error}
-      </p>
-    );
-  }
-
-  if (!cargado) {
-    return (
-      <p className="px-1 py-8 text-sm text-carbon/50">Cargando expedientes…</p>
-    );
-  }
+export function TablaExpedientes({
+  expedientes,
+}: {
+  expedientes: Expediente[];
+}) {
+  const { moverEtapa } = useExpedientes();
 
   if (expedientes.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-carbon/15 p-8 text-center text-sm text-carbon/40">
-        Aún no hay expedientes. Crea el primero con “+ Nuevo expediente”.
+        Sin resultados. Ajusta la búsqueda o crea uno con “+ Nuevo expediente”.
       </p>
     );
   }

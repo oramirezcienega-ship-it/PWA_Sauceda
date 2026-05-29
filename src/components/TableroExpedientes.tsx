@@ -2,30 +2,21 @@
 
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
-import type { EtapaId } from "@/lib/types";
+import type { EtapaId, Expediente } from "@/lib/types";
 import { TarjetaExpediente } from "./TarjetaExpediente";
 
 /**
  * Tablero de operación (tipo kanban) de expedientes de traspaso.
+ * Recibe la lista ya filtrada; usa el contexto solo para mover de etapa.
  * Mobile-first: las columnas se desplazan horizontalmente.
  * Cada tarjeta permite mover el expediente a la etapa anterior/siguiente.
  */
-export function TableroExpedientes() {
-  const { expedientes, moverEtapa, cargado, error } = useExpedientes();
-
-  if (error) {
-    return (
-      <p className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
-        {error}
-      </p>
-    );
-  }
-
-  if (!cargado) {
-    return (
-      <p className="px-1 py-8 text-sm text-carbon/50">Cargando expedientes…</p>
-    );
-  }
+export function TableroExpedientes({
+  expedientes,
+}: {
+  expedientes: Expediente[];
+}) {
+  const { moverEtapa } = useExpedientes();
 
   return (
     <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-4">
