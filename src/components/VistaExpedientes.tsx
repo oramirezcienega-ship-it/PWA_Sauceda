@@ -102,7 +102,9 @@ export function VistaExpedientes() {
         e.nombreCompleto.toLowerCase().includes(q) ||
         e.fraccionamiento.toLowerCase().includes(q);
       const coincideEtapa =
-        etapasSel.length === 0 || etapasSel.includes(e.etapa);
+        etapasSel.length === 0
+          ? e.etapa !== "perdido" // por defecto se excluyen los Perdido
+          : etapasSel.includes(e.etapa);
       const coincideFecha =
         !r || (e.ultimoMovimiento >= r.desde && e.ultimoMovimiento <= r.hasta);
       return coincideTexto && coincideEtapa && coincideFecha;
@@ -235,6 +237,9 @@ export function VistaExpedientes() {
           </>
         ) : (
           <>expediente{filtrados.length === 1 ? "" : "s"}</>
+        )}
+        {etapasSel.length === 0 && (
+          <span className="text-carbon/40"> · Perdido oculto</span>
         )}
       </p>
 

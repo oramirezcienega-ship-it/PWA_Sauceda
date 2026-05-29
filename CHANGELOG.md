@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.020 — Panel excluye "Perdido" por defecto — 29/05/26
+- El panel de operación oculta los expedientes en "Perdido" por defecto;
+  para verlos, se selecciona el chip "Perdido".
+
 ## 1.019 — Avance del traspaso como stepper horizontal — 29/05/26
 - El avance se muestra como pasos numerados conectados: verde (✓) las
   completadas, azul la actual, gris las siguientes. "Perdido" como estado aparte.
