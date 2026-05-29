@@ -3,6 +3,14 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.017 — Detalle del expediente en 2 columnas — 29/05/26
+- Izquierda: avance + mover de etapa, prospecto, portal del cliente
+  (copiar/WhatsApp), formularios del cliente y mensajes al cliente.
+- Derecha: información del expediente (teléfono, último movimiento, valor,
+  saldo, atribución, situación, notas) + "Información recopilada" (respuestas
+  de los formularios contestados, agrupadas aquí).
+- Actividades a lo ancho debajo de ambas columnas.
+
 ## 1.016 — Portal del cliente siempre fresco (anti-caché) — 29/05/26
 - El service worker ya no cachea navegaciones ni /seguimiento ni /api: el
   portal del cliente siempre lee datos frescos (refleja cambios de etapa).

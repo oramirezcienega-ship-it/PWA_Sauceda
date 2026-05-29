@@ -8,6 +8,7 @@ import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { FormulariosExpediente } from "./FormulariosExpediente";
 import { MensajesExpediente } from "./MensajesExpediente";
+import { RespuestasExpediente } from "./RespuestasExpediente";
 import { Actividades } from "./Actividades";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
@@ -78,7 +79,7 @@ export function DetalleExpediente({ id }: { id: string }) {
   const siguiente = etapaSiguiente(expediente.etapa);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
+    <div className="mx-auto max-w-5xl px-4 py-6">
       <Link
         href="/"
         className="inline-flex items-center gap-1 text-sm text-sauce hover:text-verde-profundo"
@@ -145,158 +146,175 @@ export function DetalleExpediente({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* Prospecto (persona) dueño del expediente */}
-      {expediente.prospectoId && (
-        <Link
-          href={`/prospectos/${expediente.prospectoId}`}
-          className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-carbon/10 bg-white p-3 transition hover:border-sauce"
-        >
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
-              Prospecto
+      {/* Dos columnas: izquierda = operación/cliente · derecha = info del expediente */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* ---------- COLUMNA IZQUIERDA ---------- */}
+        <div className="space-y-6">
+          {/* Avance por etapas */}
+          <div className="rounded-xl border border-carbon/10 bg-white p-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
+              Avance del traspaso
             </p>
-            <p className="mt-0.5 font-mono text-sm text-verde-profundo">
-              {expediente.prospectoId}
-            </p>
-          </div>
-          <span className="text-sm text-sauce">Ver ficha →</span>
-        </Link>
-      )}
+            <ol className="flex flex-wrap gap-2">
+              {ETAPAS.map((etapa) => {
+                const actual = etapa.id === expediente.etapa;
+                const completada =
+                  etapa.orden <
+                  ETAPAS.find((e) => e.id === expediente.etapa)!.orden;
+                return (
+                  <li
+                    key={etapa.id}
+                    className={`rounded-full px-3 py-1 text-xs ${
+                      actual
+                        ? "bg-verde-profundo text-crema"
+                        : completada
+                          ? "bg-sauce/20 text-verde-profundo"
+                          : "bg-carbon/5 text-carbon/40"
+                    }`}
+                  >
+                    {etapa.nombre}
+                  </li>
+                );
+              })}
+            </ol>
 
-      {/* Enlace privado para el cliente vendedor */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cielo/30 bg-cielo/5 p-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
-            Portal del cliente
-          </p>
-          <p className="mt-0.5 text-sm text-carbon/70">
-            Comparte el seguimiento de solo lectura de este expediente.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => copiarEnlaceCliente(expediente.token)}
-            className="rounded-md border border-cielo/40 bg-white px-3 py-2 text-sm text-cielo transition hover:bg-cielo hover:text-crema"
-          >
-            {copiado ? "¡Enlace copiado! ✓" : "Copiar enlace"}
-          </button>
-          {expediente.telefono && (
-            <a
-              href={enlaceWhatsApp(
-                expediente.token,
-                expediente.telefono,
-                expediente.cliente,
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
-            >
-              Enviar por WhatsApp
-            </a>
-          )}
-        </div>
-      </div>
-
-      {/* Avance por etapas */}
-      <div className="mt-6 rounded-xl border border-carbon/10 bg-white p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
-          Avance del traspaso
-        </p>
-        <ol className="flex flex-wrap gap-2">
-          {ETAPAS.map((etapa) => {
-            const actual = etapa.id === expediente.etapa;
-            const completada =
-              etapa.orden < ETAPAS.find((e) => e.id === expediente.etapa)!.orden;
-            return (
-              <li
-                key={etapa.id}
-                className={`rounded-full px-3 py-1 text-xs ${
-                  actual
-                    ? "bg-verde-profundo text-crema"
-                    : completada
-                      ? "bg-sauce/20 text-verde-profundo"
-                      : "bg-carbon/5 text-carbon/40"
-                }`}
+            {/* Mover de etapa */}
+            <div className="mt-4 flex gap-3 border-t border-carbon/5 pt-4">
+              <button
+                type="button"
+                disabled={!anterior}
+                onClick={() =>
+                  anterior && moverEtapa(expediente.id, anterior.id)
+                }
+                className="flex-1 rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon/70 transition enabled:hover:border-sauce enabled:hover:text-sauce disabled:opacity-30"
               >
-                {etapa.nombre}
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+                ← {anterior?.nombre ?? "Primera"}
+              </button>
+              <button
+                type="button"
+                disabled={!siguiente}
+                onClick={() =>
+                  siguiente && moverEtapa(expediente.id, siguiente.id)
+                }
+                className="flex-1 rounded-md bg-sauce px-3 py-2 text-sm text-crema transition enabled:hover:bg-verde-profundo disabled:opacity-30"
+              >
+                {siguiente?.nombre ?? "Última"} →
+              </button>
+            </div>
+          </div>
 
-      {/* Datos del caso */}
-      <dl className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-carbon/10 bg-carbon/10 sm:grid-cols-2">
-        <Dato etiqueta="Teléfono" valor={expediente.telefono} mono />
-        <Dato
-          etiqueta="Último movimiento"
-          valor={formatoFecha(expediente.ultimoMovimiento)}
-        />
-        <Dato
-          etiqueta="Valor estimado"
-          valor={formatoPesos(expediente.valorEstimado)}
-          mono
-          resaltar
-        />
-        <Dato
-          etiqueta="Saldo de deuda"
-          valor={formatoPesos(expediente.saldoDeuda)}
-          mono
-        />
-      </dl>
+          {/* Prospecto (persona) dueño del expediente */}
+          {expediente.prospectoId && (
+            <Link
+              href={`/prospectos/${expediente.prospectoId}`}
+              className="flex items-center justify-between gap-3 rounded-xl border border-carbon/10 bg-white p-3 transition hover:border-sauce"
+            >
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
+                  Prospecto
+                </p>
+                <p className="mt-0.5 font-mono text-sm text-verde-profundo">
+                  {expediente.prospectoId}
+                </p>
+              </div>
+              <span className="text-sm text-sauce">Ver ficha →</span>
+            </Link>
+          )}
 
-      {/* Formularios del cliente: enviar, retirar y ver respuestas
-          (la información recopilada queda junto a los campos del expediente). */}
-      <FormulariosExpediente expedienteId={expediente.id} />
+          {/* Portal del cliente */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cielo/30 bg-cielo/5 p-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
+                Portal del cliente
+              </p>
+              <p className="mt-0.5 text-sm text-carbon/70">
+                Comparte el seguimiento de solo lectura.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => copiarEnlaceCliente(expediente.token)}
+                className="rounded-md border border-cielo/40 bg-white px-3 py-2 text-sm text-cielo transition hover:bg-cielo hover:text-crema"
+              >
+                {copiado ? "¡Copiado! ✓" : "Copiar enlace"}
+              </button>
+              {expediente.telefono && (
+                <a
+                  href={enlaceWhatsApp(
+                    expediente.token,
+                    expediente.telefono,
+                    expediente.cliente,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                >
+                  Enviar por WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
 
-      {/* Mensajes al cliente */}
-      <MensajesExpediente
-        expedienteId={expediente.id}
-        telefono={expediente.telefono}
-        token={expediente.token}
-        parametros={{
-          nombre: expediente.cliente,
-          primer_apellido: expediente.primerApellido,
-          segundo_apellido: expediente.segundoApellido,
-          nombre_completo: expediente.nombreCompleto,
-          fraccionamiento: expediente.fraccionamiento,
-        }}
-      />
+          {/* Formularios del cliente (enviar / retirar) */}
+          <FormulariosExpediente expedienteId={expediente.id} />
 
-      {/* Bitácora de actividades */}
-      <Actividades expedienteId={expediente.id} />
+          {/* Mensajes al cliente */}
+          <MensajesExpediente
+            expedienteId={expediente.id}
+            telefono={expediente.telefono}
+            token={expediente.token}
+            parametros={{
+              nombre: expediente.cliente,
+              primer_apellido: expediente.primerApellido,
+              segundo_apellido: expediente.segundoApellido,
+              nombre_completo: expediente.nombreCompleto,
+              fraccionamiento: expediente.fraccionamiento,
+            }}
+          />
+        </div>
 
-      {/* Situación y notas */}
-      <div className="mt-4 space-y-4">
-        <Bloque titulo="Situación">{expediente.situacion}</Bloque>
-        <Bloque titulo="Notas del asesor">{expediente.notas}</Bloque>
-      </div>
+        {/* ---------- COLUMNA DERECHA: información del expediente ---------- */}
+        <div className="space-y-6">
+          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-carbon/10 bg-carbon/10 sm:grid-cols-2">
+            <Dato etiqueta="Teléfono" valor={expediente.telefono || "—"} mono />
+            <Dato
+              etiqueta="Último movimiento"
+              valor={formatoFecha(expediente.ultimoMovimiento)}
+            />
+            <Dato
+              etiqueta="Valor estimado"
+              valor={formatoPesos(expediente.valorEstimado)}
+              mono
+              resaltar
+            />
+            <Dato
+              etiqueta="Saldo de deuda"
+              valor={formatoPesos(expediente.saldoDeuda)}
+              mono
+            />
+          </dl>
 
-      {/* Mover de etapa */}
-      <div className="mt-6 rounded-xl border border-dorado/40 bg-dorado/5 p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
-          Mover de etapa
-        </p>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            disabled={!anterior}
-            onClick={() => anterior && moverEtapa(expediente.id, anterior.id)}
-            className="flex-1 rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon/70 transition enabled:hover:border-sauce enabled:hover:text-sauce disabled:opacity-30"
-          >
-            ← {anterior?.nombre ?? "Primera etapa"}
-          </button>
-          <button
-            type="button"
-            disabled={!siguiente}
-            onClick={() => siguiente && moverEtapa(expediente.id, siguiente.id)}
-            className="flex-1 rounded-md bg-sauce px-3 py-2 text-sm text-crema transition enabled:hover:bg-verde-profundo disabled:opacity-30"
-          >
-            {siguiente?.nombre ?? "Última etapa"} →
-          </button>
+          {(expediente.campaignName ||
+            expediente.adsetName ||
+            expediente.adName) && (
+            <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-carbon/10 bg-carbon/10 sm:grid-cols-3">
+              <Dato etiqueta="Campaign" valor={expediente.campaignName || "—"} />
+              <Dato etiqueta="Adset" valor={expediente.adsetName || "—"} />
+              <Dato etiqueta="Ad" valor={expediente.adName || "—"} />
+            </dl>
+          )}
+
+          <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
+          <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
+
+          {/* Información recopilada (respuestas de formularios) */}
+          <RespuestasExpediente expedienteId={expediente.id} />
         </div>
       </div>
+
+      {/* Bitácora de actividades (ancho completo) */}
+      <Actividades expedienteId={expediente.id} />
     </div>
   );
 }
