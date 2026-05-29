@@ -34,6 +34,19 @@ export function DetalleExpediente({ id }: { id: string }) {
     );
   }
 
+  // Arma el enlace de WhatsApp con el mensaje y el enlace del portal.
+  function enlaceWhatsApp(token: string, telefono: string, cliente: string) {
+    const url = `${window.location.origin}/seguimiento/${token}`;
+    const tel = telefono.replace(/\D/g, "");
+    // Si no trae lada de país, anteponemos 52 (México).
+    const numero = tel.length === 10 ? `52${tel}` : tel;
+    const nombre = cliente.split(" ")[0] || "";
+    const mensaje =
+      `Hola ${nombre}, soy de SAUCEDA Bienes Raíces. ` +
+      `Da seguimiento a tu trámite y completa tus formularios aquí: ${url}`;
+    return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+  }
+
   // Expediente inexistente. Mientras carga el estado persistido evitamos
   // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
   if (!expediente) {
@@ -158,13 +171,29 @@ export function DetalleExpediente({ id }: { id: string }) {
             Comparte el seguimiento de solo lectura de este expediente.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => copiarEnlaceCliente(expediente.token)}
-          className="rounded-md border border-cielo/40 bg-white px-3 py-2 text-sm text-cielo transition hover:bg-cielo hover:text-crema"
-        >
-          {copiado ? "¡Enlace copiado! ✓" : "Copiar enlace para el cliente"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => copiarEnlaceCliente(expediente.token)}
+            className="rounded-md border border-cielo/40 bg-white px-3 py-2 text-sm text-cielo transition hover:bg-cielo hover:text-crema"
+          >
+            {copiado ? "¡Enlace copiado! ✓" : "Copiar enlace"}
+          </button>
+          {expediente.telefono && (
+            <a
+              href={enlaceWhatsApp(
+                expediente.token,
+                expediente.telefono,
+                expediente.cliente,
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              Enviar por WhatsApp
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Avance por etapas */}
