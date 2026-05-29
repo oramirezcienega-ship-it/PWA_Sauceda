@@ -13,6 +13,7 @@ const ESTILO_ETAPA: Record<EtapaId, string> = {
   documentos: "bg-sauce/20 text-verde-profundo border-sauce/40",
   notaria: "bg-verde-profundo/15 text-verde-profundo border-verde-profundo/30",
   cerrado: "bg-verde-profundo text-crema border-verde-profundo",
+  perdido: "bg-rojo/15 text-rojo border-rojo/30",
 };
 
 export function EtapaBadge({ etapa }: { etapa: EtapaId }) {

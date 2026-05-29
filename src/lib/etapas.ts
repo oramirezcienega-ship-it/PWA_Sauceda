@@ -47,6 +47,12 @@ export const ETAPAS: Etapa[] = [
     orden: 6,
     descripcion: "Traspaso concluido con éxito.",
   },
+  {
+    id: "perdido",
+    nombre: "Perdido",
+    orden: 7,
+    descripcion: "Lead o traspaso que no prosperó.",
+  },
 ];
 
 /** Mapa de acceso rápido por id de etapa. */

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS } from "@/lib/etapas";
+import { ORIGEN_POR_ID } from "@/lib/origenes";
 import type { EtapaId, Expediente } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
@@ -29,11 +30,12 @@ export function TablaExpedientes({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
-      <table className="w-full min-w-[820px] border-collapse text-sm">
+      <table className="w-full min-w-[940px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-carbon/10 bg-crema/60 text-left">
             <Th>Expediente</Th>
             <Th>Fraccionamiento</Th>
+            <Th>Origen</Th>
             <Th>Teléfono</Th>
             <Th>Etapa</Th>
             <Th alineado="derecha">Valor estimado</Th>
@@ -62,6 +64,16 @@ export function TablaExpedientes({
 
               <td className="px-3 py-2.5 text-carbon/70">
                 {exp.fraccionamiento}
+              </td>
+
+              <td className="px-3 py-2.5">
+                {exp.origenProspecto ? (
+                  <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2 py-0.5 text-xs text-cielo">
+                    {ORIGEN_POR_ID[exp.origenProspecto]}
+                  </span>
+                ) : (
+                  <span className="text-xs text-carbon/30">—</span>
+                )}
               </td>
 
               <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">

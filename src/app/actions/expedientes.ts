@@ -3,7 +3,13 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
+import { ETAPAS } from "@/lib/etapas";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
+
+/** Convierte un texto a entero ignorando símbolos ($ , .). */
+function aEntero(s: string | undefined): number {
+  return parseInt((s ?? "").replace(/[^\d]/g, ""), 10) || 0;
+}
 
 /**
  * Server actions del módulo OPERACIÓN.
@@ -34,7 +40,7 @@ export async function listarExpedientes(): Promise<Expediente[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("expedientes")
-    .select("*")
+    .select("*, prospectos(origen)")
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as FilaExpediente[]).map(aExpediente);
@@ -130,4 +136,62 @@ export async function eliminarExpediente(id: string): Promise<void> {
   const sb = supabaseServidor();
   const { error } = await sb.from("expedientes").delete().eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Importa expedientes desde filas de un CSV (objetos por encabezado).
+ * Columnas esperadas: cliente, fraccionamiento, etapa, situacion, telefono,
+ * valor_estimado, saldo_deuda, notas. Solo cliente y fraccionamiento son
+ * obligatorios.
+ */
+export async function importarExpedientes(
+  filas: Record<string, string>[],
+): Promise<{ importados: number; errores: string[] }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const errores: string[] = [];
+
+  const { data: existentes } = await sb.from("expedientes").select("id");
+  let n = Math.max(
+    0,
+    ...(existentes ?? [])
+      .map((r) => parseInt(String(r.id).replace(/\D/g, ""), 10))
+      .filter((x) => !Number.isNaN(x)),
+  );
+
+  const etapasValidas = ETAPAS.map((e) => e.id) as string[];
+  const aInsertar: Record<string, unknown>[] = [];
+
+  filas.forEach((f, idx) => {
+    const cliente = (f.cliente ?? "").trim();
+    const fraccionamiento = (f.fraccionamiento ?? "").trim();
+    if (!cliente || !fraccionamiento) {
+      errores.push(`Fila ${idx + 1}: faltan "cliente" o "fraccionamiento".`);
+      return;
+    }
+    let etapa = (f.etapa ?? "nuevo-lead").trim();
+    if (!etapasValidas.includes(etapa)) etapa = "nuevo-lead";
+    n++;
+    aInsertar.push({
+      id: `EXP-${String(n).padStart(3, "0")}`,
+      cliente,
+      fraccionamiento,
+      etapa,
+      situacion: (f.situacion ?? "").trim(),
+      telefono: (f.telefono ?? "").trim(),
+      valor_estimado: aEntero(f.valor_estimado ?? f.valor),
+      saldo_deuda: aEntero(f.saldo_deuda ?? f.saldo),
+      notas: (f.notas ?? "").trim(),
+      ultimo_movimiento: hoyISO(),
+    });
+  });
+
+  if (aInsertar.length > 0) {
+    const { error } = await sb.from("expedientes").insert(aInsertar);
+    if (error) {
+      errores.push(`Error al insertar: ${error.message}`);
+      return { importados: 0, errores };
+    }
+  }
+  return { importados: aInsertar.length, errores };
 }

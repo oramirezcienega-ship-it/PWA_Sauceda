@@ -11,7 +11,8 @@ export type EtapaId =
   | "oferta"
   | "documentos"
   | "notaria"
-  | "cerrado";
+  | "cerrado"
+  | "perdido";
 
 /** Definición visual y de orden de una etapa. */
 export interface Etapa {
@@ -51,6 +52,8 @@ export interface Expediente {
   token: string;
   /** Prospecto (persona) dueño del expediente. Null si aún no se enlaza. */
   prospectoId: string | null;
+  /** Origen de adquisición del prospecto enlazado (solo lectura, vía join). */
+  origenProspecto: OrigenAdquisicion | null;
 }
 
 /**
@@ -60,7 +63,7 @@ export interface Expediente {
  */
 export type DatosExpediente = Omit<
   Expediente,
-  "id" | "ultimoMovimiento" | "token"
+  "id" | "ultimoMovimiento" | "token" | "origenProspecto"
 >;
 
 /** Origen de adquisición de un prospecto (lista fija). */

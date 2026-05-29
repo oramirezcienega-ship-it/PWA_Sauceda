@@ -9,7 +9,13 @@ import {
   type FilaExpediente,
   type FilaProspecto,
 } from "@/lib/supabase/mapeo";
-import type { DatosProspecto, Expediente, Prospecto } from "@/lib/types";
+import { ORIGENES } from "@/lib/origenes";
+import type {
+  DatosProspecto,
+  Expediente,
+  OrigenAdquisicion,
+  Prospecto,
+} from "@/lib/types";
 
 /**
  * Server actions del módulo PROSPECTOS (CRM de personas).
@@ -110,6 +116,60 @@ export async function eliminarProspecto(id: string): Promise<void> {
   const sb = supabaseServidor();
   const { error } = await sb.from("prospectos").delete().eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Importa prospectos desde filas de un CSV.
+ * Columnas: nombre, telefono, correo, direccion, ciudad, origen, valor_campana.
+ * Solo "nombre" es obligatorio.
+ */
+export async function importarProspectos(
+  filas: Record<string, string>[],
+): Promise<{ importados: number; errores: string[] }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const errores: string[] = [];
+
+  const { data: existentes } = await sb.from("prospectos").select("id");
+  let n = Math.max(
+    0,
+    ...(existentes ?? [])
+      .map((r) => parseInt(String(r.id).replace(/\D/g, ""), 10))
+      .filter((x) => !Number.isNaN(x)),
+  );
+
+  const origenesValidos = ORIGENES.map((o) => o.id) as string[];
+  const aInsertar: Record<string, unknown>[] = [];
+
+  filas.forEach((f, idx) => {
+    const nombre = (f.nombre ?? "").trim();
+    if (!nombre) {
+      errores.push(`Fila ${idx + 1}: falta "nombre".`);
+      return;
+    }
+    let origen = (f.origen ?? "otro").trim().toLowerCase();
+    if (!origenesValidos.includes(origen)) origen = "otro";
+    n++;
+    aInsertar.push({
+      id: `PRO-${String(n).padStart(3, "0")}`,
+      nombre,
+      telefono: (f.telefono ?? "").trim(),
+      correo: (f.correo ?? "").trim(),
+      direccion: (f.direccion ?? "").trim(),
+      ciudad: (f.ciudad ?? "").trim(),
+      origen: origen as OrigenAdquisicion,
+      valor_campana: parseInt((f.valor_campana ?? "").replace(/[^\d]/g, ""), 10) || 0,
+    });
+  });
+
+  if (aInsertar.length > 0) {
+    const { error } = await sb.from("prospectos").insert(aInsertar);
+    if (error) {
+      errores.push(`Error al insertar: ${error.message}`);
+      return { importados: 0, errores };
+    }
+  }
+  return { importados: aInsertar.length, errores };
 }
 
 /** Lista mínima (id + nombre) para selects de formularios. */

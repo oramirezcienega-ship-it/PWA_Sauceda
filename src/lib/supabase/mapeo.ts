@@ -24,6 +24,8 @@ export interface FilaExpediente {
   token: string;
   ultimo_movimiento: string;
   prospecto_id: string | null;
+  /** Origen del prospecto enlazado (cuando se pide vía join). */
+  prospectos?: { origen: OrigenAdquisicion } | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -41,6 +43,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     token: fila.token,
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
+    origenProspecto: fila.prospectos?.origen ?? null,
   };
 }
 
