@@ -2,16 +2,32 @@
 
 import Link from "next/link";
 import { useExpedientes } from "@/context/expedientes-context";
-import { ETAPAS } from "@/lib/etapas";
+import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
 import type { EtapaId, Expediente } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
+import { useOrden } from "@/hooks/useOrden";
+import { ThOrden } from "./ThOrden";
+
+/** Comparadores por columna (estables a nivel de módulo). */
+const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
+  cliente: (a, b) => a.cliente.localeCompare(b.cliente, "es"),
+  fraccionamiento: (a, b) =>
+    a.fraccionamiento.localeCompare(b.fraccionamiento, "es"),
+  origen: (a, b) =>
+    (a.origenProspecto ?? "").localeCompare(b.origenProspecto ?? "", "es"),
+  telefono: (a, b) => a.telefono.localeCompare(b.telefono, "es"),
+  etapa: (a, b) => ETAPAS_POR_ID[a.etapa].orden - ETAPAS_POR_ID[b.etapa].orden,
+  valorEstimado: (a, b) => a.valorEstimado - b.valorEstimado,
+  saldoDeuda: (a, b) => a.saldoDeuda - b.saldoDeuda,
+  ultimoMovimiento: (a, b) =>
+    a.ultimoMovimiento.localeCompare(b.ultimoMovimiento),
+};
 
 /**
  * Vista de LISTA de expedientes (tipo HubSpot).
- * Tabla con las columnas clave del traspaso y la etapa editable en línea.
+ * Columnas ordenables (clic en el encabezado) y etapa editable en línea.
  * Recibe la lista ya filtrada; usa el contexto solo para mover de etapa.
- * Responsive: en móvil se desplaza horizontalmente.
  */
 export function TablaExpedientes({
   expedientes,
@@ -19,6 +35,7 @@ export function TablaExpedientes({
   expedientes: Expediente[];
 }) {
   const { moverEtapa } = useExpedientes();
+  const orden = useOrden(expedientes, COMPARADORES);
 
   if (expedientes.length === 0) {
     return (
@@ -33,23 +50,37 @@ export function TablaExpedientes({
       <table className="w-full min-w-[940px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-carbon/10 bg-crema/60 text-left">
-            <Th>Expediente</Th>
-            <Th>Fraccionamiento</Th>
-            <Th>Origen</Th>
-            <Th>Teléfono</Th>
-            <Th>Etapa</Th>
-            <Th alineado="derecha">Valor estimado</Th>
-            <Th alineado="derecha">Saldo deuda</Th>
-            <Th>Último mov.</Th>
+            {(
+              [
+                ["cliente", "Expediente", "izquierda"],
+                ["fraccionamiento", "Fraccionamiento", "izquierda"],
+                ["origen", "Origen", "izquierda"],
+                ["telefono", "Teléfono", "izquierda"],
+                ["etapa", "Etapa", "izquierda"],
+                ["valorEstimado", "Valor estimado", "derecha"],
+                ["saldoDeuda", "Saldo deuda", "derecha"],
+                ["ultimoMovimiento", "Último mov.", "izquierda"],
+              ] as const
+            ).map(([columna, label, alineado]) => (
+              <ThOrden
+                key={columna}
+                columna={columna}
+                claveActiva={orden.clave}
+                dir={orden.dir}
+                onOrdenar={orden.ordenarPor}
+                alineado={alineado}
+              >
+                {label}
+              </ThOrden>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {expedientes.map((exp) => (
+          {orden.ordenados.map((exp) => (
             <tr
               key={exp.id}
               className="border-b border-carbon/5 transition hover:bg-crema/40"
             >
-              {/* Expediente: cliente + folio */}
               <td className="px-3 py-2.5">
                 <Link
                   href={`/expediente/${exp.id}`}
@@ -80,13 +111,10 @@ export function TablaExpedientes({
                 {exp.telefono || "—"}
               </td>
 
-              {/* Etapa editable en línea */}
               <td className="px-3 py-2.5">
                 <select
                   value={exp.etapa}
-                  onChange={(e) =>
-                    moverEtapa(exp.id, e.target.value as EtapaId)
-                  }
+                  onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
                   className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce focus:ring-2 focus:ring-sauce/30"
                   aria-label={`Cambiar etapa de ${exp.cliente}`}
                 >
@@ -114,23 +142,5 @@ export function TablaExpedientes({
         </tbody>
       </table>
     </div>
-  );
-}
-
-function Th({
-  children,
-  alineado = "izquierda",
-}: {
-  children: React.ReactNode;
-  alineado?: "izquierda" | "derecha";
-}) {
-  return (
-    <th
-      className={`px-3 py-2.5 text-[10px] font-medium uppercase tracking-wide text-carbon/50 ${
-        alineado === "derecha" ? "text-right" : "text-left"
-      }`}
-    >
-      {children}
-    </th>
   );
 }

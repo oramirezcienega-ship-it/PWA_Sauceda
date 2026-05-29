@@ -72,45 +72,6 @@ export function SeguimientoCliente({
           </p>
         </div>
 
-        {/* Línea de etapas */}
-        <div className="mt-6 rounded-2xl border border-carbon/10 bg-white p-5">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
-            Etapas del traspaso
-          </p>
-          <ol className="space-y-2">
-            {ETAPAS.map((etapa) => {
-              const actual = etapa.id === expediente.etapa;
-              const completada = etapa.orden < etapaActual.orden;
-              return (
-                <li key={etapa.id} className="flex items-center gap-3">
-                  <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] ${
-                      actual
-                        ? "bg-verde-profundo text-crema"
-                        : completada
-                          ? "bg-sauce text-crema"
-                          : "bg-carbon/10 text-carbon/40"
-                    }`}
-                  >
-                    {completada ? "✓" : etapa.orden + 1}
-                  </span>
-                  <span
-                    className={`text-sm ${
-                      actual
-                        ? "font-medium text-verde-profundo"
-                        : completada
-                          ? "text-carbon/70"
-                          : "text-carbon/40"
-                    }`}
-                  >
-                    {etapa.nombre}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-
         {/* Formularios pendientes / respondidos */}
         {token && <FormulariosCliente token={token} envios={envios} />}
 
