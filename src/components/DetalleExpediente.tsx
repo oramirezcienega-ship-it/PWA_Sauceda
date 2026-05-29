@@ -255,6 +255,13 @@ export function DetalleExpediente({ id }: { id: string }) {
         expedienteId={expediente.id}
         telefono={expediente.telefono}
         token={expediente.token}
+        parametros={{
+          nombre: expediente.cliente,
+          primer_apellido: expediente.primerApellido,
+          segundo_apellido: expediente.segundoApellido,
+          nombre_completo: expediente.nombreCompleto,
+          fraccionamiento: expediente.fraccionamiento,
+        }}
       />
 
       {/* Bitácora de actividades */}

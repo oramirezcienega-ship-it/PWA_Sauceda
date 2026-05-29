@@ -7,6 +7,7 @@ import {
   listarMensajes,
   listarMensajesDeExpediente,
 } from "@/app/actions/mensajes";
+import { aplicarParametros } from "@/lib/parametros";
 import type { Mensaje, MensajeEnviado } from "@/lib/types";
 
 /**
@@ -17,10 +18,12 @@ export function MensajesExpediente({
   expedienteId,
   telefono,
   token,
+  parametros = {},
 }: {
   expedienteId: string;
   telefono: string;
   token: string;
+  parametros?: Record<string, string>;
 }) {
   const [plantillas, setPlantillas] = useState<Mensaje[]>([]);
   const [enviados, setEnviados] = useState<MensajeEnviado[]>([]);
@@ -63,11 +66,13 @@ export function MensajesExpediente({
     }
   }
 
-  function enlaceWhatsApp(t: string, tx: string) {
+  function enlaceWhatsApp(tx: string) {
     const tel = telefono.replace(/\D/g, "");
     const numero = tel.length === 10 ? `52${tel}` : tel;
     const url = `${window.location.origin}/seguimiento/${token}`;
-    const cuerpo = `*${t}*\n\n${tx}\n\nVer en tu portal: ${url}`;
+    // Resuelve los parámetros ({nombre}, etc.) y NO incluye el título.
+    const textoResuelto = aplicarParametros(tx, parametros);
+    const cuerpo = `${textoResuelto}\n\nVer en tu portal: ${url}`;
     return `https://wa.me/${numero}?text=${encodeURIComponent(cuerpo)}`;
   }
 
@@ -148,7 +153,7 @@ export function MensajesExpediente({
               </p>
               {telefono && (
                 <a
-                  href={enlaceWhatsApp(m.titulo, m.texto)}
+                  href={enlaceWhatsApp(m.texto)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-block rounded-md bg-[#25D366] px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"

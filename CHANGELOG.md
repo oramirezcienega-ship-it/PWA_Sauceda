@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.011 — Arreglo del mensaje de WhatsApp al cliente — 29/05/26
+- El mensaje de WhatsApp ahora resuelve los parámetros ({nombre}, etc.) en
+  vez de mandarlos literales, y ya no incluye el título (mejor experiencia).
+
 ## 1.010 — Zona de Actividades (bitácora) — 29/05/26
 - Timeline de actividades en el detalle del expediente y del prospecto:
   creación, cambios de etapa, mensajes, formularios enviados/respondidos.
