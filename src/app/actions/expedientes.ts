@@ -40,6 +40,25 @@ export async function listarExpedientes(): Promise<Expediente[]> {
   return (data as FilaExpediente[]).map(aExpediente);
 }
 
+/**
+ * Variante que NO lanza: captura el error en el servidor y lo devuelve como
+ * dato, para poder mostrarlo en el cliente (Next.js oculta los mensajes de
+ * los errores lanzados en producción).
+ */
+export async function cargarExpedientes(): Promise<
+  { ok: true; expedientes: Expediente[] } | { ok: false; mensaje: string }
+> {
+  try {
+    const expedientes = await listarExpedientes();
+    return { ok: true, expedientes };
+  } catch (err) {
+    return {
+      ok: false,
+      mensaje: err instanceof Error ? err.message : "Error desconocido",
+    };
+  }
+}
+
 /** Obtiene un expediente por su token público (portal del cliente). */
 export async function obtenerPorToken(
   token: string,

@@ -49,8 +49,12 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
   const recargar = useCallback(async () => {
     try {
       setError(null);
-      const lista = await acciones.listarExpedientes();
-      setExpedientes(lista);
+      const res = await acciones.cargarExpedientes();
+      if (res.ok) {
+        setExpedientes(res.expedientes);
+      } else {
+        setError(`No se pudieron cargar los expedientes. Detalle: ${res.mensaje}`);
+      }
     } catch (err) {
       console.error("Error al cargar expedientes:", err);
       const detalle = err instanceof Error ? err.message : "error desconocido";
