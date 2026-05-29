@@ -1,5 +1,6 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
+import { enviarBienvenida } from "@/lib/bienvenida";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -118,4 +119,6 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<void> {
     titulo: "Lead del sitio web (Cotizar)",
     detalle: lead.mensaje ?? "",
   });
+  // Bienvenida automática (correo + WhatsApp + portal). Best-effort.
+  await enviarBienvenida(sb, expId);
 }

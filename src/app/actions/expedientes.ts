@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
+import { enviarBienvenida } from "@/lib/bienvenida";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
@@ -106,6 +107,8 @@ export async function crearExpediente(
     tipo: "creacion",
     titulo: "Expediente creado",
   });
+  // Bienvenida automática (correo + WhatsApp + portal). Best-effort.
+  await enviarBienvenida(sb, id);
   return aExpediente(data as FilaExpediente);
 }
 

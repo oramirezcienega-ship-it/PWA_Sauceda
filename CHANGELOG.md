@@ -3,6 +3,15 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.030 — Mensaje de bienvenida automático — 29/05/26
+- Al crear un expediente nuevo (alta manual, sitio web o WhatsApp entrante)
+  se envía un mensaje de bienvenida por todos los medios posibles: portal del
+  cliente, correo (Resend) y WhatsApp (Meta Cloud API). Best-effort: si un
+  medio no está configurado, no rompe el alta.
+- La importación masiva (CSV) NO dispara bienvenidas (evita spam a importados).
+- Nuevo envío saliente de WhatsApp (src/lib/whatsapp.ts). Variables:
+  WHATSAPP_TOKEN y WHATSAPP_PHONE_NUMBER_ID.
+
 ## 1.029 — Íconos de redes sociales en el pie del correo — 29/05/26
 - El pie del correo muestra los íconos de WhatsApp, sitio web, Facebook,
   Instagram y TikTok (cada uno enlaza a su red).

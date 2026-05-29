@@ -1,4 +1,5 @@
 import { supabaseServidor } from "@/lib/supabase/server";
+import { enviarBienvenida } from "@/lib/bienvenida";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -166,4 +167,6 @@ export async function registrarLeadWhatsApp(
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
   });
+  // Bienvenida automática (WhatsApp + portal; correo si hay). Best-effort.
+  await enviarBienvenida(sb, id);
 }
