@@ -33,7 +33,7 @@ export const ETAPAS: Etapa[] = [
     orden: 2,
     descripcion: "Se está valuando el inmueble y revisando el saldo.",
     nombreCliente: "Valuación",
-    descripcionCliente: "Estamos valuando tu propiedad y revisando tu saldo.",
+    descripcionCliente: "Estamos evaluando tu propiedad y revisando tu saldo.",
   },
   {
     id: "oferta",

@@ -3,6 +3,9 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.015 — Ajuste de texto (Valuación) — 29/05/26
+- Etapa Valuación para el cliente: "Estamos evaluando tu propiedad…".
+
 ## 1.014 — Textos por etapa para el cliente — 29/05/26
 - Cada etapa ahora tiene un texto propio para el cliente (nombre y
   descripción) en el portal, distinto del texto interno del asesor.
