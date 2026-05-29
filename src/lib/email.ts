@@ -56,6 +56,7 @@ function plantilla(titulo: string, cuerpo: string, urlPortal: string): string {
         <a href="${MARCA.web}" style="color:#C9A961;text-decoration:none;margin:0 8px;">Sitio web</a>
         <a href="${MARCA.facebook}" style="color:#C9A961;text-decoration:none;margin:0 8px;">Facebook</a>
         <a href="${MARCA.tiktok}" style="color:#C9A961;text-decoration:none;margin:0 8px;">TikTok</a>
+        <a href="${MARCA.instagram}" style="color:#C9A961;text-decoration:none;margin:0 8px;">Instagram</a>
       </div>
       <div style="font-size:12px;color:#C9A961;">WhatsApp: ${MARCA.whatsappTexto} · ${MARCA.web.replace("https://", "")}</div>
       <div style="margin-top:8px;font-size:11px;color:#9bb38f;">Tradición con tecnología.</div>

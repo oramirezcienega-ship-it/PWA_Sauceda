@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.027 — Redes sociales reales en marca y correos — 29/05/26
+- Se actualizan en src/lib/marca.ts las URLs reales de Facebook, TikTok e Instagram.
+- El pie de correo ahora incluye también el enlace a Instagram.
+
 ## 1.026 — Dashboard general de la operación — 29/05/26
 - Nueva sección Dashboard: métricas (leads, expedientes, activos, cerrados,
   perdidos, tasa de conversión, inversión en campañas, costo por lead, valor
