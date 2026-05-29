@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.012 — Filtros de etapa (multi) y fecha en expedientes — 29/05/26
+- Filtro de etapas con multi-selección (chips).
+- Filtro por fecha de último movimiento: Hoy, Ayer, Últimos 7 días, Este mes,
+  Mes pasado y rango Personalizado.
+
 ## 1.011 — Arreglo del mensaje de WhatsApp al cliente — 29/05/26
 - El mensaje de WhatsApp ahora resuelve los parámetros ({nombre}, etc.) en
   vez de mandarlos literales, y ya no incluye el título (mejor experiencia).

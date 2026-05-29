@@ -8,22 +8,75 @@ import { TableroExpedientes } from "./TableroExpedientes";
 import { TablaExpedientes } from "./TablaExpedientes";
 
 type Vista = "lista" | "tablero";
-type FiltroEtapa = EtapaId | "todas";
+type RangoPreset =
+  | "todos"
+  | "hoy"
+  | "ayer"
+  | "ultima-semana"
+  | "este-mes"
+  | "mes-pasado"
+  | "personalizado";
 
 const CLAVE_VISTA = "sauceda.vista";
 
+/** Fecha local en formato YYYY-MM-DD. */
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}
+
+/** Calcula [desde, hasta] (YYYY-MM-DD) según el preset. */
+function calcularRango(
+  preset: RangoPreset,
+  desde: string,
+  hasta: string,
+): { desde: string; hasta: string } | null {
+  const hoy = new Date();
+  switch (preset) {
+    case "hoy":
+      return { desde: ymd(hoy), hasta: ymd(hoy) };
+    case "ayer": {
+      const a = new Date(hoy);
+      a.setDate(a.getDate() - 1);
+      return { desde: ymd(a), hasta: ymd(a) };
+    }
+    case "ultima-semana": {
+      const i = new Date(hoy);
+      i.setDate(i.getDate() - 6);
+      return { desde: ymd(i), hasta: ymd(hoy) };
+    }
+    case "este-mes": {
+      const i = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      return { desde: ymd(i), hasta: ymd(hoy) };
+    }
+    case "mes-pasado": {
+      const i = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+      const f = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+      return { desde: ymd(i), hasta: ymd(f) };
+    }
+    case "personalizado":
+      if (!desde && !hasta) return null;
+      return { desde: desde || "0000-01-01", hasta: hasta || "9999-12-31" };
+    default:
+      return null;
+  }
+}
+
 /**
- * Contenedor de las visualizaciones de expedientes.
- * Maneja: selector de vista (Lista/Tablero), búsqueda por cliente o
- * fraccionamiento y filtro por etapa. El filtrado aplica a ambas vistas.
+ * Contenedor de las visualizaciones de expedientes con filtros:
+ * búsqueda, multi-selección de etapas y rango de fecha (último movimiento).
  */
 export function VistaExpedientes() {
   const { expedientes, cargado, error } = useExpedientes();
   const [vista, setVista] = useState<Vista>("lista");
   const [busqueda, setBusqueda] = useState("");
-  const [etapaFiltro, setEtapaFiltro] = useState<FiltroEtapa>("todas");
+  const [etapasSel, setEtapasSel] = useState<EtapaId[]>([]);
+  const [rango, setRango] = useState<RangoPreset>("todos");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
 
-  // Carga la preferencia de vista guardada (sin romper la hidratación).
   useEffect(() => {
     const guardada = window.localStorage.getItem(CLAVE_VISTA);
     if (guardada === "lista" || guardada === "tablero") setVista(guardada);
@@ -34,19 +87,30 @@ export function VistaExpedientes() {
     window.localStorage.setItem(CLAVE_VISTA, v);
   }
 
+  function alternarEtapa(id: EtapaId) {
+    setEtapasSel((prev) =>
+      prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id],
+    );
+  }
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
+    const r = calcularRango(rango, desde, hasta);
     return expedientes.filter((e) => {
       const coincideTexto =
         !q ||
         e.nombreCompleto.toLowerCase().includes(q) ||
         e.fraccionamiento.toLowerCase().includes(q);
-      const coincideEtapa = etapaFiltro === "todas" || e.etapa === etapaFiltro;
-      return coincideTexto && coincideEtapa;
+      const coincideEtapa =
+        etapasSel.length === 0 || etapasSel.includes(e.etapa);
+      const coincideFecha =
+        !r || (e.ultimoMovimiento >= r.desde && e.ultimoMovimiento <= r.hasta);
+      return coincideTexto && coincideEtapa && coincideFecha;
     });
-  }, [expedientes, busqueda, etapaFiltro]);
+  }, [expedientes, busqueda, etapasSel, rango, desde, hasta]);
 
-  const filtrando = busqueda.trim() !== "" || etapaFiltro !== "todas";
+  const filtrando =
+    busqueda.trim() !== "" || etapasSel.length > 0 || rango !== "todos";
 
   if (error) {
     return (
@@ -64,43 +128,98 @@ export function VistaExpedientes() {
 
   return (
     <>
-      {/* Controles: búsqueda + filtro de etapa + selector de vista */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            type="search"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por cliente o fraccionamiento…"
-            className="w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30 sm:max-w-xs"
-          />
-          <select
-            value={etapaFiltro}
-            onChange={(e) => setEtapaFiltro(e.target.value as FiltroEtapa)}
-            className="rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-          >
-            <option value="todas">Todas las etapas</option>
-            {ETAPAS.map((etapa) => (
-              <option key={etapa.id} value={etapa.id}>
-                {etapa.nombre}
-              </option>
-            ))}
-          </select>
+      <div className="mb-4 space-y-3">
+        {/* Fila 1: búsqueda + fecha + vista */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por cliente o fraccionamiento…"
+              className="w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30 sm:max-w-xs"
+            />
+            <select
+              value={rango}
+              onChange={(e) => setRango(e.target.value as RangoPreset)}
+              className="rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
+              title="Filtrar por último movimiento"
+            >
+              <option value="todos">Cualquier fecha</option>
+              <option value="hoy">Hoy</option>
+              <option value="ayer">Ayer</option>
+              <option value="ultima-semana">Últimos 7 días</option>
+              <option value="este-mes">Este mes</option>
+              <option value="mes-pasado">Mes pasado</option>
+              <option value="personalizado">Personalizado…</option>
+            </select>
+          </div>
+
+          <div className="inline-flex shrink-0 rounded-lg border border-carbon/15 bg-white p-0.5">
+            <BotonVista
+              activo={vista === "lista"}
+              onClick={() => cambiarVista("lista")}
+            >
+              Lista
+            </BotonVista>
+            <BotonVista
+              activo={vista === "tablero"}
+              onClick={() => cambiarVista("tablero")}
+            >
+              Tablero
+            </BotonVista>
+          </div>
         </div>
 
-        <div className="inline-flex shrink-0 rounded-lg border border-carbon/15 bg-white p-0.5">
-          <BotonVista
-            activo={vista === "lista"}
-            onClick={() => cambiarVista("lista")}
-          >
-            Lista
-          </BotonVista>
-          <BotonVista
-            activo={vista === "tablero"}
-            onClick={() => cambiarVista("tablero")}
-          >
-            Tablero
-          </BotonVista>
+        {/* Rango personalizado */}
+        {rango === "personalizado" && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-carbon/60">Del</span>
+            <input
+              type="date"
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1.5 text-sm"
+            />
+            <span className="text-carbon/60">al</span>
+            <input
+              type="date"
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1.5 text-sm"
+            />
+          </div>
+        )}
+
+        {/* Fila 2: chips de etapas (multi-selección) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-carbon/50">Etapas:</span>
+          {ETAPAS.map((etapa) => {
+            const activo = etapasSel.includes(etapa.id);
+            return (
+              <button
+                key={etapa.id}
+                type="button"
+                onClick={() => alternarEtapa(etapa.id)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                  activo
+                    ? "border-sauce bg-sauce text-crema"
+                    : "border-carbon/15 bg-white text-carbon/60 hover:border-sauce"
+                }`}
+              >
+                {etapa.nombre}
+              </button>
+            );
+          })}
+          {etapasSel.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setEtapasSel([])}
+              className="ml-1 text-xs text-carbon/50 underline hover:text-carbon"
+            >
+              limpiar
+            </button>
+          )}
         </div>
       </div>
 
