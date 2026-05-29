@@ -1,13 +1,25 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CerrarSesion } from "./CerrarSesion";
 import { VERSION } from "@/lib/version";
+import { rolUsuarioActual } from "@/app/actions/usuarios";
 
 /**
  * Encabezado de marca SAUCEDA (panel del admin).
- * Logo en Fraunces (display) + tagline + cerrar sesión.
- * Verde como color dominante del 30%.
+ * Logo + navegación + versión + cerrar sesión.
+ * El enlace "Usuarios" solo se muestra a administradores.
  */
 export function Encabezado() {
+  const [esAdmin, setEsAdmin] = useState(false);
+
+  useEffect(() => {
+    rolUsuarioActual()
+      .then((rol) => setEsAdmin(rol === "admin"))
+      .catch(() => setEsAdmin(false));
+  }, []);
+
   return (
     <header className="sticky top-0 z-20 border-b border-dorado/30 bg-verde-profundo text-crema">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -25,30 +37,11 @@ export function Encabezado() {
             </span>
           </Link>
           <nav className="hidden items-center gap-1 sm:flex">
-            <Link
-              href="/"
-              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
-            >
-              Expedientes
-            </Link>
-            <Link
-              href="/prospectos"
-              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
-            >
-              Prospectos
-            </Link>
-            <Link
-              href="/formularios"
-              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
-            >
-              Formularios
-            </Link>
-            <Link
-              href="/mensajes"
-              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
-            >
-              Mensajes
-            </Link>
+            <Enlace href="/">Expedientes</Enlace>
+            <Enlace href="/prospectos">Prospectos</Enlace>
+            <Enlace href="/formularios">Formularios</Enlace>
+            <Enlace href="/mensajes">Mensajes</Enlace>
+            {esAdmin && <Enlace href="/usuarios">Usuarios</Enlace>}
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -62,5 +55,16 @@ export function Encabezado() {
         </div>
       </div>
     </header>
+  );
+}
+
+function Enlace({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
+    >
+      {children}
+    </Link>
   );
 }

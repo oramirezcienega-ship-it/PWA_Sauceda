@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseServidor } from "./server";
 
 /**
  * Cliente de Supabase del lado SERVIDOR para leer la SESIÓN del usuario
@@ -48,8 +49,42 @@ export async function usuarioActual() {
   return user;
 }
 
-/** Exige un admin autenticado; si no, corta la operación. */
+/** Exige una sesión activa; si no, corta la operación. */
 export async function requireAdmin() {
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
+}
+
+/**
+ * Rol y estado de un usuario (vía service role, ignora RLS).
+ * Si no tiene perfil, se considera admin (bootstrap del primer usuario).
+ */
+export async function rolDe(
+  userId: string,
+): Promise<{ rol: "admin" | "asesor"; activo: boolean }> {
+  try {
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("perfiles")
+      .select("rol, activo")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!data) return { rol: "admin", activo: true };
+    return {
+      rol: (data as { rol: "admin" | "asesor" }).rol,
+      activo: (data as { activo: boolean }).activo,
+    };
+  } catch {
+    // Si la tabla aún no existe, no bloqueamos (bootstrap).
+    return { rol: "admin", activo: true };
+  }
+}
+
+/** Exige rol de administrador (para la gestión de usuarios). */
+export async function requireAdministrador() {
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol, activo } = await rolDe(usuario.id);
+  if (!activo) throw new Error("Usuario inactivo.");
+  if (rol !== "admin") throw new Error("Se requiere rol de administrador.");
 }

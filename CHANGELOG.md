@@ -3,6 +3,14 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.025 — Módulo de usuarios y roles — 29/05/26
+- Panel de Usuarios (solo administradores): crear usuarios (correo, contraseña,
+  nombre, rol), cambiar rol/estado y eliminar.
+- Roles: Administrador (gestiona usuarios y todo) y Asesor (opera sin gestión
+  de usuarios). El menú "Usuarios" solo aparece para administradores.
+- Migración 0010 crea la tabla de perfiles. (El primer usuario sin perfil se
+  trata como admin para el arranque.)
+
 ## 1.024 — Correos con logo y pie de contacto — 29/05/26
 - Los correos llevan el logo y un pie con WhatsApp, sitio web, Facebook y
   TikTok (configurables en src/lib/marca.ts).

@@ -1,0 +1,105 @@
+"use server";
+
+import { supabaseServidor } from "@/lib/supabase/server";
+import {
+  requireAdministrador,
+  rolDe,
+  usuarioActual,
+} from "@/lib/supabase/cliente-sesion";
+
+/**
+ * Server actions del módulo USUARIOS (gestión del equipo operativo).
+ * Requieren rol de administrador (salvo `rolUsuarioActual`).
+ */
+
+export interface UsuarioApp {
+  id: string;
+  email: string;
+  nombre: string;
+  rol: "admin" | "asesor";
+  activo: boolean;
+}
+
+/** Rol del usuario actual (para la UI). No lanza error. */
+export async function rolUsuarioActual(): Promise<"admin" | "asesor" | null> {
+  try {
+    const u = await usuarioActual();
+    if (!u) return null;
+    const { rol } = await rolDe(u.id);
+    return rol;
+  } catch {
+    return null;
+  }
+}
+
+/** Lista los usuarios del sistema con su perfil. */
+export async function listarUsuarios(): Promise<UsuarioApp[]> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+  const { data: lista, error } = await sb.auth.admin.listUsers();
+  if (error) throw new Error(error.message);
+  const { data: perfiles } = await sb.from("perfiles").select("*");
+  const mapa = new Map(
+    (perfiles ?? []).map((p) => [
+      p.id as string,
+      p as { nombre: string; rol: "admin" | "asesor"; activo: boolean },
+    ]),
+  );
+  return (lista?.users ?? []).map((u) => {
+    const p = mapa.get(u.id);
+    return {
+      id: u.id,
+      email: u.email ?? "",
+      nombre: p?.nombre ?? "",
+      rol: p?.rol ?? "admin",
+      activo: p?.activo ?? true,
+    };
+  });
+}
+
+/** Crea un usuario nuevo (correo + contraseña + nombre + rol). */
+export async function crearUsuario(datos: {
+  email: string;
+  password: string;
+  nombre: string;
+  rol: "admin" | "asesor";
+}): Promise<{ ok: boolean; mensaje?: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+  const { data, error } = await sb.auth.admin.createUser({
+    email: datos.email.trim(),
+    password: datos.password,
+    email_confirm: true,
+  });
+  if (error || !data.user) {
+    return { ok: false, mensaje: error?.message ?? "No se pudo crear." };
+  }
+  const { error: errPerfil } = await sb.from("perfiles").insert({
+    id: data.user.id,
+    nombre: datos.nombre.trim(),
+    rol: datos.rol,
+  });
+  if (errPerfil) return { ok: false, mensaje: errPerfil.message };
+  return { ok: true };
+}
+
+/** Actualiza el perfil de un usuario (nombre, rol, activo). */
+export async function actualizarUsuario(
+  id: string,
+  datos: { nombre: string; rol: "admin" | "asesor"; activo: boolean },
+): Promise<void> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("perfiles")
+    .upsert({ id, ...datos });
+  if (error) throw new Error(error.message);
+}
+
+/** Elimina un usuario (auth + perfil en cascada). */
+export async function eliminarUsuario(id: string): Promise<void> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+  const { error } = await sb.auth.admin.deleteUser(id);
+  if (error) throw new Error(error.message);
+}
