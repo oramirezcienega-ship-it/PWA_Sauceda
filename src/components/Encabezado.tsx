@@ -32,6 +32,12 @@ export function Encabezado() {
             >
               Prospectos
             </Link>
+            <Link
+              href="/formularios"
+              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
+            >
+              Formularios
+            </Link>
           </nav>
         </div>
         <CerrarSesion />

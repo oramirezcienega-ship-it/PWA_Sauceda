@@ -1,6 +1,7 @@
-import type { Expediente } from "@/lib/types";
+import type { EnvioConFormulario, Expediente } from "@/lib/types";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { formatoFecha } from "@/lib/formato";
+import { FormulariosCliente } from "./FormulariosCliente";
 
 /**
  * Portal del cliente — vista de SEGUIMIENTO (solo lectura).
@@ -9,7 +10,15 @@ import { formatoFecha } from "@/lib/formato";
  * únicamente lo que le concierne de SU expediente: en qué etapa va y el
  * avance del trámite. NO muestra notas internas, saldos ni otros expedientes.
  */
-export function SeguimientoCliente({ expediente }: { expediente: Expediente }) {
+export function SeguimientoCliente({
+  expediente,
+  token,
+  envios = [],
+}: {
+  expediente: Expediente;
+  token?: string;
+  envios?: EnvioConFormulario[];
+}) {
   const etapaActual = ETAPAS_POR_ID[expediente.etapa];
   const total = ETAPAS.length;
   const completadas = etapaActual.orden + 1;
@@ -101,6 +110,9 @@ export function SeguimientoCliente({ expediente }: { expediente: Expediente }) {
             })}
           </ol>
         </div>
+
+        {/* Formularios pendientes / respondidos */}
+        {token && <FormulariosCliente token={token} envios={envios} />}
 
         {/* Contacto */}
         <div className="mt-6 rounded-2xl border border-dorado/40 bg-dorado/5 p-5 text-center">

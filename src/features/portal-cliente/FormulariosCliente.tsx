@@ -1,0 +1,196 @@
+"use client";
+
+import { useState } from "react";
+import { responderFormulario } from "@/app/actions/formularios";
+import type { EnvioConFormulario, Pregunta } from "@/lib/types";
+
+/**
+ * Formularios pendientes que el cliente llena desde su portal.
+ * Cada respuesta se valida por el token del expediente.
+ */
+export function FormulariosCliente({
+  token,
+  envios,
+}: {
+  token: string;
+  envios: EnvioConFormulario[];
+}) {
+  if (envios.length === 0) return null;
+
+  return (
+    <div className="mt-6 space-y-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
+        Formularios
+      </p>
+      {envios.map((envio) => (
+        <TarjetaFormulario key={envio.id} token={token} envio={envio} />
+      ))}
+    </div>
+  );
+}
+
+function TarjetaFormulario({
+  token,
+  envio,
+}: {
+  token: string;
+  envio: EnvioConFormulario;
+}) {
+  const [respuestas, setRespuestas] = useState<Record<string, string>>(
+    envio.respuestas ?? {},
+  );
+  const [enviado, setEnviado] = useState(envio.estado === "respondido");
+  const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+
+  function set(id: string, valor: string) {
+    setRespuestas((r) => ({ ...r, [id]: valor }));
+  }
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault();
+    const faltan = envio.formulario.preguntas.filter(
+      (p) => p.requerido && !(respuestas[p.id] ?? "").trim(),
+    );
+    if (faltan.length > 0) {
+      setError("Por favor responde las preguntas obligatorias.");
+      return;
+    }
+    setError(null);
+    setEnviando(true);
+    try {
+      await responderFormulario(token, envio.id, respuestas);
+      setEnviado(true);
+    } catch {
+      setError("No se pudo enviar. Inténtalo de nuevo.");
+      setEnviando(false);
+    }
+  }
+
+  if (enviado) {
+    return (
+      <div className="rounded-2xl border border-sauce/30 bg-sauce/5 p-5">
+        <p className="font-titular text-lg font-semibold text-verde-profundo">
+          {envio.formulario.titulo}
+        </p>
+        <p className="mt-1 text-sm text-sauce">✓ ¡Gracias! Ya recibimos tus respuestas.</p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={enviar}
+      className="rounded-2xl border border-dorado/40 bg-white p-5"
+    >
+      <p className="font-titular text-lg font-semibold text-verde-profundo">
+        {envio.formulario.titulo}
+      </p>
+      {envio.formulario.descripcion && (
+        <p className="mt-1 text-sm text-carbon/60">
+          {envio.formulario.descripcion}
+        </p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        {envio.formulario.preguntas.map((p) => (
+          <CampoPregunta
+            key={p.id}
+            pregunta={p}
+            valor={respuestas[p.id] ?? ""}
+            onChange={(v) => set(p.id, v)}
+          />
+        ))}
+      </div>
+
+      {error && (
+        <p className="mt-3 rounded-md border border-rojo/30 bg-rojo/10 px-3 py-2 text-sm text-rojo">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={enviando}
+        className="mt-4 w-full rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-60"
+      >
+        {enviando ? "Enviando…" : "Enviar respuestas"}
+      </button>
+    </form>
+  );
+}
+
+function CampoPregunta({
+  pregunta,
+  valor,
+  onChange,
+}: {
+  pregunta: Pregunta;
+  valor: string;
+  onChange: (v: string) => void;
+}) {
+  const base =
+    "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
+
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm text-carbon/80">
+        {pregunta.etiqueta}
+        {pregunta.requerido && <span className="ml-0.5 text-rojo">*</span>}
+      </span>
+
+      {pregunta.tipo === "texto-largo" ? (
+        <textarea
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          className={base}
+        />
+      ) : pregunta.tipo === "numero" ? (
+        <input
+          type="number"
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${base} font-mono`}
+        />
+      ) : pregunta.tipo === "fecha" ? (
+        <input
+          type="date"
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          className={base}
+        />
+      ) : pregunta.tipo === "si-no" ? (
+        <select
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          className={base}
+        >
+          <option value="">Selecciona…</option>
+          <option value="Sí">Sí</option>
+          <option value="No">No</option>
+        </select>
+      ) : pregunta.tipo === "opcion-multiple" ? (
+        <select
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          className={base}
+        >
+          <option value="">Selecciona…</option>
+          {pregunta.opciones.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+          className={base}
+        />
+      )}
+    </label>
+  );
+}

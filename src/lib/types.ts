@@ -97,3 +97,52 @@ export interface Prospecto {
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
 export type DatosProspecto = Omit<Prospecto, "id">;
+
+// ------------------------------------------------------------
+// MÓDULO FORMULARIOS
+// ------------------------------------------------------------
+
+/** Tipo de pregunta de un formulario. */
+export type TipoPregunta =
+  | "texto-corto"
+  | "texto-largo"
+  | "numero"
+  | "opcion-multiple"
+  | "si-no"
+  | "fecha";
+
+/** Una pregunta dentro de un formulario. */
+export interface Pregunta {
+  id: string;
+  etiqueta: string;
+  tipo: TipoPregunta;
+  /** Opciones (solo para tipo opcion-multiple). */
+  opciones: string[];
+  requerido: boolean;
+}
+
+/** Plantilla de formulario reutilizable. */
+export interface Formulario {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  preguntas: Pregunta[];
+}
+
+/** Datos editables de un formulario (el `id` lo administra la app). */
+export type DatosFormulario = Omit<Formulario, "id">;
+
+/** Envío de un formulario a un expediente (con sus respuestas). */
+export interface EnvioFormulario {
+  id: string;
+  formularioId: string;
+  expedienteId: string;
+  estado: "pendiente" | "respondido";
+  /** Respuestas por id de pregunta. */
+  respuestas: Record<string, string>;
+}
+
+/** Envío junto con la plantilla del formulario (para mostrarlo y llenarlo). */
+export interface EnvioConFormulario extends EnvioFormulario {
+  formulario: Formulario;
+}

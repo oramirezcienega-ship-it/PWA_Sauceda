@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
+import { FormulariosExpediente } from "./FormulariosExpediente";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
 /**
@@ -219,6 +220,9 @@ export function DetalleExpediente({ id }: { id: string }) {
         <Bloque titulo="Situación">{expediente.situacion}</Bloque>
         <Bloque titulo="Notas del asesor">{expediente.notas}</Bloque>
       </div>
+
+      {/* Formularios enviados al cliente */}
+      <FormulariosExpediente expedienteId={expediente.id} />
 
       {/* Mover de etapa */}
       <div className="mt-6 rounded-xl border border-dorado/40 bg-dorado/5 p-4">

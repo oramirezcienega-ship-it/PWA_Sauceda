@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { obtenerPorToken } from "@/app/actions/expedientes";
+import { obtenerEnviosPorToken } from "@/app/actions/formularios";
 import { SeguimientoCliente } from "@/features/portal-cliente/SeguimientoCliente";
 
 // Siempre dinámica: depende del token y consulta la base de datos en cada visita.
@@ -15,6 +16,7 @@ export default async function PaginaSeguimiento({
   params: { token: string };
 }) {
   const expediente = await obtenerPorToken(params.token);
+  const envios = expediente ? await obtenerEnviosPorToken(params.token) : [];
 
   if (!expediente) {
     return (
@@ -40,5 +42,11 @@ export default async function PaginaSeguimiento({
     );
   }
 
-  return <SeguimientoCliente expediente={expediente} />;
+  return (
+    <SeguimientoCliente
+      expediente={expediente}
+      token={params.token}
+      envios={envios}
+    />
+  );
 }

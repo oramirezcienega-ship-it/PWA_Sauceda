@@ -1,0 +1,128 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  enviarFormulario,
+  listarEnviosDeExpediente,
+  listarFormularios,
+} from "@/app/actions/formularios";
+import type { EnvioConFormulario, Formulario } from "@/lib/types";
+
+/**
+ * Bloque del detalle del expediente para enviar formularios al cliente y
+ * ver el estado/respuestas de los enviados.
+ */
+export function FormulariosExpediente({
+  expedienteId,
+}: {
+  expedienteId: string;
+}) {
+  const [plantillas, setPlantillas] = useState<Formulario[]>([]);
+  const [envios, setEnvios] = useState<EnvioConFormulario[]>([]);
+  const [seleccion, setSeleccion] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function cargar() {
+    const [p, e] = await Promise.all([
+      listarFormularios().catch(() => []),
+      listarEnviosDeExpediente(expedienteId).catch(() => []),
+    ]);
+    setPlantillas(p);
+    setEnvios(e);
+  }
+
+  useEffect(() => {
+    void cargar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expedienteId]);
+
+  async function enviar() {
+    if (!seleccion) return;
+    setEnviando(true);
+    try {
+      await enviarFormulario(expedienteId, seleccion);
+      setSeleccion("");
+      await cargar();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-carbon/10 bg-white p-4">
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
+        Formularios del cliente
+      </p>
+
+      {/* Enviar uno nuevo */}
+      {plantillas.length === 0 ? (
+        <p className="text-sm text-carbon/50">
+          No hay plantillas. Crea una en la sección Formularios.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={seleccion}
+            onChange={(e) => setSeleccion(e.target.value)}
+            className="flex-1 rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Elegir formulario…</option>
+            {plantillas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.titulo}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={enviar}
+            disabled={!seleccion || enviando}
+            className="rounded-md bg-sauce px-3 py-2 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
+          >
+            {enviando ? "Enviando…" : "Enviar al cliente"}
+          </button>
+        </div>
+      )}
+
+      {/* Envíos existentes */}
+      {envios.length > 0 && (
+        <ul className="mt-4 space-y-3">
+          {envios.map((env) => (
+            <li
+              key={env.id}
+              className="rounded-lg border border-carbon/10 bg-crema/30 p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-verde-profundo">
+                  {env.formulario.titulo}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    env.estado === "respondido"
+                      ? "bg-sauce/20 text-verde-profundo"
+                      : "bg-dorado/20 text-[#8a7233]"
+                  }`}
+                >
+                  {env.estado === "respondido" ? "Respondido" : "Pendiente"}
+                </span>
+              </div>
+
+              {env.estado === "respondido" && (
+                <dl className="mt-2 space-y-1 text-sm">
+                  {env.formulario.preguntas.map((p) => (
+                    <div key={p.id}>
+                      <dt className="text-xs text-carbon/50">{p.etiqueta}</dt>
+                      <dd className="text-carbon/80">
+                        {env.respuestas[p.id] || "—"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
