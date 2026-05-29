@@ -1,4 +1,11 @@
-import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
+import type {
+  DatosExpediente,
+  DatosProspecto,
+  EtapaId,
+  Expediente,
+  OrigenAdquisicion,
+  Prospecto,
+} from "@/lib/types";
 
 /**
  * Fila tal como vive en la tabla `expedientes` de Supabase (snake_case).
@@ -16,6 +23,7 @@ export interface FilaExpediente {
   notas: string;
   token: string;
   ultimo_movimiento: string;
+  prospecto_id: string | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -32,6 +40,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     notas: fila.notas,
     token: fila.token,
     ultimoMovimiento: fila.ultimo_movimiento,
+    prospectoId: fila.prospecto_id,
   };
 }
 
@@ -45,6 +54,53 @@ export function aFila(datos: DatosExpediente) {
     telefono: datos.telefono,
     valor_estimado: datos.valorEstimado,
     saldo_deuda: datos.saldoDeuda,
+    notas: datos.notas,
+    prospecto_id: datos.prospectoId,
+  };
+}
+
+// ------------------------------------------------------------
+// MÓDULO PROSPECTOS
+// ------------------------------------------------------------
+
+/** Fila de la tabla `prospectos` (snake_case). */
+export interface FilaProspecto {
+  id: string;
+  nombre: string;
+  telefono: string;
+  correo: string;
+  direccion: string;
+  ciudad: string;
+  origen: OrigenAdquisicion;
+  valor_campana: number;
+  notas: string;
+}
+
+/** Fila de la BD → modelo de la app. */
+export function aProspecto(fila: FilaProspecto): Prospecto {
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    telefono: fila.telefono,
+    correo: fila.correo,
+    direccion: fila.direccion,
+    ciudad: fila.ciudad,
+    origen: fila.origen,
+    valorCampana: Number(fila.valor_campana),
+    notas: fila.notas,
+  };
+}
+
+/** Datos editables del formulario → columnas de la BD (snake_case). */
+export function aFilaProspecto(datos: DatosProspecto) {
+  return {
+    nombre: datos.nombre,
+    telefono: datos.telefono,
+    correo: datos.correo,
+    direccion: datos.direccion,
+    ciudad: datos.ciudad,
+    origen: datos.origen,
+    valor_campana: datos.valorCampana,
     notas: datos.notas,
   };
 }

@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Encabezado } from "@/components/Encabezado";
 import { FormularioExpediente } from "@/components/FormularioExpediente";
 import { useExpedientes } from "@/context/expedientes-context";
+import { listarProspectosMin } from "@/app/actions/prospectos";
 
 /**
  * Edición de un expediente existente: /expediente/[id]/editar
@@ -17,6 +19,13 @@ export default function PaginaEditar({
   const router = useRouter();
   const { obtenerExpediente, actualizarExpediente, cargado } = useExpedientes();
   const expediente = obtenerExpediente(params.id);
+  const [prospectos, setProspectos] = useState<
+    { id: string; nombre: string }[]
+  >([]);
+
+  useEffect(() => {
+    listarProspectosMin().then(setProspectos).catch(() => setProspectos([]));
+  }, []);
 
   // Mientras carga el estado persistido, evitamos mostrar "no encontrado".
   if (!expediente) {
@@ -63,6 +72,7 @@ export default function PaginaEditar({
         <div className="mt-6 rounded-xl border border-carbon/10 bg-white p-5">
           <FormularioExpediente
             valorInicial={datos}
+            prospectos={prospectos}
             textoBoton="Guardar cambios"
             onCancelar={() => router.push(`/expediente/${id}`)}
             onGuardar={async (nuevos) => {

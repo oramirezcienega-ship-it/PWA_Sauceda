@@ -129,6 +129,24 @@ export function DetalleExpediente({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* Prospecto (persona) dueño del expediente */}
+      {expediente.prospectoId && (
+        <Link
+          href={`/prospectos/${expediente.prospectoId}`}
+          className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-carbon/10 bg-white p-3 transition hover:border-sauce"
+        >
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
+              Prospecto
+            </p>
+            <p className="mt-0.5 font-mono text-sm text-verde-profundo">
+              {expediente.prospectoId}
+            </p>
+          </div>
+          <span className="text-sm text-sauce">Ver ficha →</span>
+        </Link>
+      )}
+
       {/* Enlace privado para el cliente vendedor */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cielo/30 bg-cielo/5 p-3">
         <div>

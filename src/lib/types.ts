@@ -49,6 +49,8 @@ export interface Expediente {
   notas: string;
   /** Token aleatorio para el enlace privado de seguimiento del cliente. */
   token: string;
+  /** Prospecto (persona) dueño del expediente. Null si aún no se enlaza. */
+  prospectoId: string | null;
 }
 
 /**
@@ -60,3 +62,35 @@ export type DatosExpediente = Omit<
   Expediente,
   "id" | "ultimoMovimiento" | "token"
 >;
+
+/** Origen de adquisición de un prospecto (lista fija). */
+export type OrigenAdquisicion =
+  | "whatsapp"
+  | "facebook"
+  | "instagram"
+  | "recomendacion"
+  | "sitio-web"
+  | "volante"
+  | "otro";
+
+/**
+ * Prospecto: la persona (entidad central del CRM). Un prospecto puede
+ * tener varios expedientes. "Cliente" no es otra entidad: es un estado
+ * que se deriva de la etapa de sus expedientes.
+ */
+export interface Prospecto {
+  id: string;
+  nombre: string;
+  telefono: string;
+  correo: string;
+  direccion: string;
+  ciudad: string;
+  /** Canal por el que se captó al prospecto. */
+  origen: OrigenAdquisicion;
+  /** Costo/valor de adquisición de la campaña, en pesos. */
+  valorCampana: number;
+  notas: string;
+}
+
+/** Datos editables de un prospecto (el `id` lo administra la app). */
+export type DatosProspecto = Omit<Prospecto, "id">;

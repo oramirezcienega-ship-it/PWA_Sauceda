@@ -1,7 +1,7 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
@@ -10,15 +10,9 @@ import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
  * Toda la lectura/escritura de expedientes en Supabase pasa por aquí
  * (en el servidor). El navegador nunca habla directo con la base de datos.
  *
- * Las acciones del admin exigen sesión (ver `requireAdmin`). La única
- * acción pública es `obtenerPorToken` (portal del cliente).
+ * Las acciones del admin exigen sesión (`requireAdmin`). La única acción
+ * pública es `obtenerPorToken` (portal del cliente).
  */
-
-/** Verifica que haya un admin autenticado; si no, corta la operación. */
-async function requireAdmin() {
-  const usuario = await usuarioActual();
-  if (!usuario) throw new Error("No autorizado.");
-}
 
 /** Fecha de hoy en formato ISO corto (YYYY-MM-DD). */
 function hoyISO(): string {

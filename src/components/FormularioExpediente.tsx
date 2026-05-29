@@ -14,6 +14,7 @@ const VACIO: DatosExpediente = {
   valorEstimado: 0,
   saldoDeuda: 0,
   notas: "",
+  prospectoId: null,
 };
 
 /**
@@ -26,11 +27,14 @@ export function FormularioExpediente({
   textoBoton,
   onGuardar,
   onCancelar,
+  prospectos = [],
 }: {
   valorInicial?: DatosExpediente;
   textoBoton: string;
   onGuardar: (datos: DatosExpediente) => void | Promise<void>;
   onCancelar: () => void;
+  /** Prospectos disponibles para enlazar (opcional). */
+  prospectos?: { id: string; nombre: string }[];
 }) {
   const [datos, setDatos] = useState<DatosExpediente>(valorInicial ?? VACIO);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +160,25 @@ export function FormularioExpediente({
           className={INPUT}
         />
       </Campo>
+
+      {prospectos.length > 0 && (
+        <Campo etiqueta="Prospecto (persona)">
+          <select
+            value={datos.prospectoId ?? ""}
+            onChange={(e) =>
+              actualizar("prospectoId", e.target.value || null)
+            }
+            className={INPUT}
+          >
+            <option value="">Sin prospecto</option>
+            {prospectos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} · {p.id}
+              </option>
+            ))}
+          </select>
+        </Campo>
+      )}
 
       <Campo etiqueta="Notas del asesor">
         <textarea

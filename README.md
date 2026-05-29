@@ -69,3 +69,5 @@ npm run dev     # http://localhost:3000
 - **Incremento 5** — Vista de lista (tipo HubSpot) con selector Lista/Tablero.
 - **Incremento 6** — Búsqueda (cliente/fraccionamiento) y filtro por etapa.
 - **Incremento 7** — Captación de leads por WhatsApp (webhook Meta Cloud API).
+- **Incremento 8** — Módulo de Prospectos (CRM): persona como entidad
+  central, expedientes relacionados, origen y valor de campaña de adquisición.

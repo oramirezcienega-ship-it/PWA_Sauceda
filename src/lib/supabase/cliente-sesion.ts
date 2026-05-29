@@ -47,3 +47,9 @@ export async function usuarioActual() {
   } = await sb.auth.getUser();
   return user;
 }
+
+/** Exige un admin autenticado; si no, corta la operación. */
+export async function requireAdmin() {
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+}

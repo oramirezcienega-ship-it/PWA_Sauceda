@@ -1,19 +1,19 @@
 "use client";
 
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Encabezado } from "@/components/Encabezado";
 import { FormularioExpediente } from "@/components/FormularioExpediente";
 import { useExpedientes } from "@/context/expedientes-context";
+import { listarProspectosMin } from "@/app/actions/prospectos";
+import type { DatosExpediente } from "@/lib/types";
 
 /**
  * Alta de un expediente nuevo: /expediente/nuevo
- * (Next.js prioriza esta ruta estática sobre la dinámica /expediente/[id].)
+ * Acepta ?prospecto=PRO-001 para enlazarlo desde el detalle de un prospecto.
  */
 export default function PaginaNuevo() {
-  const router = useRouter();
-  const { crearExpediente } = useExpedientes();
-
   return (
     <main className="min-h-screen pb-10">
       <Encabezado />
@@ -33,16 +33,56 @@ export default function PaginaNuevo() {
         </p>
 
         <div className="mt-6 rounded-xl border border-carbon/10 bg-white p-5">
-          <FormularioExpediente
-            textoBoton="Crear expediente"
-            onCancelar={() => router.push("/")}
-            onGuardar={async (datos) => {
-              const id = await crearExpediente(datos);
-              router.push(`/expediente/${id}`);
-            }}
-          />
+          <Suspense
+            fallback={<p className="text-sm text-carbon/50">Cargando…</p>}
+          >
+            <Formulario />
+          </Suspense>
         </div>
       </div>
     </main>
+  );
+}
+
+/** Contenido que depende de los parámetros de la URL (va dentro de Suspense). */
+function Formulario() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { crearExpediente } = useExpedientes();
+  const [prospectos, setProspectos] = useState<
+    { id: string; nombre: string }[]
+  >([]);
+
+  const prospectoInicial = searchParams.get("prospecto");
+
+  useEffect(() => {
+    listarProspectosMin().then(setProspectos).catch(() => setProspectos([]));
+  }, []);
+
+  const valorInicial: DatosExpediente | undefined = prospectoInicial
+    ? {
+        cliente: "",
+        fraccionamiento: "",
+        etapa: "nuevo-lead",
+        situacion: "",
+        telefono: "",
+        valorEstimado: 0,
+        saldoDeuda: 0,
+        notas: "",
+        prospectoId: prospectoInicial,
+      }
+    : undefined;
+
+  return (
+    <FormularioExpediente
+      valorInicial={valorInicial}
+      prospectos={prospectos}
+      textoBoton="Crear expediente"
+      onCancelar={() => router.push("/")}
+      onGuardar={async (datos) => {
+        const id = await crearExpediente(datos);
+        router.push(`/expediente/${id}`);
+      }}
+    />
   );
 }

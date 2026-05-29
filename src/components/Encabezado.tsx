@@ -9,21 +9,32 @@ import { CerrarSesion } from "./CerrarSesion";
 export function Encabezado() {
   return (
     <header className="sticky top-0 z-20 border-b border-dorado/30 bg-verde-profundo text-crema">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Link href="/" className="flex flex-col leading-none">
-          <span className="font-display text-2xl font-semibold tracking-tight">
-            SAUCEDA
-          </span>
-          <span className="font-cuerpo text-[11px] uppercase tracking-[0.2em] text-dorado">
-            Bienes Raíces
-          </span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <span className="hidden font-titular text-sm italic text-crema/80 sm:block">
-            Tradición con tecnología.
-          </span>
-          <CerrarSesion />
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex flex-col leading-none">
+            <span className="font-display text-2xl font-semibold tracking-tight">
+              SAUCEDA
+            </span>
+            <span className="font-cuerpo text-[11px] uppercase tracking-[0.2em] text-dorado">
+              Bienes Raíces
+            </span>
+          </Link>
+          <nav className="hidden items-center gap-1 sm:flex">
+            <Link
+              href="/"
+              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
+            >
+              Expedientes
+            </Link>
+            <Link
+              href="/prospectos"
+              className="rounded-md px-3 py-1.5 text-sm text-crema/90 transition hover:bg-crema/10"
+            >
+              Prospectos
+            </Link>
+          </nav>
         </div>
+        <CerrarSesion />
       </div>
     </header>
   );

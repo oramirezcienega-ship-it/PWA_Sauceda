@@ -80,17 +80,58 @@ async function siguienteId(
   return `EXP-${String(max + 1).padStart(3, "0")}`;
 }
 
+/** Genera el siguiente folio de prospecto (PRO-00N). */
+async function siguienteIdProspecto(
+  sb: ReturnType<typeof supabaseServidor>,
+): Promise<string> {
+  const { data } = await sb.from("prospectos").select("id");
+  const numeros = (data ?? [])
+    .map((r) => parseInt(String(r.id).replace(/\D/g, ""), 10))
+    .filter((n) => !Number.isNaN(n));
+  const max = numeros.length ? Math.max(...numeros) : 0;
+  return `PRO-${String(max + 1).padStart(3, "0")}`;
+}
+
+/** Busca o crea el prospecto (por teléfono) para un lead de WhatsApp. */
+async function obtenerOCrearProspecto(
+  sb: ReturnType<typeof supabaseServidor>,
+  lead: MensajeWhatsApp,
+): Promise<string> {
+  const { data: existentes } = await sb
+    .from("prospectos")
+    .select("id")
+    .eq("telefono", lead.telefono)
+    .limit(1);
+
+  if (existentes && existentes.length > 0) {
+    return existentes[0].id as string;
+  }
+
+  const id = await siguienteIdProspecto(sb);
+  await sb.from("prospectos").insert({
+    id,
+    nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
+    telefono: lead.telefono,
+    origen: "whatsapp",
+  });
+  return id;
+}
+
 /**
  * Registra un lead entrante de WhatsApp.
- * Si ya existe un expediente con ese teléfono, NO duplica: anota el nuevo
- * mensaje y actualiza la fecha. Si no, crea uno nuevo en "nuevo-lead".
+ * Crea (o reutiliza) el prospecto por teléfono con origen "whatsapp", y le
+ * cuelga un expediente en "nuevo-lead". Si ya existe un expediente con ese
+ * teléfono, NO duplica: anota el nuevo mensaje y actualiza la fecha.
  */
 export async function registrarLeadWhatsApp(
   lead: MensajeWhatsApp,
 ): Promise<void> {
   const sb = supabaseServidor();
 
-  // Dedupe por teléfono.
+  // Prospecto (persona): se busca o se crea por teléfono.
+  const prospectoId = await obtenerOCrearProspecto(sb, lead);
+
+  // Dedupe del expediente por teléfono.
   const { data: existentes } = await sb
     .from("expedientes")
     .select("id, notas")
@@ -123,5 +164,6 @@ export async function registrarLeadWhatsApp(
     saldo_deuda: 0,
     notas: "Lead entrante automáticamente por WhatsApp.",
     ultimo_movimiento: hoyISO(),
+    prospecto_id: prospectoId,
   });
 }
