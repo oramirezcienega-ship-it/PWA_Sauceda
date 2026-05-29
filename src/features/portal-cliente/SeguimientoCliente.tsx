@@ -5,6 +5,7 @@ import type {
 } from "@/lib/types";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { formatoFecha } from "@/lib/formato";
+import { MARCA } from "@/lib/marca";
 import { FormulariosCliente } from "./FormulariosCliente";
 import { MensajesCliente } from "./MensajesCliente";
 
@@ -114,7 +115,7 @@ export function SeguimientoCliente({
             ¿Tienes dudas sobre tu trámite?
           </p>
           <a
-            href="https://wa.me/524771234567"
+            href={`https://wa.me/${MARCA.whatsapp}`}
             className="mt-2 inline-block rounded-md bg-sauce px-4 py-2 text-sm font-medium text-crema transition hover:bg-verde-profundo"
           >
             Contactar a mi asesor

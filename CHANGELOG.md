@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.024 — Correos con logo y pie de contacto — 29/05/26
+- Los correos llevan el logo y un pie con WhatsApp, sitio web, Facebook y
+  TikTok (configurables en src/lib/marca.ts).
+
 ## 1.023 — Correo de mensajes sin el título interno — 29/05/26
 - El correo de notificación de un mensaje ya no muestra el título interno;
   asunto neutral ("Tienes un mensaje de SAUCEDA Bienes Raíces") y solo el texto.
