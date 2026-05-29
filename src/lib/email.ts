@@ -51,13 +51,35 @@ function plantilla(titulo: string, cuerpo: string, urlPortal: string): string {
       </p>
     </div>
     <div style="padding:18px 24px;background:#2D4A2B;color:#F5F1E8;text-align:center;font-size:13px;">
-      <div style="margin-bottom:8px;">
-        <a href="https://wa.me/${MARCA.whatsapp}" style="color:#C9A961;text-decoration:none;margin:0 8px;">WhatsApp</a>
-        <a href="${MARCA.web}" style="color:#C9A961;text-decoration:none;margin:0 8px;">Sitio web</a>
-        <a href="${MARCA.facebook}" style="color:#C9A961;text-decoration:none;margin:0 8px;">Facebook</a>
-        <a href="${MARCA.tiktok}" style="color:#C9A961;text-decoration:none;margin:0 8px;">TikTok</a>
-        <a href="${MARCA.instagram}" style="color:#C9A961;text-decoration:none;margin:0 8px;">Instagram</a>
-      </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 10px;">
+        <tr>
+          <td style="padding:0 7px;">
+            <a href="https://wa.me/${MARCA.whatsapp}" title="WhatsApp">
+              <img src="https://img.icons8.com/color/48/whatsapp--v1.png" width="30" height="30" alt="WhatsApp" style="display:block;" />
+            </a>
+          </td>
+          <td style="padding:0 7px;">
+            <a href="${MARCA.web}" title="Sitio web">
+              <img src="https://img.icons8.com/color/48/domain--v1.png" width="30" height="30" alt="Sitio web" style="display:block;" />
+            </a>
+          </td>
+          <td style="padding:0 7px;">
+            <a href="${MARCA.facebook}" title="Facebook">
+              <img src="https://img.icons8.com/color/48/facebook-new.png" width="30" height="30" alt="Facebook" style="display:block;" />
+            </a>
+          </td>
+          <td style="padding:0 7px;">
+            <a href="${MARCA.instagram}" title="Instagram">
+              <img src="https://img.icons8.com/color/48/instagram-new.png" width="30" height="30" alt="Instagram" style="display:block;" />
+            </a>
+          </td>
+          <td style="padding:0 7px;">
+            <a href="${MARCA.tiktok}" title="TikTok">
+              <img src="https://img.icons8.com/color/48/tiktok--v1.png" width="30" height="30" alt="TikTok" style="display:block;" />
+            </a>
+          </td>
+        </tr>
+      </table>
       <div style="font-size:12px;color:#C9A961;">WhatsApp: ${MARCA.whatsappTexto} · ${MARCA.web.replace("https://", "")}</div>
       <div style="margin-top:8px;font-size:11px;color:#9bb38f;">Tradición con tecnología.</div>
     </div>

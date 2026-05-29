@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.029 — Íconos de redes sociales en el pie del correo — 29/05/26
+- El pie del correo muestra los íconos de WhatsApp, sitio web, Facebook,
+  Instagram y TikTok (cada uno enlaza a su red).
+
 ## 1.028 — Número de WhatsApp real del negocio — 29/05/26
 - marca.ts: WhatsApp actualizado al número real (477 465 4700).
 
