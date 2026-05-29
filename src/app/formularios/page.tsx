@@ -6,7 +6,26 @@ export const dynamic = "force-dynamic";
 
 /** Panel de formularios (plantillas). */
 export default async function PaginaFormularios() {
-  const formularios = await listarFormularios();
+  let formularios;
+  try {
+    formularios = await listarFormularios();
+  } catch {
+    return (
+      <main className="min-h-screen pb-10">
+        <Encabezado />
+        <div className="mx-auto max-w-4xl px-4 pt-5">
+          <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
+            Formularios
+          </h1>
+          <p className="mt-4 rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
+            No se pudo cargar el módulo de formularios. Si es la primera vez,
+            corre la migración <span className="font-mono">0004_formularios.sql</span>{" "}
+            en Supabase.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen pb-10">

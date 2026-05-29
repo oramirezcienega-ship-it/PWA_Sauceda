@@ -16,7 +16,10 @@ export default async function PaginaSeguimiento({
   params: { token: string };
 }) {
   const expediente = await obtenerPorToken(params.token);
-  const envios = expediente ? await obtenerEnviosPorToken(params.token) : [];
+  // Si la tabla de formularios aún no existe, no rompemos el portal.
+  const envios = expediente
+    ? await obtenerEnviosPorToken(params.token).catch(() => [])
+    : [];
 
   if (!expediente) {
     return (
