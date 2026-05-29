@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.023 — Correo de mensajes sin el título interno — 29/05/26
+- El correo de notificación de un mensaje ya no muestra el título interno;
+  asunto neutral ("Tienes un mensaje de SAUCEDA Bienes Raíces") y solo el texto.
+
 ## 1.022 — Captación desde el sitio web (Cotizar) — 29/05/26
 - Endpoint /api/captacion/web que recibe el formulario del sitio
   (saucedamx.com) y crea prospecto (origen sitio-web) + expediente en

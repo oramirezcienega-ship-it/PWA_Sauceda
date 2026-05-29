@@ -128,8 +128,14 @@ export async function enviarMensaje(
     titulo: `Mensaje enviado: ${titulo}`,
     detalle: texto,
   });
-  // Notificación por correo al cliente (si tiene email).
-  await notificarCliente(sb, expedienteId, titulo, titulo, texto);
+  // Notificación por correo al cliente (sin mostrar el título interno).
+  await notificarCliente(
+    sb,
+    expedienteId,
+    "Tienes un mensaje de SAUCEDA Bienes Raíces",
+    "",
+    texto,
+  );
 }
 
 export async function listarMensajesDeExpediente(

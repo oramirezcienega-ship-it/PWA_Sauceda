@@ -31,15 +31,18 @@ async function enviarCorreo(
   }
 }
 
-/** Plantilla HTML con la marca SAUCEDA. */
+/** Plantilla HTML con la marca SAUCEDA. El título es opcional. */
 function plantilla(titulo: string, cuerpo: string, urlPortal: string): string {
+  const encabezado = titulo
+    ? `<h2 style="color:#2D4A2B;margin-top:0;">${titulo}</h2>`
+    : "";
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;">
     <div style="background:#2D4A2B;padding:20px;text-align:center;">
       <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
       <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">BIENES RAÍCES</div>
     </div>
     <div style="padding:24px;background:#F5F1E8;color:#1A1A1A;">
-      <h2 style="color:#2D4A2B;margin-top:0;">${titulo}</h2>
+      ${encabezado}
       <p style="white-space:pre-line;line-height:1.5;">${cuerpo}</p>
       <p style="margin-top:20px;">
         <a href="${urlPortal}" style="display:inline-block;background:#5C7A52;color:#F5F1E8;padding:12px 22px;border-radius:6px;text-decoration:none;">Ver en mi portal</a>
