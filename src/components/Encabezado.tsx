@@ -37,6 +37,7 @@ export function Encabezado() {
             </span>
           </Link>
           <nav className="hidden items-center gap-1 sm:flex">
+            <Enlace href="/dashboard">Dashboard</Enlace>
             <Enlace href="/">Expedientes</Enlace>
             <Enlace href="/prospectos">Prospectos</Enlace>
             <Enlace href="/formularios">Formularios</Enlace>

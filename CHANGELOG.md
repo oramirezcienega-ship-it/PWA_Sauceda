@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.026 — Dashboard general de la operación — 29/05/26
+- Nueva sección Dashboard: métricas (leads, expedientes, activos, cerrados,
+  perdidos, tasa de conversión, inversión en campañas, costo por lead, valor
+  en pipeline), embudo de conversión por etapa y leads por fuente.
+
 ## 1.025 — Módulo de usuarios y roles — 29/05/26
 - Panel de Usuarios (solo administradores): crear usuarios (correo, contraseña,
   nombre, rol), cambiar rol/estado y eliminar.
