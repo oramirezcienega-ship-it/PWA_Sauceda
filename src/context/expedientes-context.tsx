@@ -53,8 +53,9 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       setExpedientes(lista);
     } catch (err) {
       console.error("Error al cargar expedientes:", err);
+      const detalle = err instanceof Error ? err.message : "error desconocido";
       setError(
-        "No se pudieron cargar los expedientes. Revisa la conexión con Supabase.",
+        `No se pudieron cargar los expedientes. Detalle: ${detalle}`,
       );
     } finally {
       setCargado(true);
