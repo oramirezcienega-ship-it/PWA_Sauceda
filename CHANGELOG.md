@@ -3,6 +3,13 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.002 — Sincronizar nombre, respuestas junto a campos y retirar formularios — 29/05/26
+- Al cambiar el nombre del cliente en el expediente, se actualiza también
+  el nombre del prospecto enlazado.
+- El bloque de formularios (y sus respuestas) se muestra junto a los campos
+  del expediente.
+- Se puede retirar (eliminar) un formulario enviado al cliente.
+
 ## 1.001 — Columnas ordenables, versionado y portal sin lista de etapas — 29/05/26
 - Ordenamiento por columna (ascendente/descendente) en el panel de
   expedientes y en el de prospectos (clic en el encabezado).

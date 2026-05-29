@@ -116,6 +116,15 @@ export async function actualizarExpediente(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+
+  // Sincroniza el nombre del prospecto enlazado con el del expediente.
+  if (datos.prospectoId) {
+    await sb
+      .from("prospectos")
+      .update({ nombre: datos.cliente })
+      .eq("id", datos.prospectoId);
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 

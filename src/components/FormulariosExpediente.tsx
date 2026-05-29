@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  eliminarEnvio,
   enviarFormulario,
   listarEnviosDeExpediente,
   listarFormularios,
@@ -96,15 +97,28 @@ export function FormulariosExpediente({
                 <span className="font-medium text-verde-profundo">
                   {env.formulario.titulo}
                 </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
-                    env.estado === "respondido"
-                      ? "bg-sauce/20 text-verde-profundo"
-                      : "bg-dorado/20 text-[#8a7233]"
-                  }`}
-                >
-                  {env.estado === "respondido" ? "Respondido" : "Pendiente"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      env.estado === "respondido"
+                        ? "bg-sauce/20 text-verde-profundo"
+                        : "bg-dorado/20 text-[#8a7233]"
+                    }`}
+                  >
+                    {env.estado === "respondido" ? "Respondido" : "Pendiente"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await eliminarEnvio(env.id);
+                      await cargar();
+                    }}
+                    className="text-xs text-rojo/70 hover:text-rojo"
+                    title="Retirar este formulario del cliente"
+                  >
+                    Retirar
+                  </button>
+                </div>
               </div>
 
               {env.estado === "respondido" && (

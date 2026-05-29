@@ -146,6 +146,17 @@ export async function enviarFormulario(
   if (error) throw new Error(error.message);
 }
 
+/** Retira (elimina) un envío de formulario de un expediente. */
+export async function eliminarEnvio(envioId: string): Promise<void> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("envios_formulario")
+    .delete()
+    .eq("id", envioId);
+  if (error) throw new Error(error.message);
+}
+
 /** Lista los envíos de un expediente (con su plantilla). */
 export async function listarEnviosDeExpediente(
   expedienteId: string,

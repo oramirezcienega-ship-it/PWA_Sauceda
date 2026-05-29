@@ -244,14 +244,15 @@ export function DetalleExpediente({ id }: { id: string }) {
         />
       </dl>
 
+      {/* Formularios del cliente: enviar, retirar y ver respuestas
+          (la información recopilada queda junto a los campos del expediente). */}
+      <FormulariosExpediente expedienteId={expediente.id} />
+
       {/* Situación y notas */}
       <div className="mt-4 space-y-4">
         <Bloque titulo="Situación">{expediente.situacion}</Bloque>
         <Bloque titulo="Notas del asesor">{expediente.notas}</Bloque>
       </div>
-
-      {/* Formularios enviados al cliente */}
-      <FormulariosExpediente expedienteId={expediente.id} />
 
       {/* Mover de etapa */}
       <div className="mt-6 rounded-xl border border-dorado/40 bg-dorado/5 p-4">
