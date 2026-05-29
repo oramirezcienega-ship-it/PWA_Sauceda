@@ -7,6 +7,8 @@ import type { DatosExpediente } from "@/lib/types";
 /** Valores por defecto para un expediente nuevo. */
 const VACIO: DatosExpediente = {
   cliente: "",
+  primerApellido: "",
+  segundoApellido: "",
   fraccionamiento: "",
   etapa: "nuevo-lead",
   situacion: "",
@@ -59,6 +61,8 @@ export function FormularioExpediente({
       await onGuardar({
         ...datos,
         cliente: datos.cliente.trim(),
+        primerApellido: datos.primerApellido.trim(),
+        segundoApellido: datos.segundoApellido.trim(),
         fraccionamiento: datos.fraccionamiento.trim(),
         valorEstimado: Number(datos.valorEstimado) || 0,
         saldoDeuda: Number(datos.saldoDeuda) || 0,
@@ -79,15 +83,35 @@ export function FormularioExpediente({
         </p>
       )}
 
-      <Campo etiqueta="Cliente" requerido>
-        <input
-          type="text"
-          value={datos.cliente}
-          onChange={(e) => actualizar("cliente", e.target.value)}
-          placeholder="Nombre del titular del crédito"
-          className={INPUT}
-        />
-      </Campo>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Campo etiqueta="Nombre(s)" requerido>
+          <input
+            type="text"
+            value={datos.cliente}
+            onChange={(e) => actualizar("cliente", e.target.value)}
+            placeholder="Nombre(s)"
+            className={INPUT}
+          />
+        </Campo>
+        <Campo etiqueta="Primer apellido">
+          <input
+            type="text"
+            value={datos.primerApellido}
+            onChange={(e) => actualizar("primerApellido", e.target.value)}
+            placeholder="Primer apellido"
+            className={INPUT}
+          />
+        </Campo>
+        <Campo etiqueta="Segundo apellido">
+          <input
+            type="text"
+            value={datos.segundoApellido}
+            onChange={(e) => actualizar("segundoApellido", e.target.value)}
+            placeholder="Segundo apellido"
+            className={INPUT}
+          />
+        </Campo>
+      </div>
 
       <Campo etiqueta="Fraccionamiento" requerido>
         <input

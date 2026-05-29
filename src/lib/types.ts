@@ -30,8 +30,14 @@ export interface Etapa {
  */
 export interface Expediente {
   id: string;
-  /** Nombre del cliente titular del crédito. */
+  /** Nombre(s) de pila del cliente titular del crédito. */
   cliente: string;
+  /** Primer apellido del cliente. */
+  primerApellido: string;
+  /** Segundo apellido del cliente. */
+  segundoApellido: string;
+  /** Nombre completo armado (solo lectura). */
+  nombreCompleto: string;
   /** Fraccionamiento / zona en León, Gto. */
   fraccionamiento: string;
   /** Etapa actual dentro del flujo. */
@@ -63,7 +69,7 @@ export interface Expediente {
  */
 export type DatosExpediente = Omit<
   Expediente,
-  "id" | "ultimoMovimiento" | "token" | "origenProspecto"
+  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto"
 >;
 
 /** Origen de adquisición de un prospecto (lista fija). */
@@ -83,7 +89,14 @@ export type OrigenAdquisicion =
  */
 export interface Prospecto {
   id: string;
+  /** Nombre(s) de pila. */
   nombre: string;
+  /** Primer apellido. */
+  primerApellido: string;
+  /** Segundo apellido. */
+  segundoApellido: string;
+  /** Nombre completo armado (solo lectura). */
+  nombreCompleto: string;
   telefono: string;
   correo: string;
   direccion: string;
@@ -96,7 +109,7 @@ export interface Prospecto {
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
-export type DatosProspecto = Omit<Prospecto, "id">;
+export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto">;
 
 // ------------------------------------------------------------
 // MÓDULO FORMULARIOS

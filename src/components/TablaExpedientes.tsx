@@ -11,7 +11,7 @@ import { ThOrden } from "./ThOrden";
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
-  cliente: (a, b) => a.cliente.localeCompare(b.cliente, "es"),
+  cliente: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
   fraccionamiento: (a, b) =>
     a.fraccionamiento.localeCompare(b.fraccionamiento, "es"),
   origen: (a, b) =>
@@ -86,7 +86,7 @@ export function TablaExpedientes({
                   href={`/expediente/${exp.id}`}
                   className="font-titular font-medium text-verde-profundo hover:text-sauce"
                 >
-                  {exp.cliente}
+                  {exp.nombreCompleto}
                 </Link>
                 <span className="ml-2 font-mono text-[10px] text-carbon/40">
                   {exp.id}
@@ -116,7 +116,7 @@ export function TablaExpedientes({
                   value={exp.etapa}
                   onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
                   className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-                  aria-label={`Cambiar etapa de ${exp.cliente}`}
+                  aria-label={`Cambiar etapa de ${exp.nombreCompleto}`}
                 >
                   {ETAPAS.map((etapa) => (
                     <option key={etapa.id} value={etapa.id}>

@@ -42,7 +42,7 @@ export function SeguimientoCliente({
         {/* Saludo */}
         <p className="text-sm text-carbon/60">Seguimiento de tu traspaso</p>
         <h1 className="mt-1 font-titular text-3xl font-semibold text-verde-profundo">
-          Hola, {expediente.cliente.split(" ")[0]}
+          Hola, {expediente.cliente || expediente.nombreCompleto}
         </h1>
         <p className="mt-1 text-sm text-carbon/70">
           Tu propiedad en <strong>{expediente.fraccionamiento}</strong>, León, Gto.
@@ -73,7 +73,19 @@ export function SeguimientoCliente({
         </div>
 
         {/* Formularios pendientes / respondidos */}
-        {token && <FormulariosCliente token={token} envios={envios} />}
+        {token && (
+          <FormulariosCliente
+            token={token}
+            envios={envios}
+            parametros={{
+              nombre: expediente.cliente,
+              primer_apellido: expediente.primerApellido,
+              segundo_apellido: expediente.segundoApellido,
+              nombre_completo: expediente.nombreCompleto,
+              fraccionamiento: expediente.fraccionamiento,
+            }}
+          />
+        )}
 
         {/* Contacto */}
         <div className="mt-6 rounded-2xl border border-dorado/40 bg-dorado/5 p-5 text-center">

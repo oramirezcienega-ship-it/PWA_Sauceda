@@ -52,7 +52,7 @@ export default async function PaginaProspecto({
         <div className="mt-4 flex items-start justify-between gap-3">
           <div>
             <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
-              {prospecto.nombre}
+              {prospecto.nombreCompleto}
             </h1>
             <p className="mt-1 text-sm text-carbon/60">
               <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2.5 py-0.5 text-xs text-cielo">

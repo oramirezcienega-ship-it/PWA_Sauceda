@@ -7,8 +7,8 @@ import { ImportadorCSV } from "@/components/ImportadorCSV";
 import { importarExpedientes } from "@/app/actions/expedientes";
 
 const PLANTILLA =
-  "cliente,fraccionamiento,telefono,etapa,situacion,valor_estimado,saldo_deuda,notas\n" +
-  "Juan Pérez,Brisas del Campestre,477 111 2233,nuevo-lead,Quiere traspasar,950000,400000,\n";
+  "nombre,primer_apellido,segundo_apellido,fraccionamiento,telefono,etapa,situacion,valor_estimado,saldo_deuda,notas\n" +
+  "Juan,Pérez,López,Brisas del Campestre,477 111 2233,nuevo-lead,Quiere traspasar,950000,400000,\n";
 
 /** Importación de expedientes por CSV: /expediente/importar */
 export default function PaginaImportarExpedientes() {
@@ -29,14 +29,16 @@ export default function PaginaImportarExpedientes() {
           Importar expedientes
         </h1>
         <p className="mt-1 text-sm text-carbon/60">
-          Sube un archivo CSV. Solo <strong>cliente</strong> y{" "}
+          Sube un archivo CSV. Solo <strong>nombre</strong> y{" "}
           <strong>fraccionamiento</strong> son obligatorios.
         </p>
 
         <div className="mt-6 rounded-xl border border-carbon/10 bg-white p-5">
           <ImportadorCSV
             columnas={[
-              { clave: "cliente", requerido: true },
+              { clave: "nombre", requerido: true },
+              { clave: "primer_apellido" },
+              { clave: "segundo_apellido" },
               { clave: "fraccionamiento", requerido: true },
               { clave: "telefono" },
               { clave: "etapa" },

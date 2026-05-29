@@ -8,7 +8,7 @@ import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
-  nombre: (a, b) => a.nombre.localeCompare(b.nombre, "es"),
+  nombre: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
   telefono: (a, b) => a.telefono.localeCompare(b.telefono, "es"),
   ciudad: (a, b) => a.ciudad.localeCompare(b.ciudad, "es"),
   origen: (a, b) =>
@@ -58,7 +58,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   href={`/prospectos/${p.id}`}
                   className="font-titular font-medium text-verde-profundo hover:text-sauce"
                 >
-                  {p.nombre}
+                  {p.nombreCompleto}
                 </Link>
                 <span className="ml-2 font-mono text-[10px] text-carbon/40">
                   {p.id}

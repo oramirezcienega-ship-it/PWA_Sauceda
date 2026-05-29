@@ -62,6 +62,8 @@ function Formulario() {
   const valorInicial: DatosExpediente | undefined = prospectoInicial
     ? {
         cliente: "",
+        primerApellido: "",
+        segundoApellido: "",
         fraccionamiento: "",
         etapa: "nuevo-lead",
         situacion: "",

@@ -121,7 +121,11 @@ export async function actualizarExpediente(
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
-      .update({ nombre: datos.cliente })
+      .update({
+        nombre: datos.cliente,
+        primer_apellido: datos.primerApellido,
+        segundo_apellido: datos.segundoApellido,
+      })
       .eq("id", datos.prospectoId);
   }
 
@@ -172,10 +176,11 @@ export async function importarExpedientes(
   const aInsertar: Record<string, unknown>[] = [];
 
   filas.forEach((f, idx) => {
-    const cliente = (f.cliente ?? "").trim();
+    // Acepta "nombre" (preferido) o "cliente" (nombre completo) como nombre.
+    const cliente = (f.nombre ?? f.cliente ?? "").trim();
     const fraccionamiento = (f.fraccionamiento ?? "").trim();
     if (!cliente || !fraccionamiento) {
-      errores.push(`Fila ${idx + 1}: faltan "cliente" o "fraccionamiento".`);
+      errores.push(`Fila ${idx + 1}: faltan "nombre" o "fraccionamiento".`);
       return;
     }
     let etapa = (f.etapa ?? "nuevo-lead").trim();
@@ -184,6 +189,8 @@ export async function importarExpedientes(
     aInsertar.push({
       id: `EXP-${String(n).padStart(3, "0")}`,
       cliente,
+      primer_apellido: (f.primer_apellido ?? "").trim(),
+      segundo_apellido: (f.segundo_apellido ?? "").trim(),
       fraccionamiento,
       etapa,
       situacion: (f.situacion ?? "").trim(),

@@ -5,6 +5,7 @@ import {
   responderFormulario,
   subirArchivoFormulario,
 } from "@/app/actions/formularios";
+import { aplicarParametros } from "@/lib/parametros";
 import type { EnvioConFormulario, Pregunta } from "@/lib/types";
 
 /**
@@ -14,9 +15,11 @@ import type { EnvioConFormulario, Pregunta } from "@/lib/types";
 export function FormulariosCliente({
   token,
   envios,
+  parametros = {},
 }: {
   token: string;
   envios: EnvioConFormulario[];
+  parametros?: Record<string, string>;
 }) {
   if (envios.length === 0) return null;
 
@@ -26,7 +29,12 @@ export function FormulariosCliente({
         Formularios
       </p>
       {envios.map((envio) => (
-        <TarjetaFormulario key={envio.id} token={token} envio={envio} />
+        <TarjetaFormulario
+          key={envio.id}
+          token={token}
+          envio={envio}
+          parametros={parametros}
+        />
       ))}
     </div>
   );
@@ -35,10 +43,17 @@ export function FormulariosCliente({
 function TarjetaFormulario({
   token,
   envio,
+  parametros,
 }: {
   token: string;
   envio: EnvioConFormulario;
+  parametros: Record<string, string>;
 }) {
+  const titulo = aplicarParametros(envio.formulario.titulo, parametros);
+  const descripcion = aplicarParametros(
+    envio.formulario.descripcion,
+    parametros,
+  );
   const [respuestas, setRespuestas] = useState<Record<string, string>>(
     envio.respuestas ?? {},
   );
@@ -74,7 +89,7 @@ function TarjetaFormulario({
     return (
       <div className="rounded-2xl border border-sauce/30 bg-sauce/5 p-5">
         <p className="font-titular text-lg font-semibold text-verde-profundo">
-          {envio.formulario.titulo}
+          {titulo}
         </p>
         <p className="mt-1 text-sm text-sauce">✓ ¡Gracias! Ya recibimos tus respuestas.</p>
       </div>
@@ -87,12 +102,10 @@ function TarjetaFormulario({
       className="rounded-2xl border border-dorado/40 bg-white p-5"
     >
       <p className="font-titular text-lg font-semibold text-verde-profundo">
-        {envio.formulario.titulo}
+        {titulo}
       </p>
-      {envio.formulario.descripcion && (
-        <p className="mt-1 text-sm text-carbon/60">
-          {envio.formulario.descripcion}
-        </p>
+      {descripcion && (
+        <p className="mt-1 text-sm text-carbon/60">{descripcion}</p>
       )}
 
       <div className="mt-4 space-y-3">
@@ -101,6 +114,7 @@ function TarjetaFormulario({
             key={p.id}
             token={token}
             pregunta={p}
+            etiqueta={aplicarParametros(p.etiqueta, parametros)}
             valor={respuestas[p.id] ?? ""}
             onChange={(v) => set(p.id, v)}
           />
@@ -127,11 +141,13 @@ function TarjetaFormulario({
 function CampoPregunta({
   token,
   pregunta,
+  etiqueta,
   valor,
   onChange,
 }: {
   token: string;
   pregunta: Pregunta;
+  etiqueta: string;
   valor: string;
   onChange: (v: string) => void;
 }) {
@@ -141,7 +157,7 @@ function CampoPregunta({
   return (
     <label className="block">
       <span className="mb-1 block text-sm text-carbon/80">
-        {pregunta.etiqueta}
+        {etiqueta}
         {pregunta.requerido && <span className="ml-0.5 text-rojo">*</span>}
       </span>
 

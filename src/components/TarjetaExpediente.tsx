@@ -14,7 +14,7 @@ export function TarjetaExpediente({ expediente }: { expediente: Expediente }) {
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-titular text-base font-semibold leading-tight text-verde-profundo">
-          {expediente.cliente}
+          {expediente.nombreCompleto}
         </h3>
         <span className="shrink-0 font-mono text-[10px] text-carbon/40">
           {expediente.id}

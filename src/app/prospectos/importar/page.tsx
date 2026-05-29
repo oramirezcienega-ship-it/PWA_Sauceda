@@ -7,8 +7,8 @@ import { ImportadorCSV } from "@/components/ImportadorCSV";
 import { importarProspectos } from "@/app/actions/prospectos";
 
 const PLANTILLA =
-  "nombre,telefono,correo,direccion,ciudad,origen,valor_campana\n" +
-  "Juan Pérez,477 111 2233,juan@correo.com,Calle 1,León,facebook,350\n";
+  "nombre,primer_apellido,segundo_apellido,telefono,correo,direccion,ciudad,origen,valor_campana\n" +
+  "Juan,Pérez,López,477 111 2233,juan@correo.com,Calle 1,León,facebook,350\n";
 
 /** Importación de prospectos por CSV: /prospectos/importar */
 export default function PaginaImportarProspectos() {
@@ -38,6 +38,8 @@ export default function PaginaImportarProspectos() {
           <ImportadorCSV
             columnas={[
               { clave: "nombre", requerido: true },
+              { clave: "primer_apellido" },
+              { clave: "segundo_apellido" },
               { clave: "telefono" },
               { clave: "correo" },
               { clave: "direccion" },

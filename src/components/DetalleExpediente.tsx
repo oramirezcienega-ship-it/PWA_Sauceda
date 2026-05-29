@@ -88,7 +88,7 @@ export function DetalleExpediente({ id }: { id: string }) {
       <div className="mt-4 flex items-start justify-between gap-3">
         <div>
           <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
-            {expediente.cliente}
+            {expediente.nombreCompleto}
           </h1>
           <p className="mt-1 text-sm text-carbon/60">
             {expediente.fraccionamiento} · León, Gto.

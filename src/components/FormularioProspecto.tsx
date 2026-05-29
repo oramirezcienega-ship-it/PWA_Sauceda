@@ -7,6 +7,8 @@ import type { DatosProspecto } from "@/lib/types";
 /** Valores por defecto para un prospecto nuevo. */
 const VACIO: DatosProspecto = {
   nombre: "",
+  primerApellido: "",
+  segundoApellido: "",
   telefono: "",
   correo: "",
   direccion: "",
@@ -54,6 +56,8 @@ export function FormularioProspecto({
       await onGuardar({
         ...datos,
         nombre: datos.nombre.trim(),
+        primerApellido: datos.primerApellido.trim(),
+        segundoApellido: datos.segundoApellido.trim(),
         valorCampana: Number(datos.valorCampana) || 0,
       });
     } catch (err) {
@@ -71,15 +75,35 @@ export function FormularioProspecto({
         </p>
       )}
 
-      <Campo etiqueta="Nombre" requerido>
-        <input
-          type="text"
-          value={datos.nombre}
-          onChange={(e) => actualizar("nombre", e.target.value)}
-          placeholder="Nombre completo del prospecto"
-          className={INPUT}
-        />
-      </Campo>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Campo etiqueta="Nombre(s)" requerido>
+          <input
+            type="text"
+            value={datos.nombre}
+            onChange={(e) => actualizar("nombre", e.target.value)}
+            placeholder="Nombre(s)"
+            className={INPUT}
+          />
+        </Campo>
+        <Campo etiqueta="Primer apellido">
+          <input
+            type="text"
+            value={datos.primerApellido}
+            onChange={(e) => actualizar("primerApellido", e.target.value)}
+            placeholder="Primer apellido"
+            className={INPUT}
+          />
+        </Campo>
+        <Campo etiqueta="Segundo apellido">
+          <input
+            type="text"
+            value={datos.segundoApellido}
+            onChange={(e) => actualizar("segundoApellido", e.target.value)}
+            placeholder="Segundo apellido"
+            className={INPUT}
+          />
+        </Campo>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo etiqueta="Teléfono">

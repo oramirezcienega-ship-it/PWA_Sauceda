@@ -3,6 +3,15 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.006 — Nombre separado y parámetros en formularios — 29/05/26
+- El nombre se separa en Nombre / Primer apellido / Segundo apellido en
+  expedientes y prospectos (migración 0006 separa lo existente). Las vistas
+  muestran el nombre completo armado; la búsqueda usa el nombre completo.
+- Al cambiar el nombre en el expediente se sincroniza el del prospecto.
+- Los formularios admiten parámetros del cliente en su texto, ej.
+  "Hola {nombre}" ({nombre}, {primer_apellido}, {segundo_apellido},
+  {nombre_completo}, {fraccionamiento}).
+
 ## 1.005 — Fotos múltiples y elección cámara/galería en formularios — 29/05/26
 - El campo de archivo permite subir varios a la vez y el celular ofrece
   cámara, galería o archivos (PDF). El admin ve cada archivo por separado.

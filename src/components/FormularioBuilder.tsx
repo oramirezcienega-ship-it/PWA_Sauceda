@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TIPOS_PREGUNTA } from "@/lib/preguntas";
+import { PARAMETROS_DISPONIBLES } from "@/lib/parametros";
 import type { DatosFormulario, Pregunta, TipoPregunta } from "@/lib/types";
 
 /** Crea una pregunta vacía. */
@@ -128,6 +129,14 @@ export function FormularioBuilder({
           className={INPUT}
         />
       </label>
+
+      {/* Parámetros disponibles */}
+      <p className="rounded-md border border-cielo/30 bg-cielo/5 px-3 py-2 text-xs text-carbon/70">
+        Puedes usar datos del cliente en el texto (título, descripción y
+        preguntas), ej. <span className="font-mono">Hola {"{nombre}"}</span>.
+        Disponibles:{" "}
+        <span className="font-mono">{PARAMETROS_DISPONIBLES.join(" ")}</span>
+      </p>
 
       {/* Preguntas */}
       <div className="space-y-3">

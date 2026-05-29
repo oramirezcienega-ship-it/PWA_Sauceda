@@ -153,6 +153,8 @@ export async function importarProspectos(
     aInsertar.push({
       id: `PRO-${String(n).padStart(3, "0")}`,
       nombre,
+      primer_apellido: (f.primer_apellido ?? "").trim(),
+      segundo_apellido: (f.segundo_apellido ?? "").trim(),
       telefono: (f.telefono ?? "").trim(),
       correo: (f.correo ?? "").trim(),
       direccion: (f.direccion ?? "").trim(),
@@ -172,7 +174,7 @@ export async function importarProspectos(
   return { importados: aInsertar.length, errores };
 }
 
-/** Lista mínima (id + nombre) para selects de formularios. */
+/** Lista mínima (id + nombre completo) para selects de formularios. */
 export async function listarProspectosMin(): Promise<
   { id: string; nombre: string }[]
 > {
@@ -180,8 +182,20 @@ export async function listarProspectosMin(): Promise<
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("prospectos")
-    .select("id, nombre")
+    .select("id, nombre, primer_apellido, segundo_apellido")
     .order("nombre", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as { id: string; nombre: string }[];
+  return (data ?? []).map(
+    (r: {
+      id: string;
+      nombre: string;
+      primer_apellido: string;
+      segundo_apellido: string;
+    }) => ({
+      id: r.id,
+      nombre: [r.nombre, r.primer_apellido, r.segundo_apellido]
+        .filter(Boolean)
+        .join(" "),
+    }),
+  );
 }

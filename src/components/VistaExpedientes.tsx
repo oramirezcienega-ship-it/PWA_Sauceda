@@ -39,7 +39,7 @@ export function VistaExpedientes() {
     return expedientes.filter((e) => {
       const coincideTexto =
         !q ||
-        e.cliente.toLowerCase().includes(q) ||
+        e.nombreCompleto.toLowerCase().includes(q) ||
         e.fraccionamiento.toLowerCase().includes(q);
       const coincideEtapa = etapaFiltro === "todas" || e.etapa === etapaFiltro;
       return coincideTexto && coincideEtapa;

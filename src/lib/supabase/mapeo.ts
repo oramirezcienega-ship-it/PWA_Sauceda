@@ -7,6 +7,18 @@ import type {
   Prospecto,
 } from "@/lib/types";
 
+/** Arma el nombre completo a partir de nombre + apellidos. */
+export function nombreCompleto(
+  nombre: string,
+  primerApellido: string,
+  segundoApellido: string,
+): string {
+  return [nombre, primerApellido, segundoApellido]
+    .map((p) => (p ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 /**
  * Fila tal como vive en la tabla `expedientes` de Supabase (snake_case).
  * Aquí se traduce entre la base de datos y el modelo que usa la app.
@@ -14,6 +26,8 @@ import type {
 export interface FilaExpediente {
   id: string;
   cliente: string;
+  primer_apellido: string;
+  segundo_apellido: string;
   fraccionamiento: string;
   etapa: EtapaId;
   situacion: string;
@@ -33,6 +47,13 @@ export function aExpediente(fila: FilaExpediente): Expediente {
   return {
     id: fila.id,
     cliente: fila.cliente,
+    primerApellido: fila.primer_apellido ?? "",
+    segundoApellido: fila.segundo_apellido ?? "",
+    nombreCompleto: nombreCompleto(
+      fila.cliente,
+      fila.primer_apellido ?? "",
+      fila.segundo_apellido ?? "",
+    ),
     fraccionamiento: fila.fraccionamiento,
     etapa: fila.etapa,
     situacion: fila.situacion,
@@ -51,6 +72,8 @@ export function aExpediente(fila: FilaExpediente): Expediente {
 export function aFila(datos: DatosExpediente) {
   return {
     cliente: datos.cliente,
+    primer_apellido: datos.primerApellido,
+    segundo_apellido: datos.segundoApellido,
     fraccionamiento: datos.fraccionamiento,
     etapa: datos.etapa,
     situacion: datos.situacion,
@@ -70,6 +93,8 @@ export function aFila(datos: DatosExpediente) {
 export interface FilaProspecto {
   id: string;
   nombre: string;
+  primer_apellido: string;
+  segundo_apellido: string;
   telefono: string;
   correo: string;
   direccion: string;
@@ -84,6 +109,13 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
   return {
     id: fila.id,
     nombre: fila.nombre,
+    primerApellido: fila.primer_apellido ?? "",
+    segundoApellido: fila.segundo_apellido ?? "",
+    nombreCompleto: nombreCompleto(
+      fila.nombre,
+      fila.primer_apellido ?? "",
+      fila.segundo_apellido ?? "",
+    ),
     telefono: fila.telefono,
     correo: fila.correo,
     direccion: fila.direccion,
@@ -98,6 +130,8 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
 export function aFilaProspecto(datos: DatosProspecto) {
   return {
     nombre: datos.nombre,
+    primer_apellido: datos.primerApellido,
+    segundo_apellido: datos.segundoApellido,
     telefono: datos.telefono,
     correo: datos.correo,
     direccion: datos.direccion,
