@@ -65,8 +65,8 @@ export default function PaginaEditar({
             valorInicial={datos}
             textoBoton="Guardar cambios"
             onCancelar={() => router.push(`/expediente/${id}`)}
-            onGuardar={(nuevos) => {
-              actualizarExpediente(id, nuevos);
+            onGuardar={async (nuevos) => {
+              await actualizarExpediente(id, nuevos);
               router.push(`/expediente/${id}`);
             }}
           />

@@ -6,135 +6,107 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
-import { EXPEDIENTES_MOCK } from "@/lib/mock-data";
+import * as acciones from "@/app/actions/expedientes";
 
 /**
- * Estado de los expedientes con persistencia local (Incremento 2).
+ * Estado de los expedientes respaldado por Supabase (Incremento 3).
  *
- * Sigue SIN backend ni base de datos: los expedientes se guardan en
- * localStorage del navegador. En la primera visita se siembran con los
- * datos mock; a partir de ahí el tablero recuerda los cambios.
- *
- * FUTURO: sustituir localStorage por la capa de datos real (API / DB)
- * manteniendo esta misma interfaz de contexto.
+ * La fuente de verdad es la base de datos. Este contexto mantiene una
+ * copia en memoria para la UI del admin: carga la lista al montar y, en
+ * cada cambio, llama a las server actions y refleja el resultado.
  */
-
-/** Clave de almacenamiento (versionada para poder migrar más adelante). */
-const STORAGE_KEY = "sauceda.expedientes.v1";
-
 interface ExpedientesContextValue {
   expedientes: Expediente[];
-  /** Indica si ya se cargó el estado persistido (evita parpadeos/guardados prematuros). */
+  /** Indica si ya terminó la carga inicial. */
   cargado: boolean;
-  /** Cambia la etapa de un expediente y actualiza su último movimiento. */
-  moverEtapa: (id: string, etapa: EtapaId) => void;
+  /** Mensaje de error de carga/escritura, si lo hubo. */
+  error: string | null;
+  /** Vuelve a leer la lista desde la base de datos. */
+  recargar: () => Promise<void>;
+  /** Cambia la etapa de un expediente. */
+  moverEtapa: (id: string, etapa: EtapaId) => Promise<void>;
   /** Crea un expediente nuevo y devuelve su id generado. */
-  crearExpediente: (datos: DatosExpediente) => string;
+  crearExpediente: (datos: DatosExpediente) => Promise<string>;
   /** Actualiza los datos editables de un expediente existente. */
-  actualizarExpediente: (id: string, datos: DatosExpediente) => void;
+  actualizarExpediente: (id: string, datos: DatosExpediente) => Promise<void>;
   /** Elimina un expediente. */
-  eliminarExpediente: (id: string) => void;
-  /** Restablece el tablero a los datos de ejemplo (útil para demos). */
-  restablecerMock: () => void;
-  /** Busca un expediente por id. */
+  eliminarExpediente: (id: string) => Promise<void>;
+  /** Busca un expediente por id (en la copia en memoria). */
   obtenerExpediente: (id: string) => Expediente | undefined;
 }
 
 const ExpedientesContext = createContext<ExpedientesContextValue | null>(null);
 
-/** Fecha de hoy en formato ISO corto (YYYY-MM-DD). */
-function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-/** Genera el siguiente id correlativo tipo EXP-007 a partir de la lista actual. */
-function siguienteId(lista: Expediente[]): string {
-  const numeros = lista
-    .map((e) => parseInt(e.id.replace(/\D/g, ""), 10))
-    .filter((n) => !Number.isNaN(n));
-  const max = numeros.length ? Math.max(...numeros) : 0;
-  return `EXP-${String(max + 1).padStart(3, "0")}`;
-}
-
 export function ExpedientesProvider({ children }: { children: ReactNode }) {
-  // Estado inicial = mock (coincide en servidor y primer render del cliente,
-  // evitando errores de hidratación). El estado real se carga en el efecto.
-  const [expedientes, setExpedientes] =
-    useState<Expediente[]>(EXPEDIENTES_MOCK);
+  const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [cargado, setCargado] = useState(false);
-  // Evita que el primer guardado pise los datos antes de leer localStorage.
-  const puedeGuardar = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Carga inicial desde localStorage (o siembra con los mock la primera vez).
-  useEffect(() => {
+  const recargar = useCallback(async () => {
     try {
-      const guardado = window.localStorage.getItem(STORAGE_KEY);
-      if (guardado) {
-        setExpedientes(JSON.parse(guardado) as Expediente[]);
-      } else {
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(EXPEDIENTES_MOCK),
-        );
-      }
+      setError(null);
+      const lista = await acciones.listarExpedientes();
+      setExpedientes(lista);
     } catch (err) {
-      console.error("No se pudo leer el estado persistido:", err);
+      console.error("Error al cargar expedientes:", err);
+      setError(
+        "No se pudieron cargar los expedientes. Revisa la conexión con Supabase.",
+      );
+    } finally {
+      setCargado(true);
     }
-    puedeGuardar.current = true;
-    setCargado(true);
   }, []);
 
-  // Persiste cualquier cambio una vez que ya cargamos el estado inicial.
+  // Carga inicial desde la base de datos.
   useEffect(() => {
-    if (!puedeGuardar.current) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(expedientes));
-    } catch (err) {
-      console.error("No se pudo guardar el estado:", err);
-    }
-  }, [expedientes]);
+    void recargar();
+  }, [recargar]);
 
-  const moverEtapa = useCallback((id: string, etapa: EtapaId) => {
-    setExpedientes((prev) =>
-      prev.map((exp) =>
-        exp.id === id
-          ? { ...exp, etapa, ultimoMovimiento: hoyISO() }
-          : exp,
-      ),
-    );
-  }, []);
-
-  const crearExpediente = useCallback((datos: DatosExpediente): string => {
-    const id = siguienteId(expedientes);
-    const nuevo: Expediente = { ...datos, id, ultimoMovimiento: hoyISO() };
-    setExpedientes((prev) => [...prev, nuevo]);
-    return id;
-  }, [expedientes]);
-
-  const actualizarExpediente = useCallback(
-    (id: string, datos: DatosExpediente) => {
+  const moverEtapa = useCallback(
+    async (id: string, etapa: EtapaId) => {
+      const hoy = new Date().toISOString().slice(0, 10);
+      // Optimista: actualizamos la UI de inmediato.
       setExpedientes((prev) =>
         prev.map((exp) =>
-          exp.id === id
-            ? { ...exp, ...datos, id, ultimoMovimiento: hoyISO() }
-            : exp,
+          exp.id === id ? { ...exp, etapa, ultimoMovimiento: hoy } : exp,
         ),
+      );
+      try {
+        await acciones.moverEtapa(id, etapa);
+      } catch (err) {
+        console.error("Error al mover de etapa:", err);
+        await recargar(); // revertimos al estado real
+      }
+    },
+    [recargar],
+  );
+
+  const crearExpediente = useCallback(
+    async (datos: DatosExpediente): Promise<string> => {
+      const nuevo = await acciones.crearExpediente(datos);
+      setExpedientes((prev) => [...prev, nuevo]);
+      return nuevo.id;
+    },
+    [],
+  );
+
+  const actualizarExpediente = useCallback(
+    async (id: string, datos: DatosExpediente) => {
+      const actualizado = await acciones.actualizarExpediente(id, datos);
+      setExpedientes((prev) =>
+        prev.map((exp) => (exp.id === id ? actualizado : exp)),
       );
     },
     [],
   );
 
-  const eliminarExpediente = useCallback((id: string) => {
+  const eliminarExpediente = useCallback(async (id: string) => {
+    await acciones.eliminarExpediente(id);
     setExpedientes((prev) => prev.filter((exp) => exp.id !== id));
-  }, []);
-
-  const restablecerMock = useCallback(() => {
-    setExpedientes(EXPEDIENTES_MOCK);
   }, []);
 
   const obtenerExpediente = useCallback(
@@ -146,21 +118,23 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
     () => ({
       expedientes,
       cargado,
+      error,
+      recargar,
       moverEtapa,
       crearExpediente,
       actualizarExpediente,
       eliminarExpediente,
-      restablecerMock,
       obtenerExpediente,
     }),
     [
       expedientes,
       cargado,
+      error,
+      recargar,
       moverEtapa,
       crearExpediente,
       actualizarExpediente,
       eliminarExpediente,
-      restablecerMock,
       obtenerExpediente,
     ],
   );

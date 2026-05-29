@@ -29,11 +29,12 @@ export function FormularioExpediente({
 }: {
   valorInicial?: DatosExpediente;
   textoBoton: string;
-  onGuardar: (datos: DatosExpediente) => void;
+  onGuardar: (datos: DatosExpediente) => void | Promise<void>;
   onCancelar: () => void;
 }) {
   const [datos, setDatos] = useState<DatosExpediente>(valorInicial ?? VACIO);
   const [error, setError] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   function actualizar<K extends keyof DatosExpediente>(
     campo: K,
@@ -42,19 +43,28 @@ export function FormularioExpediente({
     setDatos((d) => ({ ...d, [campo]: valor }));
   }
 
-  function enviar(e: React.FormEvent) {
+  async function enviar(e: React.FormEvent) {
     e.preventDefault();
     if (!datos.cliente.trim() || !datos.fraccionamiento.trim()) {
       setError("El nombre del cliente y el fraccionamiento son obligatorios.");
       return;
     }
-    onGuardar({
-      ...datos,
-      cliente: datos.cliente.trim(),
-      fraccionamiento: datos.fraccionamiento.trim(),
-      valorEstimado: Number(datos.valorEstimado) || 0,
-      saldoDeuda: Number(datos.saldoDeuda) || 0,
-    });
+    setError(null);
+    setEnviando(true);
+    try {
+      await onGuardar({
+        ...datos,
+        cliente: datos.cliente.trim(),
+        fraccionamiento: datos.fraccionamiento.trim(),
+        valorEstimado: Number(datos.valorEstimado) || 0,
+        saldoDeuda: Number(datos.saldoDeuda) || 0,
+      });
+      // Si todo salió bien la página normalmente redirige; si no, liberamos.
+    } catch (err) {
+      console.error("Error al guardar el expediente:", err);
+      setError("No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+      setEnviando(false);
+    }
   }
 
   return (
@@ -161,15 +171,17 @@ export function FormularioExpediente({
         <button
           type="button"
           onClick={onCancelar}
-          className="flex-1 rounded-md border border-carbon/15 bg-white px-4 py-2.5 text-sm text-carbon/70 transition hover:border-carbon/30"
+          disabled={enviando}
+          className="flex-1 rounded-md border border-carbon/15 bg-white px-4 py-2.5 text-sm text-carbon/70 transition hover:border-carbon/30 disabled:opacity-50"
         >
           Cancelar
         </button>
         <button
           type="submit"
-          className="flex-1 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo"
+          disabled={enviando}
+          className="flex-1 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-60"
         >
-          {textoBoton}
+          {enviando ? "Guardando…" : textoBoton}
         </button>
       </div>
     </form>

@@ -11,7 +11,21 @@ import { TarjetaExpediente } from "./TarjetaExpediente";
  * Cada tarjeta permite mover el expediente a la etapa anterior/siguiente.
  */
 export function TableroExpedientes() {
-  const { expedientes, moverEtapa } = useExpedientes();
+  const { expedientes, moverEtapa, cargado, error } = useExpedientes();
+
+  if (error) {
+    return (
+      <p className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
+        {error}
+      </p>
+    );
+  }
+
+  if (!cargado) {
+    return (
+      <p className="px-1 py-8 text-sm text-carbon/50">Cargando expedientes…</p>
+    );
+  }
 
   return (
     <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-4">

@@ -1,14 +1,17 @@
-# Portal del cliente (FUTURO — no construido en Incremento 1)
+# Portal del cliente
 
-Aquí vivirá la experiencia que verá el **cliente** (no el asesor):
-seguimiento de su traspaso, subida de documentos, estatus de su expediente
-y notificaciones.
+Experiencia que ve el **cliente vendedor** (no el asesor).
 
-> Fuera del alcance del Incremento 1. Esta carpeta es un marcador para que
-> el módulo entre sin fricción más adelante.
+## Hecho (Incremento 3)
 
-Ideas de organización cuando llegue el momento:
+- `SeguimientoCliente.tsx` — vista de **solo lectura** del expediente del
+  cliente: etapa actual, avance del trámite y contacto. NO muestra notas
+  internas, saldos ni otros expedientes.
+- Acceso por **enlace privado** con token aleatorio: `/seguimiento/[token]`
+  (la ruta está en `src/app/seguimiento/[token]/`). El admin copia ese enlace
+  desde el detalle del expediente y se lo comparte al cliente (ej. WhatsApp).
 
-- `components/` — UI específica del cliente.
-- `vistas/` — pantallas (seguimiento, documentos, perfil).
-- Reutilizar los tipos de `src/lib/types.ts` y la capa de datos compartida.
+## Futuro
+
+- Login/seguridad real del cliente (hoy el acceso es solo por enlace).
+- Subida de documentos y notificaciones.

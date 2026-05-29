@@ -19,6 +19,19 @@ export function DetalleExpediente({ id }: { id: string }) {
     useExpedientes();
   const expediente = obtenerExpediente(id);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  // Copia al portapapeles el enlace privado de seguimiento del cliente.
+  function copiarEnlaceCliente(token: string) {
+    const url = `${window.location.origin}/seguimiento/${token}`;
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2000);
+      },
+      () => window.prompt("Copia el enlace para el cliente:", url),
+    );
+  }
 
   // Expediente inexistente. Mientras carga el estado persistido evitamos
   // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
@@ -96,8 +109,8 @@ export function DetalleExpediente({ id }: { id: string }) {
               <span className="text-carbon/70">¿Eliminar?</span>
               <button
                 type="button"
-                onClick={() => {
-                  eliminarExpediente(expediente.id);
+                onClick={async () => {
+                  await eliminarExpediente(expediente.id);
                   router.push("/");
                 }}
                 className="rounded bg-rojo px-2 py-1 font-medium text-crema hover:opacity-90"
@@ -114,6 +127,25 @@ export function DetalleExpediente({ id }: { id: string }) {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Enlace privado para el cliente vendedor */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cielo/30 bg-cielo/5 p-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
+            Portal del cliente
+          </p>
+          <p className="mt-0.5 text-sm text-carbon/70">
+            Comparte el seguimiento de solo lectura de este expediente.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => copiarEnlaceCliente(expediente.token)}
+          className="rounded-md border border-cielo/40 bg-white px-3 py-2 text-sm text-cielo transition hover:bg-cielo hover:text-crema"
+        >
+          {copiado ? "¡Enlace copiado! ✓" : "Copiar enlace para el cliente"}
+        </button>
       </div>
 
       {/* Avance por etapas */}

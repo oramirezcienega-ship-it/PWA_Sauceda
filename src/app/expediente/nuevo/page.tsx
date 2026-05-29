@@ -36,8 +36,8 @@ export default function PaginaNuevo() {
           <FormularioExpediente
             textoBoton="Crear expediente"
             onCancelar={() => router.push("/")}
-            onGuardar={(datos) => {
-              const id = crearExpediente(datos);
+            onGuardar={async (datos) => {
+              const id = await crearExpediente(datos);
               router.push(`/expediente/${id}`);
             }}
           />

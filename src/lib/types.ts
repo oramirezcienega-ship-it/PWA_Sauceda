@@ -45,12 +45,18 @@ export interface Expediente {
   saldoDeuda: number;
   /** Fecha del último movimiento (ISO). */
   ultimoMovimiento: string;
-  /** Notas internas del asesor. */
+  /** Notas internas del asesor (NO se muestran al cliente). */
   notas: string;
+  /** Token aleatorio para el enlace privado de seguimiento del cliente. */
+  token: string;
 }
 
 /**
  * Datos editables de un expediente (lo que captura el formulario).
- * El `id` y la fecha de `ultimoMovimiento` los administra la app, no el usuario.
+ * El `id`, el `token` y la fecha de `ultimoMovimiento` los administra la app,
+ * no el usuario.
  */
-export type DatosExpediente = Omit<Expediente, "id" | "ultimoMovimiento">;
+export type DatosExpediente = Omit<
+  Expediente,
+  "id" | "ultimoMovimiento" | "token"
+>;
