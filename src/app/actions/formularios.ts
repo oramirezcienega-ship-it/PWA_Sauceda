@@ -132,18 +132,35 @@ export async function eliminarFormulario(id: string): Promise<void> {
 
 // ---------- Admin: envíos a expedientes ----------
 
-/** Envía (asigna) un formulario a un expediente. */
+/** Envía (asigna) un formulario a un expediente. Evita duplicados pendientes. */
 export async function enviarFormulario(
   expedienteId: string,
   formularioId: string,
-): Promise<void> {
+): Promise<{ ok: boolean; mensaje?: string }> {
   await requireAdmin();
   const sb = supabaseServidor();
+
+  // Evita asignar el mismo formulario dos veces si ya hay uno pendiente.
+  const { data: existente } = await sb
+    .from("envios_formulario")
+    .select("id")
+    .eq("expediente_id", expedienteId)
+    .eq("formulario_id", formularioId)
+    .eq("estado", "pendiente")
+    .limit(1);
+  if (existente && existente.length > 0) {
+    return {
+      ok: false,
+      mensaje: "Ese formulario ya está pendiente para este cliente.",
+    };
+  }
+
   const { error } = await sb.from("envios_formulario").insert({
     formulario_id: formularioId,
     expediente_id: expedienteId,
   });
-  if (error) throw new Error(error.message);
+  if (error) return { ok: false, mensaje: error.message };
+  return { ok: true };
 }
 
 /** Retira (elimina) un envío de formulario de un expediente. */

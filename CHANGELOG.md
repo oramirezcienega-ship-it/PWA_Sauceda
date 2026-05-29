@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.004 — Evitar formularios duplicados — 29/05/26
+- Al enviar un formulario ya pendiente al mismo cliente, se avisa y no se
+  duplica (causa de que un formulario "siguiera apareciendo" tras retirar
+  solo una de las copias).
+
 ## 1.003 — Subir PDF y fotos en los formularios — 29/05/26
 - Nuevo tipo de pregunta "Archivo (PDF/foto)".
 - El cliente puede subir archivos desde su portal (bucket privado de

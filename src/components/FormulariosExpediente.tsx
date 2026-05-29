@@ -23,6 +23,7 @@ export function FormulariosExpediente({
   const [envios, setEnvios] = useState<EnvioConFormulario[]>([]);
   const [seleccion, setSeleccion] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   async function cargar() {
     const [p, e] = await Promise.all([
@@ -41,8 +42,13 @@ export function FormulariosExpediente({
   async function enviar() {
     if (!seleccion) return;
     setEnviando(true);
+    setAviso(null);
     try {
-      await enviarFormulario(expedienteId, seleccion);
+      const res = await enviarFormulario(expedienteId, seleccion);
+      if (!res.ok) {
+        setAviso(res.mensaje ?? "No se pudo enviar.");
+        return;
+      }
       setSeleccion("");
       await cargar();
     } finally {
@@ -84,6 +90,12 @@ export function FormulariosExpediente({
             {enviando ? "Enviando…" : "Enviar al cliente"}
           </button>
         </div>
+      )}
+
+      {aviso && (
+        <p className="mt-2 rounded-md border border-dorado/40 bg-dorado/10 px-3 py-2 text-xs text-[#8a7233]">
+          {aviso}
+        </p>
       )}
 
       {/* Envíos existentes */}
