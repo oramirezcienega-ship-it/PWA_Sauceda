@@ -1,0 +1,121 @@
+import { supabaseServidor } from "@/lib/supabase/server";
+import { registrarActividad } from "@/lib/actividades";
+
+/**
+ * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
+ * Crea (o reutiliza) el prospecto con origen "sitio-web" y le cuelga un
+ * expediente en "nuevo-lead". No requiere sesión (lo invoca el sitio web).
+ */
+
+export interface LeadWeb {
+  nombre: string;
+  primerApellido?: string;
+  segundoApellido?: string;
+  telefono?: string;
+  correo?: string;
+  mensaje?: string;
+}
+
+function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function siguienteId(
+  sb: ReturnType<typeof supabaseServidor>,
+  tabla: string,
+  prefijo: string,
+): Promise<string> {
+  const { data } = await sb.from(tabla).select("id");
+  const numeros = (data ?? [])
+    .map((r) => parseInt(String(r.id).replace(/\D/g, ""), 10))
+    .filter((n) => !Number.isNaN(n));
+  const max = numeros.length ? Math.max(...numeros) : 0;
+  return `${prefijo}-${String(max + 1).padStart(3, "0")}`;
+}
+
+export async function registrarLeadWeb(lead: LeadWeb): Promise<void> {
+  const sb = supabaseServidor();
+  const nombre = lead.nombre?.trim() || "Lead del sitio web";
+  const telefono = (lead.telefono ?? "").trim();
+  const correo = (lead.correo ?? "").trim();
+
+  // Buscar prospecto existente por teléfono o correo (evita duplicados).
+  let prospectoId: string | null = null;
+  if (telefono) {
+    const { data } = await sb
+      .from("prospectos")
+      .select("id")
+      .eq("telefono", telefono)
+      .limit(1);
+    if (data && data.length) prospectoId = data[0].id as string;
+  }
+  if (!prospectoId && correo) {
+    const { data } = await sb
+      .from("prospectos")
+      .select("id")
+      .eq("correo", correo)
+      .limit(1);
+    if (data && data.length) prospectoId = data[0].id as string;
+  }
+  if (!prospectoId) {
+    const id = await siguienteId(sb, "prospectos", "PRO");
+    await sb.from("prospectos").insert({
+      id,
+      nombre,
+      primer_apellido: lead.primerApellido ?? "",
+      segundo_apellido: lead.segundoApellido ?? "",
+      telefono,
+      correo,
+      origen: "sitio-web",
+    });
+    prospectoId = id;
+  }
+
+  // Si ya existe un expediente con ese teléfono, no duplicamos: solo anotamos.
+  if (telefono) {
+    const { data: ex } = await sb
+      .from("expedientes")
+      .select("id")
+      .eq("telefono", telefono)
+      .limit(1);
+    if (ex && ex.length) {
+      await sb
+        .from("expedientes")
+        .update({ ultimo_movimiento: hoyISO() })
+        .eq("id", ex[0].id);
+      await registrarActividad(sb, {
+        expedienteId: ex[0].id as string,
+        tipo: "sistema",
+        titulo: "Nueva solicitud de cotización (sitio web)",
+        detalle: lead.mensaje ?? "",
+      });
+      return;
+    }
+  }
+
+  const expId = await siguienteId(sb, "expedientes", "EXP");
+  await sb.from("expedientes").insert({
+    id: expId,
+    cliente: nombre,
+    primer_apellido: lead.primerApellido ?? "",
+    segundo_apellido: lead.segundoApellido ?? "",
+    fraccionamiento: "Por definir",
+    etapa: "nuevo-lead",
+    situacion: lead.mensaje
+      ? `Cotización web: ${lead.mensaje}`.slice(0, 300)
+      : "Solicitud de cotización desde el sitio web.",
+    telefono,
+    valor_estimado: 0,
+    saldo_deuda: 0,
+    notas: "Lead entrante desde el sitio web (sección Cotizar).",
+    ultimo_movimiento: hoyISO(),
+    prospecto_id: prospectoId,
+  });
+  await registrarActividad(sb, {
+    expedienteId: expId,
+    prospectoId,
+    tipo: "creacion",
+    titulo: "Lead del sitio web (Cotizar)",
+    detalle: lead.mensaje ?? "",
+  });
+}

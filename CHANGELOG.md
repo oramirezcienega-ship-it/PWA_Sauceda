@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.022 — Captación desde el sitio web (Cotizar) — 29/05/26
+- Endpoint /api/captacion/web que recibe el formulario del sitio
+  (saucedamx.com) y crea prospecto (origen sitio-web) + expediente en
+  "nuevo-lead", con dedupe por teléfono/correo. CORS abierto para el sitio.
+
 ## 1.021 — Notificaciones por correo al cliente (Resend) — 29/05/26
 - Al enviar un mensaje o un formulario, también se notifica al cliente por
   correo (a su email del prospecto), con la marca y el enlace a su portal.
