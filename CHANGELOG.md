@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.016 — Portal del cliente siempre fresco (anti-caché) — 29/05/26
+- El service worker ya no cachea navegaciones ni /seguimiento ni /api: el
+  portal del cliente siempre lee datos frescos (refleja cambios de etapa).
+- (El estado "Perdido" requiere además la migración 0003 aplicada en la BD.)
+
 ## 1.015 — Ajuste de texto (Valuación) — 29/05/26
 - Etapa Valuación para el cliente: "Estamos evaluando tu propiedad…".
 

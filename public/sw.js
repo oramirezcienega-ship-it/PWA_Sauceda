@@ -7,7 +7,7 @@
   y manejo offline de la capa de captación/portal del cliente.
 */
 
-const CACHE = "sauceda-shell-v1";
+const CACHE = "sauceda-shell-v2";
 const RECURSOS = ["/", "/manifest.json", "/icons/icon.svg"];
 
 // Instala y precachea el shell mínimo.
@@ -34,6 +34,22 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+
+  // Las navegaciones (páginas) y las rutas dinámicas NO se cachean: siempre
+  // van a la red para que los datos estén frescos (ej. portal del cliente).
+  const url = new URL(request.url);
+  const esDinamica =
+    request.mode === "navigate" ||
+    url.pathname.startsWith("/seguimiento") ||
+    url.pathname.startsWith("/api");
+  if (esDinamica) {
+    event.respondWith(
+      fetch(request).catch(
+        () => caches.match(request).then((r) => r || caches.match("/")),
+      ),
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(request)
