@@ -3,6 +3,12 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.021 — Notificaciones por correo al cliente (Resend) — 29/05/26
+- Al enviar un mensaje o un formulario, también se notifica al cliente por
+  correo (a su email del prospecto), con la marca y el enlace a su portal.
+- Best-effort: si no hay RESEND_API_KEY configurada, no envía (no rompe nada).
+- Nuevas variables: RESEND_API_KEY, RESEND_FROM, SITE_URL.
+
 ## 1.020 — Panel excluye "Perdido" por defecto — 29/05/26
 - El panel de operación oculta los expedientes en "Perdido" por defecto;
   para verlos, se selecciona el chip "Perdido".

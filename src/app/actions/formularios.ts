@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
+import { notificarCliente } from "@/lib/email";
 import type {
   DatosFormulario,
   EnvioConFormulario,
@@ -166,6 +167,14 @@ export async function enviarFormulario(
     tipo: "formulario",
     titulo: "Formulario enviado al cliente",
   });
+  // Notificación por correo al cliente (si tiene email).
+  await notificarCliente(
+    sb,
+    expedienteId,
+    "Tienes un formulario por completar",
+    "Formulario por completar",
+    "Hola {nombre}, tienes un formulario por completar para tu trámite. Ábrelo en tu portal y respóndelo cuando puedas.",
+  );
   return { ok: true };
 }
 

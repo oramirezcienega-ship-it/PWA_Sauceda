@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
+import { notificarCliente } from "@/lib/email";
 import type { DatosMensaje, Mensaje, MensajeEnviado } from "@/lib/types";
 
 /**
@@ -127,6 +128,8 @@ export async function enviarMensaje(
     titulo: `Mensaje enviado: ${titulo}`,
     detalle: texto,
   });
+  // Notificación por correo al cliente (si tiene email).
+  await notificarCliente(sb, expedienteId, titulo, titulo, texto);
 }
 
 export async function listarMensajesDeExpediente(
