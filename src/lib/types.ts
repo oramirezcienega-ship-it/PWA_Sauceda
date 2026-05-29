@@ -20,8 +20,12 @@ export interface Etapa {
   nombre: string;
   /** Orden dentro del flujo (0 = primera). */
   orden: number;
-  /** Descripción corta de lo que ocurre en la etapa. */
+  /** Descripción corta de lo que ocurre en la etapa (interna, para el asesor). */
   descripcion: string;
+  /** Nombre de la etapa que ve el cliente en su portal. */
+  nombreCliente: string;
+  /** Descripción que ve el cliente en su portal. */
+  descripcionCliente: string;
 }
 
 /**

@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.014 — Textos por etapa para el cliente — 29/05/26
+- Cada etapa ahora tiene un texto propio para el cliente (nombre y
+  descripción) en el portal, distinto del texto interno del asesor.
+- "Perdido" se muestra como "En pausa" y oculta la barra de avance.
+
 ## 1.013 — Atribución de campaña (ad/adset/campaign) — 29/05/26
 - Campos ad_name, adset_name y campaign_name en expedientes y prospectos,
   con sincronización bidireccional. Disponibles en los formularios, en la

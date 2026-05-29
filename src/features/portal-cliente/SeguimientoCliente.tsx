@@ -34,7 +34,9 @@ export function SeguimientoCliente({
     fraccionamiento: expediente.fraccionamiento,
   };
   const etapaActual = ETAPAS_POR_ID[expediente.etapa];
-  const total = ETAPAS.length;
+  const esPerdido = expediente.etapa === "perdido";
+  // El avance considera solo las etapas del flujo (excluye "Perdido").
+  const total = ETAPAS.filter((e) => e.id !== "perdido").length;
   const completadas = etapaActual.orden + 1;
   const porcentaje = Math.round((completadas / total) * 100);
 
@@ -72,22 +74,26 @@ export function SeguimientoCliente({
             Tu trámite está en
           </p>
           <p className="mt-1 font-titular text-2xl font-semibold text-sauce">
-            {etapaActual.nombre}
+            {etapaActual.nombreCliente}
           </p>
           <p className="mt-2 text-sm text-carbon/70">
-            {etapaActual.descripcion}
+            {etapaActual.descripcionCliente}
           </p>
 
-          {/* Barra de avance */}
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-carbon/10">
-            <div
-              className="h-full rounded-full bg-sauce transition-all"
-              style={{ width: `${porcentaje}%` }}
-            />
-          </div>
-          <p className="mt-1 font-mono text-xs text-carbon/50">
-            Etapa {completadas} de {total} · {porcentaje}%
-          </p>
+          {/* Barra de avance (no aplica si el trámite está en pausa) */}
+          {!esPerdido && (
+            <>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-carbon/10">
+                <div
+                  className="h-full rounded-full bg-sauce transition-all"
+                  style={{ width: `${porcentaje}%` }}
+                />
+              </div>
+              <p className="mt-1 font-mono text-xs text-carbon/50">
+                Etapa {completadas} de {total} · {porcentaje}%
+              </p>
+            </>
+          )}
         </div>
 
         {/* Mensajes del asesor */}
