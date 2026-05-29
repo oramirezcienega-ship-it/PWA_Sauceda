@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 
 /**
@@ -10,7 +9,6 @@ import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
  * desde el panel de Supabase (no hay registro público).
  */
 export default function PaginaLogin() {
-  const router = useRouter();
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +28,9 @@ export default function PaginaLogin() {
       setEntrando(false);
       return;
     }
-    router.push("/");
-    router.refresh();
+    // Recarga completa para que el panel cargue ya con la sesión activa
+    // (evita tener que dar F5 tras iniciar sesión).
+    window.location.assign("/");
   }
 
   return (
