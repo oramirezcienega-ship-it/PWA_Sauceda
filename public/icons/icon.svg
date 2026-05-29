@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="SAUCEDA">
+  <!-- Fondo de marca: Verde Profundo -->
+  <rect width="512" height="512" rx="96" fill="#2D4A2B"/>
+  <!-- Monograma "S" en Crema Marfil -->
+  <text x="50%" y="52%" text-anchor="middle" dominant-baseline="central"
+        font-family="Georgia, 'Times New Roman', serif" font-size="300"
+        font-weight="600" fill="#F5F1E8">S</text>
+  <!-- Acento Dorado Tierra -->
+  <rect x="176" y="392" width="160" height="14" rx="7" fill="#C9A961"/>
+</svg>

@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Base de marca SAUCEDA.
+  Proporción 60-30-10: el fondo dominante es crema/blanco (60%),
+  el verde aporta el 30% (encabezados, acentos) y el dorado el 10%.
+*/
+@layer base {
+  body {
+    @apply bg-crema text-carbon font-cuerpo antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-titular text-verde-profundo;
+  }
+}
+
+/* Oculta la barra de scroll horizontal del tablero sin perder el gesto. */
+@layer utilities {
+  .scrollbar-sutil {
+    scrollbar-width: thin;
+    scrollbar-color: #c9a961 transparent;
+  }
+  .scrollbar-sutil::-webkit-scrollbar {
+    height: 6px;
+  }
+  .scrollbar-sutil::-webkit-scrollbar-thumb {
+    background-color: #c9a961;
+    border-radius: 9999px;
+  }
+}

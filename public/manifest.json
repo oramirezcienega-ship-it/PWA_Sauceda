@@ -1,0 +1,20 @@
+{
+  "name": "SAUCEDA · BPM Traspasos INFONAVIT",
+  "short_name": "SAUCEDA",
+  "description": "Motor de operación de traspasos INFONAVIT — SAUCEDA Bienes Raíces. Tradición con tecnología.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F1E8",
+  "theme_color": "#2D4A2B",
+  "lang": "es-MX",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
