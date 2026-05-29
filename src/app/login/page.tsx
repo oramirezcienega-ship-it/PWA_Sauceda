@@ -38,6 +38,8 @@ export default function PaginaLogin() {
       <div className="w-full max-w-sm">
         {/* Marca */}
         <div className="mb-8 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="SAUCEDA" className="mx-auto mb-3 h-16 w-16" />
           <p className="font-display text-3xl font-semibold tracking-tight text-verde-profundo">
             SAUCEDA
           </p>

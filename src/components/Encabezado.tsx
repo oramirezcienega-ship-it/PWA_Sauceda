@@ -11,12 +11,16 @@ export function Encabezado() {
     <header className="sticky top-0 z-20 border-b border-dorado/30 bg-verde-profundo text-crema">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex flex-col leading-none">
-            <span className="font-display text-2xl font-semibold tracking-tight">
-              SAUCEDA
-            </span>
-            <span className="font-cuerpo text-[11px] uppercase tracking-[0.2em] text-dorado">
-              Bienes Raíces
+          <Link href="/" className="flex items-center gap-2 leading-none">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="SAUCEDA" className="h-9 w-9" />
+            <span className="flex flex-col">
+              <span className="font-display text-2xl font-semibold tracking-tight">
+                SAUCEDA
+              </span>
+              <span className="font-cuerpo text-[11px] uppercase tracking-[0.2em] text-dorado">
+                Bienes Raíces
+              </span>
             </span>
           </Link>
           <nav className="hidden items-center gap-1 sm:flex">

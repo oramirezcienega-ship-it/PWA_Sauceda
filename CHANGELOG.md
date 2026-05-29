@@ -3,6 +3,10 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.008 — Logo de la marca — 29/05/26
+- Logotipo SVG (public/logo.svg) en el encabezado, el login y el portal del
+  cliente. Reemplazable por el logo oficial conservando el nombre del archivo.
+
 ## 1.007 — Sincronización bidireccional de campos compartidos — 29/05/26
 - Los campos que comparten expediente y prospecto (nombre y teléfono) se
   reflejan en ambos: editar cualquiera actualiza al otro.

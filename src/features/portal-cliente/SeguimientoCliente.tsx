@@ -28,13 +28,17 @@ export function SeguimientoCliente({
     <main className="min-h-screen bg-crema">
       {/* Encabezado de marca */}
       <header className="bg-verde-profundo text-crema">
-        <div className="mx-auto max-w-xl px-5 py-5">
-          <p className="font-display text-2xl font-semibold tracking-tight">
-            SAUCEDA
-          </p>
-          <p className="font-titular text-sm italic text-dorado">
-            Tradición con tecnología.
-          </p>
+        <div className="mx-auto flex max-w-xl items-center gap-3 px-5 py-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="SAUCEDA" className="h-10 w-10" />
+          <div>
+            <p className="font-display text-2xl font-semibold tracking-tight">
+              SAUCEDA
+            </p>
+            <p className="font-titular text-sm italic text-dorado">
+              Tradición con tecnología.
+            </p>
+          </div>
         </div>
       </header>
 
