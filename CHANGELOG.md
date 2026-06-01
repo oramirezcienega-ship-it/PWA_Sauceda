@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.032 — Script interno de prueba de WhatsApp — 01/06/26
+- Herramienta de desarrollo scripts/probar-whatsapp.mjs para validar el envío
+  saliente por la Cloud API desde el código (no afecta la app).
+- Desde esta versión, cada push lleva su número de versión.
+
 ## 1.031 — Bienvenida por WhatsApp con plantilla (contacto en frío) — 29/05/26
 - La bienvenida por WhatsApp ahora usa texto libre cuando el cliente escribió
   primero (lead entrante) y una PLANTILLA aprobada cuando es contacto en frío
