@@ -3,6 +3,13 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.031 — Bienvenida por WhatsApp con plantilla (contacto en frío) — 29/05/26
+- La bienvenida por WhatsApp ahora usa texto libre cuando el cliente escribió
+  primero (lead entrante) y una PLANTILLA aprobada cuando es contacto en frío
+  (alta manual o sitio web), cubriendo el 100% de los casos.
+- Nuevas variables opcionales: WHATSAPP_BIENVENIDA_TEMPLATE (nombre de la
+  plantilla) y WHATSAPP_BIENVENIDA_IDIOMA (código de idioma, por defecto es_MX).
+
 ## 1.030 — Mensaje de bienvenida automático — 29/05/26
 - Al crear un expediente nuevo (alta manual, sitio web o WhatsApp entrante)
   se envía un mensaje de bienvenida por todos los medios posibles: portal del

@@ -167,6 +167,7 @@ export async function registrarLeadWhatsApp(
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
   });
-  // Bienvenida automática (WhatsApp + portal; correo si hay). Best-effort.
-  await enviarBienvenida(sb, id);
+  // Bienvenida automática. El cliente nos escribió: ventana de 24 h abierta,
+  // así que el WhatsApp puede ir como texto libre.
+  await enviarBienvenida(sb, id, { ventanaWhatsAppAbierta: true });
 }

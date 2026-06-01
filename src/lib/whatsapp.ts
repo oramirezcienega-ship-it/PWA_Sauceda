@@ -58,3 +58,72 @@ export async function enviarWhatsAppTexto(
     console.error("Error al enviar WhatsApp:", err);
   }
 }
+
+/**
+ * Envía un mensaje por WhatsApp usando una PLANTILLA aprobada (best-effort).
+ * Sirve para el primer contacto "en frío" (fuera de la ventana de 24 h).
+ *
+ *  - parametrosCuerpo: valores para los {{1}}, {{2}}, … del cuerpo.
+ *  - urlBotonParam: si la plantilla tiene un botón de URL dinámica, este es
+ *    el valor de su parámetro (p. ej. el token del portal). Opcional.
+ */
+export async function enviarWhatsAppPlantilla(
+  telefono: string,
+  plantilla: string,
+  idioma: string,
+  parametrosCuerpo: string[] = [],
+  urlBotonParam?: string,
+): Promise<void> {
+  try {
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const to = normalizarTelefono(telefono);
+    if (!token || !phoneId || !to || !plantilla) return;
+
+    const components: Record<string, unknown>[] = [];
+    if (parametrosCuerpo.length > 0) {
+      components.push({
+        type: "body",
+        parameters: parametrosCuerpo.map((text) => ({ type: "text", text })),
+      });
+    }
+    if (urlBotonParam) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [{ type: "text", text: urlBotonParam }],
+      });
+    }
+
+    const res = await fetch(
+      `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to,
+          type: "template",
+          template: {
+            name: plantilla,
+            language: { code: idioma },
+            ...(components.length ? { components } : {}),
+          },
+        }),
+      },
+    );
+    if (!res.ok) {
+      console.error(
+        "WhatsApp (plantilla) no enviado:",
+        res.status,
+        await res.text(),
+      );
+    }
+  } catch (err) {
+    console.error("Error al enviar WhatsApp (plantilla):", err);
+  }
+}

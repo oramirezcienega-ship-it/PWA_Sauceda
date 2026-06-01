@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { aplicarParametros } from "@/lib/parametros";
 import { notificarCliente } from "@/lib/email";
-import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { registrarActividad } from "@/lib/actividades";
 import { MARCA } from "@/lib/marca";
 
@@ -32,10 +32,17 @@ interface FilaExp {
   token: string | null;
 }
 
-/** Envía la bienvenida al cliente del expediente por todos los medios. */
+/**
+ * Envía la bienvenida al cliente del expediente por todos los medios.
+ *
+ * ventanaWhatsAppAbierta: true cuando el cliente nos escribió primero (lead
+ * entrante por WhatsApp); permite usar texto libre. Para contactos en frío
+ * (alta manual o sitio web) se usa la plantilla aprobada si está configurada.
+ */
 export async function enviarBienvenida(
   sb: SupabaseClient,
   expedienteId: string,
+  opts: { ventanaWhatsAppAbierta?: boolean } = {},
 ): Promise<void> {
   try {
     const { data } = await sb
@@ -77,10 +84,26 @@ export async function enviarBienvenida(
       base,
     );
 
-    // 3) WhatsApp (best-effort). Incluye el enlace al portal.
+    // 3) WhatsApp (best-effort).
     if (d.telefono && d.token) {
-      const textoWa = `${textoResuelto}\n\nDa seguimiento a tu proceso aquí: ${SITE_URL}/seguimiento/${d.token}`;
-      await enviarWhatsAppTexto(d.telefono, textoWa);
+      if (opts.ventanaWhatsAppAbierta) {
+        // El cliente escribió primero: texto libre con el enlace al portal.
+        const textoWa = `${textoResuelto}\n\nDa seguimiento a tu proceso aquí: ${SITE_URL}/seguimiento/${d.token}`;
+        await enviarWhatsAppTexto(d.telefono, textoWa);
+      } else {
+        // Contacto en frío: requiere plantilla aprobada (si está configurada).
+        const plantilla = process.env.WHATSAPP_BIENVENIDA_TEMPLATE;
+        const idioma = process.env.WHATSAPP_BIENVENIDA_IDIOMA || "es_MX";
+        if (plantilla) {
+          await enviarWhatsAppPlantilla(
+            d.telefono,
+            plantilla,
+            idioma,
+            [d.cliente ?? ""],
+            d.token,
+          );
+        }
+      }
     }
 
     await registrarActividad(sb, {
