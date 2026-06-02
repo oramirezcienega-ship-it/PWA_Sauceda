@@ -3,6 +3,12 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.036 — Despliegue automático desde main en Netlify — 02/06/26
+- Producción ahora se publica desde la rama `main` con auto-publish, para que
+  cada versión nueva salga en vivo sola (antes se quedaba sin publicar).
+- Solo `main` dispara builds (las demás ramas y los PR no gastan build minutes).
+- Versión visible de prueba para verificar el flujo de despliegue automático.
+
 ## 1.035 — Detalle del error real de Meta al enviar WhatsApp — 01/06/26
 - Cuando Meta rechaza un envío, ahora se muestra su mensaje y código exactos
   (en vez de un texto genérico), para poder diagnosticar (p. ej. número no
