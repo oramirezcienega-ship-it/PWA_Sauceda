@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.035 — Detalle del error real de Meta al enviar WhatsApp — 01/06/26
+- Cuando Meta rechaza un envío, ahora se muestra su mensaje y código exactos
+  (en vez de un texto genérico), para poder diagnosticar (p. ej. número no
+  permitido, plantilla requerida, token sin permiso).
+
 ## 1.034 — "Notificar por WhatsApp" de mensajes usa la API — 01/06/26
 - El botón "Notificar por WhatsApp" de cada mensaje enviado ahora manda el
   mensaje por la Cloud API (resuelve {nombre}, etc. y adjunta el enlace al

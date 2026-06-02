@@ -60,13 +60,20 @@ export async function enviarWhatsAppTexto(
     if (!res.ok) {
       const detalle = await res.text();
       console.error("WhatsApp no enviado:", res.status, detalle);
-      return {
-        ok: false,
-        error:
-          res.status === 400 || res.status === 401
-            ? "Meta rechazó el envío. Suele ser que el cliente no te ha escrito en las últimas 24 h (se requiere plantilla) o el número no está habilitado."
-            : `Meta respondió con error ${res.status}.`,
-      };
+      // Extrae el mensaje/código reales de Meta para poder diagnosticar.
+      let metaMsg = "";
+      let metaCode: number | undefined;
+      try {
+        const j = JSON.parse(detalle);
+        metaMsg = j?.error?.message ?? "";
+        metaCode = j?.error?.code;
+      } catch {
+        // respuesta no-JSON; se usa el genérico
+      }
+      const detalleTxt = metaMsg
+        ? `Meta: ${metaMsg}${metaCode ? ` (código ${metaCode})` : ""}`
+        : `Meta respondió con error ${res.status}.`;
+      return { ok: false, error: detalleTxt };
     }
     return { ok: true };
   } catch (err) {
