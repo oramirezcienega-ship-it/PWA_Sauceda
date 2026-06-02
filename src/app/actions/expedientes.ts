@@ -6,6 +6,7 @@ import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
+import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
@@ -160,6 +161,51 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     tipo: "etapa",
     titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
   });
+}
+
+/**
+ * Envía el enlace del portal del cliente por WhatsApp usando la API
+ * (Meta Cloud API), sin abrir WhatsApp Web. Devuelve el resultado para
+ * mostrar retroalimentación al asesor.
+ */
+export async function enviarEnlacePortalWhatsApp(
+  id: string,
+): Promise<{ ok: boolean; mensaje: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data } = await sb
+    .from("expedientes")
+    .select("token, telefono, cliente")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return { ok: false, mensaje: "Expediente no encontrado." };
+  const d = data as {
+    token: string;
+    telefono: string | null;
+    cliente: string | null;
+  };
+  if (!d.telefono) {
+    return { ok: false, mensaje: "El expediente no tiene teléfono." };
+  }
+
+  const base = process.env.SITE_URL || "https://app.saucedamx.com";
+  const url = `${base}/seguimiento/${d.token}`;
+  const nombre = (d.cliente ?? "").split(" ")[0] || "";
+  const texto =
+    `Hola ${nombre}, soy de SAUCEDA Bienes Raíces. ` +
+    `Da seguimiento a tu trámite y completa tus formularios aquí: ${url}`;
+
+  const r = await enviarWhatsAppTexto(d.telefono, texto);
+  if (!r.ok) {
+    return { ok: false, mensaje: r.error ?? "No se pudo enviar el WhatsApp." };
+  }
+  await registrarActividad(sb, {
+    expedienteId: id,
+    tipo: "mensaje",
+    titulo: "Enlace del portal enviado por WhatsApp",
+    detalle: url,
+  });
+  return { ok: true, mensaje: "Enlace enviado por WhatsApp ✓" };
 }
 
 /** Elimina un expediente. */

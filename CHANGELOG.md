@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.033 — "Enviar por WhatsApp" del portal ahora usa la API — 01/06/26
+- El botón "Enviar por WhatsApp" del portal del cliente ya no abre WhatsApp
+  Web: envía el enlace directamente por la Cloud API y muestra el resultado.
+- Si Meta rechaza (p. ej. fuera de la ventana de 24 h), se avisa al asesor.
+
 ## 1.032 — Script interno de prueba de WhatsApp — 01/06/26
 - Herramienta de desarrollo scripts/probar-whatsapp.mjs para validar el envío
   saliente por la Cloud API desde el código (no afecta la app).

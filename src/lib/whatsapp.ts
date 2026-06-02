@@ -24,16 +24,22 @@ function normalizarTelefono(tel: string): string {
   return d;
 }
 
-/** Envía un mensaje de texto por WhatsApp (best-effort). */
+/** Envía un mensaje de texto por WhatsApp. Devuelve el resultado. */
 export async function enviarWhatsAppTexto(
   telefono: string,
   texto: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const to = normalizarTelefono(telefono);
-    if (!token || !phoneId || !to) return;
+    if (!token || !phoneId) {
+      return {
+        ok: false,
+        error: "WhatsApp no está configurado (faltan credenciales).",
+      };
+    }
+    if (!to) return { ok: false, error: "Teléfono inválido." };
 
     const res = await fetch(
       `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
@@ -52,10 +58,20 @@ export async function enviarWhatsAppTexto(
       },
     );
     if (!res.ok) {
-      console.error("WhatsApp no enviado:", res.status, await res.text());
+      const detalle = await res.text();
+      console.error("WhatsApp no enviado:", res.status, detalle);
+      return {
+        ok: false,
+        error:
+          res.status === 400 || res.status === 401
+            ? "Meta rechazó el envío. Suele ser que el cliente no te ha escrito en las últimas 24 h (se requiere plantilla) o el número no está habilitado."
+            : `Meta respondió con error ${res.status}.`,
+      };
     }
+    return { ok: true };
   } catch (err) {
     console.error("Error al enviar WhatsApp:", err);
+    return { ok: false, error: "Error de red al enviar el WhatsApp." };
   }
 }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
+import { enviarEnlacePortalWhatsApp } from "@/app/actions/expedientes";
 import { etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
@@ -25,6 +26,8 @@ export function DetalleExpediente({ id }: { id: string }) {
   const expediente = obtenerExpediente(id);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [enviandoWa, setEnviandoWa] = useState(false);
+  const [waMsg, setWaMsg] = useState<string | null>(null);
 
   // Copia al portapapeles el enlace privado de seguimiento del cliente.
   function copiarEnlaceCliente(token: string) {
@@ -38,17 +41,20 @@ export function DetalleExpediente({ id }: { id: string }) {
     );
   }
 
-  // Arma el enlace de WhatsApp con el mensaje y el enlace del portal.
-  function enlaceWhatsApp(token: string, telefono: string, cliente: string) {
-    const url = `${window.location.origin}/seguimiento/${token}`;
-    const tel = telefono.replace(/\D/g, "");
-    // Si no trae lada de país, anteponemos 52 (México).
-    const numero = tel.length === 10 ? `52${tel}` : tel;
-    const nombre = cliente.split(" ")[0] || "";
-    const mensaje =
-      `Hola ${nombre}, soy de SAUCEDA Bienes Raíces. ` +
-      `Da seguimiento a tu trámite y completa tus formularios aquí: ${url}`;
-    return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+  // Envía el enlace del portal al cliente por WhatsApp (vía API, sin abrir
+  // WhatsApp Web).
+  async function enviarPortalWhatsApp(expedienteId: string) {
+    setEnviandoWa(true);
+    setWaMsg(null);
+    try {
+      const r = await enviarEnlacePortalWhatsApp(expedienteId);
+      setWaMsg(r.mensaje);
+    } catch {
+      setWaMsg("No se pudo enviar el WhatsApp.");
+    } finally {
+      setEnviandoWa(false);
+      setTimeout(() => setWaMsg(null), 6000);
+    }
   }
 
   // Expediente inexistente. Mientras carga el estado persistido evitamos
@@ -211,7 +217,7 @@ export function DetalleExpediente({ id }: { id: string }) {
                 Comparte el seguimiento de solo lectura.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => copiarEnlaceCliente(expediente.token)}
@@ -220,18 +226,17 @@ export function DetalleExpediente({ id }: { id: string }) {
                 {copiado ? "¡Copiado! ✓" : "Copiar enlace"}
               </button>
               {expediente.telefono && (
-                <a
-                  href={enlaceWhatsApp(
-                    expediente.token,
-                    expediente.telefono,
-                    expediente.cliente,
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                <button
+                  type="button"
+                  onClick={() => enviarPortalWhatsApp(expediente.id)}
+                  disabled={enviandoWa}
+                  className="rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
                 >
-                  Enviar por WhatsApp
-                </a>
+                  {enviandoWa ? "Enviando…" : "Enviar por WhatsApp"}
+                </button>
+              )}
+              {waMsg && (
+                <span className="w-full text-xs text-carbon/70">{waMsg}</span>
               )}
             </div>
           </div>
