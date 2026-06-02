@@ -6,8 +6,8 @@ import {
   enviarMensaje,
   listarMensajes,
   listarMensajesDeExpediente,
+  notificarMensajeWhatsApp,
 } from "@/app/actions/mensajes";
-import { aplicarParametros } from "@/lib/parametros";
 import type { Mensaje, MensajeEnviado } from "@/lib/types";
 
 /**
@@ -17,19 +17,17 @@ import type { Mensaje, MensajeEnviado } from "@/lib/types";
 export function MensajesExpediente({
   expedienteId,
   telefono,
-  token,
-  parametros = {},
 }: {
   expedienteId: string;
   telefono: string;
-  token: string;
-  parametros?: Record<string, string>;
 }) {
   const [plantillas, setPlantillas] = useState<Mensaje[]>([]);
   const [enviados, setEnviados] = useState<MensajeEnviado[]>([]);
   const [titulo, setTitulo] = useState("");
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [notiCargandoId, setNotiCargandoId] = useState<string | null>(null);
+  const [notiMsg, setNotiMsg] = useState<Record<string, string>>({});
 
   async function cargar() {
     const [p, e] = await Promise.all([
@@ -66,14 +64,26 @@ export function MensajesExpediente({
     }
   }
 
-  function enlaceWhatsApp(tx: string) {
-    const tel = telefono.replace(/\D/g, "");
-    const numero = tel.length === 10 ? `52${tel}` : tel;
-    const url = `${window.location.origin}/seguimiento/${token}`;
-    // Resuelve los parámetros ({nombre}, etc.) y NO incluye el título.
-    const textoResuelto = aplicarParametros(tx, parametros);
-    const cuerpo = `${textoResuelto}\n\nVer en tu portal: ${url}`;
-    return `https://wa.me/${numero}?text=${encodeURIComponent(cuerpo)}`;
+  // Notifica el mensaje al cliente por WhatsApp vía API (sin abrir WhatsApp Web).
+  async function notificarWhatsApp(id: string, tx: string) {
+    setNotiCargandoId(id);
+    try {
+      const r = await notificarMensajeWhatsApp(expedienteId, tx);
+      setNotiMsg((m) => ({ ...m, [id]: r.mensaje }));
+    } catch {
+      setNotiMsg((m) => ({ ...m, [id]: "No se pudo enviar el WhatsApp." }));
+    } finally {
+      setNotiCargandoId(null);
+      setTimeout(
+        () =>
+          setNotiMsg((m) => {
+            const copia = { ...m };
+            delete copia[id];
+            return copia;
+          }),
+        6000,
+      );
+    }
   }
 
   const INPUT =
@@ -152,14 +162,23 @@ export function MensajesExpediente({
                 {m.texto}
               </p>
               {telefono && (
-                <a
-                  href={enlaceWhatsApp(m.texto)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 inline-block rounded-md bg-[#25D366] px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
-                >
-                  Notificar por WhatsApp
-                </a>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => notificarWhatsApp(m.id, m.texto)}
+                    disabled={notiCargandoId === m.id}
+                    className="rounded-md bg-[#25D366] px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {notiCargandoId === m.id
+                      ? "Enviando…"
+                      : "Notificar por WhatsApp"}
+                  </button>
+                  {notiMsg[m.id] && (
+                    <span className="text-xs text-carbon/70">
+                      {notiMsg[m.id]}
+                    </span>
+                  )}
+                </div>
               )}
             </li>
           ))}

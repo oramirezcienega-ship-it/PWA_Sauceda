@@ -4,6 +4,8 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { notificarCliente } from "@/lib/email";
+import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { aplicarParametros } from "@/lib/parametros";
 import type { DatosMensaje, Mensaje, MensajeEnviado } from "@/lib/types";
 
 /**
@@ -136,6 +138,64 @@ export async function enviarMensaje(
     "",
     texto,
   );
+}
+
+/**
+ * Notifica un mensaje al cliente por WhatsApp usando la Cloud API
+ * (sin abrir WhatsApp Web). Resuelve los parámetros ({nombre}, etc.) y
+ * adjunta el enlace al portal. Devuelve el resultado para el asesor.
+ */
+export async function notificarMensajeWhatsApp(
+  expedienteId: string,
+  texto: string,
+): Promise<{ ok: boolean; mensaje: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data } = await sb
+    .from("expedientes")
+    .select(
+      "token, telefono, cliente, primer_apellido, segundo_apellido, fraccionamiento",
+    )
+    .eq("id", expedienteId)
+    .maybeSingle();
+  if (!data) return { ok: false, mensaje: "Expediente no encontrado." };
+  const d = data as {
+    token: string;
+    telefono: string | null;
+    cliente: string | null;
+    primer_apellido: string | null;
+    segundo_apellido: string | null;
+    fraccionamiento: string | null;
+  };
+  if (!d.telefono) {
+    return { ok: false, mensaje: "El expediente no tiene teléfono." };
+  }
+
+  const nombreCompleto = [d.cliente, d.primer_apellido, d.segundo_apellido]
+    .filter(Boolean)
+    .join(" ");
+  const params = {
+    nombre: d.cliente ?? "",
+    primer_apellido: d.primer_apellido ?? "",
+    segundo_apellido: d.segundo_apellido ?? "",
+    nombre_completo: nombreCompleto,
+    fraccionamiento: d.fraccionamiento ?? "",
+  };
+  const base = process.env.SITE_URL || "https://app.saucedamx.com";
+  const url = `${base}/seguimiento/${d.token}`;
+  const cuerpo = `${aplicarParametros(texto, params)}\n\nVer en tu portal: ${url}`;
+
+  const r = await enviarWhatsAppTexto(d.telefono, cuerpo);
+  if (!r.ok) {
+    return { ok: false, mensaje: r.error ?? "No se pudo enviar el WhatsApp." };
+  }
+  await registrarActividad(sb, {
+    expedienteId,
+    tipo: "mensaje",
+    titulo: "Mensaje notificado por WhatsApp",
+    detalle: aplicarParametros(texto, params),
+  });
+  return { ok: true, mensaje: "Notificado por WhatsApp ✓" };
 }
 
 export async function listarMensajesDeExpediente(

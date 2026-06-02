@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.034 — "Notificar por WhatsApp" de mensajes usa la API — 01/06/26
+- El botón "Notificar por WhatsApp" de cada mensaje enviado ahora manda el
+  mensaje por la Cloud API (resuelve {nombre}, etc. y adjunta el enlace al
+  portal), sin abrir WhatsApp Web. Muestra el resultado al asesor.
+
 ## 1.033 — "Enviar por WhatsApp" del portal ahora usa la API — 01/06/26
 - El botón "Enviar por WhatsApp" del portal del cliente ya no abre WhatsApp
   Web: envía el enlace directamente por la Cloud API y muestra el resultado.
