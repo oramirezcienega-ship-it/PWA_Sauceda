@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 const ORIGENES_PERMITIDOS = new Set([
   "https://saucedamx.com",
   "https://www.saucedamx.com",
+  "http://localhost:3000", // pruebas locales
 ]);
 
 // Construye las cabeceras CORS validando el Origin de la petición.
