@@ -4,18 +4,33 @@ import { registrarLeadWeb } from "@/features/captacion/web";
 // Endpoint de captación del formulario del sitio web (saucedamx.com / Cotizar).
 export const dynamic = "force-dynamic";
 
-// CORS: permitimos el envío desde la landing page de saucedamx.com.
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "https://saucedamx.com",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+// CORS: permitimos el envío desde la landing page (con y sin "www").
+const ORIGENES_PERMITIDOS = new Set([
+  "https://saucedamx.com",
+  "https://www.saucedamx.com",
+]);
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS });
+// Construye las cabeceras CORS validando el Origin de la petición.
+// Solo refleja el origen si coincide con un dominio permitido.
+function corsHeaders(request: NextRequest): Record<string, string> {
+  const origin = request.headers.get("origin");
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
+  };
+  if (origin && ORIGENES_PERMITIDOS.has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+  return headers;
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
 export async function POST(request: NextRequest) {
+  const CORS = corsHeaders(request);
   try {
     const tipo = request.headers.get("content-type") || "";
     let datos: Record<string, string> = {};
