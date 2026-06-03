@@ -1,6 +1,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -34,7 +35,7 @@ async function siguienteId(
   return `${prefijo}-${String(max + 1).padStart(3, "0")}`;
 }
 
-export async function registrarLeadWeb(lead: LeadWeb): Promise<void> {
+export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   const sb = supabaseServidor();
   const nombre = lead.nombre?.trim() || "Lead del sitio web";
   const telefono = (lead.telefono ?? "").trim();
@@ -70,13 +71,15 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<void> {
       origen: "sitio-web",
     });
     prospectoId = id;
+    // Automatizaciones: prospecto nuevo captado por el sitio web.
+    await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   }
 
   // Si ya existe un expediente con ese teléfono, no duplicamos: solo anotamos.
   if (telefono) {
     const { data: ex } = await sb
       .from("expedientes")
-      .select("id")
+      .select("id, token")
       .eq("telefono", telefono)
       .limit(1);
     if (ex && ex.length) {
@@ -90,13 +93,17 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<void> {
         titulo: "Nueva solicitud de cotización (sitio web)",
         detalle: lead.mensaje ?? "",
       });
-      return;
+      // Reutilizamos el expediente existente: devolvemos su token de portal.
+      return ex[0].token as string;
     }
   }
 
+  // Token único y seguro para el enlace privado del cliente (/seguimiento/[token]).
+  const token = crypto.randomUUID();
   const expId = await siguienteId(sb, "expedientes", "EXP");
   await sb.from("expedientes").insert({
     id: expId,
+    token,
     cliente: nombre,
     primer_apellido: lead.primerApellido ?? "",
     segundo_apellido: lead.segundoApellido ?? "",
@@ -121,4 +128,10 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<void> {
   });
   // Bienvenida automática (correo + WhatsApp + portal). Best-effort.
   await enviarBienvenida(sb, expId);
+  // Automatizaciones: expediente nuevo captado por el sitio web.
+  await dispararEvento(sb, "nuevo-expediente", {
+    expedienteId: expId,
+    prospectoId,
+  });
+  return token;
 }

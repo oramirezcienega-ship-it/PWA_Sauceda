@@ -11,6 +11,7 @@ import {
 } from "@/lib/supabase/mapeo";
 import { ORIGENES } from "@/lib/origenes";
 import { registrarActividad } from "@/lib/actividades";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 import type {
   DatosProspecto,
   Expediente,
@@ -96,6 +97,8 @@ export async function crearProspecto(
     tipo: "creacion",
     titulo: "Prospecto creado",
   });
+  // Dispara automatizaciones del evento "nuevo prospecto".
+  await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   return aProspecto(data as FilaProspecto);
 }
 
@@ -137,6 +140,30 @@ export async function eliminarProspecto(id: string): Promise<void> {
   await requireAdmin();
   const sb = supabaseServidor();
   const { error } = await sb.from("prospectos").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/** Elimina varios prospectos a la vez (acción masiva). */
+export async function eliminarProspectosMasivo(ids: string[]): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+  const { error } = await sb.from("prospectos").delete().in("id", ids);
+  if (error) throw new Error(error.message);
+}
+
+/** Cambia el origen de varios prospectos a la vez (acción masiva). */
+export async function cambiarOrigenMasivo(
+  ids: string[],
+  origen: OrigenAdquisicion,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("prospectos")
+    .update({ origen })
+    .in("id", ids);
   if (error) throw new Error(error.message);
 }
 

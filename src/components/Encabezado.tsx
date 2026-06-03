@@ -42,6 +42,7 @@ export function Encabezado() {
             <Enlace href="/prospectos">Prospectos</Enlace>
             <Enlace href="/formularios">Formularios</Enlace>
             <Enlace href="/mensajes">Mensajes</Enlace>
+            <Enlace href="/automatizaciones">Automatizaciones</Enlace>
             {esAdmin && <Enlace href="/usuarios">Usuarios</Enlace>}
           </nav>
         </div>

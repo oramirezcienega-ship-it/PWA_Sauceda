@@ -1,9 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ORIGEN_POR_ID } from "@/lib/origenes";
+import { useRouter } from "next/navigation";
+import { ORIGENES, ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
-import type { Prospecto } from "@/lib/types";
+import type { OrigenAdquisicion, Prospecto } from "@/lib/types";
+import {
+  cambiarOrigenMasivo,
+  eliminarProspectosMasivo,
+} from "@/app/actions/prospectos";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
 
@@ -16,16 +22,155 @@ const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   valorCampana: (a, b) => a.valorCampana - b.valorCampana,
 };
 
-/** Tabla de prospectos con columnas ordenables. */
+/** Tabla de prospectos con columnas ordenables y selección múltiple. */
 export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
+  const router = useRouter();
   const orden = useOrden(prospectos, COMPARADORES);
 
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  const [trabajando, setTrabajando] = useState(false);
+
+  const idsVisibles = orden.ordenados.map((p) => p.id);
+
+  // Limpia de la selección los ids que ya no estén en la lista.
+  useEffect(() => {
+    setSel((prev) => {
+      const visibles = new Set(idsVisibles);
+      const siguiente = new Set(
+        Array.from(prev).filter((id) => visibles.has(id)),
+      );
+      return siguiente.size === prev.size ? prev : siguiente;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsVisibles.join(",")]);
+
+  function alternar(id: string) {
+    setSel((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      return s;
+    });
+  }
+
+  function alternarTodos() {
+    setSel((prev) =>
+      prev.size === idsVisibles.length ? new Set() : new Set(idsVisibles),
+    );
+  }
+
+  const ids = Array.from(sel);
+  const todosMarcados = ids.length > 0 && ids.length === idsVisibles.length;
+
+  async function cambiarOrigenSeleccion(origen: OrigenAdquisicion) {
+    setTrabajando(true);
+    try {
+      await cambiarOrigenMasivo(ids, origen);
+      setSel(new Set());
+      router.refresh();
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function eliminarSeleccion() {
+    setTrabajando(true);
+    try {
+      await eliminarProspectosMasivo(ids);
+      setSel(new Set());
+      setConfirmarBorrado(false);
+      router.refresh();
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
-      <table className="w-full min-w-[760px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-carbon/10 bg-crema/60 text-left">
-            {(
+    <div className="space-y-2">
+      {/* Barra de acciones masivas */}
+      {ids.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sauce/30 bg-sauce/5 px-3 py-2 text-sm">
+          <span className="font-medium text-verde-profundo">
+            {ids.length} seleccionado{ids.length === 1 ? "" : "s"}
+          </span>
+
+          <label className="flex items-center gap-1.5 text-carbon/70">
+            Cambiar origen:
+            <select
+              defaultValue=""
+              disabled={trabajando}
+              onChange={(e) => {
+                if (e.target.value) {
+                  void cambiarOrigenSeleccion(e.target.value as OrigenAdquisicion);
+                  e.target.value = "";
+                }
+              }}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+            >
+              <option value="">— elige origen —</option>
+              {ORIGENES.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {confirmarBorrado ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="text-carbon/70">¿Eliminar {ids.length}?</span>
+              <button
+                type="button"
+                disabled={trabajando}
+                onClick={eliminarSeleccion}
+                className="rounded bg-rojo px-2 py-1 text-xs font-medium text-crema hover:opacity-90 disabled:opacity-60"
+              >
+                Sí, eliminar
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmarBorrado(false)}
+                className="rounded px-2 py-1 text-xs text-carbon/60 hover:text-carbon"
+              >
+                Cancelar
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={trabajando}
+              onClick={() => setConfirmarBorrado(true)}
+              className="rounded-md border border-rojo/30 bg-white px-3 py-1 text-xs text-rojo transition hover:bg-rojo/10 disabled:opacity-60"
+            >
+              Eliminar
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setSel(new Set())}
+            className="ml-auto text-xs text-carbon/50 underline hover:text-carbon"
+          >
+            limpiar selección
+          </button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
+        <table className="w-full min-w-[800px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-carbon/10 bg-crema/60 text-left">
+              <th className="w-10 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={todosMarcados}
+                  onChange={alternarTodos}
+                  aria-label="Seleccionar todos"
+                  className="cursor-pointer"
+                />
+              </th>
+              {(
               [
                 ["nombre", "Prospecto", "izquierda"],
                 ["telefono", "Teléfono", "izquierda"],
@@ -51,8 +196,19 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
           {orden.ordenados.map((p) => (
             <tr
               key={p.id}
-              className="border-b border-carbon/5 transition hover:bg-crema/40"
+              className={`border-b border-carbon/5 transition hover:bg-crema/40 ${
+                sel.has(p.id) ? "bg-sauce/5" : ""
+              }`}
             >
+              <td className="px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={sel.has(p.id)}
+                  onChange={() => alternar(p.id)}
+                  aria-label={`Seleccionar ${p.nombreCompleto}`}
+                  className="cursor-pointer"
+                />
+              </td>
               <td className="px-3 py-2.5">
                 <Link
                   href={`/prospectos/${p.id}`}
@@ -79,7 +235,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

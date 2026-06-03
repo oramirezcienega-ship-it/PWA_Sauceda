@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { notificarCliente } from "@/lib/email";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 import type {
   DatosFormulario,
   EnvioConFormulario,
@@ -303,9 +304,12 @@ export async function responderFormulario(
     .eq("id", envioId);
   if (error) throw new Error(error.message);
 
+  const expedienteId = (envio as { expediente_id: string }).expediente_id;
   await registrarActividad(sb, {
-    expedienteId: (envio as { expediente_id: string }).expediente_id,
+    expedienteId,
     tipo: "formulario",
     titulo: "El cliente respondió un formulario",
   });
+  // Dispara automatizaciones del evento "formulario respondido".
+  await dispararEvento(sb, "formulario-respondido", { expedienteId });
 }

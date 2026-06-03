@@ -219,3 +219,80 @@ export interface Actividad {
   /** Fecha/hora ISO. */
   fecha: string;
 }
+
+// ------------------------------------------------------------
+// MÓDULO AUTOMATIZACIONES (motor de reglas por disparadores)
+// ------------------------------------------------------------
+
+/** Evento que dispara una automatización. */
+export type EventoAutomatizacion =
+  | "nuevo-expediente"
+  | "nuevo-prospecto"
+  | "cambio-etapa"
+  | "formulario-respondido"
+  | "cambio-campo";
+
+/** Operador de comparación de una condición. */
+export type OperadorCondicion = "igual" | "distinto" | "contiene" | "cualquiera";
+
+/**
+ * Condición que debe cumplirse para que la regla se ejecute. Se evalúa
+ * contra una columna real de la entidad (expediente o prospecto). Todas
+ * las condiciones de una regla se combinan con AND.
+ */
+export interface CondicionAutomatizacion {
+  /** Columna de la entidad (ej. "etapa", "origen"). */
+  campo: string;
+  operador: OperadorCondicion;
+  valor: string;
+}
+
+/** Tipo de acción que ejecuta una automatización. */
+export type TipoAccion =
+  | "enviar-formulario"
+  | "enviar-correo"
+  | "enviar-whatsapp"
+  | "mover-etapa";
+
+/**
+ * Acción a ejecutar. Cada tipo usa solo algunos campos:
+ *  - enviar-formulario: formularioId
+ *  - enviar-correo: asunto, titulo, cuerpo
+ *  - enviar-whatsapp: texto
+ *  - mover-etapa: etapa
+ */
+export interface AccionAutomatizacion {
+  tipo: TipoAccion;
+  formularioId?: string;
+  asunto?: string;
+  titulo?: string;
+  cuerpo?: string;
+  texto?: string;
+  etapa?: EtapaId;
+}
+
+/** Una regla de automatización. */
+export interface Automatizacion {
+  id: string;
+  nombre: string;
+  activa: boolean;
+  evento: EventoAutomatizacion;
+  condiciones: CondicionAutomatizacion[];
+  acciones: AccionAutomatizacion[];
+}
+
+/** Datos editables de una automatización (el `id` lo administra la app). */
+export type DatosAutomatizacion = Omit<Automatizacion, "id">;
+
+/** Una ejecución registrada del motor (bitácora de automatizaciones). */
+export interface EjecucionAutomatizacion {
+  id: string;
+  automatizacionId: string | null;
+  nombre: string;
+  evento: string;
+  expedienteId: string | null;
+  prospectoId: string | null;
+  estado: "ok" | "error" | "omitido";
+  detalle: string;
+  fecha: string;
+}
