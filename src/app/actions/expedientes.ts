@@ -203,6 +203,42 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   });
 }
 
+/** Cambia la etapa de varios expedientes a la vez (acción masiva). */
+export async function moverEtapaMasivo(
+  ids: string[],
+  etapa: EtapaId,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("expedientes")
+    .update({ etapa, ultimo_movimiento: hoyISO() })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+  // Bitácora + automatizaciones por cada expediente afectado (best-effort).
+  for (const id of ids) {
+    await registrarActividad(sb, {
+      expedienteId: id,
+      tipo: "etapa",
+      titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
+    });
+    await dispararEvento(sb, "cambio-etapa", {
+      expedienteId: id,
+      cambios: ["etapa"],
+    });
+  }
+}
+
+/** Elimina varios expedientes a la vez (acción masiva). */
+export async function eliminarExpedientesMasivo(ids: string[]): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+  const { error } = await sb.from("expedientes").delete().in("id", ids);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Envía el enlace del portal del cliente por WhatsApp usando la API
  * (Meta Cloud API), sin abrir WhatsApp Web. Devuelve el resultado para

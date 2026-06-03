@@ -29,6 +29,10 @@ interface ExpedientesContextValue {
   recargar: () => Promise<void>;
   /** Cambia la etapa de un expediente. */
   moverEtapa: (id: string, etapa: EtapaId) => Promise<void>;
+  /** Cambia la etapa de varios expedientes a la vez. */
+  moverEtapaMasivo: (ids: string[], etapa: EtapaId) => Promise<void>;
+  /** Elimina varios expedientes a la vez. */
+  eliminarMasivo: (ids: string[]) => Promise<void>;
   /** Crea un expediente nuevo y devuelve su id generado. */
   crearExpediente: (datos: DatosExpediente) => Promise<string>;
   /** Actualiza los datos editables de un expediente existente. */
@@ -90,6 +94,37 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
     [recargar],
   );
 
+  const moverEtapaMasivo = useCallback(
+    async (ids: string[], etapa: EtapaId) => {
+      if (ids.length === 0) return;
+      const hoy = new Date().toISOString().slice(0, 10);
+      // Optimista: actualizamos todas las filas seleccionadas de inmediato.
+      setExpedientes((prev) =>
+        prev.map((exp) =>
+          ids.includes(exp.id)
+            ? { ...exp, etapa, ultimoMovimiento: hoy }
+            : exp,
+        ),
+      );
+      try {
+        await acciones.moverEtapaMasivo(ids, etapa);
+      } catch (err) {
+        console.error("Error al mover de etapa (masivo):", err);
+        await recargar();
+      }
+    },
+    [recargar],
+  );
+
+  const eliminarMasivo = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      await acciones.eliminarExpedientesMasivo(ids);
+      setExpedientes((prev) => prev.filter((exp) => !ids.includes(exp.id)));
+    },
+    [],
+  );
+
   const crearExpediente = useCallback(
     async (datos: DatosExpediente): Promise<string> => {
       const nuevo = await acciones.crearExpediente(datos);
@@ -126,6 +161,8 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       error,
       recargar,
       moverEtapa,
+      moverEtapaMasivo,
+      eliminarMasivo,
       crearExpediente,
       actualizarExpediente,
       eliminarExpediente,
@@ -137,6 +174,8 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       error,
       recargar,
       moverEtapa,
+      moverEtapaMasivo,
+      eliminarMasivo,
       crearExpediente,
       actualizarExpediente,
       eliminarExpediente,
