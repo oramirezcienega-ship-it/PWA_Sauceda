@@ -1,5 +1,6 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarBienvenida } from "@/lib/bienvenida";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -115,6 +116,8 @@ async function obtenerOCrearProspecto(
     telefono: lead.telefono,
     origen: "whatsapp",
   });
+  // Automatizaciones: prospecto nuevo captado por WhatsApp.
+  await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   return id;
 }
 
@@ -170,4 +173,9 @@ export async function registrarLeadWhatsApp(
   // Bienvenida automática. El cliente nos escribió: ventana de 24 h abierta,
   // así que el WhatsApp puede ir como texto libre.
   await enviarBienvenida(sb, id, { ventanaWhatsAppAbierta: true });
+  // Automatizaciones: expediente nuevo captado por WhatsApp.
+  await dispararEvento(sb, "nuevo-expediente", {
+    expedienteId: id,
+    prospectoId,
+  });
 }

@@ -11,6 +11,7 @@ import {
 } from "@/lib/supabase/mapeo";
 import { ORIGENES } from "@/lib/origenes";
 import { registrarActividad } from "@/lib/actividades";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 import type {
   DatosProspecto,
   Expediente,
@@ -96,6 +97,8 @@ export async function crearProspecto(
     tipo: "creacion",
     titulo: "Prospecto creado",
   });
+  // Dispara automatizaciones del evento "nuevo prospecto".
+  await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   return aProspecto(data as FilaProspecto);
 }
 

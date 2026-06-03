@@ -7,6 +7,7 @@ import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
@@ -110,6 +111,11 @@ export async function crearExpediente(
   });
   // Bienvenida automática (correo + WhatsApp + portal). Best-effort.
   await enviarBienvenida(sb, id);
+  // Dispara automatizaciones del evento "nuevo expediente".
+  await dispararEvento(sb, "nuevo-expediente", {
+    expedienteId: id,
+    prospectoId: datos.prospectoId,
+  });
   return aExpediente(data as FilaExpediente);
 }
 
@@ -120,13 +126,42 @@ export async function actualizarExpediente(
 ): Promise<Expediente> {
   await requireAdmin();
   const sb = supabaseServidor();
+
+  // Lee el estado anterior para detectar qué columnas cambian (automatizaciones).
+  const { data: antes } = await sb
+    .from("expedientes")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  const nuevos = aFila(datos);
   const { data, error } = await sb
     .from("expedientes")
-    .update({ ...aFila(datos), ultimo_movimiento: hoyISO() })
+    .update({ ...nuevos, ultimo_movimiento: hoyISO() })
     .eq("id", id)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+
+  // Campos que realmente cambiaron respecto al estado anterior.
+  const cambios = antes
+    ? Object.keys(nuevos).filter(
+        (k) =>
+          String((antes as Record<string, unknown>)[k] ?? "") !==
+          String((nuevos as Record<string, unknown>)[k] ?? ""),
+      )
+    : Object.keys(nuevos);
+  if (cambios.length > 0) {
+    await dispararEvento(sb, "cambio-campo", { expedienteId: id, cambios });
+    // Si cambió la etapa desde el formulario de edición, también cuenta como
+    // "cambio de etapa" (para que disparen esas reglas sin importar la vía).
+    if (cambios.includes("etapa")) {
+      await dispararEvento(sb, "cambio-etapa", {
+        expedienteId: id,
+        cambios: ["etapa"],
+      });
+    }
+  }
 
   // Sincroniza los campos compartidos (nombre + teléfono) con el prospecto.
   if (datos.prospectoId) {
@@ -160,6 +195,11 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     expedienteId: id,
     tipo: "etapa",
     titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
+  });
+  // Dispara automatizaciones del evento "cambio de etapa".
+  await dispararEvento(sb, "cambio-etapa", {
+    expedienteId: id,
+    cambios: ["etapa"],
   });
 }
 

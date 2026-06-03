@@ -1,6 +1,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
+import { dispararEvento } from "@/lib/automatizaciones/motor";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -70,6 +71,8 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
       origen: "sitio-web",
     });
     prospectoId = id;
+    // Automatizaciones: prospecto nuevo captado por el sitio web.
+    await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   }
 
   // Si ya existe un expediente con ese teléfono, no duplicamos: solo anotamos.
@@ -125,5 +128,10 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   });
   // Bienvenida automática (correo + WhatsApp + portal). Best-effort.
   await enviarBienvenida(sb, expId);
+  // Automatizaciones: expediente nuevo captado por el sitio web.
+  await dispararEvento(sb, "nuevo-expediente", {
+    expedienteId: expId,
+    prospectoId,
+  });
   return token;
 }
