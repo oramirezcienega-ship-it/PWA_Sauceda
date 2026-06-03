@@ -4,9 +4,9 @@ import { registrarLeadWeb } from "@/features/captacion/web";
 // Endpoint de captación del formulario del sitio web (saucedamx.com / Cotizar).
 export const dynamic = "force-dynamic";
 
-// CORS abierto para aceptar el envío desde el sitio web.
+// CORS: permitimos el envío desde la landing page de saucedamx.com.
 const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://saucedamx.com",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await registrarLeadWeb({ nombre, telefono, correo, mensaje });
-    return NextResponse.json({ ok: true }, { headers: CORS });
+    const token = await registrarLeadWeb({ nombre, telefono, correo, mensaje });
+    return NextResponse.json({ ok: true, token }, { headers: CORS });
   } catch (err) {
     console.error("Error en captación web:", err);
     return NextResponse.json({ ok: false }, { status: 500, headers: CORS });
