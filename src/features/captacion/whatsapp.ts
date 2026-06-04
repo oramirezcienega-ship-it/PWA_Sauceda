@@ -15,6 +15,8 @@ export interface MensajeWhatsApp {
   telefono: string;
   nombre?: string;
   mensaje?: string;
+  /** Id del mensaje en Meta (para no duplicarlo si reintenta el webhook). */
+  waMessageId?: string;
 }
 
 /** Forma mínima del payload del webhook de Meta que nos interesa. */
@@ -24,6 +26,7 @@ interface PayloadWhatsApp {
       value?: {
         contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
         messages?: Array<{
+          id?: string;
           from?: string;
           type?: string;
           text?: { body?: string };
@@ -57,6 +60,7 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
           telefono: m.from,
           nombre: nombrePorWaId[m.from],
           mensaje: texto,
+          waMessageId: m.id,
         });
       }
     }
@@ -122,6 +126,34 @@ async function obtenerOCrearProspecto(
 }
 
 /**
+ * Guarda un mensaje ENTRANTE en el hilo de conversación (best-effort).
+ * El índice único por wa_message_id evita duplicados si Meta reintenta.
+ */
+async function guardarMensajeEntrante(
+  sb: ReturnType<typeof supabaseServidor>,
+  datos: {
+    telefono: string;
+    texto: string;
+    expedienteId: string | null;
+    prospectoId: string | null;
+    waMessageId?: string;
+  },
+): Promise<void> {
+  try {
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: datos.telefono,
+      texto: datos.texto,
+      direccion: "in",
+      expediente_id: datos.expedienteId,
+      prospecto_id: datos.prospectoId,
+      wa_message_id: datos.waMessageId ?? null,
+    });
+  } catch (err) {
+    console.error("No se pudo guardar el mensaje entrante:", err);
+  }
+}
+
+/**
  * Registra un lead entrante de WhatsApp.
  * Crea (o reutiliza) el prospecto por teléfono con origen "whatsapp", y le
  * cuelga un expediente en "nuevo-lead". Si ya existe un expediente con ese
@@ -151,6 +183,13 @@ export async function registrarLeadWhatsApp(
       .from("expedientes")
       .update({ notas: nota, ultimo_movimiento: hoyISO() })
       .eq("id", exp.id);
+    await guardarMensajeEntrante(sb, {
+      telefono: lead.telefono,
+      texto: lead.mensaje ?? "",
+      expedienteId: exp.id,
+      prospectoId,
+      waMessageId: lead.waMessageId,
+    });
     return;
   }
 
@@ -169,6 +208,14 @@ export async function registrarLeadWhatsApp(
     notas: "Lead entrante automáticamente por WhatsApp.",
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
+  });
+  // Guarda el primer mensaje del cliente en el hilo de conversación.
+  await guardarMensajeEntrante(sb, {
+    telefono: lead.telefono,
+    texto: lead.mensaje ?? "",
+    expedienteId: id,
+    prospectoId,
+    waMessageId: lead.waMessageId,
   });
   // Bienvenida automática. El cliente nos escribió: ventana de 24 h abierta,
   // así que el WhatsApp puede ir como texto libre.
