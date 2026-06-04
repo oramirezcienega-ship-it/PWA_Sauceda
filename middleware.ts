@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { opcionesCookieSeguras } from "@/lib/supabase/cookies";
 
 /**
  * Middleware de autenticación.
@@ -33,7 +34,7 @@ export async function middleware(request: NextRequest) {
         );
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
+          response.cookies.set(name, value, opcionesCookieSeguras(options)),
         );
       },
     },
