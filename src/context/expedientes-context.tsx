@@ -45,12 +45,24 @@ interface ExpedientesContextValue {
 
 const ExpedientesContext = createContext<ExpedientesContextValue | null>(null);
 
+/** Rutas públicas (sin sesión de admin): login y portal del cliente. */
+function esRutaPublica(path: string): boolean {
+  return path.startsWith("/login") || path.startsWith("/seguimiento");
+}
+
 export function ExpedientesProvider({ children }: { children: ReactNode }) {
   const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [cargado, setCargado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const recargar = useCallback(async () => {
+    // Este provider envuelve TODA la app (está en el layout raíz). En las
+    // rutas públicas (login y portal del cliente) no hay panel que cargar,
+    // así que no pedimos nada ni redirigimos (evita un bucle en /login).
+    if (typeof window !== "undefined" && esRutaPublica(window.location.pathname)) {
+      setCargado(true);
+      return;
+    }
     try {
       setError(null);
       const res = await acciones.cargarExpedientes();
