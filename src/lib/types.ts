@@ -297,6 +297,43 @@ export interface Automatizacion {
 /** Datos editables de una automatización (el `id` lo administra la app). */
 export type DatosAutomatizacion = Omit<Automatizacion, "id">;
 
+// ------------------------------------------------------------
+// MÓDULO CONVERSACIONES DE WHATSAPP (bandeja bidireccional)
+// ------------------------------------------------------------
+
+/** Un mensaje dentro de un hilo de conversación de WhatsApp. */
+export interface MensajeChat {
+  id: string;
+  /** 'in' = del cliente · 'out' = enviado por nosotros. */
+  direccion: "in" | "out";
+  texto: string;
+  /** Estado del envío saliente: ''/'enviado'/'error'. */
+  estado: string;
+  fecha: string;
+}
+
+/** Resumen de una conversación (para la lista de la bandeja). */
+export interface ConversacionResumen {
+  telefono: string;
+  expedienteId: string | null;
+  prospectoId: string | null;
+  nombre: string;
+  ultimoTexto: string;
+  ultimaFecha: string;
+  /** Si hay un entrante en las últimas 24 h (se puede responder con texto). */
+  ventanaAbierta: boolean;
+}
+
+/** Detalle de una conversación (hilo completo). */
+export interface ConversacionDetalle {
+  telefono: string;
+  expedienteId: string | null;
+  prospectoId: string | null;
+  nombre: string;
+  ventanaAbierta: boolean;
+  mensajes: MensajeChat[];
+}
+
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */
 export interface EjecucionAutomatizacion {
   id: string;

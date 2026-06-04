@@ -325,3 +325,27 @@ create index if not exists automatizaciones_log_aut_idx
   on public.automatizaciones_log (automatizacion_id);
 create index if not exists automatizaciones_log_created_idx
   on public.automatizaciones_log (created_at desc);
+
+-- ===== supabase/migrations/0012_conversaciones_whatsapp.sql =====
+-- ============================================================
+-- MÓDULO: CONVERSACIONES DE WHATSAPP (bandeja bidireccional)
+-- ============================================================
+create table if not exists public.mensajes_whatsapp (
+  id             uuid primary key default gen_random_uuid(),
+  expediente_id  text references public.expedientes(id) on delete set null,
+  prospecto_id   text references public.prospectos(id) on delete set null,
+  telefono       text not null,
+  direccion      text not null check (direccion in ('in', 'out')),
+  texto          text not null default '',
+  wa_message_id  text,
+  estado         text not null default '',
+  created_at     timestamptz not null default now()
+);
+alter table public.mensajes_whatsapp enable row level security;
+create index if not exists mensajes_whatsapp_telefono_idx
+  on public.mensajes_whatsapp (telefono, created_at desc);
+create index if not exists mensajes_whatsapp_expediente_idx
+  on public.mensajes_whatsapp (expediente_id);
+create unique index if not exists mensajes_whatsapp_wamid_uniq
+  on public.mensajes_whatsapp (wa_message_id)
+  where wa_message_id is not null;
