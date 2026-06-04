@@ -269,6 +269,19 @@ export interface AccionAutomatizacion {
   cuerpo?: string;
   texto?: string;
   etapa?: EtapaId;
+  /**
+   * WhatsApp: cómo se envía.
+   *  - "texto": texto libre (solo entrega dentro de la ventana de 24 h).
+   *  - "plantilla": plantilla aprobada en Meta (contacto en frío).
+   * Si no se define, se asume "texto".
+   */
+  modoWhatsapp?: "texto" | "plantilla";
+  /** Nombre real de la plantilla aprobada en Meta. */
+  plantilla?: string;
+  /** Idioma de la plantilla (ej. "es_MX"). */
+  idiomaPlantilla?: string;
+  /** Valores para los {{1}}, {{2}}… de la plantilla (admiten {nombre}). */
+  parametros?: string[];
 }
 
 /** Una regla de automatización. */

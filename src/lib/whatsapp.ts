@@ -96,12 +96,19 @@ export async function enviarWhatsAppPlantilla(
   idioma: string,
   parametrosCuerpo: string[] = [],
   urlBotonParam?: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const to = normalizarTelefono(telefono);
-    if (!token || !phoneId || !to || !plantilla) return;
+    if (!token || !phoneId) {
+      return {
+        ok: false,
+        error: "WhatsApp no está configurado (faltan credenciales).",
+      };
+    }
+    if (!to) return { ok: false, error: "Teléfono inválido." };
+    if (!plantilla) return { ok: false, error: "Falta el nombre de la plantilla." };
 
     const components: Record<string, unknown>[] = [];
     if (parametrosCuerpo.length > 0) {
@@ -140,13 +147,110 @@ export async function enviarWhatsAppPlantilla(
       },
     );
     if (!res.ok) {
-      console.error(
-        "WhatsApp (plantilla) no enviado:",
-        res.status,
-        await res.text(),
-      );
+      const detalle = await res.text();
+      console.error("WhatsApp (plantilla) no enviado:", res.status, detalle);
+      let metaMsg = "";
+      try {
+        metaMsg = JSON.parse(detalle)?.error?.message ?? "";
+      } catch {
+        // respuesta no-JSON
+      }
+      return {
+        ok: false,
+        error: metaMsg || `Meta respondió con error ${res.status}.`,
+      };
     }
+    return { ok: true };
   } catch (err) {
     console.error("Error al enviar WhatsApp (plantilla):", err);
+    return { ok: false, error: "Error de red al enviar el WhatsApp." };
+  }
+}
+
+/** Plantilla de mensaje aprobada (o en revisión) tal como vive en Meta. */
+export interface PlantillaWhatsApp {
+  nombre: string;
+  idioma: string;
+  /** APPROVED | PENDING | REJECTED | … */
+  estado: string;
+  /** MARKETING | UTILITY | AUTHENTICATION */
+  categoria: string;
+  /** Texto del componente BODY (con sus {{1}}, {{2}}…). */
+  cuerpo: string;
+  /** Cantidad de parámetros {{n}} distintos en el cuerpo. */
+  parametros: number;
+}
+
+interface FilaPlantillaMeta {
+  name: string;
+  language: string;
+  status: string;
+  category: string;
+  components?: { type: string; text?: string }[];
+}
+
+/**
+ * Trae las plantillas de mensajes de la cuenta de WhatsApp Business (WABA)
+ * desde la Graph API de Meta. Solo lectura: las plantillas se crean y se
+ * aprueban en Meta, aquí únicamente se consultan para poder elegirlas.
+ *
+ * Requiere WHATSAPP_TOKEN y WHATSAPP_WABA_ID (ID de la cuenta de WhatsApp
+ * Business, en Meta Business Settings → Cuentas → WhatsApp).
+ */
+export async function listarPlantillasAprobadas(): Promise<{
+  ok: boolean;
+  error?: string;
+  plantillas: PlantillaWhatsApp[];
+}> {
+  try {
+    const token = process.env.WHATSAPP_TOKEN;
+    const waba = process.env.WHATSAPP_WABA_ID;
+    if (!token || !waba) {
+      return {
+        ok: false,
+        error: "Faltan WHATSAPP_TOKEN o WHATSAPP_WABA_ID en la configuración.",
+        plantillas: [],
+      };
+    }
+    const url =
+      `https://graph.facebook.com/${API_VERSION}/${waba}/message_templates` +
+      `?fields=name,status,language,category,components&limit=200`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const detalle = await res.text();
+      console.error("No se pudieron leer plantillas:", res.status, detalle);
+      let metaMsg = "";
+      try {
+        metaMsg = JSON.parse(detalle)?.error?.message ?? "";
+      } catch {
+        // respuesta no-JSON
+      }
+      return {
+        ok: false,
+        error: metaMsg || `Meta respondió con error ${res.status}.`,
+        plantillas: [],
+      };
+    }
+    const json = (await res.json()) as { data?: FilaPlantillaMeta[] };
+    const plantillas: PlantillaWhatsApp[] = (json.data ?? []).map((t) => {
+      const body = (t.components ?? []).find((c) => c.type === "BODY");
+      const cuerpo = body?.text ?? "";
+      const matches = cuerpo.match(/\{\{\d+\}\}/g);
+      return {
+        nombre: t.name,
+        idioma: t.language,
+        estado: t.status,
+        categoria: t.category,
+        cuerpo,
+        parametros: matches ? new Set(matches).size : 0,
+      };
+    });
+    return { ok: true, plantillas };
+  } catch (err) {
+    console.error("Error al consultar plantillas de WhatsApp:", err);
+    return { ok: false, error: "Error de red al consultar Meta.", plantillas: [] };
   }
 }

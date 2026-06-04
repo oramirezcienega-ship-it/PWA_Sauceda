@@ -11,6 +11,8 @@ import {
 import { ETAPAS } from "@/lib/etapas";
 import { ORIGENES } from "@/lib/origenes";
 import { listarFormularios } from "@/app/actions/formularios";
+import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
+import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 import type {
   AccionAutomatizacion,
   CondicionAutomatizacion,
@@ -58,6 +60,8 @@ export function AutomatizacionBuilder({
 }) {
   const [datos, setDatos] = useState<DatosAutomatizacion>(valorInicial ?? VACIO);
   const [formularios, setFormularios] = useState<Formulario[]>([]);
+  const [plantillas, setPlantillas] = useState<PlantillaWhatsApp[]>([]);
+  const [errorPlantillas, setErrorPlantillas] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -65,6 +69,12 @@ export function AutomatizacionBuilder({
     listarFormularios()
       .then(setFormularios)
       .catch(() => setFormularios([]));
+    listarPlantillasWhatsApp()
+      .then((r) => {
+        setPlantillas(r.plantillas);
+        if (!r.ok) setErrorPlantillas(r.error ?? "No se pudieron cargar.");
+      })
+      .catch(() => setErrorPlantillas("No se pudieron cargar las plantillas."));
   }, []);
 
   const campos = camposDeEvento(datos.evento);
@@ -169,6 +179,102 @@ export function AutomatizacionBuilder({
         placeholder="valor"
         className={`${INPUT} max-w-[180px]`}
       />
+    );
+  }
+
+  /** Config de la acción "enviar WhatsApp": texto libre o plantilla aprobada. */
+  function ConfigWhatsApp({ idx, a }: { idx: number; a: AccionAutomatizacion }) {
+    const modo = a.modoWhatsapp ?? "texto";
+    const aprobadas = plantillas.filter((p) => p.estado === "APPROVED");
+    const sel = plantillas.find((p) => p.nombre === a.plantilla);
+    const numParams = sel?.parametros ?? 0;
+
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-4 text-xs text-carbon/70">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              checked={modo === "texto"}
+              onChange={() => setAccion(idx, { modoWhatsapp: "texto" })}
+            />
+            Texto libre (ventana 24 h)
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              checked={modo === "plantilla"}
+              onChange={() => setAccion(idx, { modoWhatsapp: "plantilla" })}
+            />
+            Plantilla aprobada (contacto en frío)
+          </label>
+        </div>
+
+        {modo === "plantilla" ? (
+          <div className="space-y-2">
+            <select
+              value={a.plantilla ?? ""}
+              onChange={(e) => {
+                const p = plantillas.find((x) => x.nombre === e.target.value);
+                setAccion(idx, {
+                  plantilla: e.target.value,
+                  idiomaPlantilla: p?.idioma,
+                  parametros: [],
+                });
+              }}
+              className={`${SELECT} w-full`}
+            >
+              <option value="">— elige plantilla aprobada —</option>
+              {aprobadas.map((p) => (
+                <option key={`${p.nombre}-${p.idioma}`} value={p.nombre}>
+                  {p.nombre} ({p.idioma})
+                </option>
+              ))}
+            </select>
+
+            {errorPlantillas && (
+              <p className="text-xs text-rojo/80">
+                {errorPlantillas} Revisa <span className="font-mono">WHATSAPP_WABA_ID</span>{" "}
+                y el token, o crea/aprueba plantillas en Meta.
+              </p>
+            )}
+            {!errorPlantillas && aprobadas.length === 0 && (
+              <p className="text-xs text-carbon/50">
+                No hay plantillas aprobadas en tu cuenta de WhatsApp todavía.
+              </p>
+            )}
+
+            {sel && (
+              <p className="whitespace-pre-line rounded-md bg-crema/40 p-2 text-xs text-carbon/60">
+                {sel.cuerpo}
+              </p>
+            )}
+
+            {Array.from({ length: numParams }).map((_, i) => (
+              <input
+                key={i}
+                type="text"
+                value={a.parametros?.[i] ?? ""}
+                onChange={(e) => {
+                  const arr = [...(a.parametros ?? [])];
+                  arr[i] = e.target.value;
+                  setAccion(idx, { parametros: arr });
+                }}
+                placeholder={`Valor para {{${i + 1}}} (admite {nombre})`}
+                className={INPUT}
+              />
+            ))}
+          </div>
+        ) : (
+          <textarea
+            value={a.texto ?? ""}
+            onChange={(e) => setAccion(idx, { texto: e.target.value })}
+            rows={3}
+            placeholder="Mensaje de WhatsApp. Puedes usar {nombre}…"
+            className={INPUT}
+          />
+        )}
+      </div>
     );
   }
 
@@ -382,13 +488,7 @@ export function AutomatizacionBuilder({
             )}
 
             {a.tipo === "enviar-whatsapp" && (
-              <textarea
-                value={a.texto ?? ""}
-                onChange={(e) => setAccion(idx, { texto: e.target.value })}
-                rows={3}
-                placeholder="Mensaje de WhatsApp. Puedes usar {nombre}…"
-                className={INPUT}
-              />
+              <ConfigWhatsApp idx={idx} a={a} />
             )}
 
             {a.tipo === "mover-etapa" && (
