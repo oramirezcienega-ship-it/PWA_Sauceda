@@ -57,11 +57,24 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         setExpedientes(res.expedientes);
       } else {
+        // Sin sesión: el servidor responde "No autorizado". En vez de mostrar
+        // el panel con un error, mandamos al login (refuerza al middleware).
+        if (
+          /no autorizado/i.test(res.mensaje) &&
+          typeof window !== "undefined"
+        ) {
+          window.location.replace("/login");
+          return;
+        }
         setError(`No se pudieron cargar los expedientes. Detalle: ${res.mensaje}`);
       }
     } catch (err) {
       console.error("Error al cargar expedientes:", err);
       const detalle = err instanceof Error ? err.message : "error desconocido";
+      if (/no autorizado/i.test(detalle) && typeof window !== "undefined") {
+        window.location.replace("/login");
+        return;
+      }
       setError(
         `No se pudieron cargar los expedientes. Detalle: ${detalle}`,
       );

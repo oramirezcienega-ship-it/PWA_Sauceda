@@ -7,8 +7,10 @@
   y manejo offline de la capa de captación/portal del cliente.
 */
 
-const CACHE = "sauceda-shell-v2";
-const RECURSOS = ["/", "/manifest.json", "/icons/icon.svg"];
+const CACHE = "sauceda-shell-v3";
+// No se precachea "/" (es el panel privado): si se cacheara con sesión, luego
+// se le mostraría a un usuario sin sesión. El respaldo offline es /login.
+const RECURSOS = ["/login", "/manifest.json", "/icons/icon.svg"];
 
 // Instala y precachea el shell mínimo.
 self.addEventListener("install", (event) => {
@@ -45,7 +47,7 @@ self.addEventListener("fetch", (event) => {
   if (esDinamica) {
     event.respondWith(
       fetch(request).catch(
-        () => caches.match(request).then((r) => r || caches.match("/")),
+        () => caches.match(request).then((r) => r || caches.match("/login")),
       ),
     );
     return;
@@ -58,6 +60,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE).then((cache) => cache.put(request, copia));
         return respuesta;
       })
-      .catch(() => caches.match(request).then((r) => r || caches.match("/"))),
+      .catch(() => caches.match(request).then((r) => r || caches.match("/login"))),
   );
 });
