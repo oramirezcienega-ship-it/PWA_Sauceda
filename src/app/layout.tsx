@@ -8,6 +8,7 @@ import {
 import "./globals.css";
 import { ExpedientesProvider } from "@/context/expedientes-context";
 import { RegistrarSW } from "@/components/RegistrarSW";
+import { Shell } from "@/components/Shell";
 
 // Tipografías de marca cargadas con next/font (se exponen como variables CSS
 // y se enlazan a los tokens font-* en tailwind.config.ts).
@@ -63,7 +64,10 @@ export default function RootLayout({
     >
       <body>
         {/* Provider global del estado de expedientes (en memoria). */}
-        <ExpedientesProvider>{children}</ExpedientesProvider>
+        <ExpedientesProvider>
+          {/* Navegación lateral (escritorio) / cajón (móvil) + contenido. */}
+          <Shell>{children}</Shell>
+        </ExpedientesProvider>
         {/* Registro del service worker para que la app sea instalable. */}
         <RegistrarSW />
       </body>

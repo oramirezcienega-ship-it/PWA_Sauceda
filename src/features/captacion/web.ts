@@ -2,6 +2,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -38,16 +39,19 @@ async function siguienteId(
 export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   const sb = supabaseServidor();
   const nombre = lead.nombre?.trim() || "Lead del sitio web";
-  const telefono = (lead.telefono ?? "").trim();
+  const telefonoRaw = (lead.telefono ?? "").trim();
+  // Se guarda normalizado (52 + 10 dígitos) y se busca por todas las variantes.
+  const telefono = telefonoRaw ? normalizarTelefono(telefonoRaw) : "";
+  const variantesTel = telefonoRaw ? variantesTelefono(telefonoRaw) : [];
   const correo = (lead.correo ?? "").trim();
 
   // Buscar prospecto existente por teléfono o correo (evita duplicados).
   let prospectoId: string | null = null;
-  if (telefono) {
+  if (variantesTel.length) {
     const { data } = await sb
       .from("prospectos")
       .select("id")
-      .eq("telefono", telefono)
+      .in("telefono", variantesTel)
       .limit(1);
     if (data && data.length) prospectoId = data[0].id as string;
   }
@@ -76,11 +80,11 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   }
 
   // Si ya existe un expediente con ese teléfono, no duplicamos: solo anotamos.
-  if (telefono) {
+  if (variantesTel.length) {
     const { data: ex } = await sb
       .from("expedientes")
       .select("id, token")
-      .eq("telefono", telefono)
+      .in("telefono", variantesTel)
       .limit(1);
     if (ex && ex.length) {
       await sb

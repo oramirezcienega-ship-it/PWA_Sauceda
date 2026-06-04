@@ -1,7 +1,7 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import type {
@@ -26,7 +26,23 @@ interface FilaMsg {
   direccion: "in" | "out";
   texto: string;
   estado: string;
+  agente: string;
   created_at: string;
+}
+
+/** Nombre del asesor con sesión activa (de su perfil, o su correo). */
+async function nombreAgenteActual(
+  sb: ReturnType<typeof supabaseServidor>,
+): Promise<string> {
+  const user = await usuarioActual();
+  if (!user) return "";
+  const { data } = await sb
+    .from("perfiles")
+    .select("nombre")
+    .eq("id", user.id)
+    .maybeSingle();
+  const nombre = (data as { nombre?: string } | null)?.nombre?.trim();
+  return nombre || user.email || "";
 }
 
 /** La ventana de 24 h está abierta si hubo un entrante en ese lapso. */
@@ -87,6 +103,8 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const resumenes: ConversacionResumen[] = [];
   porTel.forEach((arr, telefono) => {
     const ultimo = arr[0];
+    // Quién atiende = el asesor de la última respuesta saliente con firma.
+    const ultimoOut = arr.find((f) => f.direccion === "out" && f.agente);
     resumenes.push({
       telefono,
       expedienteId: ultimo.expediente_id,
@@ -96,6 +114,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       ultimoTexto: ultimo.texto,
       ultimaFecha: ultimo.created_at,
       ventanaAbierta: ventanaAbierta(arr),
+      atiende: ultimoOut?.agente ?? "",
     });
   });
   resumenes.sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha));
@@ -139,6 +158,7 @@ export async function obtenerConversacion(
     direccion: f.direccion,
     texto: f.texto,
     estado: f.estado,
+    agente: f.agente ?? "",
     fecha: f.created_at,
   }));
 
@@ -180,6 +200,7 @@ export async function responderConversacion(
   if (!texto.trim()) return { ok: false, error: "El mensaje está vacío." };
   const sb = supabaseServidor();
   const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+  const agente = await nombreAgenteActual(sb);
 
   const r = await enviarWhatsAppTexto(telefono, texto);
   await sb.from("mensajes_whatsapp").insert({
@@ -189,6 +210,7 @@ export async function responderConversacion(
     expediente_id: expedienteId,
     prospecto_id: prospectoId,
     estado: r.ok ? "enviado" : "error",
+    agente,
   });
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
@@ -212,6 +234,7 @@ export async function responderConPlantilla(
   if (!plantilla) return { ok: false, error: "Falta la plantilla." };
   const sb = supabaseServidor();
   const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+  const agente = await nombreAgenteActual(sb);
 
   const r = await enviarWhatsAppPlantilla(
     telefono,
@@ -229,6 +252,7 @@ export async function responderConPlantilla(
     expediente_id: expedienteId,
     prospecto_id: prospectoId,
     estado: r.ok ? "enviado" : "error",
+    agente,
   });
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {

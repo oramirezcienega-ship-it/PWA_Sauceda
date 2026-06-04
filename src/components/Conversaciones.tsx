@@ -159,8 +159,13 @@ export function Conversaciones() {
               <span className="mt-0.5 w-full truncate text-xs text-carbon/50">
                 {c.ultimoTexto || "—"}
               </span>
-              <span className="font-mono text-[10px] text-carbon/30">
-                {c.telefono} · {horaCorta(c.ultimaFecha)}
+              <span className="flex w-full items-center justify-between gap-2">
+                <span className="font-mono text-[10px] text-carbon/30">
+                  {c.telefono} · {horaCorta(c.ultimaFecha)}
+                </span>
+                <span className="shrink-0 text-[10px] text-sauce">
+                  {c.atiende ? `Atiende: ${c.atiende}` : "Sin atender"}
+                </span>
               </span>
             </button>
           ))
@@ -186,6 +191,13 @@ export function Conversaciones() {
                 <p className="font-mono text-[11px] text-carbon/40">
                   {detalle.telefono}
                   {detalle.expedienteId && ` · ${detalle.expedienteId}`}
+                  {(() => {
+                    const a = detalle.mensajes
+                      .slice()
+                      .reverse()
+                      .find((m) => m.direccion === "out" && m.agente)?.agente;
+                    return a ? ` · Atiende: ${a}` : "";
+                  })()}
                 </p>
               </div>
               {detalle.expedienteId && (
@@ -218,6 +230,7 @@ export function Conversaciones() {
                         m.direccion === "out" ? "text-crema/70" : "text-carbon/40"
                       }`}
                     >
+                      {m.direccion === "out" && m.agente && `${m.agente} · `}
                       {horaCorta(m.fecha)}
                       {m.direccion === "out" && m.estado === "error" && " · error"}
                     </span>
