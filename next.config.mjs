@@ -17,8 +17,8 @@ const csp = [
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  `script-src 'self' 'unsafe-inline'${esDev ? " 'unsafe-eval'" : ""}`,
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  `script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com${esDev ? " 'unsafe-eval'" : ""}`,
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cloudflareinsights.com",
   "manifest-src 'self'",
   "worker-src 'self'",
 ].join("; ");
