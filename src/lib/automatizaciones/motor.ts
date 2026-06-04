@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { notificarCliente } from "@/lib/email";
-import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { aplicarParametros } from "@/lib/parametros";
 import { ETAPAS_POR_ID } from "@/lib/etapas";
 import type {
@@ -144,7 +144,25 @@ async function ejecutarAccion(
     case "enviar-whatsapp": {
       const tel = String(fila?.telefono ?? "");
       if (!tel) return "enviar-whatsapp: omitido (sin teléfono)";
-      const texto = aplicarParametros(accion.texto || "", paramsDeFila(fila));
+      const params = paramsDeFila(fila);
+      // Plantilla aprobada (contacto en frío, fuera de la ventana de 24 h).
+      if (accion.modoWhatsapp === "plantilla") {
+        if (!accion.plantilla) return "enviar-whatsapp: omitido (sin plantilla)";
+        const valores = (accion.parametros ?? []).map((p) =>
+          aplicarParametros(p, params),
+        );
+        const r = await enviarWhatsAppPlantilla(
+          tel,
+          accion.plantilla,
+          accion.idiomaPlantilla || "es_MX",
+          valores,
+        );
+        return r.ok
+          ? "enviar-whatsapp (plantilla): ok"
+          : `enviar-whatsapp (plantilla): ${r.error ?? "error"}`;
+      }
+      // Texto libre (solo se entrega dentro de la ventana de 24 h).
+      const texto = aplicarParametros(accion.texto || "", params);
       const r = await enviarWhatsAppTexto(tel, texto);
       return r.ok ? "enviar-whatsapp: ok" : `enviar-whatsapp: ${r.error ?? "error"}`;
     }

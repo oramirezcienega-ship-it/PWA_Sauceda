@@ -43,6 +43,7 @@ export function Encabezado() {
             <Enlace href="/formularios">Formularios</Enlace>
             <Enlace href="/mensajes">Mensajes</Enlace>
             <Enlace href="/automatizaciones">Automatizaciones</Enlace>
+            <Enlace href="/whatsapp">WhatsApp</Enlace>
             {esAdmin && <Enlace href="/usuarios">Usuarios</Enlace>}
           </nav>
         </div>
