@@ -309,6 +309,8 @@ export interface MensajeChat {
   texto: string;
   /** Estado del envío saliente: ''/'enviado'/'error'. */
   estado: string;
+  /** Nombre del asesor que envió el mensaje saliente. */
+  agente: string;
   fecha: string;
 }
 
@@ -322,6 +324,8 @@ export interface ConversacionResumen {
   ultimaFecha: string;
   /** Si hay un entrante en las últimas 24 h (se puede responder con texto). */
   ventanaAbierta: boolean;
+  /** Asesor que la está atendiendo (último que respondió), o "" si nadie. */
+  atiende: string;
 }
 
 /** Detalle de una conversación (hilo completo). */

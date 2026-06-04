@@ -1,6 +1,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -106,7 +107,7 @@ async function obtenerOCrearProspecto(
   const { data: existentes } = await sb
     .from("prospectos")
     .select("id")
-    .eq("telefono", lead.telefono)
+    .in("telefono", variantesTelefono(lead.telefono))
     .limit(1);
 
   if (existentes && existentes.length > 0) {
@@ -117,7 +118,7 @@ async function obtenerOCrearProspecto(
   await sb.from("prospectos").insert({
     id,
     nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
-    telefono: lead.telefono,
+    telefono: normalizarTelefono(lead.telefono),
     origen: "whatsapp",
   });
   // Automatizaciones: prospecto nuevo captado por WhatsApp.
@@ -164,14 +165,18 @@ export async function registrarLeadWhatsApp(
 ): Promise<void> {
   const sb = supabaseServidor();
 
+  // Teléfono normalizado (canónico) y sus variantes para deduplicar.
+  const telefono = normalizarTelefono(lead.telefono);
+  const variantesTel = variantesTelefono(lead.telefono);
+
   // Prospecto (persona): se busca o se crea por teléfono.
   const prospectoId = await obtenerOCrearProspecto(sb, lead);
 
-  // Dedupe del expediente por teléfono.
+  // Dedupe del expediente por teléfono (cualquier formato equivalente).
   const { data: existentes } = await sb
     .from("expedientes")
     .select("id, notas")
-    .eq("telefono", lead.telefono)
+    .in("telefono", variantesTel)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
@@ -184,7 +189,7 @@ export async function registrarLeadWhatsApp(
       .update({ notas: nota, ultimo_movimiento: hoyISO() })
       .eq("id", exp.id);
     await guardarMensajeEntrante(sb, {
-      telefono: lead.telefono,
+      telefono,
       texto: lead.mensaje ?? "",
       expedienteId: exp.id,
       prospectoId,
@@ -202,7 +207,7 @@ export async function registrarLeadWhatsApp(
     situacion: lead.mensaje
       ? `Primer mensaje: ${lead.mensaje}`.slice(0, 300)
       : "Contacto entrante por WhatsApp.",
-    telefono: lead.telefono,
+    telefono,
     valor_estimado: 0,
     saldo_deuda: 0,
     notas: "Lead entrante automáticamente por WhatsApp.",
@@ -211,7 +216,7 @@ export async function registrarLeadWhatsApp(
   });
   // Guarda el primer mensaje del cliente en el hilo de conversación.
   await guardarMensajeEntrante(sb, {
-    telefono: lead.telefono,
+    telefono,
     texto: lead.mensaje ?? "",
     expedienteId: id,
     prospectoId,
