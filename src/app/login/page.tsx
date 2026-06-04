@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+import { iniciarSesion } from "@/app/actions/auth";
 
 /**
  * Acceso del equipo de SAUCEDA al panel de operación.
@@ -18,13 +18,11 @@ export default function PaginaLogin() {
     e.preventDefault();
     setError(null);
     setEntrando(true);
-    const sb = supabaseNavegador();
-    const { error } = await sb.auth.signInWithPassword({
-      email: correo.trim(),
-      password,
-    });
-    if (error) {
-      setError("Correo o contraseña incorrectos.");
+    // El inicio de sesión ocurre en el SERVIDOR (server action): así las
+    // cookies de sesión se marcan HttpOnly + Secure + SameSite=Lax.
+    const r = await iniciarSesion(correo, password);
+    if (!r.ok) {
+      setError(r.error ?? "Correo o contraseña incorrectos.");
       setEntrando(false);
       return;
     }

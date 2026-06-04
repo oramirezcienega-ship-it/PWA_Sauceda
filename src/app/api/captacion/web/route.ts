@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { registrarLeadWeb } from "@/features/captacion/web";
+import {
+  esEmail,
+  esTelefonoValido,
+  limpiarTelefono,
+  limpiarTexto,
+} from "@/lib/validacion";
 
 // Endpoint de captación del formulario del sitio web (saucedamx.com / Cotizar).
 export const dynamic = "force-dynamic";
@@ -44,27 +50,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Acepta nombres de campo comunes.
-    const nombre = (datos.nombre || datos.name || datos.fullname || "").trim();
-    const telefono = (
-      datos.telefono ||
-      datos.tel ||
-      datos.phone ||
-      datos.celular ||
-      ""
-    ).trim();
-    const correo = (datos.correo || datos.email || datos.mail || "").trim();
-    const mensaje = (
-      datos.mensaje ||
-      datos.message ||
-      datos.comentarios ||
-      datos.comentario ||
-      ""
-    ).trim();
+    // Acepta nombres de campo comunes y SANITIZA todo en el servidor
+    // (no se confía en la validación del navegador).
+    const nombre = limpiarTexto(
+      datos.nombre || datos.name || datos.fullname,
+      120,
+    );
+    const telefono = limpiarTelefono(
+      datos.telefono || datos.tel || datos.phone || datos.celular,
+    );
+    const correo = limpiarTexto(
+      datos.correo || datos.email || datos.mail,
+      254,
+    ).toLowerCase();
+    const mensaje = limpiarTexto(
+      datos.mensaje || datos.message || datos.comentarios || datos.comentario,
+      1000,
+    );
 
+    // Debe traer al menos un dato de contacto.
     if (!nombre && !telefono && !correo) {
       return NextResponse.json(
         { ok: false, error: "Faltan datos del lead." },
+        { status: 400, headers: CORS },
+      );
+    }
+    // Si viene correo o teléfono, deben tener un formato válido.
+    if (correo && !esEmail(correo)) {
+      return NextResponse.json(
+        { ok: false, error: "El correo no es válido." },
+        { status: 400, headers: CORS },
+      );
+    }
+    if (telefono && !esTelefonoValido(telefono)) {
+      return NextResponse.json(
+        { ok: false, error: "El teléfono no es válido." },
         { status: 400, headers: CORS },
       );
     }

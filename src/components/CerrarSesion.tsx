@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+import { cerrarSesion } from "@/app/actions/auth";
 
 /** Botón para cerrar la sesión del admin. */
 export function CerrarSesion() {
   const router = useRouter();
 
   async function salir() {
-    await supabaseNavegador().auth.signOut();
+    await cerrarSesion();
     router.push("/login");
     router.refresh();
   }

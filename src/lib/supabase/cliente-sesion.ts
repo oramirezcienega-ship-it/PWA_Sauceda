@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { supabaseServidor } from "./server";
+import { opcionesCookieSeguras } from "./cookies";
 
 /**
  * Cliente de Supabase del lado SERVIDOR para leer la SESIÓN del usuario
@@ -26,7 +27,7 @@ export function supabaseSesion() {
         ) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
+              cookieStore.set(name, value, opcionesCookieSeguras(options)),
             );
           } catch {
             // En server components no se pueden escribir cookies; el

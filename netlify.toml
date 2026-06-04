@@ -1,0 +1,17 @@
+# Configuración de Netlify.
+#
+# NOTA: el sitio es Next.js 14. La fuente principal de las cabeceras de
+# seguridad es `next.config.mjs` (es el mecanismo nativo de Next y aplica a
+# todas las rutas, incluidas las SSR). Estas cabeceras se repiten aquí, con
+# valores IDÉNTICOS, como capa adicional para los recursos servidos por la CDN
+# de Netlify. Si cambias una política, actualiza ambos archivos.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; manifest-src 'self'; worker-src 'self'"
