@@ -28,7 +28,11 @@ const ENLACES = [
 ];
 
 function esRutaPublica(path: string): boolean {
-  return path.startsWith("/login") || path.startsWith("/seguimiento");
+  return (
+    path.startsWith("/login") ||
+    path.startsWith("/seguimiento") ||
+    path.startsWith("/privacidad")
+  );
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
