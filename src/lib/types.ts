@@ -326,6 +326,8 @@ export interface ConversacionResumen {
   ventanaAbierta: boolean;
   /** Asesor que la está atendiendo (último que respondió), o "" si nadie. */
   atiende: string;
+  ultimoInboundFecha: string | null;
+  finalizado: boolean;
 }
 
 /** Detalle de una conversación (hilo completo). */
@@ -336,6 +338,10 @@ export interface ConversacionDetalle {
   nombre: string;
   ventanaAbierta: boolean;
   mensajes: MensajeChat[];
+  ultimoInboundFecha: string | null;
+  finalizado: boolean;
+  nombreProspecto?: string;
+  nombreExpediente?: string;
 }
 
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */
