@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { diagnosticoIA } from "@/lib/ia/agente";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -221,6 +222,12 @@ export async function responderConversacion(
     });
   }
   return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
+/** Prueba el agente de IA (configuración + ping real a Claude). Solo admin. */
+export async function probarIA(): Promise<{ ok: boolean; mensaje: string }> {
+  await requireAdmin();
+  return diagnosticoIA();
 }
 
 /**

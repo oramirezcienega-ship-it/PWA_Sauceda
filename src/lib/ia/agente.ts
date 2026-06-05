@@ -23,6 +23,58 @@ export function iaAgenteActivo(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY) && process.env.IA_AGENTE !== "off";
 }
 
+/**
+ * Diagnóstico del agente: comprueba configuración y hace un "ping" real a
+ * Claude para verificar que la key, el modelo y el crédito funcionan.
+ * Pensado para un botón "Probar IA" en el panel (no expone la key).
+ */
+export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return {
+      ok: false,
+      mensaje:
+        "Falta ANTHROPIC_API_KEY en este deploy. Agrégala en Netlify y dispara un Trigger deploy.",
+    };
+  }
+  if (process.env.IA_AGENTE === "off") {
+    return {
+      ok: false,
+      mensaje: "La IA está apagada (IA_AGENTE = off). Cámbiala a 'on' y vuelve a desplegar.",
+    };
+  }
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODELO,
+        max_tokens: 8,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+    });
+    if (res.ok) {
+      return { ok: true, mensaje: `IA lista ✓ — modelo ${MODELO} responde correctamente.` };
+    }
+    const cuerpo = (await res.text()).slice(0, 200);
+    const pista =
+      res.status === 401
+        ? " (key inválida)"
+        : res.status === 404
+          ? " (modelo no encontrado: revisa ANTHROPIC_MODEL)"
+          : res.status === 429
+            ? " (sin crédito o límite alcanzado: activa billing en Anthropic)"
+            : "";
+    return { ok: false, mensaje: `Anthropic respondió ${res.status}${pista}. ${cuerpo}` };
+  } catch (err) {
+    return { ok: false, mensaje: `No se pudo contactar a Anthropic: ${String(err)}` };
+  }
+}
+
 interface FilaMsg {
   direccion: "in" | "out";
   texto: string;
