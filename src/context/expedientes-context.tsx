@@ -47,7 +47,11 @@ const ExpedientesContext = createContext<ExpedientesContextValue | null>(null);
 
 /** Rutas públicas (sin sesión de admin): login y portal del cliente. */
 function esRutaPublica(path: string): boolean {
-  return path.startsWith("/login") || path.startsWith("/seguimiento");
+  return (
+    path.startsWith("/login") ||
+    path.startsWith("/seguimiento") ||
+    path.startsWith("/privacidad")
+  );
 }
 
 export function ExpedientesProvider({ children }: { children: ReactNode }) {
