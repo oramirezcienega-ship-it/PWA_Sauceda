@@ -7,6 +7,7 @@ import {
   responderConversacion,
   responderConPlantilla,
   eliminarConversacion,
+  probarIA,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import type {
@@ -39,7 +40,20 @@ export function Conversaciones() {
   const [params, setParams] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [estadoIA, setEstadoIA] = useState<{ ok: boolean; mensaje: string } | null>(null);
+  const [probandoIA, setProbandoIA] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
+
+  async function ejecutarPruebaIA() {
+    setProbandoIA(true);
+    setEstadoIA(null);
+    try {
+      setEstadoIA(await probarIA());
+    } catch {
+      setEstadoIA({ ok: false, mensaje: "No se pudo ejecutar la prueba." });
+    }
+    setProbandoIA(false);
+  }
 
   const refrescar = useCallback(async (telefono: string | null) => {
     try {
@@ -140,7 +154,32 @@ export function Conversaciones() {
   }
 
   return (
-    <div className="grid h-[calc(100vh-180px)] grid-cols-1 gap-3 sm:grid-cols-[320px_1fr]">
+    <div className="flex flex-col gap-3">
+      {/* Diagnóstico del agente de IA */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-carbon/10 bg-white px-3 py-2">
+        <button
+          type="button"
+          onClick={ejecutarPruebaIA}
+          disabled={probandoIA}
+          className="shrink-0 rounded-md border border-sauce/40 px-3 py-1.5 text-xs font-medium text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50"
+        >
+          {probandoIA ? "Probando…" : "Probar IA"}
+        </button>
+        {estadoIA ? (
+          <span
+            className={`text-xs ${estadoIA.ok ? "text-verde-profundo" : "text-rojo"}`}
+          >
+            {estadoIA.ok ? "✓ " : "✕ "}
+            {estadoIA.mensaje}
+          </span>
+        ) : (
+          <span className="text-xs text-carbon/40">
+            Verifica que el agente de IA esté activo (key, modelo y crédito).
+          </span>
+        )}
+      </div>
+
+      <div className="grid h-[calc(100vh-240px)] grid-cols-1 gap-3 sm:grid-cols-[320px_1fr]">
       {/* Lista de conversaciones */}
       <div className="overflow-y-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
         {conversaciones.length === 0 ? (
@@ -364,6 +403,7 @@ export function Conversaciones() {
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   );
