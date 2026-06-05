@@ -263,11 +263,34 @@ export async function responderConIA(
     } = {};
 
     try {
-      // Intentamos parsear JSON
-      const parsed = JSON.parse(textoAI);
+      // Limpieza robusta del JSON antes de parsear
+      let limpio = textoAI.trim();
+      
+      // Quitar bloques de código markdown ```json ... ``` o ``` ... ```
+      if (limpio.startsWith("```")) {
+        limpio = limpio.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+      }
+      limpio = limpio.trim();
+
+      // Quitar prefijo "json" si quedó suelto
+      if (limpio.toLowerCase().startsWith("json")) {
+        limpio = limpio.slice(4).trim();
+      }
+
+      // Si no empieza con {, intentar extraer lo que está entre el primer { y el último }
+      if (!limpio.startsWith("{")) {
+        const idxInicio = limpio.indexOf("{");
+        const idxFin = limpio.lastIndexOf("}");
+        if (idxInicio !== -1 && idxFin !== -1 && idxFin > idxInicio) {
+          limpio = limpio.slice(idxInicio, idxFin + 1);
+        }
+      }
+
+      const parsed = JSON.parse(limpio);
       textoRespuesta = parsed.respuesta || "";
       datosExtraidos = parsed.datosExtraidos || {};
-    } catch {
+    } catch (err) {
+      console.warn("IA: Error al parsear JSON estructurado. Se usará fallback de texto original.", err);
       // Fallback por si Claude no devolvió JSON
       textoRespuesta = textoAI;
     }
