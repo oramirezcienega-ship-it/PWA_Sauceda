@@ -2,6 +2,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
+import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -129,6 +130,8 @@ async function obtenerOCrearProspecto(
 /**
  * Guarda un mensaje ENTRANTE en el hilo de conversación (best-effort).
  * El índice único por wa_message_id evita duplicados si Meta reintenta.
+ * Devuelve true solo si fue un mensaje NUEVO (no duplicado), para que la IA
+ * no responda dos veces ante reintentos del webhook.
  */
 async function guardarMensajeEntrante(
   sb: ReturnType<typeof supabaseServidor>,
@@ -139,9 +142,9 @@ async function guardarMensajeEntrante(
     prospectoId: string | null;
     waMessageId?: string;
   },
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await sb.from("mensajes_whatsapp").insert({
+    const { error } = await sb.from("mensajes_whatsapp").insert({
       telefono: datos.telefono,
       texto: datos.texto,
       direccion: "in",
@@ -149,8 +152,11 @@ async function guardarMensajeEntrante(
       prospecto_id: datos.prospectoId,
       wa_message_id: datos.waMessageId ?? null,
     });
+    // error (p. ej. choque del índice único) => ya existía, no es nuevo.
+    return !error;
   } catch (err) {
     console.error("No se pudo guardar el mensaje entrante:", err);
+    return false;
   }
 }
 
@@ -188,13 +194,15 @@ export async function registrarLeadWhatsApp(
       .from("expedientes")
       .update({ notas: nota, ultimo_movimiento: hoyISO() })
       .eq("id", exp.id);
-    await guardarMensajeEntrante(sb, {
+    const nuevo = await guardarMensajeEntrante(sb, {
       telefono,
       texto: lead.mensaje ?? "",
       expedienteId: exp.id,
       prospectoId,
       waMessageId: lead.waMessageId,
     });
+    // Respuesta automática del agente de IA (si está activo y no hay humano).
+    if (nuevo) await responderConIA(sb, { telefono, expedienteId: exp.id });
     return;
   }
 
@@ -215,7 +223,7 @@ export async function registrarLeadWhatsApp(
     prospecto_id: prospectoId,
   });
   // Guarda el primer mensaje del cliente en el hilo de conversación.
-  await guardarMensajeEntrante(sb, {
+  const nuevoMensaje = await guardarMensajeEntrante(sb, {
     telefono,
     texto: lead.mensaje ?? "",
     expedienteId: id,
@@ -223,11 +231,18 @@ export async function registrarLeadWhatsApp(
     waMessageId: lead.waMessageId,
   });
   // Bienvenida automática. El cliente nos escribió: ventana de 24 h abierta,
-  // así que el WhatsApp puede ir como texto libre.
-  await enviarBienvenida(sb, id, { ventanaWhatsAppAbierta: true });
+  // así que el WhatsApp puede ir como texto libre. Si la IA está activa, ella
+  // dará la bienvenida por WhatsApp (se omite el mensaje fijo para no duplicar).
+  const iaOn = iaAgenteActivo();
+  await enviarBienvenida(sb, id, {
+    ventanaWhatsAppAbierta: true,
+    omitirWhatsApp: iaOn,
+  });
   // Automatizaciones: expediente nuevo captado por WhatsApp.
   await dispararEvento(sb, "nuevo-expediente", {
     expedienteId: id,
     prospectoId,
   });
+  // Respuesta automática del agente de IA al primer mensaje (si está activo).
+  if (iaOn && nuevoMensaje) await responderConIA(sb, { telefono, expedienteId: id });
 }

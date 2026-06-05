@@ -42,7 +42,7 @@ interface FilaExp {
 export async function enviarBienvenida(
   sb: SupabaseClient,
   expedienteId: string,
-  opts: { ventanaWhatsAppAbierta?: boolean } = {},
+  opts: { ventanaWhatsAppAbierta?: boolean; omitirWhatsApp?: boolean } = {},
 ): Promise<void> {
   try {
     const { data } = await sb
@@ -84,8 +84,8 @@ export async function enviarBienvenida(
       base,
     );
 
-    // 3) WhatsApp (best-effort).
-    if (d.telefono && d.token) {
+    // 3) WhatsApp (best-effort). Se puede omitir si la IA dará la bienvenida.
+    if (d.telefono && d.token && !opts.omitirWhatsApp) {
       if (opts.ventanaWhatsAppAbierta) {
         // El cliente escribió primero: texto libre con el enlace al portal.
         const textoWa = `${textoResuelto}\n\nDa seguimiento a tu proceso aquí: ${SITE_URL}/seguimiento/${d.token}`;
