@@ -24,6 +24,25 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
     }
   }
 
+  /** Cambia el nombre en memoria mientras se escribe (sin guardar aún). */
+  function cambiarNombreLocal(id: string, nombre: string) {
+    setUsuarios((prev) => prev.map((x) => (x.id === id ? { ...x, nombre } : x)));
+  }
+
+  /** Persiste el nombre (al salir del campo o con Enter). */
+  async function guardarNombre(u: UsuarioApp) {
+    setGuardando(u.id);
+    try {
+      await actualizarUsuario(u.id, {
+        nombre: u.nombre.trim(),
+        rol: u.rol,
+        activo: u.activo,
+      });
+    } finally {
+      setGuardando(null);
+    }
+  }
+
   async function borrar(id: string) {
     await eliminarUsuario(id);
     setUsuarios((prev) => prev.filter((x) => x.id !== id));
@@ -44,10 +63,18 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
           {usuarios.map((u) => (
             <tr key={u.id} className="border-b border-carbon/5">
               <td className="px-3 py-2.5">
-                <p className="font-medium text-verde-profundo">
-                  {u.nombre || "(sin nombre)"}
-                </p>
-                <p className="text-xs text-carbon/50">{u.email}</p>
+                <input
+                  type="text"
+                  value={u.nombre}
+                  onChange={(e) => cambiarNombreLocal(u.id, e.target.value)}
+                  onBlur={() => guardarNombre(u)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  placeholder="Nombre del usuario"
+                  className="w-full rounded-md border border-carbon/15 bg-white px-2 py-1 text-sm font-medium text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
+                />
+                <p className="mt-0.5 px-1 text-xs text-carbon/50">{u.email}</p>
               </td>
               <td className="px-3 py-2.5">
                 <select
