@@ -3,6 +3,14 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.045 — Mejoras en bandeja de conversaciones — 05/06/26
+- Filtro por estado para separar chats "Abiertas" de "Terminadas".
+- Cronómetro dinámico de 24h (Meta API window) con colores semánticos y alerta visual.
+- Dropdown selector en cabecera para asignar/reasignar la conversación a asesores activos.
+- Badges visuales en cada conversación que identifican y enlazan a Expediente (📁) y Prospecto (👤).
+- Diseño responsivo split-pane optimizado para dispositivos móviles con botón "← Volver".
+- Migración 0014_finalizado_conversaciones.sql para soportar el estado archivado/terminado.
+
 ## 1.036 — Despliegue automático desde main en Netlify — 02/06/26
 - Producción ahora se publica desde la rama `main` con auto-publish, para que
   cada versión nueva salga en vivo sola (antes se quedaba sin publicar).
