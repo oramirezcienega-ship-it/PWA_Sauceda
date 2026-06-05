@@ -3,7 +3,7 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
-## 1.045 — Mejoras en bandeja de conversaciones — 05/06/26
+## 1.051 — Mejoras en bandeja de conversaciones — 05/06/26
 - Filtro por estado para separar chats "Abiertas" de "Terminadas".
 - Cronómetro dinámico de 24h (Meta API window) con colores semánticos y alerta visual.
 - Dropdown selector en cabecera para asignar/reasignar la conversación a asesores activos.
