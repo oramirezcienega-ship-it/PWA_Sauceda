@@ -3,6 +3,12 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.052 — Optimización del bot de IA para WhatsApp — 05/06/26
+- Ajuste del prompt de sistema del bot para recolectar información clave paso a paso por WhatsApp.
+- Eliminación de la insistencia en cambiar de canal a llamada telefónica.
+- Guía para solicitar progresivamente: ubicación, valor, adeudo y estado físico de la vivienda.
+- Cierre estructurado informando que el equipo trabaja en una propuesta de compra.
+
 ## 1.051 — Mejoras en bandeja de conversaciones — 05/06/26
 - Filtro por estado para separar chats "Abiertas" de "Terminadas".
 - Cronómetro dinámico de 24h (Meta API window) con colores semánticos y alerta visual.
