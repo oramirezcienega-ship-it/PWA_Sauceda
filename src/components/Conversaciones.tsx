@@ -6,6 +6,7 @@ import {
   obtenerConversacion,
   responderConversacion,
   responderConPlantilla,
+  eliminarConversacion,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import type {
@@ -95,6 +96,26 @@ export function Conversaciones() {
       setTexto("");
     }
     await refrescar(sel);
+  }
+
+  async function borrarConversacion() {
+    if (!sel) return;
+    const ok = window.confirm(
+      "¿Borrar toda esta conversación? Se eliminarán los mensajes de este número " +
+        "(no se borra el expediente). Útil para volver a probar desde cero.",
+    );
+    if (!ok) return;
+    setEnviando(true);
+    setAviso(null);
+    const r = await eliminarConversacion(sel);
+    setEnviando(false);
+    if (!r.ok) {
+      setAviso(r.error ?? "No se pudo borrar.");
+      return;
+    }
+    setSel(null);
+    setDetalle(null);
+    await refrescar(null);
   }
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel);
@@ -200,14 +221,25 @@ export function Conversaciones() {
                   })()}
                 </p>
               </div>
-              {detalle.expedienteId && (
-                <a
-                  href={`/expediente/${detalle.expedienteId}`}
-                  className="shrink-0 text-xs text-sauce hover:text-verde-profundo"
+              <div className="flex shrink-0 items-center gap-3">
+                {detalle.expedienteId && (
+                  <a
+                    href={`/expediente/${detalle.expedienteId}`}
+                    className="text-xs text-sauce hover:text-verde-profundo"
+                  >
+                    Ver expediente →
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={borrarConversacion}
+                  disabled={enviando}
+                  title="Borrar esta conversación (para volver a probar)"
+                  className="text-xs text-rojo/70 transition hover:text-rojo disabled:opacity-50"
                 >
-                  Ver expediente →
-                </a>
-              )}
+                  Borrar
+                </button>
+              </div>
             </div>
 
             {/* Mensajes */}

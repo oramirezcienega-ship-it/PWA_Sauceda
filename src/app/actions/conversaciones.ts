@@ -223,6 +223,24 @@ export async function responderConversacion(
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
 
+/**
+ * Borra TODO el hilo de un número (sus mensajes de WhatsApp), para poder
+ * re-probar desde cero con el mismo teléfono. No toca el expediente.
+ */
+export async function eliminarConversacion(
+  telefono: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, error: "Falta el teléfono." };
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("mensajes_whatsapp")
+    .delete()
+    .eq("telefono", telefono);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 /** Responde con una PLANTILLA aprobada (contacto fuera de la ventana de 24 h). */
 export async function responderConPlantilla(
   telefono: string,
