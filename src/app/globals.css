@@ -32,4 +32,10 @@
     background-color: #c9a961;
     border-radius: 9999px;
   }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }

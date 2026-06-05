@@ -194,8 +194,8 @@ export function VistaExpedientes() {
         )}
 
         {/* Fila 2: chips de etapas (multi-selección) */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs text-carbon/50">Etapas:</span>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none whitespace-nowrap -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
+          <span className="mr-1 text-xs text-carbon/50 shrink-0">Etapas:</span>
           {ETAPAS.map((etapa) => {
             const activo = etapasSel.includes(etapa.id);
             return (
@@ -203,7 +203,7 @@ export function VistaExpedientes() {
                 key={etapa.id}
                 type="button"
                 onClick={() => alternarEtapa(etapa.id)}
-                className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                className={`rounded-full border px-2.5 py-1 text-xs transition shrink-0 ${
                   activo
                     ? "border-sauce bg-sauce text-crema"
                     : "border-carbon/15 bg-white text-carbon/60 hover:border-sauce"
@@ -217,7 +217,7 @@ export function VistaExpedientes() {
             <button
               type="button"
               onClick={() => setEtapasSel([])}
-              className="ml-1 text-xs text-carbon/50 underline hover:text-carbon"
+              className="ml-1 text-xs text-carbon/50 underline hover:text-carbon shrink-0"
             >
               limpiar
             </button>

@@ -122,6 +122,17 @@ Estilo:
 - Haz una sola pregunta a la vez para no abrumar al cliente.
 - Eres un asistente virtual (no te hagas pasar por humano si te preguntan).
 
+IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluyes explicaciones antes ni después del JSON. El formato debe ser exactamente:
+{
+  "respuesta": "El mensaje de texto corto (1 a 3 frases) que se enviará al cliente por WhatsApp.",
+  "datosExtraidos": {
+    "fraccionamiento": "Nombre del fraccionamiento/zona si el cliente lo mencionó claramente en la conversación, de lo contrario null",
+    "valor_estimado": "Valor aproximado de la propiedad como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
+    "saldo_deuda": "Monto adeudado de INFONAVIT como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
+    "situacion_fisica": "El estado físico de la casa. Solo puede ser 'vandalizada', 'deshabitada' o 'bueno' si el cliente lo mencionó claramente, de lo contrario null"
+  }
+}
+
 Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
 
   const extra = (process.env.IA_INSTRUCCIONES || "").trim();
@@ -237,28 +248,95 @@ export async function responderConIA(
       exp = (e as FilaExp) ?? null;
     }
 
-    const texto = await generarRespuesta(
+    const textoAI = await generarRespuesta(
       instrucciones(exp),
       aMensajes(historia),
     );
-    if (!texto) return;
+    if (!textoAI) return;
 
-    const r = await enviarWhatsAppTexto(ctx.telefono, texto);
+    let textoRespuesta = "";
+    let datosExtraidos: {
+      fraccionamiento?: string | null;
+      valor_estimado?: number | null;
+      saldo_deuda?: number | null;
+      situacion_fisica?: "vandalizada" | "deshabitada" | "bueno" | null;
+    } = {};
+
+    try {
+      // Intentamos parsear JSON
+      const parsed = JSON.parse(textoAI);
+      textoRespuesta = parsed.respuesta || "";
+      datosExtraidos = parsed.datosExtraidos || {};
+    } catch {
+      // Fallback por si Claude no devolvió JSON
+      textoRespuesta = textoAI;
+    }
+
+    if (!textoRespuesta) return;
+
+    const r = await enviarWhatsAppTexto(ctx.telefono, textoRespuesta);
     await sb.from("mensajes_whatsapp").insert({
       telefono: ctx.telefono,
-      texto,
+      texto: textoRespuesta,
       direccion: "out",
       expediente_id: ctx.expedienteId ?? null,
       estado: r.ok ? "enviado" : "error",
       agente: NOMBRE_AGENTE,
     });
+
     if (r.ok && ctx.expedienteId) {
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "mensaje",
         titulo: "Respuesta automática (IA) por WhatsApp",
-        detalle: texto,
+        detalle: textoRespuesta,
       });
+
+      // Procesamos la actualización de datos extraídos
+      const updates: Record<string, any> = {};
+      if (datosExtraidos.fraccionamiento) {
+        updates.fraccionamiento = datosExtraidos.fraccionamiento;
+      }
+      if (datosExtraidos.valor_estimado) {
+        updates.valor_estimado = Number(datosExtraidos.valor_estimado);
+      }
+      if (datosExtraidos.saldo_deuda) {
+        updates.saldo_deuda = Number(datosExtraidos.saldo_deuda);
+      }
+      if (datosExtraidos.situacion_fisica) {
+        let desc = "";
+        if (datosExtraidos.situacion_fisica === "vandalizada") {
+          desc = "Propiedad vandalizada.";
+        } else if (datosExtraidos.situacion_fisica === "deshabitada") {
+          desc = "Propiedad deshabitada.";
+        } else if (datosExtraidos.situacion_fisica === "bueno") {
+          desc = "Propiedad en buen estado.";
+        }
+        if (desc) {
+          updates.situacion = desc;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const { error: errUpdate } = await sb
+          .from("expedientes")
+          .update(updates)
+          .eq("id", ctx.expedienteId);
+        
+        if (errUpdate) {
+          console.error("IA: Error al actualizar expediente con datos:", errUpdate);
+        } else {
+          const detalleActividad = Object.entries(updates)
+            .map(([col, val]) => `${col}: ${val}`)
+            .join(", ");
+          await registrarActividad(sb, {
+            expedienteId: ctx.expedienteId,
+            tipo: "sistema",
+            titulo: "Datos de propiedad actualizados por IA",
+            detalle: `Extraídos del chat: ${detalleActividad}`,
+          });
+        }
+      }
     }
   } catch (err) {
     console.error("IA: no se pudo responder:", err);

@@ -157,7 +157,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
         <table className="w-full min-w-[800px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-carbon/10 bg-crema/60 text-left">
@@ -236,6 +236,90 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
           ))}
         </tbody>
         </table>
+      </div>
+
+      {/* Vista de Tarjetas para Móviles */}
+      <div className="space-y-3 md:hidden">
+        {/* Selector de seleccionar todos en móvil */}
+        <div className="flex justify-between items-center bg-crema/60 rounded-xl p-3 border border-carbon/10">
+          <label className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-verde-profundo">
+            <input
+              type="checkbox"
+              checked={todosMarcados}
+              onChange={alternarTodos}
+              className="cursor-pointer h-4 w-4 rounded border-carbon/25 text-sauce focus:ring-sauce/30"
+            />
+            <span>Seleccionar todos los visibles ({idsVisibles.length})</span>
+          </label>
+        </div>
+
+        {/* Lista de Tarjetas */}
+        <div className="space-y-3">
+          {orden.ordenados.map((p) => (
+            <div
+              key={p.id}
+              className={`rounded-xl border transition-all p-4 shadow-sm ${
+                sel.has(p.id)
+                  ? "bg-sauce/5 border-sauce/40 shadow"
+                  : "bg-white border-carbon/10 hover:border-sauce/40"
+              }`}
+            >
+              {/* Encabezado: Checkbox + Nombre & ID + Chip Origen */}
+              <div className="flex items-start justify-between gap-3 border-b border-carbon/5 pb-3">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={sel.has(p.id)}
+                    onChange={() => alternar(p.id)}
+                    aria-label={`Seleccionar ${p.nombreCompleto}`}
+                    className="cursor-pointer mt-1 h-4.5 w-4.5 rounded border-carbon/25 text-sauce focus:ring-sauce/30"
+                  />
+                  <div>
+                    <Link
+                      href={`/prospectos/${p.id}`}
+                      className="font-titular font-bold text-verde-profundo hover:text-sauce text-base leading-tight block"
+                    >
+                      {p.nombreCompleto}
+                    </Link>
+                    <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
+                      ID: {p.id}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2.5 py-0.5 text-[10px] font-semibold text-cielo">
+                    {ORIGEN_POR_ID[p.origen]}
+                  </span>
+                </div>
+              </div>
+
+              {/* Contenido principal de la tarjeta */}
+              <div className="grid grid-cols-2 gap-y-3 pt-3 text-sm">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Teléfono</p>
+                  {p.telefono ? (
+                    <a
+                      href={`tel:${p.telefono}`}
+                      className="font-mono text-sauce font-semibold hover:underline block mt-0.5 text-xs"
+                    >
+                      {p.telefono}
+                    </a>
+                  ) : (
+                    <p className="text-carbon/50 mt-0.5">—</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Ciudad</p>
+                  <p className="text-carbon/75 font-medium mt-0.5 truncate">{p.ciudad || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Valor Campaña</p>
+                  <p className="font-mono font-bold text-carbon/70 mt-0.5">{formatoPesos(p.valorCampana)}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

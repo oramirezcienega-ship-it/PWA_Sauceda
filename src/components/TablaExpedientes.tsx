@@ -177,7 +177,7 @@ export function TablaExpedientes({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
         <table className="w-full min-w-[980px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-carbon/10 bg-crema/60 text-left">
@@ -292,6 +292,121 @@ export function TablaExpedientes({
           ))}
         </tbody>
         </table>
+      </div>
+
+      {/* Vista de Tarjetas para Móviles */}
+      <div className="space-y-3 md:hidden">
+        {/* Selector de seleccionar todos en móvil */}
+        <div className="flex justify-between items-center bg-crema/60 rounded-xl p-3 border border-carbon/10">
+          <label className="flex items-center gap-2.5 cursor-pointer text-sm font-semibold text-verde-profundo">
+            <input
+              type="checkbox"
+              checked={todosMarcados}
+              onChange={alternarTodos}
+              className="cursor-pointer h-4 w-4 rounded border-carbon/25 text-sauce focus:ring-sauce/30"
+            />
+            <span>Seleccionar todos los visibles ({idsVisibles.length})</span>
+          </label>
+        </div>
+
+        {/* Lista de Tarjetas */}
+        <div className="space-y-3">
+          {orden.ordenados.map((exp) => (
+            <div
+              key={exp.id}
+              className={`rounded-xl border transition-all p-4 shadow-sm ${
+                sel.has(exp.id)
+                  ? "bg-sauce/5 border-sauce/40 shadow"
+                  : "bg-white border-carbon/10 hover:border-sauce/40"
+              }`}
+            >
+              {/* Encabezado: Checkbox + Nombre & ID + Chip Origen */}
+              <div className="flex items-start justify-between gap-3 border-b border-carbon/5 pb-3">
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={sel.has(exp.id)}
+                    onChange={() => alternar(exp.id)}
+                    aria-label={`Seleccionar ${exp.nombreCompleto}`}
+                    className="cursor-pointer mt-1 h-4.5 w-4.5 rounded border-carbon/25 text-sauce focus:ring-sauce/30"
+                  />
+                  <div>
+                    <Link
+                      href={`/expediente/${exp.id}`}
+                      className="font-titular font-bold text-verde-profundo hover:text-sauce text-base leading-tight block"
+                    >
+                      {exp.nombreCompleto}
+                    </Link>
+                    <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
+                      ID: {exp.id}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  {exp.origenProspecto ? (
+                    <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2 py-0.5 text-[10px] font-semibold text-cielo">
+                      {ORIGEN_POR_ID[exp.origenProspecto]}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-carbon/30">—</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Contenido principal de la tarjeta */}
+              <div className="grid grid-cols-2 gap-y-3 py-3 text-sm">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Fraccionamiento</p>
+                  <p className="text-carbon/75 font-medium mt-0.5 truncate">{exp.fraccionamiento || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Teléfono</p>
+                  {exp.telefono ? (
+                    <a
+                      href={`tel:${exp.telefono}`}
+                      className="font-mono text-sauce font-semibold hover:underline block mt-0.5 text-xs"
+                    >
+                      {exp.telefono}
+                    </a>
+                  ) : (
+                    <p className="text-carbon/50 mt-0.5">—</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Valor Estimado</p>
+                  <p className="font-mono font-bold text-sauce mt-0.5">{formatoPesos(exp.valorEstimado)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Saldo Deuda</p>
+                  <p className="font-mono font-medium text-carbon/70 mt-0.5">{formatoPesos(exp.saldoDeuda)}</p>
+                </div>
+              </div>
+
+              {/* Footer de la tarjeta: Selector de Etapa + Último Movimiento */}
+              <div className="flex items-center justify-between border-t border-carbon/5 pt-3">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] uppercase tracking-wider text-carbon/40 font-semibold">Etapa</span>
+                  <select
+                    value={exp.etapa}
+                    onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
+                    className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce"
+                    aria-label={`Cambiar etapa de ${exp.nombreCompleto}`}
+                  >
+                    {ETAPAS.map((etapa) => (
+                      <option key={etapa.id} value={etapa.id}>
+                        {etapa.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] uppercase tracking-wider text-carbon/40 font-semibold block">Último Movimiento</span>
+                  <span className="text-xs text-carbon/60 font-semibold mt-1 block">{formatoFecha(exp.ultimoMovimiento)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

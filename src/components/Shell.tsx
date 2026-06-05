@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { CerrarSesion } from "./CerrarSesion";
 import { VERSION } from "@/lib/version";
 import { rolUsuarioActual } from "@/app/actions/usuarios";
+import { cerrarSesion } from "@/app/actions/auth";
 
 /**
  * Estructura (chrome) del panel del admin: menú de navegación en una columna
@@ -49,6 +50,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // Cierra el cajón al cambiar de ruta.
   useEffect(() => {
     setAbierto(false);
+  }, [pathname]);
+
+  // Monitorear inactividad del usuario (30 minutos)
+  useEffect(() => {
+    if (esRutaPublica(pathname)) return;
+
+    let timer: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try {
+          await cerrarSesion();
+          window.location.href = "/login";
+        } catch (error) {
+          console.error("Error al cerrar sesión por inactividad:", error);
+        }
+      }, 30 * 60 * 1000); // 30 minutos de inactividad
+    };
+
+    const eventos = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+
+    resetTimer();
+
+    eventos.forEach((evento) => {
+      window.addEventListener(evento, resetTimer, { passive: true });
+    });
+
+    return () => {
+      clearTimeout(timer);
+      eventos.forEach((evento) => {
+        window.removeEventListener(evento, resetTimer);
+      });
+    };
   }, [pathname]);
 
   if (esRutaPublica(pathname)) return <>{children}</>;

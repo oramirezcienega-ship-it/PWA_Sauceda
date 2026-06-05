@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { rolUsuarioActual } from "@/app/actions/usuarios";
 import {
   listarConversaciones,
   obtenerConversacion,
@@ -112,6 +113,7 @@ export function Conversaciones() {
   const [probandoIA, setProbandoIA] = useState(false);
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [asignando, setAsignando] = useState(false);
+  const [esAdmin, setEsAdmin] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
 
   async function ejecutarPruebaIA() {
@@ -138,7 +140,7 @@ export function Conversaciones() {
     }
   }, []);
 
-  // Carga inicial + plantillas aprobadas + asesores.
+  // Carga inicial + plantillas aprobadas + asesores + rol.
   useEffect(() => {
     void refrescar(null);
     listarPlantillasWhatsApp()
@@ -148,6 +150,10 @@ export function Conversaciones() {
     listarAsesoresActivos()
       .then((r) => setAsesores(r))
       .catch(() => setAsesores([]));
+
+    rolUsuarioActual()
+      .then((rol) => setEsAdmin(rol === "admin"))
+      .catch(() => setEsAdmin(false));
   }, [refrescar]);
 
   // Sondeo cada 15 s (lista + hilo abierto).
@@ -238,28 +244,30 @@ export function Conversaciones() {
   return (
     <div className="flex flex-col gap-3">
       {/* Diagnóstico del agente de IA */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-carbon/10 bg-white px-3 py-2 shadow-sm">
-        <button
-          type="button"
-          onClick={ejecutarPruebaIA}
-          disabled={probandoIA}
-          className="shrink-0 rounded-md border border-sauce/40 px-3 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50"
-        >
-          {probandoIA ? "Probando…" : "Probar IA"}
-        </button>
-        {estadoIA ? (
-          <span
-            className={`text-xs font-medium ${estadoIA.ok ? "text-verde-profundo" : "text-rojo"}`}
+      {esAdmin && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-carbon/10 bg-white px-3 py-2 shadow-sm">
+          <button
+            type="button"
+            onClick={ejecutarPruebaIA}
+            disabled={probandoIA}
+            className="shrink-0 rounded-md border border-sauce/40 px-3 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50"
           >
-            {estadoIA.ok ? "✓ " : "✕ "}
-            {estadoIA.mensaje}
-          </span>
-        ) : (
-          <span className="text-xs text-carbon/40 font-medium">
-            Verifica que el agente de IA esté activo (key, modelo y crédito).
-          </span>
-        )}
-      </div>
+            {probandoIA ? "Probando…" : "Probar IA"}
+          </button>
+          {estadoIA ? (
+            <span
+              className={`text-xs font-medium ${estadoIA.ok ? "text-verde-profundo" : "text-rojo"}`}
+            >
+              {estadoIA.ok ? "✓ " : "✕ "}
+              {estadoIA.mensaje}
+            </span>
+          ) : (
+            <span className="text-xs text-carbon/40 font-medium">
+              Verifica que el agente de IA esté activo (key, modelo y crédito).
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[320px_1fr]">
         {/* Lista de conversaciones */}

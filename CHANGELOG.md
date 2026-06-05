@@ -3,6 +3,12 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.053 — Extracción y auto-guardado de datos por IA — 05/06/26
+- Ajuste del bot de IA para responder en formato JSON estructurado que incluye la respuesta al cliente y los datos detectados.
+- Extracción y auto-guardado en tiempo real en la base de datos (tabla `expedientes`) de: fraccionamiento, valor estimado, saldo de deuda y estado físico de la casa.
+- Registro automático en la bitácora de actividades de cada actualización de datos del expediente realizada por la IA.
+- Implementación de un fallback seguro para procesar respuestas de texto plano en caso de fallo en el parseo del JSON.
+
 ## 1.052 — Optimización del bot de IA para WhatsApp — 05/06/26
 - Ajuste del prompt de sistema del bot para recolectar información clave paso a paso por WhatsApp.
 - Eliminación de la insistencia en cambiar de canal a llamada telefónica.
