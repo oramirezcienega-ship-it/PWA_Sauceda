@@ -67,6 +67,22 @@ export async function POST(request: NextRequest) {
       datos.mensaje || datos.message || datos.comentarios || datos.comentario,
       1000,
     );
+    const tipoCredito = limpiarTexto(
+      datos.tipoCredito || datos.tipo_credito || datos.creditType,
+      100,
+    );
+    const direccionPropiedad = limpiarTexto(
+      datos.direccionPropiedad || datos.direccion_propiedad || datos.address || datos.direccion,
+      300,
+    );
+    const linkGoogleMaps = limpiarTexto(
+      datos.linkGoogleMaps || datos.link_google_maps || datos.googleMaps || datos.maps || datos.ubicacion,
+      500,
+    );
+    const necesidad = limpiarTexto(
+      datos.necesidad || datos.need || datos.motivo,
+      300,
+    );
 
     // Debe traer al menos un dato de contacto.
     if (!nombre && !telefono && !correo) {
@@ -89,7 +105,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = await registrarLeadWeb({ nombre, telefono, correo, mensaje });
+    const token = await registrarLeadWeb({
+      nombre,
+      telefono,
+      correo,
+      mensaje,
+      tipoCredito,
+      direccionPropiedad,
+      linkGoogleMaps,
+      necesidad,
+    });
     return NextResponse.json({ ok: true, token }, { headers: CORS });
   } catch (err) {
     console.error("Error en captación web:", err);

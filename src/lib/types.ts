@@ -64,6 +64,14 @@ export interface Expediente {
   campaignName: string;
   /** Token aleatorio para el enlace privado de seguimiento del cliente. */
   token: string;
+  /** Tipo de crédito (ej. INFONAVIT, FOVISSSTE, Bancario, etc.). */
+  tipoCredito?: string | null;
+  /** Dirección completa de la propiedad. */
+  direccionPropiedad?: string | null;
+  /** Enlace a la ubicación en Google Maps. */
+  linkGoogleMaps?: string | null;
+  /** Necesidad del cliente (ej. Vender, traspasar, etc.). */
+  necesidad?: string | null;
   /** Prospecto (persona) dueño del expediente. Null si aún no se enlaza. */
   prospectoId: string | null;
   /** Origen de adquisición del prospecto enlazado (solo lectura, vía join). */

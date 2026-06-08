@@ -41,6 +41,10 @@ export interface FilaExpediente {
   token: string;
   ultimo_movimiento: string;
   prospecto_id: string | null;
+  tipo_credito?: string | null;
+  direccion_propiedad?: string | null;
+  link_google_maps?: string | null;
+  necesidad?: string | null;
   /** Origen del prospecto enlazado (cuando se pide vía join). */
   prospectos?: { origen: OrigenAdquisicion } | null;
 }
@@ -71,6 +75,10 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
     origenProspecto: fila.prospectos?.origen ?? null,
+    tipoCredito: fila.tipo_credito ?? "",
+    direccionPropiedad: fila.direccion_propiedad ?? "",
+    linkGoogleMaps: fila.link_google_maps ?? "",
+    necesidad: fila.necesidad ?? "",
   };
 }
 
@@ -91,6 +99,10 @@ export function aFila(datos: DatosExpediente) {
     adset_name: datos.adsetName,
     campaign_name: datos.campaignName,
     prospecto_id: datos.prospectoId,
+    tipo_credito: datos.tipoCredito ?? null,
+    direccion_propiedad: datos.direccionPropiedad ?? null,
+    link_google_maps: datos.linkGoogleMaps ?? null,
+    necesidad: datos.necesidad ?? null,
   };
 }
 

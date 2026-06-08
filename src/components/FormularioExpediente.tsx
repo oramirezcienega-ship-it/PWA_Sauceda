@@ -20,6 +20,10 @@ const VACIO: DatosExpediente = {
   adsetName: "",
   campaignName: "",
   prospectoId: null,
+  tipoCredito: "",
+  direccionPropiedad: "",
+  linkGoogleMaps: "",
+  necesidad: "",
 };
 
 /**
@@ -69,6 +73,10 @@ export function FormularioExpediente({
         fraccionamiento: datos.fraccionamiento.trim(),
         valorEstimado: Number(datos.valorEstimado) || 0,
         saldoDeuda: Number(datos.saldoDeuda) || 0,
+        tipoCredito: (datos.tipoCredito || "").trim(),
+        direccionPropiedad: (datos.direccionPropiedad || "").trim(),
+        linkGoogleMaps: (datos.linkGoogleMaps || "").trim(),
+        necesidad: (datos.necesidad || "").trim(),
       });
       // Si todo salió bien la página normalmente redirige; si no, liberamos.
     } catch (err) {
@@ -177,6 +185,48 @@ export function FormularioExpediente({
           />
         </Campo>
       </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Campo etiqueta="Tipo de crédito">
+          <input
+            type="text"
+            value={datos.tipoCredito || ""}
+            onChange={(e) => actualizar("tipoCredito", e.target.value)}
+            placeholder="INFONAVIT, FOVISSSTE, Bancario..."
+            className={INPUT}
+          />
+        </Campo>
+
+        <Campo etiqueta="Necesidad">
+          <input
+            type="text"
+            value={datos.necesidad || ""}
+            onChange={(e) => actualizar("necesidad", e.target.value)}
+            placeholder="Traspasar, Vender..."
+            className={INPUT}
+          />
+        </Campo>
+      </div>
+
+      <Campo etiqueta="Dirección de la propiedad">
+        <input
+          type="text"
+          value={datos.direccionPropiedad || ""}
+          onChange={(e) => actualizar("direccionPropiedad", e.target.value)}
+          placeholder="Calle, Número, Colonia, C.P."
+          className={INPUT}
+        />
+      </Campo>
+
+      <Campo etiqueta="Ubicación en Google Maps (Link)">
+        <input
+          type="url"
+          value={datos.linkGoogleMaps || ""}
+          onChange={(e) => actualizar("linkGoogleMaps", e.target.value)}
+          placeholder="https://maps.app.goo.gl/..."
+          className={INPUT}
+        />
+      </Campo>
 
       <Campo etiqueta="Situación">
         <textarea

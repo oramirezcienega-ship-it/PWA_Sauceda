@@ -17,6 +17,10 @@ export interface LeadWeb {
   telefono?: string;
   correo?: string;
   mensaje?: string;
+  tipoCredito?: string;
+  direccionPropiedad?: string;
+  linkGoogleMaps?: string;
+  necesidad?: string;
 }
 
 function hoyISO(): string {
@@ -122,6 +126,10 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
     notas: "Lead entrante desde el sitio web (sección Cotizar).",
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
+    tipo_credito: lead.tipoCredito || null,
+    direccion_propiedad: lead.direccionPropiedad || null,
+    link_google_maps: lead.linkGoogleMaps || null,
+    necesidad: lead.necesidad || null,
   });
   await registrarActividad(sb, {
     expedienteId: expId,

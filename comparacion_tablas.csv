@@ -1,0 +1,23 @@
+Concepto;Campo en Prospecto;Campo en Expediente;Notas
+ID de la Entidad;id;id;Claves primarias de cada tabla (PRO-xxx vs EXP-xxx).
+Nombre de Pila;nombre;cliente;En expediente se llama cliente.
+Primer Apellido;primer_apellido;primer_apellido;Mismo nombre de columna.
+Segundo Apellido;segundo_apellido;segundo_apellido;Mismo nombre de columna (opcional).
+Telefono;telefono;telefono;Telefono principal del contacto vs Telefono asignado al caso.
+Notas;notas;notas;Notas del contacto comercial vs Notas de operacion.
+Atribucion: Anuncio;ad_name;ad_name;Nombre del anuncio de Meta Ads.
+Atribucion: Conjunto;adset_name;adset_name;Nombre del conjunto de anuncios de Meta.
+Atribucion: Campana;campaign_name;campaign_name;Nombre de la campana de Meta.
+Correo de contacto;correo;;Exclusivo del Prospecto.
+Direccion actual;direccion;;Donde vive el Prospecto actualmente.
+Ciudad actual;ciudad;;Ciudad de residencia del Prospecto.
+Origen del Lead;origen;;Canal de entrada (WhatsApp, Sitio Web, etc.).
+Costo Adquisicion;valor_campana;;Costo asignado a la campana publicitaria.
+Zona de la Propiedad;;fraccionamiento;Ubicacion del inmueble que se va a traspasar.
+Etapa del Tramite;;etapa;Etapa operativa en el tablero (HubSpot style).
+Situacion de Deuda;;situacion;Descripcion del estado fisico y deuda del inmueble.
+Valor Estimado;;valor_estimado;Precio aproximado de la propiedad.
+Deuda INFONAVIT;;saldo_deuda;Saldo adeudado del credito a traspasar.
+Ultimo Movimiento;;ultimo_movimiento;Fecha de la ultima actualizacion operativa (YYYY-MM-DD).
+Seguimiento Cliente;;token;Token unico para el portal de seguimiento del cliente.
+Enlace / Relacion;;prospecto_id;Llave foranea (FK) que conecta el expediente con el prospecto.

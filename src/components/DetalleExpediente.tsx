@@ -270,6 +270,14 @@ export function DetalleExpediente({ id }: { id: string }) {
               valor={formatoPesos(expediente.saldoDeuda)}
               mono
             />
+            <Dato
+              etiqueta="Tipo de crédito"
+              valor={expediente.tipoCredito || "—"}
+            />
+            <Dato
+              etiqueta="Necesidad"
+              valor={expediente.necesidad || "—"}
+            />
           </dl>
 
           {(expediente.campaignName ||
@@ -280,6 +288,24 @@ export function DetalleExpediente({ id }: { id: string }) {
               <Dato etiqueta="Adset" valor={expediente.adsetName || "—"} />
               <Dato etiqueta="Ad" valor={expediente.adName || "—"} />
             </dl>
+          )}
+
+          {(expediente.direccionPropiedad || expediente.linkGoogleMaps) && (
+            <Bloque titulo="Dirección de la propiedad">
+              {expediente.direccionPropiedad || "—"}
+              {expediente.linkGoogleMaps && (
+                <div className="mt-2 pt-2 border-t border-carbon/5">
+                  <a
+                    href={expediente.linkGoogleMaps}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-sauce hover:underline font-semibold"
+                  >
+                    📍 Ver ubicación en Google Maps
+                  </a>
+                </div>
+              )}
+            </Bloque>
           )}
 
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
