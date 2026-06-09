@@ -88,6 +88,12 @@ interface FilaExp {
   fraccionamiento: string | null;
   etapa: string | null;
   situacion: string | null;
+  tipo_credito?: string | null;
+  direccion_propiedad?: string | null;
+  link_google_maps?: string | null;
+  necesidad?: string | null;
+  valor_estimado?: number | null;
+  saldo_deuda?: number | null;
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
@@ -102,6 +108,9 @@ Información que debes recopilar (de forma progresiva, no de golpe, haciendo una
 3. Cuánto adeudan actualmente de su crédito INFONAVIT (saldo aproximado de deuda).
 4. Estado físico actual de la vivienda (si está en buen estado, deshabitada o vandalizada).
 5. Preguntar amablemente si pueden enviarte fotos de la vivienda o si pueden compartirte su estado de cuenta de INFONAVIT por este mismo chat para afinar el análisis.
+
+REGLA CRÍTICA DE CONTEXTO:
+Si la información ya está presente en los "Datos del cliente" abajo (como la ubicación/fraccionamiento, dirección exacta de la propiedad, tipo de crédito, valor de la casa o monto de la deuda) porque el cliente ya la proporcionó previamente en el formulario de nuestro sitio web, NO debes volver a preguntársela en absoluto. En su lugar, reconócela/valídala amablemente en tu saludo (ej. "Hola Juan, veo que nos dejaste los datos de tu casa en el fraccionamiento X con adeudo de Y...") y continúa directamente con la información que falte (como el estado físico de la casa, fotos o su estado de cuenta de Infonavit).
 
 Una vez que tengas estos datos mínimos recopilados:
 - Comunícales con amabilidad que con esta información nuestro equipo preparará una propuesta de compra/traspaso personalizada para que la analicen.
@@ -144,7 +153,14 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
       exp.fraccionamiento &&
         exp.fraccionamiento !== "Por definir" &&
         `Fraccionamiento/zona: ${exp.fraccionamiento}`,
+      exp.direccion_propiedad && `Dirección exacta de la propiedad: ${exp.direccion_propiedad}`,
+      exp.tipo_credito && `Tipo de crédito / adeudo: ${exp.tipo_credito}`,
+      exp.valor_estimado && exp.valor_estimado > 0 && `Valor estimado de la vivienda: $${exp.valor_estimado}`,
+      exp.saldo_deuda && exp.saldo_deuda > 0 && `Saldo aproximado de deuda: $${exp.saldo_deuda}`,
+      exp.necesidad && `Necesidad reportada: ${exp.necesidad}`,
+      exp.link_google_maps && `Link de Google Maps: ${exp.link_google_maps}`,
       exp.etapa && `Etapa del trámite: ${exp.etapa}`,
+      exp.situacion && `Situación reportada: ${exp.situacion}`,
     ].filter(Boolean);
     if (partes.length) contexto = `\n\nDatos del cliente:\n${partes.join("\n")}`;
   }
@@ -242,7 +258,9 @@ export async function responderConIA(
     if (ctx.expedienteId) {
       const { data: e } = await sb
         .from("expedientes")
-        .select("cliente, primer_apellido, fraccionamiento, etapa, situacion")
+        .select(
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda"
+        )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
       exp = (e as FilaExp) ?? null;
