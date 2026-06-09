@@ -18,15 +18,15 @@ const config: Config = {
         sauce: "#5C7A52", // Verde Sauce
         "verde-profundo": "#2D4A2B", // Verde Profundo
         dorado: "#C9A961", // Dorado Tierra
-        crema: "#F5F1E8", // Crema Marfil
+        crema: "#FFFFFF", // Crema Marfil (ahora Blanco Limpio)
         cielo: "#5C8DAA", // Azul Cielo
-        carbon: "#1A1A1A", // Negro Carbón
+        carbon: "#0F172A", // Negro Carbón (ahora Slate 900)
         rojo: "#C44A4A", // Rojo (alertas/errores)
       },
       fontFamily: {
         // Tipografías cargadas con next/font (ver src/app/layout.tsx).
-        display: ["var(--font-fraunces)", "serif"], // Fraunces — display/logo
-        titular: ["var(--font-cormorant)", "serif"], // Cormorant Garamond — titulares
+        display: ["var(--font-outfit)", "sans-serif"], // Outfit — display/logo
+        titular: ["var(--font-outfit)", "sans-serif"], // Outfit — titulares
         cuerpo: ["var(--font-inter)", "sans-serif"], // Inter — cuerpo/UI
         mono: ["var(--font-jetbrains)", "monospace"], // JetBrains Mono — datos/precios
       },

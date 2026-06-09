@@ -9,7 +9,7 @@
 */
 @layer base {
   body {
-    @apply bg-crema text-carbon font-cuerpo antialiased;
+    @apply bg-[#F8FAFC] text-carbon font-cuerpo antialiased;
   }
 
   h1,

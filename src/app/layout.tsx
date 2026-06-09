@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import {
-  Fraunces,
-  Cormorant_Garamond,
+  Outfit,
   Inter,
   JetBrains_Mono,
 } from "next/font/google";
@@ -12,15 +11,9 @@ import { Shell } from "@/components/Shell";
 
 // Tipografías de marca cargadas con next/font (se exponen como variables CSS
 // y se enlazan a los tokens font-* en tailwind.config.ts).
-const fraunces = Fraunces({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-});
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-cormorant",
+  variable: "--font-outfit",
   display: "swap",
 });
 const inter = Inter({
@@ -60,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${fraunces.variable} ${cormorant.variable} ${inter.variable} ${jetbrains.variable}`}
+      className={`${outfit.variable} ${inter.variable} ${jetbrains.variable}`}
     >
       <body>
         {/* Provider global del estado de expedientes (en memoria). */}
