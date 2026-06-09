@@ -83,6 +83,11 @@ export async function POST(request: NextRequest) {
       datos.necesidad || datos.need || datos.motivo,
       300,
     );
+    const valorEstimadoRaw = datos.valor_estimado ?? datos.valorEstimado;
+    const valorEstimado = valorEstimadoRaw !== undefined ? Number(valorEstimadoRaw) || 0 : undefined;
+
+    const saldoDeudaRaw = datos.saldo_deuda ?? datos.saldoDeuda;
+    const saldoDeuda = saldoDeudaRaw !== undefined ? Number(saldoDeudaRaw) || 0 : undefined;
 
     // Debe traer al menos un dato de contacto.
     if (!nombre && !telefono && !correo) {
@@ -114,6 +119,8 @@ export async function POST(request: NextRequest) {
       direccionPropiedad,
       linkGoogleMaps,
       necesidad,
+      valorEstimado,
+      saldoDeuda,
     });
     return NextResponse.json({ ok: true, token }, { headers: CORS });
   } catch (err) {

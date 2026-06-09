@@ -21,6 +21,8 @@ export interface LeadWeb {
   direccionPropiedad?: string;
   linkGoogleMaps?: string;
   necesidad?: string;
+  valorEstimado?: number;
+  saldoDeuda?: number;
 }
 
 function hoyISO(): string {
@@ -121,8 +123,8 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
       ? `Cotización web: ${lead.mensaje}`.slice(0, 300)
       : "Solicitud de cotización desde el sitio web.",
     telefono,
-    valor_estimado: 0,
-    saldo_deuda: 0,
+    valor_estimado: lead.valorEstimado || 0,
+    saldo_deuda: lead.saldoDeuda || 0,
     notas: "Lead entrante desde el sitio web (sección Cotizar).",
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
