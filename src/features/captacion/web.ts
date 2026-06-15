@@ -3,6 +3,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
+import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -147,5 +148,8 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
     expedienteId: expId,
     prospectoId,
   });
+  // Notificar al equipo sobre el nuevo lead
+  void notificarNuevoLead(expId);
+
   return token;
 }

@@ -18,6 +18,7 @@ export interface UsuarioApp {
   nombre: string;
   rol: "admin" | "asesor";
   activo: boolean;
+  telefono: string;
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
@@ -42,7 +43,7 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
   const mapa = new Map(
     (perfiles ?? []).map((p) => [
       p.id as string,
-      p as { nombre: string; rol: "admin" | "asesor"; activo: boolean },
+      p as { nombre: string; rol: "admin" | "asesor"; activo: boolean; telefono?: string },
     ]),
   );
   return (lista?.users ?? []).map((u) => {
@@ -53,16 +54,18 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
       nombre: p?.nombre ?? "",
       rol: p?.rol ?? "admin",
       activo: p?.activo ?? true,
+      telefono: p?.telefono ?? "",
     };
   });
 }
 
-/** Crea un usuario nuevo (correo + contraseña + nombre + rol). */
+/** Crea un usuario nuevo (correo + contraseña + nombre + rol + teléfono). */
 export async function crearUsuario(datos: {
   email: string;
   password: string;
   nombre: string;
   rol: "admin" | "asesor";
+  telefono: string;
 }): Promise<{ ok: boolean; mensaje?: string }> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -78,15 +81,16 @@ export async function crearUsuario(datos: {
     id: data.user.id,
     nombre: datos.nombre.trim(),
     rol: datos.rol,
+    telefono: datos.telefono.trim(),
   });
   if (errPerfil) return { ok: false, mensaje: errPerfil.message };
   return { ok: true };
 }
 
-/** Actualiza el perfil de un usuario (nombre, rol, activo). */
+/** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono). */
 export async function actualizarUsuario(
   id: string,
-  datos: { nombre: string; rol: "admin" | "asesor"; activo: boolean },
+  datos: { nombre: string; rol: "admin" | "asesor"; activo: boolean; telefono: string },
 ): Promise<void> {
   await requireAdministrador();
   const sb = supabaseServidor();

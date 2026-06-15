@@ -12,6 +12,7 @@ export default function PaginaNuevoUsuario() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
+  const [telefono, setTelefono] = useState("");
   const [rol, setRol] = useState<"admin" | "asesor">("asesor");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -24,7 +25,7 @@ export default function PaginaNuevoUsuario() {
     }
     setError(null);
     setGuardando(true);
-    const res = await crearUsuario({ email, password, nombre, rol });
+    const res = await crearUsuario({ email, password, nombre, rol, telefono });
     if (!res.ok) {
       setError(res.mensaje ?? "No se pudo crear el usuario.");
       setGuardando(false);
@@ -84,6 +85,15 @@ export default function PaginaNuevoUsuario() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Mínimo 6 caracteres"
               className={`${INPUT} font-mono`}
+            />
+          </Campo>
+          <Campo etiqueta="Teléfono / WhatsApp">
+            <input
+              type="tel"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              placeholder="524771234567"
+              className={INPUT}
             />
           </Campo>
           <Campo etiqueta="Rol">

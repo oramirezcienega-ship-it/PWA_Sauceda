@@ -3,6 +3,7 @@ import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
+import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -243,6 +244,9 @@ export async function registrarLeadWhatsApp(
     expedienteId: id,
     prospectoId,
   });
+  // Notificar al equipo sobre el nuevo lead
+  void notificarNuevoLead(id);
+
   // Respuesta automática del agente de IA al primer mensaje (si está activo).
   if (iaOn && nuevoMensaje) await responderConIA(sb, { telefono, expedienteId: id });
 }

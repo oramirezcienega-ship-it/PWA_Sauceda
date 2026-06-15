@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CerrarSesion } from "./CerrarSesion";
 import { VERSION } from "@/lib/version";
 import { rolUsuarioActual } from "@/app/actions/usuarios";
 import { cerrarSesion } from "@/app/actions/auth";
+import {
+  listarNotificaciones,
+  marcarNotificacionLeida,
+  marcarTodasComoLeidas,
+  eliminarNotificacion,
+  type NotificacionApp,
+} from "@/app/actions/notificaciones";
 
 /**
  * Estructura (chrome) del panel del admin: menú de navegación en una columna
@@ -38,8 +45,11 @@ function esRutaPublica(path: string): boolean {
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [esAdmin, setEsAdmin] = useState(false);
   const [abierto, setAbierto] = useState(false);
+  const [notificaciones, setNotificaciones] = useState<NotificacionApp[]>([]);
+  const [notifsAbierto, setNotifsAbierto] = useState(false);
 
   useEffect(() => {
     rolUsuarioActual()
@@ -50,7 +60,123 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // Cierra el cajón al cambiar de ruta.
   useEffect(() => {
     setAbierto(false);
+    setNotifsAbierto(false);
   }, [pathname]);
+
+  const refrescarNotificaciones = async () => {
+    if (esRutaPublica(pathname)) return;
+    try {
+      const lista = await listarNotificaciones();
+      setNotificaciones(lista);
+    } catch (err) {
+      console.error("Error al cargar notificaciones:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (esRutaPublica(pathname)) return;
+    refrescarNotificaciones();
+    const id = setInterval(refrescarNotificaciones, 15000);
+    return () => clearInterval(id);
+  }, [pathname]);
+
+  const unreadCount = notificaciones.filter((n) => !n.leido).length;
+
+  const clickNotificacion = async (n: NotificacionApp) => {
+    setNotifsAbierto(false);
+    if (!n.leido) {
+      setNotificaciones((prev) =>
+        prev.map((x) => (x.id === n.id ? { ...x, leido: true } : x))
+      );
+      await marcarNotificacionLeida(n.id);
+    }
+    if (n.enlace) {
+      router.push(n.enlace);
+    }
+  };
+
+  const clickMarcarTodas = async () => {
+    setNotificaciones((prev) => prev.map((x) => ({ ...x, leido: true })));
+    await marcarTodasComoLeidas();
+  };
+
+  const clickEliminar = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setNotificaciones((prev) => prev.filter((x) => x.id !== id));
+    await eliminarNotificacion(id);
+  };
+
+  const IconoCampana = () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+
+  const renderNotificacionesLista = (isDesktop: boolean) => (
+    <div className="flex items-center justify-between border-b border-carbon/5 px-3 py-2 pb-2">
+      <span className="text-sm font-semibold">Notificaciones</span>
+      {unreadCount > 0 && (
+        <button
+          onClick={clickMarcarTodas}
+          className="text-[11px] font-medium text-sauce hover:underline"
+        >
+          Marcar todo leído
+        </button>
+      )}
+    </div>
+  );
+
+  const renderContenidoNotificaciones = () => (
+    <div className="max-h-96 overflow-y-auto py-1 scrollbar-sutil">
+      {notificaciones.length === 0 ? (
+        <div className="py-6 text-center text-xs text-carbon/40 font-cuerpo">
+          No tienes notificaciones
+        </div>
+      ) : (
+        notificaciones.map((n) => (
+          <div
+            key={n.id}
+            onClick={() => clickNotificacion(n)}
+            className={`relative flex cursor-pointer gap-2 rounded-lg px-3 py-2.5 transition hover:bg-carbon/5 ${
+              !n.leido ? "bg-sauce/5" : ""
+            }`}
+          >
+            {!n.leido && (
+              <span className="absolute left-1.5 top-3.5 h-1.5 w-1.5 rounded-full bg-sauce" />
+            )}
+            <div className="flex-1 pl-1.5">
+              <p className={`text-xs leading-snug font-cuerpo ${!n.leido ? "font-semibold text-verde-profundo" : "text-carbon"}`}>
+                {n.titulo}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-carbon/60 line-clamp-2 font-cuerpo">
+                {n.cuerpo}
+              </p>
+              <p className="mt-1 text-[9px] text-carbon/40 font-mono">
+                {new Date(n.created_at).toLocaleDateString()} {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+            <button
+              onClick={(e) => clickEliminar(e, n.id)}
+              className="text-[10px] text-carbon/30 hover:text-rojo p-1"
+              title="Eliminar"
+            >
+              ✕
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+  );
 
   // Monitorear inactividad del usuario (30 minutos)
   useEffect(() => {
@@ -141,7 +267,32 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div>
       {/* Columna lateral (escritorio) */}
       <aside className="hidden border-r border-dorado/30 bg-verde-profundo text-crema md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:w-60 md:flex-col">
-        {marca}
+        <div className="flex items-center justify-between border-b border-crema/10 pr-4">
+          {marca}
+          
+          {/* Campana de Notificaciones en Escritorio */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setNotifsAbierto(!notifsAbierto)}
+              className="relative rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10 hover:text-crema"
+              aria-label="Notificaciones"
+            >
+              <IconoCampana />
+              {unreadCount > 0 && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rojo text-[9px] font-bold text-crema">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {notifsAbierto && (
+              <div className="absolute left-[200px] top-2 z-50 w-80 rounded-xl border border-carbon/10 bg-white p-2 shadow-xl text-carbon">
+                {renderNotificacionesLista(true)}
+                {renderContenidoNotificaciones()}
+              </div>
+            )}
+          </div>
+        </div>
         {navegacion}
         {pie}
       </aside>
@@ -171,7 +322,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <img src="/logo.svg" alt="SAUCEDA" className="h-7 w-7" />
           <span className="font-display text-lg font-semibold">SAUCEDA</span>
         </Link>
-        <CerrarSesion />
+        <div className="flex items-center gap-1">
+          {/* Campana de Notificaciones en Móvil */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setNotifsAbierto(!notifsAbierto)}
+              className="relative rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10 hover:text-crema"
+              aria-label="Notificaciones"
+            >
+              <IconoCampana />
+              {unreadCount > 0 && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rojo text-[9px] font-bold text-crema">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            {notifsAbierto && (
+              <div className="fixed right-4 top-14 z-50 w-[90vw] max-w-sm rounded-xl border border-carbon/10 bg-white p-2 shadow-xl text-carbon">
+                {renderNotificacionesLista(false)}
+                {renderContenidoNotificaciones()}
+              </div>
+            )}
+          </div>
+          <CerrarSesion />
+        </div>
       </header>
 
       {/* Cajón desplegable (móvil) */}

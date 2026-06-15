@@ -17,7 +17,7 @@ function clienteResend(): Resend | null {
   return new Resend(key);
 }
 
-async function enviarCorreo(
+export async function enviarCorreo(
   para: string,
   asunto: string,
   html: string,
@@ -148,4 +148,50 @@ export async function notificarCliente(
     `${SITE_URL}/seguimiento/${c.token}`,
   );
   await enviarCorreo(c.correo, aplicarParametros(asunto, c.params), html);
+}
+
+/** Plantilla HTML simplificada para notificaciones al equipo operativo. */
+function plantillaAgente(
+  titulo: string,
+  cuerpo: string,
+  enlaceLabel?: string,
+  enlaceUrl?: string,
+): string {
+  const encabezado = titulo
+    ? `<h2 style="color:#2D4A2B;margin-top:0;">${titulo}</h2>`
+    : "";
+  const boton = (enlaceLabel && enlaceUrl)
+    ? `<p style="margin-top:20px;">
+        <a href="${enlaceUrl}" style="display:inline-block;background:#5C7A52;color:#F5F1E8;padding:12px 22px;border-radius:6px;text-decoration:none;">${enlaceLabel}</a>
+      </p>`
+    : "";
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;">
+    <div style="background:#2D4A2B;padding:20px;text-align:center;">
+      <img src="${SITE_URL}/logo.svg" width="48" height="48" alt="SAUCEDA" style="display:block;margin:0 auto 8px;" />
+      <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
+      <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">CRM NOTIFICACIONES</div>
+    </div>
+    <div style="padding:24px;background:#F5F1E8;color:#1A1A1A;">
+      ${encabezado}
+      <p style="white-space:pre-line;line-height:1.5;">${cuerpo}</p>
+      ${boton}
+    </div>
+    <div style="padding:18px 24px;background:#2D4A2B;color:#F5F1E8;text-align:center;font-size:11px;">
+      <div style="color:#C9A961;">SAUCEDA Bienes Raíces · Panel de Control</div>
+      <div style="margin-top:8px;color:#9bb38f;">Este es un correo automático generado por el sistema. Por favor no lo respondas.</div>
+    </div>
+  </div>`;
+}
+
+/** Notifica a un usuario/agente del sistema por correo electrónico. */
+export async function notificarAgenteEmail(
+  para: string,
+  asunto: string,
+  titulo: string,
+  cuerpo: string,
+  enlaceLabel?: string,
+  enlaceUrl?: string,
+): Promise<void> {
+  const html = plantillaAgente(titulo, cuerpo, enlaceLabel, enlaceUrl);
+  await enviarCorreo(para, asunto, html);
 }
