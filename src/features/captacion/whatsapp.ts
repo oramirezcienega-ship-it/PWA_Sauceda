@@ -73,12 +73,12 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
 }
 
 /** Fecha de hoy en formato ISO corto (YYYY-MM-DD). */
-function hoyISO(): string {
+export function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 /** Genera el siguiente folio correlativo (EXP-00N). */
-async function siguienteId(
+export async function siguienteId(
   sb: ReturnType<typeof supabaseServidor>,
 ): Promise<string> {
   const { data } = await sb.from("expedientes").select("id");
@@ -90,7 +90,7 @@ async function siguienteId(
 }
 
 /** Genera el siguiente folio de prospecto (PRO-00N). */
-async function siguienteIdProspecto(
+export async function siguienteIdProspecto(
   sb: ReturnType<typeof supabaseServidor>,
 ): Promise<string> {
   const { data } = await sb.from("prospectos").select("id");
@@ -134,7 +134,7 @@ async function obtenerOCrearProspecto(
  * Devuelve true solo si fue un mensaje NUEVO (no duplicado), para que la IA
  * no responda dos veces ante reintentos del webhook.
  */
-async function guardarMensajeEntrante(
+export async function guardarMensajeEntrante(
   sb: ReturnType<typeof supabaseServidor>,
   datos: {
     telefono: string;

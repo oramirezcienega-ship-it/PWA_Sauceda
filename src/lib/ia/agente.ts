@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { enviarMessengerTexto } from "@/lib/messenger";
 import { MARCA } from "@/lib/marca";
 
 /**
@@ -315,7 +316,15 @@ export async function responderConIA(
 
     if (!textoRespuesta) return;
 
-    const r = await enviarWhatsAppTexto(ctx.telefono, textoRespuesta);
+    let r: { ok: boolean; error?: string };
+    const esMessenger = ctx.telefono.startsWith("messenger:");
+    if (esMessenger) {
+      const psid = ctx.telefono.slice(10);
+      r = await enviarMessengerTexto(psid, textoRespuesta);
+    } else {
+      r = await enviarWhatsAppTexto(ctx.telefono, textoRespuesta);
+    }
+
     await sb.from("mensajes_whatsapp").insert({
       telefono: ctx.telefono,
       texto: textoRespuesta,
@@ -329,7 +338,7 @@ export async function responderConIA(
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "mensaje",
-        titulo: "Respuesta automática (IA) por WhatsApp",
+        titulo: esMessenger ? "Respuesta automática (IA) por Messenger" : "Respuesta automática (IA) por WhatsApp",
         detalle: textoRespuesta,
       });
 
