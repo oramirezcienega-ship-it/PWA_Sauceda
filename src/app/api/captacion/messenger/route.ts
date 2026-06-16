@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   if (
     mode === "subscribe" &&
     token &&
-    token === process.env.MESSENGER_VERIFY_TOKEN
+    token === (process.env.MESSENGER_VERIFY_TOKEN || "sauceda-leads-2026")
   ) {
     return new NextResponse(challenge ?? "", { status: 200 });
   }
