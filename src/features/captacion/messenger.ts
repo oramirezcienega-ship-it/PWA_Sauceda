@@ -10,25 +10,27 @@ import {
 } from "@/features/captacion/whatsapp";
 
 /**
- * MÓDULO: CAPTACIÓN · Facebook Messenger (Meta Graph API)
+ * MÓDULO: CAPTACIÓN · Facebook Messenger e Instagram DMs (Meta Graph API)
  *
- * Recibe mensajes entrantes de Facebook Messenger (vía Webhook) y crea/actualiza
+ * Recibe mensajes entrantes de Facebook Messenger e Instagram y crea/actualiza
  * prospectos y expedientes en etapa "nuevo-lead".
  */
 
 export interface MensajeMessenger {
-  senderId: string;   // PSID del remitente en Messenger
-  recipientId: string; // ID de la página de Facebook receptora
+  senderId: string;   // PSID del remitente en Messenger o IGSID en Instagram
+  recipientId: string; // ID de la página receptora o ID de la cuenta de Instagram
   mensaje?: string;    // Contenido del mensaje de texto
   messageId?: string;  // ID único del mensaje en Meta
   nombre?: string;     // Nombre de perfil del cliente (si viene en el payload)
 }
 
-/** Busca o crea el prospecto para un lead de Facebook Messenger. */
-async function obtenerOCrearProspectoMessenger(
+/** Busca o crea el prospecto para un lead de Redes Sociales. */
+async function obtenerOCrearProspectoSocial(
   sb: ReturnType<typeof supabaseServidor>,
   lead: MensajeMessenger,
   telefonoKey: string,
+  origen: "facebook" | "instagram",
+  canalLabel: string,
 ): Promise<string> {
   const { data: existentes } = await sb
     .from("prospectos")
@@ -43,30 +45,29 @@ async function obtenerOCrearProspectoMessenger(
   const id = await siguienteIdProspecto(sb);
   await sb.from("prospectos").insert({
     id,
-    nombre: lead.nombre?.trim() || `Lead Messenger ${lead.senderId}`,
-    telefono: telefonoKey, // Guardamos la llave "messenger:PSID"
-    origen: "facebook",
+    nombre: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
+    telefono: telefonoKey,
+    origen,
   });
-  // Automatizaciones: prospecto nuevo captado por Facebook
+  
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   return id;
 }
 
 /**
- * Registra un lead entrante de Facebook Messenger.
- * Reutiliza las tablas del CRM (expedientes y prospectos) mapeando el teléfono
- * con la llave especial "messenger:PSID" para evitar duplicar registros.
+ * Registra un lead entrante de Facebook Messenger o Instagram.
  */
-export async function registrarLeadMessenger(
+async function registrarLeadSocial(
   lead: MensajeMessenger,
+  canal: "messenger" | "instagram",
+  origen: "facebook" | "instagram",
+  canalLabel: string,
 ): Promise<void> {
   const sb = supabaseServidor();
-
-  // Llave única del canal Messenger en la base de datos
-  const telefonoKey = `messenger:${lead.senderId}`;
+  const telefonoKey = `${canal}:${lead.senderId}`;
 
   // Buscar o crear el prospecto
-  const prospectoId = await obtenerOCrearProspectoMessenger(sb, lead, telefonoKey);
+  const prospectoId = await obtenerOCrearProspectoSocial(sb, lead, telefonoKey, origen, canalLabel);
 
   // Buscar si ya existe un expediente asociado
   const { data: existentes } = await sb
@@ -77,7 +78,7 @@ export async function registrarLeadMessenger(
 
   if (existentes && existentes.length > 0) {
     const exp = existentes[0] as { id: string; notas: string };
-    const nota = `${exp.notas ?? ""}\n[Messenger ${hoyISO()}] ${
+    const nota = `${exp.notas ?? ""}\n[${canalLabel} ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
     
@@ -91,10 +92,9 @@ export async function registrarLeadMessenger(
       texto: lead.mensaje ?? "",
       expedienteId: exp.id,
       prospectoId,
-      waMessageId: lead.messageId, // reutilizamos la columna
+      waMessageId: lead.messageId,
     });
 
-    // Respuesta automática del agente de IA (si está activo y no hay humano)
     if (nuevo) {
       await responderConIA(sb, { telefono: telefonoKey, expedienteId: exp.id });
     }
@@ -105,21 +105,20 @@ export async function registrarLeadMessenger(
   const id = await siguienteId(sb);
   await sb.from("expedientes").insert({
     id,
-    cliente: lead.nombre?.trim() || `Lead Messenger ${lead.senderId}`,
+    cliente: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
     fraccionamiento: "Por definir",
     etapa: "nuevo-lead",
     situacion: lead.mensaje
-      ? `Primer mensaje por Messenger: ${lead.mensaje}`.slice(0, 300)
-      : "Contacto entrante por Facebook Messenger.",
+      ? `Primer mensaje por ${canalLabel}: ${lead.mensaje}`.slice(0, 300)
+      : `Contacto entrante por ${canalLabel}.`,
     telefono: telefonoKey,
     valor_estimado: 0,
     saldo_deuda: 0,
-    notas: "Lead entrante automáticamente por Facebook Messenger.",
+    notas: `Lead entrante automáticamente por ${canalLabel}.`,
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
   });
 
-  // Guardar mensaje en el hilo
   const nuevoMensaje = await guardarMensajeEntrante(sb, {
     telefono: telefonoKey,
     texto: lead.mensaje ?? "",
@@ -130,17 +129,24 @@ export async function registrarLeadMessenger(
 
   const iaOn = iaAgenteActivo();
   
-  // Automatizaciones: expediente nuevo captado por Facebook
   await dispararEvento(sb, "nuevo-expediente", {
     expedienteId: id,
     prospectoId,
   });
   
-  // Notificar al equipo
   void notificarNuevoLead(id);
 
-  // Respuesta automática del agente de IA
   if (iaOn && nuevoMensaje) {
     await responderConIA(sb, { telefono: telefonoKey, expedienteId: id });
   }
+}
+
+/** Registra un lead de Facebook Messenger */
+export async function registrarLeadMessenger(lead: MensajeMessenger): Promise<void> {
+  return registrarLeadSocial(lead, "messenger", "facebook", "Messenger");
+}
+
+/** Registra un lead de Instagram DMs */
+export async function registrarLeadInstagram(lead: MensajeMessenger): Promise<void> {
+  return registrarLeadSocial(lead, "instagram", "instagram", "Instagram");
 }

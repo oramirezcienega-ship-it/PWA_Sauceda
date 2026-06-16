@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import crypto from "node:crypto";
-import { registrarLeadMessenger, type MensajeMessenger } from "@/features/captacion/messenger";
+import { registrarLeadMessenger, registrarLeadInstagram, type MensajeMessenger } from "@/features/captacion/messenger";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
   try {
     const payload = JSON.parse(raw);
     
-    if (payload.object === "page") {
+    if (payload.object === "page" || payload.object === "instagram") {
+      const isInstagram = payload.object === "instagram";
       for (const entry of payload.entry ?? []) {
         const messagingEvents = entry.messaging ?? [];
         for (const event of messagingEvents) {
@@ -77,28 +78,42 @@ export async function POST(request: NextRequest) {
                 messageId,
               };
               
-              // Consultar perfil de Facebook Graph API para obtener el nombre real
+              // Consultar perfil de Facebook/Instagram Graph API para obtener el nombre real
               try {
-                const pageToken = process.env.MESSENGER_PAGE_TOKEN;
+                const pageToken = isInstagram
+                  ? (process.env.INSTAGRAM_PAGE_TOKEN || process.env.MESSENGER_PAGE_TOKEN)
+                  : process.env.MESSENGER_PAGE_TOKEN;
                 if (pageToken) {
-                  const perfilRes = await fetch(
-                    `https://graph.facebook.com/${senderId}?fields=first_name,last_name&access_token=${pageToken}`
-                  );
+                  const perfilUrl = isInstagram
+                    ? `https://graph.facebook.com/v21.0/${senderId}?fields=username&access_token=${pageToken}`
+                    : `https://graph.facebook.com/${senderId}?fields=first_name,last_name&access_token=${pageToken}`;
+                  
+                  const perfilRes = await fetch(perfilUrl);
                   if (perfilRes.ok) {
                     const perfil = await perfilRes.json();
-                    const nombreCompleto = [perfil.first_name, perfil.last_name]
-                      .filter(Boolean)
-                      .join(" ");
-                    if (nombreCompleto) {
-                      msg.nombre = nombreCompleto;
+                    if (isInstagram) {
+                      if (perfil.username) {
+                        msg.nombre = perfil.username;
+                      }
+                    } else {
+                      const nombreCompleto = [perfil.first_name, perfil.last_name]
+                        .filter(Boolean)
+                        .join(" ");
+                      if (nombreCompleto) {
+                        msg.nombre = nombreCompleto;
+                      }
                     }
                   }
                 }
               } catch (profileErr) {
-                console.error("Error al obtener perfil del remitente en Messenger:", profileErr);
+                console.error("Error al obtener perfil del remitente en Webhook Social:", profileErr);
               }
               
-              await registrarLeadMessenger(msg);
+              if (isInstagram) {
+                await registrarLeadInstagram(msg);
+              } else {
+                await registrarLeadMessenger(msg);
+              }
             }
           }
         }

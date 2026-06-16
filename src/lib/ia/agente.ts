@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
+import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
 
 /**
@@ -318,9 +319,14 @@ export async function responderConIA(
 
     let r: { ok: boolean; error?: string };
     const esMessenger = ctx.telefono.startsWith("messenger:");
+    const esInstagram = ctx.telefono.startsWith("instagram:");
+
     if (esMessenger) {
       const psid = ctx.telefono.slice(10);
       r = await enviarMessengerTexto(psid, textoRespuesta);
+    } else if (esInstagram) {
+      const igsid = ctx.telefono.slice(10);
+      r = await enviarInstagramTexto(igsid, textoRespuesta);
     } else {
       r = await enviarWhatsAppTexto(ctx.telefono, textoRespuesta);
     }
@@ -335,10 +341,14 @@ export async function responderConIA(
     });
 
     if (r.ok && ctx.expedienteId) {
+      let canalLabel = "WhatsApp";
+      if (esMessenger) canalLabel = "Messenger";
+      if (esInstagram) canalLabel = "Instagram";
+
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "mensaje",
-        titulo: esMessenger ? "Respuesta automática (IA) por Messenger" : "Respuesta automática (IA) por WhatsApp",
+        titulo: `Respuesta automática (IA) por ${canalLabel}`,
         detalle: textoRespuesta,
       });
 
