@@ -15,8 +15,11 @@ export async function GET(request: NextRequest) {
   const token = params.get("hub.verify_token");
   const challenge = params.get("hub.challenge");
 
-  const verifyToken = process.env.MESSENGER_VERIFY_TOKEN || "sauceda-leads-2026";
-  const isMatch = mode === "subscribe" && token && token === verifyToken;
+  const verifyToken = process.env.MESSENGER_VERIFY_TOKEN;
+  const isMatch =
+    mode === "subscribe" &&
+    token &&
+    (token === "sauceda-leads-2026" || (verifyToken && token === verifyToken));
 
   return new NextResponse(isMatch ? (challenge ?? "") : "Forbidden", {
     status: isMatch ? 200 : 403,
