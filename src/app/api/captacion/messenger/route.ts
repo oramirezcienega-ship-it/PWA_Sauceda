@@ -15,14 +15,18 @@ export async function GET(request: NextRequest) {
   const token = params.get("hub.verify_token");
   const challenge = params.get("hub.challenge");
 
-  if (
-    mode === "subscribe" &&
-    token &&
-    token === (process.env.MESSENGER_VERIFY_TOKEN || "sauceda-leads-2026")
-  ) {
-    return new NextResponse(challenge ?? "", { status: 200 });
-  }
-  return new NextResponse("Forbidden", { status: 403 });
+  const verifyToken = process.env.MESSENGER_VERIFY_TOKEN || "sauceda-leads-2026";
+  const isMatch = mode === "subscribe" && token && token === verifyToken;
+
+  return new NextResponse(isMatch ? (challenge ?? "") : "Forbidden", {
+    status: isMatch ? 200 : 403,
+    headers: {
+      "X-Debug-Verify-Src": process.env.MESSENGER_VERIFY_TOKEN ? "env" : "fallback",
+      "X-Debug-Match": isMatch ? "true" : "false",
+      "X-Debug-Token-Len": token ? String(token.length) : "0",
+      "X-Debug-Env-Len": process.env.MESSENGER_VERIFY_TOKEN ? String(process.env.MESSENGER_VERIFY_TOKEN.length) : "0"
+    }
+  });
 }
 
 /**
