@@ -6,6 +6,11 @@
 # valores IDÉNTICOS, como capa adicional para los recursos servidos por la CDN
 # de Netlify. Si cambias una política, actualiza ambos archivos.
 
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+
 [[headers]]
   for = "/*"
   [headers.values]
