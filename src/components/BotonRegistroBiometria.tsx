@@ -73,6 +73,10 @@ export function BotonRegistroBiometria() {
 
       // 3. Obtener llave pública DER SPKI
       // @ts-ignore
+      if (typeof credential.getPublicKey !== "function") {
+        throw new Error("Tu navegador actual (ej. navegador interno de WhatsApp) no es compatible. Por favor abre esta página en Safari (iOS) o Chrome (Android) para poder activar los biométricos.");
+      }
+      // @ts-ignore
       const publicKeyDerBuffer = credential.getPublicKey();
       if (!publicKeyDerBuffer) {
         throw new Error("Este dispositivo no soporta exportación estándar de llaves públicas.");

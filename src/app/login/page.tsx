@@ -38,6 +38,9 @@ export default function PaginaLogin() {
     setError(null);
     setCargandoBiometrico(true);
     try {
+      if (!navigator.credentials || !navigator.credentials.get) {
+        throw new Error("Tu navegador actual no es compatible con el inicio de sesión biométrico. Por favor abre la app en Safari o Chrome.");
+      }
       const resDesafio = await obtenerDesafioLogin(emailBiometrico);
       if (!resDesafio.ok || !resDesafio.challenge || !resDesafio.allowedCredentialIds) {
         throw new Error(resDesafio.error || "No se pudo obtener el desafío biométrico.");
