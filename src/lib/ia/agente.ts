@@ -248,6 +248,30 @@ export async function responderConIA(
     const historia = (data as FilaMsg[]) ?? [];
     if (historia.length === 0) return;
 
+    // Detectar bucles con auto-respondedores/bots.
+    const ultimosIn = historia.filter((f) => f.direccion === "in").slice(-3);
+    if (ultimosIn.length >= 2) {
+      const texto1 = (ultimosIn[ultimosIn.length - 1].texto ?? "").trim().toLowerCase();
+      const texto2 = (ultimosIn[ultimosIn.length - 2].texto ?? "").trim().toLowerCase();
+      
+      if (texto1 && texto1 === texto2) {
+        // Si el mensaje repetido es largo (más de 20 caracteres), asumimos bot y paramos de inmediato.
+        if (texto1.length > 20) {
+          console.warn(`IA: Se detectó bucle de bot (mensajes idénticos largos) de ${ctx.telefono}.`);
+          return;
+        }
+        
+        // Si es corto, paramos al tercer mensaje idéntico.
+        if (ultimosIn.length >= 3) {
+          const texto3 = (ultimosIn[ultimosIn.length - 3].texto ?? "").trim().toLowerCase();
+          if (texto2 === texto3) {
+            console.warn(`IA: Se detectó bucle repetido (3 mensajes idénticos cortos) de ${ctx.telefono}.`);
+            return;
+          }
+        }
+      }
+    }
+
     // Toma de control humano: si la última respuesta saliente la mandó una
     // persona (agente distinto de "IA" y no vacío), la IA no interviene.
     const ultimoOut = historia
