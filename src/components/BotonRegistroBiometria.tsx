@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+import { obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { obtenerDesafioRegistro, registrarBiometria } from "@/app/actions/biometricos";
 import { esBiometriaSoportada, hexToBuffer, bufferToBase64 } from "@/lib/biometrics-client";
 
@@ -32,8 +32,7 @@ export function BotonRegistroBiometria() {
     setCargando(true);
     setMensaje(null);
     try {
-      const sb = supabaseNavegador();
-      const { data: { user } } = await sb.auth.getUser();
+      const user = await obtenerUsuarioActual();
       if (!user || !user.email) {
         throw new Error("Debes iniciar sesión primero.");
       }
