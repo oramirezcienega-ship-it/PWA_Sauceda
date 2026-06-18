@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CerrarSesion } from "./CerrarSesion";
+import { BotonRegistroBiometria } from "./BotonRegistroBiometria";
 import { VERSION } from "@/lib/version";
 import { rolUsuarioActual } from "@/app/actions/usuarios";
 import { cerrarSesion } from "@/app/actions/auth";
@@ -256,11 +257,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 
   const pie = (
-    <div className="flex items-center justify-between gap-2 border-t border-crema/10 px-4 py-3">
-      <span className="font-mono text-[11px] text-crema/50" title="Versión">
-        v{VERSION}
-      </span>
-      <CerrarSesion />
+    <div className="flex flex-col gap-2 border-t border-crema/10 px-4 py-3">
+      <BotonRegistroBiometria />
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[11px] text-crema/50" title="Versión">
+          v{VERSION}
+        </span>
+        <CerrarSesion />
+      </div>
     </div>
   );
 

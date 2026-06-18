@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { iniciarSesion } from "@/app/actions/auth";
+import { obtenerDesafioLogin, verificarFirmaYIniciarSesion } from "@/app/actions/biometricos";
+import { esBiometriaSoportada, hexToBuffer, base64urlToBuffer, bufferToBase64 } from "@/lib/biometrics-client";
 
 /**
  * Acceso del equipo de SAUCEDA al panel de operación.
@@ -13,6 +15,77 @@ export default function PaginaLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [entrando, setEntrando] = useState(false);
+
+  const [biometriaActiva, setBiometriaActiva] = useState(false);
+  const [emailBiometrico, setEmailBiometrico] = useState("");
+  const [cargandoBiometrico, setCargandoBiometrico] = useState(false);
+
+  useEffect(() => {
+    async function checkBiometria() {
+      const isSop = await esBiometriaSoportada();
+      const activa = localStorage.getItem("biometria_activa") === "true";
+      const email = localStorage.getItem("email_biometrico");
+      if (isSop && activa && email) {
+        setBiometriaActiva(true);
+        setEmailBiometrico(email);
+      }
+    }
+    checkBiometria();
+  }, []);
+
+  async function iniciarConBiometria() {
+    if (!emailBiometrico) return;
+    setError(null);
+    setCargandoBiometrico(true);
+    try {
+      const resDesafio = await obtenerDesafioLogin(emailBiometrico);
+      if (!resDesafio.ok || !resDesafio.challenge || !resDesafio.allowedCredentialIds) {
+        throw new Error(resDesafio.error || "No se pudo obtener el desafío biométrico.");
+      }
+
+      const challengeBuffer = hexToBuffer(resDesafio.challenge);
+      const options: CredentialRequestOptions = {
+        publicKey: {
+          challenge: challengeBuffer,
+          allowCredentials: resDesafio.allowedCredentialIds.map((id) => ({
+            type: "public-key",
+            id: base64urlToBuffer(id),
+          })),
+          userVerification: "required",
+          timeout: 60000,
+        },
+      };
+
+      const assertion = (await navigator.credentials.get(options)) as PublicKeyCredential;
+      if (!assertion) {
+        throw new Error("Inicio de sesión biométrico cancelado o fallido.");
+      }
+
+      const response = assertion.response as AuthenticatorAssertionResponse;
+      const credentialId = assertion.id;
+      const clientDataJSONBase64 = bufferToBase64(response.clientDataJSON);
+      const authenticatorDataBase64 = bufferToBase64(response.authenticatorData);
+      const signatureBase64 = bufferToBase64(response.signature);
+
+      const resLogin = await verificarFirmaYIniciarSesion(
+        emailBiometrico,
+        credentialId,
+        clientDataJSONBase64,
+        authenticatorDataBase64,
+        signatureBase64
+      );
+
+      if (!resLogin.ok) {
+        throw new Error(resLogin.error || "Fallo al validar biométricos.");
+      }
+
+      window.location.assign("/");
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Error al iniciar sesión con biométricos.");
+      setCargandoBiometrico(false);
+    }
+  }
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
@@ -93,11 +166,25 @@ export default function PaginaLogin() {
 
           <button
             type="submit"
-            disabled={entrando}
+            disabled={entrando || cargandoBiometrico}
             className="w-full rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-60"
           >
             {entrando ? "Entrando…" : "Entrar"}
           </button>
+
+          {biometriaActiva && (
+            <button
+              type="button"
+              disabled={entrando || cargandoBiometrico}
+              onClick={iniciarConBiometria}
+              className="w-full flex items-center justify-center gap-2 rounded-md border border-sauce/30 bg-sauce/5 px-4 py-2.5 text-sm font-medium text-sauce transition hover:bg-sauce/10 disabled:opacity-60"
+            >
+              <svg className="h-5 w-5 text-sauce shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 009 11m0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a4.978 4.978 0 003-9m-3 9h1.82m0 0a2 2 0 001.683-1L12 15h.318M12 15h5.182M12 15L8.744 8.744A9 9 0 1121 12c0 1.258-.208 2.468-.592 3.6m-3.44 2.04l-.054-.09A13.912 13.912 0 0015 11" />
+              </svg>
+              {cargandoBiometrico ? "Verificando..." : `Ingresar con Huella / FaceID`}
+            </button>
+          )}
         </form>
       </div>
     </main>

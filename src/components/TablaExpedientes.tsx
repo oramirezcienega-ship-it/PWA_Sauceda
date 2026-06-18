@@ -328,7 +328,7 @@ export function TablaExpedientes({
                     checked={sel.has(exp.id)}
                     onChange={() => alternar(exp.id)}
                     aria-label={`Seleccionar ${exp.nombreCompleto}`}
-                    className="cursor-pointer mt-1 h-4.5 w-4.5 rounded border-carbon/25 text-sauce focus:ring-sauce/30"
+                    className="cursor-pointer mt-1 h-4 w-4 rounded border-carbon/25 text-sauce focus:ring-sauce/30"
                   />
                   <div>
                     <Link

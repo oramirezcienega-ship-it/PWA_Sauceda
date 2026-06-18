@@ -553,7 +553,7 @@ export function CRMClient() {
                       onChange={(e) => setFiltroSearch(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pl-8 text-xs text-slate-800 placeholder-slate-400 focus:border-[#5C7A52] focus:ring-1 focus:ring-[#5C7A52]"
                     />
-                    <svg className="absolute left-2.5 top-2.5 h-4.5 w-4.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
@@ -1109,7 +1109,7 @@ function TabButton({
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <svg
-          className={`h-4.5 w-4.5 shrink-0 ${active ? "text-[#C9A961]" : "text-slate-400"}`}
+          className={`h-5 w-5 shrink-0 ${active ? "text-[#C9A961]" : "text-slate-400"}`}
           viewBox="0 0 24 24"
           fill="currentColor"
         >
@@ -1897,7 +1897,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
               <div className="w-full md:w-[420px] bg-slate-50 p-6 flex flex-col justify-between space-y-4">
                 <div className="flex-1 flex flex-col space-y-2 overflow-hidden">
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <svg className="h-4.5 w-4.5 text-[#C9A961]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-4 w-4 text-[#C9A961]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                     Instrucciones de Refuerzo para Sofía
