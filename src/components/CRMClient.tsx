@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { obtenerDatosCRM, type CRMData, type CRMMessage } from "@/app/actions/crm";
-import { analizarConversacionConIA } from "@/app/actions/analisis-ia";
+import { analizarConversacionConIA, obtenerConfiguracionAgente, guardarConfiguracionAgente, generarPlanMejoraConsolidado } from "@/app/actions/analisis-ia";
 import {
   ResponsiveContainer,
   BarChart,
@@ -1281,6 +1281,79 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
   const [expandidoMap, setExpandidoMap] = useState<Record<string, boolean>>({});
   const [analizandoTodo, setAnalizandoTodo] = useState(false);
 
+  // Estados para Mejora Continua y Prompt de Sofía
+  const [promptActual, setPromptActual] = useState("");
+  const [cargandoPrompt, setCargandoPrompt] = useState(false);
+  const [verPromptActual, setVerPromptActual] = useState(false);
+  const [reporteConsolidado, setReporteConsolidado] = useState<{ reporteMarkdown: string; instruccionesSugeridas: string } | null>(null);
+  const [generandoReporte, setGenerandoReporte] = useState(false);
+  const [aplicandoPrompt, setAplicandoPrompt] = useState(false);
+  const [modalReporteAbierto, setModalReporteAbierto] = useState(false);
+  const [instructionsEditable, setInstructionsEditable] = useState("");
+  const [errorGlobal, setErrorGlobal] = useState("");
+  const [exitoMsg, setExitoMsg] = useState("");
+
+  // Cargar prompt inicial
+  useEffect(() => {
+    async function cargarPrompt() {
+      setCargandoPrompt(true);
+      try {
+        const valor = await obtenerConfiguracionAgente("ia_instrucciones");
+        setPromptActual(valor || "No hay indicaciones adicionales activas en la base de datos.");
+      } catch (err) {
+        console.error("Error al cargar configuración:", err);
+      } finally {
+        setCargandoPrompt(false);
+      }
+    }
+    cargarPrompt();
+  }, []);
+
+  const handleGenerarPlanConsolidado = async () => {
+    setGenerandoReporte(true);
+    setErrorGlobal("");
+    setExitoMsg("");
+    try {
+      const res = await generarPlanMejoraConsolidado();
+      if (!res.ok) {
+        throw new Error(res.error || "No se pudo generar el plan consolidado.");
+      }
+      setReporteConsolidado({
+        reporteMarkdown: res.reporteMarkdown || "",
+        instruccionesSugeridas: res.instruccionesSugeridas || ""
+      });
+      setInstructionsEditable(res.instruccionesSugeridas || "");
+      setModalReporteAbierto(true);
+    } catch (err: any) {
+      console.error(err);
+      setErrorGlobal(err.message || "Error al invocar la API de Claude para consolidar.");
+    } finally {
+      setGenerandoReporte(false);
+    }
+  };
+
+  const handleAplicarPrompt = async () => {
+    setAplicandoPrompt(true);
+    setErrorGlobal("");
+    setExitoMsg("");
+    try {
+      const res = await guardarConfiguracionAgente("ia_instrucciones", instructionsEditable);
+      if (!res.ok) {
+        throw new Error(res.error || "Error al guardar en base de datos.");
+      }
+      setPromptActual(instructionsEditable);
+      setExitoMsg("¡Instrucciones aplicadas a Sofía con éxito! El agente usará estas reglas para todas las conversaciones futuras.");
+      setModalReporteAbierto(false);
+      setVerPromptActual(true);
+    } catch (err: any) {
+      console.error(err);
+      setErrorGlobal(err.message || "Error al guardar el prompt.");
+    } finally {
+      setAplicandoPrompt(false);
+    }
+  };
+
+
   // Filtrar leads
   const leadsFiltrados = useMemo(() => {
     return leads.filter((l) => {
@@ -1393,6 +1466,92 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
 
   return (
     <div className="space-y-6">
+      {/* SECCIÓN DE MEJORA CONTINUA Y CONFIGURACIÓN DEL AGENTE */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] flex items-center gap-2">
+              <svg className="h-5 w-5 text-[#C9A961]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Optimización Continua de Sofía
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Consolida el aprendizaje de todos los leads perdidos para mejorar automáticamente las respuestas de la IA.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setVerPromptActual(!verPromptActual)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition flex items-center gap-1.5"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              {verPromptActual ? "Ocultar Instrucciones Activas" : "Ver Instrucciones Activas"}
+            </button>
+
+            <button
+              onClick={handleGenerarPlanConsolidado}
+              disabled={generandoReporte || leadsAnalizados.length === 0}
+              className="text-xs font-semibold px-4 py-2 bg-[#2D4A2B] hover:bg-[#5C7A52] text-white shadow-sm rounded-lg transition disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {generandoReporte ? (
+                <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="h-4 w-4 text-[#C9A961]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+              )}
+              {generandoReporte ? "Procesando Reporte..." : "Generar Plan de Mejora"}
+            </button>
+          </div>
+        </div>
+
+        {/* Notificaciones de Éxito / Error */}
+        {exitoMsg && (
+          <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>{exitoMsg}</span>
+          </div>
+        )}
+
+        {errorGlobal && (
+          <div className="bg-red-50 border border-red-200 text-[#C44A4A] px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>{errorGlobal}</span>
+          </div>
+        )}
+
+        {/* Visor del Prompt Actual */}
+        {verPromptActual && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 animate-slideDown">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Instrucciones Adicionales Activas en Base de Datos (Clave: ia_instrucciones)
+            </span>
+            {cargandoPrompt ? (
+              <div className="py-4 text-xs text-slate-400 flex items-center gap-2 justify-center">
+                <span className="h-4 w-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+                Cargando prompt desde Supabase...
+              </div>
+            ) : (
+              <pre className="text-xs text-slate-700 bg-white p-3 rounded-lg border border-slate-200 overflow-x-auto whitespace-pre-wrap font-mono max-h-48 scrollbar-sutil">
+                {promptActual}
+              </pre>
+            )}
+            <p className="text-[10px] text-slate-400 italic">
+              * Nota: Si este visor está vacío, Sofía utiliza exclusivamente el system prompt base y el fallback configurado en Netlify.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Panel de Resumen General */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between border-l-4 border-l-[#C44A4A]">
@@ -1678,6 +1837,110 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
           })
         )}
       </div>
+
+      {/* MODAL PREMIUM: PLAN DE MEJORA CONSOLIDADO */}
+      {modalReporteAbierto && reporteConsolidado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-carbon/50 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] shadow-2xl flex flex-col overflow-hidden border border-slate-100 animate-scaleIn">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 bg-[#F5F1E8]/30 flex items-center justify-between">
+              <div>
+                <h3 className="font-fraunces text-lg font-bold text-[#2D4A2B]">
+                  Reporte y Plan de Refuerzo Consolidado
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Generado a partir del análisis transversal de {leadsAnalizados.length} leads perdidos.
+                </p>
+              </div>
+              <button
+                onClick={() => setModalReporteAbierto(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content (Two columns) */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+              
+              {/* Left Column: Markdown Report */}
+              <div className="flex-1 overflow-y-auto p-6 border-r border-slate-100 space-y-4 scrollbar-sutil">
+                <div className="prose prose-slate prose-xs max-w-none">
+                  <div className="space-y-4 text-xs text-slate-700 leading-relaxed">
+                    {reporteConsolidado.reporteMarkdown.split("\n").map((line, idx) => {
+                      if (line.startsWith("###")) {
+                        return <h4 key={idx} className="font-fraunces text-sm font-bold text-[#2D4A2B] pt-2">{line.replace("###", "").trim()}</h4>;
+                      }
+                      if (line.startsWith("##")) {
+                        return <h3 key={idx} className="font-fraunces text-base font-bold text-[#2D4A2B] pt-3">{line.replace("##", "").trim()}</h3>;
+                      }
+                      if (line.startsWith("#")) {
+                        return <h2 key={idx} className="font-fraunces text-lg font-bold text-[#2D4A2B] pt-4">{line.replace("#", "").trim()}</h2>;
+                      }
+                      if (line.startsWith("-") || line.startsWith("*")) {
+                        return <li key={idx} className="ml-4 list-disc pl-1">{line.replace(/^[-*]\s+/, "")}</li>;
+                      }
+                      if (line.match(/^\d+\./)) {
+                        return <li key={idx} className="ml-4 list-decimal pl-1">{line.replace(/^\d+\.\s+/, "")}</li>;
+                      }
+                      if (line.trim() === "") return <div key={idx} className="h-2" />;
+                      return <p key={idx}>{line}</p>;
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Editable prompt guidelines */}
+              <div className="w-full md:w-[420px] bg-slate-50 p-6 flex flex-col justify-between space-y-4">
+                <div className="flex-1 flex flex-col space-y-2 overflow-hidden">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <svg className="h-4.5 w-4.5 text-[#C9A961]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Instrucciones de Refuerzo para Sofía
+                  </label>
+                  <p className="text-[10px] text-slate-500 leading-snug">
+                    Estas reglas se añadirán a su prompt de sistema. Puedes editarlas antes de aplicarlas para afinar el tono o las reglas.
+                  </p>
+                  <textarea
+                    value={instructionsEditable}
+                    onChange={(e) => setInstructionsEditable(e.target.value)}
+                    className="flex-1 w-full p-4 rounded-2xl border border-slate-200 bg-white text-xs font-mono text-slate-800 focus:border-[#5C7A52] focus:ring-1 focus:ring-[#5C7A52] resize-none overflow-y-auto scrollbar-sutil"
+                    placeholder="Escribe las instrucciones adicionales..."
+                  />
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-slate-200">
+                  <button
+                    onClick={handleAplicarPrompt}
+                    disabled={aplicandoPrompt || !instructionsEditable.trim()}
+                    className="w-full rounded-xl bg-[#2D4A2B] hover:bg-[#5C7A52] text-white py-3 text-xs font-bold shadow-sm transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {aplicandoPrompt ? (
+                      <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="h-4 w-4 text-[#C9A961]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                    {aplicandoPrompt ? "Guardando en Supabase..." : "Aplicar Instrucciones a Sofía"}
+                  </button>
+
+                  <button
+                    onClick={() => setModalReporteAbierto(false)}
+                    className="w-full rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 py-2.5 text-xs font-semibold transition text-center"
+                  >
+                    Cerrar sin guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

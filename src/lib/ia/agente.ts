@@ -99,7 +99,7 @@ interface FilaExp {
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
-function instrucciones(exp: FilaExp | null): string {
+async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<string> {
   const base = `Eres el asistente virtual de SAUCEDA Bienes Raíces, una inmobiliaria en León, Guanajuato, México, especializada en TRASPASOS de propiedades con crédito INFONAVIT. Tu objetivo principal es calificar al lead recopilando información clave para evaluar si podemos hacer una propuesta de compra para su propiedad.
 
 Lleva la conversación de manera amigable, paciente y paso a paso por WhatsApp. Evita pedirles que cambien de canal o sugerir llamadas telefónicas (muchos clientes no desean llamadas y prefieren mantenerse en WhatsApp). Como ya estás hablando con ellos por WhatsApp, no les pidas su número de teléfono.
@@ -149,7 +149,19 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
 
 Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
 
-  const extra = (process.env.IA_INSTRUCCIONES || "").trim();
+  let extra = (process.env.IA_INSTRUCCIONES || "").trim();
+  try {
+    const { data } = await sb
+      .from("configuracion_agente")
+      .select("valor")
+      .eq("clave", "ia_instrucciones")
+      .maybeSingle();
+    if (data?.valor) {
+      extra = data.valor.trim();
+    }
+  } catch (err) {
+    console.error("Error al obtener configuracion_agente de la base de datos:", err);
+  }
   let contexto = "";
   if (exp) {
     const nombre = [exp.cliente, exp.primer_apellido].filter(Boolean).join(" ");
@@ -296,7 +308,7 @@ export async function responderConIA(
     }
 
     const textoAI = await generarRespuesta(
-      instrucciones(exp),
+      await instrucciones(exp, sb),
       aMensajes(historia),
     );
     if (!textoAI) return;
