@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { obtenerTodosLosAnalisis } from "./analisis-ia";
 
 // Definición de Interfaces Estándar (Schema A)
 export interface CRMLead {
@@ -44,6 +45,16 @@ export interface CRMData {
     sinRespuestaSofia: boolean; // Si lleva >24h sin respuesta de Sofía
     ultimoTexto: string;
     conversacionCompleta: CRMMessage[];
+    analisisIA?: {
+      telefono: string;
+      resumen: string;
+      punto_de_quiebre: string;
+      razon_perdida: string;
+      calidad_lead: "alta" | "media" | "baja";
+      recomendacion: string;
+      recuperable: boolean;
+      created_at: string;
+    };
   }>;
   resumenEmbudo: {
     totalLeads: number;
@@ -278,6 +289,13 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
     }
   });
 
+  // Cargar análisis de IA cacheados
+  const listAnalisis = await obtenerTodosLosAnalisis();
+  const analisisMap = new Map<string, any>();
+  listAnalisis.forEach((a) => {
+    analisisMap.set(a.telefono, a);
+  });
+
   // Procesamos cada lead individualmente
   const leadsProcesados = leadsRaw.map((l) => {
     let conv = conversacionesPorLead.get(l.id);
@@ -327,7 +345,8 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
       tiempoUltimoMensaje,
       sinRespuestaSofia,
       ultimoTexto,
-      conversacionCompleta: msgs
+      conversacionCompleta: msgs,
+      analisisIA: analisisMap.get(l.phone)
     };
   });
 

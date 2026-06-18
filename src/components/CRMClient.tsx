@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { obtenerDatosCRM, type CRMData, type CRMMessage } from "@/app/actions/crm";
+import { analizarConversacionConIA } from "@/app/actions/analisis-ia";
 import {
   ResponsiveContainer,
   BarChart,
@@ -43,8 +44,8 @@ export function CRMClient() {
   const [lastFetchTime, setLastFetchTime] = useState<string>("");
   const [refrescar, setRefrescar] = useState(0);
 
-  // Navegación entre las 5 vistas
-  const [vistaActiva, setVistaActiva] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // Navegación entre las 6 vistas
+  const [vistaActiva, setVistaActiva] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
 
   // Filtros globales (para la Vista 3: Tabla de leads, y aplicable a métricas si se desea)
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
@@ -95,6 +96,19 @@ export function CRMClient() {
   // Handler para recargar manualmente
   const handleRecargar = () => {
     setRefrescar((prev) => prev + 1);
+  };
+
+  // Actualiza el estado local de un lead tras realizar el análisis IA
+  const handleUpdateLead = (phone: string, analisis: any) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        leads: prev.leads.map((l) =>
+          l.phone === phone ? { ...l, analisisIA: analisis } : l
+        )
+      };
+    });
   };
 
   // Filtrado de leads para la tabla
@@ -244,6 +258,12 @@ export function CRMClient() {
             icon="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V7h14v12zm-2-7h-4v4h4v-4z"
             label="5. Evolución Semanal"
           />
+          <TabButton
+            active={vistaActiva === 6}
+            onClick={() => setVistaActiva(6)}
+            icon="M12 2a10 10 0 1010 10A10 10 0 0012 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
+            label="6. Análisis IA"
+          />
         </nav>
         <div className="p-4 border-t border-slate-100 text-[10px] text-slate-400 bg-slate-50">
           <div>Refresco: Auto (5 min)</div>
@@ -269,6 +289,7 @@ export function CRMClient() {
                 <option value={3}>3. Tabla de Leads</option>
                 <option value={4}>4. Análisis Chats</option>
                 <option value={5}>5. Evolución Semanal</option>
+                <option value={6}>6. Análisis IA</option>
               </select>
             </div>
             <h1 className="font-fraunces text-2xl font-extrabold text-[#2D4A2B] hidden lg:block">
@@ -277,6 +298,7 @@ export function CRMClient() {
               {vistaActiva === 3 && "Tabla de Leads"}
               {vistaActiva === 4 && "Análisis de Conversaciones"}
               {vistaActiva === 5 && "Evolución Semanal"}
+              {vistaActiva === 6 && "Análisis IA de Conversaciones"}
             </h1>
           </div>
 
@@ -964,6 +986,16 @@ export function CRMClient() {
               </div>
             </div>
           )}
+
+          {/* ==============================================
+              VISTA 6: ANÁLISIS IA
+             ============================================== */}
+          {vistaActiva === 6 && (
+            <VistaAnalisisIA
+              leads={data.leads}
+              onUpdateLead={handleUpdateLead}
+            />
+          )}
         </div>
       </main>
 
@@ -1228,6 +1260,424 @@ function CardWoW({
         </div>
       </div>
       <p className="text-xs text-slate-500 mt-4 leading-relaxed border-t border-slate-100 pt-3">{descripcion}</p>
+    </div>
+  );
+}
+
+// ==============================================
+// NUEVA VISTA 6: COMPONENTE ANALISIS IA
+// ==============================================
+interface VistaAnalisisIAProps {
+  leads: any[];
+  onUpdateLead: (phone: string, analisis: any) => void;
+}
+
+function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
+  const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
+  const [errorMap, setErrorMap] = useState<Record<string, string>>({});
+  const [soloPerdidos, setSoloPerdidos] = useState(true);
+  const [filtroCalidad, setFiltroCalidad] = useState("todos");
+  const [filtroRecuperable, setFiltroRecuperable] = useState("todos");
+  const [expandidoMap, setExpandidoMap] = useState<Record<string, boolean>>({});
+  const [analizandoTodo, setAnalizandoTodo] = useState(false);
+
+  // Filtrar leads
+  const leadsFiltrados = useMemo(() => {
+    return leads.filter((l) => {
+      // Por defecto mostrar solo perdidos
+      if (soloPerdidos && l.status !== "perdido" && l.qualified !== "rojo") {
+        return false;
+      }
+      
+      if (l.conversacionCompleta.length === 0) {
+        return false;
+      }
+
+      if (l.analisisIA) {
+        if (filtroCalidad !== "todos" && l.analisisIA.calidad_lead !== filtroCalidad) {
+          return false;
+        }
+        if (filtroRecuperable !== "todos") {
+          const rec = filtroRecuperable === "si";
+          if (l.analisisIA.recuperable !== rec) {
+            return false;
+          }
+        }
+      } else {
+        if (filtroCalidad !== "todos" || filtroRecuperable !== "todos") {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [leads, soloPerdidos, filtroCalidad, filtroRecuperable]);
+
+  // Leads que sí están analizados para los KPI superiores
+  const leadsAnalizados = useMemo(() => {
+    return leads.filter((l) => l.analisisIA && (l.status === "perdido" || l.qualified === "rojo"));
+  }, [leads]);
+
+  // 1. Razón más común de pérdida
+  const razonMasComun = useMemo(() => {
+    if (leadsAnalizados.length === 0) return "Sin análisis cargados";
+    const frec = new Map<string, number>();
+    leadsAnalizados.forEach((l) => {
+      const razon = l.analisisIA?.razon_perdida || "No especificada";
+      frec.set(razon, (frec.get(razon) ?? 0) + 1);
+    });
+    let topRazon = "No especificada";
+    let max = 0;
+    frec.forEach((val, key) => {
+      if (val > max) {
+        max = val;
+        topRazon = key;
+      }
+    });
+    return topRazon;
+  }, [leadsAnalizados]);
+
+  // 2. Porcentaje de leads recuperables
+  const pctRecuperables = useMemo(() => {
+    if (leadsAnalizados.length === 0) return 0;
+    const recCount = leadsAnalizados.filter((l) => l.analisisIA?.recuperable).length;
+    return Math.round((recCount / leadsAnalizados.length) * 100);
+  }, [leadsAnalizados]);
+
+  // 3. Recomendación top
+  const recomendacionTop = useMemo(() => {
+    if (leadsAnalizados.length === 0) {
+      return "Evitar presionar por datos de golpe. Saludar amablemente e indagar ubicación y adeudo de manera fluida.";
+    }
+    const recs = leadsAnalizados
+      .filter((l) => l.analisisIA?.recomendacion && l.analisisIA.calidad_lead !== "baja")
+      .map((l) => l.analisisIA!.recomendacion);
+    return recs.length > 0 ? recs[0] : leadsAnalizados[0].analisisIA!.recomendacion;
+  }, [leadsAnalizados]);
+
+  // Ejecuta el análisis de una conversación individual
+  const handleAnalizar = async (phone: string) => {
+    setLoadingMap((prev) => ({ ...prev, [phone]: true }));
+    setErrorMap((prev) => ({ ...prev, [phone]: "" }));
+    try {
+      const result = await analizarConversacionConIA(phone);
+      onUpdateLead(phone, result);
+    } catch (err) {
+      console.error(err);
+      setErrorMap((prev) => ({
+        ...prev,
+        [phone]: err instanceof Error ? err.message : "Error al invocar la API de Claude."
+      }));
+    } finally {
+      setLoadingMap((prev) => ({ ...prev, [phone]: false }));
+    }
+  };
+
+  // Analiza todos los leads perdidos que no están analizados
+  const handleAnalizarTodos = async () => {
+    const noAnalizados = leads.filter(
+      (l) => !l.analisisIA && (l.status === "perdido" || l.qualified === "rojo") && l.conversacionCompleta.length > 0
+    );
+    if (noAnalizados.length === 0) return;
+    setAnalizandoTodo(true);
+    for (const l of noAnalizados) {
+      try {
+        const result = await analizarConversacionConIA(l.phone);
+        onUpdateLead(l.phone, result);
+      } catch (err) {
+        console.error("Fallo al analizar", l.phone, err);
+      }
+    }
+    setAnalizandoTodo(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Panel de Resumen General */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between border-l-4 border-l-[#C44A4A]">
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+              Razón más Común de Pérdida
+            </span>
+            <span className="text-xs font-bold text-[#2D4A2B] mt-2 block leading-snug">
+              {razonMasComun}
+            </span>
+          </div>
+          <div className="mt-4 text-[10px] text-slate-400 font-mono">
+            Calculado de {leadsAnalizados.length} análisis guardados
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between border-l-4 border-l-[#C9A961]">
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+              Tasa de Leads Recuperables
+            </span>
+            <span className="text-4xl font-fraunces font-extrabold text-[#2D4A2B] mt-2 block">
+              {pctRecuperables}%
+            </span>
+          </div>
+          <div className="mt-4 text-[10px] text-slate-400 leading-tight">
+            Porcentaje de chats marcados con potencial de recontacto
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between border-l-4 border-l-[#5C7A52]">
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+              Recomendación Script (Sofia)
+            </span>
+            <span className="text-xs text-slate-700 italic mt-2 block leading-relaxed line-clamp-3">
+              "{recomendacionTop}"
+            </span>
+          </div>
+          <div className="mt-4 text-[10px] text-[#5C7A52] font-semibold">
+            Sugerencia principal para optimizar la IA
+          </div>
+        </div>
+      </div>
+
+      {/* Controles de Filtro e Inicio de Análisis Masivo */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center justify-between">
+        <div className="flex flex-wrap gap-3 items-center flex-1">
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={soloPerdidos}
+              onChange={(e) => setSoloPerdidos(e.target.checked)}
+              className="rounded text-[#5C7A52] focus:ring-[#5C7A52]"
+            />
+            Solo Leads Perdidos / Rojos
+          </label>
+
+          <select
+            value={filtroCalidad}
+            onChange={(e) => setFiltroCalidad(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-[#5C7A52]"
+          >
+            <option value="todos">Calidad: Todas</option>
+            <option value="alta">Calidad: Alta</option>
+            <option value="media">Calidad: Media</option>
+            <option value="baja">Calidad: Baja</option>
+          </select>
+
+          <select
+            value={filtroRecuperable}
+            onChange={(e) => setFiltroRecuperable(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-[#5C7A52]"
+          >
+            <option value="todos">Recuperables: Todos</option>
+            <option value="si">Solo Recuperables</option>
+            <option value="no">Solo No Recuperables</option>
+          </select>
+        </div>
+
+        {leads.filter((l) => !l.analisisIA && (l.status === "perdido" || l.qualified === "rojo") && l.conversacionCompleta.length > 0).length > 0 && (
+          <button
+            onClick={handleAnalizarTodos}
+            disabled={analizandoTodo}
+            className="rounded-lg bg-[#2D4A2B] hover:bg-[#5C7A52] text-white px-4 py-2 text-xs font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2"
+          >
+            {analizandoTodo ? (
+              <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+            )}
+            {analizandoTodo ? "Analizando Lote..." : "Analizar Pendientes con IA"}
+          </button>
+        )}
+      </div>
+
+      {/* Lista de Tarjetas de Conversación */}
+      <div className="grid grid-cols-1 gap-6">
+        {leadsFiltrados.length === 0 ? (
+          <div className="bg-white p-8 border border-slate-200 rounded-2xl text-center text-slate-400 text-sm shadow-sm">
+            No hay conversaciones para listar con los filtros activos.
+          </div>
+        ) : (
+          leadsFiltrados.map((l) => {
+            const analizado = !!l.analisisIA;
+            const expanded = !!expandidoMap[l.phone];
+            const loading = !!loadingMap[l.phone];
+
+            let cardBorder = "border-slate-200";
+            if (analizado) {
+              if (l.analisisIA.calidad_lead === "alta") cardBorder = "border-l-4 border-l-green-500";
+              else if (l.analisisIA.calidad_lead === "media") cardBorder = "border-l-4 border-l-yellow-500";
+              else if (l.analisisIA.calidad_lead === "baja") cardBorder = "border-l-4 border-l-red-500";
+            }
+
+            return (
+              <div key={l.id} className={`bg-white rounded-2xl border p-5 shadow-sm space-y-4 ${cardBorder}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div>
+                    <h4 className="font-fraunces text-base font-bold text-[#2D4A2B]">{l.name}</h4>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">
+                      {l.phone} • {new Date(l.created_at).toLocaleDateString()} • Origen: <span className="uppercase font-semibold">{l.source}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-full border border-slate-200 text-xs">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          l.qualified === "verde"
+                            ? "bg-green-500"
+                            : l.qualified === "rojo"
+                              ? "bg-red-500"
+                              : "bg-yellow-500"
+                        }`}
+                      />
+                      <span className="capitalize text-[10px] font-semibold text-slate-600">
+                        {l.qualified === "verde" && "Verde"}
+                        {l.qualified === "amarillo" && "Amarillo"}
+                        {l.qualified === "rojo" && "Rojo"}
+                      </span>
+                    </span>
+
+                    {analizado && (
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          l.analisisIA.calidad_lead === "alta"
+                            ? "bg-green-100 text-green-800"
+                            : l.analisisIA.calidad_lead === "baja"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        Calidad {l.analisisIA.calidad_lead}
+                      </span>
+                    )}
+
+                    {analizado && l.analisisIA.recuperable && (
+                      <span className="bg-[#2D4A2B]/10 text-[#2D4A2B] border border-[#2d4a2b]/20 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-0.5">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Recuperable
+                      </span>
+                    )}
+
+                    {!analizado && (
+                      <span className="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        Pendiente Análisis
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {analizado ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3 text-xs text-slate-700">
+                        <div>
+                          <span className="font-bold text-slate-800 block mb-0.5">Resumen de Conversación:</span>
+                          <p className="leading-relaxed">{l.analisisIA.resumen}</p>
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-800 block mb-0.5">Razón de Pérdida:</span>
+                          <p className="leading-relaxed">{l.analisisIA.razon_perdida}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="bg-red-50 border border-red-200 text-[#C44A4A] p-3 rounded-xl text-xs">
+                          <span className="font-bold block mb-1">Punto de Quiebre:</span>
+                          <p className="italic leading-relaxed">"{l.analisisIA.punto_de_quiebre}"</p>
+                        </div>
+
+                        <div className="bg-[#F5F1E8]/60 border border-[#C9A961]/30 text-[#2D4A2B] p-3 rounded-xl text-xs">
+                          <span className="font-bold block mb-1 text-[#C9A961]">Sugerencia para Sofía:</span>
+                          <p className="leading-relaxed">{l.analisisIA.recomendacion}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <p className="text-xs text-slate-500 italic">
+                        Esta conversación aún no ha sido evaluada por el modelo de IA. Haz clic en el botón para solicitar el diagnóstico automático de Claude.
+                      </p>
+                      <button
+                        onClick={() => handleAnalizar(l.phone)}
+                        disabled={loading}
+                        className="rounded-lg bg-[#2D4A2B] hover:bg-[#5C7A52] text-white px-4 py-2.5 text-xs font-semibold shadow-sm transition disabled:opacity-50 shrink-0 flex items-center justify-center gap-1.5 min-w-[140px]"
+                      >
+                        {loading ? (
+                          <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        )}
+                        {loading ? "Analizando..." : "Analizar con IA"}
+                      </button>
+                    </div>
+                  )}
+
+                  {errorMap[l.phone] && (
+                    <div className="bg-red-50 border border-red-100 text-[#C44A4A] p-2.5 rounded-lg text-xs font-medium">
+                      Error: {errorMap[l.phone]}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => setExpandidoMap((prev) => ({ ...prev, [l.phone]: !expanded }))}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 transition flex items-center gap-1"
+                  >
+                    <svg
+                      className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    {expanded ? "Ocultar chat completo" : `Ver chat completo (${l.conversacionCompleta.length} mensajes)`}
+                  </button>
+
+                  {expanded && (
+                    <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl max-h-80 overflow-y-auto p-4 space-y-3 scrollbar-sutil">
+                      {l.conversacionCompleta.map((msg: any) => {
+                        const esUser = msg.role === "user";
+                        return (
+                          <div key={msg.id} className={`flex ${esUser ? "justify-end" : "justify-start"}`}>
+                            <div
+                              className={`max-w-[85%] rounded-xl px-3.5 py-2 text-[11px] shadow-sm border ${
+                                esUser
+                                  ? "bg-[#2D4A2B] text-white rounded-br-none border-[#2D4A2B]"
+                                  : "bg-white text-slate-800 rounded-bl-none border-slate-200"
+                              }`}
+                            >
+                              {!esUser && (
+                                <span className="text-[9px] font-bold text-[#5C7A52] block mb-0.5 uppercase tracking-wide">
+                                  Sofía / IA
+                                </span>
+                              )}
+                              <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
+                              <span
+                                className={`text-[8px] block text-right mt-1 opacity-60 font-mono ${
+                                  esUser ? "text-slate-300" : "text-slate-500"
+                                }`}
+                              >
+                                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
