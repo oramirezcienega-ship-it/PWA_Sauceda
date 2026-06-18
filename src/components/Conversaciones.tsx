@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { rolUsuarioActual } from "@/app/actions/usuarios";
+import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import {
   listarConversaciones,
   obtenerConversacion,
@@ -101,6 +101,8 @@ function Countdown24h({
 export function Conversaciones() {
   const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
+  const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
+  const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" } | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
   const [plantillas, setPlantillas] = useState<PlantillaWhatsApp[]>([]);
@@ -154,6 +156,10 @@ export function Conversaciones() {
     rolUsuarioActual()
       .then((rol) => setEsAdmin(rol === "admin"))
       .catch(() => setEsAdmin(false));
+
+    obtenerUsuarioActual()
+      .then((u) => setUsuario(u))
+      .catch(() => setUsuario(null));
   }, [refrescar]);
 
   // Sondeo cada 15 s (lista + hilo abierto).
@@ -235,7 +241,22 @@ export function Conversaciones() {
 
   const conversacionesFiltradas = conversaciones.filter((c) => {
     if (filtro === "abiertas") {
-      return !c.finalizado;
+      if (!c.finalizado) {
+        if (subFiltro === "mias") {
+          const nomUser = usuario?.nombre?.toLowerCase() || "";
+          const emailUser = usuario?.email?.toLowerCase() || "";
+          const atiende = c.atiende?.toLowerCase() || "";
+          return atiende !== "" && atiende !== "ia" && (atiende.includes(nomUser) || nomUser.includes(atiende) || atiende.includes(emailUser) || emailUser.includes(atiende));
+        }
+        if (subFiltro === "ia") {
+          return c.atiende?.toLowerCase() === "ia";
+        }
+        if (subFiltro === "nuevas") {
+          return c.atiende === "" || !c.atiende;
+        }
+        return true; // "todas"
+      }
+      return false;
     } else {
       return c.finalizado;
     }
@@ -300,6 +321,61 @@ export function Conversaciones() {
             </button>
           </div>
 
+          {filtro === "abiertas" && (
+            <div className="mb-2 flex flex-wrap gap-1 bg-slate-50 p-1 rounded-lg border border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSubFiltro("todas")}
+                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                  subFiltro === "todas"
+                    ? "bg-[#2D4A2B] text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Todas ({conversaciones.filter((c) => !c.finalizado).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubFiltro("mias")}
+                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                  subFiltro === "mias"
+                    ? "bg-[#2D4A2B] text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Mías ({conversaciones.filter((c) => {
+                  if (c.finalizado) return false;
+                  const nomUser = usuario?.nombre?.toLowerCase() || "";
+                  const emailUser = usuario?.email?.toLowerCase() || "";
+                  const atiende = c.atiende?.toLowerCase() || "";
+                  return atiende !== "" && atiende !== "ia" && (atiende.includes(nomUser) || nomUser.includes(atiende) || atiende.includes(emailUser) || emailUser.includes(atiende));
+                }).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubFiltro("ia")}
+                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                  subFiltro === "ia"
+                    ? "bg-[#2D4A2B] text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                De la IA ({conversaciones.filter((c) => !c.finalizado && c.atiende?.toLowerCase() === "ia").length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubFiltro("nuevas")}
+                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                  subFiltro === "nuevas"
+                    ? "bg-[#2D4A2B] text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Nuevas ({conversaciones.filter((c) => !c.finalizado && (!c.atiende || c.atiende === "")).length})
+              </button>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto space-y-1">
             {conversacionesFiltradas.length === 0 ? (
               <p className="p-6 text-center text-sm text-carbon/40">
@@ -346,8 +422,20 @@ export function Conversaciones() {
                     <span className="font-mono text-[9px] text-carbon/40">
                       {c.telefono} · {horaCorta(c.ultimaFecha)}
                     </span>
-                    <span className="shrink-0 text-[9px] text-sauce font-semibold">
-                      {c.atiende ? `Atiende: ${c.atiende}` : "Sin atender"}
+                    <span className="shrink-0">
+                      {!c.atiende || c.atiende === "" ? (
+                        <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                          NUEVA / SIN ATENDER
+                        </span>
+                      ) : c.atiende.toLowerCase() === "ia" ? (
+                        <span className="bg-purple-100 text-purple-800 border border-purple-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                          🤖 ATIENDE IA
+                        </span>
+                      ) : (
+                        <span className="bg-green-100 text-green-800 border border-green-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                          👤 {c.atiende}
+                        </span>
+                      )}
                     </span>
                   </span>
                 </button>
@@ -413,31 +501,57 @@ export function Conversaciones() {
                   </div>
 
                   {/* Dropdown de Asignación */}
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <span className="text-[10px] text-carbon/60 font-medium">Atiende:</span>
-                    <select
-                      value={detalle.mensajes.slice().reverse().find((m) => m.agente)?.agente ?? ""}
-                      onChange={async (e) => {
-                        const nuevoAgente = e.target.value;
-                        setAsignando(true);
-                        const res = await asignarAgente(detalle.telefono, nuevoAgente);
-                        setAsignando(false);
-                        if (!res.ok) {
-                          setAviso(res.error ?? "No se pudo reasignar.");
-                        } else {
-                          await refrescar(detalle.telefono);
-                        }
-                      }}
-                      disabled={asignando || enviando}
-                      className="bg-white border border-carbon/15 rounded px-1.5 py-0.5 text-[10px] text-carbon/70 focus:outline-none focus:border-sauce cursor-pointer focus:ring-1 focus:ring-sauce"
-                    >
-                      <option value="">— sin asignar —</option>
-                      {asesores.map((as) => (
-                        <option key={as.id} value={as.nombre}>
-                          {as.nombre}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex flex-wrap items-center gap-2 mt-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-carbon/60 font-bold uppercase tracking-wider">Atiende:</span>
+                      <select
+                        value={detalle.mensajes.slice().reverse().find((m) => m.agente)?.agente ?? ""}
+                        onChange={async (e) => {
+                          const nuevoAgente = e.target.value;
+                          setAsignando(true);
+                          const res = await asignarAgente(detalle.telefono, nuevoAgente);
+                          setAsignando(false);
+                          if (!res.ok) {
+                            setAviso(res.error ?? "No se pudo reasignar.");
+                          } else {
+                            await refrescar(detalle.telefono);
+                          }
+                        }}
+                        disabled={asignando || enviando}
+                        className="bg-white border border-carbon/15 rounded px-1.5 py-0.5 text-[10px] text-carbon/70 focus:outline-none focus:border-sauce cursor-pointer focus:ring-1 focus:ring-sauce font-medium"
+                      >
+                        <option value="">— sin asignar —</option>
+                        <option value="IA">🤖 Agente IA (Sofía)</option>
+                        {asesores.map((as) => (
+                          <option key={as.id} value={as.nombre}>
+                            {as.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {usuario && (detalle.mensajes.slice().reverse().find((m) => m.agente)?.agente !== usuario.nombre) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setAsignando(true);
+                          const res = await asignarAgente(detalle.telefono, usuario.nombre);
+                          setAsignando(false);
+                          if (!res.ok) {
+                            setAviso(res.error ?? "No se pudo tomar la conversación.");
+                          } else {
+                            await refrescar(detalle.telefono);
+                          }
+                        }}
+                        disabled={asignando || enviando}
+                        className="bg-[#2D4A2B] hover:bg-[#5C7A52] text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-sm transition disabled:opacity-50 flex items-center gap-1 uppercase"
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Tomar chat
+                      </button>
+                    )}
                   </div>
                 </div>
 

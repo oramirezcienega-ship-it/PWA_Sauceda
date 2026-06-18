@@ -323,11 +323,23 @@ ${listadoFormateado}
 
 Tu objetivo es analizar de forma transversal todos estos casos para encontrar patrones de falla, proponer soluciones de negocio e inyectar nuevas reglas precisas al comportamiento de Sofía para evitar que cometa los mismos errores.
 
-Debes responder EXCLUSIVAMENTE con un objeto JSON válido con la siguiente estructura (no incluyas texto antes o después del JSON, ni bloques de código markdown de tipo \`\`\`json):
-{
-  "reporteMarkdown": "### 📊 Diagnóstico de Pérdidas y Plan Comercial\\n\\nRedacta aquí un reporte completo en español con formato Markdown. Debe incluir:\\n1. **Patrones de Falla Comunes**: Explicación de los 2-3 motivos más recurrentes por los que se perdieron estos leads (ej. si la IA insistió de más, si faltó empatía, si fue muy técnica, si no detectó alguna objeción).\\n2. **Acciones de Negocio Recomendadas**: Qué deberían hacer los asesores humanos o cómo ajustar el proceso comercial para recuperar estos leads o mejorar la conversión (tiempos de respuesta, derivación manual, etc.).\\n\\nUsa listas con viñetas y formato limpio.",
-  "instruccionesSugeridas": "Reglas de refuerzo sugeridas para Sofía (máximo 15-20 líneas, en español, estructuradas en viñetas claras). Estas deben ser directivas directas y accionables que podamos copiar e inyectar en su prompt de sistema. Deben enseñarle explícitamente cómo actuar ante los patrones de quiebre analizados. Ejemplo:\\n- Si el cliente menciona que tiene adeudo pero no da el monto, pregúntale amablemente si lo conoce o si prefiere que lo busquemos con su número de Seguro Social.\\n- Evita insistir con la misma pregunta si el cliente ya mostró desinterés o evasión; en su lugar, cambia a una pregunta de ayuda."
-}`;
+Responde con el siguiente formato estructurado usando etiquetas delimitadoras (no uses JSON, escribe directamente el texto dentro de las etiquetas):
+
+[REPORTE_MARKDOWN]
+### 📊 Diagnóstico de Pérdidas y Plan Comercial
+
+#### 1. Patrones de Falla Comunes
+(Analiza aquí de forma consolidada en español con viñetas los 2-3 motivos más recurrentes por los que se perdieron estos leads)
+
+#### 2. Acciones de Negocio Recomendadas
+(Qué deberían hacer los asesores humanos o cómo ajustar el proceso comercial para recuperar estos leads o mejorar la conversión)
+[/REPORTE_MARKDOWN]
+
+[INSTRUCCIONES_SUGERIDAS]
+- Si el cliente menciona que tiene un adeudo pero no da el monto, pregúntale amablemente...
+- Evita insistir con la misma pregunta si el cliente ya mostró desinterés...
+(Añade aquí las reglas y directrices adicionales en español, estructuradas en viñetas claras, listas para copiar al prompt de Sofía. Máximo 15-20 líneas)
+[/INSTRUCCIONES_SUGERIDAS]`;
 
   console.log(`Generando plan de mejora consolidado basado en ${analisisList.length} análisis usando Claude (${model})...`);
 
@@ -362,26 +374,16 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con la siguiente estru
       .join("")
       .trim();
 
-    let cleanJson = rawText;
-    if (cleanJson.startsWith("```")) {
-      cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-    }
-    cleanJson = cleanJson.trim();
+    const reporteMatch = rawText.match(/\[REPORTE_MARKDOWN\]([\s\S]*?)\[\/REPORTE_MARKDOWN\]/);
+    const instruccionesMatch = rawText.match(/\[INSTRUCCIONES_SUGERIDAS\]([\s\S]*?)\[\/INSTRUCCIONES_SUGERIDAS\]/);
 
-    // Si no empieza con {, extraer el bloque JSON
-    if (!cleanJson.startsWith("{")) {
-      const startIdx = cleanJson.indexOf("{");
-      const endIdx = cleanJson.lastIndexOf("}");
-      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        cleanJson = cleanJson.slice(startIdx, endIdx + 1);
-      }
-    }
+    const reporteMarkdown = (reporteMatch ? reporteMatch[1] : rawText).trim();
+    const instruccionesSugeridas = (instruccionesMatch ? instruccionesMatch[1] : "").trim();
 
-    const parsed = JSON.parse(cleanJson);
     return {
       ok: true,
-      reporteMarkdown: parsed.reporteMarkdown || "Sin reporte disponible.",
-      instruccionesSugeridas: parsed.instruccionesSugeridas || "Sin instrucciones sugeridas."
+      reporteMarkdown: reporteMarkdown || "Sin reporte disponible.",
+      instruccionesSugeridas: instruccionesSugeridas || "Sin instrucciones sugeridas."
     };
   } catch (err) {
     console.error("Error al generar el plan de mejora con Claude:", err);

@@ -2,11 +2,19 @@ import { Encabezado } from "@/components/Encabezado";
 import { VistaExpedientes } from "@/components/VistaExpedientes";
 import { AccionesTablero } from "@/components/AccionesTablero";
 
+import { redirect } from "next/navigation";
+import { rolUsuarioActual } from "@/app/actions/usuarios";
+
 /**
  * Panel de operación: tablero de expedientes de traspaso INFONAVIT.
  * Es la vista principal del BPM (Incremento 1).
  */
-export default function PaginaTablero() {
+export default async function PaginaTablero() {
+  const rol = await rolUsuarioActual();
+  if (rol === "asesor") {
+    redirect("/conversaciones");
+  }
+
   return (
     <main className="min-h-screen pb-10">
       <Encabezado />

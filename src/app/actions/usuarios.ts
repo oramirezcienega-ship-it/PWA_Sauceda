@@ -33,6 +33,30 @@ export async function rolUsuarioActual(): Promise<"admin" | "asesor" | null> {
   }
 }
 
+/** Perfil completo del usuario actual (para la UI). */
+export async function obtenerUsuarioActual(): Promise<{ id: string; email: string; nombre: string; rol: "admin" | "asesor" } | null> {
+  try {
+    const u = await usuarioActual();
+    if (!u) return null;
+    const { rol } = await rolDe(u.id);
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("perfiles")
+      .select("nombre")
+      .eq("id", u.id)
+      .maybeSingle();
+    return {
+      id: u.id,
+      email: u.email || "",
+      nombre: (data as any)?.nombre || u.email || "",
+      rol
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 /** Lista los usuarios del sistema con su perfil. */
 export async function listarUsuarios(): Promise<UsuarioApp[]> {
   await requireAdministrador();

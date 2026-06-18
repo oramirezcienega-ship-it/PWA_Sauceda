@@ -305,6 +305,12 @@ export async function responderConIA(
         .eq("id", ctx.expedienteId)
         .maybeSingle();
       exp = (e as FilaExp) ?? null;
+
+      // Si el expediente ya está cerrado o perdido, la IA no debe intervenir
+      if (exp && (exp.etapa === "perdido" || exp.etapa === "cerrado")) {
+        console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el expediente está en etapa '${exp.etapa}'.`);
+        return;
+      }
     }
 
     const textoAI = await generarRespuesta(
