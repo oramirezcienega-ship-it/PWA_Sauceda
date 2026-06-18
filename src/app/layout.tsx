@@ -3,6 +3,7 @@ import {
   Outfit,
   Inter,
   JetBrains_Mono,
+  Fraunces,
 } from "next/font/google";
 import "./globals.css";
 import { ExpedientesProvider } from "@/context/expedientes-context";
@@ -24,6 +25,11 @@ const inter = Inter({
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains",
+  display: "swap",
+});
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
   display: "swap",
 });
 
@@ -53,7 +59,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${outfit.variable} ${inter.variable} ${jetbrains.variable}`}
+      className={`${outfit.variable} ${inter.variable} ${jetbrains.variable} ${fraunces.variable}`}
     >
       <body>
         {/* Provider global del estado de expedientes (en memoria). */}

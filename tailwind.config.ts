@@ -29,6 +29,7 @@ const config: Config = {
         titular: ["var(--font-outfit)", "sans-serif"], // Outfit — titulares
         cuerpo: ["var(--font-inter)", "sans-serif"], // Inter — cuerpo/UI
         mono: ["var(--font-jetbrains)", "monospace"], // JetBrains Mono — datos/precios
+        fraunces: ["var(--font-fraunces)", "serif"], // Fraunces — títulos del CRM
       },
     },
   },
