@@ -104,6 +104,16 @@ export default async function PaginaWhatsApp() {
                     {p.cuerpo}
                   </p>
                 )}
+                {p.components && p.components.length > 0 && (
+                  <div className="mt-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">
+                      Estructura de Meta (JSON):
+                    </span>
+                    <pre className="mt-1 max-h-48 overflow-y-auto overflow-x-auto rounded-md bg-carbon/5 p-2 text-[10px] font-mono text-carbon/60">
+                      {JSON.stringify(p.components, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             ))}
           </div>

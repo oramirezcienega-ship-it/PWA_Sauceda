@@ -1,6 +1,6 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { notificarAgenteEmail } from "@/lib/email";
-import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { enviarWhatsAppPlantilla, listarPlantillasAprobadas } from "@/lib/whatsapp";
 
 /**
  * Despachador central de notificaciones para eventos del sistema.
@@ -100,26 +100,97 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead";
       const plantillaIdioma = process.env.WHATSAPP_TEMPLATE_AGENTE_LANG || "es";
 
-      const promesasWa = perfiles.map(async (p) => {
-        if (p.telefono && p.telefono.trim()) {
-          // Parámetros del cuerpo de la plantilla:
-          // {{1}} = Cliente
-          // {{2}} = Origen
-          // {{3}} = Situación/Mensaje (truncado para seguridad)
-          // {{4}} = Enlace al expediente
-          const parametros = [
+      // Intentar obtener info de la plantilla en Meta para mapear parámetros correctamente
+      let bodyParamCount = 3; // Por defecto: Cliente, Origen, Detalle
+      let tieneBotonDinamico = false;
+      let urlPatternSuffix: "id" | "path" | "complete" = "path"; // Por defecto: 'expediente/id'
+
+      const rTemplates = await listarPlantillasAprobadas();
+      if (rTemplates.ok && rTemplates.plantillas) {
+        const templateInfo = rTemplates.plantillas.find(
+          (t) => t.nombre === plantillaNombre && t.idioma === plantillaIdioma
+        );
+        if (templateInfo?.components) {
+          const bodyComp = templateInfo.components.find((c: any) => c.type === "BODY");
+          if (bodyComp && bodyComp.text) {
+            const matches = bodyComp.text.match(/\{\{\d+\}\}/g);
+            bodyParamCount = matches ? new Set(matches).size : 0;
+          }
+
+          const buttonComp = templateInfo.components.find((c: any) => c.type === "BUTTONS");
+          if (buttonComp && buttonComp.buttons) {
+            const urlBtn = buttonComp.buttons.find(
+              (b: any) => b.type === "URL" && b.url && b.url.includes("{{1}}")
+            );
+            if (urlBtn) {
+              tieneBotonDinamico = true;
+              const urlPattern = urlBtn.url;
+              if (urlPattern.endsWith("/expediente/{{1}}")) {
+                urlPatternSuffix = "id";
+              } else if (urlPattern.endsWith("/{{1}}")) {
+                urlPatternSuffix = "path";
+              } else {
+                urlPatternSuffix = "complete";
+              }
+            }
+          }
+        }
+      }
+
+      // Preparar los parámetros correspondientes
+      let parametrosCuerpo: string[] = [];
+      let urlBotonParam: string | undefined = undefined;
+
+      if (tieneBotonDinamico) {
+        // Mapear cuerpo
+        if (bodyParamCount >= 1) parametrosCuerpo.push(cliente);
+        if (bodyParamCount >= 2) parametrosCuerpo.push(origen);
+        if (bodyParamCount >= 3) parametrosCuerpo.push(situacion.slice(0, 100));
+        if (bodyParamCount >= 4) parametrosCuerpo.push(`${CRM_URL}/expediente/${d.id}`);
+        while (parametrosCuerpo.length < bodyParamCount) {
+          parametrosCuerpo.push("");
+        }
+
+        // Mapear botón dinámico
+        if (urlPatternSuffix === "id") {
+          urlBotonParam = d.id;
+        } else if (urlPatternSuffix === "path") {
+          urlBotonParam = `expediente/${d.id}`;
+        } else {
+          urlBotonParam = `${CRM_URL}/expediente/${d.id}`;
+        }
+      } else {
+        // Mapeo plano heredado / fallback
+        if (bodyParamCount >= 4) {
+          parametrosCuerpo = [
             cliente,
             origen,
             situacion.slice(0, 100),
             `${CRM_URL}/expediente/${d.id}`,
           ];
+        } else {
+          parametrosCuerpo = [
+            cliente,
+            origen,
+            situacion.slice(0, 100),
+          ];
+        }
+      }
 
-          await enviarWhatsAppPlantilla(
+      const promesasWa = perfiles.map(async (p) => {
+        if (p.telefono && p.telefono.trim()) {
+          const resWa = await enviarWhatsAppPlantilla(
             p.telefono,
             plantillaNombre,
             plantillaIdioma,
-            parametros
+            parametrosCuerpo,
+            urlBotonParam
           );
+          if (!resWa.ok) {
+            console.error(`Error de WhatsApp para ${p.nombre} (${p.telefono}):`, resWa.error);
+          } else {
+            console.log(`Notificación de WhatsApp enviada exitosamente a ${p.nombre} (${p.telefono})`);
+          }
         }
       });
 

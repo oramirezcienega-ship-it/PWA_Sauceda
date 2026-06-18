@@ -39,7 +39,12 @@ export async function enviarWhatsAppTexto(
         error: "WhatsApp no está configurado (faltan credenciales).",
       };
     }
-    if (!to) return { ok: false, error: "Teléfono inválido." };
+    if (!to || to.length < 10) {
+      return {
+        ok: false,
+        error: `Teléfono inválido o demasiado corto (${to || "vacío"}). Debe tener al menos 10 dígitos.`,
+      };
+    }
 
     const res = await fetch(
       `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
@@ -107,7 +112,12 @@ export async function enviarWhatsAppPlantilla(
         error: "WhatsApp no está configurado (faltan credenciales).",
       };
     }
-    if (!to) return { ok: false, error: "Teléfono inválido." };
+    if (!to || to.length < 10) {
+      return {
+        ok: false,
+        error: `Teléfono inválido o demasiado corto (${to || "vacío"}). Debe tener al menos 10 dígitos.`,
+      };
+    }
     if (!plantilla) return { ok: false, error: "Falta el nombre de la plantilla." };
 
     const components: Record<string, unknown>[] = [];
@@ -179,6 +189,8 @@ export interface PlantillaWhatsApp {
   cuerpo: string;
   /** Cantidad de parámetros {{n}} distintos en el cuerpo. */
   parametros: number;
+  /** Estructura completa de componentes devueltos por Meta (BODY, BUTTONS, etc.) */
+  components?: any[];
 }
 
 interface FilaPlantillaMeta {
@@ -246,6 +258,7 @@ export async function listarPlantillasAprobadas(): Promise<{
         categoria: t.category,
         cuerpo,
         parametros: matches ? new Set(matches).size : 0,
+        components: t.components,
       };
     });
     return { ok: true, plantillas };
