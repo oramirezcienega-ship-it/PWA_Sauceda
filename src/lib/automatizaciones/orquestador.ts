@@ -150,11 +150,12 @@ export async function orquestador(): Promise<{
               break;
 
             case "messenger":
-              if (!enrollment.phone || !enrollment.phone.startsWith("messenger:")) {
+              const canal = enrollment.canal_id || enrollment.phone || "";
+              if (!canal || !canal.startsWith("messenger:")) {
                 errorDetalle = "No es un lead de Messenger.";
                 exito = false;
               } else {
-                const psid = enrollment.phone.replace("messenger:", "");
+                const psid = canal.replace("messenger:", "");
                 contenidoEnviado = mensajeFormateado;
                 const msgRes = await enviarMessengerTexto(psid, mensajeFormateado);
                 exito = msgRes.ok;

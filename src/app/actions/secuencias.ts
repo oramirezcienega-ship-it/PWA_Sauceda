@@ -229,6 +229,25 @@ export async function enrolarLead(datos: {
     throw new Error("El lead ya está enrolado activamente en esta secuencia.");
   }
 
+  // Obtener canal_id del prospecto o expediente si existe
+  let canalId = "";
+  if (datos.expedienteId) {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("canal_id")
+      .eq("id", datos.expedienteId)
+      .maybeSingle();
+    if (exp?.canal_id) canalId = exp.canal_id;
+  }
+  if (!canalId && datos.prospectoId) {
+    const { data: pr } = await sb
+      .from("prospectos")
+      .select("canal_id")
+      .eq("id", datos.prospectoId)
+      .maybeSingle();
+    if (pr?.canal_id) canalId = pr.canal_id;
+  }
+
   const { data, error } = await sb
     .from("sequence_enrollments")
     .insert({
@@ -238,6 +257,7 @@ export async function enrolarLead(datos: {
       email: datos.email || null,
       prospecto_id: datos.prospectoId || null,
       expediente_id: datos.expedienteId || null,
+      canal_id: canalId || "",
       status: "activo",
       step_actual: 1,
       enrolled_at: new Date().toISOString(),

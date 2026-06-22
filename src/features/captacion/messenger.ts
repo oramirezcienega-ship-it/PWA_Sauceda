@@ -31,14 +31,15 @@ export interface MensajeMessenger {
 async function obtenerOCrearProspectoSocial(
   sb: ReturnType<typeof supabaseServidor>,
   lead: MensajeMessenger,
-  telefonoKey: string,
+  canalIdKey: string,
   origen: "facebook" | "instagram",
   canalLabel: string,
 ): Promise<string> {
+  // Buscar coincidencia en canal_id o en telefono (retrocompatibilidad)
   const { data: existentes } = await sb
     .from("prospectos")
-    .select("id, campaign_name, adset_name, ad_name")
-    .eq("telefono", telefonoKey)
+    .select("id, campaign_name, adset_name, ad_name, telefono, canal_id")
+    .or(`canal_id.eq.${canalIdKey},telefono.eq.${canalIdKey}`)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
@@ -47,6 +48,11 @@ async function obtenerOCrearProspectoSocial(
     if (lead.campaign_name && lead.campaign_name !== pr.campaign_name) updateAttrs.campaign_name = lead.campaign_name;
     if (lead.adset_name && lead.adset_name !== pr.adset_name) updateAttrs.adset_name = lead.adset_name;
     if (lead.ad_name && lead.ad_name !== pr.ad_name) updateAttrs.ad_name = lead.ad_name;
+
+    // Asegurar que canal_id esté poblado para registros antiguos
+    if (!pr.canal_id) {
+      updateAttrs.canal_id = canalIdKey;
+    }
 
     if (Object.keys(updateAttrs).length > 0) {
       await sb.from("prospectos").update(updateAttrs).eq("id", pr.id);
@@ -58,7 +64,8 @@ async function obtenerOCrearProspectoSocial(
   await sb.from("prospectos").insert({
     id,
     nombre: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
-    telefono: telefonoKey,
+    telefono: "", // Queda vacío al inicio para recibir el teléfono real
+    canal_id: canalIdKey,
     origen,
     campaign_name: lead.campaign_name || "",
     adset_name: lead.adset_name || "",
@@ -79,20 +86,20 @@ async function registrarLeadSocial(
   canalLabel: string,
 ): Promise<void> {
   const sb = supabaseServidor();
-  const telefonoKey = `${canal}:${lead.senderId}`;
+  const canalIdKey = `${canal}:${lead.senderId}`;
 
   // Buscar o crear el prospecto
-  const prospectoId = await obtenerOCrearProspectoSocial(sb, lead, telefonoKey, origen, canalLabel);
+  const prospectoId = await obtenerOCrearProspectoSocial(sb, lead, canalIdKey, origen, canalLabel);
 
-  // Buscar si ya existe un expediente asociado
+  // Buscar si ya existe un expediente asociado por canal_id o por telefono (retrocompatibilidad)
   const { data: existentes } = await sb
     .from("expedientes")
-    .select("id, notas, campaign_name, adset_name, ad_name")
-    .eq("telefono", telefonoKey)
+    .select("id, notas, campaign_name, adset_name, ad_name, telefono, canal_id")
+    .or(`canal_id.eq.${canalIdKey},telefono.eq.${canalIdKey}`)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string };
+    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; canal_id?: string; telefono?: string };
     const nota = `${exp.notas ?? ""}\n[${canalLabel} ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
@@ -102,13 +109,18 @@ async function registrarLeadSocial(
     if (lead.adset_name && lead.adset_name !== exp.adset_name) updateData.adset_name = lead.adset_name;
     if (lead.ad_name && lead.ad_name !== exp.ad_name) updateData.ad_name = lead.ad_name;
 
+    // Asegurar que canal_id esté poblado
+    if (!exp.canal_id) {
+      updateData.canal_id = canalIdKey;
+    }
+
     await sb
       .from("expedientes")
       .update(updateData)
       .eq("id", exp.id);
 
     const nuevo = await guardarMensajeEntrante(sb, {
-      telefono: telefonoKey,
+      telefono: canalIdKey,
       texto: lead.mensaje ?? "",
       expedienteId: exp.id,
       prospectoId,
@@ -116,7 +128,7 @@ async function registrarLeadSocial(
     });
 
     if (nuevo) {
-      await responderConIA(sb, { telefono: telefonoKey, expedienteId: exp.id });
+      await responderConIA(sb, { telefono: canalIdKey, expedienteId: exp.id });
     }
     return;
   }
@@ -131,7 +143,8 @@ async function registrarLeadSocial(
     situacion: lead.mensaje
       ? `Primer mensaje por ${canalLabel}: ${lead.mensaje}`.slice(0, 300)
       : `Contacto entrante por ${canalLabel}.`,
-    telefono: telefonoKey,
+    telefono: "", // Queda vacío al inicio para recibir el teléfono real
+    canal_id: canalIdKey,
     valor_estimado: 0,
     saldo_deuda: 0,
     notas: `Lead entrante automáticamente por ${canalLabel}.`,
@@ -143,7 +156,7 @@ async function registrarLeadSocial(
   });
 
   const nuevoMensaje = await guardarMensajeEntrante(sb, {
-    telefono: telefonoKey,
+    telefono: canalIdKey,
     texto: lead.mensaje ?? "",
     expedienteId: id,
     prospectoId,
@@ -160,7 +173,7 @@ async function registrarLeadSocial(
   void notificarNuevoLead(id);
 
   if (iaOn && nuevoMensaje) {
-    await responderConIA(sb, { telefono: telefonoKey, expedienteId: id });
+    await responderConIA(sb, { telefono: canalIdKey, expedienteId: id });
   }
 }
 

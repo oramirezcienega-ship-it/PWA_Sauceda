@@ -45,6 +45,7 @@ export interface FilaExpediente {
   direccion_propiedad?: string | null;
   link_google_maps?: string | null;
   necesidad?: string | null;
+  canal_id?: string | null;
   /** Origen del prospecto enlazado (cuando se pide vía join). */
   prospectos?: { origen: OrigenAdquisicion } | null;
 }
@@ -79,6 +80,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     direccionPropiedad: fila.direccion_propiedad ?? "",
     linkGoogleMaps: fila.link_google_maps ?? "",
     necesidad: fila.necesidad ?? "",
+    canalId: fila.canal_id ?? "",
   };
 }
 
@@ -103,6 +105,7 @@ export function aFila(datos: DatosExpediente) {
     direccion_propiedad: datos.direccionPropiedad ?? null,
     link_google_maps: datos.linkGoogleMaps ?? null,
     necesidad: datos.necesidad ?? null,
+    canal_id: datos.canalId ?? null,
   };
 }
 
@@ -126,6 +129,7 @@ export interface FilaProspecto {
   adset_name: string;
   campaign_name: string;
   notas: string;
+  canal_id?: string | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -150,6 +154,7 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     adsetName: fila.adset_name ?? "",
     campaignName: fila.campaign_name ?? "",
     notas: fila.notas,
+    canalId: fila.canal_id ?? "",
   };
 }
 
@@ -169,5 +174,6 @@ export function aFilaProspecto(datos: DatosProspecto) {
     adset_name: datos.adsetName,
     campaign_name: datos.campaignName,
     notas: datos.notas,
+    canal_id: datos.canalId ?? null,
   };
 }

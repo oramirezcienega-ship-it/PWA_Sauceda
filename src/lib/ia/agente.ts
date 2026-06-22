@@ -96,6 +96,9 @@ interface FilaExp {
   necesidad?: string | null;
   valor_estimado?: number | null;
   saldo_deuda?: number | null;
+  telefono?: string | null;
+  canal_id?: string | null;
+  prospecto_id?: string | null;
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
@@ -139,6 +142,9 @@ Si la información ya está presente en los "Datos del cliente" abajo (como la u
 REGLA DE CRÉDITOS NO ADMITIDOS (AGIOTISTAS / PRESTAMISTAS PARTICULARES):
 Si el cliente menciona que su propiedad tiene una hipoteca, adeudo o embargo con un AGIOTISTA, PRESTAMISTA INFORMAL o persona física particular (en lugar de instituciones oficiales como INFONAVIT, FOVISSSTE o bancos), debes informarle de inmediato y con amabilidad que por políticas de la empresa SAUCEDA Bienes Raíces únicamente compra o traspasa propiedades con deudas de instituciones formales y que NO podemos atender deudas con prestamistas particulares. Despídete amablemente de ellos sin solicitar más datos.
 
+REGLA DE TELÉFONO DE CONTACTO (CRÍTICA):
+Si notas en los "Datos del cliente" abajo que el teléfono de contacto figura como "No registrado" (es decir, el prospecto viene de redes sociales y aún no nos proporciona su número móvil real), es tu prioridad absoluta solicitarle amablemente su número de teléfono o WhatsApp durante la charla de forma fluida y natural, explicándole que es para que un asesor pueda continuar el contacto.
+
 Una vez que tengas los datos mínimos recopilados para el flujo correspondiente:
 - Comunícales con amabilidad que con esta información nuestro equipo preparará la propuesta o se pondrá en contacto para los siguientes pasos.
 - Infórmales que les daremos respuesta directamente por este chat de WhatsApp.
@@ -165,7 +171,8 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "fraccionamiento": "Nombre del fraccionamiento/zona si el cliente lo mencionó claramente en la conversación, de lo contrario null",
     "valor_estimado": "Valor aproximado de la propiedad como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
     "saldo_deuda": "Monto adeudado como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
-    "situacion_fisica": "El estado físico de la casa. Solo puede ser 'vandalizada', 'deshabitada' o 'bueno' si el cliente lo mencionó claramente, de lo contrario null"
+    "situacion_fisica": "El estado físico de la casa. Solo puede ser 'vandalizada', 'deshabitada' o 'bueno' si el cliente lo mencionó claramente, de lo contrario null",
+    "telefono_real": "Número de teléfono celular de 10 dígitos (ej. 4771234567) si el cliente lo proporcionó en este mensaje o a lo largo del chat, de lo contrario null"
   }
 }
 
@@ -187,8 +194,14 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
   let contexto = "";
   if (exp) {
     const nombre = [exp.cliente, exp.primer_apellido].filter(Boolean).join(" ");
+    const telReal = (exp.telefono && !exp.telefono.startsWith("messenger:") && !exp.telefono.startsWith("instagram:"))
+      ? exp.telefono
+      : "No registrado";
+
     const partes = [
       nombre && `Nombre del cliente: ${nombre}`,
+      `Teléfono de contacto: ${telReal}`,
+      exp.canal_id && `Canal vinculado: ${exp.canal_id}`,
       exp.fraccionamiento &&
         exp.fraccionamiento !== "Por definir" &&
         `Fraccionamiento/zona: ${exp.fraccionamiento}`,
@@ -322,7 +335,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
@@ -385,17 +398,21 @@ export async function responderConIA(
     if (!textoRespuesta) return;
 
     let r: { ok: boolean; error?: string };
-    const esMessenger = ctx.telefono.startsWith("messenger:");
-    const esInstagram = ctx.telefono.startsWith("instagram:");
+    const canal = (ctx.telefono.startsWith("messenger:") || ctx.telefono.startsWith("instagram:"))
+      ? ctx.telefono
+      : (exp?.canal_id || ctx.telefono);
+
+    const esMessenger = canal.startsWith("messenger:");
+    const esInstagram = canal.startsWith("instagram:");
 
     if (esMessenger) {
-      const psid = ctx.telefono.slice(10);
+      const psid = canal.slice(10);
       r = await enviarMessengerTexto(psid, textoRespuesta);
     } else if (esInstagram) {
-      const igsid = ctx.telefono.slice(10);
+      const igsid = canal.slice(10);
       r = await enviarInstagramTexto(igsid, textoRespuesta);
     } else {
-      r = await enviarWhatsAppTexto(ctx.telefono, textoRespuesta);
+      r = await enviarWhatsAppTexto(canal, textoRespuesta);
     }
 
     await sb.from("mensajes_whatsapp").insert({
@@ -430,6 +447,12 @@ export async function responderConIA(
       if (datosExtraidos.saldo_deuda) {
         updates.saldo_deuda = Number(datosExtraidos.saldo_deuda);
       }
+      if ((datosExtraidos as any).telefono_real) {
+        const telLimpio = String((datosExtraidos as any).telefono_real).replace(/\D/g, "");
+        if (telLimpio.length >= 10) {
+          updates.telefono = telLimpio.slice(-10);
+        }
+      }
       if (datosExtraidos.situacion_fisica) {
         let desc = "";
         if (datosExtraidos.situacion_fisica === "vandalizada") {
@@ -453,6 +476,17 @@ export async function responderConIA(
         if (errUpdate) {
           console.error("IA: Error al actualizar expediente con datos:", errUpdate);
         } else {
+          // Si actualizamos el teléfono, también lo actualizamos en el prospecto enlazado
+          if (updates.telefono && exp?.prospecto_id) {
+            const { error: errUpdatePr } = await sb
+              .from("prospectos")
+              .update({ telefono: updates.telefono })
+              .eq("id", exp.prospecto_id);
+            if (errUpdatePr) {
+              console.error("IA: Error al actualizar prospecto con teléfono real:", errUpdatePr);
+            }
+          }
+
           const detalleActividad = Object.entries(updates)
             .map(([col, val]) => `${col}: ${val}`)
             .join(", ");

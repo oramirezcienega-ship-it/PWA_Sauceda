@@ -19,6 +19,7 @@ const VACIO: DatosProspecto = {
   adsetName: "",
   campaignName: "",
   notas: "",
+  canalId: "",
 };
 
 /**
@@ -110,13 +111,27 @@ export function FormularioProspecto({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo etiqueta="Teléfono">
-          <input
-            type="tel"
-            value={datos.telefono}
-            onChange={(e) => actualizar("telefono", e.target.value)}
-            placeholder="477 123 4567"
-            className={`${INPUT} font-mono`}
-          />
+          <div className="flex flex-col gap-1.5">
+            <input
+              type="tel"
+              value={datos.telefono.startsWith("messenger:") || datos.telefono.startsWith("instagram:") ? "" : datos.telefono}
+              onChange={(e) => actualizar("telefono", e.target.value)}
+              placeholder="477 123 4567"
+              className={`${INPUT} font-mono`}
+            />
+            {(datos.canalId?.startsWith("messenger:") || datos.telefono.startsWith("messenger:")) && (
+              <span className="self-start inline-flex items-center gap-1.5 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                Canal Conectado: Facebook Messenger
+              </span>
+            )}
+            {(datos.canalId?.startsWith("instagram:") || datos.telefono.startsWith("instagram:")) && (
+              <span className="self-start inline-flex items-center gap-1.5 rounded bg-pink-50 px-2 py-1 text-xs font-semibold text-pink-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-pink-500 animate-pulse"></span>
+                Canal Conectado: Instagram DM
+              </span>
+            )}
+          </div>
         </Campo>
 
         <Campo etiqueta="Correo">

@@ -76,6 +76,8 @@ export interface Expediente {
   prospectoId: string | null;
   /** Origen de adquisición del prospecto enlazado (solo lectura, vía join). */
   origenProspecto: OrigenAdquisicion | null;
+  /** Identificador técnico del canal de redes sociales (ej. messenger:PSID) */
+  canalId?: string | null;
 }
 
 /**
@@ -126,6 +128,8 @@ export interface Prospecto {
   adsetName: string;
   campaignName: string;
   notas: string;
+  /** Identificador técnico del canal de redes sociales (ej. messenger:PSID) */
+  canalId?: string | null;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
