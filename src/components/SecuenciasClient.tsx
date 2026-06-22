@@ -350,11 +350,57 @@ export function SecuenciasClient() {
             onClick={() => {
               setConstructorId(null);
               setConstructorData({
-                nombre: "",
-                descripcion: "",
+                nombre: "Secuencia de Captación y Reactivación",
+                descripcion: "Secuencia omnicanal inicial con Sofía y asignación de llamadas para calificar el interés.",
                 status: "activa",
                 segmento: "todos",
-                steps: [],
+                steps: [
+                  {
+                    orden: 1,
+                    canal: "whatsapp",
+                    delay_horas: 0,
+                    mensaje: "Hola {nombre}, gusto en saludarte. Soy Sofía, el asistente virtual de SAUCEDA Bienes Raíces en León, Gto. 🏠 ¿Te interesa vender tu casa directamente (incluso si tienes adeudo), que la promovamos a un tercero, o necesitas ayuda con el armado de expediente y trámites de INFONAVIT?",
+                    asunto_email: "",
+                    asignar_a: "",
+                    condicion_salida: "respondio"
+                  },
+                  {
+                    orden: 2,
+                    canal: "email",
+                    delay_horas: 24,
+                    mensaje: "Hola {nombre},\n\nTe escribí ayer por WhatsApp sobre tu interés en nuestros servicios de bienes raíces en León (compra directa de casas con adeudo, promoción de venta o armado de expediente INFONAVIT).\n\nSi sigues interesado, por favor respóndeme este correo o envíame un WhatsApp para asesorarte.\n\nSaludos,\nSofía - SAUCEDA",
+                    asunto_email: "¿Sigues interesado en vender o tramitar tu casa?",
+                    asignar_a: "",
+                    condicion_salida: "respondio"
+                  },
+                  {
+                    orden: 3,
+                    canal: "llamada",
+                    delay_horas: 48,
+                    mensaje: "Llamada de seguimiento por asesor. Lead sin respuesta a contacto automático de Sofía sobre compra directa / promoción / trámites.",
+                    asunto_email: "",
+                    asignar_a: asesores[0]?.id || "",
+                    condicion_salida: "respondio"
+                  },
+                  {
+                    orden: 4,
+                    canal: "whatsapp",
+                    delay_horas: 96,
+                    mensaje: "Hola {nombre}, soy Oscar de SAUCEDA Bienes Raíces. Te busqué hace unos días por llamada pero no coincidimos. ¿Sigues interesado en vender o tramitar tu casa en {fraccionamiento}?",
+                    asunto_email: "",
+                    asignar_a: "",
+                    condicion_salida: "respondio"
+                  },
+                  {
+                    orden: 5,
+                    canal: "email",
+                    delay_horas: 192,
+                    mensaje: "Hola {nombre},\n\nHemos intentado contactarte por WhatsApp y llamada para apoyarte con tu casa en {fraccionamiento}. Si aún te interesa vender o realizar trámites, puedes responder a este correo o escribirnos por WhatsApp.\n\nDe lo contrario, daremos de baja tu solicitud en nuestro sistema.\n\nAtentamente,\nSAUCEDA Bienes Raíces",
+                    asunto_email: "Último contacto - SAUCEDA Bienes Raíces",
+                    asignar_a: "",
+                    condicion_salida: "respondio"
+                  }
+                ],
               });
               setVistaActiva("constructor");
             }}
