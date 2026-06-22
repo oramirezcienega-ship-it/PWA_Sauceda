@@ -20,6 +20,9 @@ jobs:
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
+          # Activar pipefail para que el comando falle si docker run/pg_dump falla
+          set -o pipefail
+          
           if [ -z "$SUPABASE_DB_URL" ]; then
             echo "::error::La variable secreta SUPABASE_DB_URL no está configurada."
             exit 1
@@ -35,9 +38,10 @@ jobs:
           # Esto asegura compatibilidad y evita tener que instalar dependencias en el runner
           docker run --rm postgres:16-alpine pg_dump "$SUPABASE_DB_URL" | gzip > "$FILENAME"
           
-          # Validar que el archivo se haya generado correctamente y no esté vacío
-          if [ ! -s "$FILENAME" ]; then
-            echo "::error::El archivo de respaldo está vacío o no se pudo generar."
+          # Validar que el archivo se haya generado correctamente y no sea un dump vacío (un archivo gzip vacío pesa 20 bytes)
+          FILESIZE=$(stat -c%s "$FILENAME")
+          if [ "$FILESIZE" -le 30 ]; then
+            echo "::error::El archivo de respaldo está vacío o corrupto (tamaño $FILESIZE bytes). Probablemente falló la conexión a la base de datos."
             exit 1
           fi
           
