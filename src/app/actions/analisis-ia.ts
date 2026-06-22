@@ -315,13 +315,18 @@ export async function generarPlanMejoraConsolidado(): Promise<{
 
   const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
 
-  const prompt = `Eres un consultor experto en optimización de agentes conversacionales y prompts de sistema de IA para ventas en SAUCEDA Bienes Raíces (especialistas en traspasos de propiedades INFONAVIT en León, Guanajuato).
+  const prompt = `Eres un consultor experto en optimización de agentes conversacionales y prompts de sistema de IA para ventas en SAUCEDA Bienes Raíces.
+
+SAUCEDA Bienes Raíces opera en León, Guanajuato, México, ofreciendo tres modelos de servicio:
+1. Compra Directa de Casas con Adeudo o Descuido (liquidando adeudos de INFONAVIT, ISSSTE o bancos).
+2. Promoción de Viviendas (venta a cambio de una comisión/fee).
+3. Armado de Expediente / Trámite ante INFONAVIT.
 
 A continuación tienes un listado de análisis de leads cuyas conversaciones se perdieron o no se calificaron adecuadamente por nuestra agente "Sofía":
 
 ${listadoFormateado}
 
-Tu objetivo es analizar de forma transversal todos estos casos para encontrar patrones de falla, proponer soluciones de negocio e inyectar nuevas reglas precisas al comportamiento de Sofía para evitar que cometa los mismos errores.
+Tu objetivo es analizar de forma transversal todos estos casos para encontrar patrones de falla, proponer soluciones de negocio e inyectar nuevas reglas precisas al comportamiento de Sofía para evitar que cometa los mismos errores y califique adecuadamente a los clientes según el servicio de su interés.
 
 Responde con el siguiente formato estructurado usando etiquetas delimitadoras (no uses JSON, escribe directamente el texto dentro de las etiquetas):
 
