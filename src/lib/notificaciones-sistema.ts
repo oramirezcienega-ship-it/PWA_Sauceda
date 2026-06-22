@@ -104,33 +104,44 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       let bodyParamCount = 3; // Por defecto: Cliente, Origen, Detalle
       let tieneBotonDinamico = false;
       let urlPatternSuffix: "id" | "path" | "complete" = "path"; // Por defecto: 'expediente/id'
+      let plantillaIdiomaReal = plantillaIdioma;
 
       const rTemplates = await listarPlantillasAprobadas();
       if (rTemplates.ok && rTemplates.plantillas) {
-        const templateInfo = rTemplates.plantillas.find(
+        let templateInfo = rTemplates.plantillas.find(
           (t) => t.nombre === plantillaNombre && t.idioma === plantillaIdioma
         );
-        if (templateInfo?.components) {
-          const bodyComp = templateInfo.components.find((c: any) => c.type === "BODY");
-          if (bodyComp && bodyComp.text) {
-            const matches = bodyComp.text.match(/\{\{\d+\}\}/g);
-            bodyParamCount = matches ? new Set(matches).size : 0;
-          }
 
-          const buttonComp = templateInfo.components.find((c: any) => c.type === "BUTTONS");
-          if (buttonComp && buttonComp.buttons) {
-            const urlBtn = buttonComp.buttons.find(
-              (b: any) => b.type === "URL" && b.url && b.url.includes("{{1}}")
-            );
-            if (urlBtn) {
-              tieneBotonDinamico = true;
-              const urlPattern = urlBtn.url;
-              if (urlPattern.endsWith("/expediente/{{1}}")) {
-                urlPatternSuffix = "id";
-              } else if (urlPattern.endsWith("/{{1}}")) {
-                urlPatternSuffix = "path";
-              } else {
-                urlPatternSuffix = "complete";
+        // Fallback: si no coincide con idioma exacto (ej. "es" vs "es_MX"), buscar cualquiera por nombre
+        if (!templateInfo) {
+          templateInfo = rTemplates.plantillas.find((t) => t.nombre === plantillaNombre);
+        }
+
+        if (templateInfo) {
+          plantillaIdiomaReal = templateInfo.idioma; // Usar el idioma real de la plantilla en Meta (ej: es_MX)
+          
+          if (templateInfo.components) {
+            const bodyComp = templateInfo.components.find((c: any) => c.type === "BODY");
+            if (bodyComp && bodyComp.text) {
+              const matches = bodyComp.text.match(/\{\{\d+\}\}/g);
+              bodyParamCount = matches ? new Set(matches).size : 0;
+            }
+
+            const buttonComp = templateInfo.components.find((c: any) => c.type === "BUTTONS");
+            if (buttonComp && buttonComp.buttons) {
+              const urlBtn = buttonComp.buttons.find(
+                (b: any) => b.type === "URL" && b.url && b.url.includes("{{1}}")
+              );
+              if (urlBtn) {
+                tieneBotonDinamico = true;
+                const urlPattern = urlBtn.url;
+                if (urlPattern.endsWith("/expediente/{{1}}")) {
+                  urlPatternSuffix = "id";
+                } else if (urlPattern.endsWith("/{{1}}")) {
+                  urlPatternSuffix = "path";
+                } else {
+                  urlPatternSuffix = "complete";
+                }
               }
             }
           }
@@ -178,19 +189,22 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       }
 
       const promesasWa = perfiles.map(async (p) => {
-        if (p.telefono && p.telefono.trim()) {
-          const resWa = await enviarWhatsAppPlantilla(
-            p.telefono,
-            plantillaNombre,
-            plantillaIdioma,
-            parametrosCuerpo,
-            urlBotonParam
-          );
-          if (!resWa.ok) {
-            console.error(`Error de WhatsApp para ${p.nombre} (${p.telefono}):`, resWa.error);
-          } else {
-            console.log(`Notificación de WhatsApp enviada exitosamente a ${p.nombre} (${p.telefono})`);
-          }
+        if (!p.telefono || !p.telefono.trim()) {
+          console.warn(`El asesor/admin ${p.nombre} no tiene teléfono configurado para notificaciones de WhatsApp.`);
+          return;
+        }
+
+        const resWa = await enviarWhatsAppPlantilla(
+          p.telefono,
+          plantillaNombre,
+          plantillaIdiomaReal,
+          parametrosCuerpo,
+          urlBotonParam
+        );
+        if (!resWa.ok) {
+          console.error(`Error de WhatsApp para ${p.nombre} (${p.telefono}):`, resWa.error);
+        } else {
+          console.log(`Notificación de WhatsApp enviada exitosamente a ${p.nombre} (${p.telefono})`);
         }
       });
 
