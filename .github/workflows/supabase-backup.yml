@@ -1,0 +1,72 @@
+name: Supabase Database Backup
+
+on:
+  schedule:
+    # Corre todos los días a las 05:00 UTC (11:00 PM hora CDMX / 10:00 PM hora Sonora del día anterior)
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    # Permite ejecutar el respaldo manualmente desde la pestaña "Actions" en GitHub
+
+jobs:
+  backup:
+    name: Backup Supabase Database
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Create Database Dump
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::La variable secreta SUPABASE_DB_URL no está configurada."
+            exit 1
+          fi
+          
+          # Generar el nombre de archivo con fecha y hora actual (CDMX/Sonora)
+          # Ajustamos la zona horaria para que el nombre del archivo refleje el huso horario local (America/Hermosillo)
+          TIMESTAMP=$(TZ="America/Hermosillo" date +'%Y-%m-%d_%H-%M-%S')
+          FILENAME="supabase_backup_${TIMESTAMP}.sql.gz"
+          echo "Generando respaldo: $FILENAME..."
+          
+          # Ejecutar pg_dump dentro de un contenedor Docker postgres:16-alpine
+          # Esto asegura compatibilidad y evita tener que instalar dependencias en el runner
+          docker run --rm postgres:16-alpine pg_dump "$SUPABASE_DB_URL" | gzip > "$FILENAME"
+          
+          # Validar que el archivo se haya generado correctamente y no esté vacío
+          if [ ! -s "$FILENAME" ]; then
+            echo "::error::El archivo de respaldo está vacío o no se pudo generar."
+            exit 1
+          fi
+          
+          echo "Respaldo generado con éxito ($(du -sh $FILENAME | cut -f1))."
+          echo "BACKUP_FILENAME=$FILENAME" >> $GITHUB_ENV
+
+      - name: Configure AWS CLI for S3/R2/B2
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-east-1
+
+      - name: Upload Backup to S3-compatible Storage
+        env:
+          BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+        run: |
+          if [ -z "$BUCKET" ]; then
+            echo "::error::La variable BACKUP_S3_BUCKET no está configurada."
+            exit 1
+          fi
+          
+          # Si se configuró un Endpoint personalizado (como en Cloudflare R2 o Backblaze B2)
+          if [ -n "$ENDPOINT" ]; then
+            echo "Subiendo $BACKUP_FILENAME a bucket '$BUCKET' usando endpoint personalizado..."
+            aws s3 cp "$BACKUP_FILENAME" "s3://$BUCKET/backups/$BACKUP_FILENAME" --endpoint-url "$ENDPOINT"
+          else
+            echo "Subiendo $BACKUP_FILENAME a AWS S3..."
+            aws s3 cp "$BACKUP_FILENAME" "s3://$BUCKET/backups/$BACKUP_FILENAME"
+          fi
+          
+          echo "¡Carga completada con éxito!"
