@@ -34,9 +34,9 @@ jobs:
           FILENAME="supabase_backup_${TIMESTAMP}.sql.gz"
           echo "Generando respaldo: $FILENAME..."
           
-          # Ejecutar pg_dump dentro de un contenedor Docker postgres:16-alpine
+          # Ejecutar pg_dump dentro de un contenedor Docker postgres:17-alpine
           # Esto asegura compatibilidad y evita tener que instalar dependencias en el runner
-          docker run --rm postgres:16-alpine pg_dump "$SUPABASE_DB_URL" | gzip > "$FILENAME"
+          docker run --rm postgres:17-alpine pg_dump "$SUPABASE_DB_URL" | gzip > "$FILENAME"
           
           # Validar que el archivo se haya generado correctamente y no sea un dump vacío (un archivo gzip vacío pesa 20 bytes)
           FILESIZE=$(stat -c%s "$FILENAME")
