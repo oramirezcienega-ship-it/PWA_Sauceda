@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
     // 2. Traer plantillas aprobadas de Meta
     log.push({ msg: "Consultando plantillas aprobadas desde Meta..." });
     const rTemplates = await listarPlantillasAprobadas();
-    log.push({ templates_ok: rTemplates.ok, templates_count: rTemplates.plantillas?.length || 0, templates_error: rTemplates.error || null });
+    log.push({ 
+      templates_ok: rTemplates.ok, 
+      templates_count: rTemplates.plantillas?.length || 0, 
+      templates_error: rTemplates.error || null,
+      disponibles: rTemplates.plantillas?.map(t => ({ nombre: t.nombre, idioma: t.idioma, estado: t.estado })) || []
+    });
 
     let templateInfo = null;
     let plantillaIdiomaReal = plantillaIdioma;
