@@ -34,6 +34,7 @@ const ENLACES = [
   { href: "/mensajes", label: "Mensajes" },
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/automatizaciones", label: "Automatizaciones" },
+  { href: "/secuencias", label: "Secuencias" },
   { href: "/whatsapp", label: "WhatsApp" },
 ];
 

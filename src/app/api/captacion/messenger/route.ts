@@ -63,14 +63,15 @@ export async function POST(request: NextRequest) {
       for (const entry of payload.entry ?? []) {
         const messagingEvents = entry.messaging ?? [];
         for (const event of messagingEvents) {
-          // Procesar solo eventos de mensaje con texto
-          if (event.message && event.message.text) {
+          // Procesar mensajes, postbacks o referral directo
+          if (event.message || event.postback || event.referral) {
             const senderId = event.sender?.id;
             const recipientId = event.recipient?.id;
-            const text = event.message.text;
-            const messageId = event.message.mid;
             
             if (senderId && recipientId) {
+              const text = event.message?.text || event.postback?.title || event.postback?.payload || "";
+              const messageId = event.message?.mid || "";
+              
               const msg: MensajeMessenger = {
                 senderId,
                 recipientId,
@@ -78,15 +79,16 @@ export async function POST(request: NextRequest) {
                 messageId,
               };
               
-              // Consultar perfil de Facebook/Instagram Graph API para obtener el nombre real
-              try {
-                const pageToken = isInstagram
-                  ? (process.env.INSTAGRAM_PAGE_TOKEN || process.env.MESSENGER_PAGE_TOKEN)
-                  : process.env.MESSENGER_PAGE_TOKEN;
-                if (pageToken) {
+              const pageToken = isInstagram
+                ? (process.env.INSTAGRAM_PAGE_TOKEN || process.env.MESSENGER_PAGE_TOKEN)
+                : process.env.MESSENGER_PAGE_TOKEN;
+
+              // 1. Consultar perfil de Facebook/Instagram Graph API para obtener el nombre real
+              if (pageToken) {
+                try {
                   const perfilUrl = isInstagram
                     ? `https://graph.facebook.com/v21.0/${senderId}?fields=username&access_token=${pageToken}`
-                    : `https://graph.facebook.com/${senderId}?fields=first_name,last_name&access_token=${pageToken}`;
+                    : `https://graph.facebook.com/v21.0/${senderId}?fields=first_name,last_name&access_token=${pageToken}`;
                   
                   const perfilRes = await fetch(perfilUrl);
                   if (perfilRes.ok) {
@@ -103,10 +105,41 @@ export async function POST(request: NextRequest) {
                         msg.nombre = nombreCompleto;
                       }
                     }
+                  } else {
+                    const errorText = await perfilRes.text();
+                    console.error(`[Meta API] Error al obtener perfil del remitente ${senderId} (status ${perfilRes.status}):`, errorText);
+                  }
+                } catch (profileErr) {
+                  console.error("Error al obtener perfil del remitente en Webhook Social:", profileErr);
+                }
+              }
+
+              // 2. Extraer atribución de campañas (Referral / Meta Ads)
+              const referral = event.message?.referral || event.postback?.referral || event.referral;
+              if (referral) {
+                // Fallback con el título del anuncio si viene en ads_context_data
+                if (referral.ads_context_data?.ad_title) {
+                  msg.ad_name = referral.ads_context_data.ad_title;
+                }
+
+                const adId = referral.ad_id;
+                if (adId && pageToken) {
+                  try {
+                    const adUrl = `https://graph.facebook.com/v21.0/${adId}?fields=name,campaign{name},adset{name}&access_token=${pageToken}`;
+                    const adRes = await fetch(adUrl);
+                    if (adRes.ok) {
+                      const adData = await adRes.json();
+                      if (adData.name) msg.ad_name = adData.name;
+                      if (adData.campaign?.name) msg.campaign_name = adData.campaign.name;
+                      if (adData.adset?.name) msg.adset_name = adData.adset.name;
+                    } else {
+                      const errorText = await adRes.text();
+                      console.warn(`[Meta API] No se pudo consultar ad_id ${adId} (status ${adRes.status}):`, errorText);
+                    }
+                  } catch (adErr) {
+                    console.error("Error al consultar detalles de ad_id en Graph API:", adErr);
                   }
                 }
-              } catch (profileErr) {
-                console.error("Error al obtener perfil del remitente en Webhook Social:", profileErr);
               }
               
               if (isInstagram) {

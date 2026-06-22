@@ -22,6 +22,9 @@ export interface MensajeMessenger {
   mensaje?: string;    // Contenido del mensaje de texto
   messageId?: string;  // ID único del mensaje en Meta
   nombre?: string;     // Nombre de perfil del cliente (si viene en el payload)
+  campaign_name?: string;
+  adset_name?: string;
+  ad_name?: string;
 }
 
 /** Busca o crea el prospecto para un lead de Redes Sociales. */
@@ -34,12 +37,21 @@ async function obtenerOCrearProspectoSocial(
 ): Promise<string> {
   const { data: existentes } = await sb
     .from("prospectos")
-    .select("id")
+    .select("id, campaign_name, adset_name, ad_name")
     .eq("telefono", telefonoKey)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    return existentes[0].id as string;
+    const pr = existentes[0];
+    const updateAttrs: any = {};
+    if (lead.campaign_name && lead.campaign_name !== pr.campaign_name) updateAttrs.campaign_name = lead.campaign_name;
+    if (lead.adset_name && lead.adset_name !== pr.adset_name) updateAttrs.adset_name = lead.adset_name;
+    if (lead.ad_name && lead.ad_name !== pr.ad_name) updateAttrs.ad_name = lead.ad_name;
+
+    if (Object.keys(updateAttrs).length > 0) {
+      await sb.from("prospectos").update(updateAttrs).eq("id", pr.id);
+    }
+    return pr.id as string;
   }
 
   const id = await siguienteIdProspecto(sb);
@@ -48,6 +60,9 @@ async function obtenerOCrearProspectoSocial(
     nombre: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
     telefono: telefonoKey,
     origen,
+    campaign_name: lead.campaign_name || "",
+    adset_name: lead.adset_name || "",
+    ad_name: lead.ad_name || "",
   });
   
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
@@ -72,19 +87,24 @@ async function registrarLeadSocial(
   // Buscar si ya existe un expediente asociado
   const { data: existentes } = await sb
     .from("expedientes")
-    .select("id, notas")
+    .select("id, notas, campaign_name, adset_name, ad_name")
     .eq("telefono", telefonoKey)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string };
+    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string };
     const nota = `${exp.notas ?? ""}\n[${canalLabel} ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
     
+    const updateData: any = { notas: nota, ultimo_movimiento: hoyISO() };
+    if (lead.campaign_name && lead.campaign_name !== exp.campaign_name) updateData.campaign_name = lead.campaign_name;
+    if (lead.adset_name && lead.adset_name !== exp.adset_name) updateData.adset_name = lead.adset_name;
+    if (lead.ad_name && lead.ad_name !== exp.ad_name) updateData.ad_name = lead.ad_name;
+
     await sb
       .from("expedientes")
-      .update({ notas: nota, ultimo_movimiento: hoyISO() })
+      .update(updateData)
       .eq("id", exp.id);
 
     const nuevo = await guardarMensajeEntrante(sb, {
@@ -117,6 +137,9 @@ async function registrarLeadSocial(
     notas: `Lead entrante automáticamente por ${canalLabel}.`,
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
+    campaign_name: lead.campaign_name || "",
+    adset_name: lead.adset_name || "",
+    ad_name: lead.ad_name || "",
   });
 
   const nuevoMensaje = await guardarMensajeEntrante(sb, {

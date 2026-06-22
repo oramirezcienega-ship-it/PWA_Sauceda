@@ -154,10 +154,39 @@ export async function guardarMensajeEntrante(
       wa_message_id: datos.waMessageId ?? null,
     });
     // error (p. ej. choque del índice único) => ya existía, no es nuevo.
-    return !error;
+    const esNuevo = !error;
+    if (esNuevo) {
+      // Sacar de secuencias de automatización si estaba activo
+      await comprobarYSalirDeSecuenciaPorMensaje(sb, datos.telefono);
+    }
+    return esNuevo;
   } catch (err) {
     console.error("No se pudo guardar el mensaje entrante:", err);
     return false;
+  }
+}
+
+/** Comprueba si el teléfono tiene un enrolamiento activo en secuencias y lo saca */
+export async function comprobarYSalirDeSecuenciaPorMensaje(
+  sb: ReturnType<typeof supabaseServidor>,
+  telefono: string,
+): Promise<void> {
+  try {
+    const { data: enrollments } = await sb
+      .from("sequence_enrollments")
+      .select("id, step_actual")
+      .eq("phone", telefono)
+      .eq("status", "activo");
+
+    if (enrollments && enrollments.length > 0) {
+      // Cargar dinámicamente para evitar dependencias circulares
+      const { salirDeSecuencia } = await import("@/lib/automatizaciones/orquestador");
+      for (const en of enrollments) {
+        await salirDeSecuencia(sb, en.id, "respondio", en.step_actual);
+      }
+    }
+  } catch (err) {
+    console.error("Error al salir de secuencia por mensaje entrante:", err);
   }
 }
 
