@@ -11,6 +11,7 @@ import {
   eliminarProspectosMasivo,
 } from "@/app/actions/prospectos";
 import { useOrden } from "@/hooks/useOrden";
+import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 import { ThOrden } from "./ThOrden";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
@@ -30,6 +31,34 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
+  const [secuencias, setSecuencias] = useState<any[]>([]);
+
+  useEffect(() => {
+    listarSecuencias()
+      .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
+      .catch((err) => console.error("Error al cargar secuencias en tabla:", err));
+  }, []);
+
+  async function enrolarSeleccionEnSecuencia(sequenceId: string) {
+    setTrabajando(true);
+    try {
+      const seleccionados = orden.ordenados.filter((p) => sel.has(p.id));
+      for (const p of seleccionados) {
+        await enrolarLead({
+          sequenceId,
+          phone: p.telefono,
+          nombre: p.nombreCompleto,
+          email: p.correo || undefined,
+          prospectoId: p.id,
+        }).catch((err) => console.warn(`No se pudo enrolar a ${p.nombreCompleto}:`, err.message));
+      }
+      setSel(new Set());
+      alert("Enrolamiento masivo completado.");
+      router.refresh();
+    } finally {
+      setTrabajando(false);
+    }
+  }
 
   const idsVisibles = orden.ordenados.map((p) => p.id);
 
@@ -116,6 +145,30 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
               ))}
             </select>
           </label>
+
+          {secuencias.length > 0 && (
+            <label className="flex items-center gap-1.5 text-carbon/70">
+              Enrolar en secuencia:
+              <select
+                defaultValue=""
+                disabled={trabajando}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    void enrolarSeleccionEnSecuencia(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="">— elige secuencia —</option>
+                {secuencias.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {confirmarBorrado ? (
             <span className="inline-flex items-center gap-2">
