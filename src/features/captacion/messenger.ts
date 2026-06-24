@@ -155,6 +155,19 @@ async function registrarLeadSocial(
     ad_name: lead.ad_name || "",
   });
 
+  // Enrolar automáticamente en secuencias activas
+  try {
+    const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
+    await enrolarLeadEnSecuenciasActivas(sb, {
+      nombre: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
+      phone: canalIdKey,
+      prospectoId,
+      expedienteId: id,
+    });
+  } catch (err) {
+    console.error("Error al enrolar lead social en secuencias activas:", err);
+  }
+
   const nuevoMensaje = await guardarMensajeEntrante(sb, {
     telefono: canalIdKey,
     texto: lead.mensaje ?? "",

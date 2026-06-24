@@ -134,6 +134,21 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
     link_google_maps: lead.linkGoogleMaps || null,
     necesidad: lead.necesidad || null,
   });
+
+  // Enrolar automáticamente en secuencias activas
+  try {
+    const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
+    await enrolarLeadEnSecuenciasActivas(sb, {
+      nombre,
+      phone: telefono,
+      email: lead.correo || undefined,
+      prospectoId,
+      expedienteId: expId,
+    });
+  } catch (err) {
+    console.error("Error al enrolar lead web en secuencias activas:", err);
+  }
+
   await registrarActividad(sb, {
     expedienteId: expId,
     prospectoId,

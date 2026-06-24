@@ -461,3 +461,59 @@ async function formatearMensaje(
 
   return msg;
 }
+
+/**
+ * Busca secuencias activas que correspondan al segmento y enrola al nuevo lead en ellas.
+ */
+export async function enrolarLeadEnSecuenciasActivas(
+  sb: ReturnType<typeof supabaseServidor>,
+  datos: {
+    nombre: string;
+    phone: string;
+    email?: string;
+    prospectoId: string;
+    expedienteId?: string;
+  }
+): Promise<void> {
+  try {
+    // 1. Obtener todas las secuencias activas
+    const { data: secuencias } = await sb
+      .from("automation_sequences")
+      .select("id, segmento")
+      .eq("status", "activa");
+
+    if (!secuencias || secuencias.length === 0) return;
+
+    for (const sec of secuencias) {
+      // Validar segmento (todos, o si el lead entra en el segmento)
+      const matchesSegment = sec.segmento === "todos" || sec.segmento === "sin_contactar";
+      if (!matchesSegment) continue;
+
+      // 2. Verificar si ya está enrolado activamente en esta secuencia
+      const { data: existente } = await sb
+        .from("sequence_enrollments")
+        .select("id")
+        .eq("sequence_id", sec.id)
+        .eq("phone", datos.phone)
+        .eq("status", "activo")
+        .maybeSingle();
+
+      if (existente) continue;
+
+      // 3. Enrolar
+      await sb.from("sequence_enrollments").insert({
+        sequence_id: sec.id,
+        phone: datos.phone,
+        nombre: datos.nombre,
+        email: datos.email || null,
+        prospecto_id: datos.prospectoId,
+        expediente_id: datos.expedienteId || null,
+        status: "activo",
+        step_actual: 1,
+        enrolled_at: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error("Error al enrolar lead automáticamente en secuencias activas:", err);
+  }
+}

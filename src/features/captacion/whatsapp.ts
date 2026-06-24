@@ -252,6 +252,20 @@ export async function registrarLeadWhatsApp(
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
   });
+
+  // Enrolar automáticamente en secuencias activas
+  try {
+    const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
+    await enrolarLeadEnSecuenciasActivas(sb, {
+      nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
+      phone: telefono,
+      prospectoId,
+      expedienteId: id,
+    });
+  } catch (err) {
+    console.error("Error al enrolar lead de WhatsApp en secuencias activas:", err);
+  }
+
   // Guarda el primer mensaje del cliente en el hilo de conversación.
   const nuevoMensaje = await guardarMensajeEntrante(sb, {
     telefono,
