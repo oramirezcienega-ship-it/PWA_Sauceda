@@ -25,6 +25,7 @@ export interface ReporteVoiceBot {
     tipoCredito?: string;
     valorEstimado?: number;
     saldoDeuda?: number;
+    rawPayload?: any;
   };
 }
 
@@ -293,9 +294,32 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       expedienteId = ex[0].id;
       token = ex[0].token;
       
+      const updateData: Record<string, any> = {
+        ultimo_movimiento: hoyISO()
+      };
+
+      if (nombre && nombre !== "Lead de Conmutador IA" && nombre !== "Lead de Conmutador") {
+        updateData.cliente = nombre;
+      }
+      if (reporte.datosPerfilados?.tipoCredito) {
+        updateData.tipo_credito = reporte.datosPerfilados.tipoCredito;
+      }
+      if (reporte.datosPerfilados?.necesidad) {
+        updateData.necesidad = reporte.datosPerfilados.necesidad;
+      }
+      if (reporte.datosPerfilados?.valorEstimado !== undefined && reporte.datosPerfilados.valorEstimado > 0) {
+        updateData.valor_estimado = reporte.datosPerfilados.valorEstimado;
+      }
+      if (reporte.datosPerfilados?.saldoDeuda !== undefined && reporte.datosPerfilados.saldoDeuda > 0) {
+        updateData.saldo_deuda = reporte.datosPerfilados.saldoDeuda;
+      }
+      if (reporte.resumen) {
+        updateData.situacion = `Llamada perfilada por IA: ${reporte.resumen}`.slice(0, 300);
+      }
+
       await sb
         .from("expedientes")
-        .update({ ultimo_movimiento: hoyISO() })
+        .update(updateData)
         .eq("id", expedienteId);
 
       await registrarActividad(sb, {
