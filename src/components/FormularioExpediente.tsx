@@ -25,6 +25,9 @@ const VACIO: DatosExpediente = {
   linkGoogleMaps: "",
   necesidad: "",
   canalId: "",
+  sinPagos: "",
+  estadoFisico: "",
+  habitada: "",
 };
 
 /**
@@ -78,6 +81,9 @@ export function FormularioExpediente({
         direccionPropiedad: (datos.direccionPropiedad || "").trim(),
         linkGoogleMaps: (datos.linkGoogleMaps || "").trim(),
         necesidad: (datos.necesidad || "").trim(),
+        sinPagos: (datos.sinPagos || "").trim(),
+        estadoFisico: (datos.estadoFisico || "").trim(),
+        habitada: (datos.habitada || "").trim(),
       });
       // Si todo salió bien la página normalmente redirige; si no, liberamos.
     } catch (err) {
@@ -220,6 +226,40 @@ export function FormularioExpediente({
             placeholder="Traspasar, Vender..."
             className={INPUT}
           />
+        </Campo>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Campo etiqueta="Sin pagos (Tiempo)">
+          <input
+            type="text"
+            value={datos.sinPagos || ""}
+            onChange={(e) => actualizar("sinPagos", e.target.value)}
+            placeholder="ej. ~4 años o 12 meses"
+            className={INPUT}
+          />
+        </Campo>
+
+        <Campo etiqueta="Estado físico">
+          <input
+            type="text"
+            value={datos.estadoFisico || ""}
+            onChange={(e) => actualizar("estadoFisico", e.target.value)}
+            placeholder="ej. Buen estado, Descuidada..."
+            className={INPUT}
+          />
+        </Campo>
+
+        <Campo etiqueta="Habitada">
+          <select
+            value={datos.habitada || ""}
+            onChange={(e) => actualizar("habitada", e.target.value)}
+            className={INPUT}
+          >
+            <option value="">Por definir</option>
+            <option value="Sí (habitada)">Sí (habitada)</option>
+            <option value="No (deshabitada)">No (deshabitada)</option>
+          </select>
         </Campo>
       </div>
 

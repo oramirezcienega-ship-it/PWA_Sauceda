@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
 import { enviarEnlacePortalWhatsApp } from "@/app/actions/expedientes";
-import { etapaAnterior, etapaSiguiente } from "@/lib/etapas";
+import { etapaAnterior, etapaSiguiente, ETAPAS_POR_ID } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
 import { FormulariosExpediente } from "./FormulariosExpediente";
@@ -253,32 +253,160 @@ export function DetalleExpediente({ id }: { id: string }) {
 
         {/* ---------- COLUMNA DERECHA: información del expediente ---------- */}
         <div className="space-y-6">
-          <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-carbon/10 bg-carbon/10 sm:grid-cols-2">
-            <Dato etiqueta="Teléfono" valor={expediente.telefono || "—"} mono />
-            <Dato
-              etiqueta="Último movimiento"
-              valor={formatoFecha(expediente.ultimoMovimiento)}
-            />
-            <Dato
-              etiqueta="Valor estimado"
-              valor={formatoPesos(expediente.valorEstimado)}
-              mono
-              resaltar
-            />
-            <Dato
-              etiqueta="Saldo de deuda"
-              valor={formatoPesos(expediente.saldoDeuda)}
-              mono
-            />
-            <Dato
-              etiqueta="Tipo de crédito"
-              valor={expediente.tipoCredito || "—"}
-            />
-            <Dato
-              etiqueta="Necesidad"
-              valor={expediente.necesidad || "—"}
-            />
-          </dl>
+          {/* Ficha Premium de Información de la Propiedad (Estilo Expediente/Lead) */}
+          <div className="rounded-2xl border border-carbon/10 bg-white p-6 shadow-sm">
+            {/* Header de la Ficha */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-verde-profundo/10 font-titular text-lg font-bold text-verde-profundo">
+                  {expediente.cliente ? expediente.cliente.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() : "EX"}
+                </div>
+                <div>
+                  <h3 className="font-titular text-lg font-semibold text-carbon">
+                    {expediente.nombreCompleto || `${expediente.cliente} ${expediente.primerApellido}`}
+                  </h3>
+                  <p className="text-xs text-carbon/60">
+                    Lead SAUCEDA Bienes Raíces
+                  </p>
+                </div>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                expediente.etapa === "nuevo-lead" ? "bg-emerald-50 text-emerald-700" :
+                expediente.etapa === "perdido" ? "bg-rojo/10 text-rojo" :
+                "bg-sauce/10 text-sauce"
+              }`}>
+                {expediente.etapa === "nuevo-lead" ? "Nuevo" : (ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa)}
+              </span>
+            </div>
+
+            <div className="my-4 border-t border-carbon/10"></div>
+
+            {/* Listado de campos con Iconos */}
+            <div className="space-y-4 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  Teléfono
+                </span>
+                <span className="font-mono font-medium text-carbon">
+                  {expediente.telefono || "—"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Zona
+                </span>
+                <span className="font-medium text-carbon text-right max-w-[200px] truncate">
+                  {expediente.fraccionamiento || "—"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  Tipo
+                </span>
+                <span className="font-medium text-carbon text-right max-w-[200px] truncate">
+                  {expediente.tipoCredito || "—"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Sin pagos
+                </span>
+                <span className="font-medium text-carbon">
+                  {expediente.sinPagos || "Sin dato"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Estado físico
+                </span>
+                <span className={`font-semibold ${
+                  expediente.estadoFisico && expediente.estadoFisico.toLowerCase().includes("buen")
+                    ? "text-[#0F5A47]"
+                    : "text-carbon"
+                }`}>
+                  {expediente.estadoFisico || "Sin dato"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                  Habitada
+                </span>
+                <span className="font-medium text-carbon">
+                  {expediente.habitada || "Sin dato"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-carbon/60">
+                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Valor / Adeudo
+                </span>
+                <span className="font-mono font-medium text-carbon">
+                  {expediente.valorEstimado > 0 || expediente.saldoDeuda > 0 ? (
+                    <>
+                      {expediente.valorEstimado > 0 ? formatoPesos(expediente.valorEstimado) : "Sin dato"}
+                      {" / "}
+                      {expediente.saldoDeuda > 0 ? formatoPesos(expediente.saldoDeuda) : "Sin dato"}
+                    </>
+                  ) : (
+                    <span className="italic text-carbon/60 text-sm">Sin dato</span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="my-4 border-t border-carbon/10"></div>
+
+            {/* Siguiente Paso */}
+            <div className="space-y-2">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-carbon/40">
+                Siguiente Paso
+              </span>
+              <div className="flex items-start gap-2 text-sm text-carbon/85">
+                <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#0F5A47]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium text-carbon/90">
+                  {obtenerSiguientePasoDinamico(expediente.etapa)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-carbon/50 pt-0.5">
+                <svg className="h-4 w-4 shrink-0 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>
+                  Contacto recibido: {formatoFecha(expediente.createdAt || expediente.ultimoMovimiento)}
+                </span>
+              </div>
+            </div>
+          </div>
 
           {(expediente.campaignName ||
             expediente.adsetName ||
@@ -366,4 +494,28 @@ function Bloque({
       <p className="text-sm text-carbon/80">{children}</p>
     </div>
   );
+}
+
+/** Devuelve una descripción amigable del siguiente paso recomendado para el asesor según la etapa. */
+function obtenerSiguientePasoDinamico(etapa: string): string {
+  switch (etapa) {
+    case "nuevo-lead":
+      return "Establecer contacto y validar interés del prospecto";
+    case "contactado":
+      return "Solicitar fotos y validar situación de la propiedad";
+    case "valuacion":
+      return "Visita en persona para valuar la propiedad";
+    case "oferta":
+      return "Presentar oferta formal de compra / traspaso";
+    case "documentos":
+      return "Recopilar y validar expediente de documentos";
+    case "notaria":
+      return "Programar firma y finiquito en notaría";
+    case "cerrado":
+      return "Traspaso cerrado. Post-venta y archivo";
+    case "perdido":
+      return "Seguimiento de reactivación en 3 meses";
+    default:
+      return "Siguiente contacto de seguimiento";
+  }
 }

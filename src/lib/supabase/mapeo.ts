@@ -46,6 +46,10 @@ export interface FilaExpediente {
   link_google_maps?: string | null;
   necesidad?: string | null;
   canal_id?: string | null;
+  sin_pagos?: string | null;
+  estado_fisico?: string | null;
+  habitada?: string | null;
+  created_at?: string;
   /** Origen del prospecto enlazado (cuando se pide vía join). */
   prospectos?: { origen: OrigenAdquisicion } | null;
 }
@@ -81,6 +85,10 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     linkGoogleMaps: fila.link_google_maps ?? "",
     necesidad: fila.necesidad ?? "",
     canalId: fila.canal_id ?? "",
+    sinPagos: fila.sin_pagos ?? "",
+    estadoFisico: fila.estado_fisico ?? "",
+    habitada: fila.habitada ?? "",
+    createdAt: fila.created_at ?? "",
   };
 }
 
@@ -106,6 +114,9 @@ export function aFila(datos: DatosExpediente) {
     link_google_maps: datos.linkGoogleMaps ?? null,
     necesidad: datos.necesidad ?? null,
     canal_id: datos.canalId ?? null,
+    sin_pagos: datos.sinPagos ?? null,
+    estado_fisico: datos.estadoFisico ?? null,
+    habitada: datos.habitada ?? null,
   };
 }
 

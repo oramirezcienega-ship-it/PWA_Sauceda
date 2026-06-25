@@ -78,6 +78,11 @@ export interface Expediente {
   origenProspecto: OrigenAdquisicion | null;
   /** Identificador técnico del canal de redes sociales (ej. messenger:PSID) */
   canalId?: string | null;
+  /** Campos adicionales recopilados de la conversación */
+  sinPagos?: string | null;
+  estadoFisico?: string | null;
+  habitada?: string | null;
+  createdAt?: string;
 }
 
 /**

@@ -99,6 +99,9 @@ interface FilaExp {
   telefono?: string | null;
   canal_id?: string | null;
   prospecto_id?: string | null;
+  sin_pagos?: string | null;
+  estado_fisico?: string | null;
+  habitada?: string | null;
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
@@ -172,7 +175,10 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "valor_estimado": "Valor aproximado de la propiedad como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
     "saldo_deuda": "Monto adeudado como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
     "situacion_fisica": "El estado físico de la casa. Solo puede ser 'vandalizada', 'deshabitada' o 'bueno' si el cliente lo mencionó claramente, de lo contrario null",
-    "telefono_real": "Número de teléfono celular de 10 dígitos (ej. 4771234567) si el cliente lo proporcionó en este mensaje o a lo largo del chat, de lo contrario null"
+    "telefono_real": "Número de teléfono celular de 10 dígitos (ej. 4771234567) si el cliente lo proporcionó en este mensaje o a lo largo del chat, de lo contrario null",
+    "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
+    "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
+    "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null"
   }
 }
 
@@ -211,6 +217,9 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
       exp.saldo_deuda && exp.saldo_deuda > 0 && `Saldo aproximado de deuda: $${exp.saldo_deuda}`,
       exp.necesidad && `Necesidad reportada: ${exp.necesidad}`,
       exp.link_google_maps && `Link de Google Maps: ${exp.link_google_maps}`,
+      exp.sin_pagos && `Tiempo sin realizar pagos: ${exp.sin_pagos}`,
+      exp.estado_fisico && `Estado físico de la propiedad: ${exp.estado_fisico}`,
+      exp.habitada && `Vivienda habitada: ${exp.habitada}`,
       exp.etapa && `Etapa del trámite: ${exp.etapa}`,
       exp.situacion && `Situación reportada: ${exp.situacion}`,
     ].filter(Boolean);
@@ -360,6 +369,9 @@ export async function responderConIA(
       valor_estimado?: number | null;
       saldo_deuda?: number | null;
       situacion_fisica?: "vandalizada" | "deshabitada" | "bueno" | null;
+      sin_pagos?: string | null;
+      estado_fisico?: string | null;
+      habitada?: string | null;
     } = {};
 
     try {
@@ -465,6 +477,15 @@ export async function responderConIA(
         if (desc) {
           updates.situacion = desc;
         }
+      }
+      if (datosExtraidos.sin_pagos) {
+        updates.sin_pagos = datosExtraidos.sin_pagos;
+      }
+      if (datosExtraidos.estado_fisico) {
+        updates.estado_fisico = datosExtraidos.estado_fisico;
+      }
+      if (datosExtraidos.habitada) {
+        updates.habitada = datosExtraidos.habitada;
       }
 
       if (Object.keys(updates).length > 0) {
