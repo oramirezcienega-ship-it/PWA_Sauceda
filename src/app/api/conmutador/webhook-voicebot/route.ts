@@ -12,29 +12,78 @@ export async function POST(request: Request) {
     const callObj = body.message?.call || body.call || {};
     const customerObj = callObj.customer || body.customer || {};
     const analysisObj = callObj.analysis || body.analysis || {};
-    const artifactObj = body.message?.artifact || body.artifact || {};
+    const artifactObj = body.message?.artifact || callObj.artifact || body.artifact || {};
     
     const structuredObj = 
       analysisObj.structuredData || 
       artifactObj.structuredData || 
       body.message?.analysis?.structuredData || 
       body.message?.artifact?.structuredData || 
+      body.message?.call?.artifact?.structuredData || 
       body.structuredData || 
       {};
 
     // 1. Extraer identificadores y teléfono
-    const twilioCallSid = callObj.twilioCallSid || body.twilioCallSid || callObj.id || body.callSid || "";
-    let clienteTelefono = customerObj.number || body.clienteTelefono || body.phone || body.customerPhone || "";
+    const twilioCallSid = 
+      callObj.twilioCallSid || 
+      body.message?.call?.twilioCallSid || 
+      callObj.id || 
+      body.message?.call?.id || 
+      body.twilioCallSid || 
+      body.callSid || 
+      "";
+      
+    let clienteTelefono = 
+      customerObj.number || 
+      body.message?.customer?.number || 
+      body.message?.call?.customer?.number || 
+      body.call?.customer?.number || 
+      body.clienteTelefono || 
+      body.phone || 
+      body.customerPhone || 
+      "";
     
     // Si es una llamada de prueba web desde el Dashboard de Vapi, no viene número de teléfono. Asignamos uno ficticio.
     if (!clienteTelefono) {
       clienteTelefono = "+520000000000";
     }
     
-    // 2. Extraer textos y grabación (pueden venir a nivel de message o en call)
-    const transcripcion = body.message?.transcript || callObj.transcript || body.transcripcion || body.transcript || "";
-    const resumen = body.message?.summary || callObj.summary || body.resumen || body.summary || "";
-    const grabacionUrl = body.message?.recordingUrl || callObj.recordingUrl || body.grabacionUrl || body.recordingUrl || "";
+    // 2. Extraer textos y grabación (pueden venir a nivel de message o en call o dentro de artifact)
+    const transcripcion = 
+      body.message?.artifact?.transcript || 
+      callObj.artifact?.transcript || 
+      artifactObj.transcript || 
+      body.artifact?.transcript || 
+      body.message?.transcript || 
+      callObj.transcript || 
+      body.transcripcion || 
+      body.transcript || 
+      "";
+
+    const resumen = 
+      analysisObj.summary || 
+      callObj.analysis?.summary || 
+      body.message?.analysis?.summary || 
+      body.message?.artifact?.summary || 
+      callObj.artifact?.summary || 
+      artifactObj.summary || 
+      body.artifact?.summary || 
+      body.message?.summary || 
+      callObj.summary || 
+      body.resumen || 
+      body.summary || 
+      "";
+
+    const grabacionUrl = 
+      body.message?.artifact?.recording?.url || 
+      callObj.artifact?.recording?.url || 
+      artifactObj.recording?.url || 
+      body.artifact?.recording?.url || 
+      body.message?.recordingUrl || 
+      callObj.recordingUrl || 
+      body.grabacionUrl || 
+      body.recordingUrl || 
+      "";
 
     // 3. Extraer datos estructurados perfilados
     const nombre = structuredObj.nombre || structuredObj.name || structuredObj.fullname || "";

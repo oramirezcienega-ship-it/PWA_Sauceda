@@ -202,7 +202,6 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
   const telefono = normalizarTelefono(telefonoRaw);
   const variantesTel = variantesTelefono(telefonoRaw);
   
-  const nombre = reporte.datosPerfilados?.nombre?.trim() || "Lead de Conmutador IA";
   const correo = reporte.datosPerfilados?.correo?.trim() || "";
 
   // 1. Buscar prospecto existente por teléfono o correo
@@ -216,7 +215,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       .limit(1);
     if (data && data.length) {
       prospectoId = data[0].id;
-      nombreExistente = data[0].nombre;
+      nombreExistente = data[0].nombre?.trim() || "";
     }
   }
   if (!prospectoId && correo) {
@@ -227,8 +226,23 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       .limit(1);
     if (data && data.length) {
       prospectoId = data[0].id;
-      nombreExistente = data[0].nombre;
+      nombreExistente = data[0].nombre?.trim() || "";
     }
+  }
+
+  // Determinar el nombre a usar:
+  // 1. Si la IA extrajo un nombre válido, usamos ese.
+  // 2. Si no, y ya tenemos un nombre en la base de datos que no es genérico, usamos el de la BD.
+  // 3. Si no, usamos "Lead de Conmutador IA".
+  let nombre = reporte.datosPerfilados?.nombre?.trim() || "";
+  const esNombreValido = nombre && nombre !== "Lead de Conmutador IA" && nombre !== "Lead de Conmutador";
+  const esNombreExistenteValido = nombreExistente && nombreExistente !== "Lead de Conmutador IA" && nombreExistente !== "Lead de Conmutador";
+
+  if (!esNombreValido && esNombreExistenteValido) {
+    nombre = nombreExistente;
+  }
+  if (!nombre) {
+    nombre = "Lead de Conmutador IA";
   }
 
   // 2. Si no existe, crear el prospecto
@@ -251,7 +265,6 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
   } else {
     // Si ya existe pero tiene el nombre genérico y ahora se obtuvo un nombre real, actualizarlo
     const esGenerico = !nombreExistente || nombreExistente === "Lead de Conmutador IA" || nombreExistente === "Lead de Conmutador";
-    const esNombreValido = nombre && nombre !== "Lead de Conmutador IA" && nombre !== "Lead de Conmutador";
     if (esGenerico && esNombreValido) {
       await sb
         .from("prospectos")
