@@ -16,7 +16,12 @@ export async function POST(request: Request) {
 
     // 1. Extraer identificadores y teléfono
     const twilioCallSid = callObj.twilioCallSid || body.twilioCallSid || callObj.id || body.callSid || "";
-    const clienteTelefono = customerObj.number || body.clienteTelefono || body.phone || body.customerPhone || "";
+    let clienteTelefono = customerObj.number || body.clienteTelefono || body.phone || body.customerPhone || "";
+    
+    // Si es una llamada de prueba web desde el Dashboard de Vapi, no viene número de teléfono. Asignamos uno ficticio.
+    if (!clienteTelefono) {
+      clienteTelefono = "+520000000000";
+    }
     
     // 2. Extraer textos
     const transcripcion = callObj.transcript || body.transcripcion || body.transcript || "";
