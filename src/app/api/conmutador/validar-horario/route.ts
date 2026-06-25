@@ -57,11 +57,14 @@ export async function POST(request: Request) {
   </Dial>
 </Response>`;
     } else {
-      // 3. Si no hay agente disponible, mandar a buzón de voz (grabación)
+      // 3. Si no hay agente disponible, desviar al Voice Bot de Vapi
+      const vapiSipUri = process.env.VAPI_SIP_URI || "sip:sauceda@sip.vapi.ai";
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="es-MX" voice="Polly.Mia">Gracias por comunicarse a Sauceda Bienes Raíces. En este momento nuestro personal se encuentra fuera de horario de atención o en otra llamada. Por favor, deje su mensaje y datos de contacto después del tono.</Say>
-  <Record maxLength="60" playBeep="true" recordingStatusCallback="/api/conmutador/webhook-evento" />
+  <Say language="es-MX" voice="Polly.Mia">Gracias por comunicarse a Sauceda Bienes Raíces. En este momento nuestros asesores están ocupados. Le transferiremos con Sofía, nuestra asistente virtual de guardia, para tomar sus datos.</Say>
+  <Dial>
+    <Sip>${vapiSipUri}</Sip>
+  </Dial>
 </Response>`;
     }
 

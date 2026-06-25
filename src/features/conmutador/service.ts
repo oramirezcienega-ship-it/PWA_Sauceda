@@ -31,16 +31,32 @@ function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Obtiene la hora actual en la Zona Horaria de México (America/Mexico_City) en formato 'HH:MM:SS'
+// Obtiene la hora actual en la Zona Horaria de México (America/Mexico_City) en formato 'HH:MM:SS' de 24 horas robusto.
 export function obtenerHoraLocalMX(): string {
-  const opciones: Intl.DateTimeFormatOptions = {
+  const d = new Date();
+  const formateador = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Mexico_City",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-  };
-  return new Date().toLocaleTimeString("es-MX", opciones);
+  });
+
+  const partes = formateador.formatToParts(d);
+  let horas = "00";
+  let minutos = "00";
+  let segundos = "00";
+
+  for (const parte of partes) {
+    if (parte.type === "hour") horas = parte.value.padStart(2, "0");
+    if (parte.type === "minute") minutos = parte.value.padStart(2, "0");
+    if (parte.type === "second") segundos = parte.value.padStart(2, "0");
+  }
+
+  // Corregir caso donde '24' pueda ser devuelto por algunas implementaciones de Node
+  if (horas === "24") horas = "00";
+
+  return `${horas}:${minutos}:${segundos}`;
 }
 
 async function siguienteId(
