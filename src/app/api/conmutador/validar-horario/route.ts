@@ -20,6 +20,7 @@ export async function POST(request: Request) {
 
     const callSid = body.CallSid || body.callSid || "";
     const from = body.From || body.from || "";
+    const to = body.To || body.to || ""; // El número de Twilio que recibe la llamada
 
     if (!callSid) {
       return NextResponse.json({ error: "Falta CallSid" }, { status: 400 });
@@ -46,11 +47,12 @@ export async function POST(request: Request) {
         agenteId: agente.id,
       });
 
-      // 2. Generar TwiML para desviar al celular del agente con grabación activa
+      // 2. Generar TwiML para desviar al celular del agente con grabación activa.
+      // Forzamos callerId con el número de Twilio para que funcione en cuentas Trial.
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say language="es-MX" voice="Polly.Mia">Bienvenido a Sauceda Bienes Raíces. Transfiriendo su llamada con nuestro asesor de guardia, ${agente.nombre}.</Say>
-  <Dial record="record-from-answer-dual" recordingStatusCallback="/api/conmutador/webhook-evento">
+  <Dial callerId="${to}" record="record-from-answer-dual" recordingStatusCallback="/api/conmutador/webhook-evento">
     <Number>${agente.telefono_desvio}</Number>
   </Dial>
 </Response>`;
