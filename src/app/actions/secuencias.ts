@@ -4,6 +4,8 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { orquestador, salirDeSecuencia } from "@/lib/automatizaciones/orquestador";
 import { revalidatePath } from "next/cache";
+import fs from "fs";
+import path from "path";
 
 /**
  * Acciones del Servidor para el Módulo de Marketing Automation (Secuencias).
@@ -528,33 +530,43 @@ export async function obtenerAnalytics() {
   const sb = supabaseServidor();
 
   // 1. Auto-reparación de atribuciones históricas si hay discrepancias
+  const logLines: string[] = [];
+  logLines.push(`[${new Date().toISOString()}] obtenerAnalytics ejecutado.`);
   try {
     const { data: enrollmentsRespondio } = await sb
       .from("sequence_enrollments")
-      .select("id, nombre, ultimo_contacto_at")
+      .select("id, nombre, phone, ultimo_contacto_at")
       .eq("status", "salido")
       .eq("razon_salida", "respondio");
 
+    logLines.push(`  Leads respondidos en base de datos: ${enrollmentsRespondio?.length || 0}`);
+
     if (enrollmentsRespondio && enrollmentsRespondio.length > 0) {
-      console.log(`[Auto-reparar] Encontrados ${enrollmentsRespondio.length} leads con razon_salida = respondio.`);
       for (const en of enrollmentsRespondio) {
         // Verificar si existe alguna acción marcada como respondida para este enrollment
         const { data: accionesLead, error: errAc } = await sb
           .from("sequence_actions")
-          .select("id, status, respondido_at")
+          .select("id, status, respondido_at, canal, enviado_at")
           .eq("enrollment_id", en.id);
 
         if (errAc) {
-          console.error(`[Auto-reparar] Error leyendo acciones para ${en.nombre}:`, errAc.message);
+          logLines.push(`    [Error] Leyendo acciones para ${en.nombre} (${en.phone}): ${errAc.message}`);
           continue;
+        }
+
+        logLines.push(`    Lead: ${en.nombre} (${en.phone}) - Acciones en base de datos: ${accionesLead?.length || 0}`);
+        for (const ac of accionesLead || []) {
+          logLines.push(`      Acción ID: ${ac.id}, Canal: ${ac.canal}, Status: ${ac.status}, RespondidoAt: ${ac.respondido_at}`);
         }
 
         const yaRespondido = (accionesLead || []).some(
           (ac) => ac.status === "respondido" || ac.respondido_at !== null
         );
 
+        logLines.push(`      yaRespondido: ${yaRespondido}`);
+
         if (!yaRespondido) {
-          console.log(`[Auto-reparar] Lead "${en.nombre}" no tiene acción respondida. Buscando última acción...`);
+          logLines.push(`      Buscando última acción para ${en.nombre}...`);
           // Si no está marcada, buscar la última acción enviada y marcarla como respondido
           const { data: ultimaAccion } = await sb
             .from("sequence_actions")
@@ -565,7 +577,7 @@ export async function obtenerAnalytics() {
             .maybeSingle();
 
           if (ultimaAccion) {
-            console.log(`[Auto-reparar] Modificando acción ID ${ultimaAccion.id} (canal: ${ultimaAccion.canal}) a 'respondido' para lead "${en.nombre}"`);
+            logLines.push(`      Encontrada ultimaAccion: ID=${ultimaAccion.id}, Canal=${ultimaAccion.canal}, Status=${ultimaAccion.status}. Actualizando a 'respondido'...`);
             const { error: errUp } = await sb
               .from("sequence_actions")
               .update({
@@ -575,18 +587,28 @@ export async function obtenerAnalytics() {
               .eq("id", ultimaAccion.id);
             
             if (errUp) {
-              console.error(`[Auto-reparar] Error actualizando acción:`, errUp.message);
+              logLines.push(`        [Error] Falló actualización: ${errUp.message}`);
             } else {
-              console.log(`[Auto-reparar] Acción actualizada con éxito.`);
+              logLines.push(`        [Exito] Acción marcada como respondida.`);
             }
           } else {
-            console.log(`[Auto-reparar] No se encontró ninguna acción previa en sequence_actions para el lead "${en.nombre}".`);
+            logLines.push(`        No se encontró ninguna acción previa en sequence_actions para ${en.nombre}.`);
           }
         }
       }
     }
-  } catch (repairErr) {
+  } catch (repairErr: any) {
+    logLines.push(`  [Error Crítico en Reparación] ${repairErr.message}`);
     console.error("Error al auto-reparar métricas históricas:", repairErr);
+  }
+
+  // Guardar log de diagnóstico a archivo local
+  try {
+    const logPath = path.join(process.cwd(), "debug_analytics_log.txt");
+    fs.appendFileSync(logPath, logLines.join("\n") + "\n\n", "utf8");
+    console.log(`[Diagnostics] Logs de secuencias guardados en ${logPath}`);
+  } catch (fsErr: any) {
+    console.error(`[Diagnostics Error] No se pudo guardar el archivo: ${fsErr.message}`);
   }
 
   // 2. Obtener todas las acciones
