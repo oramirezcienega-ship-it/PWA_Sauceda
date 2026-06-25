@@ -12,7 +12,15 @@ export async function POST(request: Request) {
     const callObj = body.message?.call || body.call || {};
     const customerObj = callObj.customer || body.customer || {};
     const analysisObj = callObj.analysis || body.analysis || {};
-    const structuredObj = analysisObj.structuredData || body.structuredData || {};
+    const artifactObj = body.message?.artifact || body.artifact || {};
+    
+    const structuredObj = 
+      analysisObj.structuredData || 
+      artifactObj.structuredData || 
+      body.message?.analysis?.structuredData || 
+      body.message?.artifact?.structuredData || 
+      body.structuredData || 
+      {};
 
     // 1. Extraer identificadores y teléfono
     const twilioCallSid = callObj.twilioCallSid || body.twilioCallSid || callObj.id || body.callSid || "";

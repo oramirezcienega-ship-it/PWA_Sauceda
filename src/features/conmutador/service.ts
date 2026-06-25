@@ -328,16 +328,19 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
     void notificarNuevoLead(expedienteId);
   }
 
-  // 5. Actualizar la tabla llamadas_conmutador con la transcripción y el prospecto
+  // 5. Registrar/Actualizar la tabla llamadas_conmutador con la transcripción y el prospecto
   const { error: callUpdateErr } = await sb
     .from("llamadas_conmutador")
-    .update({
+    .upsert({
+      twilio_call_sid: reporte.twilioCallSid,
+      cliente_telefono: telefono,
       prospecto_id: prospectoId,
       transcripcion: reporte.transcripcion,
       resumen_ia: reporte.resumen,
       datos_perfilados: reporte.datosPerfilados,
-    })
-    .eq("twilio_call_sid", reporte.twilioCallSid);
+      estado: "completed",
+      tipo: "entrante",
+    }, { onConflict: "twilio_call_sid" });
 
   if (callUpdateErr) {
     console.error(`Error al asociar reporte de IA a llamada ${reporte.twilioCallSid}:`, callUpdateErr);
