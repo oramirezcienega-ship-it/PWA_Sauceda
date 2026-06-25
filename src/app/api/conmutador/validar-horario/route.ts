@@ -36,21 +36,51 @@ export async function POST(request: Request) {
     // Consultar agente de guardia disponible en horario laboral
     const agente = await obtenerAgenteDisponible();
 
+    let xmlResponse = "";
+
     if (agente) {
-      return NextResponse.json({
-        disponible: true,
-        agente_id: agente.id,
-        agente_nombre: agente.nombre,
-        telefono_desvio: agente.telefono_desvio,
+      // 1. Registrar en BD que la llamada se desvió a este agente
+      const { actualizarLlamada } = await import("@/features/conmutador/service");
+      await actualizarLlamada(callSid, {
+        estado: "in-progress",
+        agenteId: agente.id,
       });
+
+      // 2. Generar TwiML para desviar al celular del agente con grabación activa
+      xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say language="es-MX" voice="Polly.Mia">Bienvenido a Sauceda Bienes Raíces. Transfiriendo su llamada con nuestro asesor de guardia, ${agente.nombre}.</Say>
+  <Dial record="record-from-answer-dual" recordingStatusCallback="/api/conmutador/webhook-evento">
+    <Number>${agente.telefono_desvio}</Number>
+  </Dial>
+</Response>`;
+    } else {
+      // 3. Si no hay agente disponible, mandar a buzón de voz (grabación)
+      xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say language="es-MX" voice="Polly.Mia">Gracias por comunicarse a Sauceda Bienes Raíces. En este momento nuestro personal se encuentra fuera de horario de atención o en otra llamada. Por favor, deje su mensaje y datos de contacto después del tono.</Say>
+  <Record maxLength="60" playBeep="true" recordingStatusCallback="/api/conmutador/webhook-evento" />
+</Response>`;
     }
 
-    return NextResponse.json({
-      disponible: false,
+    return new NextResponse(xmlResponse, {
+      headers: {
+        "Content-Type": "text/xml",
+      },
     });
   } catch (error) {
     console.error("Error en API validar-horario:", error);
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
+    
+    // TwiML de fallback por si algo falla
+    const errorXml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say language="es-MX" voice="Polly.Mia">Lo sentimos, ocurrió un problema al procesar su llamada. Por favor intente más tarde.</Say>
+</Response>`;
+    return new NextResponse(errorXml, {
+      headers: {
+        "Content-Type": "text/xml",
+      },
+    });
   }
 }
 
