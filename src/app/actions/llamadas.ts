@@ -34,18 +34,10 @@ export interface ConfiguracionLlamadas {
 export async function listarLlamadasConmutador(): Promise<LlamadaConmutadorApp[]> {
   const sb = supabaseServidor();
   
-  // Realizar la consulta con joins
+  // Realizar una consulta plana sin joins para evitar bloqueos por RLS de relaciones
   const { data, error } = await sb
     .from("llamadas_conmutador")
-    .select(`
-      *,
-      prospectos (
-        nombre
-      ),
-      perfiles (
-        nombre
-      )
-    `)
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -58,9 +50,9 @@ export async function listarLlamadasConmutador(): Promise<LlamadaConmutadorApp[]
     twilio_call_sid: row.twilio_call_sid,
     cliente_telefono: row.cliente_telefono,
     prospecto_id: row.prospecto_id,
-    prospecto_nombre: row.prospectos?.nombre || null,
+    prospecto_nombre: null, // Se resolverá dinámicamente si es necesario
     agente_id: row.agente_id,
-    agente_nombre: row.perfiles?.nombre || null,
+    agente_nombre: null,    // Se resolverá dinámicamente si es necesario
     tipo: row.tipo,
     estado: row.estado,
     duracion: row.duracion,
