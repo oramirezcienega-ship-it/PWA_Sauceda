@@ -4,6 +4,8 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { orquestador, salirDeSecuencia } from "@/lib/automatizaciones/orquestador";
 import { revalidatePath } from "next/cache";
+import fs from "fs";
+import path from "path";
 
 /**
  * Acciones del Servidor para el Módulo de Marketing Automation (Secuencias).
@@ -602,8 +604,6 @@ export async function obtenerAnalytics() {
 
   // Guardar log de diagnóstico a archivo local
   try {
-    const fs = require("fs");
-    const path = require("path");
     const logPath = path.join("c:/Users/oscar/OneDrive/Documentos/GitHub/PWA_Sauceda", "debug_analytics_log.txt");
     fs.appendFileSync(logPath, logLines.join("\n") + "\n\n", "utf8");
   } catch (fsErr) {
