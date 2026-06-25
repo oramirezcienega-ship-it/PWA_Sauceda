@@ -17,6 +17,7 @@ export interface ReporteVoiceBot {
   clienteTelefono: string;
   transcripcion?: string;
   resumen?: string;
+  grabacionUrl?: string;
   datosPerfilados?: {
     nombre?: string;
     correo?: string;
@@ -206,21 +207,28 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
 
   // 1. Buscar prospecto existente por teléfono o correo
   let prospectoId: string | null = null;
+  let nombreExistente = "";
   if (variantesTel.length) {
     const { data } = await sb
       .from("prospectos")
-      .select("id")
+      .select("id, nombre")
       .in("telefono", variantesTel)
       .limit(1);
-    if (data && data.length) prospectoId = data[0].id;
+    if (data && data.length) {
+      prospectoId = data[0].id;
+      nombreExistente = data[0].nombre;
+    }
   }
   if (!prospectoId && correo) {
     const { data } = await sb
       .from("prospectos")
-      .select("id")
+      .select("id, nombre")
       .eq("correo", correo)
       .limit(1);
-    if (data && data.length) prospectoId = data[0].id;
+    if (data && data.length) {
+      prospectoId = data[0].id;
+      nombreExistente = data[0].nombre;
+    }
   }
 
   // 2. Si no existe, crear el prospecto
@@ -240,6 +248,22 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
     }
     prospectoId = id;
     await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
+  } else {
+    // Si ya existe pero tiene el nombre genérico y ahora se obtuvo un nombre real, actualizarlo
+    const esGenerico = !nombreExistente || nombreExistente === "Lead de Conmutador IA" || nombreExistente === "Lead de Conmutador";
+    const esNombreValido = nombre && nombre !== "Lead de Conmutador IA" && nombre !== "Lead de Conmutador";
+    if (esGenerico && esNombreValido) {
+      await sb
+        .from("prospectos")
+        .update({ nombre })
+        .eq("id", prospectoId);
+      
+      // También actualizamos el nombre del cliente en expedientes asociados
+      await sb
+        .from("expedientes")
+        .update({ cliente: nombre })
+        .eq("prospecto_id", prospectoId);
+    }
   }
 
   // 3. Buscar si ya existe un expediente activo
@@ -337,6 +361,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       prospecto_id: prospectoId,
       transcripcion: reporte.transcripcion,
       resumen_ia: reporte.resumen,
+      grabacion_url: reporte.grabacionUrl,
       datos_perfilados: reporte.datosPerfilados,
       estado: "completed",
       tipo: "entrante",

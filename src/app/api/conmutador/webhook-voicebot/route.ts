@@ -31,9 +31,10 @@ export async function POST(request: Request) {
       clienteTelefono = "+520000000000";
     }
     
-    // 2. Extraer textos
-    const transcripcion = callObj.transcript || body.transcripcion || body.transcript || "";
-    const resumen = callObj.summary || body.resumen || body.summary || "";
+    // 2. Extraer textos y grabación (pueden venir a nivel de message o en call)
+    const transcripcion = body.message?.transcript || callObj.transcript || body.transcripcion || body.transcript || "";
+    const resumen = body.message?.summary || callObj.summary || body.resumen || body.summary || "";
+    const grabacionUrl = body.message?.recordingUrl || callObj.recordingUrl || body.grabacionUrl || body.recordingUrl || "";
 
     // 3. Extraer datos estructurados perfilados
     const nombre = structuredObj.nombre || structuredObj.name || structuredObj.fullname || "";
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
       clienteTelefono,
       transcripcion,
       resumen,
+      grabacionUrl: grabacionUrl || undefined,
       datosPerfilados: {
         nombre: nombre || undefined,
         correo: correo || undefined,
