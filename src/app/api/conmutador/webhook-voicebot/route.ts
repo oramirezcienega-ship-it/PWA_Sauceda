@@ -14,14 +14,29 @@ export async function POST(request: Request) {
     const analysisObj = callObj.analysis || body.analysis || {};
     const artifactObj = body.message?.artifact || callObj.artifact || body.artifact || {};
     
-    const structuredObj = 
-      analysisObj.structuredData || 
-      artifactObj.structuredData || 
-      body.message?.analysis?.structuredData || 
-      body.message?.artifact?.structuredData || 
-      body.message?.call?.artifact?.structuredData || 
-      body.structuredData || 
+    // Extraer structuredOutputs de Vapi (bc34d73f-f4b6-4d56-9cb9-d42d669c3685 -> result)
+    const structuredOutputsObj = 
+      body.message?.artifact?.structuredOutputs || 
+      callObj.artifact?.structuredOutputs || 
+      body.artifact?.structuredOutputs || 
       {};
+      
+    let structuredOutputsMerged = {};
+    for (const key in structuredOutputsObj) {
+      if (structuredOutputsObj[key]?.result) {
+        structuredOutputsMerged = { ...structuredOutputsMerged, ...structuredOutputsObj[key].result };
+      }
+    }
+
+    const structuredObj = {
+      ...analysisObj.structuredData,
+      ...artifactObj.structuredData,
+      ...(body.message?.analysis?.structuredData),
+      ...(body.message?.artifact?.structuredData),
+      ...(body.message?.call?.artifact?.structuredData),
+      ...body.structuredData,
+      ...structuredOutputsMerged
+    };
 
     // 1. Extraer identificadores y teléfono
     const twilioCallSid = 

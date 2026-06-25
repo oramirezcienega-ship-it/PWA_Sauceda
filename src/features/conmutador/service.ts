@@ -205,6 +205,20 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
   
   const correo = reporte.datosPerfilados?.correo?.trim() || "";
 
+  let resumen = reporte.resumen?.trim() || "";
+  if (!resumen && reporte.datosPerfilados) {
+    const dp = reporte.datosPerfilados;
+    const partes: string[] = [];
+    if (dp.necesidad) partes.push(`Necesidad: ${dp.necesidad}`);
+    if (dp.tipoCredito) partes.push(`Crédito: ${dp.tipoCredito}`);
+    if (dp.valorEstimado) partes.push(`Presupuesto: $${dp.valorEstimado.toLocaleString()}`);
+    if (dp.saldoDeuda) partes.push(`Deuda: $${dp.saldoDeuda.toLocaleString()}`);
+    if (dp.correo) partes.push(`Correo: ${dp.correo}`);
+    if (partes.length > 0) {
+      resumen = `Llamada perfilada por IA. ${partes.join(". ")}.`;
+    }
+  }
+
   // 1. Buscar prospecto existente por teléfono o correo
   let prospectoId: string | null = null;
   let nombreExistente = "";
@@ -313,8 +327,8 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       if (reporte.datosPerfilados?.saldoDeuda !== undefined && reporte.datosPerfilados.saldoDeuda > 0) {
         updateData.saldo_deuda = reporte.datosPerfilados.saldoDeuda;
       }
-      if (reporte.resumen) {
-        updateData.situacion = `Llamada perfilada por IA: ${reporte.resumen}`.slice(0, 300);
+      if (resumen) {
+        updateData.situacion = `Llamada perfilada por IA: ${resumen}`.slice(0, 300);
       }
 
       await sb
@@ -326,7 +340,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
         expedienteId,
         tipo: "sistema",
         titulo: "Nueva interacción de voz con el conmutador IA",
-        detalle: reporte.resumen || "El cliente interactuó con el Voice Bot.",
+        detalle: resumen || "El cliente interactuó con el Voice Bot.",
       });
     }
   }
@@ -342,8 +356,8 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       cliente: nombre,
       fraccionamiento: "Por definir",
       etapa: "nuevo-lead",
-      situacion: reporte.resumen 
-        ? `Llamada perfilada por IA: ${reporte.resumen}`.slice(0, 300) 
+      situacion: resumen 
+        ? `Llamada perfilada por IA: ${resumen}`.slice(0, 300) 
         : "Solicitud entrante por llamada telefónica.",
       telefono,
       valor_estimado: reporte.datosPerfilados?.valorEstimado || 0,
@@ -381,7 +395,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       prospectoId,
       tipo: "creacion",
       titulo: "Lead captado por llamada",
-      detalle: reporte.resumen || "Registro automático.",
+      detalle: resumen || "Registro automático.",
     });
 
     await enviarBienvenida(sb, expedienteId);
@@ -397,7 +411,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       cliente_telefono: telefono,
       prospecto_id: prospectoId,
       transcripcion: reporte.transcripcion,
-      resumen_ia: reporte.resumen,
+      resumen_ia: resumen,
       grabacion_url: reporte.grabacionUrl,
       datos_perfilados: reporte.datosPerfilados,
       estado: "completed",
