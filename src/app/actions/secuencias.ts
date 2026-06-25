@@ -531,38 +531,56 @@ export async function obtenerAnalytics() {
   try {
     const { data: enrollmentsRespondio } = await sb
       .from("sequence_enrollments")
-      .select("id, ultimo_contacto_at")
+      .select("id, nombre, ultimo_contacto_at")
       .eq("status", "salido")
       .eq("razon_salida", "respondio");
 
     if (enrollmentsRespondio && enrollmentsRespondio.length > 0) {
+      console.log(`[Auto-reparar] Encontrados ${enrollmentsRespondio.length} leads con razon_salida = respondio.`);
       for (const en of enrollmentsRespondio) {
         // Verificar si existe alguna acción marcada como respondida para este enrollment
-        const { data: accionRespondida } = await sb
+        const { data: accionesLead, error: errAc } = await sb
           .from("sequence_actions")
-          .select("id")
-          .eq("enrollment_id", en.id)
-          .or("status.eq.respondido,respondido_at.not.is.null")
-          .limit(1);
+          .select("id, status, respondido_at")
+          .eq("enrollment_id", en.id);
 
-        if (!accionRespondida || accionRespondida.length === 0) {
+        if (errAc) {
+          console.error(`[Auto-reparar] Error leyendo acciones para ${en.nombre}:`, errAc.message);
+          continue;
+        }
+
+        const yaRespondido = (accionesLead || []).some(
+          (ac) => ac.status === "respondido" || ac.respondido_at !== null
+        );
+
+        if (!yaRespondido) {
+          console.log(`[Auto-reparar] Lead "${en.nombre}" no tiene acción respondida. Buscando última acción...`);
           // Si no está marcada, buscar la última acción enviada y marcarla como respondido
           const { data: ultimaAccion } = await sb
             .from("sequence_actions")
-            .select("id")
+            .select("id, canal, status")
             .eq("enrollment_id", en.id)
             .order("enviado_at", { ascending: false })
             .limit(1)
             .maybeSingle();
 
           if (ultimaAccion) {
-            await sb
+            console.log(`[Auto-reparar] Modificando acción ID ${ultimaAccion.id} (canal: ${ultimaAccion.canal}) a 'respondido' para lead "${en.nombre}"`);
+            const { error: errUp } = await sb
               .from("sequence_actions")
               .update({
                 status: "respondido",
                 respondido_at: en.ultimo_contacto_at || new Date().toISOString(),
               })
               .eq("id", ultimaAccion.id);
+            
+            if (errUp) {
+              console.error(`[Auto-reparar] Error actualizando acción:`, errUp.message);
+            } else {
+              console.log(`[Auto-reparar] Acción actualizada con éxito.`);
+            }
+          } else {
+            console.log(`[Auto-reparar] No se encontró ninguna acción previa en sequence_actions para el lead "${en.nombre}".`);
           }
         }
       }
