@@ -235,13 +235,18 @@ async function leadRespondio(
   sb: ReturnType<typeof supabaseServidor>,
   enrollment: any,
 ): Promise<boolean> {
-  // 1. Verificar mensajes entrantes de WhatsApp/Messenger desde enrolled_at
+  // Para evitar falsos positivos con el primer mensaje del cliente que gatilló la creación
+  // del prospecto (el cual se guarda en base de datos milisegundos después del enrolamiento),
+  // exigimos una holgura de al menos 10 segundos desde la fecha de enrolamiento.
+  const fechaFiltro = new Date(new Date(enrollment.enrolled_at).getTime() + 10000).toISOString();
+
+  // 1. Verificar mensajes entrantes de WhatsApp/Messenger desde la fecha filtro
   const { data: nuevosMensajes, error } = await sb
     .from("mensajes_whatsapp")
     .select("id")
     .eq("telefono", enrollment.phone)
     .eq("direccion", "in")
-    .gt("created_at", enrollment.enrolled_at);
+    .gt("created_at", fechaFiltro);
 
   if (!error && nuevosMensajes && nuevosMensajes.length > 0) {
     return true;
