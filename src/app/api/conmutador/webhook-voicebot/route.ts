@@ -85,16 +85,63 @@ export async function POST(request: Request) {
       body.recordingUrl || 
       "";
 
-    // 3. Extraer datos estructurados perfilados
-    const nombre = structuredObj.nombre || structuredObj.name || structuredObj.fullname || "";
-    const correo = structuredObj.correo || structuredObj.email || structuredObj.mail || "";
-    const necesidad = structuredObj.necesidad || structuredObj.need || structuredObj.mensaje || structuredObj.message || "";
-    const tipoCredito = structuredObj.tipoCredito || structuredObj.tipo_credito || structuredObj.creditType || "";
+    // 3. Extraer datos estructurados perfilados (soportando mayúsculas y minúsculas)
+    const nombre = 
+      structuredObj.nombre || 
+      structuredObj.Nombre || 
+      structuredObj.name || 
+      structuredObj.Name || 
+      structuredObj.fullname || 
+      structuredObj.FullName || 
+      structuredObj.cliente || 
+      structuredObj.Cliente || 
+      "";
+
+    const correo = 
+      structuredObj.correo || 
+      structuredObj.Correo || 
+      structuredObj.email || 
+      structuredObj.Email || 
+      structuredObj.mail || 
+      structuredObj.Mail || 
+      "";
+
+    const necesidad = 
+      structuredObj.necesidad || 
+      structuredObj.Necesidad || 
+      structuredObj.need || 
+      structuredObj.Need || 
+      structuredObj.mensaje || 
+      structuredObj.Mensaje || 
+      structuredObj.message || 
+      structuredObj.Message || 
+      "";
+
+    const tipoCredito = 
+      structuredObj.tipoCredito || 
+      structuredObj.TipoCredito || 
+      structuredObj.tipo_credito || 
+      structuredObj.Tipo_Credito || 
+      structuredObj.creditType || 
+      structuredObj.CreditType || 
+      "";
     
-    const valorEstimadoRaw = structuredObj.valorEstimado ?? structuredObj.estimatedValue ?? structuredObj.valor;
+    const valorEstimadoRaw = 
+      structuredObj.valorEstimado ?? 
+      structuredObj.ValorEstimado ?? 
+      structuredObj.estimatedValue ?? 
+      structuredObj.EstimatedValue ?? 
+      structuredObj.valor ?? 
+      structuredObj.Valor;
     const valorEstimado = valorEstimadoRaw !== undefined ? Number(valorEstimadoRaw) || 0 : undefined;
 
-    const saldoDeudaRaw = structuredObj.saldoDeuda ?? structuredObj.debtBalance ?? structuredObj.saldo;
+    const saldoDeudaRaw = 
+      structuredObj.saldoDeuda ?? 
+      structuredObj.SaldoDeuda ?? 
+      structuredObj.debtBalance ?? 
+      structuredObj.DebtBalance ?? 
+      structuredObj.saldo ?? 
+      structuredObj.Saldo;
     const saldoDeuda = saldoDeudaRaw !== undefined ? Number(saldoDeudaRaw) || 0 : undefined;
 
     if (!twilioCallSid || !clienteTelefono) {
@@ -117,6 +164,7 @@ export async function POST(request: Request) {
         tipoCredito: tipoCredito || undefined,
         valorEstimado,
         saldoDeuda,
+        rawPayload: body,
       },
     };
 
