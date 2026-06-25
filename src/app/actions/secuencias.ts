@@ -604,10 +604,11 @@ export async function obtenerAnalytics() {
 
   // Guardar log de diagnóstico a archivo local
   try {
-    const logPath = path.join("c:/Users/oscar/OneDrive/Documentos/GitHub/PWA_Sauceda", "debug_analytics_log.txt");
+    const logPath = path.join(process.cwd(), "debug_analytics_log.txt");
     fs.appendFileSync(logPath, logLines.join("\n") + "\n\n", "utf8");
-  } catch (fsErr) {
-    // ignorar
+    console.log(`[Diagnostics] Logs de secuencias guardados en ${logPath}`);
+  } catch (fsErr: any) {
+    console.error(`[Diagnostics Error] No se pudo guardar el archivo: ${fsErr.message}`);
   }
 
   // 2. Obtener todas las acciones
