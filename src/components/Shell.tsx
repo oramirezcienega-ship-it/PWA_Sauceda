@@ -36,6 +36,7 @@ const ENLACES = [
   { href: "/automatizaciones", label: "Automatizaciones" },
   { href: "/secuencias", label: "Secuencias" },
   { href: "/whatsapp", label: "WhatsApp" },
+  { href: "/dashboard/llamadas", label: "Llamadas" },
 ];
 
 function esRutaPublica(path: string): boolean {

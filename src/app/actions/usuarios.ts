@@ -19,6 +19,10 @@ export interface UsuarioApp {
   rol: "admin" | "asesor";
   activo: boolean;
   telefono: string;
+  telefono_desvio?: string;
+  disponible_llamadas?: boolean;
+  horario_inicio?: string;
+  horario_fin?: string;
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
@@ -67,7 +71,16 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
   const mapa = new Map(
     (perfiles ?? []).map((p) => [
       p.id as string,
-      p as { nombre: string; rol: "admin" | "asesor"; activo: boolean; telefono?: string },
+      p as {
+        nombre: string;
+        rol: "admin" | "asesor";
+        activo: boolean;
+        telefono?: string;
+        telefono_desvio?: string;
+        disponible_llamadas?: boolean;
+        horario_inicio?: string;
+        horario_fin?: string;
+      },
     ]),
   );
   return (lista?.users ?? []).map((u) => {
@@ -79,6 +92,10 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
       rol: p?.rol ?? "admin",
       activo: p?.activo ?? true,
       telefono: p?.telefono ?? "",
+      telefono_desvio: p?.telefono_desvio ?? "",
+      disponible_llamadas: p?.disponible_llamadas ?? false,
+      horario_inicio: p?.horario_inicio ?? "09:00:00",
+      horario_fin: p?.horario_fin ?? "18:00:00",
     };
   });
 }
@@ -106,15 +123,28 @@ export async function crearUsuario(datos: {
     nombre: datos.nombre.trim(),
     rol: datos.rol,
     telefono: datos.telefono.trim(),
+    telefono_desvio: datos.telefono.trim(), // Por defecto igual al teléfono principal
+    disponible_llamadas: false,
+    horario_inicio: "09:00:00",
+    horario_fin: "18:00:00",
   });
   if (errPerfil) return { ok: false, mensaje: errPerfil.message };
   return { ok: true };
 }
 
-/** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono). */
+/** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono, etc.). */
 export async function actualizarUsuario(
   id: string,
-  datos: { nombre: string; rol: "admin" | "asesor"; activo: boolean; telefono: string },
+  datos: {
+    nombre: string;
+    rol: "admin" | "asesor";
+    activo: boolean;
+    telefono: string;
+    telefono_desvio?: string;
+    disponible_llamadas?: boolean;
+    horario_inicio?: string;
+    horario_fin?: string;
+  },
 ): Promise<void> {
   await requireAdministrador();
   const sb = supabaseServidor();
