@@ -14,7 +14,7 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     // 1. Obtener la información del expediente y su prospecto asociado
     const { data: exp, error: errExp } = await sb
       .from("expedientes")
-      .select("id, cliente, etapa, situacion, prospecto_id, prospectos(origen, correo)")
+      .select("id, cliente, telefono, valor_estimado, saldo_deuda, tipo_credito, fraccionamiento, situacion, prospecto_id, prospectos(origen, correo)")
       .eq("id", expedienteId)
       .maybeSingle();
 
@@ -26,7 +26,11 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     const d = exp as unknown as {
       id: string;
       cliente: string;
-      etapa: string;
+      telefono?: string;
+      valor_estimado?: number;
+      saldo_deuda?: number;
+      tipo_credito?: string | null;
+      fraccionamiento?: string | null;
       situacion: string;
       prospecto_id: string | null;
       prospectos?: { origen: string; correo: string } | null;
@@ -36,6 +40,28 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     const origen = d.prospectos?.origen || "sitio-web";
     const situacion = d.situacion || "Solicitud de cotización entrante.";
     const CRM_URL = process.env.SITE_URL || "https://app.saucedamx.com";
+
+    // Formatear datos más ricos para WhatsApp
+    const telefonoCliente = d.telefono ? d.telefono.trim() : "";
+    const tipoCredito = d.tipo_credito || "";
+    const valorEst = d.valor_estimado || 0;
+    const saldoDeu = d.saldo_deuda || 0;
+    const fraccionamiento = d.fraccionamiento && d.fraccionamiento !== "Por definir" ? d.fraccionamiento : "";
+
+    // Construir parámetros ricos
+    const paramCliente = telefonoCliente 
+      ? `${cliente} (${telefonoCliente})` 
+      : cliente;
+
+    const partesOrigen = [origen];
+    if (tipoCredito) partesOrigen.push(`Crédito: ${tipoCredito}`);
+    if (fraccionamiento) partesOrigen.push(`Zona: ${fraccionamiento}`);
+    const paramOrigen = partesOrigen.join(" · ");
+
+    const partesDetalles = [situacion.slice(0, 100)];
+    if (valorEst > 0) partesDetalles.push(`Valor: $${valorEst.toLocaleString()}`);
+    if (saldoDeu > 0) partesDetalles.push(`Deuda: $${saldoDeu.toLocaleString()}`);
+    const paramDetalles = partesDetalles.join(" · ");
 
     // 2. Obtener perfiles de usuarios activos
     const { data: perfiles, error: errPerf } = await sb
@@ -154,9 +180,9 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
 
       if (tieneBotonDinamico) {
         // Mapear cuerpo
-        if (bodyParamCount >= 1) parametrosCuerpo.push(cliente);
-        if (bodyParamCount >= 2) parametrosCuerpo.push(origen);
-        if (bodyParamCount >= 3) parametrosCuerpo.push(situacion.slice(0, 100));
+        if (bodyParamCount >= 1) parametrosCuerpo.push(paramCliente);
+        if (bodyParamCount >= 2) parametrosCuerpo.push(paramOrigen);
+        if (bodyParamCount >= 3) parametrosCuerpo.push(paramDetalles);
         if (bodyParamCount >= 4) parametrosCuerpo.push(`${CRM_URL}/expediente/${d.id}`);
         while (parametrosCuerpo.length < bodyParamCount) {
           parametrosCuerpo.push("");
@@ -174,16 +200,16 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
         // Mapeo plano heredado / fallback
         if (bodyParamCount >= 4) {
           parametrosCuerpo = [
-            cliente,
-            origen,
-            situacion.slice(0, 100),
+            paramCliente,
+            paramOrigen,
+            paramDetalles,
             `${CRM_URL}/expediente/${d.id}`,
           ];
         } else {
           parametrosCuerpo = [
-            cliente,
-            origen,
-            situacion.slice(0, 100),
+            paramCliente,
+            paramOrigen,
+            paramDetalles,
           ];
         }
       }
