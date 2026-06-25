@@ -286,12 +286,36 @@ export async function salirDeSecuencia(
     .select("phone, expediente_id")
     .single();
 
-  // Si salió por respuesta, gatillar análisis de IA en segundo plano
-  if (razon === "respondio" && enrollment?.phone) {
-    // Ejecutar análisis asíncrono
-    void analizarConversacionConIA(enrollment.phone).catch((err) =>
-      console.error(`Error en análisis IA post-secuencia para ${enrollment.phone}:`, err)
-    );
+  // Si salió por respuesta, actualizar la última acción enviada y gatillar análisis de IA en segundo plano
+  if (razon === "respondio") {
+    try {
+      const { data: ultimaAccion } = await sb
+        .from("sequence_actions")
+        .select("id")
+        .eq("enrollment_id", enrollmentId)
+        .order("enviado_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (ultimaAccion) {
+        await sb
+          .from("sequence_actions")
+          .update({
+            status: "respondido",
+            respondido_at: new Date().toISOString(),
+          })
+          .eq("id", ultimaAccion.id);
+      }
+    } catch (err) {
+      console.error("Error al actualizar última acción con respuesta:", err);
+    }
+
+    if (enrollment?.phone) {
+      // Ejecutar análisis asíncrono
+      void analizarConversacionConIA(enrollment.phone).catch((err) =>
+        console.error(`Error en análisis IA post-secuencia para ${enrollment.phone}:`, err)
+      );
+    }
   }
 }
 

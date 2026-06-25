@@ -46,6 +46,7 @@ export function SecuenciasClient() {
   const [tareas, setTareas] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any | null>(null);
   const [usuario, setUsuario] = useState<any | null>(null);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refrescar, setRefrescar] = useState(0);
 
@@ -80,18 +81,20 @@ export function SecuenciasClient() {
     async function cargarDatos() {
       setLoading(true);
       try {
-        const [listaSec, listaAsesores, listaTareas, dataAnalitica, userObj] = await Promise.all([
+        const [listaSec, listaAsesores, listaTareas, dataAnalitica, userObj, listaEnrollments] = await Promise.all([
           listarSecuencias(),
           listarAsesores(),
           listarTareasAsesor().catch(() => []),
           obtenerAnalytics(),
           obtenerUsuarioActual(),
+          listarEnrollments().catch(() => []),
         ]);
         setSecuencias(listaSec);
         setAsesores(listaAsesores);
         setTareas(listaTareas);
         setAnalytics(dataAnalitica);
         setUsuario(userObj);
+        setEnrollments(listaEnrollments);
       } catch (err) {
         console.error("Error al cargar datos del módulo:", err);
       } finally {
@@ -292,6 +295,21 @@ export function SecuenciasClient() {
       if (!res) {
         alert("No se encontró historial para este lead.");
       }
+    } catch (err: any) {
+      alert(`Error al buscar trazabilidad: ${err.message}`);
+    } finally {
+      setLoadingTrazabilidad(false);
+    }
+  };
+
+  // Ver historial de lead y redirigir
+  const verHistorialLead = async (telefono: string) => {
+    setBusquedaTrazabilidad(telefono);
+    setVistaActiva("trazabilidad");
+    setLoadingTrazabilidad(true);
+    try {
+      const res = await obtenerTrazabilidadLead(telefono);
+      setTrazabilidadLead(res);
     } catch (err: any) {
       alert(`Error al buscar trazabilidad: ${err.message}`);
     } finally {
@@ -1039,6 +1057,97 @@ export function SecuenciasClient() {
                   </strong>{" "}
                   con un índice de contacto promedio.
                 </p>
+              </div>
+
+              {/* Listas de detalle de Leads */}
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Leads que Respondieron */}
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h3 className="font-titular text-sm font-bold text-[#2D4A2B] flex items-center gap-1.5">
+                      <span className="text-emerald-600 text-base">✓</span> Leads que Respondieron
+                    </h3>
+                    <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5">
+                      {enrollments.filter((e) => e.status === "salido" && e.razon_salida === "respondio").length}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                    {enrollments.filter((e) => e.status === "salido" && e.razon_salida === "respondio").length === 0 ? (
+                      <p className="text-center text-xs text-slate-400 py-8">Aún no hay respuestas registradas.</p>
+                    ) : (
+                      enrollments
+                        .filter((e) => e.status === "salido" && e.razon_salida === "respondio")
+                        .map((en) => (
+                          <div key={en.id} className="rounded-lg bg-slate-50/50 hover:bg-slate-100/70 p-3 border border-slate-100 transition flex items-center justify-between gap-3 text-xs">
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-slate-800">{en.nombre}</p>
+                              <p className="text-[10px] text-slate-500 font-medium">
+                                {en.phone} · Secuencia: <span className="text-slate-700 font-semibold">{en.sequence?.nombre || "N/A"}</span>
+                              </p>
+                              {en.ultimo_contacto_at && (
+                                <p className="text-[9px] text-slate-400">
+                                  Respondió el: {new Date(en.ultimo_contacto_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => verHistorialLead(en.phone)}
+                              className="shrink-0 rounded bg-white border border-slate-200 hover:border-[#2D4A2B] hover:text-[#2D4A2B] text-slate-600 font-semibold px-2 py-1 transition text-[10px] shadow-sm"
+                            >
+                              Ver Historial
+                            </button>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Leads Activos Recientes */}
+                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h3 className="font-titular text-sm font-bold text-[#2D4A2B] flex items-center gap-1.5">
+                      <span className="text-amber-500 text-base">⚡</span> Leads Activos Recientes
+                    </h3>
+                    <span className="rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5">
+                      {enrollments.filter((e) => e.status === "activo").length}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                    {enrollments.filter((e) => e.status === "activo").length === 0 ? (
+                      <p className="text-center text-xs text-slate-400 py-8">No hay leads activos en este momento.</p>
+                    ) : (
+                      enrollments
+                        .filter((e) => e.status === "activo")
+                        .slice(0, 15) // Mostrar los 15 más recientes
+                        .map((en) => (
+                          <div key={en.id} className="rounded-lg bg-slate-50/50 hover:bg-slate-100/70 p-3 border border-slate-100 transition flex items-center justify-between gap-3 text-xs">
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-slate-800">{en.nombre}</p>
+                              <p className="text-[10px] text-slate-500 font-medium">
+                                {en.phone} · Secuencia: <span className="text-slate-700 font-semibold">{en.sequence?.nombre || "N/A"}</span>
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="inline-block px-1.5 py-0.2 bg-[#C9A961]/25 text-[#2D4A2B] rounded text-[9px] font-bold">
+                                  Paso {en.step_actual}
+                                </span>
+                                <span className="text-[9px] text-slate-400">
+                                  Inscrito: {new Date(en.enrolled_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => verHistorialLead(en.phone)}
+                              className="shrink-0 rounded bg-white border border-slate-200 hover:border-[#2D4A2B] hover:text-[#2D4A2B] text-slate-600 font-semibold px-2 py-1 transition text-[10px] shadow-sm"
+                            >
+                              Ver Historial
+                            </button>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

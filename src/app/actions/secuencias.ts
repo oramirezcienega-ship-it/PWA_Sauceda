@@ -527,14 +527,58 @@ export async function obtenerAnalytics() {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  // 1. Obtener todas las acciones
+  // 1. Auto-reparación de atribuciones históricas si hay discrepancias
+  try {
+    const { data: enrollmentsRespondio } = await sb
+      .from("sequence_enrollments")
+      .select("id, ultimo_contacto_at")
+      .eq("status", "salido")
+      .eq("razon_salida", "respondio");
+
+    if (enrollmentsRespondio && enrollmentsRespondio.length > 0) {
+      for (const en of enrollmentsRespondio) {
+        // Verificar si existe alguna acción marcada como respondida para este enrollment
+        const { data: accionRespondida } = await sb
+          .from("sequence_actions")
+          .select("id")
+          .eq("enrollment_id", en.id)
+          .or("status.eq.respondido,respondido_at.not.is.null")
+          .limit(1);
+
+        if (!accionRespondida || accionRespondida.length === 0) {
+          // Si no está marcada, buscar la última acción enviada y marcarla como respondido
+          const { data: ultimaAccion } = await sb
+            .from("sequence_actions")
+            .select("id")
+            .eq("enrollment_id", en.id)
+            .order("enviado_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (ultimaAccion) {
+            await sb
+              .from("sequence_actions")
+              .update({
+                status: "respondido",
+                respondido_at: en.ultimo_contacto_at || new Date().toISOString(),
+              })
+              .eq("id", ultimaAccion.id);
+          }
+        }
+      }
+    }
+  } catch (repairErr) {
+    console.error("Error al auto-reparar métricas históricas:", repairErr);
+  }
+
+  // 2. Obtener todas las acciones
   const { data: acciones, error: errAc } = await sb
     .from("sequence_actions")
     .select("canal, status, enviado_at, respondido_at");
 
   if (errAc) throw new Error(errAc.message);
 
-  // 2. Obtener recuento de enrollments por estado
+  // 3. Obtener recuento de enrollments por estado
   const { data: enrollments, error: errEn } = await sb
     .from("sequence_enrollments")
     .select("status, razon_salida");
@@ -552,10 +596,20 @@ export async function obtenerAnalytics() {
   (acciones || []).forEach((ac) => {
     const canal = ac.canal;
     if (canalStats[canal]) {
-      if (ac.status === "enviado" || ac.status === "llamada_agendada" || ac.status === "sms_enviado") {
+      if (
+        ac.status === "enviado" ||
+        ac.status === "llamada_agendada" ||
+        ac.status === "sms_enviado" ||
+        ac.status === "respondido"
+      ) {
         canalStats[canal].enviados++;
       }
-      if (ac.status === "respondio" || ac.respondido_at || ac.status === "llamada_completada") {
+      if (
+        ac.status === "respondio" ||
+        ac.status === "respondido" ||
+        ac.respondido_at ||
+        ac.status === "llamada_completada"
+      ) {
         canalStats[canal].respuestas++;
       }
     }
