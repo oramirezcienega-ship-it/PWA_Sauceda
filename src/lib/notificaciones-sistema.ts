@@ -48,20 +48,27 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     const saldoDeu = d.saldo_deuda || 0;
     const fraccionamiento = d.fraccionamiento && d.fraccionamiento !== "Por definir" ? d.fraccionamiento : "";
 
-    // Construir parámetros ricos
-    const paramCliente = telefonoCliente 
-      ? `${cliente} (${telefonoCliente})` 
-      : cliente;
+    // Construir parámetros ricos con emojis, negritas y saltos de línea para mejor legibilidad
+    const paramCliente = `👤 *Contacto:*
+• Nombre: ${cliente}
+• Teléfono: ${telefonoCliente || "No registrado"}`;
 
-    const partesOrigen = [origen];
-    if (tipoCredito) partesOrigen.push(`Crédito: ${tipoCredito}`);
-    if (fraccionamiento) partesOrigen.push(`Zona: ${fraccionamiento}`);
-    const paramOrigen = partesOrigen.join(" · ");
+    const partesOrigen = [`• Canal: ${origen}`];
+    if (tipoCredito) partesOrigen.push(`• Crédito: ${tipoCredito}`);
+    if (fraccionamiento) partesOrigen.push(`• Zona: ${fraccionamiento}`);
+    const paramOrigen = `📍 *Canal e Ingreso:*
+${partesOrigen.join("\n")}`;
 
-    const partesDetalles = [situacion.slice(0, 100)];
-    if (valorEst > 0) partesDetalles.push(`Valor: $${valorEst.toLocaleString()}`);
-    if (saldoDeu > 0) partesDetalles.push(`Deuda: $${saldoDeu.toLocaleString()}`);
-    const paramDetalles = partesDetalles.join(" · ");
+    const partesDetalles = [];
+    if (valorEst > 0) partesDetalles.push(`• Valor Propiedad: $${valorEst.toLocaleString()}`);
+    if (saldoDeu > 0) partesDetalles.push(`• Adeudo/Deuda: $${saldoDeu.toLocaleString()}`);
+    
+    const detFinancieros = partesDetalles.length > 0 
+      ? `💰 *Datos Financieros:*\n${partesDetalles.join("\n")}\n\n` 
+      : "";
+
+    const paramDetalles = `${detFinancieros}💬 *Detalles:*
+${situacion.slice(0, 150)}`;
 
     // 2. Obtener perfiles de usuarios activos
     const { data: perfiles, error: errPerf } = await sb
