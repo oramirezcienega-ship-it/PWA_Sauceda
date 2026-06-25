@@ -34,25 +34,40 @@ export interface ConfiguracionLlamadas {
 export async function listarLlamadasConmutador(): Promise<LlamadaConmutadorApp[]> {
   const sb = supabaseServidor();
   
-  // Realizar una consulta plana sin joins para evitar bloqueos por RLS de relaciones
-  const { data, error } = await sb
+  // 1. Obtener las llamadas
+  const { data: llamadas, error: errLlamadas } = await sb
     .from("llamadas_conmutador")
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error al listar llamadas del conmutador:", error);
-    throw new Error(error.message);
+  if (errLlamadas) {
+    console.error("Error al listar llamadas del conmutador:", errLlamadas);
+    throw new Error(errLlamadas.message);
   }
 
-  return (data ?? []).map((row: any) => ({
+  // 2. Obtener perfiles para resolver nombres de agentes en memoria
+  const { data: perfiles } = await sb
+    .from("perfiles")
+    .select("id, nombre");
+  
+  const mapaAgentes = new Map((perfiles ?? []).map((p) => [p.id, p.nombre]));
+
+  // 3. Obtener prospectos para resolver nombres de clientes en memoria
+  const { data: prospectos } = await sb
+    .from("prospectos")
+    .select("id, nombre");
+  
+  const mapaProspectos = new Map((prospectos ?? []).map((pr) => [pr.id, pr.nombre]));
+
+  // 4. Mapear la información
+  return (llamadas ?? []).map((row: any) => ({
     id: row.id,
     twilio_call_sid: row.twilio_call_sid,
     cliente_telefono: row.cliente_telefono,
     prospecto_id: row.prospecto_id,
-    prospecto_nombre: null, // Se resolverá dinámicamente si es necesario
+    prospecto_nombre: row.prospecto_id ? mapaProspectos.get(row.prospecto_id) || row.prospecto_id : null,
     agente_id: row.agente_id,
-    agente_nombre: null,    // Se resolverá dinámicamente si es necesario
+    agente_nombre: row.agente_id ? mapaAgentes.get(row.agente_id) || "Asesor" : null,
     tipo: row.tipo,
     estado: row.estado,
     duracion: row.duracion,
