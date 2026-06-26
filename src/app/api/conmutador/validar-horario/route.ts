@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       // TwiML con bienvenida profesional y dial directo al celular del asesor
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces, líderes en intermediación y asesoría inmobiliaria. Le informamos que, para su seguridad, sus datos personales están protegidos de acuerdo con nuestro aviso de privacidad. Para brindarle la mejor atención, transferiremos su llamada de inmediato con un asesor disponible. Agradecemos su preferencia y su valiosa espera.</Say>
+  <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces, soluciones integrales de bienes raíces. Le informamos que, para su seguridad, sus datos personales están protegidos de acuerdo con nuestro aviso de privacidad, lo invitamos a conocer nuestro aviso de privacidad en saucedamx.com. Para brindarle la mejor atención, transferiremos su llamada de inmediato con un asesor. Agradecemos su preferencia y su valiosa espera.</Say>
   <Dial>${telE164}</Dial>
 </Response>`;
     } else {
