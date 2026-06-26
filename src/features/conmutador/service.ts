@@ -336,12 +336,14 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
         .update(updateData)
         .eq("id", expedienteId);
 
-      await registrarActividad(sb, {
-        expedienteId,
-        tipo: "sistema",
-        titulo: "Nueva interacción de voz con el conmutador IA",
-        detalle: resumen || "El cliente interactuó con el Voice Bot.",
-      });
+      if (resumen) {
+        await registrarActividad(sb, {
+          expedienteId,
+          tipo: "llamada",
+          titulo: "Llamada perfilada por Conmutador IA",
+          detalle: resumen,
+        });
+      }
     }
   }
 
