@@ -11,7 +11,7 @@ import {
   eliminarProspectosMasivo,
 } from "@/app/actions/prospectos";
 import { useOrden } from "@/hooks/useOrden";
-import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
+import { listarSecuencias, enrolarLead, listarEnrollments } from "@/app/actions/secuencias";
 import { ThOrden } from "./ThOrden";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
@@ -32,11 +32,16 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
   const [secuencias, setSecuencias] = useState<any[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
 
   useEffect(() => {
     listarSecuencias()
       .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
       .catch((err) => console.error("Error al cargar secuencias en tabla:", err));
+
+    listarEnrollments()
+      .then((lista) => setEnrollments(lista.filter((e) => e.status === "activo")))
+      .catch((err) => console.error("Error al cargar enrolamientos en tabla:", err));
   }, []);
 
   async function enrolarSeleccionEnSecuencia(sequenceId: string) {
@@ -229,7 +234,6 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 ["telefono", "Teléfono", "izquierda"],
                 ["ciudad", "Ciudad", "izquierda"],
                 ["origen", "Origen", "izquierda"],
-                ["valorCampana", "Valor campaña", "derecha"],
               ] as const
             ).map(([columna, label, alineado]) => (
               <ThOrden
@@ -243,51 +247,84 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 {label}
               </ThOrden>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {orden.ordenados.map((p) => (
-            <tr
-              key={p.id}
-              className={`border-b border-carbon/5 transition hover:bg-crema/40 ${
-                sel.has(p.id) ? "bg-sauce/5" : ""
-              }`}
-            >
-              <td className="px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  checked={sel.has(p.id)}
-                  onChange={() => alternar(p.id)}
-                  aria-label={`Seleccionar ${p.nombreCompleto}`}
-                  className="cursor-pointer"
-                />
-              </td>
-              <td className="px-3 py-2.5">
-                <Link
-                  href={`/prospectos/${p.id}`}
-                  className="font-titular font-medium text-verde-profundo hover:text-sauce"
-                >
-                  {p.nombreCompleto}
-                </Link>
-                <span className="ml-2 font-mono text-[10px] text-carbon/40">
-                  {p.id}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
-                {p.telefono || "—"}
-              </td>
-              <td className="px-3 py-2.5 text-carbon/70">{p.ciudad || "—"}</td>
-              <td className="px-3 py-2.5">
-                <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2.5 py-0.5 text-xs text-cielo">
-                  {ORIGEN_POR_ID[p.origen]}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-right font-mono text-carbon/70">
-                {formatoPesos(p.valorCampana)}
-              </td>
+              <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-carbon/70 text-left">
+                Secuencia
+              </th>
+              <ThOrden
+                columna="valorCampana"
+                claveActiva={orden.clave}
+                dir={orden.dir}
+                onOrdenar={orden.ordenarPor}
+                alineado="derecha"
+              >
+                Valor campaña
+              </ThOrden>
             </tr>
-          ))}
-        </tbody>
+          </thead>
+          <tbody>
+            {orden.ordenados.map((p) => (
+              <tr
+                key={p.id}
+                className={`border-b border-carbon/5 transition hover:bg-crema/40 ${
+                  sel.has(p.id) ? "bg-sauce/5" : ""
+                }`}
+              >
+                <td className="px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={sel.has(p.id)}
+                    onChange={() => alternar(p.id)}
+                    aria-label={`Seleccionar ${p.nombreCompleto}`}
+                    className="cursor-pointer"
+                  />
+                </td>
+                <td className="px-3 py-2.5">
+                  <Link
+                    href={`/prospectos/${p.id}`}
+                    className="font-titular font-medium text-verde-profundo hover:text-sauce"
+                  >
+                    {p.nombreCompleto}
+                  </Link>
+                  <span className="ml-2 font-mono text-[10px] text-carbon/40">
+                    {p.id}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
+                  {p.telefono || "—"}
+                </td>
+                <td className="px-3 py-2.5 text-carbon/70">{p.ciudad || "—"}</td>
+                <td className="px-3 py-2.5">
+                  <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2.5 py-0.5 text-xs text-cielo">
+                    {ORIGEN_POR_ID[p.origen]}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  {(() => {
+                    const en = enrollments.find((e) => e.prospecto_id === p.id);
+                    if (en) {
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-800"
+                          title={`Paso actual: ${en.step_actual}`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          {en.sequence?.nombre || "Activa"}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="text-xs text-carbon/40 italic">
+                        Sin enrolar
+                      </span>
+                    );
+                  })()}
+                </td>
+                <td className="px-3 py-2.5 text-right font-mono text-carbon/70">
+                  {formatoPesos(p.valorCampana)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
 
@@ -364,6 +401,30 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Ciudad</p>
                   <p className="text-carbon/75 font-medium mt-0.5 truncate">{p.ciudad || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Automatización</p>
+                  <div className="mt-0.5">
+                    {(() => {
+                      const en = enrollments.find((e) => e.prospecto_id === p.id);
+                      if (en) {
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800"
+                            title={`Paso actual: ${en.step_actual}`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            {en.sequence?.nombre || "Activa"}
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="text-xs text-carbon/40 italic">
+                          Sin enrolar
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Valor Campaña</p>
