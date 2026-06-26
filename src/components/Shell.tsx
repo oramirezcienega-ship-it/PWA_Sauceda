@@ -27,7 +27,6 @@ import {
 
 const ENLACES = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard-crm", label: "Dashboard CRM" },
   { href: "/", label: "Expedientes" },
   { href: "/prospectos", label: "Prospectos" },
   { href: "/formularios", label: "Formularios" },
@@ -37,6 +36,7 @@ const ENLACES = [
   { href: "/secuencias", label: "Secuencias" },
   { href: "/whatsapp", label: "WhatsApp" },
   { href: "/dashboard/llamadas", label: "Llamadas" },
+  { href: "/reportes", label: "Reportes" },
 ];
 
 function esRutaPublica(path: string): boolean {

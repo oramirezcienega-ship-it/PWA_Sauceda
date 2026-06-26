@@ -1,10 +1,11 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { ETAPAS } from "@/lib/etapas";
 import { ORIGENES } from "@/lib/origenes";
 import type { EtapaId } from "@/lib/types";
+import { obtenerUsuarioActual } from "@/app/actions/usuarios";
 
 /** Resumen general de la operación para el dashboard. */
 export interface ResumenOperacion {
@@ -89,5 +90,187 @@ export async function resumenOperacion(): Promise<ResumenOperacion> {
     valorPipeline,
     porEtapa,
     porOrigen,
+  };
+}
+
+export interface ResumenAsesor {
+  totalLeads: number;
+  totalTareas: number;
+  tareasPendientes: number;
+  tareasCompletadas: number;
+  cerrados: number;
+  tasaConversion: number;
+  leadsAsignados: {
+    id: string;
+    nombre: string;
+    telefono: string;
+    estatus: string;
+    calificacion: string;
+    fechaAsignacion: string;
+  }[];
+  tareasPendientesLista: {
+    id: string;
+    tipo: string;
+    agendadaPara: string;
+    contexto: string;
+    leadNombre: string;
+    leadTelefono: string;
+  }[];
+}
+
+/** Obtiene el resumen de KPIs, tareas y leads para el asesor actual. */
+export async function resumenAsesor(): Promise<ResumenAsesor> {
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const sb = supabaseServidor();
+
+  // 1. Obtener todas las tareas del asesor
+  const { data: tasks, error: eTasks } = await sb
+    .from("asesor_tasks")
+    .select(`
+      id,
+      tipo,
+      status,
+      agendada_para,
+      enrollment:sequence_enrollments(
+        id,
+        prospecto_id,
+        expediente_id,
+        nombre,
+        phone
+      )
+    `)
+    .eq("asesor_id", usuario.id);
+
+  if (eTasks) throw new Error(eTasks.message);
+
+  const totalTareas = tasks?.length ?? 0;
+  const tareasPendientes = tasks?.filter((t) => t.status === "pendiente").length ?? 0;
+  const tareasCompletadas = tasks?.filter((t) => t.status === "completada").length ?? 0;
+
+  // 2. Obtener el nombre del asesor para buscar conversaciones de WhatsApp asignadas
+  const userProfile = await obtenerUsuarioActual();
+  const nombreAgente = userProfile?.nombre || "";
+
+  // 3. Extraer los prospectos / expedientes únicos asignados a través de las tareas
+  const prospectosMap = new Map<string, { id: string; nombre: string; telefono: string; fechaAsignacion: string }>();
+  const expedienteIds = new Set<string>();
+
+  tasks?.forEach((t) => {
+    const enr = t.enrollment as any;
+    if (enr) {
+      if (enr.prospecto_id) {
+        prospectosMap.set(enr.prospecto_id, {
+          id: enr.prospecto_id,
+          nombre: enr.nombre || "Sin nombre",
+          telefono: enr.phone || "",
+          fechaAsignacion: t.agendada_para
+        });
+      }
+      if (enr.expediente_id) {
+        expedienteIds.add(enr.expediente_id);
+      }
+    }
+  });
+
+  // 4. Buscar también leads por interacción en WhatsApp
+  let extraProspectoIds: string[] = [];
+  if (nombreAgente) {
+    const { data: recentMsgs } = await sb
+      .from("mensajes_whatsapp")
+      .select("prospecto_id")
+      .eq("agente", nombreAgente)
+      .not("prospecto_id", "is", null);
+    if (recentMsgs) {
+      extraProspectoIds = recentMsgs.map((m) => m.prospecto_id).filter(Boolean) as string[];
+    }
+  }
+
+  const prospectoIds = Array.from(new Set([...Array.from(prospectosMap.keys()), ...extraProspectoIds]));
+
+  // 5. Consultar la información real de los prospectos (estatus y calificación)
+  let leadsAsignados: ResumenAsesor["leadsAsignados"] = [];
+  if (prospectoIds.length > 0) {
+    const { data: propsData, error: eProps } = await sb
+      .from("prospectos")
+      .select("id, nombre, primer_apellido, segundo_apellido, telefono, estatus, calificacion, created_at")
+      .in("id", prospectoIds);
+
+    if (!eProps && propsData) {
+      leadsAsignados = propsData.map((p) => {
+        const mappedName = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
+        const originalInfo = prospectosMap.get(p.id);
+        return {
+          id: p.id,
+          nombre: mappedName || originalInfo?.nombre || "Sin nombre",
+          telefono: p.telefono || originalInfo?.telefono || "",
+          estatus: p.estatus || "nuevo",
+          calificacion: p.calificacion || "frio",
+          fechaAsignacion: originalInfo?.fechaAsignacion || p.created_at || new Date().toISOString()
+        };
+      });
+    }
+  }
+
+  // 6. Consultar los expedientes asociados a las tareas para ver cuántos están cerrados (conversión)
+  let cerrados = 0;
+  const expIdsArray = Array.from(expedienteIds);
+  if (expIdsArray.length > 0) {
+    const { data: expsData, error: eExps } = await sb
+      .from("expedientes")
+      .select("id, etapa")
+      .in("id", expIdsArray);
+
+    if (!eExps && expsData) {
+      cerrados = expsData.filter((e) => e.etapa === "cerrado").length;
+    }
+  }
+
+  const totalLeads = leadsAsignados.length;
+  const tasaConversion = totalLeads ? Math.round((cerrados / totalLeads) * 100) : 0;
+
+  // 7. Filtrar las tareas pendientes con contexto y detalles de contacto para mostrarlas en una lista
+  const tareasPendientesListaRaw = tasks?.filter((t) => t.status === "pendiente") || [];
+  
+  // Para las tareas pendientes, obtener detalles de expediente si aplica
+  const pendExpIds = tareasPendientesListaRaw
+    .map((t) => (t.enrollment as any)?.expediente_id)
+    .filter(Boolean) as string[];
+
+  let pendExpMap = new Map<string, any>();
+  if (pendExpIds.length > 0) {
+    const { data: pExps } = await sb
+      .from("expedientes")
+      .select("id, cliente, notas, situacion, fraccionamiento")
+      .in("id", pendExpIds);
+    pendExpMap = new Map((pExps || []).map((e) => [e.id, e]));
+  }
+
+  const tareasPendientesLista = tareasPendientesListaRaw.map((t) => {
+    const enr = t.enrollment as any;
+    const exp = enr?.expediente_id ? pendExpMap.get(enr.expediente_id) : null;
+    const contexto = exp
+      ? `Fraccionamiento: ${exp.fraccionamiento || ""}. Situación: ${exp.situacion || ""}. Notas: ${exp.notas || ""}`
+      : "Lead sin expediente enlazado.";
+
+    return {
+      id: t.id,
+      tipo: t.tipo || "seguimiento",
+      agendadaPara: t.agendada_para,
+      contexto,
+      leadNombre: enr?.nombre || "Sin nombre",
+      leadTelefono: enr?.phone || ""
+    };
+  });
+
+  return {
+    totalLeads,
+    totalTareas,
+    tareasPendientes,
+    tareasCompletadas,
+    cerrados,
+    tasaConversion,
+    leadsAsignados,
+    tareasPendientesLista
   };
 }

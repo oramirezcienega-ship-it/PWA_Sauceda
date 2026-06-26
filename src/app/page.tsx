@@ -12,7 +12,7 @@ import { rolUsuarioActual } from "@/app/actions/usuarios";
 export default async function PaginaTablero() {
   const rol = await rolUsuarioActual();
   if (rol === "asesor") {
-    redirect("/conversaciones");
+    redirect("/dashboard");
   }
 
   return (

@@ -144,7 +144,17 @@ export function Conversaciones() {
 
   // Carga inicial + plantillas aprobadas + asesores + rol.
   useEffect(() => {
-    void refrescar(null);
+    let preseleccion: string | null = null;
+    if (typeof window !== "undefined") {
+      const queryParams = new URLSearchParams(window.location.search);
+      const tel = queryParams.get("tel") || queryParams.get("telefono");
+      if (tel) {
+        preseleccion = tel;
+        setSel(tel);
+      }
+    }
+
+    void refrescar(preseleccion);
     listarPlantillasWhatsApp()
       .then((r) => setPlantillas(r.plantillas.filter((p) => p.estado === "APPROVED")))
       .catch(() => setPlantillas([]));

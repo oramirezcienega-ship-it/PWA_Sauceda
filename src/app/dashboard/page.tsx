@@ -1,18 +1,205 @@
 import { Encabezado } from "@/components/Encabezado";
-import { resumenOperacion } from "@/app/actions/reportes";
+import { resumenOperacion, resumenAsesor } from "@/app/actions/reportes";
+import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { formatoPesos } from "@/lib/formato";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-/** Dashboard general de la operación. */
+/** Dashboard principal del sistema. Adaptativo según el rol (Admin u Asesor). */
 export default async function PaginaDashboard() {
+  const rol = await rolUsuarioActual();
+
+  if (rol === "asesor") {
+    const user = await obtenerUsuarioActual();
+    const usuarioNombre = user?.nombre || "Asesor";
+    
+    let r;
+    try {
+      r = await resumenAsesor();
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : "Error";
+      return (
+        <main className="min-h-screen pb-10 bg-crema/20">
+          <Encabezado />
+          <div className="mx-auto max-w-5xl px-4 pt-5">
+            <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
+              Mi Panel de Control
+            </h1>
+            <p className="mt-4 rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
+              No se pudo cargar tu panel de control. {mensaje}
+            </p>
+          </div>
+        </main>
+      );
+    }
+
+    return (
+      <main className="min-h-screen pb-10 bg-crema/10">
+        <Encabezado />
+        <div className="mx-auto max-w-6xl px-4 pt-5">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
+                Mi Panel de Control
+              </h1>
+              <p className="mt-1 text-sm text-carbon/60">
+                Hola, <span className="font-medium text-verde-profundo">{usuarioNombre}</span>. Aquí tienes tus indicadores y tareas prioritarias.
+              </p>
+            </div>
+            <div>
+              <Link
+                href="/conversaciones"
+                className="inline-block rounded-md bg-verde-profundo px-4 py-2 text-sm font-medium text-crema shadow transition hover:bg-verde-profundo/90"
+              >
+                Bandeja de Entrada
+              </Link>
+            </div>
+          </div>
+
+          {/* Tarjetas de Métricas */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+            <Metrica etiqueta="Leads Asignados" valor={String(r.totalLeads)} />
+            <Metrica 
+              etiqueta="Tareas Pendientes" 
+              valor={String(r.tareasPendientes)} 
+              resaltar={r.tareasPendientes > 0} 
+            />
+            <Metrica etiqueta="Tareas Completadas" valor={String(r.tareasCompletadas)} />
+            <Metrica etiqueta="Expedientes Cerrados" valor={String(r.cerrados)} />
+            <Metrica 
+              etiqueta="Conversión" 
+              valor={`${r.tasaConversion}%`} 
+              resaltar 
+            />
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Sección de Leads Asignados */}
+            <div className="lg:col-span-2 rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="font-titular text-lg font-semibold text-verde-profundo">
+                  Mis Leads Asignados ({r.totalLeads})
+                </h2>
+                <span className="text-xs text-carbon/40">Listado interactivo</span>
+              </div>
+
+              {r.leadsAsignados.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-carbon/40">No tienes leads asignados actualmente.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-carbon/10 text-xs font-semibold uppercase tracking-wider text-carbon/40">
+                        <th className="pb-3">Nombre</th>
+                        <th className="pb-3">Teléfono</th>
+                        <th className="pb-3">Calificación</th>
+                        <th className="pb-3">Estatus</th>
+                        <th className="pb-3 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-carbon/5 text-sm">
+                      {r.leadsAsignados.map((l) => (
+                        <tr key={l.id} className="hover:bg-carbon/[0.01] transition">
+                          <td className="py-3 font-medium text-carbon">{l.nombre}</td>
+                          <td className="py-3 text-carbon/60 font-mono">{l.telefono}</td>
+                          <td className="py-3">
+                            <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase ${
+                              l.calificacion === "caliente" ? "bg-rojoLuz text-rojo" :
+                              l.calificacion === "templado" ? "bg-dorado/20 text-[#B8860B]" :
+                              l.calificacion === "frio" ? "bg-carbon/5 text-carbon/60" :
+                              "bg-carbon/10 text-carbon/40"
+                            }`}>
+                              {l.calificacion}
+                            </span>
+                          </td>
+                          <td className="py-3">
+                            <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                              l.estatus === "cliente" ? "bg-verdeLuz text-verde-profundo" :
+                              l.estatus === "expediente_abierto" ? "bg-cielo/15 text-[#3b667e]" :
+                              l.estatus === "en_conversacion" ? "bg-amber-100 text-amber-800" :
+                              l.estatus === "nuevo" ? "bg-verde-profundo/10 text-verde-profundo" :
+                              "bg-carbon/10 text-carbon/50"
+                            }`}>
+                              {l.estatus.replace("_", " ")}
+                            </span>
+                          </td>
+                          <td className="py-3 text-right">
+                            <Link
+                              href={`/conversaciones?tel=${l.telefono}`}
+                              className="rounded-md border border-sauce/20 bg-sauce/5 px-3 py-1.5 text-xs font-medium text-sauce hover:bg-sauce hover:text-white transition"
+                            >
+                              Chatear
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Sección de Tareas Pendientes */}
+            <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 font-titular text-lg font-semibold text-verde-profundo">
+                Tareas Pendientes ({r.tareasPendientes})
+              </h2>
+
+              {r.tareasPendientesLista.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm text-carbon/40">No tienes llamadas o tareas agendadas.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1 scrollbar-sutil">
+                  {r.tareasPendientesLista.map((t) => (
+                    <div key={t.id} className="rounded-lg border border-carbon/5 bg-carbon/[0.01] p-3 hover:border-sauce/30 transition">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                          t.tipo === "llamada" ? "bg-cielo/20 text-[#3b667e]" : "bg-dorado/20 text-[#B8860B]"
+                        }`}>
+                          {t.tipo}
+                        </span>
+                        <span className="text-[10px] text-carbon/40 font-mono">
+                          {new Date(t.agendadaPara).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })} · {new Date(t.agendadaPara).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      
+                      <p className="mt-2 text-sm font-semibold text-carbon">{t.leadNombre}</p>
+                      <p className="text-xs text-carbon/50 font-mono">{t.leadTelefono}</p>
+                      <p className="mt-2 text-xs text-carbon/70 bg-white border border-carbon/5 rounded p-2 italic leading-relaxed">
+                        {t.contexto}
+                      </p>
+
+                      <div className="mt-3 flex justify-end">
+                        <Link
+                          href={`/conversaciones?tel=${t.leadTelefono}`}
+                          className="rounded bg-sauce px-3 py-1.5 text-xs font-medium text-crema hover:bg-verde-profundo transition"
+                        >
+                          Atender Tarea
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Dashboard del Administrador (global)
   let r;
   try {
     r = await resumenOperacion();
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error";
     return (
-      <main className="min-h-screen pb-10">
+      <main className="min-h-screen pb-10 bg-crema/10">
         <Encabezado />
         <div className="mx-auto max-w-5xl px-4 pt-5">
           <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
@@ -30,7 +217,7 @@ export default async function PaginaDashboard() {
   const maxOrigen = Math.max(1, ...r.porOrigen.map((o) => o.total));
 
   return (
-    <main className="min-h-screen pb-10">
+    <main className="min-h-screen pb-10 bg-crema/5">
       <Encabezado />
       <div className="mx-auto max-w-5xl px-4 pt-5">
         <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
@@ -135,7 +322,7 @@ function Metrica({
   resaltar?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-carbon/10 bg-white p-4">
+    <div className="rounded-xl border border-carbon/10 bg-white p-4 shadow-sm">
       <p className="text-[10px] uppercase tracking-wide text-carbon/40">
         {etiqueta}
       </p>
