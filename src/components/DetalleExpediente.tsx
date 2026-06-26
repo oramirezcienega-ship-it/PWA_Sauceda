@@ -51,7 +51,7 @@ export function DetalleExpediente({ id }: { id: string }) {
   const siguiente = etapaSiguiente(expediente.etapa);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
+    <div className="mx-auto max-w-2xl px-4 py-6">
       <Link
         href="/"
         className="inline-flex items-center gap-1 text-sm text-sauce hover:text-verde-profundo"
@@ -118,10 +118,8 @@ export function DetalleExpediente({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* Dos columnas: izquierda = operación/cliente · derecha = info del expediente */}
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* ---------- COLUMNA IZQUIERDA ---------- */}
-        <div className="space-y-6">
+      {/* Columna única centrada para un diseño premium y ordenado */}
+      <div className="mt-6 space-y-6">
           {/* Avance por etapas */}
           <div className="rounded-xl border border-carbon/10 bg-white p-4">
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
@@ -171,12 +169,6 @@ export function DetalleExpediente({ id }: { id: string }) {
               <span className="text-sm text-sauce">Ver ficha →</span>
             </Link>
           )}
-
-
-        </div>
-
-        {/* ---------- COLUMNA DERECHA: información del expediente ---------- */}
-        <div className="space-y-6">
           {/* Ficha Premium de Información de la Propiedad (Estilo Expediente/Lead) */}
           <div className="rounded-2xl border border-carbon/10 bg-white p-6 shadow-sm">
             {/* Header de la Ficha */}
@@ -363,13 +355,10 @@ export function DetalleExpediente({ id }: { id: string }) {
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
-
+          {/* Bitácora de actividades */}
+          <Actividades expedienteId={expediente.id} />
         </div>
       </div>
-
-      {/* Bitácora de actividades (ancho completo) */}
-      <Actividades expedienteId={expediente.id} />
-    </div>
   );
 }
 
