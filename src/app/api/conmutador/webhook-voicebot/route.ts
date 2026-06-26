@@ -11,7 +11,32 @@ export async function POST(request: Request) {
 
     const messageType = body.message?.type || body.type || "";
 
-    // Si es una petición de destino de transferencia (transfer-destination-request)
+    // 1. Interceptar petición inicial del asistente (assistant-request)
+    if (messageType === "assistant-request") {
+      const agente = await obtenerAgenteDisponible();
+
+      if (agente) {
+        console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata.`);
+        return NextResponse.json({
+          assistant: {
+            firstMessage: `Hola, bienvenido a Sauceda Bienes Raíces. Te estoy transfiriendo de inmediato con nuestro asesor de guardia, ${agente.nombre}. Por favor no cuelgues.`,
+            model: {
+              messages: [
+                {
+                  role: "system",
+                  content: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool (like 'transferir_a_asesor' or 'transfer_call_tool') to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool immediately.`
+                }
+              ]
+            }
+          }
+        });
+      } else {
+        console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía.");
+        return NextResponse.json({});
+      }
+    }
+
+    // 2. Si es una petición de destino de transferencia (transfer-destination-request)
     if (messageType === "transfer-destination-request" || messageType === "transfer-destination") {
       const callObj = body.message?.call || body.call || {};
       const twilioCallSid = 
