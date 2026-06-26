@@ -18,8 +18,8 @@ export async function POST(request: Request) {
     }
 
     const callSid = body.CallSid || body.callSid || "";
-    const callStatus = body.CallStatus || body.callStatus || "";
-    const duration = body.CallDuration || body.callDuration || body.duration;
+    const callStatus = body.DialCallStatus || body.CallStatus || body.callStatus || "";
+    const duration = body.DialCallDuration || body.CallDuration || body.callDuration || body.duration;
     const recordingUrl = body.RecordingUrl || body.recordingUrl || "";
     const agenteId = body.agenteId || body.AgenteId || undefined;
 
