@@ -20,25 +20,18 @@ export async function POST(request: Request) {
         console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata.`);
         
         return NextResponse.json({
-          assistant: {
-            id: sofiaId, // Vapi heredará toda la configuración de Sofía (herramientas, voz, etc.)
+          assistantId: sofiaId,
+          assistantOverrides: {
             firstMessage: `Hola, bienvenido a Sauceda Bienes Raíces. Te estoy transfiriendo de inmediato con nuestro asesor de guardia, ${agente.nombre}. Por favor no cuelgues.`,
             model: {
-              messages: [
-                {
-                  role: "system",
-                  content: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool 'transferir_a_asesor' to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool 'transferir_a_asesor' immediately.`
-                }
-              ]
+              systemPrompt: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool 'transferir_a_asesor' to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool 'transferir_a_asesor' immediately.`
             }
           }
         });
       } else {
         console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía por defecto.");
         return NextResponse.json({
-          assistant: {
-            id: sofiaId
-          }
+          assistantId: sofiaId
         });
       }
     }
