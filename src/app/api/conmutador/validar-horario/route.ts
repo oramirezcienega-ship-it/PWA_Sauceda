@@ -27,6 +27,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Falta CallSid" }, { status: 400 });
     }
 
+    // Ignorar status callbacks de llamadas finalizadas para evitar reiniciar la lógica
+    const callStatus = body.CallStatus || body.callStatus || "";
+    if (["completed", "busy", "no-answer", "canceled", "failed"].includes(callStatus.toLowerCase())) {
+      console.log(`[validar-horario] Ignorando status callback de llamada finalizada: ${callSid} (${callStatus})`);
+      return NextResponse.json({ ok: true });
+    }
+
     // Registrar el inicio de la llamada en la base de datos
     await registrarInicioLlamada({
       twilioCallSid: callSid,

@@ -240,7 +240,7 @@ export async function registrarInicioLlamada(datos: DatosLlamadaInicial): Promis
 export async function actualizarLlamada(
   twilioCallSid: string,
   datos: {
-    estado: string;
+    estado?: string;
     duracion?: number;
     grabacionUrl?: string;
     agenteId?: string;
@@ -248,10 +248,11 @@ export async function actualizarLlamada(
 ): Promise<void> {
   const sb = supabaseServidor();
   
-  const updateData: Record<string, any> = {
-    estado: datos.estado,
-  };
+  const updateData: Record<string, any> = {};
 
+  if (datos.estado !== undefined && datos.estado.trim() !== "") {
+    updateData.estado = datos.estado;
+  }
   if (datos.duracion !== undefined) updateData.duracion = datos.duracion;
   if (datos.grabacionUrl !== undefined) updateData.grabacion_url = datos.grabacionUrl;
   if (datos.agenteId !== undefined) updateData.agente_id = datos.agenteId;
