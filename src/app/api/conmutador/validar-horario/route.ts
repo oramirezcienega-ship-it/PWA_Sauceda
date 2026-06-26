@@ -52,11 +52,19 @@ export async function POST(request: Request) {
         agenteId: agente.id,
       });
 
-      // TwiML con bienvenida profesional y dial directo al celular del asesor
+      // Normalizar el número receptor (Twilio de Sauceda) para usarlo como Caller ID
+      let callerIdAttr = "";
+      if (to) {
+        const toCanon = normalizarTelefono(to);
+        const toE164 = toCanon.startsWith("+") ? toCanon : `+${toCanon}`;
+        callerIdAttr = ` callerId="${toE164}"`;
+      }
+
+      // TwiML con bienvenida profesional y dial directo al celular del asesor (usando número de Sauceda como Caller ID)
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces, soluciones integrales de bienes raíces. Le informamos que, para su seguridad, sus datos personales están protegidos de acuerdo con nuestro aviso de privacidad, lo invitamos a conocer nuestro aviso de privacidad en saucedamx.com. Para brindarle la mejor atención, transferiremos su llamada de inmediato con un asesor. Agradecemos su preferencia y su valiosa espera.</Say>
-  <Dial>${telE164}</Dial>
+  <Dial${callerIdAttr}>${telE164}</Dial>
 </Response>`;
     } else {
       console.log("[Twilio Direct Dial] No hay agentes de guardia disponibles. Desviando a Voice Bot (Sofía) en Vapi.");
