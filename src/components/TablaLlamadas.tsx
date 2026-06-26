@@ -57,6 +57,15 @@ export function TablaLlamadas({ inicial }: { inicial: LlamadaConmutadorApp[] }) 
     return `${mins}m ${secs}s`;
   }
 
+  // Obtener URL de audio usando el proxy para grabaciones de Twilio
+  function obtenerUrlAudio(url: string | null) {
+    if (!url) return "";
+    if (url.startsWith("https://api.twilio.com/")) {
+      return `/api/conmutador/grabacion?url=${encodeURIComponent(url)}`;
+    }
+    return url;
+  }
+
   // Badge de Estado
   function renderBadgeEstado(estado: string) {
     const est = estado.toLowerCase();
@@ -178,7 +187,7 @@ export function TablaLlamadas({ inicial }: { inicial: LlamadaConmutadorApp[] }) 
                   </td>
                   <td className="px-3 py-3">
                     {ll.grabacion_url ? (
-                      <audio src={ll.grabacion_url} controls className="h-8 max-w-[200px] outline-none" />
+                      <audio src={obtenerUrlAudio(ll.grabacion_url)} controls className="h-8 max-w-[200px] outline-none" />
                     ) : (
                       <span className="text-xs text-carbon/30">Sin grabación</span>
                     )}
@@ -247,7 +256,7 @@ export function TablaLlamadas({ inicial }: { inicial: LlamadaConmutadorApp[] }) 
               {ll.grabacion_url && (
                 <div className="pt-1">
                   <span className="text-[10px] uppercase tracking-wider text-carbon/40 font-bold block mb-1">Grabación</span>
-                  <audio src={ll.grabacion_url} controls className="h-8 w-full outline-none" />
+                  <audio src={obtenerUrlAudio(ll.grabacion_url)} controls className="h-8 w-full outline-none" />
                 </div>
               )}
 
