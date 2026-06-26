@@ -163,11 +163,11 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
     );
   }
 
-  // Renderizado en Modo Lectura (Fila Horizontal en desktop, pila en móvil)
+  // Renderizado en Modo Lectura (Fila Horizontal en desktop, pila en móvil con rejilla de 12 columnas)
   return (
-    <div className="relative flex w-full flex-col gap-4 rounded-2xl border border-carbon/10 bg-white p-4 shadow-sm transition-all duration-300 hover:border-sauce/30 hover:shadow-md md:flex-row md:items-center md:justify-between">
+    <div className="group relative w-full rounded-2xl border border-carbon/10 bg-white p-4 shadow-sm transition-all duration-300 hover:border-sauce/30 hover:shadow-md grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
       {/* 1. Información de Usuario (Nombre y Email) */}
-      <div className="flex items-center gap-3 min-w-[220px] md:max-w-xs flex-1">
+      <div className="col-span-1 md:col-span-3 flex items-center gap-3 min-w-0">
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sauce/15 to-verde-profundo/10 font-titular text-base font-semibold text-verde-profundo shadow-inner">
           {inicialNombre}
         </div>
@@ -182,15 +182,15 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
       </div>
 
       {/* 2. Teléfono */}
-      <div className="flex items-center gap-2 text-sm text-carbon/70 min-w-[140px] md:max-w-[180px]">
+      <div className="col-span-1 md:col-span-2 flex items-center gap-2 text-sm text-carbon/70 min-w-0">
         <svg className="h-4 w-4 flex-shrink-0 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
         </svg>
-        <span className="font-mono text-carbon/80">{u.telefono || "Sin teléfono"}</span>
+        <span className="font-mono text-carbon/80 truncate">{u.telefono || "Sin teléfono"}</span>
       </div>
 
       {/* 3. Ajustes Conmutador */}
-      <div className="flex flex-shrink-0 items-center justify-between gap-3 rounded-xl border border-carbon/5 bg-crema px-3 py-1.5 shadow-sm min-w-[200px] md:max-w-[250px]">
+      <div className="col-span-1 md:col-span-3 flex items-center justify-between gap-2.5 rounded-xl border border-carbon/5 bg-crema p-2.5 shadow-sm min-w-0">
         <div className="min-w-0">
           <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">Conmutador</span>
           <span className="block truncate text-xs text-carbon/70">
@@ -205,14 +205,14 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
         <button
           type="button"
           onClick={() => onConfigConmutador(u)}
-          className="rounded-lg border border-carbon/10 bg-carbon/5 px-2 py-1 text-xs font-semibold text-carbon/70 transition hover:border-carbon/20 hover:bg-carbon/10"
+          className="rounded-lg border border-carbon/10 bg-carbon/5 px-2 py-1 text-[10px] font-semibold text-carbon/70 transition hover:border-carbon/20 hover:bg-carbon/10 flex-shrink-0"
         >
           ⚙️ Ajustes
         </button>
       </div>
 
       {/* 4. Badges (Rol y Estado) */}
-      <div className="flex flex-wrap items-center gap-1.5 min-w-[130px] md:justify-end">
+      <div className="col-span-1 md:col-span-2 flex flex-row md:flex-col gap-1.5 items-center md:items-start min-w-0">
         {u.rol === "admin" ? (
           <span className="inline-flex items-center rounded-full border border-dorado/20 bg-dorado/15 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-800">
             👑 Admin
@@ -234,7 +234,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
       </div>
 
       {/* 5. Acción Editar */}
-      <div className="flex items-center justify-end md:ml-2">
+      <div className="col-span-1 md:col-span-2 flex items-center justify-end">
         <button
           type="button"
           onClick={() => setEditando(true)}
