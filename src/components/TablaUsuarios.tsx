@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { actualizarUsuario, eliminarUsuario } from "@/app/actions/usuarios";
 import type { UsuarioApp } from "@/app/actions/usuarios";
+import { CalendarioGuardias } from "./CalendarioGuardias";
 
 /** Tarjeta individual de usuario en formato fila (horizontal). */
 interface TarjetaUsuarioProps {
@@ -416,6 +417,10 @@ export function TablaUsuarios({
           ))}
         </div>
       )}
+
+      <div className="mt-8">
+        <CalendarioGuardias usuarios={usuarios} />
+      </div>
 
       {/* Modal de Configuración del Conmutador */}
       {agenteConmutador && (
