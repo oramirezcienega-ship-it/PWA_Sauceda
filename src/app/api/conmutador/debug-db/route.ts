@@ -7,12 +7,25 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const sb = supabaseServidor();
-    const { data: perfiles, error } = await sb
+    
+    // Consultar perfiles
+    const { data: perfiles, error: errPerfiles } = await sb
       .from("perfiles")
       .select("id, nombre, rol, activo, disponible_llamadas, telefono_desvio, horarios_guardia");
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (errPerfiles) {
+      return NextResponse.json({ error: errPerfiles.message }, { status: 500 });
+    }
+
+    // Consultar últimas 5 llamadas
+    const { data: llamadas, error: errLlamadas } = await sb
+      .from("llamadas_conmutador")
+      .select("twilio_call_sid, cliente_telefono, estado, agente_id, created_at, datos_perfilados")
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (errLlamadas) {
+      return NextResponse.json({ error: errLlamadas.message }, { status: 500 });
     }
 
     const d = new Date();
@@ -27,6 +40,7 @@ export async function GET() {
       horaLocal,
       diaSemanaRaw,
       perfiles,
+      llamadas,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
