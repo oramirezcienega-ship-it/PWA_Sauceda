@@ -5,6 +5,8 @@ import type {
   Expediente,
   OrigenAdquisicion,
   Prospecto,
+  EstatusProspecto,
+  CalificacionProspecto,
 } from "@/lib/types";
 
 /** Arma el nombre completo a partir de nombre + apellidos. */
@@ -141,6 +143,8 @@ export interface FilaProspecto {
   campaign_name: string;
   notas: string;
   canal_id?: string | null;
+  estatus?: EstatusProspecto;
+  calificacion?: CalificacionProspecto;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -166,6 +170,8 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     campaignName: fila.campaign_name ?? "",
     notas: fila.notas,
     canalId: fila.canal_id ?? "",
+    estatus: fila.estatus ?? "nuevo",
+    calificacion: fila.calificacion ?? "frio",
   };
 }
 
@@ -186,5 +192,7 @@ export function aFilaProspecto(datos: DatosProspecto) {
     campaign_name: datos.campaignName,
     notas: datos.notas,
     canal_id: datos.canalId ?? null,
+    estatus: datos.estatus,
+    calificacion: datos.calificacion,
   };
 }

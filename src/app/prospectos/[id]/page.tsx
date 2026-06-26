@@ -6,6 +6,8 @@ import { EtapaBadge } from "@/components/EtapaBadge";
 import { obtenerProspecto } from "@/app/actions/prospectos";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
+import { EstatusProspectoBadge } from "@/components/EstatusProspectoBadge";
+import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -55,11 +57,13 @@ export default async function PaginaProspecto({
             <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
               {prospecto.nombreCompleto}
             </h1>
-            <p className="mt-1 text-sm text-carbon/60">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2.5 py-0.5 text-xs text-cielo">
                 {ORIGEN_POR_ID[prospecto.origen]}
               </span>
-            </p>
+              <EstatusProspectoBadge estatus={prospecto.estatus} />
+              <CalificacionProspectoBadge calificacion={prospecto.calificacion} />
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Link

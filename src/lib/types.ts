@@ -110,6 +110,20 @@ export type OrigenAdquisicion =
  * tener varios expedientes. "Cliente" no es otra entidad: es un estado
  * que se deriva de la etapa de sus expedientes.
  */
+export type EstatusProspecto =
+  | "nuevo"
+  | "en_conversacion"
+  | "no_viable"
+  | "sin_contacto"
+  | "expediente_abierto"
+  | "cliente";
+
+export type CalificacionProspecto =
+  | "caliente"
+  | "templado"
+  | "frio"
+  | "descalificado";
+
 export interface Prospecto {
   id: string;
   /** Nombre(s) de pila. */
@@ -135,6 +149,10 @@ export interface Prospecto {
   notas: string;
   /** Identificador técnico del canal de redes sociales (ej. messenger:PSID) */
   canalId?: string | null;
+  /** Estado del ciclo del prospecto. */
+  estatus: EstatusProspecto;
+  /** Calificación / ranking del prospecto. */
+  calificacion: CalificacionProspecto;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */

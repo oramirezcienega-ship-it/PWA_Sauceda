@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ORIGENES } from "@/lib/origenes";
-import type { DatosProspecto } from "@/lib/types";
+import { ESTATUS_PROSPECTO_LISTA, CALIFICACION_PROSPECTO_LISTA } from "@/lib/estatus";
+import type { DatosProspecto, EstatusProspecto, CalificacionProspecto } from "@/lib/types";
 
 /** Valores por defecto para un prospecto nuevo. */
 const VACIO: DatosProspecto = {
@@ -20,6 +21,8 @@ const VACIO: DatosProspecto = {
   campaignName: "",
   notas: "",
   canalId: "",
+  estatus: "nuevo",
+  calificacion: "frio",
 };
 
 /**
@@ -165,6 +168,38 @@ export function FormularioProspecto({
             {ORIGENES.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.nombre}
+              </option>
+            ))}
+          </select>
+        </Campo>
+
+        <Campo etiqueta="Estatus del Prospecto">
+          <select
+            value={datos.estatus}
+            onChange={(e) =>
+              actualizar("estatus", e.target.value as EstatusProspecto)
+            }
+            className={INPUT}
+          >
+            {ESTATUS_PROSPECTO_LISTA.map((es) => (
+              <option key={es.id} value={es.id}>
+                {es.nombre}
+              </option>
+            ))}
+          </select>
+        </Campo>
+
+        <Campo etiqueta="Calificación / Prioridad">
+          <select
+            value={datos.calificacion}
+            onChange={(e) =>
+              actualizar("calificacion", e.target.value as CalificacionProspecto)
+            }
+            className={INPUT}
+          >
+            {CALIFICACION_PROSPECTO_LISTA.map((ca) => (
+              <option key={ca.id} value={ca.id}>
+                {ca.nombre}
               </option>
             ))}
           </select>

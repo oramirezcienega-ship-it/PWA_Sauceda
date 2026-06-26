@@ -84,8 +84,8 @@ export async function obtenerDesafioLogin(email: string): Promise<{
 
     // 1. Buscar usuario en auth.users
     const { data: userRecord, error: userError } = await sbAdmin
-      .from("users")
       .schema("auth")
+      .from("users")
       .select("id")
       .eq("email", email.toLowerCase().trim())
       .maybeSingle();
@@ -146,8 +146,8 @@ export async function verificarFirmaYIniciarSesion(
 
     // 1. Obtener usuario
     const { data: userRecord } = await sbAdmin
-      .from("users")
       .schema("auth")
+      .from("users")
       .select("id")
       .eq("email", email.toLowerCase().trim())
       .maybeSingle();

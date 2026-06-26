@@ -178,7 +178,9 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "telefono_real": "Número de teléfono celular de 10 dígitos (ej. 4771234567) si el cliente lo proporcionó en este mensaje o a lo largo del chat, de lo contrario null",
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
-    "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null"
+    "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
+    "descalificado": "true si el cliente menciona un adeudo, hipoteca o embargo con un agiotista, prestamista informal o particular/privado (rompiendo políticas de compra), de lo contrario false",
+    "motivo_descalificacion": "El motivo corto (ej. 'deuda_agiotista') si descalificado es true, de lo contrario null"
   }
 }
 
@@ -355,6 +357,22 @@ export async function responderConIA(
         console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el expediente está en etapa '${exp.etapa}'.`);
         return;
       }
+
+      // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion'
+      if (exp?.prospecto_id) {
+        const { data: prInfo } = await sb
+          .from("prospectos")
+          .select("estatus")
+          .eq("id", exp.prospecto_id)
+          .maybeSingle();
+        
+        if (prInfo?.estatus === "nuevo") {
+          await sb
+            .from("prospectos")
+            .update({ estatus: "en_conversacion" })
+            .eq("id", exp.prospecto_id);
+        }
+      }
     }
 
     const textoAI = await generarRespuesta(
@@ -516,6 +534,32 @@ export async function responderConIA(
             tipo: "sistema",
             titulo: "Datos de propiedad actualizados por IA",
             detalle: `Extraídos del chat: ${detalleActividad}`,
+          });
+        }
+      }
+
+      // Si el agente de IA determinó descalificar el prospecto (no viable)
+      if ((datosExtraidos as any).descalificado === true || (datosExtraidos as any).descalificado === "true") {
+        if (exp?.prospecto_id) {
+          await sb
+            .from("prospectos")
+            .update({ estatus: "no_viable", calificacion: "descalificado" })
+            .eq("id", exp.prospecto_id);
+
+          const motivo = (datosExtraidos as any).motivo_descalificacion || "No cumple con las políticas de compra";
+          await sb
+            .from("expedientes")
+            .update({
+              etapa: "perdido",
+              situacion: `Descalificado por IA: ${motivo}`
+            })
+            .eq("id", ctx.expedienteId);
+
+          await registrarActividad(sb, {
+            expedienteId: ctx.expedienteId,
+            tipo: "sistema",
+            titulo: "Movido a Perdido (Descalificado por IA)",
+            detalle: `Razón: ${motivo}`,
           });
         }
       }

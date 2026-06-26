@@ -13,6 +13,8 @@ import {
 import { useOrden } from "@/hooks/useOrden";
 import { listarSecuencias, enrolarLead, listarEnrollments } from "@/app/actions/secuencias";
 import { ThOrden } from "./ThOrden";
+import { EstatusProspectoBadge } from "./EstatusProspectoBadge";
+import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   nombre: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
@@ -21,6 +23,8 @@ const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   origen: (a, b) =>
     ORIGEN_POR_ID[a.origen].localeCompare(ORIGEN_POR_ID[b.origen], "es"),
   valorCampana: (a, b) => a.valorCampana - b.valorCampana,
+  estatus: (a, b) => a.estatus.localeCompare(b.estatus, "es"),
+  calificacion: (a, b) => a.calificacion.localeCompare(b.calificacion, "es"),
 };
 
 /** Tabla de prospectos con columnas ordenables y selección múltiple. */
@@ -234,6 +238,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 ["telefono", "Teléfono", "izquierda"],
                 ["ciudad", "Ciudad", "izquierda"],
                 ["origen", "Origen", "izquierda"],
+                ["estatus", "Estatus", "izquierda"],
+                ["calificacion", "Calificación", "izquierda"],
               ] as const
             ).map(([columna, label, alineado]) => (
               <ThOrden
@@ -297,6 +303,12 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2.5 py-0.5 text-xs text-cielo">
                     {ORIGEN_POR_ID[p.origen]}
                   </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <EstatusProspectoBadge estatus={p.estatus} />
+                </td>
+                <td className="px-3 py-2.5">
+                  <CalificacionProspectoBadge calificacion={p.calificacion} />
                 </td>
                 <td className="px-3 py-2.5">
                   {(() => {
@@ -424,6 +436,18 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                         </span>
                       );
                     })()}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Estatus</p>
+                  <div className="mt-0.5">
+                    <EstatusProspectoBadge estatus={p.estatus} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Calificación</p>
+                  <div className="mt-0.5">
+                    <CalificacionProspectoBadge calificacion={p.calificacion} />
                   </div>
                 </div>
                 <div>
