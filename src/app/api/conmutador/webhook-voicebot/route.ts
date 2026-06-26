@@ -14,41 +14,30 @@ export async function POST(request: Request) {
     // 1. Interceptar petición inicial del asistente (assistant-request)
     if (messageType === "assistant-request") {
       const agente = await obtenerAgenteDisponible();
-      const originalAssistant = body.assistant || body.message?.assistant || {};
-      const tools = originalAssistant.tools || [];
-
-      // Buscar herramienta de transferencia en la configuración de Vapi
-      const transferTool = tools.find((t: any) => 
-        t.type === "transfer-call" || 
-        t.type === "transferCall" ||
-        String(t.name).toLowerCase().includes("transfer") ||
-        String(t.name).toLowerCase().includes("desvi")
-      );
-      const toolName = transferTool?.name || "transfer_call_tool";
+      const sofiaId = "14da6807-3c45-4d75-94a0-d7bfc04c97e3";
 
       if (agente) {
-        console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata con herramienta: ${toolName}.`);
+        console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata.`);
         
-        // Retornar el asistente original preservando toda su configuración (voz, herramientas, etc.)
-        // pero sobreescribiendo el mensaje de bienvenida y el prompt del sistema para forzar el desvío.
         return NextResponse.json({
           assistant: {
-            ...originalAssistant,
+            id: sofiaId, // Vapi heredará toda la configuración de Sofía (herramientas, voz, etc.)
             firstMessage: `Hola, bienvenido a Sauceda Bienes Raíces. Te estoy transfiriendo de inmediato con nuestro asesor de guardia, ${agente.nombre}. Por favor no cuelgues.`,
             model: {
-              ...(originalAssistant.model || {}),
               messages: [
                 {
                   role: "system",
-                  content: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool '${toolName}' to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool '${toolName}' immediately.`
+                  content: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool 'transferir_a_asesor' to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool 'transferir_a_asesor' immediately.`
                 }
               ]
             }
           }
         });
       } else {
-        console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía.");
-        return NextResponse.json({});
+        console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía por defecto.");
+        return NextResponse.json({
+          assistantId: sofiaId
+        });
       }
     }
 
