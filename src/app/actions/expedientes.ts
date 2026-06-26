@@ -44,7 +44,7 @@ export async function listarExpedientes(): Promise<Expediente[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("expedientes")
-    .select("*, prospectos(origen)")
+    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as FilaExpediente[]).map(aExpediente);
@@ -100,9 +100,18 @@ export async function crearExpediente(
   const { data, error } = await sb
     .from("expedientes")
     .insert({ id, ...aFila(datos), ultimo_movimiento: hoyISO() })
-    .select("*")
+    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
+
+  // Sincroniza el asesor con el prospecto (bidireccional)
+  if (datos.prospectoId) {
+    await sb
+      .from("prospectos")
+      .update({ asesor_id: datos.asesorId ?? null })
+      .eq("id", datos.prospectoId);
+  }
+
   await registrarActividad(sb, {
     expedienteId: id,
     prospectoId: datos.prospectoId,
@@ -139,7 +148,7 @@ export async function actualizarExpediente(
     .from("expedientes")
     .update({ ...nuevos, ultimo_movimiento: hoyISO() })
     .eq("id", id)
-    .select("*")
+    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
@@ -163,7 +172,7 @@ export async function actualizarExpediente(
     }
   }
 
-  // Sincroniza los campos compartidos (nombre + teléfono) con el prospecto.
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor) con el prospecto.
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
@@ -175,6 +184,7 @@ export async function actualizarExpediente(
         ad_name: datos.adName,
         adset_name: datos.adsetName,
         campaign_name: datos.campaignName,
+        asesor_id: datos.asesorId ?? null,
       })
       .eq("id", datos.prospectoId);
   }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ETAPAS } from "@/lib/etapas";
 import type { DatosExpediente } from "@/lib/types";
+import { listarAsesoresActivos } from "@/app/actions/usuarios";
 
 /** Valores por defecto para un expediente nuevo. */
 const VACIO: DatosExpediente = {
@@ -28,6 +29,7 @@ const VACIO: DatosExpediente = {
   sinPagos: "",
   estadoFisico: "",
   habitada: "",
+  asesorId: null,
 };
 
 /**
@@ -52,6 +54,11 @@ export function FormularioExpediente({
   const [datos, setDatos] = useState<DatosExpediente>(valorInicial ?? VACIO);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
+
+  useEffect(() => {
+    listarAsesoresActivos().then(setAsesores).catch(() => setAsesores([]));
+  }, []);
 
   function actualizar<K extends keyof DatosExpediente>(
     campo: K,
@@ -306,6 +313,25 @@ export function FormularioExpediente({
             {prospectos.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre} · {p.id}
+              </option>
+            ))}
+          </select>
+        </Campo>
+      )}
+
+      {asesores.length > 0 && (
+        <Campo etiqueta="Asesor asignado">
+          <select
+            value={datos.asesorId ?? ""}
+            onChange={(e) =>
+              actualizar("asesorId", e.target.value || null)
+            }
+            className={INPUT}
+          >
+            <option value="">Sin asesor</option>
+            {asesores.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nombre}
               </option>
             ))}
           </select>

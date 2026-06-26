@@ -9,6 +9,8 @@ import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
 import { Actividades } from "./Actividades";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
+import { BotonLlamar } from "./BotonLlamar";
+import { AsesorSelector } from "./AsesorSelector";
 
 /**
  * Vista de detalle de un expediente.
@@ -17,7 +19,7 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
  */
 export function DetalleExpediente({ id }: { id: string }) {
   const router = useRouter();
-  const { obtenerExpediente, moverEtapa, eliminarExpediente, cargado } =
+  const { obtenerExpediente, moverEtapa, eliminarExpediente, cargado, recargar } =
     useExpedientes();
   const expediente = obtenerExpediente(id);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
@@ -68,6 +70,15 @@ export function DetalleExpediente({ id }: { id: string }) {
           <p className="mt-1 text-sm text-carbon/60">
             {expediente.fraccionamiento} · León, Gto.
           </p>
+          <div className="mt-2">
+            <AsesorSelector
+              entidadId={expediente.id}
+              tipoEntidad="expediente"
+              asesorIdActual={expediente.asesorId ?? null}
+              asesorNombreActual={expediente.asesorNombre ?? null}
+              onAsignado={recargar}
+            />
+          </div>
         </div>
         <span className="shrink-0 font-mono text-xs text-carbon/40">
           {expediente.id}
@@ -198,7 +209,6 @@ export function DetalleExpediente({ id }: { id: string }) {
             <div className="my-4 border-t border-carbon/10"></div>
 
             {/* Listado de campos con Iconos */}
-            <div className="space-y-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-carbon/60">
                   <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -206,9 +216,17 @@ export function DetalleExpediente({ id }: { id: string }) {
                   </svg>
                   Teléfono
                 </span>
-                <span className="font-mono font-medium text-carbon">
-                  {expediente.telefono || "—"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium text-carbon">
+                    {expediente.telefono || "—"}
+                  </span>
+                  {expediente.telefono && (
+                    <BotonLlamar
+                      telefono={expediente.telefono}
+                      prospectoId={expediente.prospectoId}
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between">

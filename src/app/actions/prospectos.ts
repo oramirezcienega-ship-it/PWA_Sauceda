@@ -39,7 +39,7 @@ export async function listarProspectos(): Promise<Prospecto[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("prospectos")
-    .select("*")
+    .select("*, perfiles:asesor_id(nombre)")
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as FilaProspecto[]).map(aProspecto);
@@ -54,7 +54,7 @@ export async function obtenerProspecto(
 
   const { data: filaProspecto, error } = await sb
     .from("prospectos")
-    .select("*")
+    .select("*, perfiles:asesor_id(nombre)")
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -62,7 +62,7 @@ export async function obtenerProspecto(
 
   const { data: filasExp, error: errExp } = await sb
     .from("expedientes")
-    .select("*")
+    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
     .eq("prospecto_id", id)
     .order("id", { ascending: true });
   if (errExp) throw new Error(errExp.message);
@@ -113,11 +113,11 @@ export async function actualizarProspecto(
     .from("prospectos")
     .update(aFilaProspecto(datos))
     .eq("id", id)
-    .select("*")
+    .select("*, perfiles:asesor_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza los campos compartidos (nombre + teléfono) hacia los
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor) hacia los
   // expedientes enlazados a este prospecto.
   await sb
     .from("expedientes")
@@ -129,6 +129,7 @@ export async function actualizarProspecto(
       ad_name: datos.adName,
       adset_name: datos.adsetName,
       campaign_name: datos.campaignName,
+      asesor_id: datos.asesorId ?? null,
     })
     .eq("prospecto_id", id);
 

@@ -54,6 +54,8 @@ export interface FilaExpediente {
   created_at?: string;
   /** Origen del prospecto enlazado (cuando se pide vía join). */
   prospectos?: { origen: OrigenAdquisicion } | null;
+  asesor_id?: string | null;
+  perfiles?: { nombre: string } | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -91,6 +93,8 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     estadoFisico: fila.estado_fisico ?? "",
     habitada: fila.habitada ?? "",
     createdAt: fila.created_at ?? "",
+    asesorId: fila.asesor_id ?? null,
+    asesorNombre: fila.perfiles?.nombre ?? null,
   };
 }
 
@@ -119,6 +123,7 @@ export function aFila(datos: DatosExpediente) {
     sin_pagos: datos.sinPagos ?? null,
     estado_fisico: datos.estadoFisico ?? null,
     habitada: datos.habitada ?? null,
+    asesor_id: datos.asesorId ?? null,
   };
 }
 
@@ -145,6 +150,8 @@ export interface FilaProspecto {
   canal_id?: string | null;
   estatus?: EstatusProspecto;
   calificacion?: CalificacionProspecto;
+  asesor_id?: string | null;
+  perfiles?: { nombre: string } | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -172,6 +179,8 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     canalId: fila.canal_id ?? "",
     estatus: fila.estatus ?? "nuevo",
     calificacion: fila.calificacion ?? "frio",
+    asesorId: fila.asesor_id ?? null,
+    asesorNombre: fila.perfiles?.nombre ?? null,
   };
 }
 
@@ -194,5 +203,6 @@ export function aFilaProspecto(datos: DatosProspecto) {
     canal_id: datos.canalId ?? null,
     estatus: datos.estatus,
     calificacion: datos.calificacion,
+    asesor_id: datos.asesorId ?? null,
   };
 }

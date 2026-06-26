@@ -74,6 +74,10 @@ export interface Expediente {
   necesidad?: string | null;
   /** Prospecto (persona) dueño del expediente. Null si aún no se enlaza. */
   prospectoId: string | null;
+  /** Asesor asignado al expediente. Null si no está asignado. */
+  asesorId?: string | null;
+  /** Nombre del asesor asignado (solo lectura, vía join). */
+  asesorNombre?: string | null;
   /** Origen de adquisición del prospecto enlazado (solo lectura, vía join). */
   origenProspecto: OrigenAdquisicion | null;
   /** Identificador técnico del canal de redes sociales (ej. messenger:PSID) */
@@ -92,7 +96,7 @@ export interface Expediente {
  */
 export type DatosExpediente = Omit<
   Expediente,
-  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto"
+  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto" | "asesorNombre"
 >;
 
 /** Origen de adquisición de un prospecto (lista fija). */
@@ -153,10 +157,14 @@ export interface Prospecto {
   estatus: EstatusProspecto;
   /** Calificación / ranking del prospecto. */
   calificacion: CalificacionProspecto;
+  /** Asesor asignado al prospecto. Null si no está asignado. */
+  asesorId?: string | null;
+  /** Nombre del asesor asignado (solo lectura, vía join). */
+  asesorNombre?: string | null;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
-export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto">;
+export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto" | "asesorNombre">;
 
 // ------------------------------------------------------------
 // MÓDULO FORMULARIOS

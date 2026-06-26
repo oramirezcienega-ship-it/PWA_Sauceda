@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import {
+  requireAdmin,
   requireAdministrador,
   rolDe,
   usuarioActual,
@@ -160,4 +161,70 @@ export async function eliminarUsuario(id: string): Promise<void> {
   const sb = supabaseServidor();
   const { error } = await sb.auth.admin.deleteUser(id);
   if (error) throw new Error(error.message);
+}
+
+/** Obtiene una lista simplificada de asesores/usuarios activos para selects. */
+export async function listarAsesoresActivos(): Promise<{ id: string; nombre: string }[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("perfiles")
+    .select("id, nombre")
+    .eq("activo", true)
+    .order("nombre", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as { id: string; nombre: string }[];
+}
+
+/** Reasigna un asesor a un expediente o prospecto con sincronización bidireccional. */
+export async function reasignarAsesor(
+  id: string,
+  tipo: "expediente" | "prospecto",
+  asesorId: string | null,
+): Promise<void> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  if (tipo === "expediente") {
+    // 1. Obtener prospecto_id de este expediente
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("prospecto_id")
+      .eq("id", id)
+      .maybeSingle();
+
+    // 2. Actualizar el expediente
+    const { error: errExp } = await sb
+      .from("expedientes")
+      .update({
+        asesor_id: asesorId,
+        ultimo_movimiento: new Date().toISOString().slice(0, 10),
+      })
+      .eq("id", id);
+    if (errExp) throw new Error(errExp.message);
+
+    // 3. Sincronizar bidireccionalmente con el prospecto
+    if (exp?.prospecto_id) {
+      await sb
+        .from("prospectos")
+        .update({ asesor_id: asesorId })
+        .eq("id", exp.prospecto_id);
+    }
+  } else {
+    // 1. Actualizar el prospecto
+    const { error: errPros } = await sb
+      .from("prospectos")
+      .update({ asesor_id: asesorId })
+      .eq("id", id);
+    if (errPros) throw new Error(errPros.message);
+
+    // 2. Sincronizar bidireccionalmente con todos los expedientes de este prospecto
+    await sb
+      .from("expedientes")
+      .update({
+        asesor_id: asesorId,
+        ultimo_movimiento: new Date().toISOString().slice(0, 10),
+      })
+      .eq("prospecto_id", id);
+  }
 }

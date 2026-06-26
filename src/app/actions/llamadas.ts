@@ -1,7 +1,9 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { usuarioActual, requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { normalizarTelefono } from "@/lib/telefono";
+import { registrarInicioLlamada, actualizarLlamada } from "@/features/conmutador/service";
 
 export interface LlamadaConmutadorApp {
   id: string;
@@ -179,5 +181,129 @@ export async function guardarConfiguracionLlamadasAgente(
 
   if (error) {
     throw new Error(error.message);
+  }
+}
+
+/** Auxiliar para obtener teléfono en formato E.164. */
+function normalizarTelefonoE164(tel: string): string {
+  const canon = normalizarTelefono(tel);
+  if (!canon) return "";
+  return "+" + canon;
+}
+
+/**
+ * Inicia una llamada saliente (Click-to-Call) desde el CRM.
+ * Llama primero al teléfono de desvío del agente y, al contestar, lo conecta con el prospecto.
+ */
+export async function iniciarLlamadaConmutador(
+  telefonoCliente: string,
+  prospectoId?: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const user = await usuarioActual();
+    if (!user) return { ok: false, error: "No autenticado" };
+
+    const sb = supabaseServidor();
+
+    // 1. Obtener el perfil del agente/asesor actual
+    const { data: agente, error: errAgente } = await sb
+      .from("perfiles")
+      .select("nombre, telefono_desvio, telefono")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (errAgente || !agente) {
+      return { ok: false, error: "No se encontró el perfil del asesor." };
+    }
+
+    const destinoAgente = agente.telefono_desvio || agente.telefono;
+    if (!destinoAgente) {
+      return {
+        ok: false,
+        error: "No tienes un teléfono de desvío configurado para recibir llamadas.",
+      };
+    }
+
+    // 2. Setup de Twilio
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+    if (!accountSid || !authToken || !fromNumber) {
+      return {
+        ok: false,
+        error: "El conmutador no está configurado (faltan variables de entorno de Twilio).",
+      };
+    }
+
+    // 3. Normalizar teléfonos
+    const toAgente = normalizarTelefonoE164(destinoAgente);
+    const toCliente = normalizarTelefonoE164(telefonoCliente);
+
+    if (!toAgente) {
+      return { ok: false, error: "Teléfono del asesor no es válido." };
+    }
+    if (!toCliente) {
+      return { ok: false, error: "Teléfono del cliente/prospecto no es válido." };
+    }
+
+    // 4. Construir URL de TwiML
+    const queryParams = new URLSearchParams();
+    queryParams.append("cliente", toCliente);
+    if (prospectoId) {
+      queryParams.append("prospectoId", prospectoId);
+    }
+    queryParams.append("agenteId", user.id);
+
+    const baseUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+    const twimlUrl = `${baseUrl}/api/conmutador/outbound-twiml?${queryParams.toString()}`;
+
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const params = new URLSearchParams();
+    params.append("To", toAgente);
+    params.append("From", fromNumber);
+    params.append("Url", twimlUrl);
+
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      }
+    );
+
+    const detalle = await res.json();
+
+    if (!res.ok) {
+      console.error("Twilio outbound call failed:", res.status, detalle);
+      return {
+        ok: false,
+        error: detalle.message || `Error de Twilio: ${res.status}`,
+      };
+    }
+
+    // 5. Registrar e iniciar llamada en la BD
+    await registrarInicioLlamada({
+      twilioCallSid: detalle.sid,
+      clienteTelefono: toCliente,
+      tipo: "saliente",
+      estado: "queued",
+    });
+
+    // Asociar al agente
+    await actualizarLlamada(detalle.sid, {
+      estado: "queued",
+      agenteId: user.id,
+    });
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Error al iniciar llamada conmutador:", err);
+    return { ok: false, error: "Error de red al iniciar la llamada." };
   }
 }

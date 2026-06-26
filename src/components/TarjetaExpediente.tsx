@@ -30,9 +30,16 @@ export function TarjetaExpediente({ expediente }: { expediente: Expediente }) {
       </p>
 
       <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2">
-        <span className="text-[10px] uppercase tracking-wide text-carbon/40">
-          Valor estimado
-        </span>
+        {expediente.asesorNombre ? (
+          <span className="inline-flex items-center gap-1 rounded bg-carbon/5 px-1.5 py-0.5 text-[10px] font-semibold text-carbon/60" title="Asesor asignado">
+            <svg className="h-2.5 w-2.5 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            {expediente.asesorNombre}
+          </span>
+        ) : (
+          <span className="text-[10px] italic text-carbon/30">Sin asesor</span>
+        )}
         <span className="font-mono text-sm font-medium text-sauce">
           {formatoPesos(expediente.valorEstimado)}
         </span>

@@ -8,6 +8,8 @@ import { ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
 import { EstatusProspectoBadge } from "@/components/EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
+import { AsesorSelector } from "@/components/AsesorSelector";
+import { BotonLlamar } from "@/components/BotonLlamar";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +66,14 @@ export default async function PaginaProspecto({
               <EstatusProspectoBadge estatus={prospecto.estatus} />
               <CalificacionProspectoBadge calificacion={prospecto.calificacion} />
             </div>
+            <div className="mt-2.5">
+              <AsesorSelector
+                entidadId={prospecto.id}
+                tipoEntidad="prospecto"
+                asesorIdActual={prospecto.asesorId ?? null}
+                asesorNombreActual={prospecto.asesorNombre ?? null}
+              />
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Link
@@ -78,7 +88,17 @@ export default async function PaginaProspecto({
 
         {/* Datos del prospecto */}
         <dl className="mt-6 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-carbon/10 bg-carbon/10 sm:grid-cols-2">
-          <Dato etiqueta="Teléfono" valor={prospecto.telefono || "—"} mono />
+          <div className="bg-white p-3">
+            <dt className="text-[10px] uppercase tracking-wide text-carbon/40">
+              Teléfono
+            </dt>
+            <dd className="mt-0.5 flex items-center gap-2 text-carbon font-mono">
+              <span>{prospecto.telefono || "—"}</span>
+              {prospecto.telefono && (
+                <BotonLlamar telefono={prospecto.telefono} prospectoId={prospecto.id} />
+              )}
+            </dd>
+          </div>
           <Dato etiqueta="Correo" valor={prospecto.correo || "—"} />
           <Dato etiqueta="Ciudad" valor={prospecto.ciudad || "—"} />
           <Dato
