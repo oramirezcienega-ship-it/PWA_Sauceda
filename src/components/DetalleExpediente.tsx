@@ -209,6 +209,7 @@ export function DetalleExpediente({ id }: { id: string }) {
             <div className="my-4 border-t border-carbon/10"></div>
 
             {/* Listado de campos con Iconos */}
+            <div className="space-y-4 text-sm">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-carbon/60">
                   <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
