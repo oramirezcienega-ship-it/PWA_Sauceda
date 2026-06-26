@@ -30,7 +30,6 @@ const ENLACES = [
   { href: "/", label: "Expedientes" },
   { href: "/prospectos", label: "Prospectos" },
   { href: "/conversaciones", label: "Conversaciones" },
-  { href: "/automatizaciones", label: "Automatizaciones" },
   { href: "/secuencias", label: "Secuencias" },
   { href: "/dashboard/llamadas", label: "Llamadas" },
   { href: "/reportes", label: "Reportes" },
