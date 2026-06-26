@@ -1,13 +1,267 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { actualizarUsuario, eliminarUsuario } from "@/app/actions/usuarios";
 import type { UsuarioApp } from "@/app/actions/usuarios";
 
-/** Tabla de usuarios con edición de rol/estado y eliminación. */
+/** Tarjeta individual de usuario con modo lectura y modo edición. */
+interface TarjetaUsuarioProps {
+  u: UsuarioApp;
+  onUpdate: (id: string, cambios: Partial<UsuarioApp>) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onConfigConmutador: (u: UsuarioApp) => void;
+}
+
+function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUsuarioProps) {
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  // Estados locales para la edición
+  const [nombre, setNombre] = useState(u.nombre);
+  const [telefono, setTelefono] = useState(u.telefono);
+  const [rol, setRol] = useState(u.rol);
+  const [activo, setActivo] = useState(u.activo);
+
+  // Sincronizar el estado local cuando cambien los datos del prop (ej. desde el modal)
+  useEffect(() => {
+    setNombre(u.nombre);
+    setTelefono(u.telefono);
+    setRol(u.rol);
+    setActivo(u.activo);
+  }, [u.nombre, u.telefono, u.rol, u.activo]);
+
+  async function handleGuardar() {
+    if (!nombre.trim()) return;
+    setGuardando(true);
+    try {
+      await onUpdate(u.id, {
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        rol,
+        activo,
+      });
+      setEditando(false);
+    } catch (err) {
+      console.error("Error al actualizar usuario:", err);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  function handleCancelar() {
+    setNombre(u.nombre);
+    setTelefono(u.telefono);
+    setRol(u.rol);
+    setActivo(u.activo);
+    setEditando(false);
+  }
+
+  const inicialNombre = u.nombre.trim().charAt(0).toUpperCase() || "?";
+
+  if (editando) {
+    return (
+      <div className="flex h-full flex-col justify-between rounded-2xl border-2 border-sauce/30 bg-white p-5 shadow-lg transition-all duration-300">
+        {/* Encabezado en Edición */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sauce/15 to-verde-profundo/10 font-titular text-base font-semibold text-verde-profundo shadow-inner">
+            {inicialNombre}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">Email</span>
+            <span className="block truncate font-mono text-xs text-carbon/60" title={u.email}>
+              {u.email}
+            </span>
+          </div>
+        </div>
+
+        <div className="my-3 border-t border-carbon/5" />
+
+        {/* Campos de Formulario */}
+        <div className="flex-grow space-y-3">
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+              Nombre Completo
+            </label>
+            <input
+              type="text"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Nombre del usuario"
+              className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+              Teléfono / WhatsApp
+            </label>
+            <input
+              type="text"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              placeholder="Sin teléfono"
+              className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+                Rol
+              </label>
+              <select
+                value={rol}
+                onChange={(e) => setRol(e.target.value as "admin" | "asesor")}
+                className="w-full rounded-lg border border-carbon/15 bg-white px-2 py-1.5 text-xs text-verde-profundo outline-none focus:border-sauce focus:ring-2 focus:ring-sauce/20"
+              >
+                <option value="admin">Administrador</option>
+                <option value="asesor">Asesor</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+                Estado
+              </label>
+              <button
+                type="button"
+                onClick={() => setActivo(!activo)}
+                className={`w-full rounded-lg border py-1.5 text-xs font-semibold transition ${
+                  activo
+                    ? "bg-sauce/20 text-verde-profundo border-sauce/30"
+                    : "bg-carbon/10 text-carbon/50 border-carbon/10"
+                }`}
+              >
+                {activo ? "🟢 Activo" : "⚪ Inactivo"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="my-4 border-t border-carbon/5" />
+
+        {/* Acciones en Edición */}
+        <div className="mt-auto flex items-center justify-between gap-2">
+          {/* Botón borrar sutil y con confirmación */}
+          <BotonBorrar onConfirm={() => onDelete(u.id)} />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCancelar}
+              className="rounded-lg border border-carbon/10 bg-carbon/5 px-3 py-2 text-xs font-semibold text-carbon/75 transition-all hover:bg-carbon/10"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleGuardar}
+              disabled={guardando || !nombre.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-sauce px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-verde-profundo disabled:opacity-50"
+            >
+              {guardando ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderizado en Modo Lectura (Normal)
+  return (
+    <div className="group relative flex h-full flex-col justify-between rounded-2xl border border-carbon/10 bg-white p-5 shadow-sm transition-all duration-300 hover:border-sauce/30 hover:shadow-md">
+      {/* Encabezado */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sauce/15 to-verde-profundo/10 font-titular text-lg font-semibold text-verde-profundo shadow-inner">
+            {inicialNombre}
+          </div>
+          <div className="min-w-0">
+            <h3 className="truncate font-titular text-base font-semibold text-carbon transition-colors duration-200 group-hover:text-verde-profundo">
+              {u.nombre}
+            </h3>
+            <p className="truncate font-mono text-xs text-carbon/40" title={u.email}>
+              {u.email}
+            </p>
+          </div>
+        </div>
+
+        {/* Badges de Rol y Estado */}
+        <div className="flex flex-shrink-0 flex-col gap-1 items-end">
+          {u.rol === "admin" ? (
+            <span className="inline-flex items-center rounded-full border border-dorado/20 bg-dorado/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-800">
+              👑 Admin
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full border border-sauce/10 bg-sauce/10 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo">
+              💼 Asesor
+            </span>
+          )}
+          {u.activo ? (
+            <span className="inline-flex items-center rounded-full border border-sauce/20 bg-sauce/20 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo">
+              🟢 Activo
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full border border-carbon/15 bg-carbon/10 px-2 py-0.5 text-[10px] font-semibold text-carbon/50">
+              ⚪ Inactivo
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="my-4 border-t border-carbon/5" />
+
+      {/* Información de Cuerpo */}
+      <div className="flex-grow space-y-3">
+        <div className="flex items-center gap-2 text-sm text-carbon/70">
+          <svg className="h-4 w-4 flex-shrink-0 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+          </svg>
+          <span className="font-mono text-carbon/80">{u.telefono || "Sin teléfono"}</span>
+        </div>
+
+        {/* Sección Conmutador */}
+        <div className="flex items-center justify-between rounded-xl border border-carbon/5 bg-crema p-3 shadow-sm transition-colors hover:border-carbon/10">
+          <div className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">Conmutador</span>
+            <span className="mt-0.5 block text-xs text-carbon/70">
+              {u.disponible_llamadas ? `🟢 De Guardia` : "⚪ Inactivo"}
+            </span>
+            {u.disponible_llamadas && u.telefono_desvio && (
+              <span className="mt-0.5 block truncate font-mono text-[10px] text-carbon/40">
+                Desvío: {u.telefono_desvio}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => onConfigConmutador(u)}
+            className="flex flex-shrink-0 items-center justify-center rounded-lg border border-carbon/10 bg-carbon/5 p-1.5 text-xs font-semibold text-carbon/70 transition hover:border-carbon/20 hover:bg-carbon/10"
+            title="Configurar desvíos y horarios de llamada"
+          >
+            ⚙️ Ajustes
+          </button>
+        </div>
+      </div>
+
+      <div className="my-4 border-t border-carbon/5" />
+
+      {/* Footer / Botón Editar */}
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setEditando(true)}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-sauce/15 bg-sauce/5 px-4 py-2 text-xs font-semibold text-verde-profundo transition-all hover:border-sauce/30 hover:bg-sauce/15"
+        >
+          ✏️ Editar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Componente principal de administración de usuarios. */
 export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
   const [usuarios, setUsuarios] = useState<UsuarioApp[]>(inicial);
-  const [guardando, setGuardando] = useState<string | null>(null);
 
   // Estados para el modal de configuración del conmutador
   const [agenteConmutador, setAgenteConmutador] = useState<UsuarioApp | null>(null);
@@ -15,6 +269,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
   const [dispLlamadas, setDispLlamadas] = useState(false);
   const [hInicio, setHInicio] = useState("09:00:00");
   const [hFin, setHFin] = useState("18:00:00");
+  const [modalGuardando, setModalGuardando] = useState(false);
 
   function abrirConfigConmutador(u: UsuarioApp) {
     setAgenteConmutador(u);
@@ -26,7 +281,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
 
   async function guardarConfigConmutador() {
     if (!agenteConmutador) return;
-    setGuardando(agenteConmutador.id);
+    setModalGuardando(true);
     try {
       await actualizarUsuario(agenteConmutador.id, {
         nombre: agenteConmutador.nombre,
@@ -52,270 +307,63 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
         )
       );
       setAgenteConmutador(null);
+    } catch (err) {
+      console.error("Error al guardar configuración de conmutador:", err);
     } finally {
-      setGuardando(null);
+      setModalGuardando(false);
     }
   }
 
-  async function guardar(u: UsuarioApp, cambios: Partial<UsuarioApp>) {
+  async function handleUpdateUsuario(id: string, cambios: Partial<UsuarioApp>) {
+    const u = usuarios.find((x) => x.id === id);
+    if (!u) return;
     const actualizado = { ...u, ...cambios };
-    setUsuarios((prev) => prev.map((x) => (x.id === u.id ? actualizado : x)));
-    setGuardando(u.id);
-    try {
-      await actualizarUsuario(u.id, {
-        nombre: actualizado.nombre,
-        rol: actualizado.rol,
-        activo: actualizado.activo,
-        telefono: actualizado.telefono,
-      });
-    } finally {
-      setGuardando(null);
-    }
+
+    // Ejecutar server action
+    await actualizarUsuario(id, {
+      nombre: actualizado.nombre,
+      rol: actualizado.rol,
+      activo: actualizado.activo,
+      telefono: actualizado.telefono,
+      telefono_desvio: actualizado.telefono_desvio,
+      disponible_llamadas: actualizado.disponible_llamadas,
+      horario_inicio: actualizado.horario_inicio,
+      horario_fin: actualizado.horario_fin,
+    });
+
+    // Actualizar estado si la llamada al servidor no falló
+    setUsuarios((prev) => prev.map((x) => (x.id === id ? actualizado : x)));
   }
 
-  /** Cambia el nombre en memoria mientras se escribe (sin guardar aún). */
-  function cambiarNombreLocal(id: string, nombre: string) {
-    setUsuarios((prev) => prev.map((x) => (x.id === id ? { ...x, nombre } : x)));
-  }
-
-  /** Persiste el nombre (al salir del campo o con Enter). */
-  async function guardarNombre(u: UsuarioApp) {
-    setGuardando(u.id);
-    try {
-      await actualizarUsuario(u.id, {
-        nombre: u.nombre.trim(),
-        rol: u.rol,
-        activo: u.activo,
-        telefono: u.telefono,
-      });
-    } finally {
-      setGuardando(null);
-    }
-  }
-
-  /** Cambia el teléfono en memoria mientras se escribe (sin guardar aún). */
-  function cambiarTelefonoLocal(id: string, telefono: string) {
-    setUsuarios((prev) => prev.map((x) => (x.id === id ? { ...x, telefono } : x)));
-  }
-
-  /** Persiste el teléfono (al salir del campo o con Enter). */
-  async function guardarTelefono(u: UsuarioApp) {
-    setGuardando(u.id);
-    try {
-      await actualizarUsuario(u.id, {
-        nombre: u.nombre,
-        rol: u.rol,
-        activo: u.activo,
-        telefono: u.telefono.trim(),
-      });
-    } finally {
-      setGuardando(null);
-    }
-  }
-
-  async function borrar(id: string) {
+  async function handleDeleteUsuario(id: string) {
     await eliminarUsuario(id);
     setUsuarios((prev) => prev.filter((x) => x.id !== id));
   }
 
   return (
     <>
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
-        <table className="w-full min-w-[640px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-carbon/10 bg-crema/60 text-left">
-              <Th>Usuario</Th>
-              <Th>Teléfono / WhatsApp</Th>
-              <Th>Rol</Th>
-              <Th>Estado</Th>
-              <Th>Conmutador</Th>
-              <Th> </Th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuarios.map((u) => (
-              <tr key={u.id} className="border-b border-carbon/5">
-                <td className="px-3 py-2.5">
-                  <input
-                    type="text"
-                    value={u.nombre}
-                    onChange={(e) => cambiarNombreLocal(u.id, e.target.value)}
-                    onBlur={() => guardarNombre(u)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur();
-                    }}
-                    placeholder="Nombre del usuario"
-                    className="w-full rounded-md border border-carbon/15 bg-white px-2 py-1 text-sm font-medium text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-                  />
-                  <p className="mt-0.5 px-1 text-xs text-carbon/50">{u.email}</p>
-                </td>
-                <td className="px-3 py-2.5">
-                  <input
-                    type="text"
-                    value={u.telefono}
-                    onChange={(e) => cambiarTelefonoLocal(u.id, e.target.value)}
-                    onBlur={() => guardarTelefono(u)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur();
-                    }}
-                    placeholder="Sin teléfono"
-                    className="w-full rounded-md border border-carbon/15 bg-white px-2 py-1 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-                  />
-                </td>
-                <td className="px-3 py-2.5">
-                  <select
-                    value={u.rol}
-                    onChange={(e) =>
-                      guardar(u, { rol: e.target.value as "admin" | "asesor" })
-                    }
-                    className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs"
-                  >
-                    <option value="admin">Administrador</option>
-                    <option value="asesor">Asesor</option>
-                  </select>
-                </td>
-                <td className="px-3 py-2.5">
-                  <button
-                    type="button"
-                    onClick={() => guardar(u, { activo: !u.activo })}
-                    className={`rounded-full px-2.5 py-0.5 text-xs ${
-                      u.activo
-                        ? "bg-sauce/20 text-verde-profundo"
-                        : "bg-carbon/10 text-carbon/50"
-                    }`}
-                  >
-                    {u.activo ? "Activo" : "Inactivo"}
-                  </button>
-                </td>
-                <td className="px-3 py-2.5">
-                  <button
-                    type="button"
-                    onClick={() => abrirConfigConmutador(u)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${
-                      u.disponible_llamadas
-                        ? "bg-yellow-50 text-yellow-800 border-yellow-200"
-                        : "bg-carbon/5 text-carbon/60 border-carbon/10"
-                    }`}
-                  >
-                    {u.disponible_llamadas ? "🟢 De Guardia" : "⚙️ Configurar"}
-                  </button>
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  {guardando === u.id && (
-                    <span className="mr-2 text-xs text-carbon/40">Guardando…</span>
-                  )}
-                  <BotonBorrar onConfirm={() => borrar(u.id)} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Vista de Tarjetas para Móviles */}
-      <div className="space-y-3 md:hidden">
-        {usuarios.map((u) => (
-          <div
-            key={u.id}
-            className="rounded-xl border border-carbon/10 bg-white p-4 shadow-sm transition-all hover:border-sauce/40"
-          >
-            {/* Nombre, Email y Teléfono */}
-            <div className="border-b border-carbon/5 pb-3 space-y-2">
-              <div>
-                <input
-                  type="text"
-                  value={u.nombre}
-                  onChange={(e) => cambiarNombreLocal(u.id, e.target.value)}
-                  onBlur={() => guardarNombre(u)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  placeholder="Nombre del usuario"
-                  className="w-full rounded-md border border-carbon/15 bg-white px-2.5 py-1 text-sm font-semibold text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-                />
-                <p className="mt-1 px-1 text-xs text-carbon/50 font-mono">{u.email}</p>
-              </div>
-              <div className="px-1">
-                <span className="text-[10px] uppercase tracking-wider text-carbon/40 font-semibold font-cuerpo">Teléfono / WhatsApp</span>
-                <input
-                  type="text"
-                  value={u.telefono}
-                  onChange={(e) => cambiarTelefonoLocal(u.id, e.target.value)}
-                  onBlur={() => guardarTelefono(u)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  placeholder="Sin teléfono"
-                  className="mt-1 w-full rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-                />
-              </div>
-            </div>
-
-            {/* Rol y Estado */}
-            <div className="flex items-center justify-between py-3 text-sm">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase tracking-wider text-carbon/40 font-semibold">Rol</span>
-                <select
-                  value={u.rol}
-                  onChange={(e) =>
-                    guardar(u, { rol: e.target.value as "admin" | "asesor" })
-                  }
-                  className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none"
-                >
-                  <option value="admin">Administrador</option>
-                  <option value="asesor">Asesor</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1 items-end">
-                <span className="text-[10px] uppercase tracking-wider text-carbon/40 font-semibold font-cuerpo">Estado</span>
-                <button
-                  type="button"
-                  onClick={() => guardar(u, { activo: !u.activo })}
-                  className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-                    u.activo
-                      ? "bg-sauce/20 text-verde-profundo border border-sauce/25"
-                      : "bg-carbon/10 text-carbon/50"
-                  }`}
-                >
-                  {u.activo ? "Activo" : "Inactivo"}
-                </button>
-              </div>
-            </div>
-
-            {/* Ajustes Conmutador Móvil */}
-            <div className="flex items-center justify-between border-t border-carbon/5 py-3">
-              <span className="text-xs text-carbon/60 font-semibold">Conmutador (Guardia)</span>
-              <button
-                type="button"
-                onClick={() => abrirConfigConmutador(u)}
-                className={`rounded-lg px-3 py-1 text-xs font-semibold border transition ${
-                  u.disponible_llamadas
-                    ? "bg-yellow-50 text-yellow-800 border-yellow-200"
-                    : "bg-carbon/5 text-carbon/60 border-carbon/10"
-                }`}
-              >
-                {u.disponible_llamadas ? "🟢 Activo" : "⚙️ Ajustar Horarios"}
-              </button>
-            </div>
-
-            {/* Acciones de Guardando / Borrar */}
-            <div className="flex items-center justify-between border-t border-carbon/5 pt-3">
-              <div>
-                {guardando === u.id && (
-                  <span className="text-xs text-carbon/40 font-semibold">Guardando…</span>
-                )}
-              </div>
-              <BotonBorrar onConfirm={() => borrar(u.id)} />
-            </div>
-          </div>
-        ))}
-      </div>
+      {usuarios.length === 0 ? (
+        <div className="rounded-2xl border border-carbon/10 bg-white p-8 text-center shadow-sm">
+          <p className="text-sm text-carbon/50">No hay usuarios registrados en el equipo.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {usuarios.map((u) => (
+            <TarjetaUsuario
+              key={u.id}
+              u={u}
+              onUpdate={handleUpdateUsuario}
+              onDelete={handleDeleteUsuario}
+              onConfigConmutador={abrirConfigConmutador}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Modal de Configuración del Conmutador */}
       {agenteConmutador && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-carbon/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-dorado/30 bg-white p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-dorado/30 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-carbon/10 pb-3">
               <div>
                 <h3 className="font-titular text-lg font-semibold text-verde-profundo">
@@ -328,7 +376,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
               <button
                 type="button"
                 onClick={() => setAgenteConmutador(null)}
-                className="rounded-full p-1.5 hover:bg-carbon/5 text-carbon/60 transition"
+                className="rounded-full p-1.5 text-carbon/60 transition hover:bg-carbon/5"
               >
                 ✕
               </button>
@@ -337,7 +385,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
             <div className="space-y-3">
               {/* Teléfono de Desvío */}
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-carbon/40 block mb-1">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
                   Teléfono de Desvío (Celular)
                 </label>
                 <input
@@ -347,25 +395,25 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
                   placeholder="Ej: +52XXXXXXXXXX"
                   className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
                 />
-                <span className="text-[10px] text-carbon/40 mt-1 block">
+                <span className="mt-1 block text-[10px] text-carbon/40">
                   Número al que Twilio desviará las llamadas. Debe incluir lada del país.
                 </span>
               </div>
 
               {/* Disponible (De guardia) */}
-              <div className="flex items-center justify-between rounded-xl border border-carbon/10 p-3 bg-crema/25">
+              <div className="flex items-center justify-between rounded-xl border border-carbon/10 bg-crema/25 p-3">
                 <div>
-                  <span className="text-xs font-bold text-verde-profundo block">
+                  <span className="block text-xs font-bold text-verde-profundo">
                     Activar guardia telefónica
                   </span>
-                  <span className="text-[10px] text-carbon/50 block">
+                  <span className="block text-[10px] text-carbon/50">
                     Permite recibir llamadas en su celular.
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setDispLlamadas(!dispLlamadas)}
-                  className={`rounded-full px-3 py-1 text-xs font-bold transition border ${
+                  className={`rounded-full border px-3 py-1 text-xs font-bold transition ${
                     dispLlamadas
                       ? "bg-sauce/20 text-verde-profundo border-sauce/30"
                       : "bg-carbon/10 text-carbon/50 border-carbon/15"
@@ -378,7 +426,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
               {/* Horarios */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-carbon/40 block mb-1">
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
                     Hora de Inicio
                   </label>
                   <input
@@ -390,7 +438,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-carbon/40 block mb-1">
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
                     Hora de Fin
                   </label>
                   <input
@@ -409,16 +457,17 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
               <button
                 type="button"
                 onClick={() => setAgenteConmutador(null)}
-                className="rounded-lg bg-carbon/10 hover:bg-carbon/25 text-carbon px-4 py-2 text-sm font-medium transition"
+                className="rounded-lg bg-carbon/10 px-4 py-2 text-sm font-medium text-carbon transition hover:bg-carbon/25"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={guardarConfigConmutador}
-                className="rounded-lg bg-sauce hover:bg-verde-profundo text-crema px-4 py-2 text-sm font-semibold transition"
+                disabled={modalGuardando}
+                className="rounded-lg bg-sauce px-4 py-2 text-sm font-semibold text-crema transition hover:bg-verde-profundo disabled:opacity-50"
               >
-                Guardar Ajustes
+                {modalGuardando ? "Guardando..." : "Guardar Ajustes"}
               </button>
             </div>
           </div>
@@ -429,42 +478,35 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
 }
 
 function BotonBorrar({ onConfirm }: { onConfirm: () => void }) {
-  const [c, setC] = useState(false);
-  if (!c) {
+  const [confirmar, setConfirmar] = useState(false);
+  if (!confirmar) {
     return (
       <button
         type="button"
-        onClick={() => setC(true)}
-        className="text-xs text-rojo/70 hover:text-rojo"
+        onClick={() => setConfirmar(true)}
+        className="inline-flex items-center gap-1 py-2 text-xs font-semibold text-rojo/75 transition hover:text-rojo hover:underline"
       >
-        Eliminar
+        🗑️ Eliminar
       </button>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs">
+    <div className="inline-flex items-center gap-1.5 rounded-lg border border-rojo/10 bg-rojo/5 px-2 py-1">
+      <span className="text-[10px] font-bold text-rojo/80 uppercase">¿Borrar?</span>
       <button
         type="button"
         onClick={onConfirm}
-        className="rounded bg-rojo px-2 py-1 font-medium text-crema"
+        className="rounded bg-rojo px-2 py-0.5 text-[10px] font-bold text-white transition hover:bg-red-700"
       >
         Sí
       </button>
       <button
         type="button"
-        onClick={() => setC(false)}
-        className="px-1 text-carbon/60"
+        onClick={() => setConfirmar(false)}
+        className="px-1.5 py-0.5 text-[10px] font-semibold text-carbon/60 hover:text-carbon"
       >
         No
       </button>
-    </span>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="px-3 py-2.5 text-[10px] font-medium uppercase tracking-wide text-carbon/50">
-      {children}
-    </th>
+    </div>
   );
 }
