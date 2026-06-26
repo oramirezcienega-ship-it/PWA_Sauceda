@@ -535,7 +535,7 @@ export async function obtenerAnalytics() {
   try {
     const { data: enrollmentsRespondio } = await sb
       .from("sequence_enrollments")
-      .select("id, nombre, phone, ultimo_contacto_at")
+      .select("id, nombre, phone, ultimo_contacto_at, sequence_id, enrolled_at")
       .eq("status", "salido")
       .eq("razon_salida", "respondio");
 
@@ -592,7 +592,45 @@ export async function obtenerAnalytics() {
               logLines.push(`        [Exito] Acción marcada como respondida.`);
             }
           } else {
-            logLines.push(`        No se encontró ninguna acción previa en sequence_actions para ${en.nombre}.`);
+            logLines.push(`        No se encontró ninguna acción previa para ${en.nombre}. Creando acción sintetizada...`);
+            
+            // Buscar el primer step para la secuencia
+            let stepId: string | null = null;
+            let canal = "whatsapp"; // fallback por defecto
+            
+            if (en.sequence_id) {
+              const { data: firstStep } = await sb
+                .from("sequence_steps")
+                .select("id, canal")
+                .eq("sequence_id", en.sequence_id)
+                .order("orden", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              
+              if (firstStep) {
+                stepId = firstStep.id;
+                canal = firstStep.canal;
+              }
+            }
+            
+            const { error: errIns } = await sb
+              .from("sequence_actions")
+              .insert({
+                enrollment_id: en.id,
+                step_id: stepId,
+                canal: canal,
+                status: "respondido",
+                contenido_enviado: "(Auto-reparado: Lead respondió al enrolamiento inicial)",
+                enviado_at: en.enrolled_at || new Date().toISOString(),
+                respondido_at: en.ultimo_contacto_at || new Date().toISOString(),
+                notas_asesor: "Creado por rutina de auto-reparación de analytics (lead sin acciones previas).",
+              });
+              
+            if (errIns) {
+              logLines.push(`        [Error] Falló creación de acción sintetizada: ${errIns.message}`);
+            } else {
+              logLines.push(`        [Exito] Acción sintetizada creada con éxito.`);
+            }
           }
         }
       }
