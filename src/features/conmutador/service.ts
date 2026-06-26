@@ -82,37 +82,51 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
   const sb = supabaseServidor();
   const horaActual = obtenerHoraLocalMX();
 
-  // Determinar el día de la semana actual en la zona horaria de México
+  // Determinar el día de la semana actual en la zona horaria de México (usando en-US para evitar problemas de ICU locale)
   const d = new Date();
-  const formDia = new Intl.DateTimeFormat("es-MX", {
+  const formDia = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Mexico_City",
     weekday: "long",
   });
   
   const diaSemanaRaw = formDia.format(d).toLowerCase();
   let diaSemana = "lunes";
-  if (diaSemanaRaw.includes("lun")) diaSemana = "lunes";
-  else if (diaSemanaRaw.includes("mar")) diaSemana = "martes";
-  else if (diaSemanaRaw.includes("mi")) diaSemana = "miercoles";
-  else if (diaSemanaRaw.includes("jue")) diaSemana = "jueves";
-  else if (diaSemanaRaw.includes("vie")) diaSemana = "viernes";
-  else if (diaSemanaRaw.includes("sab")) diaSemana = "sabado";
-  else if (diaSemanaRaw.includes("dom")) diaSemana = "domingo";
+  if (diaSemanaRaw.includes("monday")) diaSemana = "lunes";
+  else if (diaSemanaRaw.includes("tuesday")) diaSemana = "martes";
+  else if (diaSemanaRaw.includes("wednesday")) diaSemana = "miercoles";
+  else if (diaSemanaRaw.includes("thursday")) diaSemana = "jueves";
+  else if (diaSemanaRaw.includes("friday")) diaSemana = "viernes";
+  else if (diaSemanaRaw.includes("saturday")) diaSemana = "sabado";
+  else if (diaSemanaRaw.includes("sunday")) diaSemana = "domingo";
 
-  // Consulta perfiles que estén marcados como disponibles para llamadas y que tengan teléfono de desvío
+  console.log(`[obtenerAgenteDisponible] Evaluando día: ${diaSemana}, hora local: ${horaActual}`);
+
+  // Consulta perfiles que estén marcados como activos y disponibles para recibir llamadas
+  // Nota: Quitamos el filtro neq("telefono_desvio", "") de la query de Supabase para evitar 
+  // comportamientos inesperados si el campo es NULL, lo filtraremos de forma segura en JS.
   const { data: agentes, error } = await sb
     .from("perfiles")
     .select("id, nombre, telefono_desvio, horarios_guardia")
     .eq("activo", true)
-    .eq("disponible_llamadas", true)
-    .neq("telefono_desvio", "");
+    .eq("disponible_llamadas", true);
 
   if (error || !agentes || agentes.length === 0) {
+    console.log("[obtenerAgenteDisponible] No se encontraron agentes activos con disponible_llamadas = true.");
+    return null;
+  }
+
+  // Filtrar agentes con un teléfono de desvío válido en JS
+  const agentesConTelefono = agentes.filter(
+    (a) => a.telefono_desvio && a.telefono_desvio.trim() !== ""
+  );
+
+  if (agentesConTelefono.length === 0) {
+    console.log("[obtenerAgenteDisponible] Agentes disponibles pero ninguno tiene telefono_desvio configurado.");
     return null;
   }
 
   // Filtrar por horario laboral dinámico
-  const agentesEnHorario = agentes.filter((agente) => {
+  const agentesEnHorario = agentesConTelefono.filter((agente) => {
     // Si no tiene horarios configurados, usamos el fallback (Lunes a Viernes 09:00 a 18:00)
     const horarios = (agente.horarios_guardia as any) || {
       lunes: [{ inicio: "09:00:00", fin: "18:00:00" }],
@@ -135,23 +149,30 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
       const fin = bloque.fin;
       if (!inicio || !fin) return false;
 
-      // Comparación de cadenas 'HH:MM:SS'
-      if (inicio <= fin) {
-        return horaActual >= inicio && horaActual <= fin;
+      // Normalizar a HH:MM para evitar inconsistencias de segundos en las comparaciones de cadenas
+      const hActual = horaActual.slice(0, 5);
+      const hInicio = inicio.slice(0, 5);
+      const hFin = fin.slice(0, 5);
+
+      if (hInicio <= hFin) {
+        return hActual >= hInicio && hActual <= hFin;
       } else {
         // Manejar turnos que cruzan la medianoche
-        return horaActual >= inicio || horaActual <= fin;
+        return hActual >= hInicio || hActual <= hFin;
       }
     });
   });
 
   if (agentesEnHorario.length === 0) {
+    console.log(`[obtenerAgenteDisponible] Hay ${agentesConTelefono.length} agentes configurados, pero ninguno está dentro de su franja horaria de guardia hoy.`);
     return null;
   }
 
   // Selección aleatoria para balancear la carga entre asesores de guardia disponibles
   const index = Math.floor(Math.random() * agentesEnHorario.length);
   const agente = agentesEnHorario[index];
+
+  console.log(`[obtenerAgenteDisponible] Agente seleccionado: ${agente.nombre}`);
 
   return {
     id: agente.id,
