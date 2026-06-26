@@ -17,7 +17,10 @@ export async function POST(request: Request) {
       });
     }
 
-    const callSid = body.CallSid || body.callSid || "";
+    const { searchParams } = new URL(request.url);
+    const parentCallSidQuery = searchParams.get("parentCallSid");
+
+    const callSid = parentCallSidQuery || body.CallSid || body.callSid || "";
     const callStatus = body.DialCallStatus || body.CallStatus || body.callStatus || "";
     const duration = body.DialCallDuration || body.CallDuration || body.callDuration || body.duration;
     const recordingUrl = body.RecordingUrl || body.recordingUrl || "";

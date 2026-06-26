@@ -228,9 +228,11 @@ export async function iniciarLlamadaConmutador(
     // 2. Setup de Twilio
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
-    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+    const rawFrom = process.env.TWILIO_PHONE_NUMBER || "+524774654700";
+    const fromCanon = normalizarTelefono(rawFrom);
+    const fromNumber = fromCanon.startsWith("+") ? fromCanon : `+${fromCanon}`;
 
-    if (!accountSid || !authToken || !fromNumber) {
+    if (!accountSid || !authToken) {
       return {
         ok: false,
         error: "El conmutador no está configurado (faltan variables de entorno de Twilio).",

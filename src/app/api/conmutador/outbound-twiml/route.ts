@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizarTelefono } from "@/lib/telefono";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +18,35 @@ export async function POST(request: Request) {
       );
     }
 
-    const fromNumber = process.env.TWILIO_PHONE_NUMBER || "";
+    // Obtener el CallSid del padre (asesor)
+    let parentCallSid = "";
+    if (request.method === "POST") {
+      const contentType = request.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        try {
+          const body = await request.json();
+          parentCallSid = body.CallSid || body.callSid || "";
+        } catch {}
+      } else if (contentType.includes("form")) {
+        try {
+          const formData = await request.formData();
+          parentCallSid = (formData.get("CallSid") || formData.get("callSid") || "") as string;
+        } catch {}
+      }
+    }
+
+    const rawFromNumber = process.env.TWILIO_PHONE_NUMBER || "+524774654700";
+    const fromCanon = normalizarTelefono(rawFromNumber);
+    const fromNumber = fromCanon ? (fromCanon.startsWith("+") ? fromCanon : `+${fromCanon}`) : "+524774654700";
+
+    const callbackUrl = parentCallSid 
+      ? `/api/conmutador/webhook-evento?parentCallSid=${parentCallSid}`
+      : "/api/conmutador/webhook-evento";
 
     const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say language="es-MX" voice="Polly.Mia-Neural">Llamada iniciada desde el CRM Sauceda. Conectando con el prospecto...</Say>
-  <Dial callerId="${fromNumber}" record="record-from-answer-dual" action="/api/conmutador/webhook-evento" recordingStatusCallback="/api/conmutador/webhook-evento">
+  <Dial callerId="${fromNumber}" record="record-from-answer-dual" action="${callbackUrl}" recordingStatusCallback="${callbackUrl}">
     <Number>${cliente}</Number>
   </Dial>
 </Response>`;
