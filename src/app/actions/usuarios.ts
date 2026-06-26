@@ -160,6 +160,18 @@ export async function actualizarUsuario(
   },
 ): Promise<void> {
   await requireAdministrador();
+  
+  // Evitar auto-bloqueo o pérdida de rol administrador
+  const uActual = await usuarioActual();
+  if (uActual && uActual.id === id) {
+    if (datos.activo === false) {
+      throw new Error("No puedes desactivar tu propio usuario administrador.");
+    }
+    if (datos.rol !== "admin") {
+      throw new Error("No puedes cambiar tu propio rol de administrador.");
+    }
+  }
+
   const sb = supabaseServidor();
 
   // Filtrar undefined para evitar errores de serialización de Supabase
@@ -181,6 +193,13 @@ export async function actualizarUsuario(
 /** Elimina un usuario (auth + perfil en cascada). */
 export async function eliminarUsuario(id: string): Promise<void> {
   await requireAdministrador();
+
+  // Evitar auto-eliminación
+  const uActual = await usuarioActual();
+  if (uActual && uActual.id === id) {
+    throw new Error("No puedes eliminar tu propio usuario administrador.");
+  }
+
   const sb = supabaseServidor();
   const { error } = await sb.auth.admin.deleteUser(id);
   if (error) throw new Error(error.message);

@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Encabezado } from "@/components/Encabezado";
 import { TablaUsuarios } from "@/components/TablaUsuarios";
-import { listarUsuarios } from "@/app/actions/usuarios";
+import { listarUsuarios, obtenerUsuarioActual } from "@/app/actions/usuarios";
 
 export const dynamic = "force-dynamic";
 
 /** Panel de administración de usuarios (solo administradores). */
 export default async function PaginaUsuarios() {
+  const userActual = await obtenerUsuarioActual();
+  const usuarioActualId = userActual?.id || "";
   let usuarios;
   try {
     usuarios = await listarUsuarios();
@@ -51,7 +53,7 @@ export default async function PaginaUsuarios() {
           </Link>
         </div>
 
-        <TablaUsuarios inicial={usuarios} />
+        <TablaUsuarios inicial={usuarios} usuarioActualId={usuarioActualId} />
       </div>
     </main>
   );

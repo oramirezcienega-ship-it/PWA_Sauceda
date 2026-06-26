@@ -37,6 +37,11 @@ export const metadata: Metadata = {
   title: "SAUCEDA · BPM de Traspasos INFONAVIT",
   description: "Tradición con tecnología.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon.svg",
+    shortcut: "/icons/icon.svg",
+    apple: "/icons/icon.svg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

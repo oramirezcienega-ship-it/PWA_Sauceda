@@ -10,9 +10,10 @@ interface TarjetaUsuarioProps {
   onUpdate: (id: string, cambios: Partial<UsuarioApp>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onConfigConmutador: (u: UsuarioApp) => void;
+  usuarioActualId: string;
 }
 
-function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUsuarioProps) {
+function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActualId }: TarjetaUsuarioProps) {
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
@@ -108,8 +109,17 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
             </label>
             <select
               value={rol}
-              onChange={(e) => setRol(e.target.value as "admin" | "asesor")}
-              className="w-full rounded-lg border border-carbon/15 bg-white px-2 py-1.5 text-xs text-verde-profundo outline-none focus:border-sauce focus:ring-2 focus:ring-sauce/20"
+              onChange={(e) => {
+                const nuevoRol = e.target.value as "admin" | "asesor";
+                if (u.id === usuarioActualId && nuevoRol !== "admin") {
+                  alert("No puedes cambiar tu propio rol de administrador.");
+                  return;
+                }
+                setRol(nuevoRol);
+              }}
+              disabled={u.id === usuarioActualId}
+              className="w-full rounded-lg border border-carbon/15 bg-white px-2 py-1.5 text-xs text-verde-profundo outline-none focus:border-sauce focus:ring-2 focus:ring-sauce/20 disabled:opacity-60 disabled:cursor-not-allowed"
+              title={u.id === usuarioActualId ? "No puedes cambiar tu propio rol" : ""}
             >
               <option value="admin">Administrador</option>
               <option value="asesor">Asesor</option>
@@ -122,12 +132,19 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
             </label>
             <button
               type="button"
-              onClick={() => setActivo(!activo)}
+              onClick={() => {
+                if (u.id === usuarioActualId) {
+                  alert("No puedes desactivar tu propio usuario administrador.");
+                  return;
+                }
+                setActivo(!activo);
+              }}
               className={`w-full rounded-lg border py-1.5 text-xs font-semibold transition ${
                 activo
                   ? "bg-sauce/20 text-verde-profundo border-sauce/30"
                   : "bg-carbon/10 text-carbon/50 border-carbon/10"
-              }`}
+              } ${u.id === usuarioActualId ? "opacity-60 cursor-not-allowed" : ""}`}
+              title={u.id === usuarioActualId ? "No puedes desactivarte a ti mismo" : ""}
             >
               {activo ? "🟢 Activo" : "⚪ Inactivo"}
             </button>
@@ -139,7 +156,11 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
         {/* Acciones en Edición */}
         <div className="flex items-center justify-between gap-2">
           {/* Botón borrar sutil y con confirmación */}
-          <BotonBorrar onConfirm={() => onDelete(u.id)} />
+          {u.id !== usuarioActualId ? (
+            <BotonBorrar onConfirm={() => onDelete(u.id)} />
+          ) : (
+            <div className="text-[10px] text-carbon/40 italic">Tu propio usuario administrador</div>
+          )}
 
           <div className="flex items-center gap-2">
             <button
@@ -258,7 +279,13 @@ const DIAS_SEMANA = [
 ];
 
 /** Componente principal de administración de usuarios. */
-export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
+export function TablaUsuarios({
+  inicial,
+  usuarioActualId,
+}: {
+  inicial: UsuarioApp[];
+  usuarioActualId: string;
+}) {
   const [usuarios, setUsuarios] = useState<UsuarioApp[]>(inicial);
 
   // Estados para el modal de configuración del conmutador
@@ -384,6 +411,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
               onUpdate={handleUpdateUsuario}
               onDelete={handleDeleteUsuario}
               onConfigConmutador={abrirConfigConmutador}
+              usuarioActualId={usuarioActualId}
             />
           ))}
         </div>
