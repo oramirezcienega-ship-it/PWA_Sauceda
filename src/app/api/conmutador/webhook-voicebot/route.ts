@@ -14,17 +14,33 @@ export async function POST(request: Request) {
     // 1. Interceptar petición inicial del asistente (assistant-request)
     if (messageType === "assistant-request") {
       const agente = await obtenerAgenteDisponible();
+      const originalAssistant = body.assistant || body.message?.assistant || {};
+      const tools = originalAssistant.tools || [];
+
+      // Buscar herramienta de transferencia en la configuración de Vapi
+      const transferTool = tools.find((t: any) => 
+        t.type === "transfer-call" || 
+        t.type === "transferCall" ||
+        String(t.name).toLowerCase().includes("transfer") ||
+        String(t.name).toLowerCase().includes("desvi")
+      );
+      const toolName = transferTool?.name || "transfer_call_tool";
 
       if (agente) {
-        console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata.`);
+        console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata con herramienta: ${toolName}.`);
+        
+        // Retornar el asistente original preservando toda su configuración (voz, herramientas, etc.)
+        // pero sobreescribiendo el mensaje de bienvenida y el prompt del sistema para forzar el desvío.
         return NextResponse.json({
           assistant: {
+            ...originalAssistant,
             firstMessage: `Hola, bienvenido a Sauceda Bienes Raíces. Te estoy transfiriendo de inmediato con nuestro asesor de guardia, ${agente.nombre}. Por favor no cuelgues.`,
             model: {
+              ...(originalAssistant.model || {}),
               messages: [
                 {
                   role: "system",
-                  content: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool (like 'transferir_a_asesor' or 'transfer_call_tool') to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool immediately.`
+                  content: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool '${toolName}' to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool '${toolName}' immediately.`
                 }
               ]
             }
