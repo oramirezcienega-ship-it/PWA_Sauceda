@@ -264,6 +264,7 @@ export async function iniciarLlamadaConmutador(
     params.append("To", toAgente);
     params.append("From", fromNumber);
     params.append("Url", twimlUrl);
+    params.append("StatusCallback", `${baseUrl}/api/conmutador/webhook-evento`);
 
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`,

@@ -21,8 +21,8 @@ export async function POST(request: Request) {
 
     const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="es-MX" voice="Polly.Mia">Llamada iniciada desde el CRM Sauceda. Conectando con el prospecto...</Say>
-  <Dial callerId="${fromNumber}" record="record-from-answer-dual" recordingStatusCallback="/api/conmutador/webhook-evento">
+  <Say language="es-MX" voice="Polly.Mia-Neural">Llamada iniciada desde el CRM Sauceda. Conectando con el prospecto...</Say>
+  <Dial callerId="${fromNumber}" record="record-from-answer-dual" action="/api/conmutador/webhook-evento" recordingStatusCallback="/api/conmutador/webhook-evento">
     <Number>${cliente}</Number>
   </Dial>
 </Response>`;
