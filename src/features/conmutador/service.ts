@@ -212,43 +212,57 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
     if (dp.necesidad) partes.push(`Necesidad: ${dp.necesidad}`);
     if (dp.tipoCredito) partes.push(`Crédito: ${dp.tipoCredito}`);
     if (dp.valorEstimado) partes.push(`Presupuesto: $${dp.valorEstimado.toLocaleString()}`);
-    if (dp.saldoDeuda) partes.push(`Deuda: $${dp.saldoDeuda.toLocaleString()}`);
+    if (dp.saldoDeuda) partes.push(`Deuda: ${dp.saldoDeuda.toLocaleString()}`);
     if (dp.correo) partes.push(`Correo: ${dp.correo}`);
     if (partes.length > 0) {
       resumen = `Llamada perfilada por IA. ${partes.join(". ")}.`;
     }
   }
 
+  // 0. Buscar si esta llamada fue transferida/asociada a un agente durante la conversación
+  let agenteId: string | null = null;
+  if (reporte.twilioCallSid) {
+    const { data: callData } = await sb
+      .from("llamadas_conmutador")
+      .select("agente_id")
+      .eq("twilio_call_sid", reporte.twilioCallSid)
+      .limit(1);
+    if (callData && callData.length && callData[0].agente_id) {
+      agenteId = callData[0].agente_id;
+    }
+  }
+
   // 1. Buscar prospecto existente por teléfono o correo
   let prospectoId: string | null = null;
   let nombreExistente = "";
+  let asesorIdExistente: string | null = null;
+
   if (variantesTel.length) {
     const { data } = await sb
       .from("prospectos")
-      .select("id, nombre")
+      .select("id, nombre, asesor_id")
       .in("telefono", variantesTel)
       .limit(1);
     if (data && data.length) {
       prospectoId = data[0].id;
       nombreExistente = data[0].nombre?.trim() || "";
+      asesorIdExistente = data[0].asesor_id;
     }
   }
   if (!prospectoId && correo) {
     const { data } = await sb
       .from("prospectos")
-      .select("id, nombre")
+      .select("id, nombre, asesor_id")
       .eq("correo", correo)
       .limit(1);
     if (data && data.length) {
       prospectoId = data[0].id;
       nombreExistente = data[0].nombre?.trim() || "";
+      asesorIdExistente = data[0].asesor_id;
     }
   }
 
   // Determinar el nombre a usar:
-  // 1. Si la IA extrajo un nombre válido, usamos ese.
-  // 2. Si no, y ya tenemos un nombre en la base de datos que no es genérico, usamos el de la BD.
-  // 3. Si no, usamos "Lead de Conmutador IA".
   let nombre = reporte.datosPerfilados?.nombre?.trim() || "";
   const esNombreValido = nombre && nombre !== "Lead de Conmutador IA" && nombre !== "Lead de Conmutador";
   const esNombreExistenteValido = nombreExistente && nombreExistente !== "Lead de Conmutador IA" && nombreExistente !== "Lead de Conmutador";
@@ -260,6 +274,9 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
     nombre = "Lead de Conmutador IA";
   }
 
+  // Determinar el asesor a asignar: si ya tiene uno asignado en BD, lo mantenemos; si no, asignamos el que atendió/transfirió.
+  const finalAsesorId = asesorIdExistente || agenteId || null;
+
   // 2. Si no existe, crear el prospecto
   if (!prospectoId) {
     const id = await siguienteId(sb, "prospectos", "PRO");
@@ -268,7 +285,8 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       nombre,
       telefono,
       correo,
-      origen: "sitio-web", // Usamos un origen compatible, o crearemos uno en caso necesario. En la migración 0002 se checkean origenes. 'sitio-web' o 'otro'. Usaremos 'otro' para llamadas telefónicas.
+      origen: "otro", // 'otro' es el origen correcto para llamadas telefónicas.
+      asesor_id: finalAsesorId,
     });
 
     if (insErr) {
@@ -278,6 +296,14 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
     prospectoId = id;
     await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
   } else {
+    // Si ya existe, actualizamos su asesor_id si es que antes no tenía y ahora sí tenemos uno
+    if (finalAsesorId && finalAsesorId !== asesorIdExistente) {
+      await sb
+        .from("prospectos")
+        .update({ asesor_id: finalAsesorId })
+        .eq("id", prospectoId);
+    }
+
     // Si ya existe pero tiene el nombre genérico y ahora se obtuvo un nombre real, actualizarlo
     const esGenerico = !nombreExistente || nombreExistente === "Lead de Conmutador IA" || nombreExistente === "Lead de Conmutador";
     if (esGenerico && esNombreValido) {
@@ -301,7 +327,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
   if (variantesTel.length) {
     const { data: ex } = await sb
       .from("expedientes")
-      .select("id, token")
+      .select("id, token, asesor_id")
       .in("telefono", variantesTel)
       .limit(1);
     if (ex && ex.length) {
@@ -329,6 +355,10 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       }
       if (resumen) {
         updateData.situacion = `Llamada perfilada por IA: ${resumen}`.slice(0, 300);
+      }
+      // Mantener en sincronía el asesor del expediente
+      if (finalAsesorId && ex[0].asesor_id !== finalAsesorId) {
+        updateData.asesor_id = finalAsesorId;
       }
 
       await sb
@@ -369,6 +399,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       prospecto_id: prospectoId,
       tipo_credito: reporte.datosPerfilados?.tipoCredito || null,
       necesidad: reporte.datosPerfilados?.necesidad || null,
+      asesor_id: finalAsesorId,
     });
 
     if (expErr) {
@@ -418,6 +449,8 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       datos_perfilados: reporte.datosPerfilados,
       estado: "completed",
       tipo: "entrante",
+      // Si la llamada fue ruteada a un asesor, nos aseguramos que quede registrado aquí
+      agente_id: finalAsesorId,
     }, { onConflict: "twilio_call_sid" });
 
   if (callUpdateErr) {

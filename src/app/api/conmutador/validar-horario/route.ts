@@ -34,39 +34,14 @@ export async function POST(request: Request) {
       estado: "ringing",
     });
 
-    // Consultar agente de guardia disponible en horario laboral
-    const agente = await obtenerAgenteDisponible();
-
-    let xmlResponse = "";
-
-    if (agente) {
-      // 1. Registrar en BD que la llamada se desvió a este agente
-      const { actualizarLlamada } = await import("@/features/conmutador/service");
-      await actualizarLlamada(callSid, {
-        estado: "in-progress",
-        agenteId: agente.id,
-      });
-
-      // 2. Generar TwiML para desviar al celular del agente con grabación activa.
-      // Forzamos callerId con el número de Twilio para que funcione en cuentas Trial.
-      xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+    // Desviar directamente al Voice Bot de Vapi (Sofía)
+    const vapiSipUri = process.env.VAPI_SIP_URI || "sip:sauceda@sip.vapi.ai";
+    const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="es-MX" voice="Polly.Mia">Bienvenido a Sauceda Bienes Raíces. Transfiriendo su llamada con nuestro asesor de guardia, ${agente.nombre}.</Say>
-  <Dial callerId="${to}" record="record-from-answer-dual" recordingStatusCallback="/api/conmutador/webhook-evento">
-    <Number>${agente.telefono_desvio}</Number>
-  </Dial>
-</Response>`;
-    } else {
-      // 3. Si no hay agente disponible, desviar al Voice Bot de Vapi
-      const vapiSipUri = process.env.VAPI_SIP_URI || "sip:sauceda@sip.vapi.ai";
-      xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say language="es-MX" voice="Polly.Mia">Gracias por comunicarse a Sauceda Bienes Raíces. En este momento nuestros asesores están ocupados. Le transferiremos con Sofía, nuestra asistente virtual de guardia, para tomar sus datos.</Say>
   <Dial>
     <Sip>${vapiSipUri}</Sip>
   </Dial>
 </Response>`;
-    }
 
     return new NextResponse(xmlResponse, {
       headers: {
