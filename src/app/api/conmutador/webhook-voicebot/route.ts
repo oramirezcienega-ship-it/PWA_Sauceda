@@ -36,7 +36,9 @@ export async function POST(request: Request) {
       } else {
         console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía por defecto.");
         return NextResponse.json({
-          assistantId: sofiaId
+          assistant: {
+            id: sofiaId
+          }
         });
       }
     }
