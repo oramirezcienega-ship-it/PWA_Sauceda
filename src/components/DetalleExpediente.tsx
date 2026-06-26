@@ -4,13 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
-import { enviarEnlacePortalWhatsApp } from "@/app/actions/expedientes";
 import { etapaAnterior, etapaSiguiente, ETAPAS_POR_ID } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
-import { FormulariosExpediente } from "./FormulariosExpediente";
-import { MensajesExpediente } from "./MensajesExpediente";
-import { RespuestasExpediente } from "./RespuestasExpediente";
 import { Actividades } from "./Actividades";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 
@@ -25,37 +21,6 @@ export function DetalleExpediente({ id }: { id: string }) {
     useExpedientes();
   const expediente = obtenerExpediente(id);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
-  const [copiado, setCopiado] = useState(false);
-  const [enviandoWa, setEnviandoWa] = useState(false);
-  const [waMsg, setWaMsg] = useState<string | null>(null);
-
-  // Copia al portapapeles el enlace privado de seguimiento del cliente.
-  function copiarEnlaceCliente(token: string) {
-    const url = `${window.location.origin}/seguimiento/${token}`;
-    navigator.clipboard.writeText(url).then(
-      () => {
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-      },
-      () => window.prompt("Copia el enlace para el cliente:", url),
-    );
-  }
-
-  // Envía el enlace del portal al cliente por WhatsApp (vía API, sin abrir
-  // WhatsApp Web).
-  async function enviarPortalWhatsApp(expedienteId: string) {
-    setEnviandoWa(true);
-    setWaMsg(null);
-    try {
-      const r = await enviarEnlacePortalWhatsApp(expedienteId);
-      setWaMsg(r.mensaje);
-    } catch {
-      setWaMsg("No se pudo enviar el WhatsApp.");
-    } finally {
-      setEnviandoWa(false);
-      setTimeout(() => setWaMsg(null), 6000);
-    }
-  }
 
   // Expediente inexistente. Mientras carga el estado persistido evitamos
   // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
@@ -207,48 +172,7 @@ export function DetalleExpediente({ id }: { id: string }) {
             </Link>
           )}
 
-          {/* Portal del cliente */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cielo/30 bg-cielo/5 p-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
-                Portal del cliente
-              </p>
-              <p className="mt-0.5 text-sm text-carbon/70">
-                Comparte el seguimiento de solo lectura.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => copiarEnlaceCliente(expediente.token)}
-                className="rounded-md border border-cielo/40 bg-white px-3 py-2 text-sm text-cielo transition hover:bg-cielo hover:text-crema"
-              >
-                {copiado ? "¡Copiado! ✓" : "Copiar enlace"}
-              </button>
-              {expediente.telefono && (
-                <button
-                  type="button"
-                  onClick={() => enviarPortalWhatsApp(expediente.id)}
-                  disabled={enviandoWa}
-                  className="rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
-                >
-                  {enviandoWa ? "Enviando…" : "Enviar por WhatsApp"}
-                </button>
-              )}
-              {waMsg && (
-                <span className="w-full text-xs text-carbon/70">{waMsg}</span>
-              )}
-            </div>
-          </div>
 
-          {/* Formularios del cliente (enviar / retirar) */}
-          <FormulariosExpediente expedienteId={expediente.id} />
-
-          {/* Mensajes al cliente */}
-          <MensajesExpediente
-            expedienteId={expediente.id}
-            telefono={expediente.telefono}
-          />
         </div>
 
         {/* ---------- COLUMNA DERECHA: información del expediente ---------- */}
@@ -439,8 +363,7 @@ export function DetalleExpediente({ id }: { id: string }) {
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
-          {/* Información recopilada (respuestas de formularios) */}
-          <RespuestasExpediente expedienteId={expediente.id} />
+
         </div>
       </div>
 
