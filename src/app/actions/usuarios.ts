@@ -24,6 +24,7 @@ export interface UsuarioApp {
   disponible_llamadas?: boolean;
   horario_inicio?: string;
   horario_fin?: string;
+  horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
@@ -81,6 +82,7 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
         disponible_llamadas?: boolean;
         horario_inicio?: string;
         horario_fin?: string;
+        horarios_guardia?: any;
       },
     ]),
   );
@@ -97,6 +99,15 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
       disponible_llamadas: p?.disponible_llamadas ?? false,
       horario_inicio: p?.horario_inicio ?? "09:00:00",
       horario_fin: p?.horario_fin ?? "18:00:00",
+      horarios_guardia: p?.horarios_guardia ?? {
+        lunes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        martes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        miercoles: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        jueves: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        viernes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        sabado: [],
+        domingo: []
+      }
     };
   });
 }
@@ -145,13 +156,25 @@ export async function actualizarUsuario(
     disponible_llamadas?: boolean;
     horario_inicio?: string;
     horario_fin?: string;
+    horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
   },
 ): Promise<void> {
   await requireAdministrador();
   const sb = supabaseServidor();
+
+  // Filtrar undefined para evitar errores de serialización de Supabase
+  const updateData: Record<string, any> = {};
+  for (const key in datos) {
+    if ((datos as any)[key] !== undefined) {
+      updateData[key] = (datos as any)[key];
+    }
+  }
+
   const { error } = await sb
     .from("perfiles")
-    .upsert({ id, ...datos });
+    .update(updateData)
+    .eq("id", id);
+    
   if (error) throw new Error(error.message);
 }
 

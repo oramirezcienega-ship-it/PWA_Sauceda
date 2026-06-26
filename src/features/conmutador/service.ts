@@ -82,10 +82,27 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
   const sb = supabaseServidor();
   const horaActual = obtenerHoraLocalMX();
 
+  // Determinar el día de la semana actual en la zona horaria de México
+  const d = new Date();
+  const formDia = new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "long",
+  });
+  
+  const diaSemanaRaw = formDia.format(d).toLowerCase();
+  let diaSemana = "lunes";
+  if (diaSemanaRaw.includes("lun")) diaSemana = "lunes";
+  else if (diaSemanaRaw.includes("mar")) diaSemana = "martes";
+  else if (diaSemanaRaw.includes("mi")) diaSemana = "miercoles";
+  else if (diaSemanaRaw.includes("jue")) diaSemana = "jueves";
+  else if (diaSemanaRaw.includes("vie")) diaSemana = "viernes";
+  else if (diaSemanaRaw.includes("sab")) diaSemana = "sabado";
+  else if (diaSemanaRaw.includes("dom")) diaSemana = "domingo";
+
   // Consulta perfiles que estén marcados como disponibles para llamadas y que tengan teléfono de desvío
   const { data: agentes, error } = await sb
     .from("perfiles")
-    .select("id, nombre, telefono_desvio, horario_inicio, horario_fin")
+    .select("id, nombre, telefono_desvio, horarios_guardia")
     .eq("activo", true)
     .eq("disponible_llamadas", true)
     .neq("telefono_desvio", "");
@@ -94,25 +111,45 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
     return null;
   }
 
-  // Filtrar por horario laboral
+  // Filtrar por horario laboral dinámico
   const agentesEnHorario = agentes.filter((agente) => {
-    const inicio = agente.horario_inicio;
-    const fin = agente.horario_fin;
-    
-    // Comparación simple de cadenas 'HH:MM:SS'
-    if (inicio <= fin) {
-      return horaActual >= inicio && horaActual <= fin;
-    } else {
-      // Manejar turnos que cruzan la medianoche (ej: 22:00:00 a 06:00:00)
-      return horaActual >= inicio || horaActual <= fin;
+    // Si no tiene horarios configurados, usamos el fallback (Lunes a Viernes 09:00 a 18:00)
+    const horarios = (agente.horarios_guardia as any) || {
+      lunes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      martes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      miercoles: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      jueves: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      viernes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      sabado: [],
+      domingo: []
+    };
+
+    const bloques = horarios[diaSemana] || [];
+    if (!Array.isArray(bloques) || bloques.length === 0) {
+      return false;
     }
+
+    // Comprobar si la hora actual cae en alguna de las franjas horarias configuradas para hoy
+    return bloques.some((bloque: any) => {
+      const inicio = bloque.inicio;
+      const fin = bloque.fin;
+      if (!inicio || !fin) return false;
+
+      // Comparación de cadenas 'HH:MM:SS'
+      if (inicio <= fin) {
+        return horaActual >= inicio && horaActual <= fin;
+      } else {
+        // Manejar turnos que cruzan la medianoche
+        return horaActual >= inicio || horaActual <= fin;
+      }
+    });
   });
 
   if (agentesEnHorario.length === 0) {
     return null;
   }
 
-  // Selección aleatoria
+  // Selección aleatoria para balancear la carga entre asesores de guardia disponibles
   const index = Math.floor(Math.random() * agentesEnHorario.length);
   const agente = agentesEnHorario[index];
 

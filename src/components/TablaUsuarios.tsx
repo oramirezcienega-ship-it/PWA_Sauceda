@@ -247,6 +247,16 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador }: TarjetaUs
   );
 }
 
+const DIAS_SEMANA = [
+  { key: "lunes", label: "Lunes" },
+  { key: "martes", label: "Martes" },
+  { key: "miercoles", label: "Miércoles" },
+  { key: "jueves", label: "Jueves" },
+  { key: "viernes", label: "Viernes" },
+  { key: "sabado", label: "Sábado" },
+  { key: "domingo", label: "Domingo" },
+];
+
 /** Componente principal de administración de usuarios. */
 export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
   const [usuarios, setUsuarios] = useState<UsuarioApp[]>(inicial);
@@ -255,16 +265,22 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
   const [agenteConmutador, setAgenteConmutador] = useState<UsuarioApp | null>(null);
   const [telDesvio, setTelDesvio] = useState("");
   const [dispLlamadas, setDispLlamadas] = useState(false);
-  const [hInicio, setHInicio] = useState("09:00:00");
-  const [hFin, setHFin] = useState("18:00:00");
+  const [horariosGuardia, setHorariosGuardia] = useState<Record<string, { inicio: string; fin: string }[]>>({});
   const [modalGuardando, setModalGuardando] = useState(false);
 
   function abrirConfigConmutador(u: UsuarioApp) {
     setAgenteConmutador(u);
     setTelDesvio(u.telefono_desvio || u.telefono || "");
     setDispLlamadas(u.disponible_llamadas || false);
-    setHInicio(u.horario_inicio || "09:00:00");
-    setHFin(u.horario_fin || "18:00:00");
+    setHorariosGuardia(u.horarios_guardia || {
+      lunes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      martes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      miercoles: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      jueves: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      viernes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+      sabado: [],
+      domingo: []
+    });
   }
 
   async function guardarConfigConmutador() {
@@ -278,8 +294,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
         telefono: agenteConmutador.telefono,
         telefono_desvio: telDesvio.trim(),
         disponible_llamadas: dispLlamadas,
-        horario_inicio: hInicio,
-        horario_fin: hFin,
+        horarios_guardia: horariosGuardia,
       });
       setUsuarios((prev) =>
         prev.map((x) =>
@@ -288,8 +303,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
                 ...x,
                 telefono_desvio: telDesvio.trim(),
                 disponible_llamadas: dispLlamadas,
-                horario_inicio: hInicio,
-                horario_fin: hFin,
+                horarios_guardia: horariosGuardia,
               }
             : x
         )
@@ -301,6 +315,33 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
       setModalGuardando(false);
     }
   }
+
+  const actualizarFranja = (dia: string, index: number, campo: "inicio" | "fin", valor: string) => {
+    let v = valor;
+    if (valor && valor.split(":").length === 2) {
+      v = `${valor}:00`;
+    }
+    setHorariosGuardia((prev) => {
+      const slots = [...(prev[dia] || [])];
+      slots[index] = { ...slots[index], [campo]: v };
+      return { ...prev, [dia]: slots };
+    });
+  };
+
+  const eliminarFranja = (dia: string, index: number) => {
+    setHorariosGuardia((prev) => {
+      const slots = (prev[dia] || []).filter((_, i) => i !== index);
+      return { ...prev, [dia]: slots };
+    });
+  };
+
+  const agregarFranja = (dia: string) => {
+    setHorariosGuardia((prev) => {
+      const slots = [...(prev[dia] || [])];
+      slots.push({ inicio: "09:00:00", fin: "18:00:00" });
+      return { ...prev, [dia]: slots };
+    });
+  };
 
   async function handleUpdateUsuario(id: string, cambios: Partial<UsuarioApp>) {
     const u = usuarios.find((x) => x.id === id);
@@ -351,7 +392,7 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
       {/* Modal de Configuración del Conmutador */}
       {agenteConmutador && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-dorado/30 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-lg space-y-4 rounded-2xl border border-dorado/30 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-carbon/10 pb-3">
               <div>
                 <h3 className="font-titular text-lg font-semibold text-verde-profundo">
@@ -411,31 +452,81 @@ export function TablaUsuarios({ inicial }: { inicial: UsuarioApp[] }) {
                 </button>
               </div>
 
-              {/* Horarios */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
-                    Hora de Inicio
-                  </label>
-                  <input
-                    type="time"
-                    step="1"
-                    value={hInicio}
-                    onChange={(e) => setHInicio(e.target.value)}
-                    className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
-                    Hora de Fin
-                  </label>
-                  <input
-                    type="time"
-                    step="1"
-                    value={hFin}
-                    onChange={(e) => setHFin(e.target.value)}
-                    className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none"
-                  />
+              {/* Horarios por día y franjas */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+                  Horario de Guardia Semanal
+                </label>
+                <div className="max-h-[250px] overflow-y-auto pr-1 space-y-2 rounded-xl border border-carbon/10 p-3 bg-carbon/5">
+                  {DIAS_SEMANA.map((dia) => {
+                    const franjas = horariosGuardia[dia.key] || [];
+                    const activo = franjas.length > 0;
+
+                    return (
+                      <div key={dia.key} className="rounded-lg border border-carbon/10 bg-white p-2.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-verde-profundo">{dia.label}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activo) {
+                                setHorariosGuardia(prev => ({ ...prev, [dia.key]: [] }));
+                              } else {
+                                setHorariosGuardia(prev => ({ ...prev, [dia.key]: [{ inicio: "09:00:00", fin: "18:00:00" }] }));
+                              }
+                            }}
+                            className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold transition ${
+                              activo ? "bg-verde-profundo text-crema" : "bg-carbon/10 text-carbon/50 border border-carbon/10"
+                            }`}
+                          >
+                            {activo ? "Activo" : "Inactivo"}
+                          </button>
+                        </div>
+
+                        {activo && (
+                          <div className="space-y-2 pt-1.5 border-t border-carbon/5">
+                            {franjas.map((franja, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <div className="flex-1">
+                                  <span className="block text-[9px] text-carbon/40 font-semibold uppercase">De:</span>
+                                  <input
+                                    type="time"
+                                    value={franja.inicio.slice(0, 5)}
+                                    onChange={(e) => actualizarFranja(dia.key, idx, "inicio", e.target.value)}
+                                    className="w-full rounded border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <span className="block text-[9px] text-carbon/40 font-semibold uppercase">A:</span>
+                                  <input
+                                    type="time"
+                                    value={franja.fin.slice(0, 5)}
+                                    onChange={(e) => actualizarFranja(dia.key, idx, "fin", e.target.value)}
+                                    className="w-full rounded border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => eliminarFranja(dia.key, idx)}
+                                  className="mt-4 rounded p-1 text-rojo hover:bg-rojo/10 transition"
+                                  title="Eliminar franja"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => agregarFranja(dia.key)}
+                              className="text-[10px] font-bold text-sauce hover:underline block pt-0.5"
+                            >
+                              + Añadir franja
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
