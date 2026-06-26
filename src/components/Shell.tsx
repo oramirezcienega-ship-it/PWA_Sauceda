@@ -29,12 +29,9 @@ const ENLACES = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/", label: "Expedientes" },
   { href: "/prospectos", label: "Prospectos" },
-  { href: "/formularios", label: "Formularios" },
-  { href: "/mensajes", label: "Mensajes" },
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/automatizaciones", label: "Automatizaciones" },
   { href: "/secuencias", label: "Secuencias" },
-  { href: "/whatsapp", label: "WhatsApp" },
   { href: "/dashboard/llamadas", label: "Llamadas" },
   { href: "/reportes", label: "Reportes" },
 ];
