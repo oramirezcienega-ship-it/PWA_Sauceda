@@ -193,7 +193,11 @@ export async function listarEnrollments(sequenceId?: string) {
     .from("sequence_enrollments")
     .select(`
       *,
-      sequence:automation_sequences(nombre)
+      sequence:automation_sequences(
+        nombre,
+        steps:sequence_steps(*)
+      ),
+      actions:sequence_actions(*)
     `)
     .order("enrolled_at", { ascending: false });
 

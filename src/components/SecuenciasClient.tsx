@@ -76,6 +76,34 @@ export function SecuenciasClient() {
   const [trazabilidadLead, setTrazabilidadLead] = useState<any | null>(null);
   const [loadingTrazabilidad, setLoadingTrazabilidad] = useState(false);
 
+  // Estado para el Monitoreo en Tiempo Real (Analytics)
+  const [filtroEstadoMonitoreo, setFiltroEstadoMonitoreo] = useState<"todos" | "activo" | "respondio" | "otros">("todos");
+  const [busquedaLeadMonitoreo, setBusquedaLeadMonitoreo] = useState("");
+
+  const enrollmentsFiltrados = useMemo(() => {
+    return enrollments.filter((en) => {
+      // 1. Filtrar por estado
+      if (filtroEstadoMonitoreo === "activo" && en.status !== "activo") return false;
+      if (filtroEstadoMonitoreo === "respondio" && !(en.status === "salido" && en.razon_salida === "respondio")) return false;
+      if (filtroEstadoMonitoreo === "otros") {
+        const esActivo = en.status === "activo";
+        const esRespondio = en.status === "salido" && en.razon_salida === "respondio";
+        if (esActivo || esRespondio) return false;
+      }
+
+      // 2. Filtrar por búsqueda
+      if (busquedaLeadMonitoreo.trim() !== "") {
+        const query = busquedaLeadMonitoreo.toLowerCase();
+        const nombreMatch = en.nombre?.toLowerCase().includes(query);
+        const telefonoMatch = en.phone?.includes(query);
+        const seqMatch = en.sequence?.nombre?.toLowerCase().includes(query);
+        if (!nombreMatch && !telefonoMatch && !seqMatch) return false;
+      }
+
+      return true;
+    });
+  }, [enrollments, filtroEstadoMonitoreo, busquedaLeadMonitoreo]);
+
   // Carga inicial de datos
   useEffect(() => {
     async function cargarDatos() {
@@ -1059,94 +1087,241 @@ export function SecuenciasClient() {
                 </p>
               </div>
 
-              {/* Listas de detalle de Leads */}
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* Leads que Respondieron */}
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <h3 className="font-titular text-sm font-bold text-[#2D4A2B] flex items-center gap-1.5">
-                      <span className="text-emerald-600 text-base">✓</span> Leads que Respondieron
+              {/* Monitoreo de Leads en Tiempo Real */}
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-100 pb-3 gap-3">
+                  <div>
+                    <h3 className="font-titular text-sm font-bold text-[#2D4A2B] flex items-center gap-2">
+                      <span className="text-emerald-600 text-md">📊</span> Monitoreo de Leads en Tiempo Real
                     </h3>
-                    <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5">
-                      {enrollments.filter((e) => e.status === "salido" && e.razon_salida === "respondio").length}
-                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Visualiza de forma instantánea el progreso y trazabilidad paso a paso de cada prospecto.
+                    </p>
                   </div>
-
-                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                    {enrollments.filter((e) => e.status === "salido" && e.razon_salida === "respondio").length === 0 ? (
-                      <p className="text-center text-xs text-slate-400 py-8">Aún no hay respuestas registradas.</p>
-                    ) : (
-                      enrollments
-                        .filter((e) => e.status === "salido" && e.razon_salida === "respondio")
-                        .map((en) => (
-                          <div key={en.id} className="rounded-lg bg-slate-50/50 hover:bg-slate-100/70 p-3 border border-slate-100 transition flex items-center justify-between gap-3 text-xs">
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-slate-800">{en.nombre}</p>
-                              <p className="text-[10px] text-slate-500 font-medium">
-                                {en.phone} · Secuencia: <span className="text-slate-700 font-semibold">{en.sequence?.nombre || "N/A"}</span>
-                              </p>
-                              {en.ultimo_contacto_at && (
-                                <p className="text-[9px] text-slate-400">
-                                  Respondió el: {new Date(en.ultimo_contacto_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => verHistorialLead(en.phone)}
-                              className="shrink-0 rounded bg-white border border-slate-200 hover:border-[#2D4A2B] hover:text-[#2D4A2B] text-slate-600 font-semibold px-2 py-1 transition text-[10px] shadow-sm"
-                            >
-                              Ver Historial
-                            </button>
-                          </div>
-                        ))
-                    )}
+                  
+                  {/* Buscador y Filtros */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <input
+                      type="text"
+                      placeholder="Buscar por lead o secuencia..."
+                      value={busquedaLeadMonitoreo}
+                      onChange={(e) => setBusquedaLeadMonitoreo(e.target.value)}
+                      className="rounded border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#2D4A2B] w-full md:w-56 placeholder-slate-400"
+                    />
+                    
+                    <div className="flex rounded border border-slate-200 p-0.5 bg-slate-50 shrink-0 text-xs">
+                      {(
+                        [
+                          ["todos", "Todos"],
+                          ["activo", "Activos"],
+                          ["respondio", "Respondieron"],
+                          ["otros", "Otros"],
+                        ] as const
+                      ).map(([tipo, label]) => (
+                        <button
+                          key={tipo}
+                          onClick={() => setFiltroEstadoMonitoreo(tipo)}
+                          className={`px-3 py-1 rounded-sm font-semibold transition ${
+                            filtroEstadoMonitoreo === tipo
+                              ? "bg-white shadow-sm text-[#2D4A2B]"
+                              : "text-slate-500 hover:text-slate-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Leads Activos Recientes */}
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <h3 className="font-titular text-sm font-bold text-[#2D4A2B] flex items-center gap-1.5">
-                      <span className="text-amber-500 text-base">⚡</span> Leads Activos Recientes
-                    </h3>
-                    <span className="rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5">
-                      {enrollments.filter((e) => e.status === "activo").length}
-                    </span>
-                  </div>
+                {/* Tabla de Monitoreo */}
+                <div className="overflow-x-auto">
+                  {enrollmentsFiltrados.length === 0 ? (
+                    <div className="text-center py-10 text-slate-400 text-xs">
+                      No se encontraron enrolamientos que coincidan con la búsqueda o filtro.
+                    </div>
+                  ) : (
+                    <table className="w-full text-xs min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-semibold text-left">
+                          <th className="py-2.5 w-1/4">Lead y Secuencia</th>
+                          <th className="py-2.5 w-1/6">Ingreso</th>
+                          <th className="py-2.5 w-1/6">Último Contacto</th>
+                          <th className="py-2.5">Progreso y Línea de Tiempo</th>
+                          <th className="py-2.5 text-right w-1/6">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {enrollmentsFiltrados.map((en) => {
+                          const steps = [...(en.sequence?.steps || [])].sort((a: any, b: any) => a.orden - b.orden);
+                          
+                          // Obtener última acción para fecha y canal
+                          const ultAccion = en.actions && en.actions.length > 0
+                            ? [...en.actions].sort((a: any, b: any) => new Date(b.enviado_at).getTime() - new Date(a.enviado_at).getTime())[0]
+                            : null;
 
-                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                    {enrollments.filter((e) => e.status === "activo").length === 0 ? (
-                      <p className="text-center text-xs text-slate-400 py-8">No hay leads activos en este momento.</p>
-                    ) : (
-                      enrollments
-                        .filter((e) => e.status === "activo")
-                        .slice(0, 15) // Mostrar los 15 más recientes
-                        .map((en) => (
-                          <div key={en.id} className="rounded-lg bg-slate-50/50 hover:bg-slate-100/70 p-3 border border-slate-100 transition flex items-center justify-between gap-3 text-xs">
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-slate-800">{en.nombre}</p>
-                              <p className="text-[10px] text-slate-500 font-medium">
-                                {en.phone} · Secuencia: <span className="text-slate-700 font-semibold">{en.sequence?.nombre || "N/A"}</span>
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="inline-block px-1.5 py-0.2 bg-[#C9A961]/25 text-[#2D4A2B] rounded text-[9px] font-bold">
-                                  Paso {en.step_actual}
-                                </span>
-                                <span className="text-[9px] text-slate-400">
-                                  Inscrito: {new Date(en.enrolled_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => verHistorialLead(en.phone)}
-                              className="shrink-0 rounded bg-white border border-slate-200 hover:border-[#2D4A2B] hover:text-[#2D4A2B] text-slate-600 font-semibold px-2 py-1 transition text-[10px] shadow-sm"
-                            >
-                              Ver Historial
-                            </button>
-                          </div>
-                        ))
-                    )}
-                  </div>
+                          return (
+                            <tr key={en.id} className="hover:bg-slate-50/50 transition">
+                              <td className="py-3 pr-2">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`h-2 w-2 rounded-full shrink-0 ${
+                                      en.status === 'activo'
+                                        ? 'bg-amber-500 animate-pulse'
+                                        : en.status === 'salido' && en.razon_salida === 'respondio'
+                                        ? 'bg-emerald-500'
+                                        : 'bg-slate-400'
+                                    }`} />
+                                    <span className="font-bold text-slate-800 text-[13px]">{en.nombre}</span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 font-mono">{en.phone}</p>
+                                  <p className="text-[10px] text-slate-600 font-medium">
+                                    Secuencia: <span className="text-slate-800 font-bold">{en.sequence?.nombre || "N/A"}</span>
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="py-3 text-slate-600 pr-2">
+                                <p className="font-medium">{new Date(en.enrolled_at).toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' })}</p>
+                                <p className="text-[10px] text-slate-400 font-medium">
+                                  {(() => {
+                                    const diff = Math.floor((new Date().getTime() - new Date(en.enrolled_at).getTime()) / (1000 * 60 * 60 * 24));
+                                    if (diff === 0) return "hoy";
+                                    if (diff === 1) return "hace 1 día";
+                                    return `hace ${diff} días`;
+                                  })()}
+                                </p>
+                              </td>
+                              <td className="py-3 text-slate-600 pr-2">
+                                {ultAccion ? (
+                                  <div>
+                                    <p className="font-bold text-slate-700 capitalize flex items-center gap-1">
+                                      {ultAccion.canal === "whatsapp" && <span className="text-emerald-600">💬</span>}
+                                      {ultAccion.canal === "email" && <span className="text-cielo">✉️</span>}
+                                      {ultAccion.canal === "sms" && <span className="text-amber-500">📱</span>}
+                                      {ultAccion.canal === "messenger" && <span className="text-blue-500">🔵</span>}
+                                      {ultAccion.canal === "llamada" && <span className="text-slate-500">📞</span>}
+                                      {ultAccion.canal}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                      {new Date(ultAccion.enviado_at).toLocaleDateString([], { day: '2-digit', month: '2-digit' })} a las {new Date(ultAccion.enviado_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 pr-2">
+                                {/* Línea de Tiempo del Lead */}
+                                <div className="flex items-center gap-1">
+                                  {steps.map((step, idx) => {
+                                    // Buscar acción para este step
+                                    const action = en.actions?.find((ac: any) => ac.step_id === step.id);
+                                    
+                                    let nodeClass = "bg-slate-100 border-slate-200 text-slate-400";
+                                    let statusText = "Pendiente";
+                                    
+                                    const isCurrent = en.status === 'activo' && en.step_actual === step.orden;
+                                    const isRespondedStep = en.status === 'salido' && en.razon_salida === 'respondio' && en.actions?.some((ac: any) => ac.step_id === step.id && (ac.status === 'respondido' || ac.respondido_at !== null));
+                                    const isLastAttemptBeforeResponse = en.status === 'salido' && en.razon_salida === 'respondio' && !isRespondedStep && en.actions?.length > 0 && idx === steps.findIndex(s => s.id === ultAccion?.step_id);
+
+                                    if (action) {
+                                      if (action.status === "respondido" || action.respondido_at || isRespondedStep) {
+                                        nodeClass = "bg-emerald-600 border-emerald-700 text-white animate-pulse ring-2 ring-emerald-200 ring-offset-1";
+                                        statusText = "Respondido";
+                                      } else if (action.status === "fallido") {
+                                        nodeClass = "bg-rose-500 border-rose-600 text-white";
+                                        statusText = "Fallido";
+                                      } else if (action.status === "llamada_completada") {
+                                        nodeClass = "bg-amber-500 border-amber-600 text-white";
+                                        statusText = "Completado";
+                                      } else {
+                                        // enviado, sms_enviado, entregado, llamada_agendada
+                                        nodeClass = "bg-[#2D4A2B] border-[#5C7A52] text-white";
+                                        statusText = "Enviado";
+                                      }
+                                    } else if (isCurrent) {
+                                      nodeClass = "bg-sky-500 border-sky-600 text-white animate-pulse ring-2 ring-sky-200 ring-offset-1";
+                                      statusText = "En Curso";
+                                    }
+
+                                    // Si no hubo acción registrada de respuesta directa pero salieron por respuesta en este último paso
+                                    if (isLastAttemptBeforeResponse) {
+                                      nodeClass = "bg-emerald-600 border-emerald-700 text-white animate-pulse ring-2 ring-emerald-200 ring-offset-1";
+                                      statusText = "Respondido";
+                                    }
+
+                                    return (
+                                      <div key={step.id} className="flex items-center group relative">
+                                        {/* Nodo Conector */}
+                                        {idx > 0 && (
+                                          <div className={`h-0.5 w-4 shrink-0 ${
+                                            action ? "bg-[#2D4A2B]" : "bg-slate-100"
+                                          }`} />
+                                        )}
+
+                                        {/* Círculo del Nodo */}
+                                        <div
+                                          className={`h-7 w-7 rounded-full border flex items-center justify-center font-bold text-[10px] cursor-help shadow-sm transition-all duration-300 hover:scale-110 ${nodeClass}`}
+                                          title={`Paso ${step.orden}: ${step.canal.toUpperCase()} - ${statusText}`}
+                                        >
+                                          {step.canal === "whatsapp" && "WA"}
+                                          {step.canal === "email" && "EM"}
+                                          {step.canal === "sms" && "SM"}
+                                          {step.canal === "messenger" && "ME"}
+                                          {step.canal === "llamada" && "LL"}
+
+                                          {/* Tooltip Detallado */}
+                                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-48 bg-slate-800 text-white text-[10px] rounded p-2 shadow-lg space-y-1">
+                                            <p className="font-bold border-b border-slate-700 pb-0.5 flex justify-between">
+                                              <span>Paso {step.orden}: {step.canal.toUpperCase()}</span>
+                                              <span className="text-amber-400 font-semibold">{statusText}</span>
+                                            </p>
+                                            {action ? (
+                                              <>
+                                                <p className="text-slate-300">Enviado: {new Date(action.enviado_at).toLocaleDateString()} {new Date(action.enviado_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                                {action.respondido_at && (
+                                                  <p className="text-emerald-400 font-medium">Respondido: {new Date(action.respondido_at).toLocaleDateString()} {new Date(action.respondido_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                                )}
+                                                {action.error_detalle && (
+                                                  <p className="text-rose-400 italic">Error: {action.error_detalle}</p>
+                                                )}
+                                              </>
+                                            ) : isCurrent ? (
+                                              <p className="text-slate-300">Lead actualmente esperando o ejecutándose en este paso.</p>
+                                            ) : (
+                                              <p className="text-slate-400 italic">Paso pendiente de ejecución.</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              <td className="py-3 text-right">
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() => verHistorialLead(en.phone)}
+                                    className="rounded bg-white border border-slate-200 hover:border-[#2D4A2B] hover:text-[#2D4A2B] text-slate-600 font-semibold px-2 py-1 transition text-[10px] shadow-sm shrink-0"
+                                  >
+                                    Historial
+                                  </button>
+                                  {en.prospecto_id && (
+                                    <a
+                                      href={`/prospectos/${en.prospecto_id}`}
+                                      className="rounded bg-[#F5F1E8] border border-slate-200 hover:border-[#C9A961] hover:text-[#C9A961] text-[#2D4A2B] font-semibold px-2 py-1 transition text-[10px] shadow-sm shrink-0 flex items-center justify-center"
+                                    >
+                                      Ficha
+                                    </a>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
