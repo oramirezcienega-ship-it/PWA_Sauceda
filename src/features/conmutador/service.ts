@@ -106,7 +106,7 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
   // comportamientos inesperados si el campo es NULL, lo filtraremos de forma segura en JS.
   const { data: agentes, error } = await sb
     .from("perfiles")
-    .select("id, nombre, telefono_desvio, horarios_guardia")
+    .select("id, nombre, telefono_desvio, horarios_guardia, rol")
     .eq("activo", true)
     .eq("disponible_llamadas", true);
 
@@ -168,11 +168,26 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
     return null;
   }
 
-  // Selección aleatoria para balancear la carga entre asesores de guardia disponibles
-  const index = Math.floor(Math.random() * agentesEnHorario.length);
-  const agente = agentesEnHorario[index];
+  // Lógica de Priorización:
+  // 1. Filtrar asesores de guardia y balancear uniformemente (aleatorio) entre ellos
+  // 2. Si no hay asesores de guardia, delegar en administradores de guardia (balanceados uniformemente)
+  let poolSeleccion = agentesEnHorario.filter((a) => a.rol === "asesor");
 
-  console.log(`[obtenerAgenteDisponible] Agente seleccionado: ${agente.nombre}`);
+  if (poolSeleccion.length === 0) {
+    console.log("[obtenerAgenteDisponible] No hay asesores de guardia disponibles en este momento. Evaluando administradores.");
+    poolSeleccion = agentesEnHorario.filter((a) => a.rol === "admin");
+  }
+
+  if (poolSeleccion.length === 0) {
+    console.log("[obtenerAgenteDisponible] No se encontraron asesores ni administradores en el pool de selección.");
+    return null;
+  }
+
+  // Selección aleatoria equilibrada dentro del pool seleccionado
+  const index = Math.floor(Math.random() * poolSeleccion.length);
+  const agente = poolSeleccion[index];
+
+  console.log(`[obtenerAgenteDisponible] Agente seleccionado (${agente.rol}): ${agente.nombre}`);
 
   return {
     id: agente.id,
