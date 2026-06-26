@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { procesarReporteVoiceBot, type ReporteVoiceBot } from "@/features/conmutador/service";
+import { procesarReporteVoiceBot, type ReporteVoiceBot, obtenerAgenteDisponible, actualizarLlamada } from "@/features/conmutador/service";
+import { normalizarTelefono } from "@/lib/telefono";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,50 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     console.log("Webhook Voice Bot recibido:", JSON.stringify(body, null, 2));
+
+    const messageType = body.message?.type || body.type || "";
+
+    // Si es una petición de destino de transferencia (transfer-destination-request)
+    if (messageType === "transfer-destination-request" || messageType === "transfer-destination") {
+      const callObj = body.message?.call || body.call || {};
+      const twilioCallSid = 
+        callObj.twilioCallSid || 
+        body.message?.call?.twilioCallSid || 
+        callObj.id || 
+        body.message?.call?.id || 
+        body.twilioCallSid || 
+        body.callSid || 
+        "";
+
+      const agente = await obtenerAgenteDisponible();
+      
+      let numeroDestino = "524774654700"; 
+      let nombreDestino = "Oficina Principal (Sauceda)";
+      
+      if (agente && agente.telefono_desvio) {
+        numeroDestino = agente.telefono_desvio;
+        nombreDestino = agente.nombre;
+      }
+      
+      const telCanon = normalizarTelefono(numeroDestino);
+      const telE164 = telCanon.startsWith("+") ? telCanon : `+${telCanon}`;
+
+      console.log(`[Vapi Webhook Transfer] Desviando llamada a: ${telE164} (${nombreDestino}) con TwilioCallSid: ${twilioCallSid}`);
+
+      if (twilioCallSid && agente?.id) {
+        await actualizarLlamada(twilioCallSid, {
+          estado: "transferring",
+          agenteId: agente.id,
+        });
+      }
+
+      return NextResponse.json({
+        destination: {
+          type: "number",
+          number: telE164,
+        }
+      });
+    }
 
     // Determinar origen del mensaje (Vapi.ai o payload genérico)
     const callObj = body.message?.call || body.call || {};
