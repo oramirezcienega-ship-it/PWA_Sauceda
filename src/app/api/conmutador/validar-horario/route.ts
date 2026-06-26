@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { obtenerAgenteDisponible, registrarInicioLlamada } from "@/features/conmutador/service";
+import { obtenerAgenteDisponible, registrarInicioLlamada, actualizarLlamada } from "@/features/conmutador/service";
+import { normalizarTelefono } from "@/lib/telefono";
 
 export const dynamic = "force-dynamic";
 
@@ -34,14 +35,42 @@ export async function POST(request: Request) {
       estado: "ringing",
     });
 
-    // Desviar directamente al Voice Bot de Vapi (Sofía)
-    const vapiSipUri = process.env.VAPI_SIP_URI || "sip:sauceda@sip.vapi.ai";
-    const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+    // Consultar si hay un agente de guardia disponible en este horario
+    const agente = await obtenerAgenteDisponible();
+
+    let xmlResponse = "";
+
+    if (agente && agente.telefono_desvio) {
+      const telCanon = normalizarTelefono(agente.telefono_desvio);
+      const telE164 = telCanon.startsWith("+") ? telCanon : `+${telCanon}`;
+
+      console.log(`[Twilio Direct Dial] Agente disponible: ${agente.nombre}. Desviando llamada directamente a: ${telE164}`);
+
+      // Registrar en base de datos que se está desviando a este agente
+      await actualizarLlamada(callSid, {
+        estado: "transferring",
+        agenteId: agente.id,
+      });
+
+      // TwiML con bienvenida profesional y dial directo al celular del asesor
+      xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces. Te estamos transfiriendo de inmediato con nuestro asesor de guardia, ${agente.nombre}. Por favor no cuelgues.</Say>
+  <Dial>${telE164}</Dial>
+</Response>`;
+    } else {
+      console.log("[Twilio Direct Dial] No hay agentes de guardia disponibles. Desviando a Voice Bot (Sofía) en Vapi.");
+      
+      const vapiSipUri = process.env.VAPI_SIP_URI || "sip:sauceda@sip.vapi.ai";
+      
+      // TwiML para desviar al SIP de Vapi
+      xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Dial>
     <Sip>${vapiSipUri}</Sip>
   </Dial>
 </Response>`;
+    }
 
     return new NextResponse(xmlResponse, {
       headers: {
@@ -54,7 +83,7 @@ export async function POST(request: Request) {
     // TwiML de fallback por si algo falla
     const errorXml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="es-MX" voice="Polly.Mia">Lo sentimos, ocurrió un problema al procesar su llamada. Por favor intente más tarde.</Say>
+  <Say language="es-MX" voice="Polly.Mia-Neural">Lo sentimos, ocurrió un problema al procesar su llamada. Por favor intente más tarde.</Say>
 </Response>`;
     return new NextResponse(errorXml, {
       headers: {
