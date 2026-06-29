@@ -17,6 +17,14 @@ export async function GET() {
       return NextResponse.json({ error: errPerfiles.message }, { status: 500 });
     }
 
+    const { data: prospectos } = await sb
+      .from("prospectos")
+      .select("id, nombre, primer_apellido, segundo_apellido, asesor_id, estatus, calificacion, created_at");
+
+    const { data: expedientes } = await sb
+      .from("expedientes")
+      .select("id, cliente, prospecto_id, asesor_id, etapa, creado_en");
+
     // Consultar últimas 5 llamadas
     const { data: llamadas, error: errLlamadas } = await sb
       .from("llamadas_conmutador")
@@ -41,6 +49,8 @@ export async function GET() {
       diaSemanaRaw,
       perfiles,
       llamadas,
+      prospectos,
+      expedientes,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
