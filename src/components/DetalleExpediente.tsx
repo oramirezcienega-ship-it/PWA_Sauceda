@@ -71,70 +71,81 @@ export function DetalleExpediente({ id }: { id: string }) {
         ← Volver al tablero
       </Link>
 
-      {/* Cabecera Optimizado para Móvil */}
-      <div className="mt-3 space-y-2">
-        {/* Fila 1: Título, ID y Acciones */}
-        <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
-          <div>
-            <h1 className="font-titular text-xl sm:text-3xl font-bold text-verde-profundo leading-tight">
-              {expediente.nombreCompleto}
-            </h1>
-            <p className="text-xs text-carbon/45 mt-0.5">
-              {expediente.fraccionamiento} · León, Gto.
-            </p>
-          </div>
-          
-          <div className="flex flex-col items-end gap-1.5 shrink-0 ml-auto">
-            <span className="font-mono text-[10px] sm:text-xs text-carbon/40">
-              {expediente.id}
-            </span>
-            
-            {/* Acciones del expediente: editar / eliminar compactos */}
-            <div className="flex items-center gap-1.5">
-              <Link
-                href={`/expediente/${expediente.id}/editar`}
-                className="rounded-lg border border-carbon/15 bg-white px-2 py-1 text-[11px] font-bold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+      {/* Volver al tablero & Acciones principales */}
+      <div className="flex items-center justify-between gap-4 border-b border-carbon/5 pb-2.5">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-sauce hover:text-verde-profundo"
+        >
+          ← Volver al tablero
+        </Link>
+        
+        {/* Acciones principales como enlaces limpios y compactos */}
+        <div className="flex items-center gap-2 text-xs">
+          <Link
+            href={`/expediente/${expediente.id}/editar`}
+            className="font-bold text-carbon/60 hover:text-sauce hover:underline"
+          >
+            Editar
+          </Link>
+          <span className="text-carbon/25">|</span>
+          {!confirmarBorrado ? (
+            <button
+              type="button"
+              onClick={() => setConfirmarBorrado(true)}
+              className="font-bold text-rojo hover:underline"
+            >
+              Eliminar
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-2 bg-rojo/5 px-2 py-0.5 rounded border border-rojo/10">
+              <span className="text-carbon/50 text-[10px]">¿Eliminar?</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await eliminarExpediente(expediente.id);
+                  router.push("/");
+                }}
+                className="font-bold text-rojo hover:underline text-[10px]"
               >
-                Editar
-              </Link>
-              {!confirmarBorrado ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirmarBorrado(true)}
-                  className="rounded-lg border border-rojo/30 bg-white px-2 py-1 text-[11px] font-bold text-rojo hover:bg-rojo/5 transition"
-                >
-                  Eliminar
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-rojo/20 bg-rojo/5 p-1 text-[10px]">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await eliminarExpediente(expediente.id);
-                      router.push("/");
-                    }}
-                    className="rounded bg-rojo px-1.5 py-0.5 font-bold text-crema"
-                  >
-                    Sí
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmarBorrado(false)}
-                    className="text-carbon/60 hover:text-carbon font-bold"
-                  >
-                    No
-                  </button>
-                </span>
-              )}
-            </div>
-          </div>
+                Sí
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmarBorrado(false)}
+                className="text-carbon/50 hover:underline text-[10px]"
+              >
+                No
+              </button>
+            </span>
+          )}
         </div>
+      </div>
 
-        {/* Fila 2: Estatus y Asesor */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-carbon/5">
-          <EtapaBadge etapa={expediente.etapa} />
+      {/* Cabecera limpia y justificada */}
+      <div className="mt-4 space-y-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="font-titular text-2xl sm:text-3xl font-bold text-verde-profundo leading-tight">
+            {expediente.nombreCompleto}
+          </h1>
+          <span className="font-mono text-xs text-carbon/40 shrink-0 select-all">
+            {expediente.id}
+          </span>
+        </div>
+        
+        <p className="text-xs text-carbon/45 leading-none">
+          {expediente.fraccionamiento} · León, Gto.
+        </p>
+
+        {/* Estatus y Asesor alineados en una sola fila */}
+        <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase font-bold text-carbon/35">Etapa:</span>
+            <EtapaBadge etapa={expediente.etapa} />
+          </div>
           
-          <div className="text-xs">
+          <div className="flex items-center gap-1.5 text-xs text-carbon/70">
+            <span className="text-[10px] uppercase font-bold text-carbon/35">Atiende:</span>
             <AsesorSelector
               entidadId={expediente.id}
               tipoEntidad="expediente"
@@ -149,7 +160,7 @@ export function DetalleExpediente({ id }: { id: string }) {
       {/* Columna única centrada para un diseño premium y ordenado */}
       <div className="mt-6 space-y-6">
           {/* Avance por etapas */}
-          <div className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-sm">
+          <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
             {/* Vista Desktop (Completa) */}
             <div className="hidden md:block">
               <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
