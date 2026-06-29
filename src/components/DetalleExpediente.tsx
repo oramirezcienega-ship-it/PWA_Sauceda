@@ -127,8 +127,20 @@ export function DetalleExpediente({ id }: { id: string }) {
           </span>
         </div>
         
-        <p className="text-xs text-carbon/45 leading-none">
-          {expediente.fraccionamiento} · León, Gto.
+        <p className="text-xs text-carbon/45 leading-none flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{expediente.fraccionamiento} · León, Gto.</span>
+          {expediente.prospectoId && (
+            <>
+              <span className="text-carbon/25 font-bold">•</span>
+              <span className="font-bold text-carbon/40 uppercase text-[10px]">Prospecto:</span>
+              <Link
+                href={`/prospectos/${expediente.prospectoId}`}
+                className="font-mono font-bold text-sauce hover:underline flex items-center gap-0.5"
+              >
+                {expediente.prospectoId} <span className="text-[9px] font-semibold text-sauce/80 font-titular leading-none">(Ver ficha →)</span>
+              </Link>
+            </>
+          )}
         </p>
 
         {/* Estatus y Tipo de Negocio responsivos */}
@@ -285,25 +297,6 @@ export function DetalleExpediente({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* Prospecto (persona) dueño del expediente */}
-          {expediente.prospectoId && (
-            <Link
-              href={`/prospectos/${expediente.prospectoId}`}
-              className="flex items-center justify-between gap-2 rounded-xl border border-carbon/10 bg-white px-3.5 py-2.5 transition hover:border-sauce shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-carbon/40">
-                  Prospecto:
-                </span>
-                <span className="font-mono text-xs font-bold text-verde-profundo">
-                  {expediente.prospectoId}
-                </span>
-              </div>
-              <span className="text-xs font-bold text-sauce flex items-center gap-0.5">
-                Ver ficha →
-              </span>
-            </Link>
-          )}
           {/* Ficha Premium de Información de la Propiedad (Estilo Expediente/Lead) */}
           <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm">
             {/* Header de la Ficha */}
