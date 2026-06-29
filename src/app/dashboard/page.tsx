@@ -3,6 +3,7 @@ import { resumenOperacion, resumenAsesor } from "@/app/actions/reportes";
 import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { formatoPesos } from "@/lib/formato";
 import Link from "next/link";
+import { BotonLlamar } from "@/components/BotonLlamar";
 
 export const dynamic = "force-dynamic";
 
@@ -93,18 +94,43 @@ export default async function PaginaDashboard() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-carbon/10 text-xs font-semibold uppercase tracking-wider text-carbon/40">
-                        <th className="pb-3">Nombre</th>
-                        <th className="pb-3">Teléfono</th>
+                        <th className="pb-3">Nombre / Contacto</th>
+                        <th className="pb-3">Detalle Expediente</th>
                         <th className="pb-3">Calificación</th>
                         <th className="pb-3">Estatus</th>
-                        <th className="pb-3 text-right">Acción</th>
+                        <th className="pb-3 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-carbon/5 text-sm">
                       {r.leadsAsignados.map((l) => (
                         <tr key={l.id} className="hover:bg-carbon/[0.01] transition">
-                          <td className="py-3 font-medium text-carbon">{l.nombre}</td>
-                          <td className="py-3 text-carbon/60 font-mono">{l.telefono}</td>
+                          <td className="py-3 font-medium text-carbon">
+                            <div>{l.nombre}</div>
+                            {l.telefono && (
+                              <div className="text-xs text-carbon/40 font-mono mt-0.5">{l.telefono}</div>
+                            )}
+                          </td>
+                          <td className="py-3 text-xs">
+                            {l.expedienteId ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-verde-profundo">
+                                  🏢 {l.fraccionamiento || "Sin fraccionamiento"}
+                                </span>
+                                {l.etapaExpediente && (
+                                  <span className="inline-block text-[10px] text-[#3b667e] font-semibold bg-[#3b667e]/10 px-1.5 py-0.5 rounded self-start mt-0.5">
+                                    {l.etapaExpediente}
+                                  </span>
+                                )}
+                                {l.notasExpediente && (
+                                  <span className="text-[10px] text-carbon/50 italic truncate max-w-[200px]" title={l.notasExpediente}>
+                                    {l.notasExpediente}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-carbon/30 italic">Sin expediente enlazado</span>
+                            )}
+                          </td>
                           <td className="py-3">
                             <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase ${
                               l.calificacion === "caliente" ? "bg-rojoLuz text-rojo" :
@@ -127,12 +153,26 @@ export default async function PaginaDashboard() {
                             </span>
                           </td>
                           <td className="py-3 text-right">
-                            <Link
-                              href={`/conversaciones?tel=${l.telefono}`}
-                              className="rounded-md border border-sauce/20 bg-sauce/5 px-3 py-1.5 text-xs font-medium text-sauce hover:bg-sauce hover:text-white transition"
-                            >
-                              Chatear
-                            </Link>
+                            <div className="flex items-center justify-end gap-2">
+                              {l.telefono && (
+                                <>
+                                  <BotonLlamar
+                                    telefono={l.telefono}
+                                    prospectoId={l.id.startsWith("exp-") ? null : l.id}
+                                  />
+                                  <Link
+                                    href={`/conversaciones?tel=${l.telefono}`}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100 hover:text-green-800"
+                                    title="WhatsApp Web CRM"
+                                  >
+                                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                    </svg>
+                                    WhatsApp
+                                  </Link>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

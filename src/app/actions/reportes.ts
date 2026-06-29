@@ -107,6 +107,10 @@ export interface ResumenAsesor {
     estatus: string;
     calificacion: string;
     fechaAsignacion: string;
+    expedienteId?: string;
+    fraccionamiento?: string;
+    etapaExpediente?: string;
+    notasExpediente?: string;
   }[];
   tareasPendientesLista: {
     id: string;
@@ -209,7 +213,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
   const { data: directExpedientes } = await sb
     .from("expedientes")
-    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, created_at")
+    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, created_at, fraccionamiento, etapa, notas")
     .eq("asesor_id", usuario.id);
 
   const directProspectoIdsFromExp: string[] = [];
@@ -230,6 +234,22 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
     ])
   );
 
+  // 4d. Obtener detalles de los expedientes asociados a estos prospectoIds
+  const expsMap = new Map<string, any>();
+  if (prospectoIds.length > 0) {
+    const { data: expsData } = await sb
+      .from("expedientes")
+      .select("id, prospecto_id, fraccionamiento, etapa, notas")
+      .in("prospecto_id", prospectoIds);
+    if (expsData) {
+      expsData.forEach((e) => {
+        if (e.prospecto_id) {
+          expsMap.set(e.prospecto_id, e);
+        }
+      });
+    }
+  }
+
   // 5. Consultar la información real de los prospectos (estatus y calificación)
   let leadsAsignados: ResumenAsesor["leadsAsignados"] = [];
   const processedProspectoIds = new Set<string>();
@@ -245,13 +265,18 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
         processedProspectoIds.add(p.id);
         const mappedName = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
         const originalInfo = prospectosMap.get(p.id);
+        const exp = expsMap.get(p.id);
         return {
           id: p.id,
           nombre: mappedName || originalInfo?.nombre || "Sin nombre",
           telefono: p.telefono || originalInfo?.telefono || "",
           estatus: p.estatus || "nuevo",
           calificacion: p.calificacion || "frio",
-          fechaAsignacion: originalInfo?.fechaAsignacion || p.created_at || new Date().toISOString()
+          fechaAsignacion: originalInfo?.fechaAsignacion || p.created_at || new Date().toISOString(),
+          expedienteId: exp?.id,
+          fraccionamiento: exp?.fraccionamiento,
+          etapaExpediente: exp?.etapa,
+          notasExpediente: exp?.notas,
         };
       });
     }
@@ -268,7 +293,11 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
           telefono: "",
           estatus: "expediente_abierto",
           calificacion: "caliente",
-          fechaAsignacion: e.created_at || new Date().toISOString()
+          fechaAsignacion: e.created_at || new Date().toISOString(),
+          expedienteId: e.id,
+          fraccionamiento: e.fraccionamiento,
+          etapaExpediente: e.etapa,
+          notasExpediente: e.notas,
         });
       }
     });
