@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
 import { ListadoLeadsDashboard } from "@/components/ListadoLeadsDashboard";
+import { ResumenKpisAsesor } from "@/components/ResumenKpisAsesor";
 
 export const dynamic = "force-dynamic";
 
@@ -41,50 +42,43 @@ export default async function PaginaDashboard() {
       <main className="min-h-screen pb-10 bg-crema/10">
         <Encabezado />
         <div className="mx-auto max-w-6xl px-4 pt-5">
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
-                Mi Panel de Control
+          <div className="mb-4 flex flex-col gap-2">
+            {/* Título y Botón en la misma fila */}
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="font-titular text-xl sm:text-2xl font-bold text-verde-profundo">
+                Panel de Control
               </h1>
-              <p className="mt-1 text-sm text-carbon/60">
-                Hola, <span className="font-medium text-verde-profundo">{usuarioNombre}</span>. Aquí tienes tus indicadores y tareas prioritarias.
-              </p>
-            </div>
-            <div>
               <Link
                 href="/conversaciones"
-                className="inline-block rounded-md bg-verde-profundo px-4 py-2 text-sm font-medium text-crema shadow transition hover:bg-verde-profundo/90"
+                className="inline-flex items-center gap-1 rounded-md bg-verde-profundo px-3 py-1.5 text-xs font-bold text-crema shadow transition hover:bg-verde-profundo/90"
               >
-                Bandeja de Entrada
+                💬 Bandeja<span className="hidden sm:inline"> de Entrada</span>
               </Link>
             </div>
+
+            {/* Mensaje de saludo optimizado */}
+            <p className="text-xs text-carbon/50 leading-tight">
+              Hola, <span className="font-semibold text-verde-profundo">{usuarioNombre}</span>. Aquí tienes tus tareas e indicadores.
+            </p>
           </div>
 
-          {/* Tarjetas de Métricas */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-5">
-            <Metrica etiqueta="Leads Asignados" valor={String(r.totalLeads)} />
-            <Metrica 
-              etiqueta="Tareas Pendientes" 
-              valor={String(r.tareasPendientes)} 
-              resaltar={r.tareasPendientes > 0} 
-            />
-            <Metrica etiqueta="Tareas Completadas" valor={String(r.tareasCompletadas)} />
-            <Metrica etiqueta="Expedientes Cerrados" valor={String(r.cerrados)} />
-            <Metrica 
-              etiqueta="Conversión" 
-              valor={`${r.tasaConversion}%`} 
-              resaltar 
-            />
-          </div>
+          {/* Tarjetas de Métricas (Colapsable en Móvil) */}
+          <ResumenKpisAsesor
+            totalLeads={r.totalLeads}
+            tareasPendientes={r.tareasPendientes}
+            tareasCompletadas={r.tareasCompletadas}
+            cerrados={r.cerrados}
+            tasaConversion={r.tasaConversion}
+          />
 
-          <div className="mt-8 space-y-6">
+          <div className="mt-4 sm:mt-6 space-y-4">
             {/* Sección de Leads Asignados */}
-            <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-titular text-lg font-semibold text-verde-profundo">
+            <div className="rounded-xl border border-carbon/10 bg-white p-3.5 sm:p-5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-titular text-base sm:text-lg font-semibold text-verde-profundo">
                   Mis Leads Asignados ({r.totalLeads})
                 </h2>
-                <span className="text-xs text-carbon/40">Listado interactivo</span>
+                <span className="text-[10px] sm:text-xs text-carbon/40">Listado interactivo</span>
               </div>
 
               <ListadoLeadsDashboard leadsIniciales={r.leadsAsignados} />
