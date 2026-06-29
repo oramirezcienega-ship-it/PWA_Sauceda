@@ -118,6 +118,8 @@ export async function crearExpediente(
       .from("prospectos")
       .update({ asesor_id: datos.asesorId ?? null })
       .eq("id", datos.prospectoId);
+    const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+    await sincronizarEstatusProspecto(sb, datos.prospectoId);
   }
 
   await registrarActividad(sb, {
@@ -195,6 +197,14 @@ export async function actualizarExpediente(
         asesor_id: datos.asesorId ?? null,
       })
       .eq("id", datos.prospectoId);
+    const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+    await sincronizarEstatusProspecto(sb, datos.prospectoId);
+  }
+
+  // Si cambió el prospecto enlazado, sincronizar también el anterior
+  if (antes?.prospecto_id && antes.prospecto_id !== datos.prospectoId) {
+    const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+    await sincronizarEstatusProspecto(sb, antes.prospecto_id);
   }
 
   return aExpediente(data as FilaExpediente);
@@ -204,11 +214,25 @@ export async function actualizarExpediente(
 export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   await requireAdmin();
   const sb = supabaseServidor();
+
+  // Obtener prospecto_id antes de actualizar
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("prospecto_id")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await sb
     .from("expedientes")
     .update({ etapa, ultimo_movimiento: hoyISO() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (exp?.prospecto_id) {
+    const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+    await sincronizarEstatusProspecto(sb, exp.prospecto_id);
+  }
+
   await registrarActividad(sb, {
     expedienteId: id,
     tipo: "etapa",
@@ -229,11 +253,19 @@ export async function moverEtapaMasivo(
   await requireAdmin();
   if (ids.length === 0) return;
   const sb = supabaseServidor();
+
+  // Obtener todos los prospecto_ids únicos
+  const { data: exps } = await sb
+    .from("expedientes")
+    .select("prospecto_id")
+    .in("id", ids);
+
   const { error } = await sb
     .from("expedientes")
     .update({ etapa, ultimo_movimiento: hoyISO() })
     .in("id", ids);
   if (error) throw new Error(error.message);
+
   // Bitácora + automatizaciones por cada expediente afectado (best-effort).
   for (const id of ids) {
     await registrarActividad(sb, {
@@ -245,6 +277,14 @@ export async function moverEtapaMasivo(
       expedienteId: id,
       cambios: ["etapa"],
     });
+  }
+
+  if (exps) {
+    const propIds = Array.from(new Set(exps.map((e) => e.prospecto_id).filter(Boolean))) as string[];
+    const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+    for (const propId of propIds) {
+      await sincronizarEstatusProspecto(sb, propId);
+    }
   }
 }
 

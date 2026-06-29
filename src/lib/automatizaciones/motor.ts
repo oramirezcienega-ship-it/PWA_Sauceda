@@ -170,6 +170,13 @@ async function ejecutarAccion(
     case "mover-etapa": {
       if (!ctx.expedienteId) return "mover-etapa: omitido (sin expediente)";
       if (!accion.etapa) return "mover-etapa: omitido (sin etapa)";
+
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("prospecto_id")
+        .eq("id", ctx.expedienteId)
+        .maybeSingle();
+
       // Escribe la columna directamente: no usamos moverEtapa() para no
       // volver a disparar el evento "cambio-etapa" (evita bucles).
       const { error } = await sb
@@ -177,6 +184,12 @@ async function ejecutarAccion(
         .update({ etapa: accion.etapa, ultimo_movimiento: hoyISO() })
         .eq("id", ctx.expedienteId);
       if (error) return `mover-etapa: error (${error.message})`;
+
+      if (exp?.prospecto_id) {
+        const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+        await sincronizarEstatusProspecto(sb, exp.prospecto_id);
+      }
+
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "etapa",

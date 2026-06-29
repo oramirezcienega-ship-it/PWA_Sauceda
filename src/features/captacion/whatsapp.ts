@@ -328,6 +328,9 @@ export async function registrarLeadWhatsApp(
     ad_name,
   });
 
+  const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
+  await sincronizarEstatusProspecto(sb, prospectoId);
+
   // Enrolar automáticamente en secuencias activas
   try {
     const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
