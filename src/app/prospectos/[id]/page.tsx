@@ -11,6 +11,7 @@ import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBa
 import { AsesorSelector } from "@/components/AsesorSelector";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { ConversacionHistorica } from "@/components/ConversacionHistorica";
+import { LlamadasHistoricas } from "@/components/LlamadasHistoricas";
 
 export const dynamic = "force-dynamic";
 
@@ -181,6 +182,11 @@ export default async function PaginaProspecto({
         {/* Historial de conversaciones de WhatsApp */}
         {prospecto.telefono && (
           <ConversacionHistorica telefono={prospecto.telefono} />
+        )}
+
+        {/* Historial de llamadas telefónicas y grabaciones */}
+        {prospecto.telefono && (
+          <LlamadasHistoricas telefono={prospecto.telefono} />
         )}
 
         {/* Bitácora de actividades del prospecto */}

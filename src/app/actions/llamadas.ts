@@ -310,3 +310,66 @@ export async function iniciarLlamadaConmutador(
     return { ok: false, error: "Error de red al iniciar la llamada." };
   }
 }
+
+/**
+ * Obtiene todas las llamadas registradas del conmutador para un teléfono específico (últimos 10 dígitos).
+ */
+export async function obtenerLlamadasPorTelefono(
+  telefono: string
+): Promise<LlamadaConmutadorApp[]> {
+  const sb = supabaseServidor();
+  const digitos = (telefono || "").replace(/\D/g, "").slice(-10);
+  if (!digitos) return [];
+
+  // 1. Obtener todas las llamadas
+  const { data: llamadas, error: errLlamadas } = await sb
+    .from("llamadas_conmutador")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (errLlamadas) {
+    console.error("Error al filtrar llamadas por teléfono:", errLlamadas);
+    throw new Error(errLlamadas.message);
+  }
+
+  // 2. Filtrar llamadas donde cliente_telefono coincida con los últimos 10 dígitos
+  const llamadasFiltradas = (llamadas ?? []).filter((row: any) => {
+    const rowDigitos = (row.cliente_telefono || "").replace(/\D/g, "").slice(-10);
+    return rowDigitos === digitos;
+  });
+
+  if (llamadasFiltradas.length === 0) return [];
+
+  // 3. Obtener perfiles para resolver nombres de agentes en memoria
+  const { data: perfiles } = await sb
+    .from("perfiles")
+    .select("id, nombre");
+  
+  const mapaAgentes = new Map((perfiles ?? []).map((p) => [p.id, p.nombre]));
+
+  // 4. Obtener prospectos para resolver nombres de clientes en memoria
+  const { data: prospectos } = await sb
+    .from("prospectos")
+    .select("id, nombre");
+  
+  const mapaProspectos = new Map((prospectos ?? []).map((pr) => [pr.id, pr.nombre]));
+
+  // 5. Mapear la información
+  return llamadasFiltradas.map((row: any) => ({
+    id: row.id,
+    twilio_call_sid: row.twilio_call_sid,
+    cliente_telefono: row.cliente_telefono,
+    prospecto_id: row.prospecto_id,
+    prospecto_nombre: row.prospecto_id ? mapaProspectos.get(row.prospecto_id) || row.prospecto_id : null,
+    agente_id: row.agente_id,
+    agente_nombre: row.agente_id ? mapaAgentes.get(row.agente_id) || "Asesor" : null,
+    tipo: row.tipo,
+    estado: row.estado,
+    duracion: row.duracion,
+    grabacion_url: row.grabacion_url,
+    transcripcion: row.transcripcion,
+    resumen_ia: row.resumen_ia,
+    datos_perfilados: row.datos_perfilados,
+    created_at: row.created_at,
+  }));
+}
