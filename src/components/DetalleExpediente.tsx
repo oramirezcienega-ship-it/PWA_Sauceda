@@ -131,23 +131,37 @@ export function DetalleExpediente({ id }: { id: string }) {
           {expediente.fraccionamiento} · León, Gto.
         </p>
 
-        {/* Estatus y Asesor responsivos */}
-        <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-2.5 border-t border-carbon/5 mt-2">
+        {/* Estatus y Tipo de Negocio responsivos */}
+        <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-[10px] uppercase font-bold text-carbon/40">Etapa:</span>
             <EtapaBadge etapa={expediente.etapa} />
           </div>
           
-          <div className="flex items-center gap-1.5 text-xs text-carbon/70">
-            <span className="text-[10px] uppercase font-bold text-carbon/40">Atiende:</span>
-            <AsesorSelector
-              entidadId={expediente.id}
-              tipoEntidad="expediente"
-              asesorIdActual={expediente.asesorId ?? null}
-              asesorNombreActual={expediente.asesorNombre ?? null}
-              onAsignado={recargar}
-            />
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[10px] uppercase font-bold text-carbon/40">Negocio:</span>
+            {expediente.tipoNegocio ? (
+              <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[10px] font-bold text-sauce">
+                {labelTipoNegocio(expediente.tipoNegocio)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-carbon/5 border border-carbon/10 px-2 py-0.5 text-[10px] font-medium text-carbon/50">
+                Sin definir
+              </span>
+            )}
           </div>
+        </div>
+
+        {/* Asesor Selector */}
+        <div className="flex items-center gap-1.5 text-xs text-carbon/70 pt-2 border-t border-carbon/5">
+          <span className="text-[10px] uppercase font-bold text-carbon/40">Atiende:</span>
+          <AsesorSelector
+            entidadId={expediente.id}
+            tipoEntidad="expediente"
+            asesorIdActual={expediente.asesorId ?? null}
+            asesorNombreActual={expediente.asesorNombre ?? null}
+            onAsignado={recargar}
+          />
         </div>
       </div>
 
