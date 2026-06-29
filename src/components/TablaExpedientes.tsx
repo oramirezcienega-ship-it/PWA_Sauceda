@@ -25,6 +25,7 @@ const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
   saldoDeuda: (a, b) => a.saldoDeuda - b.saldoDeuda,
   ultimoMovimiento: (a, b) =>
     a.ultimoMovimiento.localeCompare(b.ultimoMovimiento),
+  asesor: (a, b) => (a.asesorNombre ?? "").localeCompare(b.asesorNombre ?? "", "es"),
 };
 
 /**
@@ -180,7 +181,7 @@ export function TablaExpedientes({
       )}
 
       <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
-        <table className="w-full min-w-[980px] border-collapse text-sm">
+        <table className="w-full min-w-[1080px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-carbon/10 bg-crema/60 text-left">
               <th className="w-10 px-3 py-2.5">
@@ -195,6 +196,7 @@ export function TablaExpedientes({
               {(
               [
                 ["cliente", "Expediente", "izquierda"],
+                ["asesor", "Asesor", "izquierda"],
                 ["fraccionamiento", "Fraccionamiento", "izquierda"],
                 ["tipoNegocio", "Negocio", "izquierda"],
                 ["origen", "Origen", "izquierda"],
@@ -245,6 +247,11 @@ export function TablaExpedientes({
                 <span className="ml-2 font-mono text-[10px] text-carbon/40">
                   {exp.id}
                 </span>
+              </td>
+              <td className="px-3 py-2.5 text-carbon/70">
+                {exp.asesorNombre || (
+                  <span className="text-xs text-carbon/30 italic">Sin asignar</span>
+                )}
               </td>
 
               <td className="px-3 py-2.5 text-carbon/70">
@@ -369,6 +376,10 @@ export function TablaExpedientes({
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Negocio</p>
                   <p className="text-carbon/75 font-medium mt-0.5 truncate">{exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Asesor</p>
+                  <p className="text-carbon/75 font-medium mt-0.5 truncate">{exp.asesorNombre || "Sin asignar"}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Teléfono</p>
