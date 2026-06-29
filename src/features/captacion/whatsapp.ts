@@ -20,6 +20,17 @@ export interface MensajeWhatsApp {
   mensaje?: string;
   /** Id del mensaje en Meta (para no duplicarlo si reintenta el webhook). */
   waMessageId?: string;
+  referral?: {
+    source_url?: string;
+    source_id?: string;
+    source_type?: string;
+    headline?: string;
+    body?: string;
+    ctwa_clid?: string;
+  };
+  campaign_name?: string;
+  adset_name?: string;
+  ad_name?: string;
 }
 
 /** Forma mínima del payload del webhook de Meta que nos interesa. */
@@ -33,6 +44,14 @@ interface PayloadWhatsApp {
           from?: string;
           type?: string;
           text?: { body?: string };
+          referral?: {
+            source_url?: string;
+            source_id?: string;
+            source_type?: string;
+            headline?: string;
+            body?: string;
+            ctwa_clid?: string;
+          };
         }>;
       };
     }>;
@@ -64,6 +83,7 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
           nombre: nombrePorWaId[m.from],
           mensaje: texto,
           waMessageId: m.id,
+          referral: m.referral,
         });
       }
     }
@@ -105,15 +125,27 @@ export async function siguienteIdProspecto(
 async function obtenerOCrearProspecto(
   sb: ReturnType<typeof supabaseServidor>,
   lead: MensajeWhatsApp,
+  campaign_name = "",
+  adset_name = "",
+  ad_name = "",
 ): Promise<string> {
   const { data: existentes } = await sb
     .from("prospectos")
-    .select("id")
+    .select("id, campaign_name, adset_name, ad_name")
     .in("telefono", variantesTelefono(lead.telefono))
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    return existentes[0].id as string;
+    const pr = existentes[0];
+    const updateAttrs: any = {};
+    if (campaign_name && campaign_name !== pr.campaign_name) updateAttrs.campaign_name = campaign_name;
+    if (adset_name && adset_name !== pr.adset_name) updateAttrs.adset_name = adset_name;
+    if (ad_name && ad_name !== pr.ad_name) updateAttrs.ad_name = ad_name;
+
+    if (Object.keys(updateAttrs).length > 0) {
+      await sb.from("prospectos").update(updateAttrs).eq("id", pr.id);
+    }
+    return pr.id as string;
   }
 
   const id = await siguienteIdProspecto(sb);
@@ -122,6 +154,9 @@ async function obtenerOCrearProspecto(
     nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
     telefono: normalizarTelefono(lead.telefono),
     origen: "whatsapp",
+    campaign_name,
+    adset_name,
+    ad_name,
   });
   // Automatizaciones: prospecto nuevo captado por WhatsApp.
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
@@ -205,24 +240,61 @@ export async function registrarLeadWhatsApp(
   const telefono = normalizarTelefono(lead.telefono);
   const variantesTel = variantesTelefono(lead.telefono);
 
+  // Atribución de campaña
+  let campaign_name = "";
+  let adset_name = "";
+  let ad_name = "";
+
+  if (lead.referral) {
+    if (lead.referral.headline) {
+      ad_name = lead.referral.headline;
+    }
+
+    const adId = lead.referral.source_id;
+    const token = process.env.WHATSAPP_TOKEN || process.env.MESSENGER_PAGE_TOKEN;
+    if (adId && token) {
+      try {
+        const adUrl = `https://graph.facebook.com/v21.0/${adId}?fields=name,campaign{name},adset{name}&access_token=${token}`;
+        const adRes = await fetch(adUrl);
+        if (adRes.ok) {
+          const adData = await adRes.json();
+          if (adData.name) ad_name = adData.name;
+          if (adData.campaign?.name) campaign_name = adData.campaign.name;
+          if (adData.adset?.name) adset_name = adData.adset.name;
+        } else {
+          const errBody = await adRes.text();
+          console.warn(`[Meta API - WhatsApp Referral] No se pudo consultar ad_id ${adId} (status ${adRes.status}):`, errBody);
+        }
+      } catch (adErr) {
+        console.error("Error al consultar detalles de ad_id en Graph API desde WhatsApp:", adErr);
+      }
+    }
+  }
+
   // Prospecto (persona): se busca o se crea por teléfono.
-  const prospectoId = await obtenerOCrearProspecto(sb, lead);
+  const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name);
 
   // Dedupe del expediente por teléfono (cualquier formato equivalente).
   const { data: existentes } = await sb
     .from("expedientes")
-    .select("id, notas")
+    .select("id, notas, campaign_name, adset_name, ad_name")
     .in("telefono", variantesTel)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string };
+    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string };
     const nota = `${exp.notas ?? ""}\n[WhatsApp ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
+
+    const updateData: any = { notas: nota, ultimo_movimiento: hoyISO() };
+    if (campaign_name && campaign_name !== exp.campaign_name) updateData.campaign_name = campaign_name;
+    if (adset_name && adset_name !== exp.adset_name) updateData.adset_name = adset_name;
+    if (ad_name && ad_name !== exp.ad_name) updateData.ad_name = ad_name;
+
     await sb
       .from("expedientes")
-      .update({ notas: nota, ultimo_movimiento: hoyISO() })
+      .update(updateData)
       .eq("id", exp.id);
     const nuevo = await guardarMensajeEntrante(sb, {
       telefono,
@@ -251,6 +323,9 @@ export async function registrarLeadWhatsApp(
     notas: "Lead entrante automáticamente por WhatsApp.",
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
+    campaign_name,
+    adset_name,
+    ad_name,
   });
 
   // Enrolar automáticamente en secuencias activas
