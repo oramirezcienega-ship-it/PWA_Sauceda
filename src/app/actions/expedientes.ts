@@ -443,3 +443,14 @@ export async function importarExpedientes(
   }
   return { importados: aInsertar.length, errores };
 }
+
+/** Guarda o actualiza las notas de un expediente. */
+export async function guardarNotaExpediente(id: string, notas: string): Promise<void> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("expedientes")
+    .update({ notas, ultimo_movimiento: hoyISO() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}

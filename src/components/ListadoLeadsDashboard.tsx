@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
 
@@ -32,6 +33,12 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const router = useRouter();
+
+  // Notas
+  const [editandoNotaId, setEditandoNotaId] = useState<string | null>(null);
+  const [notaTemp, setNotaTemp] = useState<string>("");
+  const [guardandoNota, setGuardandoNota] = useState(false);
 
   // Expandir filtros automáticamente en desktop al montar
   useEffect(() => {
@@ -397,15 +404,26 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
                     </span>
                   )}
                 </div>
-                <span className={`inline-block rounded-md px-2 py-0.5 text-[9px] font-bold uppercase ${
-                  l.calificacion === "caliente" ? "bg-rojoLuz text-rojo" :
-                  l.calificacion === "templado" ? "bg-dorado/20 text-[#B8860B]" :
-                  l.calificacion === "frio" ? "bg-carbon/5 text-carbon/60" :
-                  l.calificacion === "descalificado" ? "bg-carbon/10 text-carbon/50" :
-                  "bg-carbon/10 text-carbon/40"
-                }`}>
-                  {l.calificacion}
-                </span>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {l.expedienteId && (
+                    <Link
+                      href={`/expediente/${l.expedienteId}/editar`}
+                      className="text-[10px] font-bold text-sauce hover:underline flex items-center gap-0.5 mb-0.5"
+                      title="Editar expediente"
+                    >
+                      ✏️ Editar
+                    </Link>
+                  )}
+                  <span className={`inline-block rounded-md px-2 py-0.5 text-[9px] font-bold uppercase ${
+                    l.calificacion === "caliente" ? "bg-rojoLuz text-rojo" :
+                    l.calificacion === "templado" ? "bg-dorado/20 text-[#B8860B]" :
+                    l.calificacion === "frio" ? "bg-carbon/5 text-carbon/60" :
+                    l.calificacion === "descalificado" ? "bg-carbon/10 text-carbon/50" :
+                    "bg-carbon/10 text-carbon/40"
+                  }`}>
+                    {l.calificacion}
+                  </span>
+                </div>
               </div>
 
               {/* Contenido: Detalle Expediente, Tipo de Negocio y Estatus */}
@@ -466,14 +484,76 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
                 </div>
 
                 {/* Notas de Expediente */}
-                {l.notasExpediente && (
-                  <div className="col-span-2 bg-crema/20 p-2 rounded-lg border border-carbon/5">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-carbon/45 block">
-                      Notas de Expediente
-                    </span>
-                    <p className="text-[10px] text-carbon/60 italic mt-0.5 whitespace-pre-wrap leading-tight">
-                      {l.notasExpediente}
-                    </p>
+                {l.expedienteId && (
+                  <div className="col-span-2 bg-crema/25 p-2 rounded-lg border border-carbon/5 relative group">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-carbon/45 block">
+                        Notas del Expediente
+                      </span>
+                      {editandoNotaId !== l.expedienteId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditandoNotaId(l.expedienteId!);
+                            setNotaTemp(l.notasExpediente || "");
+                          }}
+                          className="text-[9px] font-bold text-sauce hover:underline flex items-center gap-0.5"
+                        >
+                          ✏️ {l.notasExpediente ? "Editar" : "Escribir nota"}
+                        </button>
+                      )}
+                    </div>
+
+                    {editandoNotaId === l.expedienteId ? (
+                      <div className="space-y-1.5 mt-1">
+                        <textarea
+                          rows={2}
+                          value={notaTemp}
+                          onChange={(e) => setNotaTemp(e.target.value)}
+                          placeholder="Escribe una nota rápida..."
+                          disabled={guardandoNota}
+                          className="w-full rounded border border-carbon/25 p-1 text-[10px] text-carbon outline-none resize-none bg-white focus:border-sauce"
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={guardandoNota}
+                            onClick={() => setEditandoNotaId(null)}
+                            className="rounded px-1.5 py-0.5 text-[9px] font-bold text-carbon/50 hover:bg-carbon/5"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={guardandoNota}
+                            onClick={async () => {
+                              if (!l.expedienteId) return;
+                              setGuardandoNota(true);
+                              try {
+                                const { guardarNotaExpediente } = await import("@/app/actions/expedientes");
+                                await guardarNotaExpediente(l.expedienteId, notaTemp);
+                                // Actualizar localmente para evitar parpadeo antes de refresh
+                                l.notasExpediente = notaTemp;
+                                setEditandoNotaId(null);
+                                router.refresh();
+                              } catch (err) {
+                                console.error("Error al guardar nota:", err);
+                                alert("No se pudo guardar la nota.");
+                              } finally {
+                                setGuardandoNota(false);
+                              }
+                            }}
+                            className="rounded bg-sauce px-2 py-0.5 text-[9px] font-bold text-crema hover:bg-verde-profundo"
+                          >
+                            {guardandoNota ? "Guardando..." : "Guardar"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-carbon/60 italic whitespace-pre-wrap leading-tight mt-0.5">
+                        {l.notasExpediente || "Sin notas escritas. Toca en Escribir nota para añadir una."}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
