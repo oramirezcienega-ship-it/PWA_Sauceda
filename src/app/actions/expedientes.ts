@@ -444,13 +444,44 @@ export async function importarExpedientes(
   return { importados: aInsertar.length, errores };
 }
 
-/** Guarda o actualiza las notas de un expediente. */
-export async function guardarNotaExpediente(id: string, notas: string): Promise<void> {
+/** Guarda o actualiza las notas de un expediente prependiéndola con fecha y nombre del asesor. */
+export async function guardarNotaExpediente(id: string, nuevaNota: string): Promise<void> {
   await requireAdmin();
+  if (!nuevaNota || !nuevaNota.trim()) return;
   const sb = supabaseServidor();
+
+  // 1. Obtener nombre del usuario actual
+  const { obtenerUsuarioActual } = await import("@/app/actions/usuarios");
+  const usuario = await obtenerUsuarioActual();
+  const nombreAsesor = usuario?.nombre || "Asesor";
+
+  // 2. Obtener notas existentes
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("notas")
+    .eq("id", id)
+    .maybeSingle();
+
+  const existentes = exp?.notas || "";
+
+  // 3. Formatear la nueva nota prependida
+  const fechaStr = new Date().toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
+  const header = `[${fechaStr} - ${nombreAsesor}]`;
+  const notasActualizadas = `${header}\n${nuevaNota.trim()}${existentes ? `\n\n${existentes}` : ""}`;
+
+  // 4. Guardar
   const { error } = await sb
     .from("expedientes")
-    .update({ notas, ultimo_movimiento: hoyISO() })
+    .update({ notas: notasActualizadas, ultimo_movimiento: hoyISO() })
     .eq("id", id);
   if (error) throw new Error(error.message);
 }

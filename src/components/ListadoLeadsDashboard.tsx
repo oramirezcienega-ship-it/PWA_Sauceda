@@ -39,6 +39,41 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
   const [editandoNotaId, setEditandoNotaId] = useState<string | null>(null);
   const [notaTemp, setNotaTemp] = useState<string>("");
   const [guardandoNota, setGuardandoNota] = useState(false);
+  const [escuchandoId, setEscuchandoId] = useState<string | null>(null);
+  const [verTodasId, setVerTodasId] = useState<string | null>(null);
+
+  function iniciarDictado(id: string) {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("El dictado por voz no es compatible con este navegador.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "es-MX";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setEscuchandoId(id);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setNotaTemp((prev) => prev ? `${prev} ${transcript}` : transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      setEscuchandoId(null);
+    };
+
+    recognition.onend = () => {
+      setEscuchandoId(null);
+    };
+
+    recognition.start();
+  }
 
   // Expandir filtros automáticamente en desktop al montar
   useEffect(() => {
@@ -484,78 +519,150 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
                 </div>
 
                 {/* Notas de Expediente */}
-                {l.expedienteId && (
-                  <div className="col-span-2 bg-crema/25 p-2 rounded-lg border border-carbon/5 relative group">
-                    <div className="flex items-center justify-between gap-2 mb-0.5">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-carbon/45 block">
-                        Notas del Expediente
-                      </span>
-                      {editandoNotaId !== l.expedienteId && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditandoNotaId(l.expedienteId!);
-                            setNotaTemp(l.notasExpediente || "");
-                          }}
-                          className="text-[9px] font-bold text-sauce hover:underline flex items-center gap-0.5"
-                        >
-                          ✏️ {l.notasExpediente ? "Editar" : "Escribir nota"}
-                        </button>
+                {l.expedienteId && (() => {
+                  const notasList = l.notasExpediente ? l.notasExpediente.split("\n\n").filter(Boolean) : [];
+                  return (
+                    <div className="col-span-2 bg-crema/25 p-2.5 rounded-lg border border-carbon/5 relative">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-carbon/45 block">
+                          Notas del Expediente
+                        </span>
+                        {editandoNotaId !== l.expedienteId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditandoNotaId(l.expedienteId!);
+                              setNotaTemp(""); // Empezamos en blanco para la nueva nota
+                            }}
+                            className="text-[9px] font-bold text-sauce hover:underline flex items-center gap-0.5"
+                          >
+                            ➕ Agregar nota
+                          </button>
+                        )}
+                      </div>
+
+                      {editandoNotaId === l.expedienteId ? (
+                        /* Modo Edición / Escritura de nota */
+                        <div className="space-y-1.5 mt-1">
+                          <div className="relative">
+                            <textarea
+                              rows={2}
+                              value={notaTemp}
+                              onChange={(e) => setNotaTemp(e.target.value)}
+                              placeholder="Escribe la nueva nota aquí..."
+                              disabled={guardandoNota}
+                              className="w-full rounded border border-carbon/25 p-1 pr-7 text-[10px] text-carbon outline-none resize-none bg-white focus:border-sauce"
+                            />
+                            <button
+                              type="button"
+                              disabled={guardandoNota}
+                              onClick={() => iniciarDictado(l.expedienteId!)}
+                              className={`absolute right-1.5 top-1.5 p-1 rounded-full transition ${
+                                escuchandoId === l.expedienteId
+                                  ? "bg-rojo/10 text-rojo animate-pulse"
+                                  : "text-carbon/40 hover:bg-carbon/5 hover:text-sauce"
+                              }`}
+                              title="Dictar por voz"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                              </svg>
+                            </button>
+                          </div>
+                          
+                          {escuchandoId === l.expedienteId && (
+                            <p className="text-[9px] text-rojo font-semibold animate-pulse flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rojo"></span>
+                              Escuchando voz... hable ahora.
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              disabled={guardandoNota}
+                              onClick={() => setEditandoNotaId(null)}
+                              className="rounded px-1.5 py-0.5 text-[9px] font-bold text-carbon/50 hover:bg-carbon/5"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              disabled={guardandoNota || !notaTemp.trim()}
+                              onClick={async () => {
+                                if (!l.expedienteId || !notaTemp.trim()) return;
+                                setGuardandoNota(true);
+                                try {
+                                  const { guardarNotaExpediente } = await import("@/app/actions/expedientes");
+                                  await guardarNotaExpediente(l.expedienteId, notaTemp);
+                                  
+                                  // Actualizar localmente la nota prependiéndola para respuesta inmediata
+                                  const { obtenerUsuarioActual } = await import("@/app/actions/usuarios");
+                                  const user = await obtenerUsuarioActual();
+                                  const name = user?.nombre || "Asesor";
+                                  const dateStr = new Date().toLocaleString("es-MX", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                    hour12: false
+                                  });
+                                  const header = `[${dateStr} - ${name}]`;
+                                  const newFullText = `${header}\n${notaTemp.trim()}${l.notasExpediente ? `\n\n${l.notasExpediente}` : ""}`;
+                                  l.notasExpediente = newFullText;
+                                  
+                                  setEditandoNotaId(null);
+                                  router.refresh();
+                                } catch (err) {
+                                  console.error("Error al guardar nota:", err);
+                                  alert("No se pudo guardar la nota.");
+                                } finally {
+                                  setGuardandoNota(false);
+                                }
+                              }}
+                              className="rounded bg-sauce px-2 py-0.5 text-[9px] font-bold text-crema hover:bg-verde-profundo disabled:opacity-55"
+                            >
+                              {guardandoNota ? "Guardando..." : "Guardar"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Modo Visualización (Historial / Última nota) */
+                        <div className="space-y-1.5">
+                          {notasList.length > 0 ? (
+                            <>
+                              {/* Renderizar según verTodasId */}
+                              {(verTodasId === l.expedienteId ? notasList : [notasList[0]]).map((nota, nIdx) => (
+                                <div key={nIdx} className="text-[10px] text-carbon/75 border-l-2 border-sauce/30 pl-2 py-0.5 leading-tight">
+                                  <p className="whitespace-pre-wrap">{nota}</p>
+                                </div>
+                              ))}
+                              
+                              {/* Toggle para ver historial completo */}
+                              {notasList.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setVerTodasId(verTodasId === l.expedienteId ? null : l.expedienteId!)}
+                                  className="text-[9px] font-bold text-sauce hover:underline block mt-1"
+                                >
+                                  {verTodasId === l.expedienteId
+                                    ? "▲ Ocultar historial"
+                                    : `▼ Ver historial de notas (${notasList.length})`}
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-[10px] text-carbon/40 italic whitespace-pre-wrap leading-tight mt-0.5">
+                              Sin notas registradas. Toca en agregar nota para añadir comentarios.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-
-                    {editandoNotaId === l.expedienteId ? (
-                      <div className="space-y-1.5 mt-1">
-                        <textarea
-                          rows={2}
-                          value={notaTemp}
-                          onChange={(e) => setNotaTemp(e.target.value)}
-                          placeholder="Escribe una nota rápida..."
-                          disabled={guardandoNota}
-                          className="w-full rounded border border-carbon/25 p-1 text-[10px] text-carbon outline-none resize-none bg-white focus:border-sauce"
-                        />
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            disabled={guardandoNota}
-                            onClick={() => setEditandoNotaId(null)}
-                            className="rounded px-1.5 py-0.5 text-[9px] font-bold text-carbon/50 hover:bg-carbon/5"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            disabled={guardandoNota}
-                            onClick={async () => {
-                              if (!l.expedienteId) return;
-                              setGuardandoNota(true);
-                              try {
-                                const { guardarNotaExpediente } = await import("@/app/actions/expedientes");
-                                await guardarNotaExpediente(l.expedienteId, notaTemp);
-                                // Actualizar localmente para evitar parpadeo antes de refresh
-                                l.notasExpediente = notaTemp;
-                                setEditandoNotaId(null);
-                                router.refresh();
-                              } catch (err) {
-                                console.error("Error al guardar nota:", err);
-                                alert("No se pudo guardar la nota.");
-                              } finally {
-                                setGuardandoNota(false);
-                              }
-                            }}
-                            className="rounded bg-sauce px-2 py-0.5 text-[9px] font-bold text-crema hover:bg-verde-profundo"
-                          >
-                            {guardandoNota ? "Guardando..." : "Guardar"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-carbon/60 italic whitespace-pre-wrap leading-tight mt-0.5">
-                        {l.notasExpediente || "Sin notas escritas. Toca en Escribir nota para añadir una."}
-                      </p>
-                    )}
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Acciones */}
