@@ -61,7 +61,7 @@ export default async function PaginaDashboard() {
           </div>
 
           {/* Tarjetas de Métricas */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-4 lg:grid-cols-5">
             <Metrica etiqueta="Leads Asignados" valor={String(r.totalLeads)} />
             <Metrica 
               etiqueta="Tareas Pendientes" 
@@ -176,7 +176,7 @@ export default async function PaginaDashboard() {
         </p>
 
         {/* Tarjetas de métricas */}
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Metrica etiqueta="Leads (prospectos)" valor={String(r.totalLeads)} />
           <Metrica etiqueta="Expedientes" valor={String(r.totalExpedientes)} />
           <Metrica etiqueta="Activos" valor={String(r.activos)} />
@@ -270,12 +270,12 @@ function Metrica({
   resaltar?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-carbon/10 bg-white p-4 shadow-sm">
-      <p className="text-[10px] uppercase tracking-wide text-carbon/40">
+    <div className="rounded-xl border border-carbon/10 bg-white p-2.5 sm:p-4 shadow-sm flex flex-col justify-between">
+      <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-carbon/40 truncate" title={etiqueta}>
         {etiqueta}
       </p>
       <p
-        className={`mt-1 font-mono text-2xl font-semibold ${
+        className={`mt-0.5 font-mono text-base sm:text-2xl font-bold ${
           resaltar ? "text-sauce" : "text-verde-profundo"
         }`}
       >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
@@ -31,6 +31,25 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
   const [filtroFraccionamiento, setFiltroFraccionamiento] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+
+  // Expandir filtros automáticamente en desktop al montar
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      setMostrarFiltros(true);
+    }
+  }, []);
+
+  const filtrosActivosCount = useMemo(() => {
+    let count = 0;
+    if (busqueda) count++;
+    if (filtroEstatus !== "activos") count++;
+    if (filtroCalificacion !== "todos") count++;
+    if (filtroFraccionamiento !== "todos") count++;
+    if (fechaDesde) count++;
+    if (fechaHasta) count++;
+    return count;
+  }, [busqueda, filtroEstatus, filtroCalificacion, filtroFraccionamiento, fechaDesde, fechaHasta]);
 
   // Obtener fraccionamientos únicos para el dropdown
   const fraccionamientos = useMemo(() => {
@@ -110,108 +129,123 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
 
   return (
     <div className="space-y-4">
-      {/* Barra de Filtros */}
-      <div className="rounded-xl border border-carbon/10 bg-carbon/[0.02] p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-          {/* Búsqueda */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Buscar</label>
-            <input
-              type="text"
-              placeholder="Nombre o teléfono..."
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs text-carbon placeholder-carbon/40 focus:border-sauce focus:outline-none"
-            />
-          </div>
+      {/* Botón para contraer/expandir filtros */}
+      <div className="flex items-center justify-between bg-white border border-carbon/10 rounded-xl p-3 shadow-sm shrink-0">
+        <button
+          type="button"
+          onClick={() => setMostrarFiltros(!mostrarFiltros)}
+          className="inline-flex items-center gap-2 rounded-lg border border-carbon/15 bg-white px-3.5 py-1.5 text-xs font-bold text-carbon transition hover:bg-carbon/[0.02] focus:outline-none"
+        >
+          <span>{mostrarFiltros ? "▲ Ocultar Filtros" : "▼ Mostrar Filtros"}</span>
+          {filtrosActivosCount > 0 && (
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sauce text-[10px] font-bold text-crema leading-none">
+              {filtrosActivosCount}
+            </span>
+          )}
+        </button>
 
-          {/* Estatus */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Estatus</label>
-            <select
-              value={filtroEstatus}
-              onChange={(e) => setFiltroEstatus(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon focus:border-sauce focus:outline-none"
-            >
-              <option value="activos">Activos (Sin Perdidos)</option>
-              <option value="todos">Todos los estatus</option>
-              <option value="nuevo">Nuevo</option>
-              <option value="en_conversacion">En conversación</option>
-              <option value="expediente_abierto">Expediente abierto</option>
-              <option value="cliente">Cliente</option>
-              <option value="no_viable">No viable (Perdido)</option>
-              <option value="sin_contacto">Sin contacto</option>
-            </select>
-          </div>
-
-          {/* Calificación */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Calificación</label>
-            <select
-              value={filtroCalificacion}
-              onChange={(e) => setFiltroCalificacion(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon focus:border-sauce focus:outline-none"
-            >
-              <option value="todos">Todas</option>
-              <option value="caliente">Caliente</option>
-              <option value="templado">Templado</option>
-              <option value="frio">Frío</option>
-              <option value="descalificado">Descalificado</option>
-            </select>
-          </div>
-
-          {/* Fraccionamiento */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Fraccionamiento</label>
-            <select
-              value={filtroFraccionamiento}
-              onChange={(e) => setFiltroFraccionamiento(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon focus:border-sauce focus:outline-none"
-            >
-              <option value="todos">Todos</option>
-              {fraccionamientos.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Fecha Desde */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Desde fecha</label>
-            <input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-2 py-1 text-xs text-carbon focus:border-sauce focus:outline-none"
-            />
-          </div>
-
-          {/* Fecha Hasta */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Hasta fecha</label>
-            <input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-2 py-1 text-xs text-carbon focus:border-sauce focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Botón de limpiar filtros */}
         {tieneFiltrosActivos && (
-          <div className="mt-3 flex justify-end">
-            <button
-              onClick={limpiarFiltros}
-              className="text-xs font-semibold text-rojo hover:underline focus:outline-none"
-            >
-              Limpiar Filtros
-            </button>
-          </div>
+          <button
+            onClick={limpiarFiltros}
+            className="text-xs font-bold text-rojo hover:underline focus:outline-none"
+          >
+            Limpiar Filtros
+          </button>
         )}
       </div>
+
+      {/* Barra de Filtros (Colapsable) */}
+      {mostrarFiltros && (
+        <div className="rounded-xl border border-carbon/10 bg-carbon/[0.02] p-4 transition-all duration-300">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+            {/* Búsqueda */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Buscar</label>
+              <input
+                type="text"
+                placeholder="Nombre o teléfono..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs text-carbon placeholder-carbon/40 focus:border-sauce focus:outline-none"
+              />
+            </div>
+
+            {/* Estatus */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Estatus</label>
+              <select
+                value={filtroEstatus}
+                onChange={(e) => setFiltroEstatus(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon focus:border-sauce focus:outline-none"
+              >
+                <option value="activos">Activos (Sin Perdidos)</option>
+                <option value="todos">Todos los estatus</option>
+                <option value="nuevo">Nuevo</option>
+                <option value="en_conversacion">En conversación</option>
+                <option value="expediente_abierto">Expediente abierto</option>
+                <option value="cliente">Cliente</option>
+                <option value="no_viable">No viable (Perdido)</option>
+                <option value="sin_contacto">Sin contacto</option>
+              </select>
+            </div>
+
+            {/* Calificación */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Calificación</label>
+              <select
+                value={filtroCalificacion}
+                onChange={(e) => setFiltroCalificacion(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon focus:border-sauce focus:outline-none"
+              >
+                <option value="todos">Todas</option>
+                <option value="caliente">Caliente</option>
+                <option value="templado">Templado</option>
+                <option value="frio">Frío</option>
+                <option value="descalificado">Descalificado</option>
+              </select>
+            </div>
+
+            {/* Fraccionamiento */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Fraccionamiento</label>
+              <select
+                value={filtroFraccionamiento}
+                onChange={(e) => setFiltroFraccionamiento(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon focus:border-sauce focus:outline-none"
+              >
+                <option value="todos">Todos</option>
+                {fraccionamientos.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Fecha Desde */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Desde fecha</label>
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white px-2 py-1 text-xs text-carbon focus:border-sauce focus:outline-none"
+              />
+            </div>
+
+            {/* Fecha Hasta */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Hasta fecha</label>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white px-2 py-1 text-xs text-carbon focus:border-sauce focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabla con resultados */}
       {leadsFiltrados.length === 0 ? (
