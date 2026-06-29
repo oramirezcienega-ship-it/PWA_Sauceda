@@ -213,7 +213,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
   const { data: directExpedientes } = await sb
     .from("expedientes")
-    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, created_at, fraccionamiento, etapa, notas")
+    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, telefono, created_at, fraccionamiento, etapa, notas")
     .eq("asesor_id", usuario.id);
 
   const directProspectoIdsFromExp: string[] = [];
@@ -290,7 +290,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
         leadsAsignados.push({
           id: `exp-${e.id}`, // Prefijo para no colisionar con IDs de prospecto
           nombre: nombreCompleto || "Cliente sin nombre",
-          telefono: "",
+          telefono: e.telefono || "",
           estatus: "expediente_abierto",
           calificacion: "caliente",
           fechaAsignacion: e.created_at || new Date().toISOString(),

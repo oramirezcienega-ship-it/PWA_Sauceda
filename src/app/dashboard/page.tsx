@@ -103,14 +103,14 @@ export default async function PaginaDashboard() {
                     </thead>
                     <tbody className="divide-y divide-carbon/5 text-sm">
                       {r.leadsAsignados.map((l) => (
-                        <tr key={l.id} className="hover:bg-carbon/[0.01] transition">
-                          <td className="py-3 font-medium text-carbon">
+                        <tr key={l.id} className="hover:bg-carbon/[0.01] transition align-top">
+                          <td className="py-4 font-medium text-carbon align-top">
                             <div>{l.nombre}</div>
                             {l.telefono && (
                               <div className="text-xs text-carbon/40 font-mono mt-0.5">{l.telefono}</div>
                             )}
                           </td>
-                          <td className="py-3 text-xs">
+                          <td className="py-4 text-xs align-top">
                             {l.expedienteId ? (
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-semibold text-verde-profundo">
@@ -122,7 +122,7 @@ export default async function PaginaDashboard() {
                                   </span>
                                 )}
                                 {l.notasExpediente && (
-                                  <span className="text-[10px] text-carbon/50 italic truncate max-w-[200px]" title={l.notasExpediente}>
+                                  <span className="text-[10px] text-carbon/50 italic block max-w-[220px] whitespace-pre-wrap mt-0.5" title={l.notasExpediente}>
                                     {l.notasExpediente}
                                   </span>
                                 )}
@@ -131,7 +131,7 @@ export default async function PaginaDashboard() {
                               <span className="text-carbon/30 italic">Sin expediente enlazado</span>
                             )}
                           </td>
-                          <td className="py-3">
+                          <td className="py-4 align-top">
                             <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold uppercase ${
                               l.calificacion === "caliente" ? "bg-rojoLuz text-rojo" :
                               l.calificacion === "templado" ? "bg-dorado/20 text-[#B8860B]" :
@@ -141,7 +141,7 @@ export default async function PaginaDashboard() {
                               {l.calificacion}
                             </span>
                           </td>
-                          <td className="py-3">
+                          <td className="py-4 align-top">
                             <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
                               l.estatus === "cliente" ? "bg-verdeLuz text-verde-profundo" :
                               l.estatus === "expediente_abierto" ? "bg-cielo/15 text-[#3b667e]" :
@@ -152,9 +152,9 @@ export default async function PaginaDashboard() {
                               {l.estatus.replace("_", " ")}
                             </span>
                           </td>
-                          <td className="py-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {l.telefono && (
+                          <td className="py-4 text-right align-top">
+                            <div className="flex items-center justify-end gap-2 flex-wrap md:flex-nowrap">
+                              {l.telefono ? (
                                 <>
                                   <BotonLlamar
                                     telefono={l.telefono}
@@ -171,6 +171,8 @@ export default async function PaginaDashboard() {
                                     WhatsApp
                                   </Link>
                                 </>
+                              ) : (
+                                <span className="text-xs text-carbon/30 italic">Sin número</span>
                               )}
                             </div>
                           </td>
