@@ -346,7 +346,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, direccion_propiedad, link_google_maps, necesidad, tipo_negocio, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();

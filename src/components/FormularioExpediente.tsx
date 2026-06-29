@@ -25,6 +25,7 @@ const VACIO: DatosExpediente = {
   direccionPropiedad: "",
   linkGoogleMaps: "",
   necesidad: "",
+  tipoNegocio: "traspaso_compra",
   canalId: "",
   sinPagos: "",
   estadoFisico: "",
@@ -88,6 +89,7 @@ export function FormularioExpediente({
         direccionPropiedad: (datos.direccionPropiedad || "").trim(),
         linkGoogleMaps: (datos.linkGoogleMaps || "").trim(),
         necesidad: (datos.necesidad || "").trim(),
+        tipoNegocio: datos.tipoNegocio || "traspaso_compra",
         sinPagos: (datos.sinPagos || "").trim(),
         estadoFisico: (datos.estadoFisico || "").trim(),
         habitada: (datos.habitada || "").trim(),
@@ -214,7 +216,7 @@ export function FormularioExpediente({
         </Campo>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Campo etiqueta="Tipo de crédito">
           <input
             type="text"
@@ -233,6 +235,20 @@ export function FormularioExpediente({
             placeholder="Traspasar, Vender..."
             className={INPUT}
           />
+        </Campo>
+
+        <Campo etiqueta="Tipo de negocio">
+          <select
+            value={datos.tipoNegocio || "traspaso_compra"}
+            onChange={(e) => actualizar("tipoNegocio", e.target.value as any)}
+            className={INPUT}
+          >
+            <option value="traspaso_compra">Traspaso / Compra de casa</option>
+            <option value="promocion_venta">Promoción de venta</option>
+            <option value="solo_tramite">Solo trámite</option>
+            <option value="construccion">Sauceda Construye</option>
+            <option value="otro">Otro</option>
+          </select>
         </Campo>
       </div>
 

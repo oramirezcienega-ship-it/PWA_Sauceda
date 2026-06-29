@@ -10,11 +10,30 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
 
+export function labelTipoNegocio(tipo: string): string {
+  switch (tipo) {
+    case "traspaso_compra":
+      return "Traspaso / Compra";
+    case "promocion_venta":
+      return "Promoción Venta";
+    case "solo_tramite":
+      return "Solo Trámite";
+    case "construccion":
+      return "Sauceda Construye";
+    case "otro":
+      return "Otro";
+    default:
+      return tipo || "—";
+  }
+}
+
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
   cliente: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
   fraccionamiento: (a, b) =>
     a.fraccionamiento.localeCompare(b.fraccionamiento, "es"),
+  tipoNegocio: (a, b) =>
+    (a.tipoNegocio ?? "").localeCompare(b.tipoNegocio ?? "", "es"),
   origen: (a, b) =>
     (a.origenProspecto ?? "").localeCompare(b.origenProspecto ?? "", "es"),
   telefono: (a, b) => a.telefono.localeCompare(b.telefono, "es"),
@@ -194,6 +213,7 @@ export function TablaExpedientes({
               [
                 ["cliente", "Expediente", "izquierda"],
                 ["fraccionamiento", "Fraccionamiento", "izquierda"],
+                ["tipoNegocio", "Negocio", "izquierda"],
                 ["origen", "Origen", "izquierda"],
                 ["telefono", "Teléfono", "izquierda"],
                 ["etapa", "Etapa", "izquierda"],
@@ -246,6 +266,10 @@ export function TablaExpedientes({
 
               <td className="px-3 py-2.5 text-carbon/70">
                 {exp.fraccionamiento}
+              </td>
+
+              <td className="px-3 py-2.5 text-carbon/70">
+                {exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "—"}
               </td>
 
               <td className="px-3 py-2.5">
@@ -358,6 +382,10 @@ export function TablaExpedientes({
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Fraccionamiento</p>
                   <p className="text-carbon/75 font-medium mt-0.5 truncate">{exp.fraccionamiento || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Negocio</p>
+                  <p className="text-carbon/75 font-medium mt-0.5 truncate">{exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "—"}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Teléfono</p>

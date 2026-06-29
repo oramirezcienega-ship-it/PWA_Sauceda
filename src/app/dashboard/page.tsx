@@ -4,6 +4,7 @@ import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { formatoPesos } from "@/lib/formato";
 import Link from "next/link";
 import { BotonLlamar } from "@/components/BotonLlamar";
+import { labelTipoNegocio } from "@/components/TablaExpedientes";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +97,7 @@ export default async function PaginaDashboard() {
                       <tr className="border-b border-carbon/10 text-xs font-semibold uppercase tracking-wider text-carbon/40">
                         <th className="pb-3">Nombre / Contacto</th>
                         <th className="pb-3">Detalle Expediente</th>
+                        <th className="pb-3">Tipo de Negocio</th>
                         <th className="pb-3">Calificación</th>
                         <th className="pb-3">Estatus</th>
                         <th className="pb-3 text-right">Acciones</th>
@@ -113,8 +115,14 @@ export default async function PaginaDashboard() {
                           <td className="py-4 text-xs align-top">
                             {l.expedienteId ? (
                               <div className="flex flex-col gap-0.5">
-                                <span className="font-semibold text-verde-profundo">
-                                  🏢 {l.fraccionamiento || "Sin fraccionamiento"}
+                                <Link
+                                  href={`/expediente/${l.expedienteId}`}
+                                  className="font-bold font-mono text-sauce hover:underline flex items-center gap-1 text-sm"
+                                >
+                                  📁 {l.expedienteId}
+                                </Link>
+                                <span className="text-[11px] text-carbon/60">
+                                  🏠 {l.fraccionamiento || "Sin fraccionamiento"}
                                 </span>
                                 {l.etapaExpediente && (
                                   <span className="inline-block text-[10px] text-[#3b667e] font-semibold bg-[#3b667e]/10 px-1.5 py-0.5 rounded self-start mt-0.5">
@@ -129,6 +137,15 @@ export default async function PaginaDashboard() {
                               </div>
                             ) : (
                               <span className="text-carbon/30 italic">Sin expediente enlazado</span>
+                            )}
+                          </td>
+                          <td className="py-4 align-top text-xs text-carbon/80">
+                            {l.tipoNegocio ? (
+                              <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-2.5 py-0.5 font-semibold text-sauce">
+                                {labelTipoNegocio(l.tipoNegocio)}
+                              </span>
+                            ) : (
+                              <span className="text-carbon/30 italic">No definido</span>
                             )}
                           </td>
                           <td className="py-4 align-top">

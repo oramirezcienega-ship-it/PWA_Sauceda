@@ -28,6 +28,13 @@ export interface Etapa {
   descripcionCliente: string;
 }
 
+export type TipoNegocioId =
+  | "traspaso_compra"
+  | "promocion_venta"
+  | "solo_tramite"
+  | "construccion"
+  | "otro";
+
 /**
  * Expediente de un traspaso INFONAVIT.
  * Representa el caso de un cliente a lo largo del flujo de operación.
@@ -60,7 +67,9 @@ export interface Expediente {
   notas: string;
   /** Atribución de campaña Meta. */
   adName: string;
+  /** Adset de campaña Meta. */
   adsetName: string;
+  /** Campaña Meta. */
   campaignName: string;
   /** Token aleatorio para el enlace privado de seguimiento del cliente. */
   token: string;
@@ -72,6 +81,8 @@ export interface Expediente {
   linkGoogleMaps?: string | null;
   /** Necesidad del cliente (ej. Vender, traspasar, etc.). */
   necesidad?: string | null;
+  /** Tipo de negocio (ej. Traspaso/Compra, Promoción de venta, Solo trámite, etc.). */
+  tipoNegocio?: TipoNegocioId | null;
   /** Prospecto (persona) dueño del expediente. Null si aún no se enlaza. */
   prospectoId: string | null;
   /** Asesor asignado al expediente. Null si no está asignado. */

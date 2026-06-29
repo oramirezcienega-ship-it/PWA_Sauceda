@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Expediente } from "@/lib/types";
 import { formatoPesos } from "@/lib/formato";
+import { labelTipoNegocio } from "./TablaExpedientes";
 
 /**
  * Tarjeta resumen de un expediente dentro del tablero.
@@ -21,9 +22,14 @@ export function TarjetaExpediente({ expediente }: { expediente: Expediente }) {
         </span>
       </div>
 
-      <p className="mt-0.5 text-xs text-carbon/60">
-        {expediente.fraccionamiento}
-      </p>
+      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+        <span className="text-xs text-carbon/60">
+          {expediente.fraccionamiento}
+        </span>
+        <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-1.5 py-0.5 text-[9px] font-bold text-sauce leading-none">
+          {expediente.tipoNegocio ? labelTipoNegocio(expediente.tipoNegocio) : "Traspaso / Compra"}
+        </span>
+      </div>
 
       <p className="mt-2 line-clamp-2 text-xs text-carbon/80">
         {expediente.situacion}

@@ -95,7 +95,16 @@ export default async function PaginaProspecto({
             <dd className="mt-0.5 flex items-center gap-2 text-carbon font-mono">
               <span>{prospecto.telefono || "—"}</span>
               {prospecto.telefono && (
-                <BotonLlamar telefono={prospecto.telefono} prospectoId={prospecto.id} />
+                <div className="flex items-center gap-1.5">
+                  <BotonLlamar telefono={prospecto.telefono} prospectoId={prospecto.id} />
+                  <Link
+                    href={`/conversaciones?tel=${prospecto.telefono}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100 hover:text-green-800"
+                    title="Abrir chat de WhatsApp"
+                  >
+                    💬 WhatsApp
+                  </Link>
+                </div>
               )}
             </dd>
           </div>

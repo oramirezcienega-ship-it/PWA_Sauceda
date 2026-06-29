@@ -111,6 +111,7 @@ export interface ResumenAsesor {
     fraccionamiento?: string;
     etapaExpediente?: string;
     notasExpediente?: string;
+    tipoNegocio?: string | null;
   }[];
   tareasPendientesLista: {
     id: string;
@@ -213,7 +214,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
   const { data: directExpedientes } = await sb
     .from("expedientes")
-    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, telefono, created_at, fraccionamiento, etapa, notas")
+    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, telefono, created_at, fraccionamiento, etapa, notas, tipo_negocio")
     .eq("asesor_id", usuario.id);
 
   const directProspectoIdsFromExp: string[] = [];
@@ -239,7 +240,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   if (prospectoIds.length > 0) {
     const { data: expsData } = await sb
       .from("expedientes")
-      .select("id, prospecto_id, fraccionamiento, etapa, notas")
+      .select("id, prospecto_id, fraccionamiento, etapa, notas, tipo_negocio")
       .in("prospecto_id", prospectoIds);
     if (expsData) {
       expsData.forEach((e) => {
@@ -277,6 +278,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
           fraccionamiento: exp?.fraccionamiento,
           etapaExpediente: exp?.etapa,
           notasExpediente: exp?.notas,
+          tipoNegocio: exp?.tipo_negocio || null,
         };
       });
     }
@@ -298,6 +300,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
           fraccionamiento: e.fraccionamiento,
           etapaExpediente: e.etapa,
           notasExpediente: e.notas,
+          tipoNegocio: e.tipo_negocio || null,
         });
       }
     });

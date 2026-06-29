@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import {
   listarConversaciones,
@@ -22,6 +23,16 @@ import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 
 const INPUT =
   "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
+
+export function coincidenTelefonos(tel1: string, tel2: string): boolean {
+  const t1 = tel1.replace(/\D/g, "");
+  const t2 = tel2.replace(/\D/g, "");
+  if (!t1 || !t2) return false;
+  if (t1.length >= 10 && t2.length >= 10) {
+    return t1.slice(-10) === t2.slice(-10);
+  }
+  return t1 === t2;
+}
 
 function horaCorta(iso: string): string {
   const d = new Date(iso);
@@ -104,6 +115,7 @@ export function Conversaciones() {
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
   const [sel, setSel] = useState<string | null>(null);
+  const [soloTel, setSoloTel] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
   const [plantillas, setPlantillas] = useState<PlantillaWhatsApp[]>([]);
   const [texto, setTexto] = useState("");
@@ -129,12 +141,15 @@ export function Conversaciones() {
     setProbandoIA(false);
   }
 
-  const refrescar = useCallback(async (telefono: string | null) => {
+  const refrescar = useCallback(async (telefonoPreseleccionado: string | null) => {
     try {
       const lista = await listarConversaciones();
       setConversaciones(lista);
-      if (telefono) {
-        const d = await obtenerConversacion(telefono);
+      if (telefonoPreseleccionado) {
+        const coincidencia = lista.find((c) => coincidenTelefonos(c.telefono, telefonoPreseleccionado));
+        const telReal = coincidencia ? coincidencia.telefono : telefonoPreseleccionado;
+        setSel(telReal);
+        const d = await obtenerConversacion(telReal);
         setDetalle(d);
       }
     } catch {
@@ -150,7 +165,7 @@ export function Conversaciones() {
       const tel = queryParams.get("tel") || queryParams.get("telefono");
       if (tel) {
         preseleccion = tel;
-        setSel(tel);
+        setSoloTel(tel);
       }
     }
 
@@ -250,6 +265,12 @@ export function Conversaciones() {
   }
 
   const conversacionesFiltradas = conversaciones.filter((c) => {
+    if (soloTel) {
+      return coincidenTelefonos(c.telefono, soloTel);
+    }
+
+    if (sel && coincidenTelefonos(c.telefono, sel)) return true;
+
     if (filtro === "abiertas") {
       if (!c.finalizado) {
         if (subFiltro === "mias") {
@@ -305,6 +326,27 @@ export function Conversaciones() {
         <div className={`overflow-y-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-2 shadow-sm ${
           sel ? "hidden sm:flex" : "flex"
         }`}>
+          {soloTel && (
+            <div className="mb-2 flex items-center justify-between rounded-lg bg-sauce/15 border border-sauce/30 p-2 text-xs text-verde-profundo font-medium shrink-0">
+              <span>Chat filtrado</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSoloTel(null);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("tel");
+                    url.searchParams.delete("telefono");
+                    window.history.pushState({}, "", url.pathname + url.search);
+                  }
+                }}
+                className="font-bold underline hover:text-sauce"
+              >
+                Mostrar todos
+              </button>
+            </div>
+          )}
+
           {/* Tabs de Filtro */}
           <div className="flex border border-carbon/10 mb-2 bg-crema/40 p-1 rounded-lg shrink-0">
             <button
@@ -417,14 +459,24 @@ export function Conversaciones() {
                   {/* Badges de expediente / prospecto */}
                   <span className="flex flex-wrap gap-1 mt-1.5">
                     {c.expedienteId && (
-                      <span className="bg-sauce/10 text-verde-profundo border border-sauce/20 rounded-md px-1.5 py-0.5 text-[9px] font-mono font-medium">
+                      <Link
+                        href={`/expediente/${c.expedienteId}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-sauce/10 text-verde-profundo border border-sauce/20 hover:bg-sauce/20 rounded-md px-1.5 py-0.5 text-[9px] font-mono font-medium transition cursor-pointer"
+                        title="Ver detalle del expediente"
+                      >
                         📁 {c.expedienteId}
-                      </span>
+                      </Link>
                     )}
                     {c.prospectoId && (
-                      <span className="bg-cielo/10 text-cielo border border-cielo/20 rounded-md px-1.5 py-0.5 text-[9px] font-mono font-medium">
+                      <Link
+                        href={`/prospectos/${c.prospectoId}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-cielo/10 text-cielo border border-cielo/20 hover:bg-cielo/20 rounded-md px-1.5 py-0.5 text-[9px] font-mono font-medium transition cursor-pointer"
+                        title="Ver detalle del prospecto"
+                      >
                         👤 {c.prospectoId}
-                      </span>
+                      </Link>
                     )}
                   </span>
 

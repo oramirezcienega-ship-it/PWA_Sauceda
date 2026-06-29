@@ -7,6 +7,7 @@ import type {
   Prospecto,
   EstatusProspecto,
   CalificacionProspecto,
+  TipoNegocioId,
 } from "@/lib/types";
 
 /** Arma el nombre completo a partir de nombre + apellidos. */
@@ -47,6 +48,7 @@ export interface FilaExpediente {
   direccion_propiedad?: string | null;
   link_google_maps?: string | null;
   necesidad?: string | null;
+  tipo_negocio?: TipoNegocioId | null;
   canal_id?: string | null;
   sin_pagos?: string | null;
   estado_fisico?: string | null;
@@ -88,6 +90,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     direccionPropiedad: fila.direccion_propiedad ?? "",
     linkGoogleMaps: fila.link_google_maps ?? "",
     necesidad: fila.necesidad ?? "",
+    tipoNegocio: fila.tipo_negocio ?? "traspaso_compra",
     canalId: fila.canal_id ?? "",
     sinPagos: fila.sin_pagos ?? "",
     estadoFisico: fila.estado_fisico ?? "",
@@ -119,6 +122,7 @@ export function aFila(datos: DatosExpediente) {
     direccion_propiedad: datos.direccionPropiedad ?? null,
     link_google_maps: datos.linkGoogleMaps ?? null,
     necesidad: datos.necesidad ?? null,
+    tipo_negocio: datos.tipoNegocio ?? "traspaso_compra",
     canal_id: datos.canalId ?? null,
     sin_pagos: datos.sinPagos ?? null,
     estado_fisico: datos.estadoFisico ?? null,

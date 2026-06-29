@@ -161,7 +161,72 @@ export async function obtenerConversacion(
     .limit(500);
   if (error) throw new Error(error.message);
   const filas = (data as FilaMsg[]) ?? [];
-  if (filas.length === 0) return null;
+  if (filas.length === 0) {
+    // Si no hay mensajes de WhatsApp en el historial, intentamos resolver el nombre
+    // buscando el número en expedientes o prospectos usando normalización de los últimos 10 dígitos.
+    const digitos = telefono.replace(/\D/g, "").slice(-10);
+    if (!digitos) return null;
+
+    const { data: exps } = await sb
+      .from("expedientes")
+      .select("id, cliente, primer_apellido, segundo_apellido, prospecto_id, telefono");
+    
+    const exp = (exps ?? []).find(
+      (e) => (e.telefono || "").replace(/\D/g, "").slice(-10) === digitos
+    );
+
+    let expId: string | null = null;
+    let prosId: string | null = null;
+    let nombreExpediente = "";
+    let nombreProspecto = "";
+
+    if (exp) {
+      expId = exp.id;
+      prosId = exp.prospecto_id;
+      nombreExpediente = nombreDe(exp as any);
+    }
+
+    if (!prosId) {
+      const { data: prosList } = await sb
+        .from("prospectos")
+        .select("id, nombre, primer_apellido, segundo_apellido, telefono");
+      const pros = (prosList ?? []).find(
+        (p) => (p.telefono || "").replace(/\D/g, "").slice(-10) === digitos
+      );
+      if (pros) {
+        prosId = pros.id;
+        nombreProspecto = [pros.nombre, pros.primer_apellido, pros.segundo_apellido]
+          .filter(Boolean)
+          .join(" ");
+      }
+    } else {
+      const { data: pros } = await sb
+        .from("prospectos")
+        .select("nombre, primer_apellido, segundo_apellido")
+        .eq("id", prosId)
+        .maybeSingle();
+      if (pros) {
+        nombreProspecto = [pros.nombre, pros.primer_apellido, pros.segundo_apellido]
+          .filter(Boolean)
+          .join(" ");
+      }
+    }
+
+    const nombreFinal = nombreExpediente || nombreProspecto || telefono;
+
+    return {
+      telefono,
+      expedienteId: expId,
+      prospectoId: prosId,
+      nombre: nombreFinal,
+      ventanaAbierta: false,
+      mensajes: [],
+      ultimoInboundFecha: null,
+      finalizado: false,
+      nombreProspecto: nombreProspecto || undefined,
+      nombreExpediente: nombreExpediente || undefined,
+    };
+  }
 
   const recientes = filas.slice().reverse();
   const expedienteId =
