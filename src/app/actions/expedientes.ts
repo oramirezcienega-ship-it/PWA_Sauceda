@@ -154,6 +154,10 @@ export async function actualizarExpediente(
     .maybeSingle();
 
   const nuevos = aFila(datos);
+  if (nuevos.etapa === "perdido") {
+    nuevos.asesor_id = null;
+    datos.asesorId = null;
+  }
   const { data, error } = await sb
     .from("expedientes")
     .update({ ...nuevos, ultimo_movimiento: hoyISO() })
@@ -222,13 +226,24 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     .eq("id", id)
     .maybeSingle();
 
+  const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
+  if (etapa === "perdido") {
+    updatePayload.asesor_id = null;
+  }
+
   const { error } = await sb
     .from("expedientes")
-    .update({ etapa, ultimo_movimiento: hoyISO() })
+    .update(updatePayload)
     .eq("id", id);
   if (error) throw new Error(error.message);
 
   if (exp?.prospecto_id) {
+    if (etapa === "perdido") {
+      await sb
+        .from("prospectos")
+        .update({ asesor_id: null })
+        .eq("id", exp.prospecto_id);
+    }
     const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
     await sincronizarEstatusProspecto(sb, exp.prospecto_id);
   }
@@ -260,11 +275,26 @@ export async function moverEtapaMasivo(
     .select("prospecto_id")
     .in("id", ids);
 
+  const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
+  if (etapa === "perdido") {
+    updatePayload.asesor_id = null;
+  }
+
   const { error } = await sb
     .from("expedientes")
-    .update({ etapa, ultimo_movimiento: hoyISO() })
+    .update(updatePayload)
     .in("id", ids);
   if (error) throw new Error(error.message);
+
+  if (etapa === "perdido" && exps && exps.length > 0) {
+    const propIds = Array.from(new Set(exps.map((e) => e.prospecto_id).filter(Boolean))) as string[];
+    if (propIds.length > 0) {
+      await sb
+        .from("prospectos")
+        .update({ asesor_id: null })
+        .in("id", propIds);
+    }
+  }
 
   // Bitácora + automatizaciones por cada expediente afectado (best-effort).
   for (const id of ids) {
