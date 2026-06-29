@@ -186,6 +186,38 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
     }
   }
 
+  // 4b. Agregar prospectos asignados directamente por la columna de asesor_id
+  const { data: directProspectos } = await sb
+    .from("prospectos")
+    .select("id, nombre, primer_apellido, segundo_apellido, telefono, created_at")
+    .eq("asesor_id", usuario.id);
+  
+  if (directProspectos) {
+    directProspectos.forEach((p) => {
+      if (!prospectosMap.has(p.id)) {
+        const nombreCompleto = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
+        prospectosMap.set(p.id, {
+          id: p.id,
+          nombre: nombreCompleto || "Sin nombre",
+          telefono: p.telefono || "",
+          fechaAsignacion: p.created_at || new Date().toISOString()
+        });
+      }
+    });
+  }
+
+  // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
+  const { data: directExpedientes } = await sb
+    .from("expedientes")
+    .select("id")
+    .eq("asesor_id", usuario.id);
+
+  if (directExpedientes) {
+    directExpedientes.forEach((e) => {
+      expedienteIds.add(e.id);
+    });
+  }
+
   const prospectoIds = Array.from(new Set([...Array.from(prospectosMap.keys()), ...extraProspectoIds]));
 
   // 5. Consultar la información real de los prospectos (estatus y calificación)

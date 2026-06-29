@@ -1,7 +1,7 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
@@ -38,14 +38,22 @@ function siguienteId(ids: string[]): string {
   return `EXP-${String(max + 1).padStart(3, "0")}`;
 }
 
-/** Lista todos los expedientes (panel del admin). */
+/** Lista todos los expedientes (panel del admin, filtrado si es asesor). */
 export async function listarExpedientes(): Promise<Expediente[]> {
-  await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
+
   const sb = supabaseServidor();
-  const { data, error } = await sb
+  let query = sb
     .from("expedientes")
-    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
-    .order("id", { ascending: true });
+    .select("*, prospectos(origen), perfiles:asesor_id(nombre)");
+
+  if (rol === "asesor" || rol === "operaciones") {
+    query = query.eq("asesor_id", usuario.id);
+  }
+
+  const { data, error } = await query.order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as FilaExpediente[]).map(aExpediente);
 }

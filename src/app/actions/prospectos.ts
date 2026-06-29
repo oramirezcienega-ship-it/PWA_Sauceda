@@ -1,7 +1,7 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import {
   aExpediente,
   aProspecto,
@@ -33,14 +33,22 @@ function siguienteId(ids: string[]): string {
   return `PRO-${String(max + 1).padStart(3, "0")}`;
 }
 
-/** Lista todos los prospectos. */
+/** Lista todos los prospectos (filtrado si es asesor). */
 export async function listarProspectos(): Promise<Prospecto[]> {
-  await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
+
   const sb = supabaseServidor();
-  const { data, error } = await sb
+  let query = sb
     .from("prospectos")
-    .select("*, perfiles:asesor_id(nombre)")
-    .order("id", { ascending: true });
+    .select("*, perfiles:asesor_id(nombre)");
+
+  if (rol === "asesor" || rol === "operaciones") {
+    query = query.eq("asesor_id", usuario.id);
+  }
+
+  const { data, error } = await query.order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as FilaProspecto[]).map(aProspecto);
 }
