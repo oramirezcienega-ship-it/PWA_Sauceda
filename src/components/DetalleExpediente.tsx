@@ -64,12 +64,6 @@ export function DetalleExpediente({ id }: { id: string }) {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1 text-sm text-sauce hover:text-verde-profundo"
-      >
-        ← Volver al tablero
-      </Link>
 
       {/* Volver al tablero & Acciones principales */}
       <div className="flex items-center justify-between gap-4 border-b border-carbon/5 pb-2.5">
@@ -137,15 +131,15 @@ export function DetalleExpediente({ id }: { id: string }) {
           {expediente.fraccionamiento} · León, Gto.
         </p>
 
-        {/* Estatus y Asesor alineados en una sola fila */}
-        <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase font-bold text-carbon/35">Etapa:</span>
+        {/* Estatus y Asesor responsivos */}
+        <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-2.5 border-t border-carbon/5 mt-2">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[10px] uppercase font-bold text-carbon/40">Etapa:</span>
             <EtapaBadge etapa={expediente.etapa} />
           </div>
           
           <div className="flex items-center gap-1.5 text-xs text-carbon/70">
-            <span className="text-[10px] uppercase font-bold text-carbon/35">Atiende:</span>
+            <span className="text-[10px] uppercase font-bold text-carbon/40">Atiende:</span>
             <AsesorSelector
               entidadId={expediente.id}
               tipoEntidad="expediente"
