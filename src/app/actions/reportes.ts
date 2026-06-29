@@ -209,16 +209,26 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
   const { data: directExpedientes } = await sb
     .from("expedientes")
-    .select("id")
+    .select("id, prospecto_id")
     .eq("asesor_id", usuario.id);
 
+  const directProspectoIdsFromExp: string[] = [];
   if (directExpedientes) {
     directExpedientes.forEach((e) => {
       expedienteIds.add(e.id);
+      if (e.prospecto_id) {
+        directProspectoIdsFromExp.push(e.prospecto_id);
+      }
     });
   }
 
-  const prospectoIds = Array.from(new Set([...Array.from(prospectosMap.keys()), ...extraProspectoIds]));
+  const prospectoIds = Array.from(
+    new Set([
+      ...Array.from(prospectosMap.keys()),
+      ...extraProspectoIds,
+      ...directProspectoIdsFromExp,
+    ])
+  );
 
   // 5. Consultar la información real de los prospectos (estatus y calificación)
   let leadsAsignados: ResumenAsesor["leadsAsignados"] = [];
