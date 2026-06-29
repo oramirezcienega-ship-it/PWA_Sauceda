@@ -55,6 +55,12 @@ export function DetalleExpediente({ id }: { id: string }) {
   const anterior = etapaAnterior(expediente.etapa);
   const siguiente = etapaSiguiente(expediente.etapa);
 
+  const etapasLista = Object.values(ETAPAS_POR_ID);
+  const totalEtapas = etapasLista.length;
+  const etapaActualIndex = etapasLista.findIndex(e => e.id === expediente.etapa);
+  const etapaNumero = etapaActualIndex !== -1 ? etapaActualIndex + 1 : 1;
+  const porcentajeAvance = Math.round((etapaNumero / totalEtapas) * 100);
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       <Link
@@ -64,16 +70,70 @@ export function DetalleExpediente({ id }: { id: string }) {
         ← Volver al tablero
       </Link>
 
-      {/* Cabecera */}
-      <div className="mt-4 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
-            {expediente.nombreCompleto}
-          </h1>
-          <p className="mt-1 text-sm text-carbon/60">
-            {expediente.fraccionamiento} · León, Gto.
-          </p>
-          <div className="mt-2">
+      {/* Cabecera Optimizado para Móvil */}
+      <div className="mt-3 space-y-2">
+        {/* Fila 1: Título, ID y Acciones */}
+        <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div>
+            <h1 className="font-titular text-xl sm:text-3xl font-bold text-verde-profundo leading-tight">
+              {expediente.nombreCompleto}
+            </h1>
+            <p className="text-xs text-carbon/45 mt-0.5">
+              {expediente.fraccionamiento} · León, Gto.
+            </p>
+          </div>
+          
+          <div className="flex flex-col items-end gap-1.5 shrink-0 ml-auto">
+            <span className="font-mono text-[10px] sm:text-xs text-carbon/40">
+              {expediente.id}
+            </span>
+            
+            {/* Acciones del expediente: editar / eliminar compactos */}
+            <div className="flex items-center gap-1.5">
+              <Link
+                href={`/expediente/${expediente.id}/editar`}
+                className="rounded-lg border border-carbon/15 bg-white px-2 py-1 text-[11px] font-bold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+              >
+                Editar
+              </Link>
+              {!confirmarBorrado ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmarBorrado(true)}
+                  className="rounded-lg border border-rojo/30 bg-white px-2 py-1 text-[11px] font-bold text-rojo hover:bg-rojo/5 transition"
+                >
+                  Eliminar
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-rojo/20 bg-rojo/5 p-1 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await eliminarExpediente(expediente.id);
+                      router.push("/");
+                    }}
+                    className="rounded bg-rojo px-1.5 py-0.5 font-bold text-crema"
+                  >
+                    Sí
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmarBorrado(false)}
+                    className="text-carbon/60 hover:text-carbon font-bold"
+                  >
+                    No
+                  </button>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Fila 2: Estatus y Asesor */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-carbon/5">
+          <EtapaBadge etapa={expediente.etapa} />
+          
+          <div className="text-xs">
             <AsesorSelector
               entidadId={expediente.id}
               tipoEntidad="expediente"
@@ -83,86 +143,84 @@ export function DetalleExpediente({ id }: { id: string }) {
             />
           </div>
         </div>
-        <span className="shrink-0 font-mono text-xs text-carbon/40">
-          {expediente.id}
-        </span>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <EtapaBadge etapa={expediente.etapa} />
-
-        {/* Acciones del expediente: editar / eliminar */}
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/expediente/${expediente.id}/editar`}
-            className="rounded-md border border-carbon/15 bg-white px-3 py-1.5 text-xs text-carbon/70 transition hover:border-sauce hover:text-sauce"
-          >
-            Editar
-          </Link>
-          {!confirmarBorrado ? (
-            <button
-              type="button"
-              onClick={() => setConfirmarBorrado(true)}
-              className="rounded-md border border-rojo/30 bg-white px-3 py-1.5 text-xs text-rojo transition hover:bg-rojo/10"
-            >
-              Eliminar
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-2 rounded-md border border-rojo/30 bg-rojo/5 px-2 py-1 text-xs">
-              <span className="text-carbon/70">¿Eliminar?</span>
-              <button
-                type="button"
-                onClick={async () => {
-                  await eliminarExpediente(expediente.id);
-                  router.push("/");
-                }}
-                className="rounded bg-rojo px-2 py-1 font-medium text-crema hover:opacity-90"
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmarBorrado(false)}
-                className="rounded px-2 py-1 text-carbon/60 hover:text-carbon"
-              >
-                No
-              </button>
-            </span>
-          )}
-        </div>
       </div>
 
       {/* Columna única centrada para un diseño premium y ordenado */}
       <div className="mt-6 space-y-6">
           {/* Avance por etapas */}
           <div className="rounded-xl border border-carbon/10 bg-white p-4">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-carbon/50">
+            <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
               Avance del traspaso
             </p>
-            <AvanceTraspaso etapa={expediente.etapa} />
 
-            {/* Mover de etapa */}
-            <div className="mt-4 flex gap-3 border-t border-carbon/5 pt-4">
-              <button
-                type="button"
-                disabled={!anterior}
-                onClick={() =>
-                  anterior && moverEtapa(expediente.id, anterior.id)
-                }
-                className="flex-1 rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon/70 transition enabled:hover:border-sauce enabled:hover:text-sauce disabled:opacity-30"
-              >
-                ← {anterior?.nombre ?? "Primera"}
-              </button>
-              <button
-                type="button"
-                disabled={!siguiente}
-                onClick={() =>
-                  siguiente && moverEtapa(expediente.id, siguiente.id)
-                }
-                className="flex-1 rounded-md bg-sauce px-3 py-2 text-sm text-crema transition enabled:hover:bg-verde-profundo disabled:opacity-30"
-              >
-                {siguiente?.nombre ?? "Última"} →
-              </button>
+            {/* Vista Desktop (Completa) */}
+            <div className="hidden md:block">
+              <AvanceTraspaso etapa={expediente.etapa} />
+              
+              {/* Mover de etapa Desktop */}
+              <div className="mt-4 flex gap-3 border-t border-carbon/5 pt-4">
+                <button
+                  type="button"
+                  disabled={!anterior}
+                  onClick={() => anterior && moverEtapa(expediente.id, anterior.id)}
+                  className="flex-1 rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon/70 transition enabled:hover:border-sauce enabled:hover:text-sauce disabled:opacity-30"
+                >
+                  ← {anterior?.nombre ?? "Primera"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!siguiente}
+                  onClick={() => siguiente && moverEtapa(expediente.id, siguiente.id)}
+                  className="flex-1 rounded-md bg-sauce px-3 py-2 text-sm text-crema transition enabled:hover:bg-verde-profundo disabled:opacity-30"
+                >
+                  {siguiente?.nombre ?? "Última"} →
+                </button>
+              </div>
+            </div>
+
+            {/* Vista Móvil (Súper Compacta con Barra de Progreso y KPI) */}
+            <div className="block md:hidden space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[10px] text-carbon/40 font-bold uppercase block">
+                    Etapa {etapaNumero} de {totalEtapas}
+                  </span>
+                  <span className="text-sm font-bold text-verde-profundo mt-0.5 block">
+                    {etapasLista[etapaActualIndex]?.nombre || expediente.etapa}
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold text-sauce bg-sauce/10 px-2 py-0.5 rounded-full">
+                  {porcentajeAvance}%
+                </span>
+              </div>
+
+              {/* Barra de progreso visual */}
+              <div className="w-full bg-carbon/5 rounded-full h-2">
+                <div
+                  className="bg-sauce h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${porcentajeAvance}%` }}
+                ></div>
+              </div>
+
+              {/* Botones de navegación móviles compactos */}
+              <div className="flex gap-2 pt-2 border-t border-carbon/5">
+                <button
+                  type="button"
+                  disabled={!anterior}
+                  onClick={() => anterior && moverEtapa(expediente.id, anterior.id)}
+                  className="flex-1 rounded-lg border border-carbon/15 bg-white py-1 px-2 text-xs font-bold text-carbon/70 transition disabled:opacity-30"
+                >
+                  ← {anterior ? "Anterior" : "Inicio"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!siguiente}
+                  onClick={() => siguiente && moverEtapa(expediente.id, siguiente.id)}
+                  className="flex-1 rounded-lg bg-sauce py-1 px-2 text-xs font-bold text-crema transition disabled:opacity-30"
+                >
+                  {siguiente ? "Siguiente" : "Fin"} →
+                </button>
+              </div>
             </div>
           </div>
 
@@ -170,24 +228,27 @@ export function DetalleExpediente({ id }: { id: string }) {
           {expediente.prospectoId && (
             <Link
               href={`/prospectos/${expediente.prospectoId}`}
-              className="flex items-center justify-between gap-3 rounded-xl border border-carbon/10 bg-white p-3 transition hover:border-sauce"
+              className="flex items-center justify-between gap-2 rounded-xl border border-carbon/10 bg-white px-3.5 py-2.5 transition hover:border-sauce shadow-sm"
             >
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-carbon/50">
-                  Prospecto
-                </p>
-                <p className="mt-0.5 font-mono text-sm text-verde-profundo">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-carbon/40">
+                  Prospecto:
+                </span>
+                <span className="font-mono text-xs font-bold text-verde-profundo">
                   {expediente.prospectoId}
-                </p>
+                </span>
               </div>
-              <span className="text-sm text-sauce">Ver ficha →</span>
+              <span className="text-xs font-bold text-sauce flex items-center gap-0.5">
+                Ver ficha →
+              </span>
             </Link>
           )}
           {/* Ficha Premium de Información de la Propiedad (Estilo Expediente/Lead) */}
-          <div className="rounded-2xl border border-carbon/10 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm">
             {/* Header de la Ficha */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3">
+              {/* Desktop Header */}
+              <div className="hidden sm:flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-verde-profundo/10 font-titular text-lg font-bold text-verde-profundo">
                   {expediente.cliente ? expediente.cliente.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() : "EX"}
                 </div>
@@ -200,7 +261,15 @@ export function DetalleExpediente({ id }: { id: string }) {
                   </p>
                 </div>
               </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+
+              {/* Mobile Header (Súper Compacto, evita duplicidad de nombre) */}
+              <div className="block sm:hidden">
+                <h3 className="font-titular text-sm font-bold uppercase tracking-wider text-verde-profundo">
+                  Negociación y Ficha
+                </h3>
+              </div>
+
+              <span className={`rounded-full px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold ${
                 expediente.etapa === "nuevo-lead" ? "bg-emerald-50 text-emerald-700" :
                 expediente.etapa === "perdido" ? "bg-rojo/10 text-rojo" :
                 "bg-sauce/10 text-sauce"
