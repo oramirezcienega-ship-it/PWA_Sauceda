@@ -190,6 +190,16 @@ export async function actualizarUsuario(
   if (error) throw new Error(error.message);
 }
 
+/** Restablece la contraseña de un usuario usando el cliente admin de Supabase. */
+export async function actualizarPasswordUsuario(id: string, nuevoPassword: string): Promise<void> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+  const { error } = await sb.auth.admin.updateUserById(id, {
+    password: nuevoPassword,
+  });
+  if (error) throw new Error(error.message);
+}
+
 /** Elimina un usuario (auth + perfil en cascada). */
 export async function eliminarUsuario(id: string): Promise<void> {
   await requireAdministrador();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { actualizarUsuario, eliminarUsuario } from "@/app/actions/usuarios";
+import { actualizarUsuario, eliminarUsuario, actualizarPasswordUsuario } from "@/app/actions/usuarios";
 import type { UsuarioApp } from "@/app/actions/usuarios";
 import { CalendarioGuardias } from "./CalendarioGuardias";
 
@@ -23,6 +23,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
   const [telefono, setTelefono] = useState(u.telefono);
   const [rol, setRol] = useState(u.rol);
   const [activo, setActivo] = useState(u.activo);
+  const [password, setPassword] = useState("");
 
   // Sincronizar el estado local cuando cambien los datos del prop (ej. desde el modal)
   useEffect(() => {
@@ -34,8 +35,16 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
 
   async function handleGuardar() {
     if (!nombre.trim()) return;
+    if (password.trim() !== "" && password.trim().length < 6) {
+      alert("La nueva contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
     setGuardando(true);
     try {
+      if (password.trim() !== "") {
+        await actualizarPasswordUsuario(u.id, password.trim());
+        setPassword("");
+      }
       await onUpdate(u.id, {
         nombre: nombre.trim(),
         telefono: telefono.trim(),
@@ -45,6 +54,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
       setEditando(false);
     } catch (err) {
       console.error("Error al actualizar usuario:", err);
+      alert(err instanceof Error ? err.message : "No se pudo actualizar el usuario.");
     } finally {
       setGuardando(false);
     }
@@ -55,6 +65,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
     setTelefono(u.telefono);
     setRol(u.rol);
     setActivo(u.activo);
+    setPassword("");
     setEditando(false);
   }
 
@@ -77,7 +88,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
         </div>
 
         {/* Campos de Formulario Distribuidos */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end flex-grow">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end flex-grow">
           <div>
             <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
               Nombre Completo
@@ -149,6 +160,19 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
             >
               {activo ? "🟢 Activo" : "⚪ Inactivo"}
             </button>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40" title="Dejar en blanco para conservar la contraseña actual">
+              Restablecer Contraseña
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Nueva contraseña"
+              className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-xs text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20"
+            />
           </div>
         </div>
 
