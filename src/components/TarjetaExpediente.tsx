@@ -1,7 +1,6 @@
 import Link from "next/link";
-import type { Expediente } from "@/lib/types";
+import { type Expediente, labelTipoNegocio } from "@/lib/types";
 import { formatoPesos } from "@/lib/formato";
-import { labelTipoNegocio } from "./TablaExpedientes";
 
 /**
  * Tarjeta resumen de un expediente dentro del tablero.

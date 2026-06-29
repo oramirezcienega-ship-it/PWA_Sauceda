@@ -5,27 +5,10 @@ import Link from "next/link";
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
-import type { EtapaId, Expediente } from "@/lib/types";
+import { type EtapaId, type Expediente, labelTipoNegocio } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
-
-export function labelTipoNegocio(tipo: string): string {
-  switch (tipo) {
-    case "traspaso_compra":
-      return "Traspaso / Compra";
-    case "promocion_venta":
-      return "Promoción Venta";
-    case "solo_tramite":
-      return "Solo Trámite";
-    case "construccion":
-      return "Sauceda Construye";
-    case "otro":
-      return "Otro";
-    default:
-      return tipo || "—";
-  }
-}
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {

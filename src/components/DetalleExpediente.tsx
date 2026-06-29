@@ -11,7 +11,7 @@ import { Actividades } from "./Actividades";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
-import { labelTipoNegocio } from "./TablaExpedientes";
+import { labelTipoNegocio } from "@/lib/types";
 
 /**
  * Vista de detalle de un expediente.

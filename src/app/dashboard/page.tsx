@@ -4,7 +4,7 @@ import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { formatoPesos } from "@/lib/formato";
 import Link from "next/link";
 import { BotonLlamar } from "@/components/BotonLlamar";
-import { labelTipoNegocio } from "@/components/TablaExpedientes";
+import { labelTipoNegocio } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 

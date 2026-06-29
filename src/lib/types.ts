@@ -35,6 +35,23 @@ export type TipoNegocioId =
   | "construccion"
   | "otro";
 
+export function labelTipoNegocio(tipo: string): string {
+  switch (tipo) {
+    case "traspaso_compra":
+      return "Traspaso / Compra";
+    case "promocion_venta":
+      return "Promoción Venta";
+    case "solo_tramite":
+      return "Solo Trámite";
+    case "construccion":
+      return "Sauceda Construye";
+    case "otro":
+      return "Otro";
+    default:
+      return tipo || "—";
+  }
+}
+
 /**
  * Expediente de un traspaso INFONAVIT.
  * Representa el caso de un cliente a lo largo del flujo de operación.
