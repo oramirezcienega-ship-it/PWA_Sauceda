@@ -413,6 +413,7 @@ export interface ConversacionDetalle {
   finalizado: boolean;
   nombreProspecto?: string;
   nombreExpediente?: string;
+  atiende?: string;
 }
 
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */

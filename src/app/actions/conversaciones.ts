@@ -92,14 +92,18 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
     new Set(filas.map((f) => f.expediente_id).filter(Boolean) as string[]),
   );
   const nombres = new Map<string, string>();
+  const nombresAsesor = new Map<string, string>();
   if (expIds.length > 0) {
     const { data: exps } = await sb
       .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido")
+      .select("id, cliente, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
       .in("id", expIds);
-    (exps ?? []).forEach((e: Record<string, unknown>) =>
-      nombres.set(e.id as string, nombreDe(e)),
-    );
+    (exps ?? []).forEach((e: any) => {
+      nombres.set(e.id as string, nombreDe(e));
+      if (e.perfiles?.nombre) {
+        nombresAsesor.set(e.id as string, e.perfiles.nombre);
+      }
+    });
   }
 
   // Resuelve nombres desde los prospectos enlazados (una sola consulta).
@@ -107,16 +111,20 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
     new Set(filas.map((f) => f.prospecto_id).filter(Boolean) as string[]),
   );
   const nombresPros = new Map<string, string>();
+  const nombresAsesorPros = new Map<string, string>();
   if (prosIds.length > 0) {
     const { data: pros } = await sb
       .from("prospectos")
-      .select("id, nombre, primer_apellido, segundo_apellido")
+      .select("id, nombre, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
       .in("id", prosIds);
-    (pros ?? []).forEach((p: Record<string, unknown>) => {
+    (pros ?? []).forEach((p: any) => {
       const nom = [p.nombre, p.primer_apellido, p.segundo_apellido]
         .filter(Boolean)
         .join(" ");
       nombresPros.set(p.id as string, nom);
+      if (p.perfiles?.nombre) {
+        nombresAsesorPros.set(p.id as string, p.perfiles.nombre);
+      }
     });
   }
 
@@ -126,6 +134,12 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
     // Quién atiende = el último mensaje que tenga agente (de cualquier dirección)
     const ultimoConAgente = arr.find((f) => f.agente);
     const ultimoInbound = arr.find((f) => f.direccion === "in");
+
+    const asesorNombre =
+      (ultimo.expediente_id && nombresAsesor.get(ultimo.expediente_id)) ||
+      (ultimo.prospecto_id && nombresAsesorPros.get(ultimo.prospecto_id));
+
+    const atiendeFinal = asesorNombre || ultimoConAgente?.agente || "";
 
     resumenes.push({
       telefono,
@@ -140,7 +154,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       ventanaAbierta: ventanaAbierta(arr),
       ultimoInboundFecha: ultimoInbound?.created_at ?? null,
       finalizado: ultimo.finalizado ?? false,
-      atiende: ultimoConAgente?.agente ?? "",
+      atiende: atiendeFinal,
     });
   });
   resumenes.sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha));
@@ -169,7 +183,7 @@ export async function obtenerConversacion(
 
     const { data: exps } = await sb
       .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, prospecto_id, telefono");
+      .select("id, cliente, primer_apellido, segundo_apellido, prospecto_id, telefono, perfiles:asesor_id(nombre)");
     
     const exp = (exps ?? []).find(
       (e) => (e.telefono || "").replace(/\D/g, "").slice(-10) === digitos
@@ -179,17 +193,21 @@ export async function obtenerConversacion(
     let prosId: string | null = null;
     let nombreExpediente = "";
     let nombreProspecto = "";
+    let asesorNombreMock = "";
 
     if (exp) {
       expId = exp.id;
       prosId = exp.prospecto_id;
       nombreExpediente = nombreDe(exp as any);
+      if ((exp as any).perfiles?.nombre) {
+        asesorNombreMock = (exp as any).perfiles.nombre;
+      }
     }
 
     if (!prosId) {
       const { data: prosList } = await sb
         .from("prospectos")
-        .select("id, nombre, primer_apellido, segundo_apellido, telefono");
+        .select("id, nombre, primer_apellido, segundo_apellido, telefono, perfiles:asesor_id(nombre)");
       const pros = (prosList ?? []).find(
         (p) => (p.telefono || "").replace(/\D/g, "").slice(-10) === digitos
       );
@@ -198,17 +216,23 @@ export async function obtenerConversacion(
         nombreProspecto = [pros.nombre, pros.primer_apellido, pros.segundo_apellido]
           .filter(Boolean)
           .join(" ");
+        if (!asesorNombreMock && (pros as any).perfiles?.nombre) {
+          asesorNombreMock = (pros as any).perfiles.nombre;
+        }
       }
     } else {
       const { data: pros } = await sb
         .from("prospectos")
-        .select("nombre, primer_apellido, segundo_apellido")
+        .select("nombre, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
         .eq("id", prosId)
         .maybeSingle();
       if (pros) {
         nombreProspecto = [pros.nombre, pros.primer_apellido, pros.segundo_apellido]
           .filter(Boolean)
           .join(" ");
+        if (!asesorNombreMock && (pros as any).perfiles?.nombre) {
+          asesorNombreMock = (pros as any).perfiles.nombre;
+        }
       }
     }
 
@@ -225,6 +249,7 @@ export async function obtenerConversacion(
       finalizado: false,
       nombreProspecto: nombreProspecto || undefined,
       nombreExpediente: nombreExpediente || undefined,
+      atiende: asesorNombreMock || "",
     };
   }
 
@@ -238,31 +263,43 @@ export async function obtenerConversacion(
   let nombreExpediente = "";
   let nombreProspecto = "";
 
+  let asesorNombre = "";
+
   if (expedienteId) {
     const { data: e } = await sb
       .from("expedientes")
-      .select("cliente, primer_apellido, segundo_apellido")
+      .select("cliente, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
       .eq("id", expedienteId)
       .maybeSingle();
-    if (e) nombreExpediente = nombreDe(e as Record<string, string>);
+    if (e) {
+      nombreExpediente = nombreDe(e as any);
+      if ((e as any).perfiles?.nombre) {
+        asesorNombre = (e as any).perfiles.nombre;
+      }
+    }
   }
 
   if (prospectoId) {
     const { data: p } = await sb
       .from("prospectos")
-      .select("nombre, primer_apellido, segundo_apellido")
+      .select("nombre, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
       .eq("id", prospectoId)
       .maybeSingle();
     if (p) {
       nombreProspecto = [p.nombre, p.primer_apellido, p.segundo_apellido]
         .filter(Boolean)
         .join(" ");
+      if (!asesorNombre && (p as any).perfiles?.nombre) {
+        asesorNombre = (p as any).perfiles.nombre;
+      }
     }
   }
 
   nombre = nombreExpediente || nombreProspecto || telefono;
   const ultimoInbound = recientes.find((f) => f.direccion === "in");
   const ultimo = recientes[0];
+  const ultimoConAgente = recientes.find((f) => f.agente);
+  const atiendeFinal = asesorNombre || ultimoConAgente?.agente || "";
 
   const mensajes: MensajeChat[] = filas.map((f) => ({
     id: f.id,
@@ -284,6 +321,7 @@ export async function obtenerConversacion(
     finalizado: ultimo?.finalizado ?? false,
     nombreExpediente: nombreExpediente || undefined,
     nombreProspecto: nombreProspecto || undefined,
+    atiende: atiendeFinal,
   };
 }
 

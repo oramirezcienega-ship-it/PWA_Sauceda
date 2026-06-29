@@ -12,6 +12,7 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
 import { labelTipoNegocio } from "@/lib/types";
+import { ConversacionHistorica } from "./ConversacionHistorica";
 
 /**
  * Vista de detalle de un expediente.
@@ -395,6 +396,11 @@ export function DetalleExpediente({ id }: { id: string }) {
 
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
+
+          {/* Historial de conversaciones de WhatsApp */}
+          {expediente.telefono && (
+            <ConversacionHistorica telefono={expediente.telefono} />
+          )}
 
           {/* Bitácora de actividades */}
           <Actividades expedienteId={expediente.id} />

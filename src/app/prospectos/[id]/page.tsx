@@ -10,6 +10,7 @@ import { EstatusProspectoBadge } from "@/components/EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
 import { AsesorSelector } from "@/components/AsesorSelector";
 import { BotonLlamar } from "@/components/BotonLlamar";
+import { ConversacionHistorica } from "@/components/ConversacionHistorica";
 
 export const dynamic = "force-dynamic";
 
@@ -176,6 +177,11 @@ export default async function PaginaProspecto({
             </Link>
           ))}
         </div>
+
+        {/* Historial de conversaciones de WhatsApp */}
+        {prospecto.telefono && (
+          <ConversacionHistorica telefono={prospecto.telefono} />
+        )}
 
         {/* Bitácora de actividades del prospecto */}
         <Actividades prospectoId={prospecto.id} />

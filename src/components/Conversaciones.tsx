@@ -567,7 +567,7 @@ export function Conversaciones() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] text-carbon/60 font-bold uppercase tracking-wider">Atiende:</span>
                       <select
-                        value={detalle.mensajes.slice().reverse().find((m) => m.agente)?.agente ?? ""}
+                        value={detalle.atiende ?? ""}
                         onChange={async (e) => {
                           const nuevoAgente = e.target.value;
                           setAsignando(true);
@@ -592,7 +592,7 @@ export function Conversaciones() {
                       </select>
                     </div>
 
-                    {usuario && (detalle.mensajes.slice().reverse().find((m) => m.agente)?.agente !== usuario.nombre) && (
+                    {usuario && (detalle.atiende !== usuario.nombre) && (
                       <button
                         type="button"
                         onClick={async () => {
