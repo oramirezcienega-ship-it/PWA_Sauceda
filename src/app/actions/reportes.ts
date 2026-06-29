@@ -209,7 +209,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
   const { data: directExpedientes } = await sb
     .from("expedientes")
-    .select("id, prospecto_id")
+    .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, created_at")
     .eq("asesor_id", usuario.id);
 
   const directProspectoIdsFromExp: string[] = [];
@@ -232,6 +232,8 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
 
   // 5. Consultar la información real de los prospectos (estatus y calificación)
   let leadsAsignados: ResumenAsesor["leadsAsignados"] = [];
+  const processedProspectoIds = new Set<string>();
+
   if (prospectoIds.length > 0) {
     const { data: propsData, error: eProps } = await sb
       .from("prospectos")
@@ -240,6 +242,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
 
     if (!eProps && propsData) {
       leadsAsignados = propsData.map((p) => {
+        processedProspectoIds.add(p.id);
         const mappedName = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
         const originalInfo = prospectosMap.get(p.id);
         return {
@@ -252,6 +255,23 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
         };
       });
     }
+  }
+
+  // 5b. Agregar expedientes asignados que no tienen un prospecto enlazado o cuyo prospecto no existe en la BD
+  if (directExpedientes) {
+    directExpedientes.forEach((e) => {
+      if (!e.prospecto_id || !processedProspectoIds.has(e.prospecto_id)) {
+        const nombreCompleto = [e.cliente, e.primer_apellido, e.segundo_apellido].filter(Boolean).join(" ");
+        leadsAsignados.push({
+          id: `exp-${e.id}`, // Prefijo para no colisionar con IDs de prospecto
+          nombre: nombreCompleto || "Cliente sin nombre",
+          telefono: "",
+          estatus: "expediente_abierto",
+          calificacion: "caliente",
+          fechaAsignacion: e.created_at || new Date().toISOString()
+        });
+      }
+    });
   }
 
   // 6. Consultar los expedientes asociados a las tareas para ver cuántos están cerrados (conversión)
