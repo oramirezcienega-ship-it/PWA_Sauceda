@@ -76,9 +76,9 @@ export default async function PaginaDashboard() {
             />
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="mt-8 space-y-6">
             {/* Sección de Leads Asignados */}
-            <div className="lg:col-span-2 rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
+            <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-titular text-lg font-semibold text-verde-profundo">
                   Mis Leads Asignados ({r.totalLeads})
@@ -212,7 +212,7 @@ export default async function PaginaDashboard() {
                   <p className="text-sm text-carbon/40">No tienes llamadas o tareas agendadas.</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1 scrollbar-sutil">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1 scrollbar-sutil">
                   {r.tareasPendientesLista.map((t) => (
                     <div key={t.id} className="rounded-lg border border-carbon/5 bg-carbon/[0.01] p-3 hover:border-sauce/30 transition">
                       <div className="flex items-start justify-between gap-2">
