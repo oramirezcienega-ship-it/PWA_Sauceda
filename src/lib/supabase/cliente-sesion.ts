@@ -62,7 +62,7 @@ export async function requireAdmin() {
  */
 export async function rolDe(
   userId: string,
-): Promise<{ rol: "admin" | "asesor"; activo: boolean }> {
+): Promise<{ rol: "admin" | "asesor" | "operaciones"; activo: boolean }> {
   try {
     const sb = supabaseServidor();
     const { data } = await sb
@@ -72,7 +72,7 @@ export async function rolDe(
       .maybeSingle();
     if (!data) return { rol: "admin", activo: true };
     return {
-      rol: (data as { rol: "admin" | "asesor" }).rol,
+      rol: (data as { rol: "admin" | "asesor" | "operaciones" }).rol,
       activo: (data as { activo: boolean }).activo,
     };
   } catch {

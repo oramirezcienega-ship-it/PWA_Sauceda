@@ -17,7 +17,7 @@ export interface UsuarioApp {
   id: string;
   email: string;
   nombre: string;
-  rol: "admin" | "asesor";
+  rol: "admin" | "asesor" | "operaciones";
   activo: boolean;
   telefono: string;
   telefono_desvio?: string;
@@ -28,7 +28,7 @@ export interface UsuarioApp {
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
-export async function rolUsuarioActual(): Promise<"admin" | "asesor" | null> {
+export async function rolUsuarioActual(): Promise<"admin" | "asesor" | "operaciones" | null> {
   try {
     const u = await usuarioActual();
     if (!u) return null;
@@ -40,7 +40,7 @@ export async function rolUsuarioActual(): Promise<"admin" | "asesor" | null> {
 }
 
 /** Perfil completo del usuario actual (para la UI). */
-export async function obtenerUsuarioActual(): Promise<{ id: string; email: string; nombre: string; rol: "admin" | "asesor" } | null> {
+export async function obtenerUsuarioActual(): Promise<{ id: string; email: string; nombre: string; rol: "admin" | "asesor" | "operaciones" } | null> {
   try {
     const u = await usuarioActual();
     if (!u) return null;
@@ -75,7 +75,7 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
       p.id as string,
       p as {
         nombre: string;
-        rol: "admin" | "asesor";
+        rol: "admin" | "asesor" | "operaciones";
         activo: boolean;
         telefono?: string;
         telefono_desvio?: string;
@@ -117,7 +117,7 @@ export async function crearUsuario(datos: {
   email: string;
   password: string;
   nombre: string;
-  rol: "admin" | "asesor";
+  rol: "admin" | "asesor" | "operaciones";
   telefono: string;
 }): Promise<{ ok: boolean; mensaje?: string }> {
   await requireAdministrador();
@@ -149,7 +149,7 @@ export async function actualizarUsuario(
   id: string,
   datos: {
     nombre: string;
-    rol: "admin" | "asesor";
+    rol: "admin" | "asesor" | "operaciones";
     activo: boolean;
     telefono: string;
     telefono_desvio?: string;

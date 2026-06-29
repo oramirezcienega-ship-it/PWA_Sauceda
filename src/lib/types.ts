@@ -399,3 +399,71 @@ export interface EjecucionAutomatizacion {
   detalle: string;
   fecha: string;
 }
+
+// ------------------------------------------------------------
+// MÓDULO CONSTRUCCIÓN (Sauceda Construye)
+// ------------------------------------------------------------
+
+export type ServicioConstruccionTipo = 'pintura' | 'impermeabilizacion' | 'losa' | 'remodelacion' | 'otro';
+
+export type CotizacionEstatus =
+  | 'borrador'
+  | 'esperando_visita'
+  | 'en_inspeccion'
+  | 'calculando_costo'
+  | 'pendiente_aprobacion'
+  | 'aprobada'
+  | 'enviada'
+  | 'aceptada'
+  | 'rechazada'
+  | 'archivada';
+
+export interface Cotizacion {
+  id: string;
+  prospectoId: string;
+  prospectoNombre?: string;
+  prospectoTelefono?: string;
+  servicioTipo: ServicioConstruccionTipo;
+  estatus: CotizacionEstatus;
+  requiereVisita: boolean;
+  fechaVisita?: string | null;
+  inspectorId?: string | null;
+  inspectorNombre?: string | null;
+  costoEstimado: number;
+  precioFinal: number;
+  aprobadoComercial: boolean;
+  aprobadoComercialBy?: string | null;
+  aprobadoComercialByNombre?: string | null;
+  aprobadoOperativo: boolean;
+  aprobadoOperativoBy?: string | null;
+  aprobadoOperativoByNombre?: string | null;
+  token: string;
+  notasInternas: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VisitaReporte {
+  id: string;
+  cotizacionId: string;
+  inspectorId: string;
+  inspectorNombre?: string;
+  fechaInspeccion: string;
+  observacionesTecnicas: string;
+  condicionesSitio: string;
+  medidas: Record<string, any>;
+  fotos: string[];
+  createdAt: string;
+}
+
+export interface CotizacionConcepto {
+  id: string;
+  cotizacionId: string;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  costoUnitario: number;
+  precioUnitario: number;
+  importe: number;
+  createdAt: string;
+}

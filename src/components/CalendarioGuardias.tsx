@@ -6,7 +6,7 @@ import type { UsuarioApp } from "@/app/actions/usuarios";
 interface TurnoVisual {
   usuarioId: string;
   nombre: string;
-  rol: "admin" | "asesor";
+  rol: "admin" | "asesor" | "operaciones";
   disponibleLlamadas: boolean;
   inicio: string;
   fin: string;

@@ -102,7 +102,7 @@ export function Conversaciones() {
   const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
-  const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" } | null>(null);
+  const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
   const [sel, setSel] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
   const [plantillas, setPlantillas] = useState<PlantillaWhatsApp[]>([]);
