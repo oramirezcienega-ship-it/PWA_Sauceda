@@ -26,6 +26,7 @@ export function DetalleExpediente({ id }: { id: string }) {
     useExpedientes();
   const expediente = obtenerExpediente(id);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  const [mostrarControlesTraspaso, setMostrarControlesTraspaso] = useState(false);
 
   // Expediente inexistente. Mientras carga el estado persistido evitamos
   // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
@@ -148,13 +149,12 @@ export function DetalleExpediente({ id }: { id: string }) {
       {/* Columna única centrada para un diseño premium y ordenado */}
       <div className="mt-6 space-y-6">
           {/* Avance por etapas */}
-          <div className="rounded-xl border border-carbon/10 bg-white p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
-              Avance del traspaso
-            </p>
-
+          <div className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-sm">
             {/* Vista Desktop (Completa) */}
             <div className="hidden md:block">
+              <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
+                Avance del traspaso
+              </p>
               <AvanceTraspaso etapa={expediente.etapa} />
               
               {/* Mover de etapa Desktop */}
@@ -178,49 +178,91 @@ export function DetalleExpediente({ id }: { id: string }) {
               </div>
             </div>
 
-            {/* Vista Móvil (Súper Compacta con Barra de Progreso y KPI) */}
-            <div className="block md:hidden space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <span className="text-[10px] text-carbon/40 font-bold uppercase block">
-                    Etapa {etapaNumero} de {totalEtapas}
-                  </span>
-                  <span className="text-sm font-bold text-verde-profundo mt-0.5 block">
-                    {etapasLista[etapaActualIndex]?.nombre || expediente.etapa}
-                  </span>
-                </div>
-                <span className="text-xs font-mono font-bold text-sauce bg-sauce/10 px-2 py-0.5 rounded-full">
-                  {porcentajeAvance}%
-                </span>
-              </div>
-
-              {/* Barra de progreso visual */}
-              <div className="w-full bg-carbon/5 rounded-full h-2">
+            {/* Vista Móvil (Colapsable) */}
+            <div className="block md:hidden">
+              {!mostrarControlesTraspaso ? (
+                /* Vista Contraída (Fila Única tipo Prospecto) */
                 <div
-                  className="bg-sauce h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${porcentajeAvance}%` }}
-                ></div>
-              </div>
+                  onClick={() => setMostrarControlesTraspaso(true)}
+                  className="flex items-center justify-between gap-3 cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+                      Avance:
+                    </span>
+                    <span className="text-xs font-bold text-verde-profundo">
+                      {etapasLista[etapaActualIndex]?.nombre || expediente.etapa}
+                    </span>
+                    <span className="text-[10px] text-carbon/40">
+                      ({etapaNumero}/{totalEtapas})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-bold text-sauce bg-sauce/10 px-1.5 py-0.5 rounded-full font-mono">
+                      {porcentajeAvance}%
+                    </span>
+                    <span className="text-[10px] font-bold text-sauce flex items-center gap-0.5">
+                      Cambiar →
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                /* Vista Expandida (Progreso y Controles) */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <span className="text-[10px] text-carbon/40 font-bold uppercase block">
+                        Etapa {etapaNumero} de {totalEtapas}
+                      </span>
+                      <span className="text-sm font-bold text-verde-profundo mt-0.5 block">
+                        {etapasLista[etapaActualIndex]?.nombre || expediente.etapa}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-sauce bg-sauce/10 px-2 py-0.5 rounded-full">
+                        {porcentajeAvance}%
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMostrarControlesTraspaso(false);
+                        }}
+                        className="text-[10px] font-bold text-carbon/50 hover:underline"
+                      >
+                        ▲ Cerrar
+                      </button>
+                    </div>
+                  </div>
 
-              {/* Botones de navegación móviles compactos */}
-              <div className="flex gap-2 pt-2 border-t border-carbon/5">
-                <button
-                  type="button"
-                  disabled={!anterior}
-                  onClick={() => anterior && moverEtapa(expediente.id, anterior.id)}
-                  className="flex-1 rounded-lg border border-carbon/15 bg-white py-1 px-2 text-xs font-bold text-carbon/70 transition disabled:opacity-30"
-                >
-                  ← {anterior ? "Anterior" : "Inicio"}
-                </button>
-                <button
-                  type="button"
-                  disabled={!siguiente}
-                  onClick={() => siguiente && moverEtapa(expediente.id, siguiente.id)}
-                  className="flex-1 rounded-lg bg-sauce py-1 px-2 text-xs font-bold text-crema transition disabled:opacity-30"
-                >
-                  {siguiente ? "Siguiente" : "Fin"} →
-                </button>
-              </div>
+                  {/* Barra de progreso visual */}
+                  <div className="w-full bg-carbon/5 rounded-full h-1.5">
+                    <div
+                      className="bg-sauce h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${porcentajeAvance}%` }}
+                    ></div>
+                  </div>
+
+                  {/* Botones de navegación móviles compactos */}
+                  <div className="flex gap-2 pt-2 border-t border-carbon/5">
+                    <button
+                      type="button"
+                      disabled={!anterior}
+                      onClick={() => anterior && moverEtapa(expediente.id, anterior.id)}
+                      className="flex-1 rounded-lg border border-carbon/15 bg-white py-1 px-2 text-xs font-bold text-carbon/70 transition disabled:opacity-30"
+                    >
+                      ← {anterior ? "Anterior" : "Inicio"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!siguiente}
+                      onClick={() => siguiente && moverEtapa(expediente.id, siguiente.id)}
+                      className="flex-1 rounded-lg bg-sauce py-1 px-2 text-xs font-bold text-crema transition disabled:opacity-30"
+                    >
+                      {siguiente ? "Siguiente" : "Fin"} →
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -282,15 +324,15 @@ export function DetalleExpediente({ id }: { id: string }) {
 
             {/* Listado de campos con Iconos */}
             <div className="space-y-4 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-1">
+                <span className="flex items-center gap-2 text-carbon/60 text-xs sm:text-sm">
                   <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                   </svg>
                   Teléfono
                 </span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-medium text-carbon">
+                <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
+                  <span className="font-mono font-bold text-carbon text-sm">
                     {expediente.telefono || "—"}
                   </span>
                   {expediente.telefono && (
@@ -301,7 +343,7 @@ export function DetalleExpediente({ id }: { id: string }) {
                       />
                       <Link
                         href={`/conversaciones?tel=${expediente.telefono}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100 hover:text-green-800"
+                        className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-bold text-green-700 transition hover:bg-green-100 hover:text-green-800"
                         title="Abrir chat de WhatsApp"
                       >
                         💬 WhatsApp
@@ -389,14 +431,14 @@ export function DetalleExpediente({ id }: { id: string }) {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 py-1">
+                <span className="flex items-center gap-2 text-carbon/60 text-xs sm:text-sm">
                   <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Valor / Adeudo
                 </span>
-                <span className="font-mono font-medium text-carbon">
+                <span className="font-mono font-bold text-carbon text-xs sm:text-sm text-left sm:text-right">
                   {expediente.valorEstimado > 0 || expediente.saldoDeuda > 0 ? (
                     <>
                       {expediente.valorEstimado > 0 ? formatoPesos(expediente.valorEstimado) : "Sin dato"}
@@ -404,7 +446,7 @@ export function DetalleExpediente({ id }: { id: string }) {
                       {expediente.saldoDeuda > 0 ? formatoPesos(expediente.saldoDeuda) : "Sin dato"}
                     </>
                   ) : (
-                    <span className="italic text-carbon/60 text-sm">Sin dato</span>
+                    <span className="italic text-carbon/60">Sin dato</span>
                   )}
                 </span>
               </div>
