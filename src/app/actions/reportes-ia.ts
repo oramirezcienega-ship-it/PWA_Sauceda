@@ -369,13 +369,13 @@ export async function sincronizarHistorialMarketing(
   try {
     const hoyStr = new Date().toISOString().split("T")[0];
 
-    // 1. Obtener métricas diarias de Facebook Ads en una sola petición
+    // 1. Obtener métricas diarias de Facebook Ads en una sola petición (con límite amplio de 500 registros para evitar cortes)
     const urlFb = `https://graph.facebook.com/v18.0/act_${adAccountId}/insights`;
     const resFb = await fetch(
       `${urlFb}?access_token=${accessToken}&time_range=${JSON.stringify({
         since: fechaInicio,
         until: hoyStr
-      })}&time_increment=1&fields=spend,clicks,impressions`
+      })}&time_increment=1&limit=500&fields=spend,clicks,impressions`
     );
 
     if (!resFb.ok) {
