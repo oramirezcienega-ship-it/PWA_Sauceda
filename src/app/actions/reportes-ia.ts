@@ -80,13 +80,7 @@ export async function obtenerMetricasMarketing(): Promise<MarketingMetric[]> {
   const sb = supabaseServidor();
 
   try {
-    // 1. Limpieza automática de datos simulados previos al 30 de junio de 2026
-    await sb
-      .from("analytics_marketing")
-      .delete()
-      .lt("fecha", "2026-06-30");
-
-    // 2. Obtener los datos reales de métricas
+    // Obtener los datos reales de métricas
     const { data, error } = await sb
       .from("analytics_marketing")
       .select("*")
