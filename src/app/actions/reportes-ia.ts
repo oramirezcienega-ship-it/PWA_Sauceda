@@ -776,3 +776,25 @@ export async function obtenerTodosLosExpedientes(): Promise<Array<{ id: string; 
     return [];
   }
 }
+
+/**
+ * Elimina de la base de datos todas las transacciones de prueba con la etiqueta "(Demo)".
+ */
+export async function eliminarDatosDemostracionFinanzas(): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb
+      .from("transacciones_financieras")
+      .delete()
+      .like("concepto", "%(Demo)%");
+
+    if (error) throw error;
+
+    return { success: true, message: "Todos los datos de demostración con la etiqueta '(Demo)' fueron eliminados." };
+  } catch (err: any) {
+    console.error("Error al eliminar datos demo:", err);
+    return { success: false, message: err.message || "Error al eliminar registros demo." };
+  }
+}

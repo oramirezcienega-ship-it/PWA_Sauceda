@@ -15,6 +15,7 @@ import {
   eliminarTransaccionFinanciera,
   obtenerExpedientesCerradosSinComision,
   obtenerTodosLosExpedientes,
+  eliminarDatosDemostracionFinanzas,
   type MarketingMetric,
   type TransaccionFinanciera,
   type AIInsight
@@ -552,6 +553,26 @@ export function DashboardInteligente() {
       alert(`Error al procesar la importación: ${err.message}`);
     } finally {
       setLoadingImport(false);
+    }
+  };
+
+  // Handler para limpiar los datos demo que contengan "(Demo)"
+  const handleLimpiarDemos = async () => {
+    if (!confirm("¿Estás seguro de que deseas eliminar TODOS los registros de prueba etiquetados con '(Demo)'?")) return;
+    try {
+      const res = await eliminarDatosDemostracionFinanzas();
+      if (res.success) {
+        alert(res.message);
+        // Recargar datos
+        const trans = await obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        const expCerrados = await obtenerExpedientesCerradosSinComision();
+        setTransacciones(trans);
+        setExpedientesCerrados(expCerrados);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(`Error al limpiar datos demo: ${err.message}`);
     }
   };
 
@@ -1426,6 +1447,12 @@ export function DashboardInteligente() {
                   Libro Contable (Ingresos y Costos Operativos)
                 </h3>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleLimpiarDemos}
+                    className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-[#FDF2F2] px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 transition shadow-sm"
+                  >
+                    🗑️ Limpiar Demos
+                  </button>
                   <button
                     onClick={() => setShowImportModal(true)}
                     className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
