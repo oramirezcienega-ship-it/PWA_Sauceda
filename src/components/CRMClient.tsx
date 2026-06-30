@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { obtenerDatosCRM, type CRMData, type CRMMessage } from "@/app/actions/crm";
 import { analizarConversacionConIA, obtenerConfiguracionAgente, guardarConfiguracionAgente, generarPlanMejoraConsolidado } from "@/app/actions/analisis-ia";
+import { rolUsuarioActual } from "@/app/actions/usuarios";
+import Link from "next/link";
 import {
   ResponsiveContainer,
   BarChart,
@@ -43,9 +45,17 @@ export function CRMClient() {
   const [error, setError] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<string>("");
   const [refrescar, setRefrescar] = useState(0);
+  const [esAdmin, setEsAdmin] = useState(false);
 
   // Navegación entre las 6 vistas
   const [vistaActiva, setVistaActiva] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+
+  // Validar rol de administrador
+  useEffect(() => {
+    rolUsuarioActual()
+      .then((rol) => setEsAdmin(rol === "admin"))
+      .catch(() => setEsAdmin(false));
+  }, []);
 
   // Filtros globales (para la Vista 3: Tabla de leads, y aplicable a métricas si se desea)
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
@@ -265,6 +275,16 @@ export function CRMClient() {
             label="6. Análisis IA"
           />
         </nav>
+        {esAdmin && (
+          <div className="p-3 border-t border-slate-100 bg-emerald-50/30">
+            <Link
+              href="/reportes/dashboard-inteligente"
+              className="flex items-center justify-center gap-2 rounded-lg bg-[#2D4A2B] px-3 py-2 text-xs font-bold text-[#F5F1E8] hover:bg-[#5C7A52] transition shadow-sm w-full"
+            >
+              <span>🧠 Dashboard Inteligente</span>
+            </Link>
+          </div>
+        )}
         <div className="p-4 border-t border-slate-100 text-[10px] text-slate-400 bg-slate-50">
           <div>Refresco: Auto (5 min)</div>
           <div className="mt-0.5">Último: {lastFetchTime}</div>

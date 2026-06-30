@@ -217,7 +217,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (esRutaPublica(pathname)) return <>{children}</>;
 
   const enlaces = esAdmin
-    ? [...ENLACES, { href: "/usuarios", label: "Usuarios" }]
+    ? [
+        ...ENLACES,
+        { href: "/reportes/dashboard-inteligente", label: "Dashboard Inteligente" },
+        { href: "/usuarios", label: "Usuarios" },
+      ]
     : ENLACES;
 
   const activo = (href: string) =>
