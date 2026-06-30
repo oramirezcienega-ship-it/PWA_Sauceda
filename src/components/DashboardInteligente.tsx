@@ -204,7 +204,8 @@ export function DashboardInteligente() {
     categoria: "otro" as any,
     concepto: "",
     monto: "",
-    expediente_id: ""
+    expediente_id: "",
+    es_recurrente: false
   });
   const [loadingManual, setLoadingManual] = useState(false);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -452,7 +453,8 @@ export function DashboardInteligente() {
         categoria: categoriaFinal,
         concepto: manualData.concepto,
         monto: Number(manualData.monto),
-        expediente_id: manualData.expediente_id || null
+        expediente_id: manualData.expediente_id || null,
+        es_recurrente: manualData.es_recurrente
       };
 
       let res;
@@ -472,7 +474,8 @@ export function DashboardInteligente() {
           categoria: "otro",
           concepto: "",
           monto: "",
-          expediente_id: ""
+          expediente_id: "",
+          es_recurrente: false
         });
         setIsCustomCategory(false);
         setCustomCategoryName("");
@@ -901,6 +904,8 @@ export function DashboardInteligente() {
       CPA: d.Leads > 0 ? Number((d.Gasto / d.Leads).toFixed(2)) : 0
     }));
   }, [metricasFiltradas]);
+
+  const isEditingChildTransaction = editingId ? !!transacciones.find(t => t.id === editingId)?.recurrente_parent_id : false;
 
   if (loading) {
     return (
@@ -1597,7 +1602,19 @@ export function DashboardInteligente() {
                           </td>
                           <td className="px-4 py-2.5 text-[10px] font-bold uppercase text-slate-500">{t.categoria}</td>
                           <td className="px-4 py-2.5">
-                            <div className="font-semibold text-slate-800">{t.concepto}</div>
+                            <div className="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                              <span>{t.concepto}</span>
+                              {t.es_recurrente && (
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-bold px-1.5 py-0.2 rounded" title="Plantilla recurrente activa">
+                                  🔁 Recurrente
+                                </span>
+                              )}
+                              {t.recurrente_parent_id && (
+                                <span className="bg-slate-50 text-slate-500 border border-slate-200 text-[8px] font-medium px-1.5 py-0.2 rounded" title="Movimiento generado automáticamente">
+                                  ⚙️ Autogenerado
+                                </span>
+                              )}
+                            </div>
                             {t.expediente_cliente && (
                               <span className="text-[9px] text-[#2D4A2B] bg-[#F5F1E8] px-1.5 py-0.5 rounded mt-0.5 inline-block font-bold">
                                 Folio: {t.expediente_id} · Cliente: {t.expediente_cliente}
@@ -1619,7 +1636,8 @@ export function DashboardInteligente() {
                                   categoria: t.categoria,
                                   concepto: t.concepto,
                                   monto: String(t.monto),
-                                  expediente_id: t.expediente_id || ""
+                                  expediente_id: t.expediente_id || "",
+                                  es_recurrente: t.es_recurrente || false
                                 });
                                 const isCustom = t.tipo === "ingreso"
                                   ? !["comision", "venta", "otro"].includes(t.categoria.toLowerCase())
@@ -2059,7 +2077,8 @@ export function DashboardInteligente() {
                     categoria: "otro",
                     concepto: "",
                     monto: "",
-                    expediente_id: ""
+                    expediente_id: "",
+                    es_recurrente: false
                   });
                   setIsCustomCategory(false);
                   setCustomCategoryName("");
@@ -2199,6 +2218,21 @@ export function DashboardInteligente() {
                 </select>
               </div>
 
+              {!isEditingChildTransaction && (
+                <div className="flex items-center gap-2 py-1.5">
+                  <input
+                    type="checkbox"
+                    id="es_recurrente"
+                    checked={manualData.es_recurrente}
+                    onChange={(e) => setManualData({ ...manualData, es_recurrente: e.target.checked })}
+                    className="rounded text-[#2D4A2B] focus:ring-[#2D4A2B] h-4 w-4 cursor-pointer"
+                  />
+                  <label htmlFor="es_recurrente" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                    🔁 Movimiento recurrente (se repetirá mensualmente)
+                  </label>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
@@ -2211,7 +2245,8 @@ export function DashboardInteligente() {
                       categoria: "otro",
                       concepto: "",
                       monto: "",
-                      expediente_id: ""
+                      expediente_id: "",
+                      es_recurrente: false
                     });
                     setIsCustomCategory(false);
                     setCustomCategoryName("");

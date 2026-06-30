@@ -28,6 +28,8 @@ export interface TransaccionFinanciera {
   expediente_id?: string | null;
   created_at?: string;
   expediente_cliente?: string | null;
+  es_recurrente?: boolean;
+  recurrente_parent_id?: string | null;
 }
 
 export interface AIInsight {
@@ -81,6 +83,32 @@ Esta semana muestra una tendencia general estable, con una fuerte tracción en *
 #### Recomendaciones
 1. **Revisar cuenta de Facebook Ads:** Asegurar que los fondos y métodos de pago estén vigentes para evitar pausas como la del 27 de junio.
 2. **Reasignación Presupuestal:** Transferir un porcentaje del presupuesto inactivo de Meta hacia TikTok para maximizar el volumen diario mientras se estabiliza Meta.`
+};
+
+const MOCK_FINANCE_INSIGHTS: AIInsight = {
+  fecha: "2026-06-29",
+  estado_salud: "regular",
+  alertas: [
+    "🔴 GASTO OPEX: La nómina de asesores y la renta física representan el 62% del total de egresos operativos. Sugerencia: evaluar incentivos variables por cierre de comisiones.",
+    "🔴 ALERTA ROAS: El ROAS financiero del negocio promedia 1.45x debido al aumento de presupuesto publicitario sin correspondencia proporcional en cobros de comisiones este mes."
+  ],
+  oportunidades: [
+    "🟡 EFICIENCIA EN SERVICIOS: La categoría Servicios Básicos reportó un incremento del 20% MoM. Evaluar cancelación de softwares inactivos.",
+    "🟡 ATRIBUCIÓN ACELERADA: Existen 2 expedientes cerrados en CRM con un valor de operación estimado combinado de $1.5M sin comisiones registradas."
+  ],
+  diagnostico_general: `### 💰 Diagnóstico Financiero de Sofía
+
+#### Análisis del Estado de Resultados (P&L)
+El rendimiento neto del negocio se encuentra en un estado **regular**. Si bien la facturación por comisiones es recurrente, el margen neto de utilidad del periodo se encuentra en **-3.2%** debido al acumulado de costos fijos altos y la inversión publicitaria que aún no ve el retorno devengado en cierres.
+
+#### Estructura de Gastos (OPEX)
+- **Nóminas y Sueldos:** $30,000.00 MXN (el componente más pesado del egreso fijo).
+- **Renta y Servicios:** $16,200.00 MXN combinados.
+- **Inversión en Marketing:** Representa el rubro más elástico. Se sugiere optimizar el coste de adquisición de leads de marketing.
+
+#### Recomendaciones Financieras
+1. **Atribuir comisiones pendientes:** Ligar los cierres de expedientes del CRM para que se vean reflejados en el ingreso de caja.
+2. **Revisar suscripciones SaaS:** Auditar las plataformas y softwares de diseño y hosting que no se utilicen activamente.`
 };
 
 /**
@@ -609,6 +637,96 @@ export async function sincronizarHistorialTikTok(
 }
 
 /**
+ * Analiza las transacciones marcadas como es_recurrente = true y
+ * genera copias para los meses posteriores que aún no tengan registros creados.
+ */
+export async function procesarTransaccionesRecurrentes(sb: any): Promise<void> {
+  try {
+    // 1. Obtener todas las transacciones recurrentes principales (padres)
+    const { data: padres, error: errPadres } = await sb
+      .from("transacciones_financieras")
+      .select("*")
+      .eq("es_recurrente", true)
+      .is("recurrente_parent_id", null);
+
+    if (errPadres || !padres || padres.length === 0) return;
+
+    // 2. Obtener todas las transacciones generadas (hijos)
+    const { data: hijos, error: errHijos } = await sb
+      .from("transacciones_financieras")
+      .select("*")
+      .not("recurrente_parent_id", "is", null);
+
+    if (errHijos) return;
+
+    const hoy = new Date();
+    const anioActual = hoy.getFullYear();
+    const mesActual = hoy.getMonth(); // 0 = Enero, 11 = Diciembre
+
+    const nuevosHijos: any[] = [];
+
+    for (const parent of padres) {
+      const [pAnio, pMes, pDia] = parent.fecha.split("-").map(Number);
+      const pMesIndex = pMes - 1; // 0-indexed
+
+      let idxAnio = pAnio;
+      let idxMes = pMesIndex;
+
+      while (true) {
+        // Avanzar un mes
+        idxMes++;
+        if (idxMes > 11) {
+          idxMes = 0;
+          idxAnio++;
+        }
+
+        // Si superamos el año y mes actual, detenemos la generación
+        if (idxAnio > anioActual || (idxAnio === anioActual && idxMes > mesActual)) {
+          break;
+        }
+
+        // Comprobar si ya existe una transacción hija para este mes
+        const existeHijo = (hijos || []).some(h => {
+          if (h.recurrente_parent_id !== parent.id) return false;
+          const [hAnio, hMes] = h.fecha.split("-").map(Number);
+          return hAnio === idxAnio && (hMes - 1) === idxMes;
+        });
+
+        if (!existeHijo) {
+          // Ajustar día del mes (ej. si el día de cargo es 31 y el mes destino tiene 30 días)
+          const maxDias = new Date(idxAnio, idxMes + 1, 0).getDate();
+          const targetDia = Math.min(pDia, maxDias);
+          const mesStr = String(idxMes + 1).padStart(2, "0");
+          const diaStr = String(targetDia).padStart(2, "0");
+          const targetFecha = `${idxAnio}-${mesStr}-${diaStr}`;
+
+          nuevosHijos.push({
+            fecha: targetFecha,
+            tipo: parent.tipo,
+            categoria: parent.categoria,
+            concepto: parent.concepto,
+            monto: parent.monto,
+            expediente_id: parent.expediente_id || null,
+            recurrente_parent_id: parent.id,
+            es_recurrente: false // Los hijos generados son individuales para poder editarse
+          });
+        }
+      }
+    }
+
+    if (nuevosHijos.length > 0) {
+      const { error: errInsert } = await sb
+        .from("transacciones_financieras")
+        .insert(nuevosHijos);
+      if (errInsert) throw errInsert;
+      console.log(`[Recurrentes] Se generaron y guardaron ${nuevosHijos.length} movimientos recurrentes.`);
+    }
+  } catch (err) {
+    console.error("Error al autogenerar gastos recurrentes:", err);
+  }
+}
+
+/**
  * Obtiene las transacciones financieras registradas en un rango de fechas.
  * Une la información del cliente desde la tabla de expedientes si existe.
  */
@@ -618,6 +736,9 @@ export async function obtenerTransaccionesFinancieras(
 ): Promise<TransaccionFinanciera[]> {
   await requireAdministrador();
   const sb = supabaseServidor();
+
+  // Autogenerar gastos recurrentes antes de hacer la consulta real
+  await procesarTransaccionesRecurrentes(sb);
 
   try {
     const { data, error } = await sb
@@ -643,7 +764,9 @@ export async function obtenerTransaccionesFinancieras(
       monto: Number(t.monto),
       expediente_id: t.expediente_id,
       created_at: t.created_at,
-      expediente_cliente: t.expedientes ? t.expedientes.cliente : null
+      expediente_cliente: t.expedientes ? t.expedientes.cliente : null,
+      es_recurrente: t.es_recurrente,
+      recurrente_parent_id: t.recurrente_parent_id
     }));
   } catch (err) {
     console.error("Error al obtener transacciones financieras:", err);
