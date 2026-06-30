@@ -469,3 +469,129 @@ export async function sincronizarHistorialMarketing(
     };
   }
 }
+
+/**
+ * Sincroniza el historial de publicidad de TikTok Ads.
+ * Consulta la API de TikTok para obtener el gasto, clics e impresiones diarios,
+ * cruza la información con los leads de TikTok en el CRM, y guarda los datos de forma consolidada.
+ */
+export async function sincronizarHistorialTikTok(
+  accessToken: string,
+  advertiserId: string,
+  fechaInicio: string
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const hoyStr = new Date().toISOString().split("T")[0];
+
+    // 1. Obtener métricas diarias de TikTok Ads usando la API integrada de reportes
+    const url = `https://business-api.tiktok.com/open_api/v1.3/report/integrated/get/`;
+    const params = new URLSearchParams({
+      advertiser_id: advertiserId,
+      report_type: "BASIC",
+      data_level: "AUCTION_CAMPAIGN",
+      dimensions: JSON.stringify(["campaign_name", "stat_time_day"]),
+      metrics: JSON.stringify(["spend", "clicks", "impressions"]),
+      start_date: fechaInicio,
+      end_date: hoyStr,
+      page_size: "100"
+    });
+
+    const resTk = await fetch(`${url}?${params.toString()}`, {
+      headers: {
+        "Access-Token": accessToken
+      }
+    });
+
+    if (!resTk.ok) {
+      const errorText = await resTk.text();
+      throw new Error(`Error en llamada HTTP a TikTok: ${resTk.status} - ${errorText}`);
+    }
+
+    const json = await resTk.json();
+    if (json.code !== 0) {
+      throw new Error(`Error de TikTok Graph API: ${json.code} - ${json.message}`);
+    }
+
+    const insightsTk = json.data?.list || [];
+
+    // 2. Traer todos los prospectos del CRM para agrupar leads de TikTok por fecha
+    const { data: prospectos, error: errCrm } = await sb
+      .from("prospectos")
+      .select("created_at, campaign_name, notas");
+
+    if (errCrm) throw errCrm;
+
+    // Agrupar leads atribuibles a TikTok por fecha YYYY-MM-DD
+    const leadsPorFecha: Record<string, number> = {};
+    (prospectos || []).forEach(p => {
+      if (p.created_at) {
+        const dStr = p.created_at.split("T")[0];
+        
+        const campaign = (p.campaign_name || "").toLowerCase();
+        const notas = (p.notas || "").toLowerCase();
+        const esTikTok = campaign.includes("tiktok") || notas.includes("tiktok");
+
+        if (esTikTok) {
+          leadsPorFecha[dStr] = (leadsPorFecha[dStr] || 0) + 1;
+        }
+      }
+    });
+
+    // 3. Procesar y preparar registros para insertar
+    const registrosInsertar = insightsTk.map((item: any) => {
+      const fechaFull = item.stat_time_day || "";
+      const fecha = fechaFull.split(" ")[0]; // Extraer solo la fecha YYYY-MM-DD
+      const leads = leadsPorFecha[fecha] || 0;
+
+      return {
+        fecha,
+        canal: "tiktok",
+        campana_nombre: item.campaign_name || "General TikTok",
+        gasto_publicitario: Number(item.spend || 0),
+        clics: Number(item.clicks || 0),
+        impresiones: Number(item.impressions || 0),
+        leads_registrados_crm: leads
+      };
+    });
+
+    if (registrosInsertar.length === 0) {
+      return {
+        success: true,
+        message: "No se encontraron datos de publicidad de TikTok Ads en el periodo indicado."
+      };
+    }
+
+    // 4. Limpiar los registros de TikTok previos en ese rango de fechas
+    const fechas = registrosInsertar.map((r: any) => r.fecha);
+    const fechaMin = fechas.reduce((a: string, b: string) => a < b ? a : b);
+    const fechaMax = fechas.reduce((a: string, b: string) => a > b ? a : b);
+
+    await sb
+      .from("analytics_marketing")
+      .delete()
+      .eq("canal", "tiktok")
+      .gte("fecha", fechaMin)
+      .lte("fecha", fechaMax);
+
+    // 5. Insertar registros consolidados
+    const { error: errInsert } = await sb
+      .from("analytics_marketing")
+      .insert(registrosInsertar);
+
+    if (errInsert) throw errInsert;
+
+    return {
+      success: true,
+      message: `Se sincronizaron exitosamente ${registrosInsertar.length} días de historial de publicidad de TikTok Ads desde el ${fechaMin}.`
+    };
+  } catch (error: any) {
+    console.error("Error al sincronizar historial de TikTok Ads:", error);
+    return {
+      success: false,
+      message: error.message || "Error desconocido al sincronizar."
+    };
+  }
+}

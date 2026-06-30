@@ -8,6 +8,7 @@ import {
   obtenerKPIsRealesCRM,
   obtenerKPIsPeriodoCRM,
   sincronizarHistorialMarketing,
+  sincronizarHistorialTikTok,
   type MarketingMetric,
   type AIInsight
 } from "@/app/actions/reportes-ia";
@@ -175,10 +176,17 @@ export function DashboardInteligente() {
 
   // Estados para sincronización de historial
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncTab, setSyncTab] = useState<"facebook" | "tiktok">("facebook");
   const [sincronizandoHistorial, setSincronizandoHistorial] = useState(false);
   const [fbToken, setFbToken] = useState("");
   const [fbAdAccountId, setFbAdAccountId] = useState("1269333735358072");
   const [fbFechaInicio, setFbFechaInicio] = useState("2026-05-01");
+
+  // Credenciales de TikTok
+  const [tkToken, setTkToken] = useState("");
+  const [tkAdvertiserId, setTkAdvertiserId] = useState("");
+  const [tkFechaInicio, setTkFechaInicio] = useState("2026-05-01");
+  const [sincronizandoTikTok, setSincronizandoTikTok] = useState(false);
 
   // Carga de datos inicial (solo métricas fijas de marketing y diagnóstico de Sofía)
   useEffect(() => {
@@ -331,6 +339,40 @@ export function DashboardInteligente() {
       alert(`Error en el servidor: ${err.message}`);
     } finally {
       setSincronizandoHistorial(false);
+    }
+  };
+
+  // Handler para ejecutar el backfill histórico desde TikTok Ads
+  const handleSincronizarTikTok = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tkToken.trim() || !tkAdvertiserId.trim()) {
+      alert("Por favor introduce el Token de Acceso y el ID de Anunciante de TikTok.");
+      return;
+    }
+    setSincronizandoTikTok(true);
+    try {
+      const res = await sincronizarHistorialTikTok(tkToken, tkAdvertiserId, tkFechaInicio);
+      if (res.success) {
+        alert(res.message);
+        setShowSyncModal(false);
+        // Recargar datos en la UI
+        const met = await obtenerMetricasMarketing();
+        setMetricas(met);
+        // Forzar actualización de KPIs CRM recalculando
+        const kpis = await obtenerKPIsPeriodoCRM(
+          fechasCalculadas.fechaInicio,
+          fechasCalculadas.fechaFin,
+          fechasCalculadas.fechaInicioPrev,
+          fechasCalculadas.fechaFinPrev
+        );
+        setCrmKPIs(kpis);
+      } else {
+        alert(`Fallo en la sincronización de TikTok: ${res.message}`);
+      }
+    } catch (err: any) {
+      alert(`Error en el servidor: ${err.message}`);
+    } finally {
+      setSincronizandoTikTok(false);
     }
   };
 
@@ -890,75 +932,174 @@ export function DashboardInteligente() {
               </button>
             </div>
 
-            <form onSubmit={handleSincronizarHistorial} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Meta Access Token (con permiso ads_read)
-                </label>
-                <textarea
-                  value={fbToken}
-                  onChange={(e) => setFbToken(e.target.value)}
-                  placeholder="Pega el token de Meta generado en la consola..."
-                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
-                  required
-                />
-              </div>
+            {/* TABS DE SELECCIÓN DE CANAL */}
+            <div className="flex border-b border-slate-100 mb-4 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setSyncTab("facebook")}
+                className={`w-1/2 pb-2 text-center transition ${
+                  syncTab === "facebook"
+                    ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+                    : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                🔵 Meta (Facebook / Instagram)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncTab("tiktok")}
+                className={`w-1/2 pb-2 text-center transition ${
+                  syncTab === "tiktok"
+                    ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+                    : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                🎵 TikTok Ads
+              </button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
+            {syncTab === "facebook" ? (
+              <form onSubmit={handleSincronizarHistorial} className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    ID Cuenta Publicitaria
+                    Meta Access Token (con permiso ads_read)
                   </label>
-                  <input
-                    type="text"
-                    value={fbAdAccountId}
-                    onChange={(e) => setFbAdAccountId(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                  <textarea
+                    value={fbToken}
+                    onChange={(e) => setFbToken(e.target.value)}
+                    placeholder="Pega el token de Meta generado en la consola..."
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
                     required
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      ID Cuenta Publicitaria
+                    </label>
+                    <input
+                      type="text"
+                      value={fbAdAccountId}
+                      onChange={(e) => setFbAdAccountId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Sincronizar desde
+                    </label>
+                    <input
+                      type="date"
+                      value={fbFechaInicio}
+                      onChange={(e) => setFbFechaInicio(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                  Esta acción descargará día por día los gastos reales de Meta Ads, contará automáticamente los prospectos registrados en el CRM para cada día y creará el historial consolidado.
+                </p>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncModal(false)}
+                    className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sincronizandoHistorial}
+                    className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sincronizandoHistorial ? (
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent font-bold"></div>
+                        Sincronizando...
+                      </>
+                    ) : (
+                      "Iniciar"
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleSincronizarTikTok} className="space-y-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    Sincronizar desde
+                    TikTok Developer Access Token
                   </label>
-                  <input
-                    type="date"
-                    value={fbFechaInicio}
-                    onChange={(e) => setFbFechaInicio(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                  <textarea
+                    value={tkToken}
+                    onChange={(e) => setTkToken(e.target.value)}
+                    placeholder="Pega tu Access Token de TikTok Developer..."
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
                     required
                   />
                 </div>
-              </div>
 
-              <p className="text-[10px] text-slate-400 leading-normal font-medium">
-                Esta acción descargará día por día los gastos reales de Meta Ads, contará automáticamente los prospectos registrados en el CRM para cada día y creará el historial consolidado.
-              </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      ID Anunciante (Advertiser ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={tkAdvertiserId}
+                      onChange={(e) => setTkAdvertiserId(e.target.value)}
+                      placeholder="Ej: 7123456789012345678"
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Sincronizar desde
+                    </label>
+                    <input
+                      type="date"
+                      value={tkFechaInicio}
+                      onChange={(e) => setTkFechaInicio(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSyncModal(false)}
-                  className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={sincronizandoHistorial}
-                  className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {sincronizandoHistorial ? (
-                    <>
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent font-bold"></div>
-                      Sincronizando...
-                    </>
-                  ) : (
-                    "Iniciar"
-                  )}
-                </button>
-              </div>
-            </form>
+                <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                  Esta acción descargará día por día los gastos reales de TikTok Ads, filtrará y asociará los leads de TikTok del CRM, y los consolidará en la Torre de Control.
+                </p>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncModal(false)}
+                    className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sincronizandoTikTok}
+                    className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sincronizandoTikTok ? (
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent font-bold"></div>
+                        Sincronizando...
+                      </>
+                    ) : (
+                      "Iniciar"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
