@@ -51,6 +51,108 @@ const PALETA_CANALES = {
   otro: "#64748B"
 };
 
+// Funciones auxiliares para renderizado de Markdown simple
+function parseBold(text: string): React.ReactNode {
+  const parts = text.split(/\*\*([\s\S]*?)\*\*/g);
+  return parts.map((part, i) => {
+    return i % 2 === 1 ? <strong key={i} className="font-bold text-slate-800">{part}</strong> : part;
+  });
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let inList = false;
+  let inNumList = false;
+  let listItems: React.ReactNode[] = [];
+
+  const commitList = (key: string | number) => {
+    if (inList) {
+      elements.push(
+        <ul key={`ul-${key}`} className="list-disc pl-4 space-y-1 my-1.5">
+          {listItems}
+        </ul>
+      );
+      listItems = [];
+      inList = false;
+    }
+    if (inNumList) {
+      elements.push(
+        <ol key={`ol-${key}`} className="list-decimal pl-4 space-y-1 my-1.5">
+          {listItems}
+        </ol>
+      );
+      listItems = [];
+      inNumList = false;
+    }
+  };
+
+  lines.forEach((line, idx) => {
+    const cleanLine = line.trim();
+    if (!cleanLine) {
+      commitList(idx);
+      return;
+    }
+
+    // Encabezado 4 (####) - verificar antes de ###
+    if (cleanLine.startsWith("####")) {
+      commitList(idx);
+      elements.push(
+        <h5 key={idx} className="font-bold text-slate-800 text-xs mt-3 mb-1 uppercase tracking-wider">
+          {parseBold(cleanLine.replace(/^####\s*/, ""))}
+        </h5>
+      );
+      return;
+    }
+
+    // Encabezado 3 (###)
+    if (cleanLine.startsWith("###")) {
+      commitList(idx);
+      elements.push(
+        <h4 key={idx} className="font-bold text-[#2D4A2B] text-sm mt-4 mb-2">
+          {parseBold(cleanLine.replace(/^###\s*/, ""))}
+        </h4>
+      );
+      return;
+    }
+
+    // Item de lista no ordenada (- o *)
+    if (cleanLine.startsWith("- ") || cleanLine.startsWith("* ")) {
+      if (inNumList) commitList(idx);
+      inList = true;
+      listItems.push(
+        <li key={idx} className="text-slate-600 text-xs">
+          {parseBold(cleanLine.replace(/^[-*]\s*/, ""))}
+        </li>
+      );
+      return;
+    }
+
+    // Item de lista ordenada (1. , 2. )
+    if (/^\d+\.\s+/.test(cleanLine)) {
+      if (inList) commitList(idx);
+      inNumList = true;
+      listItems.push(
+        <li key={idx} className="text-slate-600 text-xs">
+          {parseBold(cleanLine.replace(/^\d+\.\s+/, ""))}
+        </li>
+      );
+      return;
+    }
+
+    // Párrafo normal
+    commitList(idx);
+    elements.push(
+      <p key={idx} className="my-1.5 text-xs text-slate-600 leading-relaxed">
+        {parseBold(cleanLine)}
+      </p>
+    );
+  });
+
+  commitList("final");
+  return elements;
+}
+
 export function DashboardInteligente() {
   const [metricas, setMetricas] = useState<MarketingMetric[]>([]);
   const [insight, setInsight] = useState<AIInsight | null>(null);
@@ -314,25 +416,8 @@ export function DashboardInteligente() {
                 )}
               </div>
               <div className="text-xs text-slate-600 leading-relaxed font-medium prose prose-sm max-h-48 overflow-y-auto pr-2 scrollbar-sutil">
-                {/* Visualizar Diagnóstico en Formato de Párrafos Simples (Fallback de Markdown para no necesitar librería extra) */}
-                {insight.diagnostico_general.split("\n\n").map((parrafo, idx) => {
-                  if (parrafo.startsWith("###")) {
-                    return <h4 key={idx} className="font-bold text-[#2D4A2B] text-sm mt-3 mb-1">{parrafo.replace("###", "")}</h4>;
-                  }
-                  if (parrafo.startsWith("####")) {
-                    return <h5 key={idx} className="font-bold text-slate-800 text-xs mt-2 mb-1">{parrafo.replace("####", "")}</h5>;
-                  }
-                  if (parrafo.includes("- ")) {
-                    return (
-                      <ul key={idx} className="list-disc pl-4 space-y-1 my-1">
-                        {parrafo.split("\n").map((li, lidx) => (
-                          <li key={lidx}>{li.replace("- ", "")}</li>
-                        ))}
-                      </ul>
-                    );
-                  }
-                  return <p key={idx} className="my-1.5">{parrafo}</p>;
-                })}
+                {/* Visualizar Diagnóstico con parser simple de markdown */}
+                {renderMarkdown(insight.diagnostico_general)}
               </div>
             </div>
             <div className="mt-4 text-[10px] text-slate-400">
