@@ -206,6 +206,8 @@ export function DashboardInteligente() {
     expediente_id: ""
   });
   const [loadingManual, setLoadingManual] = useState(false);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState("");
 
   // Importador de Excel
   const [importText, setImportText] = useState("");
@@ -433,12 +435,19 @@ export function DashboardInteligente() {
       alert("Por favor completa el concepto y el monto.");
       return;
     }
+
+    const categoriaFinal = isCustomCategory ? customCategoryName.trim().toLowerCase() : manualData.categoria;
+    if (isCustomCategory && !customCategoryName.trim()) {
+      alert("Por favor ingresa un nombre para la nueva categoría.");
+      return;
+    }
+
     setLoadingManual(true);
     try {
       const res = await crearTransaccionFinanciera({
         fecha: manualData.fecha,
         tipo: manualData.tipo,
-        categoria: manualData.categoria,
+        categoria: categoriaFinal,
         concepto: manualData.concepto,
         monto: Number(manualData.monto),
         expediente_id: manualData.expediente_id || null
@@ -455,6 +464,8 @@ export function DashboardInteligente() {
           monto: "",
           expediente_id: ""
         });
+        setIsCustomCategory(false);
+        setCustomCategoryName("");
         // Recargar datos
         const trans = await obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
         const expCerrados = await obtenerExpedientesCerradosSinComision();
@@ -575,6 +586,23 @@ export function DashboardInteligente() {
       alert(`Error al limpiar datos demo: ${err.message}`);
     }
   };
+
+  // Categorías de ingresos y gastos dinámicas extraídas de las transacciones existentes en base de datos
+  const categoriasIngreso = useMemo(() => {
+    const predeterminadas = ["comision", "venta", "otro"];
+    const existentes = transacciones
+      .filter(t => t.tipo === "ingreso")
+      .map(t => t.categoria.toLowerCase());
+    return Array.from(new Set([...predeterminadas, ...existentes]));
+  }, [transacciones]);
+
+  const categoriasGasto = useMemo(() => {
+    const predeterminadas = ["nomina", "renta", "servicios", "marketing", "impuestos", "otro"];
+    const existentes = transacciones
+      .filter(t => t.tipo === "gasto")
+      .map(t => t.categoria.toLowerCase());
+    return Array.from(new Set([...predeterminadas, ...existentes]));
+  }, [transacciones]);
 
   // Filtrar métricas de marketing para el período actual basándonos en fechas de calendario reales
   const metricasFiltradas = useMemo(() => {
@@ -1821,28 +1849,47 @@ export function DashboardInteligente() {
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     Categoría
                   </label>
-                  <select
-                    value={manualData.categoria}
-                    onChange={(e) => setManualData({ ...manualData, categoria: e.target.value as any })}
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
-                  >
-                    {manualData.tipo === "ingreso" ? (
-                      <>
-                        <option value="venta">Venta Directa</option>
-                        <option value="comision">Comisión Inmobiliaria</option>
-                        <option value="otro">Otro Ingreso</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="nomina">Nómina / Sueldos</option>
-                        <option value="renta">Renta Oficina</option>
-                        <option value="servicios">Servicios (Luz, Internet, etc.)</option>
-                        <option value="marketing">Publicidad Extra</option>
-                        <option value="impuestos">Impuestos</option>
-                        <option value="otro">Otro Gasto</option>
-                      </>
-                    )}
-                  </select>
+                  {isCustomCategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customCategoryName}
+                        onChange={(e) => setCustomCategoryName(e.target.value)}
+                        placeholder="Ej: Mantenimiento"
+                        className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomCategory(false);
+                          setCustomCategoryName("");
+                        }}
+                        className="text-xs text-slate-400 hover:text-slate-600 px-1 font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={manualData.categoria}
+                      onChange={(e) => {
+                        if (e.target.value === "__NEW__") {
+                          setIsCustomCategory(true);
+                        } else {
+                          setManualData({ ...manualData, categoria: e.target.value });
+                        }
+                      }}
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
+                    >
+                      {(manualData.tipo === "ingreso" ? categoriasIngreso : categoriasGasto).map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat.toUpperCase()}
+                        </option>
+                      ))}
+                      <option value="__NEW__">➕ OTRA CATEGORÍA...</option>
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">

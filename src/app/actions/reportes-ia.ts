@@ -22,7 +22,7 @@ export interface TransaccionFinanciera {
   id?: string;
   fecha: string;
   tipo: "ingreso" | "gasto";
-  categoria: "venta" | "comision" | "marketing" | "nomina" | "renta" | "servicios" | "impuestos" | "otro";
+  categoria: string;
   concepto: string;
   monto: number;
   expediente_id?: string | null;

@@ -9,7 +9,7 @@ create table if not exists public.transacciones_financieras (
   id            uuid primary key default gen_random_uuid(),
   fecha         date not null,
   tipo          text not null check (tipo in ('ingreso', 'gasto')),
-  categoria     text not null check (categoria in ('venta', 'comision', 'marketing', 'nomina', 'renta', 'servicios', 'impuestos', 'otro')),
+  categoria     text not null,
   concepto      text not null,
   monto         numeric(12,2) not null check (monto >= 0),
   expediente_id text references public.expedientes(id) on delete set null,
