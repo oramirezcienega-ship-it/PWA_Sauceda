@@ -163,7 +163,7 @@ export function DashboardInteligente() {
   const [generandoIA, setGenerandoIA] = useState(false);
 
   // Rangos de fecha y selección
-  const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "custom">("14");
+  const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "este-mes" | "custom">("14");
   const [fechaInicioCustom, setFechaInicioCustom] = useState("");
   const [fechaFinCustom, setFechaFinCustom] = useState("");
 
@@ -218,6 +218,9 @@ export function DashboardInteligente() {
       const d = new Date();
       d.setDate(today.getDate() - 29);
       fechaInicio = d.toISOString().split("T")[0];
+    } else if (rangoSeleccionado === "este-mes") {
+      const primerDia = new Date(today.getFullYear(), today.getMonth(), 1);
+      fechaInicio = primerDia.toISOString().split("T")[0];
     } else if (rangoSeleccionado === "custom" && fechaInicioCustom && fechaFinCustom) {
       fechaInicio = fechaInicioCustom;
       fechaFin = fechaFinCustom;
@@ -228,16 +231,27 @@ export function DashboardInteligente() {
       fechaInicio = d.toISOString().split("T")[0];
     }
 
-    // Calcular período anterior equivalente para la comparativa MoM
-    const start = new Date(fechaInicio);
-    const end = new Date(fechaFin);
-    const diffMs = end.getTime() - start.getTime() + 24 * 3600 * 1000;
+    let fechaInicioPrev = "";
+    let fechaFinPrev = "";
 
-    const startPrev = new Date(start.getTime() - diffMs);
-    const endPrev = new Date(start.getTime() - 1);
+    if (rangoSeleccionado === "este-mes") {
+      // Periodo anterior: mes completo anterior
+      const primerDiaPrev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const ultimoDiaPrev = new Date(today.getFullYear(), today.getMonth(), 0);
+      fechaInicioPrev = primerDiaPrev.toISOString().split("T")[0];
+      fechaFinPrev = ultimoDiaPrev.toISOString().split("T")[0];
+    } else {
+      // Calcular período anterior equivalente para la comparativa MoM
+      const start = new Date(fechaInicio);
+      const end = new Date(fechaFin);
+      const diffMs = end.getTime() - start.getTime() + 24 * 3600 * 1000;
 
-    const fechaInicioPrev = startPrev.toISOString().split("T")[0];
-    const fechaFinPrev = endPrev.toISOString().split("T")[0];
+      const startPrev = new Date(start.getTime() - diffMs);
+      const endPrev = new Date(start.getTime() - 1);
+
+      fechaInicioPrev = startPrev.toISOString().split("T")[0];
+      fechaFinPrev = endPrev.toISOString().split("T")[0];
+    }
 
     return {
       fechaInicio,
@@ -271,7 +285,12 @@ export function DashboardInteligente() {
   const handleRegenerarIA = async () => {
     setGenerandoIA(true);
     try {
-      const nuevoInsight = await generarInsightsConIA();
+      const nuevoInsight = await generarInsightsConIA(
+        fechasCalculadas.fechaInicio,
+        fechasCalculadas.fechaFin,
+        fechasCalculadas.fechaInicioPrev,
+        fechasCalculadas.fechaFinPrev
+      );
       setInsight(nuevoInsight);
     } catch (error) {
       alert("Error al invocar al cerebro analítico. Verifique la API Key de Anthropic.");
@@ -460,7 +479,7 @@ export function DashboardInteligente() {
         {/* CONTROLES */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            {(["7", "14", "30", "custom"] as const).map((r) => (
+            {(["7", "14", "30", "este-mes", "custom"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setRangoSeleccionado(r)}
@@ -470,7 +489,7 @@ export function DashboardInteligente() {
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                {r === "custom" ? "Personalizado" : `Últimos ${r} días`}
+                {r === "custom" ? "Personalizado" : r === "este-mes" ? "Este Mes" : `Últimos ${r} días`}
               </button>
             ))}
           </div>

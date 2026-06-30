@@ -257,26 +257,43 @@ export async function obtenerInsightsIA(): Promise<AIInsight> {
 
 /**
  * Ejecuta un análisis inteligente en tiempo real usando Claude.
- * Lee las métricas de marketing consolidadas y genera el diagnóstico en base a ellas y al CRM actual.
+ * Lee las métricas de marketing y CRM consolidadas para el período seleccionado y genera el diagnóstico en base a ellas.
  */
-export async function generarInsightsConIA(): Promise<AIInsight> {
+export async function generarInsightsConIA(
+  fechaInicio: string,
+  fechaFin: string,
+  fechaInicioPrev?: string,
+  fechaFinPrev?: string
+): Promise<AIInsight> {
   await requireAdministrador();
   const sb = supabaseServidor();
 
-  const metricas = await obtenerMetricasMarketing();
-  const crmData = await obtenerDatosCRM();
+  // 1. Obtener métricas reales para el periodo seleccionado
+  const { data: metricas, error: errMet } = await sb
+    .from("analytics_marketing")
+    .select("*")
+    .gte("fecha", fechaInicio)
+    .lte("fecha", fechaFin)
+    .order("fecha", { ascending: true });
+
+  if (errMet) throw errMet;
+
+  // 2. Obtener KPIs de CRM para el periodo seleccionado y el previo
+  const crmData = await obtenerKPIsPeriodoCRM(fechaInicio, fechaFin, fechaInicioPrev, fechaFinPrev);
 
   // Formatear métricas y crm para Claude
-  const resumenMetricas = metricas.slice(-14).map(m => 
+  const resumenMetricas = (metricas || []).map(m => 
     `- Fecha: ${m.fecha} | Canal: ${m.canal} | Gasto: $${m.gasto_publicitario} | Clics: ${m.clics} | Leads Registrados: ${m.leads_registrados_crm}`
   ).join("\n");
 
   const crmInfo = `
-- Leads Totales: ${crmData.resumenEmbudo.totalLeads}
-- Leads Contactados: ${crmData.resumenEmbudo.contactados}
-- Tasa Conversión Lead -> Contactado: ${crmData.resumenEmbudo.tasaLeadAContactado}%
-- Tiempos promedio de respuesta: ${crmData.tiempoRespuesta.promedioMinutos} minutos
-- Alerta por inactividad activa: ${crmData.tiempoRespuesta.alerta ? "SÍ" : "NO"}
+PERIODO SELECCIONADO (${fechaInicio} al ${fechaFin}):
+- Leads Totales Capturados en CRM: ${crmData.actual.totalLeads}
+- Ventas Cerradas (Expedientes en etapa cerrado): ${crmData.actual.totalVentas}
+
+PERIODO ANTERIOR DE COMPARACIÓN (${fechaInicioPrev || "N/A"} al ${fechaFinPrev || "N/A"}):
+- Leads Totales Capturados en CRM: ${crmData.previo.totalLeads}
+- Ventas Cerradas (Expedientes en etapa cerrado): ${crmData.previo.totalVentas}
   `;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -287,11 +304,13 @@ export async function generarInsightsConIA(): Promise<AIInsight> {
   const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
 
   const prompt = `Eres Sofía, la Directora de Operaciones Inteligente de SAUCEDA Bienes Raíces. Tu rol es analizar las métricas comerciales y de marketing recopiladas para evaluar la salud de la adquisición de prospectos y la operación del equipo.
+  
+Analiza el desempeño comercial del periodo seleccionado del ${fechaInicio} al ${fechaFin}, comparándolo con el periodo anterior del ${fechaInicioPrev || "N/A"} al ${fechaFinPrev || "N/A"}.
 
-Aquí tienes los datos de publicidad y analítica de los últimos días:
-${resumenMetricas}
+Aquí tienes los datos de publicidad y analítica de los días con campaña del periodo seleccionado:
+${resumenMetricas || "Sin datos de publicidad en este rango."}
 
-Y aquí está el estado actual del CRM de conversión de prospectos:
+Y aquí está el estado actual del CRM de conversión de prospectos para ambos periodos:
 ${crmInfo}
 
 Genera un reporte operativo y de optimización. Identifica alertas de fallas operativas (como caídas drásticas de leads, aumentos desmedidos de costos o webhooks fallidos), oportunidades de negocio (eficiencia de canales, reasignación de presupuestos) y un diagnóstico de salud general del negocio (Excelente, Regular, Crítico).
