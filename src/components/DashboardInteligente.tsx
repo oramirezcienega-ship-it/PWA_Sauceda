@@ -9,7 +9,14 @@ import {
   obtenerKPIsPeriodoCRM,
   sincronizarHistorialMarketing,
   sincronizarHistorialTikTok,
+  obtenerTransaccionesFinancieras,
+  crearTransaccionFinanciera,
+  importarTransaccionesMasivas,
+  eliminarTransaccionFinanciera,
+  obtenerExpedientesCerradosSinComision,
+  obtenerTodosLosExpedientes,
   type MarketingMetric,
+  type TransaccionFinanciera,
   type AIInsight
 } from "@/app/actions/reportes-ia";
 import {
@@ -163,6 +170,9 @@ export function DashboardInteligente() {
   const [loading, setLoading] = useState(true);
   const [generandoIA, setGenerandoIA] = useState(false);
 
+  // Selector de Pestaña Principal (Marketing vs Finanzas)
+  const [activeTab, setActiveTab] = useState<"marketing" | "finanzas">("marketing");
+
   // Rangos de fecha y selección
   const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "este-mes" | "custom">("14");
   const [fechaInicioCustom, setFechaInicioCustom] = useState("");
@@ -173,6 +183,32 @@ export function DashboardInteligente() {
     actual: { totalLeads: 0, totalVentas: 0 },
     previo: { totalLeads: 0, totalVentas: 0 }
   });
+
+  // Estados de Finanzas y P&L
+  const [transacciones, setTransacciones] = useState<TransaccionFinanciera[]>([]);
+  const [transaccionesPrev, setTransaccionesPrev] = useState<TransaccionFinanciera[]>([]);
+  const [expedientesCerrados, setExpedientesCerrados] = useState<any[]>([]);
+  const [todosLosExpedientes, setTodosLosExpedientes] = useState<any[]>([]);
+  const [loadingFinanzas, setLoadingFinanzas] = useState(false);
+
+  // Modales financieros
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  // Formulario manual
+  const [manualData, setManualData] = useState({
+    fecha: new Date().toISOString().split("T")[0],
+    tipo: "gasto" as "ingreso" | "gasto",
+    categoria: "otro" as any,
+    concepto: "",
+    monto: "",
+    expediente_id: ""
+  });
+  const [loadingManual, setLoadingManual] = useState(false);
+
+  // Importador de Excel
+  const [importText, setImportText] = useState("");
+  const [loadingImport, setLoadingImport] = useState(false);
 
   // Estados para sincronización de historial
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -269,24 +305,37 @@ export function DashboardInteligente() {
     };
   }, [rangoSeleccionado, fechaInicioCustom, fechaFinCustom]);
 
-  // Cargar dinámicamente los KPIs de CRM para el rango seleccionado y el anterior
+  // Cargar dinámicamente los KPIs de CRM, transacciones financieras y expedientes sin comisión
   useEffect(() => {
     if (!fechasCalculadas.fechaInicio || !fechasCalculadas.fechaFin) return;
 
-    async function cargarKPIsCRM() {
+    async function cargarDatosFinancierosYCRM() {
+      setLoadingFinanzas(true);
       try {
-        const kpis = await obtenerKPIsPeriodoCRM(
-          fechasCalculadas.fechaInicio,
-          fechasCalculadas.fechaFin,
-          fechasCalculadas.fechaInicioPrev,
-          fechasCalculadas.fechaFinPrev
-        );
+        const [kpis, trans, transPrev, expCerrados, todosExps] = await Promise.all([
+          obtenerKPIsPeriodoCRM(
+            fechasCalculadas.fechaInicio,
+            fechasCalculadas.fechaFin,
+            fechasCalculadas.fechaInicioPrev,
+            fechasCalculadas.fechaFinPrev
+          ),
+          obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin),
+          obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicioPrev, fechasCalculadas.fechaFinPrev),
+          obtenerExpedientesCerradosSinComision(),
+          obtenerTodosLosExpedientes()
+        ]);
         setCrmKPIs(kpis);
+        setTransacciones(trans);
+        setTransaccionesPrev(transPrev);
+        setExpedientesCerrados(expCerrados);
+        setTodosLosExpedientes(todosExps);
       } catch (error) {
-        console.error("Error al cargar KPIs de CRM por periodo:", error);
+        console.error("Error al cargar datos financieros y CRM:", error);
+      } finally {
+        setLoadingFinanzas(false);
       }
     }
-    cargarKPIsCRM();
+    cargarDatosFinancierosYCRM();
   }, [fechasCalculadas]);
 
   // Handler para regenerar insights con IA (llamando a Claude)
@@ -376,6 +425,136 @@ export function DashboardInteligente() {
     }
   };
 
+  // Handler para registrar movimiento contable de forma manual
+  const handleCrearTransaccionManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualData.concepto.trim() || !manualData.monto) {
+      alert("Por favor completa el concepto y el monto.");
+      return;
+    }
+    setLoadingManual(true);
+    try {
+      const res = await crearTransaccionFinanciera({
+        fecha: manualData.fecha,
+        tipo: manualData.tipo,
+        categoria: manualData.categoria,
+        concepto: manualData.concepto,
+        monto: Number(manualData.monto),
+        expediente_id: manualData.expediente_id || null
+      });
+      if (res.success) {
+        alert(res.message);
+        setShowManualModal(false);
+        // Resetear formulario
+        setManualData({
+          fecha: new Date().toISOString().split("T")[0],
+          tipo: "gasto",
+          categoria: "otro",
+          concepto: "",
+          monto: "",
+          expediente_id: ""
+        });
+        // Recargar datos
+        const trans = await obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        const expCerrados = await obtenerExpedientesCerradosSinComision();
+        setTransacciones(trans);
+        setExpedientesCerrados(expCerrados);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(`Error al registrar movimiento: ${err.message}`);
+    } finally {
+      setLoadingManual(false);
+    }
+  };
+
+  // Handler para eliminar un movimiento financiero
+  const handleEliminarTransaccion = async (id: string) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar este registro financiero?")) return;
+    try {
+      const res = await eliminarTransaccionFinanciera(id);
+      if (res.success) {
+        alert(res.message);
+        // Recargar transacciones
+        const trans = await obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        const expCerrados = await obtenerExpedientesCerradosSinComision();
+        setTransacciones(trans);
+        setExpedientesCerrados(expCerrados);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(`Error al eliminar movimiento: ${err.message}`);
+    }
+  };
+
+  // Handler para procesar y cargar datos copiados desde Excel (tabuladores / comas)
+  const handleImportarExcel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importText.trim()) {
+      alert("Por favor pega los datos de Excel en el cuadro de texto.");
+      return;
+    }
+    setLoadingImport(true);
+    try {
+      const lineas = importText.split("\n");
+      const transaccionesImportadas: Omit<TransaccionFinanciera, "id" | "created_at">[] = [];
+
+      for (let i = 0; i < lineas.length; i++) {
+        const linea = lineas[i].trim();
+        if (!linea) continue;
+
+        // Dividir por tabulación (copia directa de Excel) o por coma (CSV)
+        const columnas = linea.split(/\t|,/);
+        if (columnas.length < 5) continue;
+
+        const fecha = columnas[0].trim();
+        const tipo = columnas[1].trim().toLowerCase() as "ingreso" | "gasto";
+        const categoria = columnas[2].trim().toLowerCase() as any;
+        const concepto = columnas[3].trim();
+        const montoRaw = columnas[4].trim().replace(/[^0-9.-]+/g, ""); // Quitar símbolos de moneda y comas
+        const monto = Number(montoRaw);
+
+        // Validaciones básicas de fila
+        if (!fecha || !["ingreso", "gasto"].includes(tipo) || isNaN(monto)) {
+          continue;
+        }
+
+        transaccionesImportadas.push({
+          fecha,
+          tipo,
+          categoria,
+          concepto,
+          monto,
+          expediente_id: null
+        });
+      }
+
+      if (transaccionesImportadas.length === 0) {
+        alert("No se encontraron registros válidos para importar. Formato requerido por columna: Fecha (YYYY-MM-DD) | Tipo (ingreso/gasto) | Categoría | Concepto | Monto.");
+        setLoadingImport(false);
+        return;
+      }
+
+      const res = await importarTransaccionesMasivas(transaccionesImportadas);
+      if (res.success) {
+        alert(res.message);
+        setShowImportModal(false);
+        setImportText("");
+        // Recargar transacciones
+        const trans = await obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        setTransacciones(trans);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(`Error al procesar la importación: ${err.message}`);
+    } finally {
+      setLoadingImport(false);
+    }
+  };
+
   // Filtrar métricas de marketing para el período actual basándonos en fechas de calendario reales
   const metricasFiltradas = useMemo(() => {
     if (metricas.length === 0) return [];
@@ -450,6 +629,121 @@ export function DashboardInteligente() {
       variacionVentas
     };
   }, [metricasFiltradas, metricasFiltradasPrev, crmKPIs]);
+
+  // Cálculos consolidados para la pestaña de Finanzas y P&L
+  const finanzasKPIs = useMemo(() => {
+    // 1. Periodo actual
+    const ingresos = transacciones
+      .filter(t => t.tipo === "ingreso")
+      .reduce((sum, t) => sum + t.monto, 0);
+
+    const opex = transacciones
+      .filter(t => t.tipo === "gasto" && t.categoria !== "marketing")
+      .reduce((sum, t) => sum + t.monto, 0);
+
+    const marketing = kpis.totalGasto;
+
+    const utilidadNeta = ingresos - (opex + marketing);
+    const margenNeta = ingresos > 0 ? (utilidadNeta / ingresos) * 100 : 0;
+    const roasReal = marketing > 0 ? ingresos / marketing : 0;
+
+    // 2. Periodo previo
+    const ingresosPrev = transaccionesPrev
+      .filter(t => t.tipo === "ingreso")
+      .reduce((sum, t) => sum + t.monto, 0);
+
+    const opexPrev = transaccionesPrev
+      .filter(t => t.tipo === "gasto" && t.categoria !== "marketing")
+      .reduce((sum, t) => sum + t.monto, 0);
+
+    const marketingPrev = kpis.totalGastoPrev;
+
+    const utilidadNetaPrev = ingresosPrev - (opexPrev + marketingPrev);
+    const margenNetaPrev = ingresosPrev > 0 ? (utilidadNetaPrev / ingresosPrev) * 100 : 0;
+    const roasRealPrev = marketingPrev > 0 ? ingresosPrev / marketingPrev : 0;
+
+    // 3. Variaciones porcentuales MoM
+    const variacionIngresos = ingresosPrev > 0 ? ((ingresos - ingresosPrev) / ingresosPrev) * 100 : 0;
+    const variacionOpex = opexPrev > 0 ? ((opex - opexPrev) / opexPrev) * 100 : 0;
+    const variacionUtilidad = utilidadNetaPrev > 0 ? ((utilidadNeta - utilidadNetaPrev) / utilidadNetaPrev) * 100 : 0;
+    const variacionMargen = margenNeta - margenNetaPrev; // Variación directa en puntos porcentuales
+    const variacionRoas = roasRealPrev > 0 ? ((roasReal - roasRealPrev) / roasRealPrev) * 100 : 0;
+
+    return {
+      ingresos,
+      ingresosPrev,
+      opex,
+      opexPrev,
+      marketing,
+      marketingPrev,
+      utilidadNeta,
+      utilidadNetaPrev,
+      margenNeta,
+      margenNetaPrev,
+      roasReal,
+      roasRealPrev,
+      variacionIngresos,
+      variacionOpex,
+      variacionUtilidad,
+      variacionMargen,
+      variacionRoas
+    };
+  }, [transacciones, transaccionesPrev, kpis]);
+
+  // Agrupado diario para el gráfico de Ingresos vs Gastos en Recharts
+  const datosGraficoFinanciero = useMemo(() => {
+    const mapa = new Map<string, { fecha: string; Ingresos: number; Gastos: number }>();
+
+    // Rellenar primero con fechas de marketing para mantener sincronía
+    metricasFiltradas.forEach(m => {
+      const existente = mapa.get(m.fecha) || { fecha: m.fecha, Ingresos: 0, Gastos: 0 };
+      existente.Gastos += Number(m.gasto_publicitario);
+      mapa.set(m.fecha, existente);
+    });
+
+    // Sumar transacciones de ingresos/gastos
+    transacciones.forEach(t => {
+      const existente = mapa.get(t.fecha) || { fecha: t.fecha, Ingresos: 0, Gastos: 0 };
+      if (t.tipo === "ingreso") {
+        existente.Ingresos += t.monto;
+      } else {
+        existente.Gastos += t.monto;
+      }
+      mapa.set(t.fecha, existente);
+    });
+
+    return Array.from(mapa.values())
+      .sort((a, b) => a.fecha.localeCompare(b.fecha))
+      .map(d => ({
+        fecha: d.fecha.slice(5), // YYYY-MM-DD -> MM-DD
+        Ingresos: Number(d.Ingresos.toFixed(2)),
+        Gastos: Number(d.Gastos.toFixed(2))
+      }));
+  }, [metricasFiltradas, transacciones]);
+
+  // Agrupado por categoría de gastos para el gráfico de dona
+  const datosDistribucionOpex = useMemo(() => {
+    const mapa = new Map<string, number>();
+
+    // Gastos operativos
+    transacciones
+      .filter(t => t.tipo === "gasto" && t.categoria !== "marketing")
+      .forEach(t => {
+        const cat = t.categoria.toUpperCase();
+        mapa.set(cat, (mapa.get(cat) || 0) + t.monto);
+      });
+
+    // Inversión en marketing
+    const totalMarketing = kpis.totalGasto;
+    if (totalMarketing > 0) {
+      mapa.set("MARKETING", totalMarketing);
+    }
+
+    return Array.from(mapa.entries()).map(([name, value]) => ({
+      name,
+      value: Number(value.toFixed(2))
+    }));
+  }, [transacciones, kpis]);
 
   // Agrupado diario para el gráfico de Gasto vs Leads
   const datosPorDia = useMemo(() => {
@@ -589,6 +883,30 @@ export function DashboardInteligente() {
         </div>
       </header>
 
+      {/* PESTAÑAS PRINCIPALES DEL DASHBOARD */}
+      <div className="flex border-b border-slate-200 mb-6 text-sm font-semibold">
+        <button
+          onClick={() => setActiveTab("marketing")}
+          className={`pb-3 px-4 transition ${
+            activeTab === "marketing"
+              ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          📣 Adquisición & Leads (Marketing)
+        </button>
+        <button
+          onClick={() => setActiveTab("finanzas")}
+          className={`pb-3 px-4 transition ${
+            activeTab === "finanzas"
+              ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          💰 Finanzas & P&L (Contabilidad)
+        </button>
+      </div>
+
       {/* SECCIÓN DEL CEREBRO DE RECOMENDACIONES (SOFÍA) */}
       {insight && (
         <section className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -676,245 +994,563 @@ export function DashboardInteligente() {
         </section>
       )}
 
-      {/* TARJETAS DE KPIS PRINCIPALES */}
-      <section className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gasto Total</span>
-            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">${kpis.totalGasto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-          </div>
-          <div className="mt-1 flex flex-col">
-            <span className="text-[9px] text-slate-400">Presupuesto invertido</span>
-            {kpis.totalGastoPrev > 0 ? (
-              <span className={`text-[9px] font-bold ${kpis.variacionGasto <= 0 ? "text-emerald-600" : "text-slate-500"}`}>
-                {kpis.variacionGasto >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionGasto).toFixed(1)}% vs periodo ant.
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-300">Sin comparativo</span>
-            )}
-          </div>
+      {loadingFinanzas ? (
+        <div className="flex h-96 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#2D4A2B] border-t-transparent"></div>
         </div>
+      ) : activeTab === "marketing" ? (
+        <>
+          {/* TARJETAS DE KPIS PRINCIPALES (MARKETING) */}
+          <section className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gasto Total</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">${kpis.totalGasto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Presupuesto invertido</span>
+                {kpis.totalGastoPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${kpis.variacionGasto <= 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                    {kpis.variacionGasto >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionGasto).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Leads CRM</span>
-            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{crmKPIs.actual.totalLeads}</p>
-          </div>
-          <div className="mt-1 flex flex-col">
-            <span className="text-[9px] text-slate-400">Capturados en CRM</span>
-            {crmKPIs.previo.totalLeads > 0 ? (
-              <span className={`text-[9px] font-bold ${kpis.variacionLeads >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {kpis.variacionLeads >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionLeads).toFixed(1)}% vs periodo ant.
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-300">Sin comparativo</span>
-            )}
-          </div>
-        </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Leads CRM</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{crmKPIs.actual.totalLeads}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Capturados en CRM</span>
+                {crmKPIs.previo.totalLeads > 0 ? (
+                  <span className={`text-[9px] font-bold ${kpis.variacionLeads >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {kpis.variacionLeads >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionLeads).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CPA Promedio</span>
-            <p className="text-xl font-extrabold text-amber-600 mt-1">${kpis.cpa.toFixed(2)}</p>
-          </div>
-          <div className="mt-1 flex flex-col">
-            <span className="text-[9px] text-slate-400">Costo por Adquisición</span>
-            {kpis.cpaPrev > 0 ? (
-              <span className={`text-[9px] font-bold ${kpis.variacionCpa <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {kpis.variacionCpa >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionCpa).toFixed(1)}% vs periodo ant.
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-300">Sin comparativo</span>
-            )}
-          </div>
-        </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CPA Promedio</span>
+                <p className="text-xl font-extrabold text-amber-600 mt-1">${kpis.cpa.toFixed(2)}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Costo por Adquisición</span>
+                {kpis.cpaPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${kpis.variacionCpa <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {kpis.variacionCpa >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionCpa).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ventas Cerradas</span>
-            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{crmKPIs.actual.totalVentas}</p>
-          </div>
-          <div className="mt-1 flex flex-col">
-            <span className="text-[9px] text-slate-400">Expedientes finalizados</span>
-            {crmKPIs.previo.totalVentas > 0 ? (
-              <span className={`text-[9px] font-bold ${kpis.variacionVentas >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {kpis.variacionVentas >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionVentas).toFixed(1)}% vs periodo ant.
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-300">Sin comparativo</span>
-            )}
-          </div>
-        </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ventas Cerradas</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{crmKPIs.actual.totalVentas}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Expedientes finalizados</span>
+                {crmKPIs.previo.totalVentas > 0 ? (
+                  <span className={`text-[9px] font-bold ${kpis.variacionVentas >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {kpis.variacionVentas >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionVentas).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Conversión</span>
-            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.conversion.toFixed(1)}%</p>
-          </div>
-          <div className="mt-1 flex flex-col">
-            <span className="text-[9px] text-slate-400">Lead a Venta</span>
-            {crmKPIs.previo.totalLeads > 0 ? (
-              <span className={`text-[9px] font-bold ${kpis.variacionConversion >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {kpis.variacionConversion >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionConversion).toFixed(1)}% vs periodo ant.
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-300">Sin comparativo</span>
-            )}
-          </div>
-        </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Conversión</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.conversion.toFixed(1)}%</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Lead a Venta</span>
+                {crmKPIs.previo.totalLeads > 0 ? (
+                  <span className={`text-[9px] font-bold ${kpis.variacionConversion >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {kpis.variacionConversion >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionConversion).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CTR Promedio</span>
-            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.ctr.toFixed(2)}%</p>
-          </div>
-          <div className="mt-1 flex flex-col">
-            <span className="text-[9px] text-slate-400">Clics / Impresiones</span>
-            {kpis.ctrPrev > 0 ? (
-              <span className={`text-[9px] font-bold ${kpis.variacionCtr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {kpis.variacionCtr >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionCtr).toFixed(1)}% vs periodo ant.
-              </span>
-            ) : (
-              <span className="text-[9px] text-slate-300">Sin comparativo</span>
-            )}
-          </div>
-        </div>
-      </section>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CTR Promedio</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.ctr.toFixed(2)}%</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Clics / Impresiones</span>
+                {kpis.ctrPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${kpis.variacionCtr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {kpis.variacionCtr >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionCtr).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
+          </section>
 
+          {/* GRÁFICOS ANALÍTICOS (MARKETING) */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
+                Relación Gasto Publicitario vs Leads Capturados
+              </h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={datosPorDia} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorGasto" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORES.verdeSauce} stopOpacity={0.2} />
+                        <stop offset="95%" stopColor={COLORES.verdeSauce} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 9 }} stroke="#64748B" />
+                    <YAxis yAxisId="left" tick={{ fontSize: 9 }} stroke="#64748B" label={{ value: 'Gasto ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#64748B' } }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9 }} stroke="#64748B" label={{ value: 'Leads', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fontSize: 10, fill: '#64748B' } }} />
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Area yAxisId="left" type="monotone" dataKey="Gasto" name="Inversión ($)" stroke={COLORES.verdeSauce} fillOpacity={1} fill="url(#colorGasto)" strokeWidth={2} />
+                    <Bar yAxisId="right" dataKey="Leads" name="Leads Capturados" fill={COLORES.dorado} radius={[4, 4, 0, 0]} barSize={20} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-      {/* GRÁFICOS ANALÍTICOS */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Gráfico 1: Relación Gasto vs Leads (Area/Bar) */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
-          <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
-            Relación Gasto Publicitario vs Leads Capturados
-          </h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={datosPorDia} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorGasto" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORES.verdeSauce} stopOpacity={0.2} />
-                    <stop offset="95%" stopColor={COLORES.verdeSauce} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="fecha" tick={{ fontSize: 9 }} stroke="#64748B" />
-                <YAxis yAxisId="left" tick={{ fontSize: 9 }} stroke="#64748B" label={{ value: 'Gasto ($)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#64748B' } }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9 }} stroke="#64748B" label={{ value: 'Leads', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fontSize: 10, fill: '#64748B' } }} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area yAxisId="left" type="monotone" dataKey="Gasto" name="Inversión ($)" stroke={COLORES.verdeSauce} fillOpacity={1} fill="url(#colorGasto)" strokeWidth={2} />
-                <Bar yAxisId="right" dataKey="Leads" name="Leads Capturados" fill={COLORES.dorado} radius={[4, 4, 0, 0]} barSize={20} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Gráfico 2: Torta de Leads por Canal */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
-            Distribución de Adquisición
-          </h3>
-          <div className="h-72 flex items-center justify-center">
-            {datosPorCanal.length === 0 ? (
-              <p className="text-slate-400 text-xs font-medium">Sin datos para distribuir.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={datosPorCanal}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={75}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {datosPorCanal.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={PALETA_CANALES[entry.name.toLowerCase() as keyof typeof PALETA_CANALES] || COLORES.gris} 
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
+                Distribución de Adquisición
+              </h3>
+              <div className="h-72 flex items-center justify-center">
+                {datosPorCanal.length === 0 ? (
+                  <p className="text-slate-400 text-xs font-medium">Sin datos para distribuir.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={datosPorCanal}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={75}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {datosPorCanal.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={PALETA_CANALES[entry.name.toLowerCase() as keyof typeof PALETA_CANALES] || COLORES.gris} 
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value} leads`, 'Total']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                      <Legend 
+                        layout="horizontal" 
+                        verticalAlign="bottom" 
+                        align="center"
+                        wrapperStyle={{ fontSize: 10 }} 
                       />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-1">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
+                Evolución del CPA Diario ($)
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={datosCpaDiario} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 9 }} stroke="#64748B" />
+                    <YAxis tick={{ fontSize: 9 }} stroke="#64748B" />
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Line type="monotone" dataKey="CPA" name="CPA ($)" stroke={COLORES.amarillo} strokeWidth={2.5} activeDot={{ r: 6 }} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* TABLA DETALLADA HISTÓRICA */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
+                  Historial Consolidado de Métricas
+                </h3>
+                <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  {metricasFiltradas.length} Registros
+                </span>
+              </div>
+              <div className="overflow-x-auto max-h-64 scrollbar-sutil">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold tracking-wider sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2">Fecha</th>
+                      <th className="px-4 py-2">Canal</th>
+                      <th className="px-4 py-2">Campaña</th>
+                      <th className="px-4 py-2 text-right">Inversión</th>
+                      <th className="px-4 py-2 text-right">Clics</th>
+                      <th className="px-4 py-2 text-right">Leads</th>
+                      <th className="px-4 py-2 text-right">Cerrados</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {metricasFiltradas.map((m, index) => (
+                      <tr key={m.id || index} className="hover:bg-slate-50 text-slate-700">
+                        <td className="px-4 py-2.5 font-mono text-[10px]">{m.fecha}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold text-white uppercase" style={{ backgroundColor: PALETA_CANALES[m.canal] || COLORES.gris }}>
+                            {m.canal}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 truncate max-w-[150px]">{m.campana_nombre || "Orgánico / General"}</td>
+                        <td className="px-4 py-2.5 text-right font-mono">${Number(m.gasto_publicitario).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono">{m.clics}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-[#2D4A2B] font-bold">{m.leads_registrados_crm}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-emerald-600 font-bold">{m.ventas_cerradas_crm}</td>
+                      </tr>
                     ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [`${value} leads`, 'Total']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                  <Legend 
-                    layout="horizontal" 
-                    verticalAlign="bottom" 
-                    align="center"
-                    wrapperStyle={{ fontSize: 10 }} 
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
-      </section>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : (
+        <>
+          {/* TARJETAS DE KPIS PRINCIPALES (FINANZAS Y P&L) */}
+          <section className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ingresos Totales</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">${finanzasKPIs.ingresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Ventas & Comisiones</span>
+                {finanzasKPIs.ingresosPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionIngresos >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.variacionIngresos >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionIngresos).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Gráfico 3: Tendencia de CPA diario */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-1">
-          <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
-            Evolución del CPA Diario ($)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={datosCpaDiario} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="fecha" tick={{ fontSize: 9 }} stroke="#64748B" />
-                <YAxis tick={{ fontSize: 9 }} stroke="#64748B" />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Line type="monotone" dataKey="CPA" name="CPA ($)" stroke={COLORES.amarillo} strokeWidth={2.5} activeDot={{ r: 6 }} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Inversión Marketing</span>
+                <p className="text-xl font-extrabold text-amber-600 mt-1">${finanzasKPIs.marketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Facebook & TikTok Ads</span>
+                {finanzasKPIs.marketingPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${finanzasKPIs.marketing <= finanzasKPIs.marketingPrev ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.marketing >= finanzasKPIs.marketingPrev ? "▲" : "▼"} {Math.abs(((finanzasKPIs.marketing - finanzasKPIs.marketingPrev)/finanzasKPIs.marketingPrev)*100).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
 
-        {/* Tabla Detallada Histórica */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
-              Historial Consolidado de Métricas
-            </h3>
-            <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
-              {metricasFiltradas.length} Registros
-            </span>
-          </div>
-          <div className="overflow-x-auto max-h-64 scrollbar-sutil">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold tracking-wider sticky top-0">
-                <tr>
-                  <th className="px-4 py-2">Fecha</th>
-                  <th className="px-4 py-2">Canal</th>
-                  <th className="px-4 py-2">Campaña</th>
-                  <th className="px-4 py-2 text-right">Inversión</th>
-                  <th className="px-4 py-2 text-right">Clics</th>
-                  <th className="px-4 py-2 text-right">Leads</th>
-                  <th className="px-4 py-2 text-right">Cerrados</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {metricasFiltradas.map((m, index) => (
-                  <tr key={m.id || index} className="hover:bg-slate-50 text-slate-700">
-                    <td className="px-4 py-2.5 font-mono text-[10px]">{m.fecha}</td>
-                    <td className="px-4 py-2.5">
-                      <span className="inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold text-white uppercase" style={{ backgroundColor: PALETA_CANALES[m.canal] || COLORES.gris }}>
-                        {m.canal}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 truncate max-w-[150px]">{m.campana_nombre || "Orgánico / General"}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">${Number(m.gasto_publicitario).toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{m.clics}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-[#2D4A2B] font-bold">{m.leads_registrados_crm}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-emerald-600 font-bold">{m.ventas_cerradas_crm}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gastos OPEX</span>
+                <p className="text-xl font-extrabold text-slate-700 mt-1">${finanzasKPIs.opex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Nómina, renta, servicios</span>
+                {finanzasKPIs.opexPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionOpex <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.variacionOpex >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionOpex).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Utilidad Neta</span>
+                <p className={`text-xl font-extrabold mt-1 ${finanzasKPIs.utilidadNeta >= 0 ? "text-[#2D4A2B]" : "text-rose-600"}`}>
+                  ${finanzasKPIs.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Ingresos - Egresos</span>
+                {finanzasKPIs.utilidadNetaPrev !== 0 ? (
+                  <span className={`text-[9px] font-bold ${finanzasKPIs.utilidadNeta >= finanzasKPIs.utilidadNetaPrev ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.utilidadNeta >= finanzasKPIs.utilidadNetaPrev ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionUtilidad).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Margen Neto</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{finanzasKPIs.margenNeta.toFixed(1)}%</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Porcentaje de Retorno</span>
+                {finanzasKPIs.ingresosPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionMargen >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.variacionMargen >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionMargen).toFixed(1)} pp vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">ROAS Real</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{finanzasKPIs.roasReal.toFixed(2)}x</p>
+              </div>
+              <div className="mt-1 flex flex-col">
+                <span className="text-[9px] text-slate-400">Retorno real de inversión</span>
+                {finanzasKPIs.roasRealPrev > 0 ? (
+                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionRoas >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.variacionRoas >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionRoas).toFixed(1)}% vs periodo ant.
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* GRÁFICOS FINANCIEROS */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
+                Flujo de Caja (Ingresos vs Egresos Totales)
+              </h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={datosGraficoFinanciero} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 9 }} stroke="#64748B" />
+                    <YAxis tick={{ fontSize: 9 }} stroke="#64748B" />
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="Ingresos" name="Ingresos ($)" fill="#10B981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Gastos" name="Egresos ($)" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
+                Distribución del Total de Gastos
+              </h3>
+              <div className="h-72 flex flex-col justify-between">
+                {datosDistribucionOpex.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-xs text-slate-400">
+                    Sin egresos registrados en este periodo.
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={datosDistribucionOpex}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {datosDistribucionOpex.map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={Object.values(COLORES)[index % Object.values(COLORES).length]} 
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] mt-2 max-h-20 overflow-y-auto pr-1 scrollbar-sutil">
+                      {datosDistribucionOpex.map((entry, idx) => (
+                        <div key={idx} className="flex items-center gap-1">
+                          <span
+                            className="h-2 w-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: Object.values(COLORES)[idx % Object.values(COLORES).length] }}
+                          />
+                          <span className="truncate text-slate-600 uppercase font-semibold">{entry.name}:</span>
+                          <span className="font-bold">${entry.value.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* TABLA DE TRANSACCIONES Y ATRIBUCIÓN CRM */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
+                  Libro Contable (Ingresos y Costos Operativos)
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+                  >
+                    📋 Importar Excel
+                  </button>
+                  <button
+                    onClick={() => setShowManualModal(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-[#2D4A2B] px-3 py-1.5 text-xs font-bold text-[#F5F1E8] hover:bg-[#5C7A52] transition shadow-sm"
+                  >
+                    ➕ Nuevo Registro
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto max-h-[350px] scrollbar-sutil">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold tracking-wider sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2.5">Fecha</th>
+                      <th className="px-4 py-2.5">Tipo</th>
+                      <th className="px-4 py-2.5">Categoría</th>
+                      <th className="px-4 py-2.5">Concepto</th>
+                      <th className="px-4 py-2.5 text-right">Monto</th>
+                      <th className="px-4 py-2.5 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {transacciones.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                          Sin transacciones contables registradas para este periodo.
+                        </td>
+                      </tr>
+                    ) : (
+                      transacciones.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-50 text-slate-700 transition">
+                          <td className="px-4 py-2.5 font-mono text-[10px]">{t.fecha}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider ${
+                              t.tipo === "ingreso" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                            }`}>
+                              {t.tipo}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-[10px] font-bold uppercase text-slate-500">{t.categoria}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="font-semibold text-slate-800">{t.concepto}</div>
+                            {t.expediente_cliente && (
+                              <span className="text-[9px] text-[#2D4A2B] bg-[#F5F1E8] px-1.5 py-0.5 rounded mt-0.5 inline-block font-bold">
+                                Folio: {t.expediente_id} · Cliente: {t.expediente_cliente}
+                              </span>
+                            )}
+                          </td>
+                          <td className={`px-4 py-2.5 text-right font-mono font-bold ${
+                            t.tipo === "ingreso" ? "text-emerald-600" : "text-slate-900"
+                          }`}>
+                            ${t.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <button
+                              onClick={() => handleEliminarTransaccion(t.id!)}
+                              className="text-rose-600 hover:text-rose-900 hover:underline font-bold"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* PANEL DE ATRIBUCIÓN CRM */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-2">
+                Atribución de Ventas CRM
+              </h3>
+              <p className="text-[10px] text-slate-400 mb-4 leading-normal">
+                Registra la comisión de los expedientes cerrados en tu embudo para sumarlos a los ingresos del P&L:
+              </p>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-sutil">
+                {expedientesCerrados.length === 0 ? (
+                  <div className="flex h-44 flex-col items-center justify-center text-xs text-slate-400 text-center p-4">
+                    <span>🎉</span>
+                    <span className="mt-1 font-semibold text-slate-500">¡Todo al día!</span>
+                    <span className="text-[10px] text-slate-300 mt-0.5">Todos los expedientes cerrados tienen sus comisiones registradas.</span>
+                  </div>
+                ) : (
+                  expedientesCerrados.map((exp) => (
+                    <div key={exp.id} className="border border-slate-100 rounded-xl p-3 hover:border-[#2D4A2B] transition flex flex-col justify-between bg-slate-50">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 font-mono uppercase">EXP: {exp.id}</span>
+                          <span className="bg-emerald-100 text-emerald-800 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Cerrado</span>
+                        </div>
+                        <h4 className="font-bold text-slate-800 text-xs truncate">{exp.cliente}</h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Valor de Operación: <span className="font-semibold text-slate-600">${exp.valor_estimado.toLocaleString("es-MX")}</span></p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setManualData({
+                            fecha: exp.ultimo_movimiento || new Date().toISOString().split("T")[0],
+                            tipo: "ingreso",
+                            categoria: "comision",
+                            concepto: `Comisión por Venta Cerrada: ${exp.cliente}`,
+                            monto: String(Math.round(exp.valor_estimado * 0.05)), // Sugiere 5% de comisión por defecto
+                            expediente_id: exp.id
+                          });
+                          setShowManualModal(true);
+                        }}
+                        className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] py-1.5 rounded-lg transition text-center shadow-sm"
+                      >
+                        Registrar Comisión (5%)
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
 
       {/* MODAL DE SINCRONIZACIÓN HISTÓRICA */}
       {showSyncModal && (
@@ -1100,6 +1736,214 @@ export function DashboardInteligente() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NUEVO REGISTRO MANUAL (FINANZAS) */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] flex items-center gap-2">
+                ➕ Registrar Movimiento Contable
+              </h3>
+              <button 
+                onClick={() => setShowManualModal(false)}
+                className="text-slate-400 hover:text-[#2D4A2B] text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCrearTransaccionManual} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Fecha
+                  </label>
+                  <input
+                    type="date"
+                    value={manualData.fecha}
+                    onChange={(e) => setManualData({ ...manualData, fecha: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Tipo de Movimiento
+                  </label>
+                  <select
+                    value={manualData.tipo}
+                    onChange={(e) => {
+                      const tipo = e.target.value as "ingreso" | "gasto";
+                      const categoria = tipo === "ingreso" ? "venta" : "nomina";
+                      setManualData({ ...manualData, tipo, categoria });
+                    }}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
+                  >
+                    <option value="gasto">🔴 Gasto (Egreso)</option>
+                    <option value="ingreso">🟢 Ingreso (Venta/Comisión)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Categoría
+                  </label>
+                  <select
+                    value={manualData.categoria}
+                    onChange={(e) => setManualData({ ...manualData, categoria: e.target.value as any })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
+                  >
+                    {manualData.tipo === "ingreso" ? (
+                      <>
+                        <option value="venta">Venta Directa</option>
+                        <option value="comision">Comisión Inmobiliaria</option>
+                        <option value="otro">Otro Ingreso</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="nomina">Nómina / Sueldos</option>
+                        <option value="renta">Renta Oficina</option>
+                        <option value="servicios">Servicios (Luz, Internet, etc.)</option>
+                        <option value="marketing">Publicidad Extra</option>
+                        <option value="impuestos">Impuestos</option>
+                        <option value="otro">Otro Gasto</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Monto ($ MXN)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualData.monto}
+                    onChange={(e) => setManualData({ ...manualData, monto: e.target.value })}
+                    placeholder="Ej: 15000"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Concepto / Detalle
+                </label>
+                <input
+                  type="text"
+                  value={manualData.concepto}
+                  onChange={(e) => setManualData({ ...manualData, concepto: e.target.value })}
+                  placeholder="Ej: Pago de renta mes de junio..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Vincular a Expediente CRM (Opcional)
+                </label>
+                <select
+                  value={manualData.expediente_id}
+                  onChange={(e) => setManualData({ ...manualData, expediente_id: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-medium text-slate-700 bg-white"
+                >
+                  <option value="">-- No vincular --</option>
+                  {todosLosExpedientes.map((exp) => (
+                    <option key={exp.id} value={exp.id}>
+                      {exp.cliente} (Folio: {exp.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingManual}
+                  className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loadingManual ? "Registrando..." : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL IMPORTADOR DE EXCEL MASIVO (FINANZAS) */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] flex items-center gap-2">
+                📋 Importar Movimientos desde Excel
+              </h3>
+              <button 
+                onClick={() => setShowImportModal(false)}
+                className="text-slate-400 hover:text-[#2D4A2B] text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleImportarExcel} className="space-y-4">
+              <p className="text-[10px] text-slate-500 leading-relaxed font-semibold">
+                Copia las columnas de tu Excel y pégalas directamente abajo. El formato debe ser de 5 columnas separadas por tabulaciones (como lo copia Excel por defecto) o por comas:
+                <br />
+                <span className="font-mono bg-slate-100 text-slate-800 p-1 rounded mt-1.5 block font-bold">
+                  Fecha (AAAA-MM-DD) | Tipo (ingreso/gasto) | Categoría | Concepto | Monto
+                </span>
+                <br />
+                Categorías permitidas: <span className="font-mono bg-slate-50 text-[#2D4A2B] p-0.5 rounded">nomina, renta, servicios, marketing, impuestos, venta, comision, otro</span>
+              </p>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Datos de Excel (Copia y Pega)
+                </label>
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder="2026-06-01&#9;gasto&#9;renta&#9;Renta Oficina de Junio&#9;12000&#10;2026-06-05&#9;ingreso&#9;comision&#9;Comision Casa Fracc. Ramos&#9;45000"
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-40 resize-none"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingImport}
+                  className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loadingImport ? "Procesando importación..." : "Procesar e Importar"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

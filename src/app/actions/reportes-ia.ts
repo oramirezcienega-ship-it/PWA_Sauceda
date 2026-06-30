@@ -18,6 +18,18 @@ export interface MarketingMetric {
   ventas_cerradas_crm: number;
 }
 
+export interface TransaccionFinanciera {
+  id?: string;
+  fecha: string;
+  tipo: "ingreso" | "gasto";
+  categoria: "venta" | "comision" | "marketing" | "nomina" | "renta" | "servicios" | "impuestos" | "otro";
+  concepto: string;
+  monto: number;
+  expediente_id?: string | null;
+  created_at?: string;
+  expediente_cliente?: string | null;
+}
+
 export interface AIInsight {
   id?: string;
   fecha: string;
@@ -593,5 +605,174 @@ export async function sincronizarHistorialTikTok(
       success: false,
       message: error.message || "Error desconocido al sincronizar."
     };
+  }
+}
+
+/**
+ * Obtiene las transacciones financieras registradas en un rango de fechas.
+ * Une la información del cliente desde la tabla de expedientes si existe.
+ */
+export async function obtenerTransaccionesFinancieras(
+  fechaInicio: string,
+  fechaFin: string
+): Promise<TransaccionFinanciera[]> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { data, error } = await sb
+      .from("transacciones_financieras")
+      .select(`
+        *,
+        expedientes (
+          cliente
+        )
+      `)
+      .gte("fecha", fechaInicio)
+      .lte("fecha", fechaFin)
+      .order("fecha", { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      fecha: t.fecha,
+      tipo: t.tipo as "ingreso" | "gasto",
+      categoria: t.categoria as any,
+      concepto: t.concepto,
+      monto: Number(t.monto),
+      expediente_id: t.expediente_id,
+      created_at: t.created_at,
+      expediente_cliente: t.expedientes ? t.expedientes.cliente : null
+    }));
+  } catch (err) {
+    console.error("Error al obtener transacciones financieras:", err);
+    return [];
+  }
+}
+
+/**
+ * Registra una nueva transacción financiera (gasto o ingreso) en Supabase.
+ */
+export async function crearTransaccionFinanciera(
+  t: Omit<TransaccionFinanciera, "id" | "created_at">
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb.from("transacciones_financieras").insert([t]);
+    if (error) throw error;
+
+    return { success: true, message: "Movimiento financiero registrado exitosamente." };
+  } catch (err: any) {
+    console.error("Error al crear transacción financiera:", err);
+    return { success: false, message: err.message || "Error al registrar el movimiento." };
+  }
+}
+
+/**
+ * Inserta un conjunto masivo de transacciones financieras (importador de Excel).
+ */
+export async function importarTransaccionesMasivas(
+  transacciones: Omit<TransaccionFinanciera, "id" | "created_at">[]
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb.from("transacciones_financieras").insert(transacciones);
+    if (error) throw error;
+
+    return { success: true, message: `Se importaron exitosamente ${transacciones.length} movimientos financieros.` };
+  } catch (err: any) {
+    console.error("Error al importar transacciones financieras:", err);
+    return { success: false, message: err.message || "Error al importar movimientos." };
+  }
+}
+
+/**
+ * Elimina un registro de transacción financiera en Supabase.
+ */
+export async function eliminarTransaccionFinanciera(
+  id: string
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb.from("transacciones_financieras").delete().eq("id", id);
+    if (error) throw error;
+
+    return { success: true, message: "Movimiento financiero eliminado exitosamente." };
+  } catch (err: any) {
+    console.error("Error al eliminar transacción financiera:", err);
+    return { success: false, message: err.message || "Error al eliminar el movimiento." };
+  }
+}
+
+/**
+ * Obtiene los expedientes en etapa 'cerrado' que aún no tienen una comisión (ingreso) asociada.
+ */
+export async function obtenerExpedientesCerradosSinComision(): Promise<
+  Array<{ id: string; cliente: string; valor_estimado: number; ultimo_movimiento: string }>
+> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Obtener expedientes cerrados
+    const { data: expedientes, error: errExp } = await sb
+      .from("expedientes")
+      .select("id, cliente, valor_estimado, ultimo_movimiento")
+      .eq("etapa", "cerrado");
+
+    if (errExp) throw errExp;
+    if (!expedientes || expedientes.length === 0) return [];
+
+    // 2. Obtener IDs de expedientes que ya tengan ingresos/comisión asociados
+    const { data: transacciones, error: errTrans } = await sb
+      .from("transacciones_financieras")
+      .select("expediente_id")
+      .is("expediente_id", "not.null")
+      .eq("tipo", "ingreso");
+
+    if (errTrans) throw errTrans;
+
+    const idsConComision = new Set((transacciones || []).map((t: any) => t.expediente_id));
+
+    // 3. Filtrar los que no tienen registro financiero
+    return expedientes
+      .filter((e: any) => !idsConComision.has(e.id))
+      .map((e: any) => ({
+        id: e.id,
+        cliente: e.cliente,
+        valor_estimado: Number(e.valor_estimado || 0),
+        ultimo_movimiento: e.ultimo_movimiento || ""
+      }));
+  } catch (err) {
+    console.error("Error al obtener expedientes cerrados sin comisión:", err);
+    return [];
+  }
+}
+
+/**
+ * Obtiene todos los expedientes (ID y nombre de cliente) para el selector de vinculación manual.
+ */
+export async function obtenerTodosLosExpedientes(): Promise<Array<{ id: string; cliente: string }>> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { data, error } = await sb
+      .from("expedientes")
+      .select("id, cliente")
+      .order("cliente", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error("Error al obtener todos los expedientes:", err);
+    return [];
   }
 }
