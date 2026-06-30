@@ -16,6 +16,7 @@ import {
   obtenerExpedientesCerradosSinComision,
   obtenerTodosLosExpedientes,
   eliminarDatosDemostracionFinanzas,
+  actualizarTransaccionFinanciera,
   type MarketingMetric,
   type TransaccionFinanciera,
   type AIInsight
@@ -208,6 +209,7 @@ export function DashboardInteligente() {
   const [loadingManual, setLoadingManual] = useState(false);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategoryName, setCustomCategoryName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Importador de Excel
   const [importText, setImportText] = useState("");
@@ -428,7 +430,7 @@ export function DashboardInteligente() {
     }
   };
 
-  // Handler para registrar movimiento contable de forma manual
+  // Handler para registrar movimiento contable de forma manual o editar uno existente
   const handleCrearTransaccionManual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualData.concepto.trim() || !manualData.monto) {
@@ -444,14 +446,22 @@ export function DashboardInteligente() {
 
     setLoadingManual(true);
     try {
-      const res = await crearTransaccionFinanciera({
+      const payload = {
         fecha: manualData.fecha,
         tipo: manualData.tipo,
         categoria: categoriaFinal,
         concepto: manualData.concepto,
         monto: Number(manualData.monto),
         expediente_id: manualData.expediente_id || null
-      });
+      };
+
+      let res;
+      if (editingId) {
+        res = await actualizarTransaccionFinanciera(editingId, payload);
+      } else {
+        res = await crearTransaccionFinanciera(payload);
+      }
+
       if (res.success) {
         alert(res.message);
         setShowManualModal(false);
@@ -466,6 +476,7 @@ export function DashboardInteligente() {
         });
         setIsCustomCategory(false);
         setCustomCategoryName("");
+        setEditingId(null);
         // Recargar datos
         const trans = await obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
         const expCerrados = await obtenerExpedientesCerradosSinComision();
@@ -475,7 +486,7 @@ export function DashboardInteligente() {
         alert(res.message);
       }
     } catch (err: any) {
-      alert(`Error al registrar movimiento: ${err.message}`);
+      alert(`Error al guardar movimiento: ${err.message}`);
     } finally {
       setLoadingManual(false);
     }
@@ -618,6 +629,64 @@ export function DashboardInteligente() {
     return metricas
       .filter(m => m.fecha >= fechasCalculadas.fechaInicioPrev && m.fecha <= fechasCalculadas.fechaFinPrev);
   }, [metricas, fechasCalculadas]);
+
+  // Estado de Resultados (P&L) tradicional
+  const estadoResultados = useMemo(() => {
+    let ventasDirectas = 0;
+    let comisiones = 0;
+    let otrosIngresos = 0;
+
+    let nomina = 0;
+    let renta = 0;
+    let servicios = 0;
+    let impuestos = 0;
+    let otrosGastos = 0;
+
+    transacciones.forEach(t => {
+      const cat = t.categoria.toLowerCase();
+      if (t.tipo === "ingreso") {
+        if (cat === "venta") ventasDirectas += t.monto;
+        else if (cat === "comision") comisiones += t.monto;
+        else otrosIngresos += t.monto;
+      } else {
+        if (cat === "nomina") nomina += t.monto;
+        else if (cat === "renta") renta += t.monto;
+        else if (cat === "servicios") servicios += t.monto;
+        else if (cat === "impuestos") impuestos += t.monto;
+        else if (cat !== "marketing") otrosGastos += t.monto;
+      }
+    });
+
+    const metaAdsGasto = metricasFiltradas.reduce((acc, curr) => acc + (curr.gasto_publicitario || 0), 0);
+    const marketingTransacciones = transacciones
+      .filter(t => t.tipo === "gasto" && t.categoria.toLowerCase() === "marketing")
+      .reduce((acc, curr) => acc + curr.monto, 0);
+
+    const totalIngresos = ventasDirectas + comisiones + otrosIngresos;
+    const totalMarketing = metaAdsGasto + marketingTransacciones;
+    const utilidadBruta = totalIngresos - totalMarketing;
+
+    const totalOpex = nomina + renta + servicios + impuestos + otrosGastos;
+    const utilidadNeta = utilidadBruta - totalOpex;
+    const margenNeto = totalIngresos > 0 ? (utilidadNeta / totalIngresos) * 100 : 0;
+
+    return {
+      ventasDirectas,
+      comisiones,
+      otrosIngresos,
+      totalIngresos,
+      totalMarketing,
+      utilidadBruta,
+      nomina,
+      renta,
+      servicios,
+      impuestos,
+      otrosGastos,
+      totalOpex,
+      utilidadNeta,
+      margenNeto
+    };
+  }, [transacciones, metricasFiltradas]);
 
   // Cálculos consolidados para los KPI Cards
   const kpis = useMemo(() => {
@@ -1540,7 +1609,34 @@ export function DashboardInteligente() {
                           }`}>
                             ${t.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-2.5 text-center">
+                          <td className="px-4 py-2.5 text-center flex items-center justify-center gap-3">
+                            <button
+                              onClick={() => {
+                                setEditingId(t.id!);
+                                setManualData({
+                                  fecha: t.fecha,
+                                  tipo: t.tipo,
+                                  categoria: t.categoria,
+                                  concepto: t.concepto,
+                                  monto: String(t.monto),
+                                  expediente_id: t.expediente_id || ""
+                                });
+                                const isCustom = t.tipo === "ingreso"
+                                  ? !["comision", "venta", "otro"].includes(t.categoria.toLowerCase())
+                                  : !["nomina", "renta", "servicios", "marketing", "impuestos", "otro"].includes(t.categoria.toLowerCase());
+                                if (isCustom) {
+                                  setIsCustomCategory(true);
+                                  setCustomCategoryName(t.categoria);
+                                } else {
+                                  setIsCustomCategory(false);
+                                  setCustomCategoryName("");
+                                }
+                                setShowManualModal(true);
+                              }}
+                              className="text-blue-600 hover:text-blue-900 hover:underline font-bold"
+                            >
+                              Editar
+                            </button>
                             <button
                               onClick={() => handleEliminarTransaccion(t.id!)}
                               className="text-rose-600 hover:text-rose-900 hover:underline font-bold"
@@ -1601,6 +1697,156 @@ export function DashboardInteligente() {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          </section>
+
+          {/* ESTADO DE RESULTADOS TRADICIONAL (P&L STATEMENT) */}
+          <section className="mb-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="border-b border-slate-100 pb-4 mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
+                    Estado de Resultados (P&L Tradicional)
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                    Resumen contable estructurado para el período seleccionado
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded tracking-wide">
+                    Moneda: MXN ($)
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto scrollbar-sutil">
+                <table className="w-full text-xs text-left border-collapse">
+                  <tbody>
+                    {/* INGRESO BRUTO */}
+                    <tr className="bg-slate-50 border-y border-slate-200 font-bold text-[#2D4A2B]">
+                      <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                        1. Ingresos Operativos (Revenues)
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono">
+                        ${estadoResultados.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
+                      <td className="px-4 py-2 text-slate-400">Ingresos por intermediación de ventas/rentas</td>
+                      <td className="px-4 py-2 text-right font-mono text-slate-700">
+                        ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
+                      <td className="px-4 py-2 text-slate-400">Ingresos directos o traspasos comerciales</td>
+                      <td className="px-4 py-2 text-right font-mono text-slate-700">
+                        ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
+                      <td className="px-4 py-2 text-slate-400">Otros conceptos de entrada financiera</td>
+                      <td className="px-4 py-2 text-right font-mono text-slate-700">
+                        ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+
+                    {/* COSTO DE VENTAS */}
+                    <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
+                      <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                        2. Costo de Adquisición / Marketing (COGS)
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-rose-600">
+                        -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
+                      <td className="px-4 py-2 text-slate-400">Gasto en Meta Ads, TikTok Ads y agencias de medios</td>
+                      <td className="px-4 py-2 text-right font-mono text-rose-600">
+                        -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+
+                    {/* UTILIDAD BRUTA */}
+                    <tr className="bg-[#F5F1E8] border-y border-[#E6DEC9] font-extrabold text-[#2D4A2B]">
+                      <td className="px-4 py-3 uppercase tracking-wider text-[10px]" colSpan={2}>
+                        (=) Utilidad Bruta (Gross Profit)
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-[13px]">
+                        ${estadoResultados.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+
+                    {/* GASTOS OPERATIVOS */}
+                    <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
+                      <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                        3. Gastos de Operación y Administración (OPEX)
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-rose-600">
+                        -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
+                      <td className="px-4 py-2 text-slate-400">Salarios y honorarios profesionales fijos</td>
+                      <td className="px-4 py-2 text-right font-mono text-rose-600">
+                        -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
+                      <td className="px-4 py-2 text-slate-400">Alquileres de sucursales e inmuebles corporativos</td>
+                      <td className="px-4 py-2 text-right font-mono text-rose-600">
+                        -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
+                      <td className="px-4 py-2 text-slate-400">Luz, agua, internet, telefonía e insumos de oficina</td>
+                      <td className="px-4 py-2 text-right font-mono text-rose-600">
+                        -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
+                      <td className="px-4 py-2 text-slate-400">Pagos al SAT y provisiones fiscales</td>
+                      <td className="px-4 py-2 text-right font-mono text-rose-600">
+                        -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-100 font-medium">
+                      <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
+                      <td className="px-4 py-2 text-slate-400">Cualquier otro gasto de operación menor o misceláneo</td>
+                      <td className="px-4 py-2 text-right font-mono text-rose-600">
+                        -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+
+                    {/* RESULTADO NETO */}
+                    <tr className={`border-y-2 border-slate-900 font-black ${
+                      estadoResultados.utilidadNeta >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
+                    }`}>
+                      <td className="px-4 py-3.5 uppercase tracking-wider text-[11px]" colSpan={2}>
+                        (=) Utilidad Neta (Net Income / EBIT)
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-mono text-sm underline decoration-double">
+                        ${estadoResultados.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="font-semibold text-slate-500 text-[10px]">
+                      <td className="px-4 py-2" colSpan={2}>Margen de Utilidad Neto (%)</td>
+                      <td className={`px-4 py-2 text-right font-mono font-bold ${
+                        estadoResultados.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
+                      }`}>
+                        {estadoResultados.margenNeto.toFixed(2)}%
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>
@@ -1801,10 +2047,23 @@ export function DashboardInteligente() {
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
               <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] flex items-center gap-2">
-                ➕ Registrar Movimiento Contable
+                {editingId ? "✏️ Editar Movimiento Contable" : "➕ Registrar Movimiento Contable"}
               </h3>
               <button 
-                onClick={() => setShowManualModal(false)}
+                onClick={() => {
+                  setShowManualModal(false);
+                  setEditingId(null);
+                  setManualData({
+                    fecha: new Date().toISOString().split("T")[0],
+                    tipo: "gasto",
+                    categoria: "otro",
+                    concepto: "",
+                    monto: "",
+                    expediente_id: ""
+                  });
+                  setIsCustomCategory(false);
+                  setCustomCategoryName("");
+                }}
                 className="text-slate-400 hover:text-[#2D4A2B] text-sm font-bold"
               >
                 ✕
@@ -1943,7 +2202,20 @@ export function DashboardInteligente() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowManualModal(false)}
+                  onClick={() => {
+                    setShowManualModal(false);
+                    setEditingId(null);
+                    setManualData({
+                      fecha: new Date().toISOString().split("T")[0],
+                      tipo: "gasto",
+                      categoria: "otro",
+                      concepto: "",
+                      monto: "",
+                      expediente_id: ""
+                    });
+                    setIsCustomCategory(false);
+                    setCustomCategoryName("");
+                  }}
                   className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancelar

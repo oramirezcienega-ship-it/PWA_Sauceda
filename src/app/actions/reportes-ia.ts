@@ -798,3 +798,28 @@ export async function eliminarDatosDemostracionFinanzas(): Promise<{ success: bo
     return { success: false, message: err.message || "Error al eliminar registros demo." };
   }
 }
+
+/**
+ * Actualiza un movimiento financiero existente en Supabase.
+ */
+export async function actualizarTransaccionFinanciera(
+  id: string,
+  t: Omit<TransaccionFinanciera, "id" | "created_at">
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb
+      .from("transacciones_financieras")
+      .update(t)
+      .eq("id", id);
+
+    if (error) throw error;
+
+    return { success: true, message: "Movimiento financiero actualizado exitosamente." };
+  } catch (err: any) {
+    console.error("Error al actualizar transacción financiera:", err);
+    return { success: false, message: err.message || "Error al actualizar el movimiento." };
+  }
+}
