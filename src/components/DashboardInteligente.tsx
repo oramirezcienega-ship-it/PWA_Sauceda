@@ -168,7 +168,8 @@ function renderMarkdown(text: string): React.ReactNode {
 
 export function DashboardInteligente() {
   const [metricas, setMetricas] = useState<MarketingMetric[]>([]);
-  const [insight, setInsight] = useState<AIInsight | null>(null);
+  const [insightMarketing, setInsightMarketing] = useState<AIInsight | null>(null);
+  const [insightFinanzas, setInsightFinanzas] = useState<AIInsight | null>(null);
   const [loading, setLoading] = useState(true);
   const [generandoIA, setGenerandoIA] = useState(false);
 
@@ -230,17 +231,19 @@ export function DashboardInteligente() {
   const [tkFechaInicio, setTkFechaInicio] = useState("2026-05-01");
   const [sincronizandoTikTok, setSincronizandoTikTok] = useState(false);
 
-  // Carga de datos inicial (solo métricas fijas de marketing y diagnóstico de Sofía)
+  // Carga de datos inicial (métricas fijas de marketing y diagnósticos de Sofía)
   useEffect(() => {
     async function cargarDatos() {
       setLoading(true);
       try {
-        const [met, ins] = await Promise.all([
+        const [met, insM, insF] = await Promise.all([
           obtenerMetricasMarketing(),
-          obtenerInsightsIA()
+          obtenerInsightsIA("marketing"),
+          obtenerInsightsIA("finanzas")
         ]);
         setMetricas(met);
-        setInsight(ins);
+        setInsightMarketing(insM);
+        setInsightFinanzas(insF);
       } catch (error) {
         console.error("Error al cargar datos de analítica:", error);
       } finally {
@@ -352,9 +355,14 @@ export function DashboardInteligente() {
         fechasCalculadas.fechaInicio,
         fechasCalculadas.fechaFin,
         fechasCalculadas.fechaInicioPrev,
-        fechasCalculadas.fechaFinPrev
+        fechasCalculadas.fechaFinPrev,
+        activeTab
       );
-      setInsight(nuevoInsight);
+      if (activeTab === "marketing") {
+        setInsightMarketing(nuevoInsight);
+      } else {
+        setInsightFinanzas(nuevoInsight);
+      }
     } catch (error) {
       alert("Error al invocar al cerebro analítico. Verifique la API Key de Anthropic.");
       console.error(error);
@@ -905,6 +913,7 @@ export function DashboardInteligente() {
     }));
   }, [metricasFiltradas]);
 
+  const insight = activeTab === "marketing" ? insightMarketing : insightFinanzas;
   const isEditingChildTransaction = editingId ? !!transacciones.find(t => t.id === editingId)?.recurrente_parent_id : false;
 
   if (loading) {

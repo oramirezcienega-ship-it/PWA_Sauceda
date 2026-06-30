@@ -39,6 +39,7 @@ export interface AIInsight {
   oportunidades: string[];
   estado_salud: "excelente" | "regular" | "critico";
   diagnostico_general: string;
+  tipo?: string;
 }
 
 /** Mockups realistas por si las tablas están vacías al inicio */
@@ -248,10 +249,12 @@ export async function obtenerKPIsPeriodoCRM(
 
 
 /**
- * Obtiene el insight/diagnóstico analítico más reciente.
- * Si la tabla está vacía, retorna el mockup por defecto.
+ * Obtiene el insight/diagnóstico analítico más reciente por tipo (marketing o finanzas).
+ * Si la tabla está vacía, retorna el mockup por defecto correspondiente.
  */
-export async function obtenerInsightsIA(): Promise<AIInsight> {
+export async function obtenerInsightsIA(
+  tipo: "marketing" | "finanzas" = "marketing"
+): Promise<AIInsight> {
   await requireAdministrador();
   const sb = supabaseServidor();
 
@@ -259,27 +262,29 @@ export async function obtenerInsightsIA(): Promise<AIInsight> {
     const { data, error } = await sb
       .from("dashboard_insights")
       .select("*")
+      .eq("tipo", tipo)
       .order("fecha", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (error) {
       if (error.code === "42P01") {
-        console.warn("La tabla dashboard_insights no existe. Usando fallback Mockup.");
-        return MOCK_INSIGHTS;
+        console.warn(`La tabla dashboard_insights no existe. Usando fallback Mockup para ${tipo}.`);
+        return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
       }
       throw error;
     }
 
     if (!data) {
+      const fallback = tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
       // Guardar el mockup por defecto si no hay nada
       const { data: insertado } = await sb
         .from("dashboard_insights")
-        .insert([MOCK_INSIGHTS])
+        .insert([{ ...fallback, tipo }])
         .select()
         .single();
 
-      return (insertado as AIInsight) || MOCK_INSIGHTS;
+      return (insertado as AIInsight) || fallback;
     }
 
     return {
@@ -290,41 +295,25 @@ export async function obtenerInsightsIA(): Promise<AIInsight> {
       diagnostico_general: data.diagnostico_general
     };
   } catch (err) {
-    console.error("Error al obtener insights de la IA:", err);
-    return MOCK_INSIGHTS;
+    console.error(`Error al obtener insights de la IA (${tipo}):`, err);
+    return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
   }
 }
 
 /**
  * Ejecuta un análisis inteligente en tiempo real usando Claude.
- * Lee las métricas de marketing y CRM consolidadas para el período seleccionado y genera el diagnóstico en base a ellas.
- */
-export async function generarInsightsConIA(
+ * Lee las métricas de marexport async function generarInsightsConIA(
   fechaInicio: string,
   fechaFin: string,
   fechaInicioPrev?: string,
-  fechaFinPrev?: string
+  fechaFinPrev?: string,
+  tipo: "marketing" | "finanzas" = "marketing"
 ): Promise<AIInsight> {
   await requireAdministrador();
   const sb = supabaseServidor();
 
-  // 1. Obtener métricas reales para el periodo seleccionado
-  const { data: metricas, error: errMet } = await sb
-    .from("analytics_marketing")
-    .select("*")
-    .gte("fecha", fechaInicio)
-    .lte("fecha", fechaFin)
-    .order("fecha", { ascending: true });
-
-  if (errMet) throw errMet;
-
-  // 2. Obtener KPIs de CRM para el periodo seleccionado y el previo
+  // 1. Obtener KPIs de CRM para el periodo seleccionado y el previo
   const crmData = await obtenerKPIsPeriodoCRM(fechaInicio, fechaFin, fechaInicioPrev, fechaFinPrev);
-
-  // Formatear métricas y crm para Claude
-  const resumenMetricas = (metricas || []).map(m => 
-    `- Fecha: ${m.fecha} | Canal: ${m.canal} | Gasto: $${m.gasto_publicitario} | Clics: ${m.clics} | Leads Registrados: ${m.leads_registrados_crm}`
-  ).join("\n");
 
   const crmInfo = `
 PERIODO SELECCIONADO (${fechaInicio} al ${fechaFin}):
@@ -336,14 +325,72 @@ PERIODO ANTERIOR DE COMPARACIÓN (${fechaInicioPrev || "N/A"} al ${fechaFinPrev 
 - Ventas Cerradas (Expedientes en etapa cerrado): ${crmData.previo.totalVentas}
   `;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en el entorno.");
-  }
+  let prompt = "";
 
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  if (tipo === "finanzas") {
+    // Obtener transacciones financieras para ambos periodos
+    const { data: transacciones, error: errTrans } = await sb
+      .from("transacciones_financieras")
+      .select("*")
+      .gte("fecha", fechaInicio)
+      .lte("fecha", fechaFin);
 
-  const prompt = `Eres Sofía, la Directora de Operaciones Inteligente de SAUCEDA Bienes Raíces. Tu rol es analizar las métricas comerciales y de marketing recopiladas para evaluar la salud de la adquisición de prospectos y la operación del equipo.
+    if (errTrans) throw errTrans;
+
+    const { data: transaccionesPrev, error: errTransPrev } = await sb
+      .from("transacciones_financieras")
+      .select("*")
+      .gte("fecha", fechaInicioPrev || "2000-01-01")
+      .lte("fecha", fechaFinPrev || "2000-01-01");
+
+    if (errTransPrev) throw errTransPrev;
+
+    const resumenTransacciones = (transacciones || []).map(t =>
+      `- Fecha: ${t.fecha} | Tipo: ${t.tipo} | Categoría: ${t.categoria} | Concepto: ${t.concepto} | Monto: $${t.monto} MXN`
+    ).join("\n");
+
+    const resumenTransaccionesPrev = (transaccionesPrev || []).map(t =>
+      `- Fecha: ${t.fecha} | Tipo: ${t.tipo} | Categoría: ${t.categoria} | Concepto: ${t.concepto} | Monto: $${t.monto} MXN`
+    ).join("\n");
+
+    prompt = `Eres Sofía, la Directora de Operaciones y Finanzas Inteligente de SAUCEDA Bienes Raíces. Tu rol es analizar las transacciones financieras y la contabilidad (P&L) del negocio para evaluar su rentabilidad, estructura de gastos fijos y variables (OPEX), y dar recomendaciones tácticas.
+
+Analiza el desempeño financiero del periodo seleccionado del ${fechaInicio} al ${fechaFin}, comparándolo con el periodo anterior del ${fechaInicioPrev || "N/A"} al ${fechaFinPrev || "N/A"}.
+
+Aquí tienes el listado de transacciones (ingresos y gastos) del periodo seleccionado:
+${resumenTransacciones || "Sin transacciones en este rango."}
+
+Aquí tienes el listado de transacciones (ingresos y gastos) del periodo anterior:
+${resumenTransaccionesPrev || "Sin transacciones en este rango."}
+
+Y aquí está el estado comercial del CRM de conversión de prospectos para ambos periodos (útil para estimar ROAS financiero y comisiones pendientes):
+${crmInfo}
+
+Genera un reporte financiero de Estado de Resultados (P&L). Identifica alertas críticas financieras (como egresos OPEX desmedidos, nóminas o rentas que superan el margen saludable, o ROAS financiero bajo), oportunidades de mejora (optimización de servicios de suscripción o software, aceleración de comisiones pendientes en CRM) y un diagnóstico de salud general del negocio (Excelente, Regular, Crítico).
+
+Responde exclusivamente con un JSON válido con esta estructura:
+{
+  "estado_salud": "excelente" | "regular" | "critico",
+  "alertas": ["Frase descriptiva de alerta 1 con prefijo emoji rojo", "Frase 2..."],
+  "oportunidades": ["Frase descriptiva de oportunidad 1 con prefijo emoji amarillo", "Frase 2..."],
+  "diagnostico_general": "Reporte detallado en formato Markdown, analizando el rendimiento financiero (ingresos vs egresos, margen neto), análisis detallado del OPEX, balance de comisiones CRM y recomendando acciones de optimización en viñetas."
+}`;
+  } else {
+    // Obtener métricas reales de marketing
+    const { data: metricas, error: errMet } = await sb
+      .from("analytics_marketing")
+      .select("*")
+      .gte("fecha", fechaInicio)
+      .lte("fecha", fechaFin)
+      .order("fecha", { ascending: true });
+
+    if (errMet) throw errMet;
+
+    const resumenMetricas = (metricas || []).map(m =>
+      `- Fecha: ${m.fecha} | Canal: ${m.canal} | Gasto: $${m.gasto_publicitario} | Clics: ${m.clics} | Leads Registrados: ${m.leads_registrados_crm}`
+    ).join("\n");
+
+    prompt = `Eres Sofía, la Directora de Operaciones Inteligente de SAUCEDA Bienes Raíces. Tu rol es analizar las métricas comerciales y de marketing recopiladas para evaluar la salud de la adquisición de prospectos y la operación del equipo.
   
 Analiza el desempeño comercial del periodo seleccionado del ${fechaInicio} al ${fechaFin}, comparándolo con el periodo anterior del ${fechaInicioPrev || "N/A"} al ${fechaFinPrev || "N/A"}.
 
@@ -362,6 +409,14 @@ Responde exclusivamente con un JSON válido con esta estructura:
   "oportunidades": ["Frase descriptiva de oportunidad 1 con prefijo emoji amarillo", "Frase 2..."],
   "diagnostico_general": "Reporte detallado en formato Markdown, analizando el rendimiento comercial, costos y recomendando acciones tácticas en viñetas."
 }`;
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en el entorno.");
+  }
+
+  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -386,7 +441,6 @@ Responde exclusivamente con un JSON válido con esta estructura:
     const json = await res.json();
     const texto = json.content[0].text;
 
-    // Extraer JSON limpio de la respuesta
     const match = texto.match(/\{[\s\S]*\}/);
     if (!match) {
       throw new Error("La respuesta de la IA no contiene un JSON válido.");
@@ -399,7 +453,8 @@ Responde exclusivamente con un JSON válido con esta estructura:
       estado_salud: dataClean.estado_salud || "regular",
       alertas: Array.isArray(dataClean.alertas) ? dataClean.alertas : [],
       oportunidades: Array.isArray(dataClean.oportunidades) ? dataClean.oportunidades : [],
-      diagnostico_general: dataClean.diagnostico_general || ""
+      diagnostico_general: dataClean.diagnostico_general || "",
+      tipo: tipo
     };
 
     // Insertar en Supabase
@@ -407,8 +462,8 @@ Responde exclusivamente con un JSON válido con esta estructura:
 
     return nuevoInsight;
   } catch (err) {
-    console.error("Fallo al generar insights con Claude, usando mockups:", err);
-    return MOCK_INSIGHTS;
+    console.error(`Fallo al generar insights con Claude (${tipo}), usando mockups:`, err);
+    return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
   }
 }
 
