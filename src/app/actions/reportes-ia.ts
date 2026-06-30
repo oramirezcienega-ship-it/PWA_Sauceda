@@ -138,6 +138,76 @@ export async function obtenerKPIsRealesCRM() {
 }
 
 /**
+ * Obtiene los KPIs reales de CRM filtrados por un rango de fechas específico,
+ * e incluye el conteo del período anterior equivalente para realizar comparativas.
+ */
+export async function obtenerKPIsPeriodoCRM(
+  fechaInicio: string,
+  fechaFin: string,
+  fechaInicioPrev?: string,
+  fechaFinPrev?: string
+) {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Periodo seleccionado
+    const { count: leadsActual } = await sb
+      .from("prospectos")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", `${fechaInicio}T00:00:00Z`)
+      .lte("created_at", `${fechaFin}T23:59:59Z`);
+
+    const { count: ventasActual } = await sb
+      .from("expedientes")
+      .select("*", { count: "exact", head: true })
+      .eq("etapa", "cerrado")
+      .gte("created_at", `${fechaInicio}T00:00:00Z`)
+      .lte("created_at", `${fechaFin}T23:59:59Z`);
+
+    // 2. Periodo comparativo anterior
+    let leadsPrev = 0;
+    let ventasPrev = 0;
+
+    if (fechaInicioPrev && fechaFinPrev) {
+      const { count: lPrev } = await sb
+        .from("prospectos")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", `${fechaInicioPrev}T00:00:00Z`)
+        .lte("created_at", `${fechaFinPrev}T23:59:59Z`);
+
+      const { count: vPrev } = await sb
+        .from("expedientes")
+        .select("*", { count: "exact", head: true })
+        .eq("etapa", "cerrado")
+        .gte("created_at", `${fechaInicioPrev}T00:00:00Z`)
+        .lte("created_at", `${fechaFinPrev}T23:59:59Z`);
+
+      leadsPrev = lPrev || 0;
+      ventasPrev = vPrev || 0;
+    }
+
+    return {
+      actual: {
+        totalLeads: leadsActual || 0,
+        totalVentas: ventasActual || 0
+      },
+      previo: {
+        totalLeads: leadsPrev,
+        totalVentas: ventasPrev
+      }
+    };
+  } catch (err) {
+    console.error("Error al obtener KPIs por periodo de CRM:", err);
+    return {
+      actual: { totalLeads: 0, totalVentas: 0 },
+      previo: { totalLeads: 0, totalVentas: 0 }
+    };
+  }
+}
+
+
+/**
  * Obtiene el insight/diagnóstico analítico más reciente.
  * Si la tabla está vacía, retorna el mockup por defecto.
  */

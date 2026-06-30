@@ -6,6 +6,7 @@ import {
   obtenerInsightsIA,
   generarInsightsConIA,
   obtenerKPIsRealesCRM,
+  obtenerKPIsPeriodoCRM,
   sincronizarHistorialMarketing,
   type MarketingMetric,
   type AIInsight
@@ -158,10 +159,19 @@ function renderMarkdown(text: string): React.ReactNode {
 export function DashboardInteligente() {
   const [metricas, setMetricas] = useState<MarketingMetric[]>([]);
   const [insight, setInsight] = useState<AIInsight | null>(null);
-  const [kpisRealesCRM, setKpisRealesCRM] = useState({ totalLeads: 0, totalVentas: 0 });
   const [loading, setLoading] = useState(true);
   const [generandoIA, setGenerandoIA] = useState(false);
-  const [rangoDias, setRangoDias] = useState<7 | 14 | 30>(14);
+
+  // Rangos de fecha y selección
+  const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "custom">("14");
+  const [fechaInicioCustom, setFechaInicioCustom] = useState("");
+  const [fechaFinCustom, setFechaFinCustom] = useState("");
+
+  // KPIs dinámicos del CRM (en base a la fecha filtrada)
+  const [crmKPIs, setCrmKPIs] = useState({
+    actual: { totalLeads: 0, totalVentas: 0 },
+    previo: { totalLeads: 0, totalVentas: 0 }
+  });
 
   // Estados para sincronización de historial
   const [showSyncModal, setShowSyncModal] = useState(false);
@@ -170,19 +180,17 @@ export function DashboardInteligente() {
   const [fbAdAccountId, setFbAdAccountId] = useState("1269333735358072");
   const [fbFechaInicio, setFbFechaInicio] = useState("2026-05-01");
 
-  // Carga de datos inicial
+  // Carga de datos inicial (solo métricas fijas de marketing y diagnóstico de Sofía)
   useEffect(() => {
     async function cargarDatos() {
       setLoading(true);
       try {
-        const [met, ins, kpisCrm] = await Promise.all([
+        const [met, ins] = await Promise.all([
           obtenerMetricasMarketing(),
-          obtenerInsightsIA(),
-          obtenerKPIsRealesCRM()
+          obtenerInsightsIA()
         ]);
         setMetricas(met);
         setInsight(ins);
-        setKpisRealesCRM(kpisCrm);
       } catch (error) {
         console.error("Error al cargar datos de analítica:", error);
       } finally {
@@ -192,15 +200,79 @@ export function DashboardInteligente() {
     cargarDatos();
   }, []);
 
+  // Calcular las fechas del período seleccionado y del período previo equivalente
+  const fechasCalculadas = useMemo(() => {
+    const today = new Date();
+    let fechaFin = today.toISOString().split("T")[0];
+    let fechaInicio = "";
+
+    if (rangoSeleccionado === "7") {
+      const d = new Date();
+      d.setDate(today.getDate() - 6);
+      fechaInicio = d.toISOString().split("T")[0];
+    } else if (rangoSeleccionado === "14") {
+      const d = new Date();
+      d.setDate(today.getDate() - 13);
+      fechaInicio = d.toISOString().split("T")[0];
+    } else if (rangoSeleccionado === "30") {
+      const d = new Date();
+      d.setDate(today.getDate() - 29);
+      fechaInicio = d.toISOString().split("T")[0];
+    } else if (rangoSeleccionado === "custom" && fechaInicioCustom && fechaFinCustom) {
+      fechaInicio = fechaInicioCustom;
+      fechaFin = fechaFinCustom;
+    } else {
+      // Fallback por defecto a 14 días
+      const d = new Date();
+      d.setDate(today.getDate() - 13);
+      fechaInicio = d.toISOString().split("T")[0];
+    }
+
+    // Calcular período anterior equivalente para la comparativa MoM
+    const start = new Date(fechaInicio);
+    const end = new Date(fechaFin);
+    const diffMs = end.getTime() - start.getTime() + 24 * 3600 * 1000;
+
+    const startPrev = new Date(start.getTime() - diffMs);
+    const endPrev = new Date(start.getTime() - 1);
+
+    const fechaInicioPrev = startPrev.toISOString().split("T")[0];
+    const fechaFinPrev = endPrev.toISOString().split("T")[0];
+
+    return {
+      fechaInicio,
+      fechaFin,
+      fechaInicioPrev,
+      fechaFinPrev
+    };
+  }, [rangoSeleccionado, fechaInicioCustom, fechaFinCustom]);
+
+  // Cargar dinámicamente los KPIs de CRM para el rango seleccionado y el anterior
+  useEffect(() => {
+    if (!fechasCalculadas.fechaInicio || !fechasCalculadas.fechaFin) return;
+
+    async function cargarKPIsCRM() {
+      try {
+        const kpis = await obtenerKPIsPeriodoCRM(
+          fechasCalculadas.fechaInicio,
+          fechasCalculadas.fechaFin,
+          fechasCalculadas.fechaInicioPrev,
+          fechasCalculadas.fechaFinPrev
+        );
+        setCrmKPIs(kpis);
+      } catch (error) {
+        console.error("Error al cargar KPIs de CRM por periodo:", error);
+      }
+    }
+    cargarKPIsCRM();
+  }, [fechasCalculadas]);
+
   // Handler para regenerar insights con IA (llamando a Claude)
   const handleRegenerarIA = async () => {
     setGenerandoIA(true);
     try {
       const nuevoInsight = await generarInsightsConIA();
       setInsight(nuevoInsight);
-      // Actualizar también KPIs reales por si cambiaron
-      const kpisCrm = await obtenerKPIsRealesCRM();
-      setKpisRealesCRM(kpisCrm);
     } catch (error) {
       alert("Error al invocar al cerebro analítico. Verifique la API Key de Anthropic.");
       console.error(error);
@@ -223,12 +295,16 @@ export function DashboardInteligente() {
         alert(res.message);
         setShowSyncModal(false);
         // Recargar datos en la UI
-        const [met, kpisCrm] = await Promise.all([
-          obtenerMetricasMarketing(),
-          obtenerKPIsRealesCRM()
-        ]);
+        const met = await obtenerMetricasMarketing();
         setMetricas(met);
-        setKpisRealesCRM(kpisCrm);
+        // Forzar actualización de KPIs CRM recalculando
+        const kpis = await obtenerKPIsPeriodoCRM(
+          fechasCalculadas.fechaInicio,
+          fechasCalculadas.fechaFin,
+          fechasCalculadas.fechaInicioPrev,
+          fechasCalculadas.fechaFinPrev
+        );
+        setCrmKPIs(kpis);
       } else {
         alert(`Fallo en la sincronización: ${res.message}`);
       }
@@ -239,42 +315,80 @@ export function DashboardInteligente() {
     }
   };
 
-  // Filtrar métricas en base al rango de días seleccionado
+  // Filtrar métricas de marketing para el período actual basándonos en fechas de calendario reales
   const metricasFiltradas = useMemo(() => {
     if (metricas.length === 0) return [];
-    
-    // Obtener las fechas más recientes
-    const fechasUnicas = Array.from(new Set(metricas.map(m => m.fecha)))
-      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime()); // De más nueva a más vieja
-
-    const fechasRango = fechasUnicas.slice(0, rangoDias);
     return metricas
-      .filter(m => fechasRango.includes(m.fecha))
-      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()); // Ascendente para gráficos
-  }, [metricas, rangoDias]);
+      .filter(m => m.fecha >= fechasCalculadas.fechaInicio && m.fecha <= fechasCalculadas.fechaFin)
+      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()); // Orden ascendente para gráficos
+  }, [metricas, fechasCalculadas]);
+
+  // Filtrar métricas de marketing para el período comparativo previo
+  const metricasFiltradasPrev = useMemo(() => {
+    if (metricas.length === 0) return [];
+    return metricas
+      .filter(m => m.fecha >= fechasCalculadas.fechaInicioPrev && m.fecha <= fechasCalculadas.fechaFinPrev);
+  }, [metricas, fechasCalculadas]);
 
   // Cálculos consolidados para los KPI Cards
   const kpis = useMemo(() => {
+    // 1. Periodo actual
     const totalGasto = metricasFiltradas.reduce((acc, curr) => acc + Number(curr.gasto_publicitario), 0);
     const totalLeadsMarketing = metricasFiltradas.reduce((acc, curr) => acc + curr.leads_registrados_crm, 0);
     const totalClics = metricasFiltradas.reduce((acc, curr) => acc + curr.clics, 0);
     const totalImpresiones = metricasFiltradas.reduce((acc, curr) => acc + curr.impresiones, 0);
     
-    // CPA Promedio se calcula en base al gasto y los leads captados de campañas pagadas
     const cpa = totalLeadsMarketing > 0 ? totalGasto / totalLeadsMarketing : 0;
-    
-    // Tasa de conversión global del CRM real
-    const conversion = kpisRealesCRM.totalLeads > 0 ? (kpisRealesCRM.totalVentas / kpisRealesCRM.totalLeads) * 100 : 0;
     const ctr = totalImpresiones > 0 ? (totalClics / totalImpresiones) * 100 : 0;
+
+    // 2. Periodo previo
+    const totalGastoPrev = metricasFiltradasPrev.reduce((acc, curr) => acc + Number(curr.gasto_publicitario), 0);
+    const totalLeadsMarketingPrev = metricasFiltradasPrev.reduce((acc, curr) => acc + curr.leads_registrados_crm, 0);
+    const totalClicsPrev = metricasFiltradasPrev.reduce((acc, curr) => acc + curr.clics, 0);
+    const totalImpresionesPrev = metricasFiltradasPrev.reduce((acc, curr) => acc + curr.impresiones, 0);
+
+    const cpaPrev = totalLeadsMarketingPrev > 0 ? totalGastoPrev / totalLeadsMarketingPrev : 0;
+    const ctrPrev = totalImpresionesPrev > 0 ? (totalClicsPrev / totalImpresionesPrev) * 100 : 0;
+
+    // 3. Variaciones porcentuales del periodo anterior
+    const variacionGasto = totalGastoPrev > 0 ? ((totalGasto - totalGastoPrev) / totalGastoPrev) * 100 : 0;
+    const variacionCpa = cpaPrev > 0 ? ((cpa - cpaPrev) / cpaPrev) * 100 : 0;
+    const variacionCtr = ctrPrev > 0 ? ((ctr - ctrPrev) / ctrPrev) * 100 : 0;
+
+    const variacionLeads = crmKPIs.previo.totalLeads > 0 
+      ? ((crmKPIs.actual.totalLeads - crmKPIs.previo.totalLeads) / crmKPIs.previo.totalLeads) * 100 
+      : 0;
+    const variacionVentas = crmKPIs.previo.totalVentas > 0 
+      ? ((crmKPIs.actual.totalVentas - crmKPIs.previo.totalVentas) / crmKPIs.previo.totalVentas) * 100 
+      : 0;
+
+    // Tasas de conversión y su variación
+    const conversion = crmKPIs.actual.totalLeads > 0 
+      ? (crmKPIs.actual.totalVentas / crmKPIs.actual.totalLeads) * 100 
+      : 0;
+    const conversionPrev = crmKPIs.previo.totalLeads > 0 
+      ? (crmKPIs.previo.totalVentas / crmKPIs.previo.totalLeads) * 100 
+      : 0;
+    const variacionConversion = conversionPrev > 0 
+      ? ((conversion - conversionPrev) / conversionPrev) * 100 
+      : 0;
 
     return {
       totalGasto,
-      totalLeadsMarketing,
+      totalGastoPrev,
+      variacionGasto,
       cpa,
+      cpaPrev,
+      variacionCpa,
+      ctr,
+      ctrPrev,
+      variacionCtr,
       conversion,
-      ctr
+      variacionConversion,
+      variacionLeads,
+      variacionVentas
     };
-  }, [metricasFiltradas, kpisRealesCRM]);
+  }, [metricasFiltradas, metricasFiltradasPrev, crmKPIs]);
 
   // Agrupado diario para el gráfico de Gasto vs Leads
   const datosPorDia = useMemo(() => {
@@ -346,20 +460,38 @@ export function DashboardInteligente() {
         {/* CONTROLES */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            {[7, 14, 30].map((d) => (
+            {(["7", "14", "30", "custom"] as const).map((r) => (
               <button
-                key={d}
-                onClick={() => setRangoDias(d as any)}
+                key={r}
+                onClick={() => setRangoSeleccionado(r)}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  rangoDias === d
+                  rangoSeleccionado === r
                     ? "bg-[#2D4A2B] text-[#F5F1E8]"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Últimos {d} días
+                {r === "custom" ? "Personalizado" : `Últimos ${r} días`}
               </button>
             ))}
           </div>
+
+          {rangoSeleccionado === "custom" && (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
+              <input
+                type="date"
+                value={fechaInicioCustom}
+                onChange={(e) => setFechaInicioCustom(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-[#2D4A2B] focus:outline-none px-1"
+              />
+              <span className="text-slate-400 text-xs font-bold">al</span>
+              <input
+                type="date"
+                value={fechaFinCustom}
+                onChange={(e) => setFechaFinCustom(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-[#2D4A2B] focus:outline-none px-1"
+              />
+            </div>
+          )}
 
           <button
             onClick={handleRegenerarIA}
@@ -485,42 +617,109 @@ export function DashboardInteligente() {
 
       {/* TARJETAS DE KPIS PRINCIPALES */}
       <section className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gasto Total</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">${kpis.totalGasto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-          <span className="text-[9px] text-slate-400">Presupuesto invertido</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gasto Total</span>
+            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">${kpis.totalGasto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div className="mt-1 flex flex-col">
+            <span className="text-[9px] text-slate-400">Presupuesto invertido</span>
+            {kpis.totalGastoPrev > 0 ? (
+              <span className={`text-[9px] font-bold ${kpis.variacionGasto <= 0 ? "text-emerald-600" : "text-slate-500"}`}>
+                {kpis.variacionGasto >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionGasto).toFixed(1)}% vs periodo ant.
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-300">Sin comparativo</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Leads CRM</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpisRealesCRM.totalLeads}</p>
-          <span className="text-[9px] text-slate-400">Capturados en CRM</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Leads CRM</span>
+            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{crmKPIs.actual.totalLeads}</p>
+          </div>
+          <div className="mt-1 flex flex-col">
+            <span className="text-[9px] text-slate-400">Capturados en CRM</span>
+            {crmKPIs.previo.totalLeads > 0 ? (
+              <span className={`text-[9px] font-bold ${kpis.variacionLeads >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpis.variacionLeads >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionLeads).toFixed(1)}% vs periodo ant.
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-300">Sin comparativo</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CPA Promedio</span>
-          <p className="text-xl font-extrabold text-amber-600 mt-1">${kpis.cpa.toFixed(2)}</p>
-          <span className="text-[9px] text-slate-400">Costo por Adquisición</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CPA Promedio</span>
+            <p className="text-xl font-extrabold text-amber-600 mt-1">${kpis.cpa.toFixed(2)}</p>
+          </div>
+          <div className="mt-1 flex flex-col">
+            <span className="text-[9px] text-slate-400">Costo por Adquisición</span>
+            {kpis.cpaPrev > 0 ? (
+              <span className={`text-[9px] font-bold ${kpis.variacionCpa <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpis.variacionCpa >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionCpa).toFixed(1)}% vs periodo ant.
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-300">Sin comparativo</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ventas Cerradas</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpisRealesCRM.totalVentas}</p>
-          <span className="text-[9px] text-slate-400">Expedientes finalizados</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ventas Cerradas</span>
+            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{crmKPIs.actual.totalVentas}</p>
+          </div>
+          <div className="mt-1 flex flex-col">
+            <span className="text-[9px] text-slate-400">Expedientes finalizados</span>
+            {crmKPIs.previo.totalVentas > 0 ? (
+              <span className={`text-[9px] font-bold ${kpis.variacionVentas >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpis.variacionVentas >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionVentas).toFixed(1)}% vs periodo ant.
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-300">Sin comparativo</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Conversión</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.conversion.toFixed(1)}%</p>
-          <span className="text-[9px] text-slate-400">Lead a Venta</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Conversión</span>
+            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.conversion.toFixed(1)}%</p>
+          </div>
+          <div className="mt-1 flex flex-col">
+            <span className="text-[9px] text-slate-400">Lead a Venta</span>
+            {crmKPIs.previo.totalLeads > 0 ? (
+              <span className={`text-[9px] font-bold ${kpis.variacionConversion >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpis.variacionConversion >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionConversion).toFixed(1)}% vs periodo ant.
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-300">Sin comparativo</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
-          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CTR Promedio</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.ctr.toFixed(2)}%</p>
-          <span className="text-[9px] text-slate-400">Clics / Impresiones</span>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">CTR Promedio</span>
+            <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.ctr.toFixed(2)}%</p>
+          </div>
+          <div className="mt-1 flex flex-col">
+            <span className="text-[9px] text-slate-400">Clics / Impresiones</span>
+            {kpis.ctrPrev > 0 ? (
+              <span className={`text-[9px] font-bold ${kpis.variacionCtr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                {kpis.variacionCtr >= 0 ? "▲" : "▼"} {Math.abs(kpis.variacionCtr).toFixed(1)}% vs periodo ant.
+              </span>
+            ) : (
+              <span className="text-[9px] text-slate-300">Sin comparativo</span>
+            )}
+          </div>
         </div>
       </section>
+
 
       {/* GRÁFICOS ANALÍTICOS */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
