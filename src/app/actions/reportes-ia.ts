@@ -72,14 +72,21 @@ Esta semana muestra una tendencia general estable, con una fuerte tracción en *
 };
 
 /**
- * Obtiene las métricas de marketing y CRM de Supabase.
- * Si la tabla está vacía, inserta y retorna los mockups de prueba para asegurar que el dashboard sea visible inmediatamente.
+ * Obtiene las métricas de marketing reales de Supabase.
+ * Limpia automáticamente los datos de simulación/mockups previos para que solo aparezcan tus datos reales.
  */
 export async function obtenerMetricasMarketing(): Promise<MarketingMetric[]> {
   await requireAdministrador();
   const sb = supabaseServidor();
 
   try {
+    // 1. Limpieza automática de datos simulados previos al 30 de junio de 2026
+    await sb
+      .from("analytics_marketing")
+      .delete()
+      .lt("fecha", "2026-06-30");
+
+    // 2. Obtener los datos reales de métricas
     const { data, error } = await sb
       .from("analytics_marketing")
       .select("*")
@@ -87,26 +94,52 @@ export async function obtenerMetricasMarketing(): Promise<MarketingMetric[]> {
 
     if (error) {
       if (error.code === "42P01") {
-        console.warn("La tabla analytics_marketing no existe. Usando fallback Mockup.");
-        return MOCK_METRICAS;
+        console.warn("La tabla analytics_marketing no existe.");
+        return [];
       }
       throw error;
     }
 
-    if (!data || data.length === 0) {
-      // Poblar tabla con mockups si está vacía, para fines demostrativos iniciales
-      const { data: insertados } = await sb
-        .from("analytics_marketing")
-        .insert(MOCK_METRICAS)
-        .select();
-
-      return (insertados as MarketingMetric[]) || MOCK_METRICAS;
-    }
-
-    return data as MarketingMetric[];
+    return (data as MarketingMetric[]) || [];
   } catch (err) {
     console.error("Error al obtener métricas de marketing:", err);
-    return MOCK_METRICAS;
+    return [];
+  }
+}
+
+/**
+ * Obtiene los KPIs reales directamente desde la base de datos del CRM (tablas prospectos y expedientes).
+ */
+export async function obtenerKPIsRealesCRM() {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Contar prospectos reales en el CRM
+    const { count: totalLeads, error: errLeads } = await sb
+      .from("prospectos")
+      .select("*", { count: "exact", head: true });
+    
+    if (errLeads) throw errLeads;
+
+    // 2. Contar expedientes reales cerrados (etapa = 'cerrado')
+    const { count: totalVentas, error: errVentas } = await sb
+      .from("expedientes")
+      .select("*", { count: "exact", head: true })
+      .eq("etapa", "cerrado");
+
+    if (errVentas) throw errVentas;
+
+    return {
+      totalLeads: totalLeads || 0,
+      totalVentas: totalVentas || 0
+    };
+  } catch (err) {
+    console.error("Error al obtener KPIs reales de CRM:", err);
+    return {
+      totalLeads: 0,
+      totalVentas: 0
+    };
   }
 }
 

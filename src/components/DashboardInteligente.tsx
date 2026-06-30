@@ -5,6 +5,7 @@ import {
   obtenerMetricasMarketing,
   obtenerInsightsIA,
   generarInsightsConIA,
+  obtenerKPIsRealesCRM,
   type MarketingMetric,
   type AIInsight
 } from "@/app/actions/reportes-ia";
@@ -156,6 +157,7 @@ function renderMarkdown(text: string): React.ReactNode {
 export function DashboardInteligente() {
   const [metricas, setMetricas] = useState<MarketingMetric[]>([]);
   const [insight, setInsight] = useState<AIInsight | null>(null);
+  const [kpisRealesCRM, setKpisRealesCRM] = useState({ totalLeads: 0, totalVentas: 0 });
   const [loading, setLoading] = useState(true);
   const [generandoIA, setGenerandoIA] = useState(false);
   const [rangoDias, setRangoDias] = useState<7 | 14 | 30>(14);
@@ -165,12 +167,14 @@ export function DashboardInteligente() {
     async function cargarDatos() {
       setLoading(true);
       try {
-        const [met, ins] = await Promise.all([
+        const [met, ins, kpisCrm] = await Promise.all([
           obtenerMetricasMarketing(),
-          obtenerInsightsIA()
+          obtenerInsightsIA(),
+          obtenerKPIsRealesCRM()
         ]);
         setMetricas(met);
         setInsight(ins);
+        setKpisRealesCRM(kpisCrm);
       } catch (error) {
         console.error("Error al cargar datos de analítica:", error);
       } finally {
@@ -186,6 +190,9 @@ export function DashboardInteligente() {
     try {
       const nuevoInsight = await generarInsightsConIA();
       setInsight(nuevoInsight);
+      // Actualizar también KPIs reales por si cambiaron
+      const kpisCrm = await obtenerKPIsRealesCRM();
+      setKpisRealesCRM(kpisCrm);
     } catch (error) {
       alert("Error al invocar al cerebro analítico. Verifique la API Key de Anthropic.");
       console.error(error);
@@ -211,24 +218,25 @@ export function DashboardInteligente() {
   // Cálculos consolidados para los KPI Cards
   const kpis = useMemo(() => {
     const totalGasto = metricasFiltradas.reduce((acc, curr) => acc + Number(curr.gasto_publicitario), 0);
-    const totalLeads = metricasFiltradas.reduce((acc, curr) => acc + curr.leads_registrados_crm, 0);
-    const totalVentas = metricasFiltradas.reduce((acc, curr) => acc + curr.ventas_cerradas_crm, 0);
+    const totalLeadsMarketing = metricasFiltradas.reduce((acc, curr) => acc + curr.leads_registrados_crm, 0);
     const totalClics = metricasFiltradas.reduce((acc, curr) => acc + curr.clics, 0);
     const totalImpresiones = metricasFiltradas.reduce((acc, curr) => acc + curr.impresiones, 0);
     
-    const cpa = totalLeads > 0 ? totalGasto / totalLeads : 0;
-    const conversion = totalLeads > 0 ? (totalVentas / totalLeads) * 100 : 0;
+    // CPA Promedio se calcula en base al gasto y los leads captados de campañas pagadas
+    const cpa = totalLeadsMarketing > 0 ? totalGasto / totalLeadsMarketing : 0;
+    
+    // Tasa de conversión global del CRM real
+    const conversion = kpisRealesCRM.totalLeads > 0 ? (kpisRealesCRM.totalVentas / kpisRealesCRM.totalLeads) * 100 : 0;
     const ctr = totalImpresiones > 0 ? (totalClics / totalImpresiones) * 100 : 0;
 
     return {
       totalGasto,
-      totalLeads,
-      totalVentas,
+      totalLeadsMarketing,
       cpa,
       conversion,
       ctr
     };
-  }, [metricasFiltradas]);
+  }, [metricasFiltradas, kpisRealesCRM]);
 
   // Agrupado diario para el gráfico de Gasto vs Leads
   const datosPorDia = useMemo(() => {
@@ -437,7 +445,7 @@ export function DashboardInteligente() {
 
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
           <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Leads CRM</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.totalLeads}</p>
+          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpisRealesCRM.totalLeads}</p>
           <span className="text-[9px] text-slate-400">Capturados en CRM</span>
         </div>
 
@@ -449,7 +457,7 @@ export function DashboardInteligente() {
 
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition">
           <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ventas Cerradas</span>
-          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpis.totalVentas}</p>
+          <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{kpisRealesCRM.totalVentas}</p>
           <span className="text-[9px] text-slate-400">Expedientes finalizados</span>
         </div>
 
