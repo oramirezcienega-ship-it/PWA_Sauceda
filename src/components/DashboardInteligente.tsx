@@ -6,6 +6,7 @@ import {
   obtenerInsightsIA,
   generarInsightsConIA,
   obtenerKPIsRealesCRM,
+  sincronizarHistorialMarketing,
   type MarketingMetric,
   type AIInsight
 } from "@/app/actions/reportes-ia";
@@ -162,6 +163,13 @@ export function DashboardInteligente() {
   const [generandoIA, setGenerandoIA] = useState(false);
   const [rangoDias, setRangoDias] = useState<7 | 14 | 30>(14);
 
+  // Estados para sincronización de historial
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [sincronizandoHistorial, setSincronizandoHistorial] = useState(false);
+  const [fbToken, setFbToken] = useState("");
+  const [fbAdAccountId, setFbAdAccountId] = useState("1269333735358072");
+  const [fbFechaInicio, setFbFechaInicio] = useState("2026-05-01");
+
   // Carga de datos inicial
   useEffect(() => {
     async function cargarDatos() {
@@ -198,6 +206,36 @@ export function DashboardInteligente() {
       console.error(error);
     } finally {
       setGenerandoIA(false);
+    }
+  };
+
+  // Handler para ejecutar el backfill histórico desde Facebook Ads
+  const handleSincronizarHistorial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fbToken.trim()) {
+      alert("Por favor introduce el Token de Acceso de Facebook.");
+      return;
+    }
+    setSincronizandoHistorial(true);
+    try {
+      const res = await sincronizarHistorialMarketing(fbToken, fbAdAccountId, fbFechaInicio);
+      if (res.success) {
+        alert(res.message);
+        setShowSyncModal(false);
+        // Recargar datos en la UI
+        const [met, kpisCrm] = await Promise.all([
+          obtenerMetricasMarketing(),
+          obtenerKPIsRealesCRM()
+        ]);
+        setMetricas(met);
+        setKpisRealesCRM(kpisCrm);
+      } else {
+        alert(`Fallo en la sincronización: ${res.message}`);
+      }
+    } catch (err: any) {
+      alert(`Error en el servidor: ${err.message}`);
+    } finally {
+      setSincronizandoHistorial(false);
     }
   };
 
@@ -344,6 +382,16 @@ export function DashboardInteligente() {
                 Analizar con Sofía (IA)
               </>
             )}
+          </button>
+
+          <button
+            onClick={() => setShowSyncModal(true)}
+            className="flex items-center gap-2 rounded-lg border border-[#2D4A2B] bg-white px-4 py-2 text-xs font-bold text-[#2D4A2B] hover:bg-[#F5F1E8] transition shadow-sm"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.2" />
+            </svg>
+            Sincronizar Historial
           </button>
         </div>
       </header>
@@ -607,6 +655,95 @@ export function DashboardInteligente() {
           </div>
         </div>
       </section>
+
+      {/* MODAL DE SINCRONIZACIÓN HISTÓRICA */}
+      {showSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] flex items-center gap-2">
+                🔄 Sincronizar Historial de Publicidad
+              </h3>
+              <button 
+                onClick={() => setShowSyncModal(false)}
+                className="text-slate-400 hover:text-[#2D4A2B] text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSincronizarHistorial} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Meta Access Token (con permiso ads_read)
+                </label>
+                <textarea
+                  value={fbToken}
+                  onChange={(e) => setFbToken(e.target.value)}
+                  placeholder="Pega el token de Meta generado en la consola..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    ID Cuenta Publicitaria
+                  </label>
+                  <input
+                    type="text"
+                    value={fbAdAccountId}
+                    onChange={(e) => setFbAdAccountId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Sincronizar desde
+                  </label>
+                  <input
+                    type="date"
+                    value={fbFechaInicio}
+                    onChange={(e) => setFbFechaInicio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-400 leading-normal font-medium">
+                Esta acción descargará día por día los gastos reales de Meta Ads, contará automáticamente los prospectos registrados en el CRM para cada día y creará el historial consolidado.
+              </p>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSyncModal(false)}
+                  className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={sincronizandoHistorial}
+                  className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {sincronizandoHistorial ? (
+                    <>
+                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent font-bold"></div>
+                      Sincronizando...
+                    </>
+                  ) : (
+                    "Iniciar"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
