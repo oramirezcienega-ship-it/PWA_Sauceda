@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { variantesTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
 import type {
   ConversacionDetalle,
@@ -170,7 +171,7 @@ export async function obtenerConversacion(
   const { data, error } = await sb
     .from("mensajes_whatsapp")
     .select("*")
-    .eq("telefono", telefono)
+    .in("telefono", variantesTelefono(telefono))
     .order("created_at", { ascending: true })
     .limit(500);
   if (error) throw new Error(error.message);
@@ -333,7 +334,7 @@ async function idsDeTelefono(
   const { data } = await sb
     .from("mensajes_whatsapp")
     .select("expediente_id, prospecto_id")
-    .eq("telefono", telefono)
+    .in("telefono", variantesTelefono(telefono))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -395,7 +396,7 @@ export async function eliminarConversacion(
   const { error } = await sb
     .from("mensajes_whatsapp")
     .delete()
-    .eq("telefono", telefono);
+    .in("telefono", variantesTelefono(telefono));
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
@@ -452,7 +453,7 @@ export async function finalizarConversacion(
   const { data: ultimo } = await sb
     .from("mensajes_whatsapp")
     .select("id")
-    .eq("telefono", telefono)
+    .in("telefono", variantesTelefono(telefono))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -480,7 +481,7 @@ export async function asignarAgente(
   const { data: ultimo } = await sb
     .from("mensajes_whatsapp")
     .select("id")
-    .eq("telefono", telefono)
+    .in("telefono", variantesTelefono(telefono))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
