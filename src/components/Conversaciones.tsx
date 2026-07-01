@@ -108,6 +108,76 @@ function Countdown24h({
   );
 }
 
+interface RespuestaRapida {
+  atajo: string;
+  titulo: string;
+  texto: string;
+  categoria: string;
+}
+
+const RESPUESTAS_RAPIDAS: RespuestaRapida[] = [
+  {
+    atajo: "saludo",
+    titulo: "Saludo Inicial",
+    texto: "¡Hola! Me pongo en contacto contigo de Sauceda Bienes Raíces. Vi tu interés en nuestro portal. ¿Cómo te puedo ayudar hoy?",
+    categoria: "General"
+  },
+  {
+    atajo: "agendado",
+    titulo: "Contacto Agendado",
+    texto: "Hola, de acuerdo a lo agendado, te contacto para platicar sobre tus opciones inmobiliarias. ¿Tienes unos minutos libres?",
+    categoria: "General"
+  },
+  {
+    atajo: "infonavit",
+    titulo: "Información Infonavit",
+    texto: "En Sauceda Bienes Raíces te ayudamos a precalificar tu crédito Infonavit y te asesoramos para elegir la mejor opción de vivienda que se adapte a tu puntaje y saldo de subcuenta. ¿Te gustaría que revisemos tu puntaje?",
+    categoria: "Productos"
+  },
+  {
+    atajo: "banco",
+    titulo: "Crédito Bancario",
+    texto: "Trabajamos con los principales bancos del país para conseguirte la mejor tasa de interés y CAT para tu crédito hipotecario. Hacemos todo el trámite de preaprobación sin costo para ti. ¿Quieres que hagamos una simulación?",
+    categoria: "Productos"
+  },
+  {
+    atajo: "servicios",
+    titulo: "Servicios Integrales",
+    texto: "Ofrecemos asesoría en compra, venta, renta, avalúos y regularización de propiedades en León y zona Bajío, garantizando total seguridad jurídica en tu transacción.",
+    categoria: "Productos"
+  },
+  {
+    atajo: "privacidad",
+    titulo: "Aviso de Privacidad",
+    texto: "En Sauceda Bienes Raíces protegemos tus datos. Puedes consultar nuestro aviso de privacidad completo en cualquier momento en saucedamx.com",
+    categoria: "FAQs"
+  },
+  {
+    atajo: "horario",
+    titulo: "Horarios de Oficina",
+    texto: "Nuestros horarios de oficina son de Lunes a Viernes de 9:00 AM a 6:00 PM y Sábados de 9:00 AM a 2:00 PM. Fuera de este horario, seguimos a tus órdenes en nuestros canales digitales.",
+    categoria: "FAQs"
+  },
+  {
+    atajo: "requisitos",
+    titulo: "Requisitos de Compra",
+    texto: "Para iniciar tu trámite de compra requerimos identificación oficial (INE/Pasaporte), CURP, RFC, comprobante de domicilio y tu precalificación de crédito vigente (si aplica).",
+    categoria: "FAQs"
+  },
+  {
+    atajo: "llamada",
+    titulo: "Llamada Perdida / Recontacto",
+    texto: "Hola, intenté llamarte pero no logré contactarte. Avísame a qué hora te queda mejor que te llame. ¡Saludos!",
+    categoria: "Seguimiento"
+  },
+  {
+    atajo: "documentos",
+    titulo: "Seguimiento de Documentos",
+    texto: "Hola, te escribo para dar seguimiento a los documentos que teníamos pendientes para tu trámite. Quedo al pendiente si tienes alguna duda.",
+    categoria: "Seguimiento"
+  }
+];
+
 /** Bandeja de conversaciones de WhatsApp (lista + hilo + responder). */
 export function Conversaciones() {
   const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
@@ -128,7 +198,12 @@ export function Conversaciones() {
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [asignando, setAsignando] = useState(false);
   const [esAdmin, setEsAdmin] = useState(false);
+  const [mostrarAtajos, setMostrarAtajos] = useState(false);
+  const [filtroAtajos, setFiltroAtajos] = useState("");
+  const [indiceAtajoSeleccionado, setIndiceAtajoSeleccionado] = useState(0);
+  const [mostrarDropdownMenu, setMostrarDropdownMenu] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function ejecutarPruebaIA() {
     setProbandoIA(true);
@@ -292,6 +367,93 @@ export function Conversaciones() {
       return c.finalizado;
     }
   });
+
+  const filteredAtajos = RESPUESTAS_RAPIDAS.filter((r) =>
+    r.atajo.toLowerCase().includes(filtroAtajos.toLowerCase()) ||
+    r.titulo.toLowerCase().includes(filtroAtajos.toLowerCase())
+  );
+
+  function insertarRespuesta(textoRespuesta: string) {
+    if (!textareaRef.current) {
+      setTexto(textoRespuesta);
+      setMostrarAtajos(false);
+      setMostrarDropdownMenu(false);
+      return;
+    }
+    const cursor = textareaRef.current.selectionStart || 0;
+    const textBeforeCursor = texto.slice(0, cursor);
+    const textAfterCursor = texto.slice(cursor);
+    
+    const lastHashIndex = textBeforeCursor.lastIndexOf("#");
+    if (lastHashIndex !== -1) {
+      const nuevoTexto = textBeforeCursor.slice(0, lastHashIndex) + textoRespuesta + textAfterCursor;
+      setTexto(nuevoTexto);
+      setMostrarAtajos(false);
+      setMostrarDropdownMenu(false);
+      
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const nuevaPos = lastHashIndex + textoRespuesta.length;
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(nuevaPos, nuevaPos);
+        }
+      }, 0);
+    } else {
+      const nuevoTexto = textBeforeCursor + textoRespuesta + textAfterCursor;
+      setTexto(nuevoTexto);
+      setMostrarDropdownMenu(false);
+      
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const nuevaPos = cursor + textoRespuesta.length;
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(nuevaPos, nuevaPos);
+        }
+      }, 0);
+    }
+  }
+
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value;
+    setTexto(val);
+
+    const cursor = e.target.selectionStart || 0;
+    const textBeforeCursor = val.slice(0, cursor);
+    const words = textBeforeCursor.split(/\s+/);
+    const lastWord = words[words.length - 1] || "";
+
+    if (lastWord.startsWith("#")) {
+      const query = lastWord.slice(1);
+      setFiltroAtajos(query);
+      setIndiceAtajoSeleccionado(0);
+      setMostrarAtajos(true);
+    } else {
+      setMostrarAtajos(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mostrarAtajos && filteredAtajos.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setIndiceAtajoSeleccionado((prev) => (prev + 1) % filteredAtajos.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setIndiceAtajoSeleccionado((prev) => (prev - 1 + filteredAtajos.length) % filteredAtajos.length);
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertarRespuesta(filteredAtajos[indiceAtajoSeleccionado].texto);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setMostrarAtajos(false);
+      }
+    } else {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        void enviarTexto();
+      }
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -560,6 +722,12 @@ export function Conversaciones() {
                         </a>
                       </>
                     )}
+                    <span>·</span>
+                    <span className="font-semibold text-[9px] uppercase tracking-wider text-carbon/40">Ventana 24h:</span>
+                    <Countdown24h
+                      ultimoInboundFecha={detalle.ultimoInboundFecha}
+                      ventanaAbierta={detalle.ventanaAbierta}
+                    />
                   </div>
 
                   {/* Dropdown de Asignación */}
@@ -699,28 +867,103 @@ export function Conversaciones() {
                 )}
 
                 {detalle.ventanaAbierta ? (
-                  <div className="flex items-end gap-2">
-                    <textarea
-                      value={texto}
-                      onChange={(e) => setTexto(e.target.value)}
-                      rows={2}
-                      placeholder="Escribe un mensaje…"
-                      className={INPUT}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          void enviarTexto();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={enviarTexto}
-                      disabled={enviando || !texto.trim()}
-                      className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
-                    >
-                      {enviando ? "…" : "Enviar"}
-                    </button>
+                  <div className="space-y-1.5 relative">
+                    {/* Tarjeta Flotante de Atajos (#) */}
+                    {mostrarAtajos && filteredAtajos.length > 0 && (
+                      <div className="absolute left-0 bottom-full mb-2 z-50 w-80 max-h-60 overflow-y-auto rounded-lg border border-carbon/10 bg-white p-1 shadow-lg scrollbar-sutil">
+                        <div className="bg-crema/40 px-2 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 flex items-center justify-between">
+                          <span>Atajos disponibles</span>
+                          <span className="font-normal text-carbon/40">Usa ↑↓ y Enter</span>
+                        </div>
+                        {filteredAtajos.map((r, idx) => (
+                          <button
+                            key={r.atajo}
+                            type="button"
+                            onClick={() => insertarRespuesta(r.texto)}
+                            className={`w-full text-left px-2 py-1.5 rounded text-xs transition flex flex-col ${
+                              idx === indiceAtajoSeleccionado
+                                ? "bg-sauce/15 text-verde-profundo"
+                                : "hover:bg-carbon/5 text-carbon"
+                            }`}
+                          >
+                            <span className="font-semibold flex items-center gap-1">
+                              <span className="text-[10px] bg-sauce/20 text-verde-profundo px-1 py-0.5 rounded">#{r.atajo}</span>
+                              {r.titulo}
+                            </span>
+                            <span className="text-[10px] text-carbon/50 truncate w-full mt-0.5">{r.texto}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
+                    <div className="flex items-center justify-between text-[11px] text-carbon/40 px-1">
+                      <span>Escribe <strong className="text-sauce">#</strong> para usar respuestas rápidas</span>
+                      
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMostrarDropdownMenu(!mostrarDropdownMenu)}
+                          className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm"
+                        >
+                          ⚡ Respuestas Rápidas
+                        </button>
+                        
+                        {/* Menú Dropdown de Respuestas Rápidas */}
+                        {mostrarDropdownMenu && (
+                          <div className="absolute right-0 bottom-full mb-1.5 z-50 w-72 max-h-80 overflow-y-auto rounded-lg border border-carbon/10 bg-white py-1.5 shadow-lg scrollbar-sutil">
+                            <div className="px-3 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 uppercase tracking-wider">
+                              Catálogo de Respuestas
+                            </div>
+                            
+                            {/* Agrupación por Categorías */}
+                            {["General", "Productos", "FAQs", "Seguimiento"].map((cat) => {
+                              const list = RESPUESTAS_RAPIDAS.filter((r) => r.categoria === cat);
+                              if (list.length === 0) return null;
+                              return (
+                                <div key={cat} className="mt-1.5">
+                                  <div className="px-3 py-0.5 text-[9px] font-bold text-carbon/30 bg-carbon/5 uppercase">
+                                    {cat}
+                                  </div>
+                                  {list.map((r) => (
+                                    <button
+                                      key={r.atajo}
+                                      type="button"
+                                      onClick={() => insertarRespuesta(r.texto)}
+                                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-carbon/5 text-carbon flex flex-col transition"
+                                    >
+                                      <span className="font-semibold text-verde-profundo">{r.titulo}</span>
+                                      <span className="text-[10px] text-carbon/50 line-clamp-2 mt-0.5">{r.texto}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Caja de Texto + Botón de Enviar */}
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        ref={textareaRef}
+                        value={texto}
+                        onChange={handleTextareaChange}
+                        rows={2}
+                        placeholder="Escribe un mensaje o usa #..."
+                        className={INPUT}
+                        onKeyDown={handleKeyDown}
+                      />
+                      <button
+                        type="button"
+                        onClick={enviarTexto}
+                        disabled={enviando || !texto.trim()}
+                        className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
+                      >
+                        {enviando ? "…" : "Enviar"}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
