@@ -12,6 +12,7 @@ import { AsesorSelector } from "@/components/AsesorSelector";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { ConversacionHistorica } from "@/components/ConversacionHistorica";
 import { LlamadasHistoricas } from "@/components/LlamadasHistoricas";
+import { TimelineSecuencia } from "@/components/TimelineSecuencia";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,9 @@ export default async function PaginaProspecto({
             </Link>
           ))}
         </div>
+
+        {/* Línea de tiempo de la Secuencia de Automatización */}
+        <TimelineSecuencia phoneOrId={prospecto.id} />
 
         {/* Historial de conversaciones de WhatsApp */}
         {prospecto.telefono && (

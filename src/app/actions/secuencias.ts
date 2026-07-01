@@ -502,7 +502,7 @@ export async function obtenerTrazabilidadLead(leadPhoneOrId: string) {
       *,
       sequence:automation_sequences(nombre)
     `)
-    .or(`phone.eq.${leadPhoneOrId},prospecto_id.eq.${leadPhoneOrId}`)
+    .or(`phone.eq.${leadPhoneOrId},prospecto_id.eq.${leadPhoneOrId},expediente_id.eq.${leadPhoneOrId}`)
     .order("enrolled_at", { ascending: false })
     .limit(1)
     .maybeSingle();
