@@ -177,7 +177,8 @@ export function DashboardInteligente() {
   const [activeTab, setActiveTab] = useState<"marketing" | "finanzas">("marketing");
 
   // Rangos de fecha y selección
-  const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "este-mes" | "custom">("14");
+  const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "este-mes" | "este-ano" | "custom">("14");
+  const [vistaPnLMensual, setVistaPnLMensual] = useState(false);
   const [fechaInicioCustom, setFechaInicioCustom] = useState("");
   const [fechaFinCustom, setFechaFinCustom] = useState("");
 
@@ -274,6 +275,9 @@ export function DashboardInteligente() {
     } else if (rangoSeleccionado === "este-mes") {
       const primerDia = new Date(today.getFullYear(), today.getMonth(), 1);
       fechaInicio = primerDia.toISOString().split("T")[0];
+    } else if (rangoSeleccionado === "este-ano") {
+      const primerDia = new Date(today.getFullYear(), 0, 1);
+      fechaInicio = primerDia.toISOString().split("T")[0];
     } else if (rangoSeleccionado === "custom" && fechaInicioCustom && fechaFinCustom) {
       fechaInicio = fechaInicioCustom;
       fechaFin = fechaFinCustom;
@@ -293,6 +297,12 @@ export function DashboardInteligente() {
       const ultimoDiaPrev = new Date(today.getFullYear(), today.getMonth(), 0);
       fechaInicioPrev = primerDiaPrev.toISOString().split("T")[0];
       fechaFinPrev = ultimoDiaPrev.toISOString().split("T")[0];
+    } else if (rangoSeleccionado === "este-ano") {
+      // Periodo anterior: año anterior completo equivalente (YTD)
+      const primerDiaPrev = new Date(today.getFullYear() - 1, 0, 1);
+      const equivalenteDiaPrev = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+      fechaInicioPrev = primerDiaPrev.toISOString().split("T")[0];
+      fechaFinPrev = equivalenteDiaPrev.toISOString().split("T")[0];
     } else {
       // Calcular período anterior equivalente para la comparativa MoM
       const start = new Date(fechaInicio);
@@ -699,6 +709,127 @@ export function DashboardInteligente() {
     };
   }, [transacciones, metricasFiltradas]);
 
+  // Obtener la lista de meses "AAAA-MM" que caen dentro del período seleccionado
+  const mesesEnPeriodo = useMemo(() => {
+    if (!fechasCalculadas.fechaInicio || !fechasCalculadas.fechaFin) return [];
+    const start = new Date(fechasCalculadas.fechaInicio + 'T00:00:00');
+    const end = new Date(fechasCalculadas.fechaFin + 'T00:00:00');
+    const resultado: string[] = [];
+    const actual = new Date(start.getFullYear(), start.getMonth(), 1);
+
+    while (actual <= end) {
+      const year = actual.getFullYear();
+      const month = String(actual.getMonth() + 1).padStart(2, '0');
+      resultado.push(`${year}-${month}`);
+      actual.setMonth(actual.getMonth() + 1);
+    }
+    return resultado;
+  }, [fechasCalculadas]);
+
+  // Desglose del P&L mensual para el período seleccionado
+  const PnLMensual = useMemo(() => {
+    const mapa = new Map<string, {
+      ventasDirectas: number;
+      comisiones: number;
+      otrosIngresos: number;
+      nomina: number;
+      renta: number;
+      servicios: number;
+      impuestos: number;
+      otrosGastos: number;
+      marketingTransacciones: number;
+      metaAdsGasto: number;
+    }>();
+
+    // Inicializar mapa para todos los meses del periodo
+    mesesEnPeriodo.forEach(mes => {
+      mapa.set(mes, {
+        ventasDirectas: 0,
+        comisiones: 0,
+        otrosIngresos: 0,
+        nomina: 0,
+        renta: 0,
+        servicios: 0,
+        impuestos: 0,
+        otrosGastos: 0,
+        marketingTransacciones: 0,
+        metaAdsGasto: 0
+      });
+    });
+
+    // Sumar transacciones financieras
+    transacciones.forEach(t => {
+      const mes = t.fecha.slice(0, 7); // "YYYY-MM"
+      if (!mapa.has(mes)) {
+        mapa.set(mes, {
+          ventasDirectas: 0,
+          comisiones: 0,
+          otrosIngresos: 0,
+          nomina: 0,
+          renta: 0,
+          servicios: 0,
+          impuestos: 0,
+          otrosGastos: 0,
+          marketingTransacciones: 0,
+          metaAdsGasto: 0
+        });
+      }
+      const datosMes = mapa.get(mes)!;
+      const cat = t.categoria.toLowerCase();
+      if (t.tipo === "ingreso") {
+        if (cat === "venta") datosMes.ventasDirectas += t.monto;
+        else if (cat === "comision") datosMes.comisiones += t.monto;
+        else datosMes.otrosIngresos += t.monto;
+      } else {
+        if (cat === "nomina") datosMes.nomina += t.monto;
+        else if (cat === "renta") datosMes.renta += t.monto;
+        else if (cat === "servicios") datosMes.servicios += t.monto;
+        else if (cat === "impuestos") datosMes.impuestos += t.monto;
+        else if (cat === "marketing") datosMes.marketingTransacciones += t.monto;
+        else datosMes.otrosGastos += t.monto;
+      }
+    });
+
+    // Sumar el gasto publicitario de Meta/TikTok desde las métricas diarias
+    metricasFiltradas.forEach(m => {
+      const mes = m.fecha.slice(0, 7);
+      if (mapa.has(mes)) {
+        mapa.get(mes)!.metaAdsGasto += (m.gasto_publicitario || 0);
+      }
+    });
+
+    // Construir estructura final para la tabla
+    return mesesEnPeriodo.map(mes => {
+      const datos = mapa.get(mes)!;
+      const totalIngresos = datos.ventasDirectas + datos.comisiones + datos.otrosIngresos;
+      const totalMarketing = datos.metaAdsGasto + datos.marketingTransacciones;
+      const utilidadBruta = totalIngresos - totalMarketing;
+      const totalOpex = datos.nomina + datos.renta + datos.servicios + datos.impuestos + datos.otrosGastos;
+      const utilidadNeta = utilidadBruta - totalOpex;
+      const margenNeto = totalIngresos > 0 ? (utilidadNeta / totalIngresos) * 100 : 0;
+
+      return {
+        mes,
+        ...datos,
+        totalIngresos,
+        totalMarketing,
+        utilidadBruta,
+        totalOpex,
+        utilidadNeta,
+        margenNeto
+      };
+    });
+  }, [mesesEnPeriodo, transacciones, metricasFiltradas]);
+
+  const formatearMes = (mesStr: string) => {
+    const [year, month] = mesStr.split("-");
+    const nombresMeses = [
+      "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+      "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
+    ];
+    return `${nombresMeses[parseInt(month, 10) - 1]} ${year.slice(2)}`;
+  };
+
   // Cálculos consolidados para los KPI Cards
   const kpis = useMemo(() => {
     // 1. Periodo actual
@@ -947,7 +1078,7 @@ export function DashboardInteligente() {
         {/* CONTROLES */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            {(["7", "14", "30", "este-mes", "custom"] as const).map((r) => (
+            {(["7", "14", "30", "este-mes", "este-ano", "custom"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setRangoSeleccionado(r)}
@@ -957,7 +1088,13 @@ export function DashboardInteligente() {
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                {r === "custom" ? "Personalizado" : r === "este-mes" ? "Este Mes" : `Últimos ${r} días`}
+                {r === "custom"
+                  ? "Personalizado"
+                  : r === "este-mes"
+                  ? "Este Mes"
+                  : r === "este-ano"
+                  ? "Este Año"
+                  : `Últimos ${r} días`}
               </button>
             ))}
           </div>
@@ -1713,7 +1850,8 @@ export function DashboardInteligente() {
                             categoria: "comision",
                             concepto: `Comisión por Venta Cerrada: ${exp.cliente}`,
                             monto: String(Math.round(exp.valor_estimado * 0.05)), // Sugiere 5% de comisión por defecto
-                            expediente_id: exp.id
+                            expediente_id: exp.id,
+                            es_recurrente: false
                           });
                           setShowManualModal(true);
                         }}
@@ -1731,7 +1869,7 @@ export function DashboardInteligente() {
           {/* ESTADO DE RESULTADOS TRADICIONAL (P&L STATEMENT) */}
           <section className="mb-8">
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <div className="border-b border-slate-100 pb-4 mb-4 flex items-center justify-between">
+              <div className="border-b border-slate-100 pb-4 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
                     Estado de Resultados (P&L Tradicional)
@@ -1740,7 +1878,31 @@ export function DashboardInteligente() {
                     Resumen contable estructurado para el período seleccionado
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 shadow-sm text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setVistaPnLMensual(false)}
+                      className={`rounded-md px-2.5 py-1 transition ${
+                        !vistaPnLMensual
+                          ? "bg-[#2D4A2B] text-[#F5F1E8]"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Consolidado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVistaPnLMensual(true)}
+                      className={`rounded-md px-2.5 py-1 transition ${
+                        vistaPnLMensual
+                          ? "bg-[#2D4A2B] text-[#F5F1E8]"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Mensual
+                    </button>
+                  </div>
                   <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded tracking-wide">
                     Moneda: MXN ($)
                   </span>
@@ -1748,132 +1910,354 @@ export function DashboardInteligente() {
               </div>
 
               <div className="overflow-x-auto scrollbar-sutil">
-                <table className="w-full text-xs text-left border-collapse">
-                  <tbody>
-                    {/* INGRESO BRUTO */}
-                    <tr className="bg-slate-50 border-y border-slate-200 font-bold text-[#2D4A2B]">
-                      <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                        1. Ingresos Operativos (Revenues)
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono">
-                        ${estadoResultados.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
-                      <td className="px-4 py-2 text-slate-400">Ingresos por intermediación de ventas/rentas</td>
-                      <td className="px-4 py-2 text-right font-mono text-slate-700">
-                        ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
-                      <td className="px-4 py-2 text-slate-400">Ingresos directos o traspasos comerciales</td>
-                      <td className="px-4 py-2 text-right font-mono text-slate-700">
-                        ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
-                      <td className="px-4 py-2 text-slate-400">Otros conceptos de entrada financiera</td>
-                      <td className="px-4 py-2 text-right font-mono text-slate-700">
-                        ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
+                {vistaPnLMensual ? (
+                  <table className="w-full text-xs text-left border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase text-[9px] tracking-wider">
+                        <th className="px-4 py-2.5 min-w-[200px]">Concepto</th>
+                        <th className="px-4 py-2.5">Detalle / Notas</th>
+                        {PnLMensual.map((m) => (
+                          <th key={m.mes} className="px-4 py-2.5 text-right font-mono text-[10px]">
+                            {formatearMes(m.mes)}
+                          </th>
+                        ))}
+                        <th className="px-4 py-2.5 text-right bg-slate-100 font-bold font-mono text-[10px] text-slate-800">
+                          Acumulado
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* 1. INGRESOS */}
+                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-[#2D4A2B]">
+                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          1. Ingresos Operativos (Revenues)
+                        </td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2.5 text-right font-mono">
+                            ${m.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5 text-right font-mono bg-slate-50 text-slate-800">
+                          ${estadoResultados.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Intermediación de ventas/rentas</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
+                            ${m.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
+                          ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Traspasos y cierres directos</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
+                            ${m.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
+                          ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Otros conceptos financieros</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
+                            ${m.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
+                          ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
 
-                    {/* COSTO DE VENTAS */}
-                    <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
-                      <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                        2. Costo de Adquisición / Marketing (COGS)
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-rose-600">
-                        -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
-                      <td className="px-4 py-2 text-slate-400">Gasto en Meta Ads, TikTok Ads y agencias de medios</td>
-                      <td className="px-4 py-2 text-right font-mono text-rose-600">
-                        -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
+                      {/* 2. COSTO DE VENTAS */}
+                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
+                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          2. Costo de Adquisición / Marketing (COGS)
+                        </td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2.5 text-right font-mono text-rose-600">
+                            -${m.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5 text-right font-mono text-rose-600 bg-slate-50">
+                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Meta Ads, TikTok Ads y agencias</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
+                            -${m.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
+                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
 
-                    {/* UTILIDAD BRUTA */}
-                    <tr className="bg-[#F5F1E8] border-y border-[#E6DEC9] font-extrabold text-[#2D4A2B]">
-                      <td className="px-4 py-3 uppercase tracking-wider text-[10px]" colSpan={2}>
-                        (=) Utilidad Bruta (Gross Profit)
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-[13px]">
-                        ${estadoResultados.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
+                      {/* UTILIDAD BRUTA */}
+                      <tr className="bg-[#F5F1E8] border-y border-[#E6DEC9] font-extrabold text-[#2D4A2B]">
+                        <td className="px-4 py-3 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          (=) Utilidad Bruta (Gross Profit)
+                        </td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-3 text-right font-mono text-[12px]">
+                            ${m.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-right font-mono text-[13px] bg-[#EBE5D5] text-[#2D4A2B]">
+                          ${estadoResultados.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
 
-                    {/* GASTOS OPERATIVOS */}
-                    <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
-                      <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                        3. Gastos de Operación y Administración (OPEX)
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-rose-600">
-                        -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
-                      <td className="px-4 py-2 text-slate-400">Salarios y honorarios profesionales fijos</td>
-                      <td className="px-4 py-2 text-right font-mono text-rose-600">
-                        -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
-                      <td className="px-4 py-2 text-slate-400">Alquileres de sucursales e inmuebles corporativos</td>
-                      <td className="px-4 py-2 text-right font-mono text-rose-600">
-                        -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
-                      <td className="px-4 py-2 text-slate-400">Luz, agua, internet, telefonía e insumos de oficina</td>
-                      <td className="px-4 py-2 text-right font-mono text-rose-600">
-                        -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
-                      <td className="px-4 py-2 text-slate-400">Pagos al SAT y provisiones fiscales</td>
-                      <td className="px-4 py-2 text-right font-mono text-rose-600">
-                        -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-100 font-medium">
-                      <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
-                      <td className="px-4 py-2 text-slate-400">Cualquier otro gasto de operación menor o misceláneo</td>
-                      <td className="px-4 py-2 text-right font-mono text-rose-600">
-                        -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
+                      {/* 3. GASTOS OPERATIVOS */}
+                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
+                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          3. Gastos de Operación y Administración (OPEX)
+                        </td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2.5 text-right font-mono text-rose-600">
+                            -${m.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2.5 text-right font-mono text-rose-600 bg-slate-50">
+                          -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Salarios y honorarios profesionales fijos</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
+                            -${m.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
+                          -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Alquileres corporativos</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
+                            -${m.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
+                          -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Luz, internet, telefonía e insumos</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
+                            -${m.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
+                          -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Pagos al SAT y provisiones fiscales</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
+                            -${m.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
+                          -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
+                        <td className="px-4 py-2 text-slate-400 text-[10px]">Cualquier otro gasto de operación menor</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
+                            -${m.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
+                          -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
 
-                    {/* RESULTADO NETO */}
-                    <tr className={`border-y-2 border-slate-900 font-black ${
-                      estadoResultados.utilidadNeta >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
-                    }`}>
-                      <td className="px-4 py-3.5 uppercase tracking-wider text-[11px]" colSpan={2}>
-                        (=) Utilidad Neta (Net Income / EBIT)
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-mono text-sm underline decoration-double">
-                        ${estadoResultados.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                    <tr className="font-semibold text-slate-500 text-[10px]">
-                      <td className="px-4 py-2" colSpan={2}>Margen de Utilidad Neto (%)</td>
-                      <td className={`px-4 py-2 text-right font-mono font-bold ${
-                        estadoResultados.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
+                      {/* RESULTADO NETO */}
+                      <tr className={`border-y-2 border-slate-900 font-black ${
+                        estadoResultados.utilidadNeta >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
                       }`}>
-                        {estadoResultados.margenNeto.toFixed(2)}%
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                        <td className="px-4 py-3.5 uppercase tracking-wider text-[11px]" colSpan={2}>
+                          (=) Utilidad Neta (Net Income / EBIT)
+                        </td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className={`px-4 py-3.5 text-right font-mono text-xs ${
+                            m.utilidadNeta >= 0 ? "text-emerald-700" : "text-rose-700"
+                          }`}>
+                            ${m.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3.5 text-right font-mono text-sm underline decoration-double bg-slate-100">
+                          ${estadoResultados.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="font-semibold text-slate-500 text-[10px]">
+                        <td className="px-4 py-2" colSpan={2}>Margen de Utilidad Neto (%)</td>
+                        {PnLMensual.map((m) => (
+                          <td key={m.mes} className={`px-4 py-2 text-right font-mono font-bold ${
+                            m.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
+                          }`}>
+                            {m.margenNeto.toFixed(2)}%
+                          </td>
+                        ))}
+                        <td className={`px-4 py-2 text-right font-mono font-bold bg-slate-50/50 ${
+                          estadoResultados.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
+                        }`}>
+                          {estadoResultados.margenNeto.toFixed(2)}%
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-xs text-left border-collapse">
+                    <tbody>
+                      {/* INGRESO BRUTO */}
+                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-[#2D4A2B]">
+                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          1. Ingresos Operativos (Revenues)
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono">
+                          ${estadoResultados.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
+                        <td className="px-4 py-2 text-slate-400">Ingresos por intermediación de ventas/rentas</td>
+                        <td className="px-4 py-2 text-right font-mono text-slate-700">
+                          ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
+                        <td className="px-4 py-2 text-slate-400">Ingresos directos o traspasos comerciales</td>
+                        <td className="px-4 py-2 text-right font-mono text-slate-700">
+                          ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
+                        <td className="px-4 py-2 text-slate-400">Otros conceptos de entrada financiera</td>
+                        <td className="px-4 py-2 text-right font-mono text-slate-700">
+                          ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+
+                      {/* COSTO DE VENTAS */}
+                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
+                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          2. Costo de Adquisición / Marketing (COGS)
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-rose-600">
+                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
+                        <td className="px-4 py-2 text-slate-400">Gasto en Meta Ads, TikTok Ads y agencias de medios</td>
+                        <td className="px-4 py-2 text-right font-mono text-rose-600">
+                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+
+                      {/* UTILIDAD BRUTA */}
+                      <tr className="bg-[#F5F1E8] border-y border-[#E6DEC9] font-extrabold text-[#2D4A2B]">
+                        <td className="px-4 py-3 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          (=) Utilidad Bruta (Gross Profit)
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-[13px]">
+                          ${estadoResultados.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+
+                      {/* GASTOS OPERATIVOS */}
+                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
+                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
+                          3. Gastos de Operación y Administración (OPEX)
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-rose-600">
+                          -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
+                        <td className="px-4 py-2 text-slate-400">Salarios y honorarios profesionales fijos</td>
+                        <td className="px-4 py-2 text-right font-mono text-rose-600">
+                          -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
+                        <td className="px-4 py-2 text-slate-400">Alquileres de sucursales e inmuebles corporativos</td>
+                        <td className="px-4 py-2 text-right font-mono text-rose-600">
+                          -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
+                        <td className="px-4 py-2 text-slate-400">Luz, agua, internet, telefonía e insumos de oficina</td>
+                        <td className="px-4 py-2 text-right font-mono text-rose-600">
+                          -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
+                        <td className="px-4 py-2 text-slate-400">Pagos al SAT y provisiones fiscales</td>
+                        <td className="px-4 py-2 text-right font-mono text-rose-600">
+                          -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-100 font-medium">
+                        <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
+                        <td className="px-4 py-2 text-slate-400">Cualquier otro gasto de operación menor o misceláneo</td>
+                        <td className="px-4 py-2 text-right font-mono text-rose-600">
+                          -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+
+                      {/* RESULTADO NETO */}
+                      <tr className={`border-y-2 border-slate-900 font-black ${
+                        estadoResultados.utilidadNeta >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
+                      }`}>
+                        <td className="px-4 py-3.5 uppercase tracking-wider text-[11px]" colSpan={2}>
+                          (=) Utilidad Neta (Net Income / EBIT)
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono text-sm underline decoration-double">
+                          ${estadoResultados.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      <tr className="font-semibold text-slate-500 text-[10px]">
+                        <td className="px-4 py-2" colSpan={2}>Margen de Utilidad Neto (%)</td>
+                        <td className={`px-4 py-2 text-right font-mono font-bold ${
+                          estadoResultados.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
+                        }`}>
+                          {estadoResultados.margenNeto.toFixed(2)}%
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </section>

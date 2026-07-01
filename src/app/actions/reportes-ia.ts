@@ -302,7 +302,9 @@ export async function obtenerInsightsIA(
 
 /**
  * Ejecuta un análisis inteligente en tiempo real usando Claude.
- * Lee las métricas de marexport async function generarInsightsConIA(
+ * Lee las métricas de marketing/finanzas y genera insights.
+ */
+export async function generarInsightsConIA(
   fechaInicio: string,
   fechaFin: string,
   fechaInicioPrev?: string,
@@ -741,7 +743,7 @@ export async function procesarTransaccionesRecurrentes(sb: any): Promise<void> {
         }
 
         // Comprobar si ya existe una transacción hija para este mes
-        const existeHijo = (hijos || []).some(h => {
+        const existeHijo = (hijos || []).some((h: any) => {
           if (h.recurrente_parent_id !== parent.id) return false;
           const [hAnio, hMes] = h.fecha.split("-").map(Number);
           return hAnio === idxAnio && (hMes - 1) === idxMes;
