@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { obtenerTrazabilidadLead } from "@/app/actions/secuencias";
+import { obtenerTrazabilidadLead, cambiarEstadoEnrollment } from "@/app/actions/secuencias";
 
 interface TimelineSecuenciaProps {
   phoneOrId: string;
@@ -10,6 +10,7 @@ interface TimelineSecuenciaProps {
 export function TimelineSecuencia({ phoneOrId }: TimelineSecuenciaProps) {
   const [loading, setLoading] = useState(true);
   const [trazabilidad, setTrazabilidad] = useState<any>(null);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
     async function cargar() {
@@ -26,6 +27,23 @@ export function TimelineSecuencia({ phoneOrId }: TimelineSecuenciaProps) {
     }
     void cargar();
   }, [phoneOrId]);
+
+  const handleSalir = async () => {
+    if (!window.confirm("¿Seguro que deseas sacar a este lead de la secuencia manualmente?")) {
+      return;
+    }
+    setExiting(true);
+    try {
+      await cambiarEstadoEnrollment(trazabilidad.enrollment.id, "salido");
+      const res = await obtenerTrazabilidadLead(phoneOrId);
+      setTrazabilidad(res);
+    } catch (err) {
+      console.error("Error al salir de la secuencia:", err);
+      alert("Ocurrió un error al detener la secuencia.");
+    } finally {
+      setExiting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -56,17 +74,29 @@ export function TimelineSecuencia({ phoneOrId }: TimelineSecuenciaProps) {
             Secuencia activa: <span className="font-semibold text-sauce">{enrollment.sequence?.nombre || "Automatización"}</span>
           </p>
         </div>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${
-            enrollment.status === "activo"
-              ? "bg-emerald-100 text-emerald-800"
-              : enrollment.status === "completado"
-              ? "bg-blue-100 text-blue-800"
-              : "bg-amber-100 text-amber-800"
-          }`}
-        >
-          {enrollment.status.toUpperCase()}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${
+              enrollment.status === "activo"
+                ? "bg-emerald-100 text-emerald-800"
+                : enrollment.status === "completado"
+                ? "bg-blue-100 text-blue-800"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {enrollment.status.toUpperCase()}
+          </span>
+          {enrollment.status === "activo" && (
+            <button
+              onClick={handleSalir}
+              disabled={exiting}
+              className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700 hover:bg-red-100 transition disabled:opacity-50"
+              title="Detener secuencia manualmente"
+            >
+              {exiting ? "Deteniendo..." : "Detener Secuencia"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Timeline de acciones ejecutadas */}

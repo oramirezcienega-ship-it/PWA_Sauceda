@@ -21,6 +21,9 @@ export async function orquestador(): Promise<{
   const errores: string[] = [];
 
   try {
+    // 0. Buscar e inscribir prospectos/expedientes inactivos en secuencias de reactivación
+    await buscarYEnrolarLeadsInactivos(sb);
+
     // 1. Obtener enrollments activos
     const { data: enrollments, error: errEnrollments } = await sb
       .from("sequence_enrollments")
@@ -117,9 +120,49 @@ export async function orquestador(): Promise<{
           switch (step.canal) {
             case "whatsapp":
               contenidoEnviado = mensajeFormateado;
-              const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
-              exito = waRes.ok;
-              errorDetalle = waRes.error || "";
+              // Soporte para plantillas de WhatsApp si el mensaje comienza con "[plantilla: nombre_plantilla]"
+              if (mensajeFormateado.startsWith("[plantilla:")) {
+                const match = mensajeFormateado.match(/\[plantilla:\s*([^\]\s,]+)(?:\s*,\s*([^\]\s]+))?\]/);
+                const plantillaNombre = match ? match[1] : null;
+                const idioma = match && match[2] ? match[2] : "es_MX";
+
+                if (plantillaNombre) {
+                  // Extraer parámetros después del cierre de corchete "[plantilla: ...]"
+                  const textoRestante = mensajeFormateado.replace(/\[plantilla:[^\]]+\]/, "").trim();
+                  const parametros = textoRestante ? textoRestante.split("|").map(p => p.trim()) : [enrollment.nombre];
+
+                  // Si hay expediente, consultar su token para el enlace del portal del cliente
+                  let token: string | undefined;
+                  if (enrollment.expediente_id) {
+                    const { data: exp } = await sb
+                      .from("expedientes")
+                      .select("token")
+                      .eq("id", enrollment.expediente_id)
+                      .maybeSingle();
+                    if (exp?.token) token = exp.token;
+                  }
+
+                  const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
+                  const waRes = await enviarWhatsAppPlantilla(
+                    enrollment.phone,
+                    plantillaNombre,
+                    idioma,
+                    parametros,
+                    token
+                  );
+                  exito = waRes.ok;
+                  errorDetalle = waRes.error || "";
+                  contenidoEnviado = `[Plantilla: ${plantillaNombre}] ${parametros.join(" | ")}`;
+                } else {
+                  const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
+                  exito = waRes.ok;
+                  errorDetalle = waRes.error || "";
+                }
+              } else {
+                const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
+                exito = waRes.ok;
+                errorDetalle = waRes.error || "";
+              }
               break;
 
             case "email":
@@ -202,6 +245,31 @@ export async function orquestador(): Promise<{
             });
 
             if (exito) {
+              // Si fue WhatsApp, registrar también en el historial de mensajes de la conversación
+              if (step.canal === "whatsapp") {
+                try {
+                  const { data: idData } = await sb
+                    .from("mensajes_whatsapp")
+                    .select("expediente_id, prospecto_id")
+                    .eq("telefono", enrollment.phone)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                  await sb.from("mensajes_whatsapp").insert({
+                    telefono: enrollment.phone,
+                    texto: contenidoEnviado,
+                    direccion: "out",
+                    expediente_id: enrollment.expediente_id || idData?.expediente_id || null,
+                    prospecto_id: enrollment.prospecto_id || idData?.prospecto_id || null,
+                    estado: "enviado",
+                    agente: "Sistema (Secuencia)",
+                  });
+                } catch (dbErr) {
+                  console.error("Error al registrar mensaje de secuencia en mensajes_whatsapp:", dbErr);
+                }
+              }
+
               // Avanzar al siguiente paso
               await avanzarStep(sb, enrollment.id, enrollment.step_actual + 1);
             } else {
@@ -544,5 +612,98 @@ export async function enrolarLeadEnSecuenciasActivas(
     }
   } catch (err) {
     console.error("Error al enrolar lead automáticamente en secuencias activas:", err);
+  }
+}
+
+/**
+ * Rutina para encontrar prospectos/expedientes inactivos en 'nuevo-lead' o 'contactado'
+ * por más de 3 días y enrolarlos automáticamente en una secuencia de reactivación.
+ */
+async function buscarYEnrolarLeadsInactivos(
+  sb: ReturnType<typeof supabaseServidor>
+): Promise<void> {
+  try {
+    // 1. Encontrar secuencia de reactivación activa
+    const { data: secuencias } = await sb
+      .from("automation_sequences")
+      .select("id, nombre")
+      .eq("status", "activa")
+      .eq("segmento", "sin_respuesta")
+      .limit(1);
+
+    let secuenciaId = secuencias && secuencias.length > 0 ? secuencias[0].id : null;
+    let secuenciaNombre = secuencias && secuencias.length > 0 ? secuencias[0].nombre : null;
+
+    if (!secuenciaId) {
+      // Buscar una con nombre "reactiva" o similar
+      const { data: seqAlternativa } = await sb
+        .from("automation_sequences")
+        .select("id, nombre")
+        .eq("status", "activa")
+        .ilike("nombre", "%reactiva%")
+        .limit(1);
+      
+      if (!seqAlternativa || seqAlternativa.length === 0) {
+        return; // No hay ninguna secuencia de reactivación configurada y activa
+      }
+      secuenciaId = seqAlternativa[0].id;
+      secuenciaNombre = seqAlternativa[0].nombre;
+    }
+
+    // 2. Definir fecha límite (3 días de inactividad)
+    const limiteInactividad = new Date();
+    limiteInactividad.setDate(limiteInactividad.getDate() - 3);
+    const limiteISO = limiteInactividad.toISOString();
+
+    // 3. Buscar expedientes inactivos
+    const { data: expedientes } = await sb
+      .from("expedientes")
+      .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, ultimo_movimiento")
+      .in("etapa", ["nuevo-lead", "contactado"])
+      .lt("ultimo_movimiento", limiteISO);
+
+    if (!expedientes || expedientes.length === 0) return;
+
+    // 4. Filtrar los que ya están en alguna secuencia activa y enrolar
+    for (const exp of expedientes) {
+      if (!exp.telefono) continue;
+
+      // Verificar si ya está enrolado activamente en CUALQUIER secuencia
+      const { data: enrolado } = await sb
+        .from("sequence_enrollments")
+        .select("id")
+        .eq("phone", exp.telefono)
+        .eq("status", "activo")
+        .maybeSingle();
+
+      if (enrolado) continue; // Ya está en una secuencia activa, ignorar
+
+      // Enrolar en la secuencia de reactivación
+      const nombreCompleto = [exp.cliente, exp.primer_apellido, exp.segundo_apellido]
+        .filter(Boolean)
+        .join(" ");
+
+      await sb.from("sequence_enrollments").insert({
+        sequence_id: secuenciaId,
+        phone: exp.telefono,
+        nombre: nombreCompleto || "Cliente",
+        prospecto_id: exp.prospecto_id || null,
+        expediente_id: exp.id,
+        status: "activo",
+        step_actual: 1,
+        enrolled_at: new Date().toISOString(),
+      });
+
+      // Registrar una actividad de sistema en el expediente
+      await sb.from("actividades").insert({
+        expediente_id: exp.id,
+        prospecto_id: exp.prospecto_id || null,
+        tipo: "sistema",
+        titulo: "Enrolamiento por inactividad",
+        detalle: `Enrolado automáticamente en la secuencia '${secuenciaNombre}' tras 3 días sin actividad.`,
+      });
+    }
+  } catch (err) {
+    console.error("Error en buscarYEnrolarLeadsInactivos:", err);
   }
 }
