@@ -521,6 +521,29 @@ export function DetalleExpediente({ id }: { id: string }) {
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
+          {/* Tarjeta de Secuencia de Automatización Activa */}
+          {expediente.secuenciaNombre && (
+            <div className="rounded-xl border border-sauce/20 bg-sauce/5 p-4 flex items-center justify-between shadow-sm">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-sauce bg-sauce/10 px-2 py-0.5 rounded-full">
+                    Secuencia Activa
+                  </span>
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sauce opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-sauce"></span>
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-verde-profundo mt-1.5">
+                  {expediente.secuenciaNombre}
+                </h4>
+                <p className="text-xs text-carbon/60 mt-1">
+                  Este expediente está enlazado a esta secuencia de marketing automation y está recibiendo mensajes automáticos.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Historial de conversaciones de WhatsApp */}
           {expediente.telefono && (
             <ConversacionHistorica telefono={expediente.telefono} />

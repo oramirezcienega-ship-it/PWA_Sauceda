@@ -234,7 +234,7 @@ export function TablaExpedientes({
                 sel.has(exp.id) ? "bg-sauce/5" : ""
               }`}
             >
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 align-top">
                 <input
                   type="checkbox"
                   checked={sel.has(exp.id)}
@@ -243,45 +243,47 @@ export function TablaExpedientes({
                   className="cursor-pointer"
                 />
               </td>
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 align-top">
                 <Link
                   href={`/expediente/${exp.id}`}
-                  className="font-titular font-medium text-verde-profundo hover:text-sauce"
+                  className="font-titular font-medium text-verde-profundo hover:text-sauce block font-semibold"
                 >
                   {exp.nombreCompleto}
                 </Link>
-                <span className="ml-2 font-mono text-[10px] text-carbon/40">
-                  {exp.id}
-                </span>
-                {exp.createdAt && (
-                  <div className="text-[10px] text-carbon/40 mt-0.5">
-                    Creado: {new Date(exp.createdAt).toLocaleString("es-MX", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: false
-                    })}
-                  </div>
-                )}
+                <div className="flex flex-col gap-1 mt-1 text-[10px]">
+                  <span className="font-mono text-carbon/40 font-semibold bg-carbon/5 px-1.5 py-0.5 rounded w-max">
+                    {exp.id}
+                  </span>
+                  {exp.createdAt && (
+                    <span className="text-carbon/45 whitespace-nowrap">
+                      📅 {new Date(exp.createdAt).toLocaleString("es-MX", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: false
+                      })}
+                    </span>
+                  )}
+                </div>
               </td>
-              <td className="px-3 py-2.5 text-carbon/70">
+              <td className="px-3 py-2.5 align-top text-carbon/70">
                 {exp.asesorNombre || (
                   <span className="text-xs text-carbon/30 italic">Sin asignar</span>
                 )}
               </td>
 
-              <td className="px-3 py-2.5 text-carbon/70">
+              <td className="px-3 py-2.5 align-top text-carbon/70 font-medium">
                 {exp.fraccionamiento}
               </td>
 
-              <td className="px-3 py-2.5 text-carbon/70">
+              <td className="px-3 py-2.5 align-top text-carbon/70">
                 {exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "—"}
               </td>
 
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 align-top">
                 {exp.origenProspecto ? (
                   <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2 py-0.5 text-xs text-cielo">
                     {ORIGEN_POR_ID[exp.origenProspecto]}
@@ -291,11 +293,11 @@ export function TablaExpedientes({
                 )}
               </td>
 
-              <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
+              <td className="px-3 py-2.5 align-top font-mono text-xs text-carbon/70">
                 {exp.telefono || "—"}
               </td>
 
-              <td className="px-3 py-2.5">
+              <td className="px-3 py-2.5 align-top">
                 <select
                   value={exp.etapa}
                   onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
@@ -310,17 +312,17 @@ export function TablaExpedientes({
                 </select>
               </td>
 
-              <td className="px-3 py-2.5 text-right font-mono text-sauce">
+              <td className="px-3 py-2.5 align-top text-right font-mono text-sauce">
                 {formatoPesos(exp.valorEstimado)}
               </td>
 
-              <td className="px-3 py-2.5 text-right font-mono text-carbon/70">
+              <td className="px-3 py-2.5 align-top text-right font-mono text-carbon/70">
                 {formatoPesos(exp.saldoDeuda)}
               </td>
 
-              <td className="px-3 py-2.5 text-xs">
+              <td className="px-3 py-2.5 align-top text-xs">
                 {exp.secuenciaNombre ? (
-                  <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-xs font-semibold text-sauce">
+                  <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-2.5 py-0.5 text-xs font-semibold text-sauce whitespace-nowrap">
                     {exp.secuenciaNombre}
                   </span>
                 ) : (
@@ -328,14 +330,14 @@ export function TablaExpedientes({
                 )}
               </td>
 
-              <td className="px-3 py-2.5 text-xs">
+              <td className="px-3 py-2.5 align-top text-xs">
                 {exp.ultimaActividadTitulo ? (
-                  <div className="flex flex-col gap-0.5 max-w-[200px]">
-                    <span className="font-semibold text-carbon leading-tight truncate" title={exp.ultimaActividadTitulo}>
+                  <div className="flex flex-col gap-0.5 max-w-[220px]">
+                    <span className="font-semibold text-carbon leading-tight" title={exp.ultimaActividadTitulo}>
                       {exp.ultimaActividadTitulo}
                     </span>
                     {exp.ultimaActividadFecha && (
-                      <span className="text-[10px] text-carbon/40 font-mono">
+                      <span className="text-[10px] text-carbon/40 font-mono mt-0.5 whitespace-nowrap">
                         {new Date(exp.ultimaActividadFecha).toLocaleString("es-MX", {
                           day: "2-digit",
                           month: "short",
@@ -353,7 +355,7 @@ export function TablaExpedientes({
                 )}
               </td>
 
-              <td className="px-3 py-2.5 text-xs text-carbon/50">
+              <td className="px-3 py-2.5 align-top text-xs text-carbon/50">
                 {formatoFecha(exp.ultimoMovimiento)}
               </td>
             </tr>

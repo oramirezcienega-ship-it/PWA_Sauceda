@@ -58,20 +58,35 @@ export async function listarExpedientes(): Promise<Expediente[]> {
 
   const expedientesFilas = (data as FilaExpediente[]) ?? [];
   const expIds = expedientesFilas.map((e) => e.id);
+  const prospectoIds = expedientesFilas.map((e) => e.prospecto_id).filter(Boolean) as string[];
 
-  // 1. Obtener enrolamientos activos de secuencias para estos expedientes
+  // 1. Obtener enrolamientos activos de secuencias para estos expedientes o sus prospectos
   const secuenciasMap = new Map<string, string>();
   if (expIds.length > 0) {
-    const { data: enrollments } = await sb
+    let querySec = sb
       .from("sequence_enrollments")
-      .select("expediente_id, automation_sequences(nombre)")
-      .eq("status", "activo")
-      .in("expediente_id", expIds);
+      .select("expediente_id, prospecto_id, automation_sequences(nombre)")
+      .eq("status", "activo");
+
+    if (prospectoIds.length > 0) {
+      querySec = querySec.or(`expediente_id.in.(${expIds.join(",")}),prospecto_id.in.(${prospectoIds.join(",")})`);
+    } else {
+      querySec = querySec.in("expediente_id", expIds);
+    }
+
+    const { data: enrollments } = await querySec;
 
     if (enrollments) {
       enrollments.forEach((en: any) => {
-        if (en.expediente_id && en.automation_sequences?.nombre) {
-          secuenciasMap.set(en.expediente_id, en.automation_sequences.nombre);
+        if (en.automation_sequences?.nombre) {
+          if (en.expediente_id) {
+            secuenciasMap.set(en.expediente_id, en.automation_sequences.nombre);
+          } else if (en.prospecto_id) {
+            const foundExp = expedientesFilas.find((x) => x.prospecto_id === en.prospecto_id);
+            if (foundExp) {
+              secuenciasMap.set(foundExp.id, en.automation_sequences.nombre);
+            }
+          }
         }
       });
     }
