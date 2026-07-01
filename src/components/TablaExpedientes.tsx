@@ -26,6 +26,10 @@ const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
   ultimoMovimiento: (a, b) =>
     a.ultimoMovimiento.localeCompare(b.ultimoMovimiento),
   asesor: (a, b) => (a.asesorNombre ?? "").localeCompare(b.asesorNombre ?? "", "es"),
+  secuenciaNombre: (a, b) =>
+    (a.secuenciaNombre ?? "").localeCompare(b.secuenciaNombre ?? "", "es"),
+  ultimaActividadFecha: (a, b) =>
+    (a.ultimaActividadFecha ?? "").localeCompare(b.ultimaActividadFecha ?? ""),
 };
 
 /**
@@ -181,7 +185,7 @@ export function TablaExpedientes({
       )}
 
       <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
-        <table className="w-full min-w-[1080px] border-collapse text-sm">
+        <table className="w-full min-w-[1300px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-carbon/10 bg-crema/60 text-left">
               <th className="w-10 px-3 py-2.5">
@@ -204,6 +208,8 @@ export function TablaExpedientes({
                 ["etapa", "Etapa", "izquierda"],
                 ["valorEstimado", "Valor estimado", "derecha"],
                 ["saldoDeuda", "Saldo deuda", "derecha"],
+                ["secuenciaNombre", "Secuencia", "izquierda"],
+                ["ultimaActividadFecha", "Última Acción", "izquierda"],
                 ["ultimoMovimiento", "Último mov.", "izquierda"],
               ] as const
             ).map(([columna, label, alineado]) => (
@@ -247,6 +253,19 @@ export function TablaExpedientes({
                 <span className="ml-2 font-mono text-[10px] text-carbon/40">
                   {exp.id}
                 </span>
+                {exp.createdAt && (
+                  <div className="text-[10px] text-carbon/40 mt-0.5">
+                    Creado: {new Date(exp.createdAt).toLocaleString("es-MX", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false
+                    })}
+                  </div>
+                )}
               </td>
               <td className="px-3 py-2.5 text-carbon/70">
                 {exp.asesorNombre || (
@@ -297,6 +316,41 @@ export function TablaExpedientes({
 
               <td className="px-3 py-2.5 text-right font-mono text-carbon/70">
                 {formatoPesos(exp.saldoDeuda)}
+              </td>
+
+              <td className="px-3 py-2.5 text-xs">
+                {exp.secuenciaNombre ? (
+                  <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-xs font-semibold text-sauce">
+                    {exp.secuenciaNombre}
+                  </span>
+                ) : (
+                  <span className="text-carbon/35 italic">—</span>
+                )}
+              </td>
+
+              <td className="px-3 py-2.5 text-xs">
+                {exp.ultimaActividadTitulo ? (
+                  <div className="flex flex-col gap-0.5 max-w-[200px]">
+                    <span className="font-semibold text-carbon leading-tight truncate" title={exp.ultimaActividadTitulo}>
+                      {exp.ultimaActividadTitulo}
+                    </span>
+                    {exp.ultimaActividadFecha && (
+                      <span className="text-[10px] text-carbon/40 font-mono">
+                        {new Date(exp.ultimaActividadFecha).toLocaleString("es-MX", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                          hour12: false
+                        })}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-carbon/35 italic">—</span>
+                )}
               </td>
 
               <td className="px-3 py-2.5 text-xs text-carbon/50">
@@ -351,9 +405,22 @@ export function TablaExpedientes({
                     >
                       {exp.nombreCompleto}
                     </Link>
-                    <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
-                      ID: {exp.id}
-                    </span>
+                    <div className="flex flex-col gap-0.5 mt-0.5 text-[10px] text-carbon/40 font-mono">
+                      <span>ID: {exp.id}</span>
+                      {exp.createdAt && (
+                        <span>
+                          Creado: {new Date(exp.createdAt).toLocaleString("es-MX", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                            hour12: false
+                          })}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -401,6 +468,39 @@ export function TablaExpedientes({
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Saldo Deuda</p>
                   <p className="font-mono font-medium text-carbon/70 mt-0.5">{formatoPesos(exp.saldoDeuda)}</p>
+                </div>
+                <div className="col-span-2 border-t border-carbon/5 pt-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Secuencia Activa</p>
+                  {exp.secuenciaNombre ? (
+                    <span className="inline-flex items-center rounded-full bg-sauce/10 border border-sauce/20 px-2.5 py-0.5 text-xs font-semibold text-sauce mt-1">
+                      {exp.secuenciaNombre}
+                    </span>
+                  ) : (
+                    <p className="text-carbon/40 italic mt-0.5 text-xs">Ninguna</p>
+                  )}
+                </div>
+                <div className="col-span-2 border-t border-carbon/5 pt-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Última Acción</p>
+                  {exp.ultimaActividadTitulo ? (
+                    <div className="mt-1">
+                      <p className="text-carbon/75 font-semibold text-xs leading-tight">{exp.ultimaActividadTitulo}</p>
+                      {exp.ultimaActividadFecha && (
+                        <p className="text-[10px] text-carbon/40 font-mono mt-0.5">
+                          {new Date(exp.ultimaActividadFecha).toLocaleString("es-MX", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                            hour12: false
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-carbon/40 italic mt-0.5 text-xs">Sin acciones registradas</p>
+                  )}
                 </div>
               </div>
 

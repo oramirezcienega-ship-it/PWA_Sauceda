@@ -115,6 +115,9 @@ export interface Expediente {
   estadoFisico?: string | null;
   habitada?: string | null;
   createdAt?: string;
+  secuenciaNombre?: string | null;
+  ultimaActividadTitulo?: string | null;
+  ultimaActividadFecha?: string | null;
 }
 
 /**

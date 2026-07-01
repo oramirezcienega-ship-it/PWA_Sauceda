@@ -55,7 +55,58 @@ export async function listarExpedientes(): Promise<Expediente[]> {
 
   const { data, error } = await query.order("id", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data as FilaExpediente[]).map(aExpediente);
+
+  const expedientesFilas = (data as FilaExpediente[]) ?? [];
+  const expIds = expedientesFilas.map((e) => e.id);
+
+  // 1. Obtener enrolamientos activos de secuencias para estos expedientes
+  const secuenciasMap = new Map<string, string>();
+  if (expIds.length > 0) {
+    const { data: enrollments } = await sb
+      .from("sequence_enrollments")
+      .select("expediente_id, automation_sequences(nombre)")
+      .eq("status", "activo")
+      .in("expediente_id", expIds);
+
+    if (enrollments) {
+      enrollments.forEach((en: any) => {
+        if (en.expediente_id && en.automation_sequences?.nombre) {
+          secuenciasMap.set(en.expediente_id, en.automation_sequences.nombre);
+        }
+      });
+    }
+  }
+
+  // 2. Obtener la última actividad para cada uno de estos expedientes
+  const ultimaActividadMap = new Map<string, { titulo: string; created_at: string }>();
+  if (expIds.length > 0) {
+    const { data: acts } = await sb
+      .from("actividades")
+      .select("expediente_id, titulo, created_at")
+      .in("expediente_id", expIds)
+      .order("created_at", { ascending: false });
+
+    if (acts) {
+      acts.forEach((act) => {
+        if (act.expediente_id && !ultimaActividadMap.has(act.expediente_id)) {
+          ultimaActividadMap.set(act.expediente_id, {
+            titulo: act.titulo,
+            created_at: act.created_at,
+          });
+        }
+      });
+    }
+  }
+
+  return expedientesFilas.map((e) => {
+    const mapped = aExpediente(e);
+    return {
+      ...mapped,
+      secuenciaNombre: secuenciasMap.get(e.id) || null,
+      ultimaActividadTitulo: ultimaActividadMap.get(e.id)?.titulo || null,
+      ultimaActividadFecha: ultimaActividadMap.get(e.id)?.created_at || null,
+    };
+  });
 }
 
 /**
