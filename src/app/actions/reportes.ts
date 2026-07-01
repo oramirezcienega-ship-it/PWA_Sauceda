@@ -107,6 +107,8 @@ export interface ResumenAsesor {
     estatus: string;
     calificacion: string;
     fechaAsignacion: string;
+    fechaCreacion?: string | null;
+    ventanaAbierta?: boolean;
     expedienteId?: string;
     fraccionamiento?: string;
     etapaExpediente?: string;
@@ -274,6 +276,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
           estatus: p.estatus || "nuevo",
           calificacion: p.calificacion || "frio",
           fechaAsignacion: originalInfo?.fechaAsignacion || p.created_at || new Date().toISOString(),
+          fechaCreacion: p.created_at || null,
           expedienteId: exp?.id,
           fraccionamiento: exp?.fraccionamiento,
           etapaExpediente: exp?.etapa,
@@ -296,6 +299,7 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
           estatus: "expediente_abierto",
           calificacion: "caliente",
           fechaAsignacion: e.created_at || new Date().toISOString(),
+          fechaCreacion: e.created_at || null,
           expedienteId: e.id,
           fraccionamiento: e.fraccionamiento,
           etapaExpediente: e.etapa,
@@ -305,6 +309,38 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
       }
     });
   }
+
+  // 5c. Consultar la ventana de 24h para cada lead asignado
+  const telefonos = leadsAsignados.map((l) => l.telefono).filter(Boolean);
+  const ultimoInboundPorTel = new Map<string, string>();
+  if (telefonos.length > 0) {
+    const { data: msgData } = await sb
+      .from("mensajes_whatsapp")
+      .select("telefono, created_at")
+      .eq("direccion", "in")
+      .in("telefono", telefonos)
+      .order("created_at", { ascending: false });
+
+    if (msgData) {
+      msgData.forEach((m) => {
+        if (!ultimoInboundPorTel.has(m.telefono)) {
+          ultimoInboundPorTel.set(m.telefono, m.created_at);
+        }
+      });
+    }
+  }
+
+  // Enriquecer leadsAsignados con ventanaAbierta
+  leadsAsignados = leadsAsignados.map((l) => {
+    const ultimoInbound = l.telefono ? ultimoInboundPorTel.get(l.telefono) : null;
+    const ventanaAbierta = ultimoInbound
+      ? (Date.now() - new Date(ultimoInbound).getTime() < 24 * 60 * 60 * 1000)
+      : false;
+    return {
+      ...l,
+      ventanaAbierta,
+    };
+  });
 
   // 6. Consultar los expedientes asociados a las tareas para ver cuántos están cerrados (conversión)
   let cerrados = 0;
