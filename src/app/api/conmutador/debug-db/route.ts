@@ -36,6 +36,16 @@ export async function GET() {
       return NextResponse.json({ error: errLlamadas.message }, { status: 500 });
     }
 
+    // Diagnóstico WhatsApp Lidia
+    const { data: mensajesLidia } = await sb
+      .from("mensajes_whatsapp")
+      .select("*")
+      .in("telefono", ["4772733826", "524772733826", "5214772733826", "+524772733826", "+5214772733826"]);
+
+    const { count: totalMensajes } = await sb
+      .from("mensajes_whatsapp")
+      .select("*", { count: "exact", head: true });
+
     const d = new Date();
     const formDia = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Mexico_City",
@@ -51,6 +61,8 @@ export async function GET() {
       llamadas,
       prospectos,
       expedientes,
+      mensajesLidia,
+      totalMensajes,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
