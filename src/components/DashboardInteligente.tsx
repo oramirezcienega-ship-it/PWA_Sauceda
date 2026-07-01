@@ -17,9 +17,13 @@ import {
   obtenerTodosLosExpedientes,
   eliminarDatosDemostracionFinanzas,
   actualizarTransaccionFinanciera,
+  obtenerMetricasOrganicas,
+  guardarMetricaOrganica,
+  eliminarMetricaOrganica,
   type MarketingMetric,
   type TransaccionFinanciera,
-  type AIInsight
+  type AIInsight,
+  type MetricaOrganica
 } from "@/app/actions/reportes-ia";
 import {
   ResponsiveContainer,
@@ -36,7 +40,8 @@ import {
   Line,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  ComposedChart
 } from "recharts";
 
 // Paleta de colores SAUCEDA
@@ -168,13 +173,15 @@ function renderMarkdown(text: string): React.ReactNode {
 
 export function DashboardInteligente() {
   const [metricas, setMetricas] = useState<MarketingMetric[]>([]);
+  const [metricasOrganicas, setMetricasOrganicas] = useState<MetricaOrganica[]>([]);
   const [insightMarketing, setInsightMarketing] = useState<AIInsight | null>(null);
   const [insightFinanzas, setInsightFinanzas] = useState<AIInsight | null>(null);
+  const [insightOrganico, setInsightOrganico] = useState<AIInsight | null>(null);
   const [loading, setLoading] = useState(true);
   const [generandoIA, setGenerandoIA] = useState(false);
 
-  // Selector de Pestaña Principal (Marketing vs Finanzas)
-  const [activeTab, setActiveTab] = useState<"marketing" | "finanzas">("marketing");
+  // Selector de Pestaña Principal (Marketing vs Finanzas vs Orgánico)
+  const [activeTab, setActiveTab] = useState<"marketing" | "finanzas" | "organico">("marketing");
 
   // Rangos de fecha y selección
   const [rangoSeleccionado, setRangoSeleccionado] = useState<"7" | "14" | "30" | "este-mes" | "este-ano" | "custom">("14");
@@ -226,6 +233,18 @@ export function DashboardInteligente() {
   const [importText, setImportText] = useState("");
   const [loadingImport, setLoadingImport] = useState(false);
 
+  // Modal de Métricas Orgánicas
+  const [showOrganicModal, setShowOrganicModal] = useState(false);
+  const [loadingOrganic, setLoadingOrganic] = useState(false);
+  const [organicData, setOrganicData] = useState({
+    fecha: new Date().toISOString().split("T")[0],
+    plataforma: "instagram" as "facebook" | "instagram" | "tiktok",
+    seguidores: "",
+    publicaciones: "",
+    visualizaciones: "",
+    interacciones: ""
+  });
+
   // Estados para sincronización de historial
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncTab, setSyncTab] = useState<"facebook" | "tiktok">("facebook");
@@ -245,14 +264,16 @@ export function DashboardInteligente() {
     async function cargarDatos() {
       setLoading(true);
       try {
-        const [met, insM, insF] = await Promise.all([
+        const [met, insM, insF, insO] = await Promise.all([
           obtenerMetricasMarketing(),
           obtenerInsightsIA("marketing"),
-          obtenerInsightsIA("finanzas")
+          obtenerInsightsIA("finanzas"),
+          obtenerInsightsIA("organico")
         ]);
         setMetricas(met);
         setInsightMarketing(insM);
         setInsightFinanzas(insF);
+        setInsightOrganico(insO);
       } catch (error) {
         console.error("Error al cargar datos de analítica:", error);
       } finally {
@@ -332,14 +353,14 @@ export function DashboardInteligente() {
     };
   }, [rangoSeleccionado, fechaInicioCustom, fechaFinCustom]);
 
-  // Cargar dinámicamente los KPIs de CRM, transacciones financieras y expedientes sin comisión
+  // Cargar dinámicamente los KPIs de CRM, transacciones financieras, expedientes sin comisión y métricas orgánicas
   useEffect(() => {
     if (!fechasCalculadas.fechaInicio || !fechasCalculadas.fechaFin) return;
 
     async function cargarDatosFinancierosYCRM() {
       setLoadingFinanzas(true);
       try {
-        const [kpis, trans, transPrev, expCerrados, todosExps] = await Promise.all([
+        const [kpis, trans, transPrev, expCerrados, todosExps, org] = await Promise.all([
           obtenerKPIsPeriodoCRM(
             fechasCalculadas.fechaInicio,
             fechasCalculadas.fechaFin,
@@ -349,13 +370,15 @@ export function DashboardInteligente() {
           obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin),
           obtenerTransaccionesFinancieras(fechasCalculadas.fechaInicioPrev, fechasCalculadas.fechaFinPrev),
           obtenerExpedientesCerradosSinComision(),
-          obtenerTodosLosExpedientes()
+          obtenerTodosLosExpedientes(),
+          obtenerMetricasOrganicas(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin)
         ]);
         setCrmKPIs(kpis);
         setTransacciones(trans);
         setTransaccionesPrev(transPrev);
         setExpedientesCerrados(expCerrados);
         setTodosLosExpedientes(todosExps);
+        setMetricasOrganicas(org);
       } catch (error) {
         console.error("Error al cargar datos financieros y CRM:", error);
       } finally {
@@ -378,8 +401,10 @@ export function DashboardInteligente() {
       );
       if (activeTab === "marketing") {
         setInsightMarketing(nuevoInsight);
-      } else {
+      } else if (activeTab === "finanzas") {
         setInsightFinanzas(nuevoInsight);
+      } else if (activeTab === "organico") {
+        setInsightOrganico(nuevoInsight);
       }
     } catch (error) {
       alert("Error al invocar al cerebro analítico. Verifique la API Key de Anthropic.");
@@ -538,6 +563,66 @@ export function DashboardInteligente() {
       }
     } catch (err: any) {
       alert(`Error al eliminar movimiento: ${err.message}`);
+    }
+  };
+
+  // Handler para guardar métrica orgánica manual
+  const handleGuardarMetricaOrganica = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!organicData.seguidores || !organicData.publicaciones) {
+      alert("Por favor completa al menos los campos de seguidores y publicaciones.");
+      return;
+    }
+    setLoadingOrganic(true);
+    try {
+      const res = await guardarMetricaOrganica({
+        fecha: organicData.fecha,
+        plataforma: organicData.plataforma,
+        seguidores: Number(organicData.seguidores),
+        publicaciones: Number(organicData.publicaciones),
+        visualizaciones: Number(organicData.visualizaciones || 0),
+        interacciones: Number(organicData.interacciones || 0)
+      });
+      if (res.success) {
+        alert(res.message);
+        setShowOrganicModal(false);
+        // Resetear campos
+        setOrganicData({
+          fecha: new Date().toISOString().split("T")[0],
+          plataforma: "instagram",
+          seguidores: "",
+          publicaciones: "",
+          visualizaciones: "",
+          interacciones: ""
+        });
+        // Recargar datos orgánicos
+        const org = await obtenerMetricasOrganicas(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        setMetricasOrganicas(org);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(`Error al registrar métrica orgánica: ${err.message}`);
+    } finally {
+      setLoadingOrganic(false);
+    }
+  };
+
+  // Handler para eliminar métrica orgánica
+  const handleEliminarMetricaOrganicaRow = async (id: string) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar este registro de métrica orgánica?")) return;
+    try {
+      const res = await eliminarMetricaOrganica(id);
+      if (res.success) {
+        alert(res.message);
+        // Recargar datos orgánicos
+        const org = await obtenerMetricasOrganicas(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        setMetricasOrganicas(org);
+      } else {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert(`Error al eliminar registro orgánico: ${err.message}`);
     }
   };
 
@@ -716,6 +801,68 @@ export function DashboardInteligente() {
       margenNeto
     };
   }, [transacciones, metricasFiltradas]);
+
+  // Cálculos consolidados para Métricas Orgánicas
+  const organicoKPIs = useMemo(() => {
+    const ultimosSeguidores = { facebook: 0, instagram: 0, tiktok: 0 };
+    const ultimasFechas = { facebook: "", instagram: "", tiktok: "" };
+
+    let totalPublicaciones = 0;
+    let totalVisualizaciones = 0;
+    let totalInteracciones = 0;
+
+    metricasOrganicas.forEach(o => {
+      totalPublicaciones += o.publicaciones;
+      totalVisualizaciones += o.visualizaciones;
+      totalInteracciones += o.interacciones;
+
+      const plat = o.plataforma.toLowerCase() as "facebook" | "instagram" | "tiktok";
+      if (!ultimasFechas[plat] || o.fecha > ultimasFechas[plat]) {
+        ultimasFechas[plat] = o.fecha;
+        ultimosSeguidores[plat] = o.seguidores;
+      }
+    });
+
+    const seguidoresTotales = ultimosSeguidores.facebook + ultimosSeguidores.instagram + ultimosSeguidores.tiktok;
+    const engagementRate = totalVisualizaciones > 0 ? (totalInteracciones / totalVisualizaciones) * 100 : 0;
+
+    return {
+      seguidores: seguidoresTotales,
+      desgloseSeguidores: ultimosSeguidores,
+      publicaciones: totalPublicaciones,
+      visualizaciones: totalVisualizaciones,
+      interacciones: totalInteracciones,
+      engagementRate
+    };
+  }, [metricasOrganicas]);
+
+  // Datos agrupados para el gráfico de crecimiento de seguidores
+  const datosSeguidoresGrafico = useMemo(() => {
+    const fechasMap = new Map<string, { fecha: string; Facebook: number; Instagram: number; TikTok: number }>();
+    metricasOrganicas.forEach(o => {
+      const fechaCorta = o.fecha.slice(5); // cortar año
+      const plat = o.plataforma.toLowerCase();
+      const existente = fechasMap.get(o.fecha) || { fecha: fechaCorta, Facebook: 0, Instagram: 0, TikTok: 0 };
+      if (plat === "facebook") existente.Facebook = o.seguidores;
+      else if (plat === "instagram") existente.Instagram = o.seguidores;
+      else if (plat === "tiktok") existente.TikTok = o.seguidores;
+      fechasMap.set(o.fecha, existente);
+    });
+    return Array.from(fechasMap.values()).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  }, [metricasOrganicas]);
+
+  // Datos agrupados para el gráfico de publicaciones y vistas orgánicas
+  const datosContenidoGrafico = useMemo(() => {
+    const fechasMap = new Map<string, { fecha: string; Publicaciones: number; Visualizaciones: number }>();
+    metricasOrganicas.forEach(o => {
+      const fechaCorta = o.fecha.slice(5);
+      const existente = fechasMap.get(o.fecha) || { fecha: fechaCorta, Publicaciones: 0, Visualizaciones: 0 };
+      existente.Publicaciones += o.publicaciones;
+      existente.Visualizaciones += o.visualizaciones;
+      fechasMap.set(o.fecha, existente);
+    });
+    return Array.from(fechasMap.values()).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  }, [metricasOrganicas]);
 
   // Obtener la lista de meses "AAAA-MM" que caen dentro del período seleccionado
   const mesesEnPeriodo = useMemo(() => {
@@ -1138,7 +1285,7 @@ export function DashboardInteligente() {
     }));
   }, [metricasFiltradas]);
 
-  const insight = activeTab === "marketing" ? insightMarketing : insightFinanzas;
+  const insight = activeTab === "marketing" ? insightMarketing : (activeTab === "organico" ? insightOrganico : insightFinanzas);
   const isEditingChildTransaction = editingId ? !!transacciones.find(t => t.id === editingId)?.recurrente_parent_id : false;
 
   if (loading) {
@@ -1248,7 +1395,7 @@ export function DashboardInteligente() {
         </header>
 
         {/* PESTAÑAS PRINCIPALES DEL DASHBOARD */}
-        <div className="flex text-sm font-semibold">
+        <div className="flex text-sm font-semibold flex-wrap">
           <button
             onClick={() => setActiveTab("marketing")}
             className={`pb-3 px-4 transition ${
@@ -1268,6 +1415,16 @@ export function DashboardInteligente() {
             }`}
           >
             💰 Finanzas & P&L (Contabilidad)
+          </button>
+          <button
+            onClick={() => setActiveTab("organico")}
+            className={`pb-3 px-4 transition ${
+              activeTab === "organico"
+                ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            📈 Redes & Tráfico Orgánico
           </button>
         </div>
       </div>
@@ -1601,7 +1758,7 @@ export function DashboardInteligente() {
             </div>
           </section>
         </>
-      ) : (
+      ) : activeTab === "finanzas" ? (
         <>
           {/* TARJETAS DE KPIS PRINCIPALES (FINANZAS Y P&L) */}
           <section className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
@@ -2503,6 +2660,181 @@ export function DashboardInteligente() {
             </div>
           </section>
         </>
+      ) : (
+        <>
+          {/* TARJETAS DE KPIS PRINCIPALES (ORGANICO) */}
+          <section className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8 animate-in fade-in duration-200">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Seguidores Totales</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{organicoKPIs.seguidores.toLocaleString()}</p>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-2 text-[9px] text-slate-400">
+                <span>🔵 FB: {organicoKPIs.desgloseSeguidores.facebook.toLocaleString()}</span>
+                <span>📸 IG: {organicoKPIs.desgloseSeguidores.instagram.toLocaleString()}</span>
+                <span>🎵 TK: {organicoKPIs.desgloseSeguidores.tiktok.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Publicaciones Orgánicas</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{organicoKPIs.publicaciones.toLocaleString()}</p>
+              </div>
+              <span className="text-[9px] text-slate-400">Contenido creado en periodo</span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Visualizaciones Orgánicas</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{organicoKPIs.visualizaciones.toLocaleString()}</p>
+              </div>
+              <span className="text-[9px] text-slate-400">Reproducciones & impresiones</span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Interacciones Totales</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{organicoKPIs.interacciones.toLocaleString()}</p>
+              </div>
+              <span className="text-[9px] text-slate-400">Me gusta, comentarios & compartidos</span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Engagement Rate Promedio</span>
+                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{organicoKPIs.engagementRate.toFixed(2)}%</p>
+              </div>
+              <span className="text-[9px] text-slate-400">Interacciones / Visualizaciones</span>
+            </div>
+          </section>
+
+          {/* SECCIÓN DE GRÁFICOS ORGÁNICOS */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">📈 Crecimiento de Seguidores por Plataforma</h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={datosSeguidoresGrafico}>
+                    <defs>
+                      <linearGradient id="colorFb" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#1877F2" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#1877F2" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorIg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#E4405F" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#E4405F" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorTk" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#000000" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="fecha" stroke="#94A3B8" fontSize={10} />
+                    <YAxis stroke="#94A3B8" fontSize={10} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #E2E8F0" }} />
+                    <Legend verticalAlign="top" height={36}/>
+                    <Area name="Facebook" type="monotone" dataKey="Facebook" stroke="#1877F2" fillOpacity={1} fill="url(#colorFb)" strokeWidth={2} />
+                    <Area name="Instagram" type="monotone" dataKey="Instagram" stroke="#E4405F" fillOpacity={1} fill="url(#colorIg)" strokeWidth={2} />
+                    <Area name="TikTok" type="monotone" dataKey="TikTok" stroke="#0F172A" fillOpacity={1} fill="url(#colorTk)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">🎥 Publicaciones vs Alcance de Video</h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={datosContenidoGrafico}>
+                    <XAxis dataKey="fecha" stroke="#94A3B8" fontSize={10} />
+                    <YAxis yAxisId="left" label={{ value: 'Publicaciones', angle: -90, position: 'insideLeft', style: { fill: '#94A3B8', fontSize: 10 } }} stroke="#94A3B8" fontSize={10} />
+                    <YAxis yAxisId="right" orientation="right" label={{ value: 'Visualizaciones', angle: 90, position: 'insideRight', style: { fill: '#94A3B8', fontSize: 10 } }} stroke="#94A3B8" fontSize={10} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #E2E8F0" }} />
+                    <Legend verticalAlign="top" height={36}/>
+                    <Bar yAxisId="left" name="Posts Orgánicos" dataKey="Publicaciones" barSize={20} fill="#2D4A2B" radius={[4, 4, 0, 0]} />
+                    <Line yAxisId="right" name="Views Orgánicos" type="monotone" dataKey="Visualizaciones" stroke="#E4405F" strokeWidth={2} activeDot={{ r: 8 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </section>
+
+          {/* BITÁCORA Y HISTORIAL ORGÁNICO */}
+          <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+              <div>
+                <h3 className="font-fraunces text-lg font-bold text-[#2D4A2B]">📖 Bitácora de Métricas Orgánicas</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Historial de registros semanales o mensuales para control de evolución orgánica.</p>
+              </div>
+              <button
+                onClick={() => setShowOrganicModal(true)}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#2D4A2B] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#1E331D] transition shadow-sm self-start sm:self-center"
+              >
+                ➕ Registrar Métricas Orgánicas
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left text-slate-600">
+                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3">Fecha</th>
+                    <th className="px-6 py-3">Plataforma</th>
+                    <th className="px-6 py-3 text-right">Seguidores</th>
+                    <th className="px-6 py-3 text-right">Publicaciones</th>
+                    <th className="px-6 py-3 text-right">Visualizaciones</th>
+                    <th className="px-6 py-3 text-right">Interacciones</th>
+                    <th className="px-6 py-3 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {metricasOrganicas.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                        No hay métricas orgánicas registradas en este periodo. Registre su primera métrica para ver los gráficos.
+                      </td>
+                    </tr>
+                  ) : (
+                    metricasOrganicas.map((o) => (
+                      <tr key={o.id} className="hover:bg-slate-50 transition">
+                        <td className="px-6 py-3.5 font-mono">{o.fecha}</td>
+                        <td className="px-6 py-3.5">
+                          {o.plataforma === "facebook" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
+                              🔵 Facebook
+                            </span>
+                          ) : o.plataforma === "instagram" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 uppercase">
+                              📸 Instagram
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-800 uppercase">
+                              🎵 TikTok
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-3.5 text-right font-mono">{o.seguidores.toLocaleString()}</td>
+                        <td className="px-6 py-3.5 text-right font-mono">{o.publicaciones.toLocaleString()}</td>
+                        <td className="px-6 py-3.5 text-right font-mono">{o.visualizaciones.toLocaleString()}</td>
+                        <td className="px-6 py-3.5 text-right font-mono">{o.interacciones.toLocaleString()}</td>
+                        <td className="px-6 py-3.5 text-center">
+                          <button
+                            onClick={() => handleEliminarMetricaOrganicaRow(o.id!)}
+                            className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition"
+                            title="Eliminar"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
       )}
 
       {/* MODAL DE SINCRONIZACIÓN HISTÓRICA */}
@@ -2895,6 +3227,133 @@ export function DashboardInteligente() {
                   className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loadingManual ? "Registrando..." : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REGISTRO MANUAL DE MÉTRICAS ORGÁNICAS */}
+      {showOrganicModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] flex items-center gap-2">
+                📊 Registrar Métricas Orgánicas
+              </h3>
+              <button 
+                onClick={() => setShowOrganicModal(false)}
+                className="text-slate-400 hover:text-[#2D4A2B] text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarMetricaOrganica} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Fecha de Registro
+                  </label>
+                  <input
+                    type="date"
+                    value={organicData.fecha}
+                    onChange={(e) => setOrganicData({ ...organicData, fecha: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Plataforma
+                  </label>
+                  <select
+                    value={organicData.plataforma}
+                    onChange={(e) => setOrganicData({ ...organicData, plataforma: e.target.value as any })}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
+                  >
+                    <option value="facebook">🔵 Facebook</option>
+                    <option value="instagram">📸 Instagram</option>
+                    <option value="tiktok">🎵 TikTok</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Seguidores Totales
+                  </label>
+                  <input
+                    type="number"
+                    value={organicData.seguidores}
+                    onChange={(e) => setOrganicData({ ...organicData, seguidores: e.target.value })}
+                    placeholder="Ej: 15400"
+                    min="0"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Publicaciones Orgánicas (periodo)
+                  </label>
+                  <input
+                    type="number"
+                    value={organicData.publicaciones}
+                    onChange={(e) => setOrganicData({ ...organicData, publicaciones: e.target.value })}
+                    placeholder="Ej: 4"
+                    min="0"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Visualizaciones (Views / Impresiones)
+                  </label>
+                  <input
+                    type="number"
+                    value={organicData.visualizaciones}
+                    onChange={(e) => setOrganicData({ ...organicData, visualizaciones: e.target.value })}
+                    placeholder="Ej: 25000"
+                    min="0"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Interacciones (Likes/Comentarios)
+                  </label>
+                  <input
+                    type="number"
+                    value={organicData.interacciones}
+                    onChange={(e) => setOrganicData({ ...organicData, interacciones: e.target.value })}
+                    placeholder="Ej: 850"
+                    min="0"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOrganicModal(false)}
+                  className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingOrganic}
+                  className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loadingOrganic ? "Registrando..." : "Guardar"}
                 </button>
               </div>
             </form>

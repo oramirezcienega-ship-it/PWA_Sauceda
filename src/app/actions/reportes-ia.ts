@@ -112,6 +112,29 @@ El rendimiento neto del negocio se encuentra en un estado **regular**. Si bien l
 2. **Revisar suscripciones SaaS:** Auditar las plataformas y softwares de diseño y hosting que no se utilicen activamente.`
 };
 
+const MOCK_ORGANIC_INSIGHTS: AIInsight = {
+  fecha: "2026-06-29",
+  estado_salud: "regular",
+  alertas: [
+    "🔴 CAÍDA TIKTOK ORGÁNICO: El volumen de videos orgánicos bajó a 0 esta semana. TikTok requiere regularidad mínima de 2 videos semanales para mantener alcance de algoritmo.",
+    "🔴 ALERTA INSTAGRAM ENGAGEMENT: Las interacciones disminuyeron 12% MoM. Los reels publicados no están usando llamadas a la acción en descripción."
+  ],
+  oportunidades: [
+    "🟡 CRECIMIENTO META: Los seguidores orgánicos de Instagram subieron +150 sin pauta pagada, impulsados por el Reel del proyecto León. Sugerencia: replicar formato testimonial.",
+    "🟡 TRÁFICO ORGÁNICO CRM: 3 prospectos cerrados provinieron de un mensaje directo orgánico de Facebook. Es clave responder antes de los 15 minutos."
+  ],
+  diagnostico_general: `### 📈 Diagnóstico de Redes y Tráfico Orgánico de Sofía
+
+#### Rendimiento del Contenido
+La presencia orgánica muestra un comportamiento **regular** con crecimiento asimétrico:
+- **Instagram:** Es nuestro canal con mayor conversión natural. El formato de Reels informativos cortos de propiedades atrae audiencias muy calificadas.
+- **TikTok:** Se encuentra estancado debido a la falta de constancia en el ritmo de publicaciones de videos verticales.
+
+#### Recomendaciones Orgánicas
+1. **Establecer calendario de contenidos:** Definir una meta de 2 Reels/TikToks a la semana y 3 publicaciones estáticas semanales.
+2. **Integrar WhatsApp Link:** Asegurar que los perfiles tengan un enlace directo de contacto para agilizar la entrada de prospectos al CRM.`
+};
+
 /**
  * Obtiene las métricas de marketing reales de Supabase.
  * Limpia automáticamente los datos de simulación/mockups previos para que solo aparezcan tus datos reales.
@@ -253,7 +276,7 @@ export async function obtenerKPIsPeriodoCRM(
  * Si la tabla está vacía, retorna el mockup por defecto correspondiente.
  */
 export async function obtenerInsightsIA(
-  tipo: "marketing" | "finanzas" = "marketing"
+  tipo: "marketing" | "finanzas" | "organico" = "marketing"
 ): Promise<AIInsight> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -270,13 +293,14 @@ export async function obtenerInsightsIA(
     if (error) {
       if (error.code === "42P01") {
         console.warn(`La tabla dashboard_insights no existe. Usando fallback Mockup para ${tipo}.`);
-        return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
+        return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : (tipo === "organico" ? MOCK_ORGANIC_INSIGHTS : MOCK_INSIGHTS);
       }
       throw error;
     }
 
+    const fallback = tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : (tipo === "organico" ? MOCK_ORGANIC_INSIGHTS : MOCK_INSIGHTS);
+
     if (!data) {
-      const fallback = tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
       // Guardar el mockup por defecto si no hay nada
       const { data: insertado } = await sb
         .from("dashboard_insights")
@@ -296,20 +320,15 @@ export async function obtenerInsightsIA(
     };
   } catch (err) {
     console.error(`Error al obtener insights de la IA (${tipo}):`, err);
-    return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : MOCK_INSIGHTS;
+    return tipo === "finanzas" ? MOCK_FINANCE_INSIGHTS : (tipo === "organico" ? MOCK_ORGANIC_INSIGHTS : MOCK_INSIGHTS);
   }
 }
-
-/**
- * Ejecuta un análisis inteligente en tiempo real usando Claude.
- * Lee las métricas de marketing/finanzas y genera insights.
- */
 export async function generarInsightsConIA(
   fechaInicio: string,
   fechaFin: string,
   fechaInicioPrev?: string,
   fechaFinPrev?: string,
-  tipo: "marketing" | "finanzas" = "marketing"
+  tipo: "marketing" | "finanzas" | "organico" = "marketing"
 ): Promise<AIInsight> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -376,6 +395,55 @@ Responde exclusivamente con un JSON válido con esta estructura:
   "alertas": ["Frase descriptiva de alerta 1 con prefijo emoji rojo", "Frase 2..."],
   "oportunidades": ["Frase descriptiva de oportunidad 1 con prefijo emoji amarillo", "Frase 2..."],
   "diagnostico_general": "Reporte detallado en formato Markdown, analizando el rendimiento financiero (ingresos vs egresos, margen neto), análisis detallado del OPEX, balance de comisiones CRM y recomendando acciones de optimización en viñetas."
+}`;
+  } else if (tipo === "organico") {
+    // Obtener métricas orgánicas para ambos periodos
+    const { data: organico, error: errOrg } = await sb
+      .from("metricas_organicas")
+      .select("*")
+      .gte("fecha", fechaInicio)
+      .lte("fecha", fechaFin)
+      .order("fecha", { ascending: true });
+
+    if (errOrg) throw errOrg;
+
+    const { data: organicoPrev, error: errOrgPrev } = await sb
+      .from("metricas_organicas")
+      .select("*")
+      .gte("fecha", fechaInicioPrev || "2000-01-01")
+      .lte("fecha", fechaFinPrev || "2000-01-01");
+
+    if (errOrgPrev) throw errOrgPrev;
+
+    const resumenOrganico = (organico || []).map(o =>
+      `- Fecha: ${o.fecha} | Plataforma: ${o.plataforma} | Seguidores: ${o.seguidores} | Publicaciones: ${o.publicaciones} | Vistas: ${o.visualizaciones} | Interacciones: ${o.interacciones}`
+    ).join("\n");
+
+    const resumenOrganicoPrev = (organicoPrev || []).map(o =>
+      `- Fecha: ${o.fecha} | Plataforma: ${o.plataforma} | Seguidores: ${o.seguidores} | Publicaciones: ${o.publicaciones} | Vistas: ${o.visualizaciones} | Interacciones: ${o.interacciones}`
+    ).join("\n");
+
+    prompt = `Eres Sofía, la Directora de Contenidos y Redes Sociales Inteligente de SAUCEDA Bienes Raíces. Tu rol es analizar las métricas de crecimiento orgánico en Facebook, Instagram y TikTok para evaluar la salud de la presencia de marca, el alcance del contenido y proponer mejoras tácticas para el algoritmo.
+
+Analiza el desempeño orgánico del periodo seleccionado del ${fechaInicio} al ${fechaFin}, comparándolo con el periodo anterior del ${fechaInicioPrev || "N/A"} al ${fechaFinPrev || "N/A"}.
+
+Aquí tienes el historial de métricas orgánicas del periodo seleccionado:
+${resumenOrganico || "Sin métricas orgánicas registradas en este rango."}
+
+Aquí tienes el historial de métricas orgánicas del periodo anterior:
+${resumenOrganicoPrev || "Sin métricas orgánicas registradas en este rango."}
+
+Y aquí está el estado de captación comercial del CRM para ambos periodos:
+${crmInfo}
+
+Genera un reporte operativo de Redes Sociales. Identifica alertas críticas (como caídas drásticas en la publicación de posts, pérdida de seguidores, engagement rate extremadamente bajo < 1% o estancamiento de visualizaciones), oportunidades (plataformas más eficientes, replicar temáticas virales) y un diagnóstico de salud de redes general (Excelente, Regular, Crítico).
+
+Responde exclusivamente con un JSON válido con esta estructura:
+{
+  "estado_salud": "excelente" | "regular" | "critico",
+  "alertas": ["Frase descriptiva de alerta con prefijo emoji rojo", "Frase 2..."],
+  "oportunidades": ["Frase descriptiva de oportunidad con prefijo emoji amarillo", "Frase 2..."],
+  "diagnostico_general": "Reporte detallado en formato Markdown, analizando el volumen de publicaciones, la tracción en seguidores, el alcance del contenido, el engagement y recomendando acciones de contenido en viñetas."
 }`;
   } else {
     // Obtener métricas reales de marketing
@@ -1001,5 +1069,87 @@ export async function actualizarTransaccionFinanciera(
   } catch (err: any) {
     console.error("Error al actualizar transacción financiera:", err);
     return { success: false, message: err.message || "Error al actualizar el movimiento." };
+  }
+}
+
+export interface MetricaOrganica {
+  id?: string;
+  fecha: string;
+  plataforma: "facebook" | "instagram" | "tiktok";
+  seguidores: number;
+  publicaciones: number;
+  visualizaciones: number;
+  interacciones: number;
+  created_at?: string;
+}
+
+/**
+ * Obtiene las métricas orgánicas de redes sociales registradas en un rango de fechas.
+ */
+export async function obtenerMetricasOrganicas(
+  fechaInicio: string,
+  fechaFin: string
+): Promise<MetricaOrganica[]> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { data, error } = await sb
+      .from("metricas_organicas")
+      .select("*")
+      .gte("fecha", fechaInicio)
+      .lte("fecha", fechaFin)
+      .order("fecha", { ascending: true });
+
+    if (error) throw error;
+    return (data as MetricaOrganica[]) || [];
+  } catch (err) {
+    console.error("Error al obtener métricas orgánicas:", err);
+    return [];
+  }
+}
+
+/**
+ * Guarda o actualiza (upsert) una métrica orgánica para una fecha y plataforma dadas.
+ */
+export async function guardarMetricaOrganica(
+  datos: Omit<MetricaOrganica, "id" | "created_at">
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb
+      .from("metricas_organicas")
+      .upsert(datos, { onConflict: "fecha,plataforma" });
+
+    if (error) throw error;
+    return { success: true, message: "Métrica orgánica registrada exitosamente." };
+  } catch (err: any) {
+    console.error("Error al guardar métrica orgánica:", err);
+    return { success: false, message: err.message || "Error al registrar la métrica orgánica." };
+  }
+}
+
+/**
+ * Elimina un registro de métricas orgánicas por ID.
+ */
+export async function eliminarMetricaOrganica(
+  id: string
+): Promise<{ success: boolean; message: string }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    const { error } = await sb
+      .from("metricas_organicas")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+    return { success: true, message: "Métrica orgánica eliminada exitosamente." };
+  } catch (err: any) {
+    console.error("Error al eliminar métrica orgánica:", err);
+    return { success: false, message: err.message || "Error al eliminar el registro orgánico." };
   }
 }
