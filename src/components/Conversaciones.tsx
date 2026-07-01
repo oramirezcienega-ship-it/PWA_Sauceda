@@ -483,7 +483,7 @@ export function Conversaciones() {
         </div>
       )}
 
-      <div className="grid h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[320px_1fr]">
+      <div className="grid h-[calc(100dvh-180px)] sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[320px_1fr]">
         {/* Lista de conversaciones */}
         <div className={`overflow-y-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-2 shadow-sm ${
           sel ? "hidden sm:flex" : "flex"
@@ -681,143 +681,140 @@ export function Conversaciones() {
           ) : (
             <>
               {/* Encabezado del hilo */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-carbon/10 bg-crema/40 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 border-b border-carbon/10 bg-crema/40 px-3 py-2 shrink-0">
+                {/* Fila 1: Nombre + Botones de Acción */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     {/* Botón de volver para celular */}
                     <button
                       type="button"
                       onClick={() => setSel(null)}
-                      className="sm:hidden mr-1 text-sauce hover:text-verde-profundo text-sm font-semibold flex items-center"
+                      className="sm:hidden mr-1 text-sauce hover:text-verde-profundo text-sm font-semibold flex items-center shrink-0"
                     >
                       ← Volver
                     </button>
-                    <p className="truncate font-titular font-medium text-verde-profundo text-base">
+                    <p className="truncate font-titular font-medium text-verde-profundo text-sm sm:text-base">
                       {detalle.nombre}
                     </p>
                   </div>
-                  
-                  {/* Enlaces y metadatos */}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-carbon/50 mt-1">
-                    <span>{detalle.telefono}</span>
-                    {detalle.expedienteId && (
-                      <>
-                        <span>·</span>
-                        <a
-                          href={`/expediente/${detalle.expedienteId}`}
-                          className="text-sauce hover:underline font-bold flex items-center gap-0.5"
-                        >
-                          📁 {detalle.expedienteId}
-                        </a>
-                      </>
-                    )}
-                    {detalle.prospectoId && (
-                      <>
-                        <span>·</span>
-                        <a
-                          href={`/prospectos/${detalle.prospectoId}`}
-                          className="text-cielo hover:underline font-bold flex items-center gap-0.5"
-                        >
-                          👤 {detalle.prospectoId}
-                        </a>
-                      </>
-                    )}
-                    <span>·</span>
-                    <span className="font-semibold text-[9px] uppercase tracking-wider text-carbon/40">Ventana 24h:</span>
-                    <Countdown24h
-                      ultimoInboundFecha={detalle.ultimoInboundFecha}
-                      ventanaAbierta={detalle.ventanaAbierta}
-                    />
-                  </div>
 
-                  {/* Dropdown de Asignación */}
-                  <div className="flex flex-wrap items-center gap-2 mt-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-carbon/60 font-bold uppercase tracking-wider">Atiende:</span>
-                      <select
-                        value={detalle.atiende ?? ""}
-                        onChange={async (e) => {
-                          const nuevoAgente = e.target.value;
-                          setAsignando(true);
-                          const res = await asignarAgente(detalle.telefono, nuevoAgente);
-                          setAsignando(false);
-                          if (!res.ok) {
-                            setAviso(res.error ?? "No se pudo reasignar.");
-                          } else {
-                            await refrescar(detalle.telefono);
-                          }
-                        }}
-                        disabled={asignando || enviando}
-                        className="bg-white border border-carbon/15 rounded px-1.5 py-0.5 text-[10px] text-carbon/70 focus:outline-none focus:border-sauce cursor-pointer focus:ring-1 focus:ring-sauce font-medium"
-                      >
-                        <option value="">— sin asignar —</option>
-                        <option value="IA">🤖 Agente IA (Sofía)</option>
-                        {asesores.map((as) => (
-                          <option key={as.id} value={as.nombre}>
-                            {as.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setEnviando(true);
+                        const res = await finalizarConversacion(detalle.telefono, !detalle.finalizado);
+                        setEnviando(false);
+                        if (!res.ok) {
+                          setAviso(res.error ?? "Error al cambiar estado.");
+                        } else {
+                          await refrescar(detalle.telefono);
+                        }
+                      }}
+                      disabled={enviando}
+                      className={`text-[10px] px-2 py-0.5 rounded font-semibold transition border ${
+                        detalle.finalizado
+                          ? "bg-sauce text-crema border-sauce hover:bg-verde-profundo"
+                          : "bg-white text-carbon/70 border-carbon/20 hover:bg-carbon/5"
+                      }`}
+                    >
+                      {detalle.finalizado ? "Reabrir" : "Terminar"}
+                    </button>
 
-                    {usuario && (detalle.atiende !== usuario.nombre) && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setAsignando(true);
-                          const res = await asignarAgente(detalle.telefono, usuario.nombre);
-                          setAsignando(false);
-                          if (!res.ok) {
-                            setAviso(res.error ?? "No se pudo tomar la conversación.");
-                          } else {
-                            await refrescar(detalle.telefono);
-                          }
-                        }}
-                        disabled={asignando || enviando}
-                        className="bg-[#2D4A2B] hover:bg-[#5C7A52] text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-sm transition disabled:opacity-50 flex items-center gap-1 uppercase"
-                      >
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Tomar chat
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={borrarConversacion}
+                      disabled={enviando}
+                      title="Borrar esta conversación (para volver a probar)"
+                      className="text-[10px] text-rojo/85 border border-rojo/20 bg-rojo/5 px-2 py-0.5 rounded transition hover:bg-rojo hover:text-white disabled:opacity-50 font-semibold"
+                    >
+                      Borrar
+                    </button>
                   </div>
                 </div>
 
-                {/* Botones de acción del encabezado */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setEnviando(true);
-                      const res = await finalizarConversacion(detalle.telefono, !detalle.finalizado);
-                      setEnviando(false);
-                      if (!res.ok) {
-                        setAviso(res.error ?? "Error al cambiar estado.");
-                      } else {
-                        await refrescar(detalle.telefono);
-                      }
-                    }}
-                    disabled={enviando}
-                    className={`text-xs px-2.5 py-1 rounded-md font-semibold transition border ${
-                      detalle.finalizado
-                        ? "bg-sauce text-crema border-sauce hover:bg-verde-profundo"
-                        : "bg-white text-carbon/70 border-carbon/20 hover:bg-carbon/5"
-                    }`}
-                  >
-                    {detalle.finalizado ? "Reabrir Chat" : "Terminar Chat"}
-                  </button>
+                {/* Fila 2: Enlaces y metadatos */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[9px] text-carbon/50">
+                  <span>{detalle.telefono}</span>
+                  {detalle.expedienteId && (
+                    <>
+                      <span>·</span>
+                      <a
+                        href={`/expediente/${detalle.expedienteId}`}
+                        className="text-sauce hover:underline font-bold flex items-center gap-0.5"
+                      >
+                        📁 {detalle.expedienteId}
+                      </a>
+                    </>
+                  )}
+                  {detalle.prospectoId && (
+                    <>
+                      <span>·</span>
+                      <a
+                        href={`/prospectos/${detalle.prospectoId}`}
+                        className="text-cielo hover:underline font-bold flex items-center gap-0.5"
+                      >
+                        👤 {detalle.prospectoId}
+                      </a>
+                    </>
+                  )}
+                  <span>·</span>
+                  <span className="font-semibold text-[8px] uppercase tracking-wider text-carbon/40">24h:</span>
+                  <Countdown24h
+                    ultimoInboundFecha={detalle.ultimoInboundFecha}
+                    ventanaAbierta={detalle.ventanaAbierta}
+                  />
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={borrarConversacion}
-                    disabled={enviando}
-                    title="Borrar esta conversación (para volver a probar)"
-                    className="text-xs text-rojo/85 border border-rojo/20 bg-rojo/5 px-2.5 py-1 rounded-md transition hover:bg-rojo hover:text-white disabled:opacity-50"
-                  >
-                    Borrar
-                  </button>
+                {/* Fila 3: Asignación */}
+                <div className="flex flex-wrap items-center gap-2 text-[10px] bg-white/60 p-1 rounded border border-carbon/5">
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold uppercase tracking-wider text-carbon/40 text-[8px]">Atiende:</span>
+                    <select
+                      value={detalle.atiende ?? ""}
+                      onChange={async (e) => {
+                        const nuevoAgente = e.target.value;
+                        setAsignando(true);
+                        const res = await asignarAgente(detalle.telefono, nuevoAgente);
+                        setAsignando(false);
+                        if (!res.ok) {
+                          setAviso(res.error ?? "No se pudo reasignar.");
+                        } else {
+                          await refrescar(detalle.telefono);
+                        }
+                      }}
+                      disabled={asignando || enviando}
+                      className="bg-white border border-carbon/15 rounded px-1 py-0.5 text-[10px] text-carbon/70 focus:outline-none focus:border-sauce cursor-pointer font-medium"
+                    >
+                      <option value="">— sin asignar —</option>
+                      <option value="IA">🤖 Agente IA (Sofía)</option>
+                      {asesores.map((as) => (
+                        <option key={as.id} value={as.nombre}>
+                          {as.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {usuario && (detalle.atiende !== usuario.nombre) && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setAsignando(true);
+                        const res = await asignarAgente(detalle.telefono, usuario.nombre);
+                        setAsignando(false);
+                        if (!res.ok) {
+                          setAviso(res.error ?? "No se pudo tomar la conversación.");
+                        } else {
+                          await refrescar(detalle.telefono);
+                        }
+                      }}
+                      disabled={asignando || enviando}
+                      className="bg-[#2D4A2B] hover:bg-[#5C7A52] text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm transition disabled:opacity-50 flex items-center gap-0.5 uppercase"
+                    >
+                      Tomar chat
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -866,162 +863,114 @@ export function Conversaciones() {
                   </p>
                 )}
 
-                {detalle.ventanaAbierta ? (
-                  <div className="space-y-1.5 relative">
-                    {/* Tarjeta Flotante de Atajos (#) */}
-                    {mostrarAtajos && filteredAtajos.length > 0 && (
-                      <div className="absolute left-0 bottom-full mb-2 z-50 w-80 max-h-60 overflow-y-auto rounded-lg border border-carbon/10 bg-white p-1 shadow-lg scrollbar-sutil">
-                        <div className="bg-crema/40 px-2 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 flex items-center justify-between">
-                          <span>Atajos disponibles</span>
-                          <span className="font-normal text-carbon/40">Usa ↑↓ y Enter</span>
-                        </div>
-                        {filteredAtajos.map((r, idx) => (
-                          <button
-                            key={r.atajo}
-                            type="button"
-                            onClick={() => insertarRespuesta(r.texto)}
-                            className={`w-full text-left px-2 py-1.5 rounded text-xs transition flex flex-col ${
-                              idx === indiceAtajoSeleccionado
-                                ? "bg-sauce/15 text-verde-profundo"
-                                : "hover:bg-carbon/5 text-carbon"
-                            }`}
-                          >
-                            <span className="font-semibold flex items-center gap-1">
-                              <span className="text-[10px] bg-sauce/20 text-verde-profundo px-1 py-0.5 rounded">#{r.atajo}</span>
-                              {r.titulo}
-                            </span>
-                            <span className="text-[10px] text-carbon/50 truncate w-full mt-0.5">{r.texto}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
-                    <div className="flex items-center justify-between text-[11px] text-carbon/40 px-1">
-                      <span>Escribe <strong className="text-sauce">#</strong> para usar respuestas rápidas</span>
-                      
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setMostrarDropdownMenu(!mostrarDropdownMenu)}
-                          className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm"
-                        >
-                          ⚡ Respuestas Rápidas
-                        </button>
-                        
-                        {/* Menú Dropdown de Respuestas Rápidas */}
-                        {mostrarDropdownMenu && (
-                          <div className="absolute right-0 bottom-full mb-1.5 z-50 w-72 max-h-80 overflow-y-auto rounded-lg border border-carbon/10 bg-white py-1.5 shadow-lg scrollbar-sutil">
-                            <div className="px-3 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 uppercase tracking-wider">
-                              Catálogo de Respuestas
-                            </div>
-                            
-                            {/* Agrupación por Categorías */}
-                            {["General", "Productos", "FAQs", "Seguimiento"].map((cat) => {
-                              const list = RESPUESTAS_RAPIDAS.filter((r) => r.categoria === cat);
-                              if (list.length === 0) return null;
-                              return (
-                                <div key={cat} className="mt-1.5">
-                                  <div className="px-3 py-0.5 text-[9px] font-bold text-carbon/30 bg-carbon/5 uppercase">
-                                    {cat}
-                                  </div>
-                                  {list.map((r) => (
-                                    <button
-                                      key={r.atajo}
-                                      type="button"
-                                      onClick={() => insertarRespuesta(r.texto)}
-                                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-carbon/5 text-carbon flex flex-col transition"
-                                    >
-                                      <span className="font-semibold text-verde-profundo">{r.titulo}</span>
-                                      <span className="text-[10px] text-carbon/50 line-clamp-2 mt-0.5">{r.texto}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                <div className="space-y-1.5 relative">
+                  {/* Advertencia de ventana de 24h expirada */}
+                  {!detalle.ventanaAbierta && (
+                    <div className="rounded-md border border-dorado/30 bg-dorado/5 px-2.5 py-1.5 text-[10px] text-carbon/70 flex items-start gap-1.5 leading-relaxed">
+                      <span className="shrink-0 mt-0.5">⚠️</span>
+                      <span>
+                        <strong>Ventana de 24h cerrada:</strong> Los mensajes de texto libre podrían no entregarse hasta que el cliente vuelva a escribir.
+                      </span>
                     </div>
+                  )}
 
-                    {/* Caja de Texto + Botón de Enviar */}
-                    <div className="flex items-end gap-2">
-                      <textarea
-                        ref={textareaRef}
-                        value={texto}
-                        onChange={handleTextareaChange}
-                        rows={2}
-                        placeholder="Escribe un mensaje o usa #..."
-                        className={INPUT}
-                        onKeyDown={handleKeyDown}
-                      />
+                  {/* Tarjeta Flotante de Atajos (#) */}
+                  {mostrarAtajos && filteredAtajos.length > 0 && (
+                    <div className="absolute left-0 bottom-full mb-2 z-50 w-80 max-h-60 overflow-y-auto rounded-lg border border-carbon/10 bg-white p-1 shadow-lg scrollbar-sutil">
+                      <div className="bg-crema/40 px-2 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 flex items-center justify-between">
+                        <span>Atajos disponibles</span>
+                        <span className="font-normal text-carbon/40">Usa ↑↓ y Enter</span>
+                      </div>
+                      {filteredAtajos.map((r, idx) => (
+                        <button
+                          key={r.atajo}
+                          type="button"
+                          onClick={() => insertarRespuesta(r.texto)}
+                          className={`w-full text-left px-2 py-1.5 rounded text-xs transition flex flex-col ${
+                            idx === indiceAtajoSeleccionado
+                              ? "bg-sauce/15 text-verde-profundo"
+                              : "hover:bg-carbon/5 text-carbon"
+                          }`}
+                        >
+                          <span className="font-semibold flex items-center gap-1">
+                            <span className="text-[10px] bg-sauce/20 text-verde-profundo px-1 py-0.5 rounded">#{r.atajo}</span>
+                            {r.titulo}
+                          </span>
+                          <span className="text-[10px] text-carbon/50 truncate w-full mt-0.5">{r.texto}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
+                  <div className="flex items-center justify-between text-[11px] text-carbon/40 px-1">
+                    <span>Escribe <strong className="text-sauce">#</strong> para usar respuestas rápidas</span>
+                    
+                    <div className="relative">
                       <button
                         type="button"
-                        onClick={enviarTexto}
-                        disabled={enviando || !texto.trim()}
-                        className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
+                        onClick={() => setMostrarDropdownMenu(!mostrarDropdownMenu)}
+                        className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm"
                       >
-                        {enviando ? "…" : "Enviar"}
+                        ⚡ Respuestas Rápidas
                       </button>
+                      
+                      {/* Menú Dropdown de Respuestas Rápidas */}
+                      {mostrarDropdownMenu && (
+                        <div className="absolute right-0 bottom-full mb-1.5 z-50 w-72 max-h-80 overflow-y-auto rounded-lg border border-carbon/10 bg-white py-1.5 shadow-lg scrollbar-sutil">
+                          <div className="px-3 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 uppercase tracking-wider">
+                            Catálogo de Respuestas
+                          </div>
+                          
+                          {/* Agrupación por Categorías */}
+                          {["General", "Productos", "FAQs", "Seguimiento"].map((cat) => {
+                            const list = RESPUESTAS_RAPIDAS.filter((r) => r.categoria === cat);
+                            if (list.length === 0) return null;
+                            return (
+                              <div key={cat} className="mt-1.5">
+                                <div className="px-3 py-0.5 text-[9px] font-bold text-carbon/30 bg-carbon/5 uppercase">
+                                  {cat}
+                                  </div>
+                                {list.map((r) => (
+                                  <button
+                                    key={r.atajo}
+                                    type="button"
+                                    onClick={() => insertarRespuesta(r.texto)}
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-carbon/5 text-carbon flex flex-col transition"
+                                  >
+                                    <span className="font-semibold text-verde-profundo">{r.titulo}</span>
+                                    <span className="text-[10px] text-carbon/50 line-clamp-2 mt-0.5">{r.texto}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="rounded-md border border-dorado/30 bg-dorado/5 px-3 py-2 text-xs text-carbon/70">
-                      Fuera de la ventana de 24 h. Solo puedes contactar con una{" "}
-                      <strong>plantilla aprobada</strong>.
-                    </p>
-                    <select
-                      value={plantillaSel}
-                      onChange={(e) => {
-                        setPlantillaSel(e.target.value);
-                        setParams([]);
-                      }}
+
+                  {/* Caja de Texto + Botón de Enviar */}
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      ref={textareaRef}
+                      value={texto}
+                      onChange={handleTextareaChange}
+                      rows={2}
+                      placeholder="Escribe un mensaje o usa #..."
                       className={INPUT}
-                    >
-                      <option value="">— elige plantilla aprobada —</option>
-                      {plantillas.map((p) => (
-                        <option key={`${p.nombre}-${p.idioma}`} value={p.nombre}>
-                          {p.nombre} ({p.idioma})
-                        </option>
-                      ))}
-                    </select>
-                    {plantillas.length === 0 && (
-                      <p className="text-xs text-carbon/50">
-                        No hay plantillas aprobadas o falta configurar el token /
-                        WABA_ID.
-                      </p>
-                    )}
-                    {plantilla && (
-                      <p className="whitespace-pre-line rounded-md bg-crema/40 p-2 text-xs text-carbon/60">
-                        {plantilla.cuerpo}
-                      </p>
-                    )}
-                    {plantilla &&
-                      Array.from({ length: plantilla.parametros }).map((_, i) => (
-                        <input
-                          key={i}
-                          type="text"
-                          value={params[i] ?? ""}
-                          onChange={(e) => {
-                            const arr = [...params];
-                            arr[i] = e.target.value;
-                            setParams(arr);
-                          }}
-                          placeholder={`Valor para {{${i + 1}}}`}
-                          className={INPUT}
-                        />
-                      ))}
+                      onKeyDown={handleKeyDown}
+                    />
                     <button
                       type="button"
-                      onClick={enviarPlantilla}
-                      disabled={enviando || !plantillaSel}
-                      className="rounded-md bg-sauce px-4 py-2 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
+                      onClick={enviarTexto}
+                      disabled={enviando || !texto.trim()}
+                      className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
                     >
-                      {enviando ? "Enviando…" : "Enviar plantilla"}
+                      {enviando ? "…" : "Enviar"}
                     </button>
                   </div>
-                )}
+                </div>
               </div>
             </>
           )}
