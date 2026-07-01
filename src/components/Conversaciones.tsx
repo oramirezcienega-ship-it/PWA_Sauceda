@@ -681,8 +681,8 @@ export function Conversaciones() {
           ) : (
             <>
               {/* Encabezado del hilo */}
-              <div className="flex flex-col gap-2 border-b border-carbon/10 bg-crema/40 px-3 py-2 shrink-0">
-                {/* Fila 1: Nombre + Botones de Acción */}
+              <div className="flex flex-col gap-1.5 border-b border-carbon/10 bg-crema/40 px-3 py-2 shrink-0">
+                {/* Fila 1: Nombre + 24h Countdown */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {/* Botón de volver para celular */}
@@ -698,38 +698,12 @@ export function Conversaciones() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setEnviando(true);
-                        const res = await finalizarConversacion(detalle.telefono, !detalle.finalizado);
-                        setEnviando(false);
-                        if (!res.ok) {
-                          setAviso(res.error ?? "Error al cambiar estado.");
-                        } else {
-                          await refrescar(detalle.telefono);
-                        }
-                      }}
-                      disabled={enviando}
-                      className={`text-[10px] px-2 py-0.5 rounded font-semibold transition border ${
-                        detalle.finalizado
-                          ? "bg-sauce text-crema border-sauce hover:bg-verde-profundo"
-                          : "bg-white text-carbon/70 border-carbon/20 hover:bg-carbon/5"
-                      }`}
-                    >
-                      {detalle.finalizado ? "Reabrir" : "Terminar"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={borrarConversacion}
-                      disabled={enviando}
-                      title="Borrar esta conversación (para volver a probar)"
-                      className="text-[10px] text-rojo/85 border border-rojo/20 bg-rojo/5 px-2 py-0.5 rounded transition hover:bg-rojo hover:text-white disabled:opacity-50 font-semibold"
-                    >
-                      Borrar
-                    </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="font-semibold text-[8px] uppercase tracking-wider text-carbon/40 hidden xs:inline">24h:</span>
+                    <Countdown24h
+                      ultimoInboundFecha={detalle.ultimoInboundFecha}
+                      ventanaAbierta={detalle.ventanaAbierta}
+                    />
                   </div>
                 </div>
 
@@ -758,16 +732,10 @@ export function Conversaciones() {
                       </a>
                     </>
                   )}
-                  <span>·</span>
-                  <span className="font-semibold text-[8px] uppercase tracking-wider text-carbon/40">24h:</span>
-                  <Countdown24h
-                    ultimoInboundFecha={detalle.ultimoInboundFecha}
-                    ventanaAbierta={detalle.ventanaAbierta}
-                  />
                 </div>
 
-                {/* Fila 3: Asignación */}
-                <div className="flex flex-wrap items-center gap-2 text-[10px] bg-white/60 p-1 rounded border border-carbon/5">
+                {/* Fila 3: Asignación y Acciones combinados */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] bg-white/60 p-1 rounded border border-carbon/5">
                   <div className="flex items-center gap-1">
                     <span className="font-bold uppercase tracking-wider text-carbon/40 text-[8px]">Atiende:</span>
                     <select
@@ -794,27 +762,60 @@ export function Conversaciones() {
                         </option>
                       ))}
                     </select>
+
+                    {usuario && (detalle.atiende !== usuario.nombre) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setAsignando(true);
+                          const res = await asignarAgente(detalle.telefono, usuario.nombre);
+                          setAsignando(false);
+                          if (!res.ok) {
+                            setAviso(res.error ?? "No se pudo tomar la conversación.");
+                          } else {
+                            await refrescar(detalle.telefono);
+                          }
+                        }}
+                        disabled={asignando || enviando}
+                        className="bg-[#2D4A2B] hover:bg-[#5C7A52] text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm transition disabled:opacity-50 flex items-center gap-0.5 uppercase shrink-0"
+                      >
+                        Tomar
+                      </button>
+                    )}
                   </div>
 
-                  {usuario && (detalle.atiende !== usuario.nombre) && (
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={async () => {
-                        setAsignando(true);
-                        const res = await asignarAgente(detalle.telefono, usuario.nombre);
-                        setAsignando(false);
+                        setEnviando(true);
+                        const res = await finalizarConversacion(detalle.telefono, !detalle.finalizado);
+                        setEnviando(false);
                         if (!res.ok) {
-                          setAviso(res.error ?? "No se pudo tomar la conversación.");
+                          setAviso(res.error ?? "Error al cambiar estado.");
                         } else {
                           await refrescar(detalle.telefono);
                         }
                       }}
-                      disabled={asignando || enviando}
-                      className="bg-[#2D4A2B] hover:bg-[#5C7A52] text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm transition disabled:opacity-50 flex items-center gap-0.5 uppercase"
+                      disabled={enviando}
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition border ${
+                        detalle.finalizado
+                          ? "bg-sauce text-crema border-sauce hover:bg-verde-profundo"
+                          : "bg-white text-carbon/70 border-carbon/20 hover:bg-carbon/5"
+                      }`}
                     >
-                      Tomar chat
+                      {detalle.finalizado ? "Reabrir" : "Terminar"}
                     </button>
-                  )}
+
+                    <button
+                      type="button"
+                      onClick={borrarConversacion}
+                      disabled={enviando}
+                      className="text-[9px] text-rojo/85 border border-rojo/20 bg-rojo/5 px-1.5 py-0.5 rounded transition hover:bg-rojo hover:text-white disabled:opacity-50 font-semibold"
+                    >
+                      Borrar
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -957,14 +958,15 @@ export function Conversaciones() {
                       value={texto}
                       onChange={handleTextareaChange}
                       rows={2}
-                      placeholder="Escribe un mensaje o usa #..."
-                      className={INPUT}
+                      placeholder={detalle.ventanaAbierta ? "Escribe un mensaje o usa #..." : "Ventana cerrada - No puedes enviar mensajes"}
+                      className={`${INPUT} disabled:bg-slate-50 disabled:text-carbon/40`}
                       onKeyDown={handleKeyDown}
+                      disabled={!detalle.ventanaAbierta}
                     />
                     <button
                       type="button"
                       onClick={enviarTexto}
-                      disabled={enviando || !texto.trim()}
+                      disabled={enviando || !texto.trim() || !detalle.ventanaAbierta}
                       className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
                     >
                       {enviando ? "…" : "Enviar"}

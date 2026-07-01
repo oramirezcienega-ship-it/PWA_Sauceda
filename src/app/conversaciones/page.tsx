@@ -9,13 +9,12 @@ export default function PaginaConversaciones() {
     <main className="min-h-screen pb-6">
       <Encabezado />
       <div className="mx-auto max-w-6xl px-4 pt-5">
-        <div className="mb-4">
-          <h1 className="font-titular text-3xl font-semibold text-verde-profundo">
+        <div className="mb-3">
+          <h1 className="font-titular text-xl sm:text-2xl md:text-3xl font-semibold text-verde-profundo">
             Conversaciones
           </h1>
-          <p className="mt-1 text-sm text-carbon/60">
-            Mensajes de WhatsApp con tus clientes. Responde con texto dentro de
-            la ventana de 24 h; fuera de ella, usa una plantilla aprobada.
+          <p className="mt-0.5 text-xs sm:text-sm text-carbon/60">
+            Mensajes de WhatsApp con tus clientes. <span className="hidden sm:inline">Responde con texto dentro de la ventana de 24 h; fuera de ella, usa una plantilla aprobada.</span>
           </p>
         </div>
         <Conversaciones />
