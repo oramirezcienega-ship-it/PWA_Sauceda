@@ -214,6 +214,14 @@ export function DashboardInteligente() {
   const [customCategoryName, setCustomCategoryName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Estado para Drill-down de P&L
+  const [drillDownConfig, setDrillDownConfig] = useState<{
+    categoria: string;
+    mes?: string;
+    titulo: string;
+  } | null>(null);
+  const [updatingTxId, setUpdatingTxId] = useState<string | null>(null);
+
   // Importador de Excel
   const [importText, setImportText] = useState("");
   const [loadingImport, setLoadingImport] = useState(false);
@@ -830,6 +838,92 @@ export function DashboardInteligente() {
     return `${nombresMeses[parseInt(month, 10) - 1]} ${year.slice(2)}`;
   };
 
+  // Transacciones filtradas para el modal de Drill-down
+  const transaccionesDrillDown = useMemo(() => {
+    if (!drillDownConfig) return [];
+    const { categoria, mes } = drillDownConfig;
+
+    return transacciones.filter((t) => {
+      // Filtrar por mes si aplica
+      if (mes && !t.fecha.startsWith(mes)) {
+        return false;
+      }
+
+      const cat = t.categoria.toLowerCase();
+      if (categoria === "comision") {
+        return t.tipo === "ingreso" && cat === "comision";
+      }
+      if (categoria === "venta") {
+        return t.tipo === "ingreso" && cat === "venta";
+      }
+      if (categoria === "otrosIngresos") {
+        return t.tipo === "ingreso" && cat !== "comision" && cat !== "venta";
+      }
+      if (categoria === "marketing") {
+        return t.tipo === "gasto" && cat === "marketing";
+      }
+      if (categoria === "nomina") {
+        return t.tipo === "gasto" && cat === "nomina";
+      }
+      if (categoria === "renta") {
+        return t.tipo === "gasto" && cat === "renta";
+      }
+      if (categoria === "servicios") {
+        return t.tipo === "gasto" && cat === "servicios";
+      }
+      if (categoria === "impuestos") {
+        return t.tipo === "gasto" && cat === "impuestos";
+      }
+      if (categoria === "otrosGastos") {
+        return t.tipo === "gasto" && !["nomina", "renta", "servicios", "impuestos", "marketing"].includes(cat);
+      }
+      return false;
+    });
+  }, [drillDownConfig, transacciones]);
+
+  // Registros diarios de marketing para el Drill-down
+  const marketingMetricasDrillDown = useMemo(() => {
+    if (!drillDownConfig || !["marketing", "publicidad"].includes(drillDownConfig.categoria)) return [];
+    const { mes } = drillDownConfig;
+    return metricasFiltradas.filter((m) => {
+      if (mes && !m.fecha.startsWith(mes)) return false;
+      return (m.gasto_publicitario || 0) > 0;
+    });
+  }, [drillDownConfig, metricasFiltradas]);
+
+  const handleCambiarCategoriaDrillDown = async (id: string, nuevaCategoria: string) => {
+    setUpdatingTxId(id);
+    try {
+      const res = await actualizarTransaccionFinanciera(id, { categoria: nuevaCategoria });
+      if (res.success) {
+        setTransacciones(prev => prev.map(t => t.id === id ? { ...t, categoria: nuevaCategoria } : t));
+      } else {
+        alert("Error al actualizar la categoría: " + res.message);
+      }
+    } catch (error: any) {
+      alert("Error al actualizar: " + error.message);
+    } finally {
+      setUpdatingTxId(null);
+    }
+  };
+
+  const handleEliminarTransaccionDrillDown = async (id: string) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar este movimiento contable?")) return;
+    setUpdatingTxId(id);
+    try {
+      const res = await eliminarTransaccionFinanciera(id);
+      if (res.success) {
+        setTransacciones(prev => prev.filter(t => t.id !== id));
+      } else {
+        alert("Error al eliminar la transacción: " + res.message);
+      }
+    } catch (error: any) {
+      alert("Error al eliminar: " + error.message);
+    } finally {
+      setUpdatingTxId(null);
+    }
+  };
+
   // Cálculos consolidados para los KPI Cards
   const kpis = useMemo(() => {
     // 1. Periodo actual
@@ -1060,120 +1154,122 @@ export function DashboardInteligente() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-[#0F172A] font-cuerpo p-4 lg:p-8">
-      {/* CABECERA */}
-      <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-            <span className="text-xs font-semibold text-emerald-600 uppercase tracking-widest">En Vivo</span>
-          </div>
-          <h1 className="font-fraunces text-3xl font-extrabold text-[#2D4A2B] tracking-tight">
-            🧠 Dashboard Inteligente (Admin)
-          </h1>
-          <p className="text-slate-500 text-sm mt-0.5">
-            Analítica consolidada multi-canal con recomendaciones automáticas y control operativo.
-          </p>
-        </div>
-
-        {/* CONTROLES */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            {(["7", "14", "30", "este-mes", "este-ano", "custom"] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRangoSeleccionado(r)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  rangoSeleccionado === r
-                    ? "bg-[#2D4A2B] text-[#F5F1E8]"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {r === "custom"
-                  ? "Personalizado"
-                  : r === "este-mes"
-                  ? "Este Mes"
-                  : r === "este-ano"
-                  ? "Este Año"
-                  : `Últimos ${r} días`}
-              </button>
-            ))}
-          </div>
-
-          {rangoSeleccionado === "custom" && (
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
-              <input
-                type="date"
-                value={fechaInicioCustom}
-                onChange={(e) => setFechaInicioCustom(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-[#2D4A2B] focus:outline-none px-1"
-              />
-              <span className="text-slate-400 text-xs font-bold">al</span>
-              <input
-                type="date"
-                value={fechaFinCustom}
-                onChange={(e) => setFechaFinCustom(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-[#2D4A2B] focus:outline-none px-1"
-              />
+      {/* CABECERA Y PESTAÑAS FIJAS */}
+      <div className="sticky top-0 z-40 bg-slate-50/95 backdrop-blur-md pt-4 pb-1 border-b border-slate-200 mb-6 -mx-4 px-4 lg:-mx-8 lg:px-8">
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <span className="text-xs font-semibold text-emerald-600 uppercase tracking-widest">En Vivo</span>
             </div>
-          )}
+            <h1 className="font-fraunces text-3xl font-extrabold text-[#2D4A2B] tracking-tight">
+              🧠 Dashboard Inteligente (Admin)
+            </h1>
+            <p className="text-slate-500 text-sm mt-0.5">
+              Analítica consolidada multi-canal con recomendaciones automáticas y control operativo.
+            </p>
+          </div>
 
-          <button
-            onClick={handleRegenerarIA}
-            disabled={generandoIA}
-            className="flex items-center gap-2 rounded-lg bg-[#2D4A2B] px-4 py-2 text-xs font-bold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 shadow-sm"
-          >
-            {generandoIA ? (
-              <>
-                <svg className="h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Sofía está analizando...
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Analizar con Sofía (IA)
-              </>
+          {/* CONTROLES */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+              {(["7", "14", "30", "este-mes", "este-ano", "custom"] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRangoSeleccionado(r)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    rangoSeleccionado === r
+                      ? "bg-[#2D4A2B] text-[#F5F1E8]"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {r === "custom"
+                    ? "Personalizado"
+                    : r === "este-mes"
+                    ? "Este Mes"
+                    : r === "este-ano"
+                    ? "Este Año"
+                    : `Últimos ${r} días`}
+                </button>
+              ))}
+            </div>
+
+            {rangoSeleccionado === "custom" && (
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
+                <input
+                  type="date"
+                  value={fechaInicioCustom}
+                  onChange={(e) => setFechaInicioCustom(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-[#2D4A2B] focus:outline-none px-1"
+                />
+                <span className="text-slate-400 text-xs font-bold">al</span>
+                <input
+                  type="date"
+                  value={fechaFinCustom}
+                  onChange={(e) => setFechaFinCustom(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-[#2D4A2B] focus:outline-none px-1"
+                />
+              </div>
             )}
-          </button>
 
+            <button
+              onClick={handleRegenerarIA}
+              disabled={generandoIA}
+              className="flex items-center gap-2 rounded-lg bg-[#2D4A2B] px-4 py-2 text-xs font-bold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 shadow-sm"
+            >
+              {generandoIA ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Sofía está analizando...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Analizar con Sofía (IA)
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowSyncModal(true)}
+              className="flex items-center gap-2 rounded-lg border border-[#2D4A2B] bg-white px-4 py-2 text-xs font-bold text-[#2D4A2B] hover:bg-[#F5F1E8] transition shadow-sm"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.2" />
+              </svg>
+              Sincronizar Historial
+            </button>
+          </div>
+        </header>
+
+        {/* PESTAÑAS PRINCIPALES DEL DASHBOARD */}
+        <div className="flex text-sm font-semibold">
           <button
-            onClick={() => setShowSyncModal(true)}
-            className="flex items-center gap-2 rounded-lg border border-[#2D4A2B] bg-white px-4 py-2 text-xs font-bold text-[#2D4A2B] hover:bg-[#F5F1E8] transition shadow-sm"
+            onClick={() => setActiveTab("marketing")}
+            className={`pb-3 px-4 transition ${
+              activeTab === "marketing"
+                ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.2" />
-            </svg>
-            Sincronizar Historial
+            📣 Adquisición & Leads (Marketing)
+          </button>
+          <button
+            onClick={() => setActiveTab("finanzas")}
+            className={`pb-3 px-4 transition ${
+              activeTab === "finanzas"
+                ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            💰 Finanzas & P&L (Contabilidad)
           </button>
         </div>
-      </header>
-
-      {/* PESTAÑAS PRINCIPALES DEL DASHBOARD */}
-      <div className="flex border-b border-slate-200 mb-6 text-sm font-semibold">
-        <button
-          onClick={() => setActiveTab("marketing")}
-          className={`pb-3 px-4 transition ${
-            activeTab === "marketing"
-              ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          📣 Adquisición & Leads (Marketing)
-        </button>
-        <button
-          onClick={() => setActiveTab("finanzas")}
-          className={`pb-3 px-4 transition ${
-            activeTab === "finanzas"
-              ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          💰 Finanzas & P&L (Contabilidad)
-        </button>
       </div>
 
       {/* SECCIÓN DEL CEREBRO DE RECOMENDACIONES (SOFÍA) */}
@@ -1946,11 +2042,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Intermediación de ventas/rentas</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
-                            ${m.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "comision", mes: m.mes, titulo: `Comisiones Inmobiliarias (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              ${m.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
-                          ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "comision", titulo: "Comisiones Inmobiliarias (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
@@ -1958,11 +2064,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Traspasos y cierres directos</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
-                            ${m.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "venta", mes: m.mes, titulo: `Ventas Directas (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              ${m.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
-                          ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "venta", titulo: "Ventas Directas (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
@@ -1970,11 +2086,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Otros conceptos financieros</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
-                            ${m.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "otrosIngresos", mes: m.mes, titulo: `Otros Ingresos (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              ${m.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
-                          ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "otrosIngresos", titulo: "Otros Ingresos (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
 
@@ -1997,11 +2123,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Meta Ads, TikTok Ads y agencias</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            -${m.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "marketing", mes: m.mes, titulo: `Inversión en Publicidad/Marketing (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              -${m.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "marketing", titulo: "Inversión en Publicidad/Marketing (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
 
@@ -2039,11 +2175,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Salarios y honorarios profesionales fijos</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            -${m.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "nomina", mes: m.mes, titulo: `Nóminas y Sueldos (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              -${m.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "nomina", titulo: "Nóminas y Sueldos (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
@@ -2051,11 +2197,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Alquileres corporativos</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            -${m.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "renta", mes: m.mes, titulo: `Renta de Oficinas (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              -${m.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "renta", titulo: "Renta de Oficinas (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
@@ -2063,11 +2219,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Luz, internet, telefonía e insumos</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            -${m.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "servicios", mes: m.mes, titulo: `Servicios Básicos (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              -${m.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "servicios", titulo: "Servicios Básicos (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
@@ -2075,11 +2241,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Pagos al SAT y provisiones fiscales</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            -${m.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "impuestos", mes: m.mes, titulo: `Impuestos y Retenciones (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              -${m.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "impuestos", titulo: "Impuestos y Retenciones (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
@@ -2087,11 +2263,21 @@ export function DashboardInteligente() {
                         <td className="px-4 py-2 text-slate-400 text-[10px]">Cualquier otro gasto de operación menor</td>
                         {PnLMensual.map((m) => (
                           <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            -${m.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span
+                              onClick={() => setDrillDownConfig({ categoria: "otrosGastos", mes: m.mes, titulo: `Otros Gastos Administrativos (${formatearMes(m.mes)})` })}
+                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                            >
+                              -${m.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
                           </td>
                         ))}
                         <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "otrosGastos", titulo: "Otros Gastos Administrativos (Acumulado)" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
 
@@ -2146,21 +2332,36 @@ export function DashboardInteligente() {
                         <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
                         <td className="px-4 py-2 text-slate-400">Ingresos por intermediación de ventas/rentas</td>
                         <td className="px-4 py-2 text-right font-mono text-slate-700">
-                          ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "comision", titulo: "Comisiones Inmobiliarias" })}
+                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
                         <td className="px-4 py-2 text-slate-400">Ingresos directos o traspasos comerciales</td>
                         <td className="px-4 py-2 text-right font-mono text-slate-700">
-                          ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "venta", titulo: "Ventas Directas" })}
+                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
                         <td className="px-4 py-2 text-slate-400">Otros conceptos de entrada financiera</td>
                         <td className="px-4 py-2 text-right font-mono text-slate-700">
-                          ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "otrosIngresos", titulo: "Otros Ingresos" })}
+                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
 
@@ -2170,14 +2371,24 @@ export function DashboardInteligente() {
                           2. Costo de Adquisición / Marketing (COGS)
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono text-rose-600">
-                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "marketing", titulo: "Inversión en Publicidad / Marketing" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
                         <td className="px-4 py-2 text-slate-400">Gasto en Meta Ads, TikTok Ads y agencias de medios</td>
                         <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "marketing", titulo: "Inversión en Publicidad / Marketing" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
 
@@ -2197,42 +2408,72 @@ export function DashboardInteligente() {
                           3. Gastos de Operación y Administración (OPEX)
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono text-rose-600">
-                          -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "nomina", titulo: "Gastos Operativos (OPEX)" })} // Default to showing OPEX breakdown (can list all OPEX accounts or default to nomina)
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
                         <td className="px-4 py-2 text-slate-400">Salarios y honorarios profesionales fijos</td>
                         <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "nomina", titulo: "Nóminas y Sueldos" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
                         <td className="px-4 py-2 text-slate-400">Alquileres de sucursales e inmuebles corporativos</td>
                         <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "renta", titulo: "Renta de Oficinas" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
                         <td className="px-4 py-2 text-slate-400">Luz, agua, internet, telefonía e insumos de oficina</td>
                         <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "servicios", titulo: "Servicios Básicos" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
                         <td className="px-4 py-2 text-slate-400">Pagos al SAT y provisiones fiscales</td>
                         <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "impuestos", titulo: "Impuestos y Retenciones" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
                       <tr className="border-b border-slate-100 font-medium">
                         <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
                         <td className="px-4 py-2 text-slate-400">Cualquier otro gasto de operación menor o misceláneo</td>
                         <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          <span
+                            onClick={() => setDrillDownConfig({ categoria: "otrosGastos", titulo: "Otros Gastos Administrativos" })}
+                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
+                          >
+                            -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </span>
                         </td>
                       </tr>
 
@@ -2721,6 +2962,193 @@ export function DashboardInteligente() {
           </div>
         </div>
       )}
+
+      {/* MODAL DRILL-DOWN DE P&L (CONSULTA DETALLADA) */}
+      {drillDownConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div>
+                <h3 className="font-fraunces text-lg font-bold text-[#2D4A2B] flex items-center gap-2">
+                  🔍 Desglose: {drillDownConfig.titulo}
+                </h3>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  Visualizando e integrando movimientos para el período:{" "}
+                  <span className="font-semibold text-slate-600">
+                    {drillDownConfig.mes ? formatearMes(drillDownConfig.mes) : "Consolidado total"}
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={() => setDrillDownConfig(null)}
+                className="text-slate-400 hover:text-[#2D4A2B] text-sm font-bold p-1 hover:bg-slate-100 rounded-lg transition"
+              >
+                ✕ Cerrar
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 pr-1 scrollbar-sutil">
+              {/* Resumen o Totalizador */}
+              <div className="mb-4 bg-[#F5F1E8] rounded-xl p-4 border border-[#E6DEC9] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-extrabold text-[#5C7A52] tracking-wider block">Monto Total Sumado</span>
+                  <span className="text-xl font-bold font-mono text-[#2D4A2B] block sm:inline">
+                    ${(
+                      transaccionesDrillDown.reduce((acc, curr) => acc + curr.monto, 0) +
+                      marketingMetricasDrillDown.reduce((acc, curr) => acc + (curr.gasto_publicitario || 0), 0)
+                    ).toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN
+                  </span>
+                </div>
+                <div className="text-right text-[11px] text-[#5C7A52] font-semibold">
+                  {transaccionesDrillDown.length} movimientos de caja / factura
+                  {marketingMetricasDrillDown.length > 0 && ` + ${marketingMetricasDrillDown.length} logs de publicidad`}
+                </div>
+              </div>
+
+              {/* Sección de Publicidad Directa (Meta/TikTok Ads) */}
+              {marketingMetricasDrillDown.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="font-bold text-slate-700 text-xs mb-2 uppercase tracking-wide">
+                    📈 Consumo diario publicitario sincronizado
+                  </h4>
+                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase text-[9px] tracking-wider">
+                          <th className="px-4 py-2">Fecha</th>
+                          <th className="px-4 py-2">Canal / Plataforma</th>
+                          <th className="px-4 py-2">Leads Registrados</th>
+                          <th className="px-4 py-2 text-right">Impresiones</th>
+                          <th className="px-4 py-2 text-right">Clics</th>
+                          <th className="px-4 py-2 text-right">Gasto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {marketingMetricasDrillDown.map((m, idx) => (
+                          <tr key={idx} className="border-b border-slate-100 font-medium hover:bg-slate-50/50">
+                            <td className="px-4 py-2 font-mono text-slate-500">{m.fecha}</td>
+                            <td className="px-4 py-2">
+                              <span
+                                className="inline-block rounded-md px-2 py-0.5 text-[10px] font-semibold text-white uppercase"
+                                style={{ backgroundColor: PALETA_CANALES[m.canal.toLowerCase() as keyof typeof PALETA_CANALES] || COLORES.gris }}
+                              >
+                                {m.canal}
+                              </span>
+                              {m.campana_nombre && (
+                                <span className="text-[10px] text-slate-400 ml-1.5 font-normal">
+                                  ({m.campana_nombre})
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-slate-600">{m.leads_registrados_crm} leads</td>
+                            <td className="px-4 py-2 text-right font-mono text-slate-600">{m.impresiones.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right font-mono text-slate-600">{m.clics.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right font-mono font-bold text-rose-600">
+                              -${(m.gasto_publicitario || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5 italic">
+                    * Los consumos publicitarios son sincronizados diariamente desde las APIs correspondientes.
+                  </p>
+                </div>
+              )}
+
+              {/* Sección de Movimientos Contables (Transacciones Ledger) */}
+              <div>
+                <h4 className="font-bold text-slate-700 text-xs mb-2 uppercase tracking-wide">
+                  💵 Transacciones del Libro Mayor / Caja
+                </h4>
+                {transaccionesDrillDown.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    No hay transacciones manuales registradas en esta cuenta para el período seleccionado.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-100">
+                    <table className="w-full text-xs text-left border-collapse min-w-[600px]">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase text-[9px] tracking-wider">
+                          <th className="px-4 py-2.5">Fecha</th>
+                          <th className="px-4 py-2.5">Concepto</th>
+                          <th className="px-4 py-2.5">Monto</th>
+                          <th className="px-4 py-2.5">Cuenta / Categoría (Mover Cuenta)</th>
+                          <th className="px-4 py-2.5 text-center">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transaccionesDrillDown.map((t) => {
+                          const tAny = t as any;
+                          return (
+                            <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-4 py-2.5 font-mono text-slate-500 whitespace-nowrap">{t.fecha}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="font-bold text-slate-800">{t.concepto}</div>
+                                {t.expediente_id && tAny.cliente && (
+                                  <div className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 mt-0.5">
+                                    <span>👤 CRM:</span>
+                                    <span>{tAny.cliente} (Folio: {t.expediente_id})</span>
+                                  </div>
+                                )}
+                                {t.es_recurrente && (
+                                  <span className="inline-block bg-[#F5F1E8] text-[#2D4A2B] text-[8px] px-1 py-0.2 rounded mt-0.5 font-extrabold uppercase tracking-wide">
+                                    Recurrente 🔁
+                                  </span>
+                                )}
+                              </td>
+                              <td className={`px-4 py-2.5 font-mono font-bold whitespace-nowrap ${
+                                t.tipo === "ingreso" ? "text-emerald-600" : "text-rose-600"
+                              }`}>
+                                {t.tipo === "ingreso" ? "+" : "-"}${t.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <select
+                                  value={t.categoria}
+                                  disabled={updatingTxId === t.id}
+                                  onChange={(e) => handleCambiarCategoriaDrillDown(t.id!, e.target.value)}
+                                  className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-semibold focus:outline-none focus:border-[#2D4A2B] w-full"
+                                >
+                                  {(t.tipo === "ingreso" ? categoriasIngreso : categoriasGasto).map((cat) => (
+                                    <option key={cat} value={cat}>
+                                      {cat.toUpperCase()}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                <button
+                                  onClick={() => handleEliminarTransaccionDrillDown(t.id!)}
+                                  disabled={updatingTxId === t.id}
+                                  className="text-rose-600 hover:text-rose-800 hover:bg-rose-50 p-1.5 rounded-lg transition"
+                                  title="Eliminar registro"
+                                >
+                                  🗑️
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 mt-4 text-right">
+              <button
+                onClick={() => setDrillDownConfig(null)}
+                className="bg-slate-100 hover:bg-slate-200 text-[#0F172A] font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-sm"
+              >
+                Cerrar Ventana
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

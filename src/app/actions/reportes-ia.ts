@@ -984,7 +984,7 @@ export async function eliminarDatosDemostracionFinanzas(): Promise<{ success: bo
  */
 export async function actualizarTransaccionFinanciera(
   id: string,
-  t: Omit<TransaccionFinanciera, "id" | "created_at">
+  t: Partial<Omit<TransaccionFinanciera, "id" | "created_at">>
 ): Promise<{ success: boolean; message: string }> {
   await requireAdministrador();
   const sb = supabaseServidor();
