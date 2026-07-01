@@ -522,9 +522,44 @@ export async function obtenerTrazabilidadLead(leadPhoneOrId: string) {
 
   if (errAc) throw new Error(errAc.message);
 
+  let historial = acciones || [];
+
+  const tieneAutoReparado = historial.some(
+    (ac) => ac.contenido_enviado && ac.contenido_enviado.includes("Auto-reparado")
+  );
+
+  if (tieneAutoReparado && enrollment.phone) {
+    try {
+      const { variantesTelefono } = await import("@/lib/telefono");
+      const { data: mensajes } = await sb
+        .from("mensajes_whatsapp")
+        .select("texto, created_at")
+        .in("telefono", variantesTelefono(enrollment.phone))
+        .eq("direccion", "out")
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      if (mensajes && mensajes.length > 0) {
+        const primerMensajeEnviado = mensajes[0].texto;
+        historial = historial.map((ac) => {
+          if (ac.contenido_enviado && ac.contenido_enviado.includes("Auto-reparado")) {
+            return {
+              ...ac,
+              contenido_enviado: primerMensajeEnviado,
+              notas_asesor: null, // Omitir la nota técnica para que se vea más limpio
+            };
+          }
+          return ac;
+        });
+      }
+    } catch (err) {
+      console.error("Error al enriquecer trazabilidad auto-reparada:", err);
+    }
+  }
+
   return {
     enrollment,
-    historial: acciones || [],
+    historial,
   };
 }
 
