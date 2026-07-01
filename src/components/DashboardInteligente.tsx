@@ -20,6 +20,7 @@ import {
   obtenerMetricasOrganicas,
   guardarMetricaOrganica,
   eliminarMetricaOrganica,
+  sincronizarMetricasOrganicasMeta,
   type MarketingMetric,
   type TransaccionFinanciera,
   type AIInsight,
@@ -247,10 +248,13 @@ export function DashboardInteligente() {
 
   // Estados para sincronización de historial
   const [showSyncModal, setShowSyncModal] = useState(false);
-  const [syncTab, setSyncTab] = useState<"facebook" | "tiktok">("facebook");
+  const [syncTab, setSyncTab] = useState<"facebook" | "tiktok" | "organico">("facebook");
   const [sincronizandoHistorial, setSincronizandoHistorial] = useState(false);
+  const [sincronizandoOrganico, setSincronizandoOrganico] = useState(false);
   const [fbToken, setFbToken] = useState("");
   const [fbAdAccountId, setFbAdAccountId] = useState("1269333735358072");
+  const [fbPageId, setFbPageId] = useState("");
+  const [diasOrganicos, setDiasOrganicos] = useState(14);
   const [fbFechaInicio, setFbFechaInicio] = useState("2026-05-01");
 
   // Credenciales de TikTok
@@ -479,6 +483,32 @@ export function DashboardInteligente() {
       alert(`Error en el servidor: ${err.message}`);
     } finally {
       setSincronizandoTikTok(false);
+    }
+  };
+
+  // Handler para ejecutar la sincronización orgánica de Facebook/Instagram desde Meta Graph API
+  const handleSincronizarOrganicoMeta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fbToken.trim() || !fbPageId.trim()) {
+      alert("Por favor introduce el Token de Acceso y el ID de Página de Facebook.");
+      return;
+    }
+    setSincronizandoOrganico(true);
+    try {
+      const res = await sincronizarMetricasOrganicasMeta(fbToken, fbPageId, diasOrganicos);
+      if (res.success) {
+        alert(res.message);
+        setShowSyncModal(false);
+        // Recargar datos en la UI
+        const org = await obtenerMetricasOrganicas(fechasCalculadas.fechaInicio, fechasCalculadas.fechaFin);
+        setMetricasOrganicas(org);
+      } else {
+        alert(`Fallo en la sincronización orgánica: ${res.message}`);
+      }
+    } catch (err: any) {
+      alert(`Error en el servidor: ${err.message}`);
+    } finally {
+      setSincronizandoOrganico(false);
     }
   };
 
@@ -2858,24 +2888,35 @@ export function DashboardInteligente() {
               <button
                 type="button"
                 onClick={() => setSyncTab("facebook")}
-                className={`w-1/2 pb-2 text-center transition ${
+                className={`w-1/3 pb-2 text-center transition ${
                   syncTab === "facebook"
                     ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
                     : "text-slate-400 hover:text-slate-600"
                 }`}
               >
-                🔵 Meta (Facebook / Instagram)
+                🔵 Meta Ads
               </button>
               <button
                 type="button"
                 onClick={() => setSyncTab("tiktok")}
-                className={`w-1/2 pb-2 text-center transition ${
+                className={`w-1/3 pb-2 text-center transition ${
                   syncTab === "tiktok"
                     ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
                     : "text-slate-400 hover:text-slate-600"
                 }`}
               >
                 🎵 TikTok Ads
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncTab("organico")}
+                className={`w-1/3 pb-2 text-center transition ${
+                  syncTab === "organico"
+                    ? "border-b-2 border-[#2D4A2B] text-[#2D4A2B] font-bold"
+                    : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                📈 Orgánico (Facebook/IG)
               </button>
             </div>
 
@@ -3010,6 +3051,81 @@ export function DashboardInteligente() {
                     className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {sincronizandoTikTok ? (
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent font-bold"></div>
+                        Sincronizando...
+                      </>
+                    ) : (
+                      "Iniciar"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {syncTab === "organico" && (
+              <form onSubmit={handleSincronizarOrganicoMeta} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Meta Access Token (con permisos read_insights, instagram_basic)
+                  </label>
+                  <textarea
+                    value={fbToken}
+                    onChange={(e) => setFbToken(e.target.value)}
+                    placeholder="Escribe o pega tu token de acceso de Facebook Graph API..."
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none min-h-[60px]"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Facebook Page ID
+                    </label>
+                    <input
+                      type="text"
+                      value={fbPageId}
+                      onChange={(e) => setFbPageId(e.target.value)}
+                      placeholder="Ej: 1029384756"
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Días a sincronizar
+                    </label>
+                    <select
+                      value={diasOrganicos}
+                      onChange={(e) => setDiasOrganicos(Number(e.target.value))}
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-semibold text-slate-700 bg-white"
+                    >
+                      <option value={7}>Últimos 7 días</option>
+                      <option value={14}>Últimos 14 días</option>
+                      <option value={30}>Últimos 30 días</option>
+                    </select>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
+                  ⚠️ Esta sincronización busca de manera automática la cuenta de Instagram Business vinculada a tu página de Facebook para descargar las estadísticas acumuladas de ambas redes.
+                </p>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncModal(false)}
+                    className="w-1/2 rounded-xl border border-slate-200 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sincronizandoOrganico}
+                    className="w-1/2 rounded-xl bg-[#2D4A2B] py-2.5 text-xs font-semibold text-[#F5F1E8] hover:bg-[#5C7A52] transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sincronizandoOrganico ? (
                       <>
                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent font-bold"></div>
                         Sincronizando...

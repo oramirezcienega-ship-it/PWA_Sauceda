@@ -1153,3 +1153,181 @@ export async function eliminarMetricaOrganica(
     return { success: false, message: err.message || "Error al eliminar el registro orgánico." };
   }
 }
+
+/**
+ * Sincroniza métricas orgánicas desde la API Graph de Meta para Facebook e Instagram.
+ */
+export async function sincronizarMetricasOrganicasMeta(
+  accessToken: string,
+  pageId: string,
+  diasAtras: number = 14
+): Promise<{ success: boolean; message: string; count: number }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Obtener datos de la página e ID de Instagram
+    const resPagina = await fetch(
+      `https://graph.facebook.com/v20.0/${pageId}?fields=fan_count,followers_count,instagram_business_account&access_token=${accessToken}`
+    );
+    if (!resPagina.ok) {
+      const errTxt = await resPagina.text();
+      throw new Error(`Error al consultar la página de Facebook: ${resPagina.status} - ${errTxt}`);
+    }
+    const datosPagina = await resPagina.json();
+    const fbLikes = Number(datosPagina.fan_count || 0);
+    const fbFollowers = Number(datosPagina.followers_count || fbLikes);
+    const igAccount = datosPagina.instagram_business_account;
+
+    let igFollowers = 0;
+    let igId = "";
+    if (igAccount && igAccount.id) {
+      igId = igAccount.id;
+      const resIg = await fetch(
+        `https://graph.facebook.com/v20.0/${igId}?fields=followers_count&access_token=${accessToken}`
+      );
+      if (resIg.ok) {
+        const datosIg = await resIg.json();
+        igFollowers = Number(datosIg.followers_count || 0);
+      }
+    }
+
+    // Calcular fechas since/until
+    const hoy = new Date();
+    const startOffset = new Date();
+    startOffset.setDate(hoy.getDate() - diasAtras);
+    const sinceStr = startOffset.toISOString().split("T")[0];
+    const untilStr = hoy.toISOString().split("T")[0];
+
+    // 2. Obtener Insights diarios de la Página de Facebook
+    const resFbInsights = await fetch(
+      `https://graph.facebook.com/v20.0/${pageId}/insights?metric=page_impressions,page_post_engagements&period=day&since=${sinceStr}&until=${untilStr}&access_token=${accessToken}`
+    );
+    let fbImpressionsMap = new Map<string, number>();
+    let fbEngagementsMap = new Map<string, number>();
+
+    if (resFbInsights.ok) {
+      const json = await resFbInsights.json();
+      const metrics = json.data || [];
+      const impressionsObj = metrics.find((m: any) => m.name === "page_impressions");
+      const engagementsObj = metrics.find((m: any) => m.name === "page_post_engagements");
+
+      if (impressionsObj) {
+        (impressionsObj.values || []).forEach((v: any) => {
+          const date = v.end_time.split("T")[0];
+          fbImpressionsMap.set(date, Number(v.value || 0));
+        });
+      }
+      if (engagementsObj) {
+        (engagementsObj.values || []).forEach((v: any) => {
+          const date = v.end_time.split("T")[0];
+          fbEngagementsMap.set(date, Number(v.value || 0));
+        });
+      }
+    }
+
+    // 3. Obtener posts publicados para contar publicaciones por día
+    const resFbPosts = await fetch(
+      `https://graph.facebook.com/v20.0/${pageId}/published_posts?fields=created_time&limit=100&access_token=${accessToken}`
+    );
+    let fbPostsMap = new Map<string, number>();
+    if (resFbPosts.ok) {
+      const json = await resFbPosts.json();
+      (json.data || []).forEach((p: any) => {
+        const date = p.created_time.split("T")[0];
+        fbPostsMap.set(date, (fbPostsMap.get(date) || 0) + 1);
+      });
+    }
+
+    // 4. Si hay Instagram, obtener Insights e imágenes para contar publicaciones
+    let igImpressionsMap = new Map<string, number>();
+    let igEngagementsMap = new Map<string, number>();
+    let igPostsMap = new Map<string, number>();
+
+    if (igId) {
+      // Intentar obtener impressions de Instagram
+      const resIgInsights = await fetch(
+        `https://graph.facebook.com/v20.0/${igId}/insights?metric=impressions&period=day&since=${sinceStr}&until=${untilStr}&access_token=${accessToken}`
+      );
+      if (resIgInsights.ok) {
+        const json = await resIgInsights.json();
+        const impressionsObj = (json.data || []).find((m: any) => m.name === "impressions");
+        if (impressionsObj) {
+          (impressionsObj.values || []).forEach((v: any) => {
+            const date = v.end_time.split("T")[0];
+            igImpressionsMap.set(date, Number(v.value || 0));
+          });
+        }
+      }
+
+      // Obtener posts e interacciones (likes + comments)
+      const resIgMedia = await fetch(
+        `https://graph.facebook.com/v20.0/${igId}/media?fields=timestamp,like_count,comments_count&limit=100&access_token=${accessToken}`
+      );
+      if (resIgMedia.ok) {
+        const json = await resIgMedia.json();
+        (json.data || []).forEach((m: any) => {
+          const date = m.timestamp.split("T")[0];
+          igPostsMap.set(date, (igPostsMap.get(date) || 0) + 1);
+          const likes = Number(m.like_count || 0);
+          const comments = Number(m.comments_count || 0);
+          igEngagementsMap.set(date, (igEngagementsMap.get(date) || 0) + likes + comments);
+        });
+      }
+    }
+
+    // 5. Preparar filas para guardar en Supabase (upsert)
+    const filasUpsert: any[] = [];
+    const listaFechas: string[] = [];
+    for (let i = 0; i <= diasAtras; i++) {
+      const d = new Date();
+      d.setDate(hoy.getDate() - i);
+      listaFechas.push(d.toISOString().split("T")[0]);
+    }
+
+    listaFechas.forEach(date => {
+      // Fila Facebook
+      filasUpsert.push({
+        fecha: date,
+        plataforma: "facebook",
+        seguidores: fbFollowers,
+        publicaciones: fbPostsMap.get(date) || 0,
+        visualizaciones: fbImpressionsMap.get(date) || 0,
+        interacciones: fbEngagementsMap.get(date) || 0
+      });
+
+      // Fila Instagram
+      if (igId) {
+        filasUpsert.push({
+          fecha: date,
+          plataforma: "instagram",
+          seguidores: igFollowers,
+          publicaciones: igPostsMap.get(date) || 0,
+          visualizaciones: igImpressionsMap.get(date) || 0,
+          interacciones: igEngagementsMap.get(date) || 0
+        });
+      }
+    });
+
+    if (filasUpsert.length > 0) {
+      const { error } = await sb
+        .from("metricas_organicas")
+        .upsert(filasUpsert, { onConflict: "fecha,plataforma" });
+
+      if (error) throw error;
+    }
+
+    return {
+      success: true,
+      message: `Sincronización orgánica completada. Se procesaron ${filasUpsert.length} registros de los últimos ${diasAtras} días.`,
+      count: filasUpsert.length
+    };
+  } catch (err: any) {
+    console.error("Error al sincronizar métricas orgánicas de Meta:", err);
+    return {
+      success: false,
+      message: err.message || "Error desconocido al consultar la API de Meta.",
+      count: 0
+    };
+  }
+}
