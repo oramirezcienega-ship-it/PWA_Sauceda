@@ -371,3 +371,82 @@ export async function registrarLeadWhatsApp(
   // Respuesta automática del agente de IA al primer mensaje (si está activo).
   if (iaOn && nuevoMensaje) await responderConIA(sb, { telefono, expedienteId: id });
 }
+
+/**
+ * Procesa actualizaciones de estado de mensajes enviados (sent, delivered, read, failed)
+ * enviadas por Meta vía webhook.
+ */
+export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
+  const sb = supabaseServidor();
+  
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const value = change.value ?? {};
+      for (const status of value.statuses ?? []) {
+        const waMessageId = status.id; // wamid.HBgLNTI...
+        const estadoMeta = status.status; // sent, delivered, read, failed
+        const destinatario = status.recipient_id; // teléfono del cliente
+        
+        let nuevoEstado = "enviado";
+        if (estadoMeta === "delivered") nuevoEstado = "delivered";
+        if (estadoMeta === "read") nuevoEstado = "read";
+        if (estadoMeta === "failed") nuevoEstado = "error";
+
+        // 1. Actualizar en mensajes_whatsapp
+        const { data: msgActualizado } = await sb
+          .from("mensajes_whatsapp")
+          .update({ estado: nuevoEstado })
+          .eq("wa_message_id", waMessageId)
+          .select("telefono, expediente_id, prospecto_id")
+          .maybeSingle();
+
+        // 2. Si falló y hay código de error, extraer el detalle
+        let errorTxt = "";
+        if (estadoMeta === "failed" && status.errors && status.errors.length > 0) {
+          errorTxt = `Meta Error ${status.errors[0].code}: ${status.errors[0].title || status.errors[0].message}`;
+        }
+
+        // 3. Buscar enrolamiento activo en secuencias para este teléfono
+        const phone = destinatario || msgActualizado?.telefono;
+        if (phone) {
+          const { data: enrollments } = await sb
+            .from("sequence_enrollments")
+            .select("id")
+            .in("phone", variantesTelefono(phone))
+            .eq("status", "activo");
+
+          if (enrollments && enrollments.length > 0) {
+            for (const en of enrollments) {
+              // Buscar la última acción de whatsapp de esta secuencia
+              const { data: ultimaAccion } = await sb
+                .from("sequence_actions")
+                .select("id")
+                .eq("enrollment_id", en.id)
+                .eq("canal", "whatsapp")
+                .order("enviado_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (ultimaAccion) {
+                let statusSecuencia = "enviado";
+                if (estadoMeta === "delivered") statusSecuencia = "entregado";
+                if (estadoMeta === "read") statusSecuencia = "respondido";
+                if (estadoMeta === "failed") statusSecuencia = "fallido";
+
+                await sb
+                  .from("sequence_actions")
+                  .update({
+                    status: statusSecuencia,
+                    ...(estadoMeta === "failed" ? { error_detalle: errorTxt || "Bloqueado por Meta (fuera de 24h)" } : {}),
+                    ...(estadoMeta === "read" ? { respondido_at: new Date().toISOString() } : {}),
+                  })
+                  .eq("id", ultimaAccion.id);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

@@ -365,6 +365,7 @@ export async function responderConversacion(
     prospecto_id: prospectoId,
     estado: r.ok ? "enviado" : "error",
     agente,
+    wa_message_id: r.messageId || null,
   });
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
@@ -431,6 +432,7 @@ export async function responderConPlantilla(
     prospecto_id: prospectoId,
     estado: r.ok ? "enviado" : "error",
     agente,
+    wa_message_id: r.messageId || null,
   });
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {

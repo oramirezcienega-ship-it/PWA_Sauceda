@@ -111,6 +111,7 @@ export async function orquestador(): Promise<{
           let exito = false;
           let errorDetalle = "";
           let contenidoEnviado = "";
+          let waMessageId: string | undefined = undefined;
 
           // Mapear y sustituir variables {nombre} y {fraccionamiento}
           const mensajeFormateado = await formatearMensaje(sb, step.mensaje || "", enrollment);
@@ -152,16 +153,19 @@ export async function orquestador(): Promise<{
                   );
                   exito = waRes.ok;
                   errorDetalle = waRes.error || "";
+                  if (waRes.ok) waMessageId = waRes.messageId;
                   contenidoEnviado = `[Plantilla: ${plantillaNombre}] ${parametros.join(" | ")}`;
                 } else {
                   const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
                   exito = waRes.ok;
                   errorDetalle = waRes.error || "";
+                  if (waRes.ok) waMessageId = waRes.messageId;
                 }
               } else {
                 const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
                 exito = waRes.ok;
                 errorDetalle = waRes.error || "";
+                if (waRes.ok) waMessageId = waRes.messageId;
               }
               break;
 
@@ -264,6 +268,7 @@ export async function orquestador(): Promise<{
                     prospecto_id: enrollment.prospecto_id || idData?.prospecto_id || null,
                     estado: "enviado",
                     agente: "Sistema (Secuencia)",
+                    wa_message_id: waMessageId || null,
                   });
                 } catch (dbErr) {
                   console.error("Error al registrar mensaje de secuencia en mensajes_whatsapp:", dbErr);

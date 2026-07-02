@@ -28,7 +28,7 @@ function normalizarTelefono(tel: string): string {
 export async function enviarWhatsAppTexto(
   telefono: string,
   texto: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   try {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -62,14 +62,14 @@ export async function enviarWhatsAppTexto(
         }),
       },
     );
+    const bodyText = await res.text();
     if (!res.ok) {
-      const detalle = await res.text();
-      console.error("WhatsApp no enviado:", res.status, detalle);
+      console.error("WhatsApp no enviado:", res.status, bodyText);
       // Extrae el mensaje/código reales de Meta para poder diagnosticar.
       let metaMsg = "";
       let metaCode: number | undefined;
       try {
-        const j = JSON.parse(detalle);
+        const j = JSON.parse(bodyText);
         metaMsg = j?.error?.message ?? "";
         metaCode = j?.error?.code;
       } catch {
@@ -80,7 +80,14 @@ export async function enviarWhatsAppTexto(
         : `Meta respondió con error ${res.status}.`;
       return { ok: false, error: detalleTxt };
     }
-    return { ok: true };
+    let messageId: string | undefined;
+    try {
+      const j = JSON.parse(bodyText);
+      messageId = j?.messages?.[0]?.id;
+    } catch {
+      // Ignorar
+    }
+    return { ok: true, messageId };
   } catch (err) {
     console.error("Error al enviar WhatsApp:", err);
     return { ok: false, error: "Error de red al enviar el WhatsApp." };
@@ -101,7 +108,7 @@ export async function enviarWhatsAppPlantilla(
   idioma: string,
   parametrosCuerpo: string[] = [],
   urlBotonParam?: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   try {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -156,12 +163,12 @@ export async function enviarWhatsAppPlantilla(
         }),
       },
     );
+    const bodyText = await res.text();
     if (!res.ok) {
-      const detalle = await res.text();
-      console.error("WhatsApp (plantilla) no enviado:", res.status, detalle);
+      console.error("WhatsApp (plantilla) no enviado:", res.status, bodyText);
       let metaMsg = "";
       try {
-        metaMsg = JSON.parse(detalle)?.error?.message ?? "";
+        metaMsg = JSON.parse(bodyText)?.error?.message ?? "";
       } catch {
         // respuesta no-JSON
       }
@@ -170,7 +177,14 @@ export async function enviarWhatsAppPlantilla(
         error: metaMsg || `Meta respondió con error ${res.status}.`,
       };
     }
-    return { ok: true };
+    let messageId: string | undefined;
+    try {
+      const j = JSON.parse(bodyText);
+      messageId = j?.messages?.[0]?.id;
+    } catch {
+      // Ignorar
+    }
+    return { ok: true, messageId };
   } catch (err) {
     console.error("Error al enviar WhatsApp (plantilla):", err);
     return { ok: false, error: "Error de red al enviar el WhatsApp." };

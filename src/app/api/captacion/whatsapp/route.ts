@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import {
   extraerMensajes,
   registrarLeadWhatsApp,
+  procesarEstadosWhatsApp,
 } from "@/features/captacion/whatsapp";
 
 // Webhook de captación de WhatsApp (Meta Cloud API).
@@ -55,6 +56,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const payload = JSON.parse(raw);
+
+    // Procesar actualizaciones de estado de envío (delivered, read, failed)
+    await procesarEstadosWhatsApp(payload);
+
     const mensajes = extraerMensajes(payload);
     for (const mensaje of mensajes) {
       await registrarLeadWhatsApp(mensaje);
