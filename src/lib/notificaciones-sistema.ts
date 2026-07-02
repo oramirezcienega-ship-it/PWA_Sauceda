@@ -228,6 +228,10 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       }
 
       const promesasWa = perfiles.map(async (p) => {
+        // Restringir notificaciones automáticas de nuevos leads únicamente a Oscar / rol admin
+        const esOscarOAdmin = p.nombre === "Oscar" || p.rol === "admin";
+        if (!esOscarOAdmin) return;
+
         if (!p.telefono || !p.telefono.trim()) {
           console.warn(`El asesor/admin ${p.nombre} no tiene teléfono configurado para notificaciones de WhatsApp.`);
           return;
@@ -255,3 +259,201 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     console.error("Fallo general en notificarNuevoLead:", err);
   }
 }
+
+/**
+ * Notifica a un asesor específico cuando se le asigna un expediente.
+ * Reutiliza el mismo formato de plantilla para mayor simplicidad y consistencia.
+ */
+export async function notificarAsignacionAsesor(
+  expedienteId: string,
+  asesorId: string
+): Promise<void> {
+  try {
+    const sb = supabaseServidor();
+
+    // 1. Obtener la información del expediente
+    const { data: exp, error: errExp } = await sb
+      .from("expedientes")
+      .select("id, cliente, telefono, valor_estimado, saldo_deuda, tipo_credito, fraccionamiento, situacion, prospecto_id, prospectos(origen)")
+      .eq("id", expedienteId)
+      .maybeSingle();
+
+    if (errExp || !exp) {
+      console.error("Error al buscar expediente para notificar asignación:", errExp?.message);
+      return;
+    }
+
+    // 2. Obtener el perfil del asesor asignado
+    const { data: asesor, error: errAsesor } = await sb
+      .from("perfiles")
+      .select("id, nombre, telefono, activo")
+      .eq("id", asesorId)
+      .maybeSingle();
+
+    if (errAsesor || !asesor || !asesor.activo) {
+      console.warn("No se encontró el asesor asignado o está inactivo.");
+      return;
+    }
+
+    if (!asesor.telefono || !asesor.telefono.trim()) {
+      console.warn(`El asesor ${asesor.nombre} no tiene teléfono configurado.`);
+      return;
+    }
+
+    const d = exp as unknown as {
+      id: string;
+      cliente: string;
+      telefono?: string;
+      valor_estimado?: number;
+      saldo_deuda?: number;
+      tipo_credito?: string | null;
+      fraccionamiento?: string | null;
+      situacion: string;
+      prospecto_id: string | null;
+      prospectos?: { origen: string } | null;
+    };
+    const cliente = `${d.cliente || "Prospecto"}`;
+    const origen = d.prospectos?.origen || "CRM";
+    const situacion = d.situacion || "Asignación de expediente.";
+    const CRM_URL = process.env.SITE_URL || "https://app.saucedamx.com";
+
+    const telefonoCliente = d.telefono ? d.telefono.trim() : "";
+    const tipoCredito = d.tipo_credito || "";
+    const valorEst = d.valor_estimado || 0;
+    const saldoDeu = d.saldo_deuda || 0;
+    const fraccionamiento = d.fraccionamiento && d.fraccionamiento !== "Por definir" ? d.fraccionamiento : "";
+
+    // Construir parámetros planos (sin saltos de línea ni tabuladores para evitar el error 132018 de Meta)
+    const paramClienteFlat = `Nombre: ${cliente} · Teléfono: ${telefonoCliente || "No registrado"}`;
+
+    const partesOrigenFlat = [`Canal: ${origen}`];
+    if (tipoCredito) partesOrigenFlat.push(`Crédito: ${tipoCredito}`);
+    if (fraccionamiento) partesOrigenFlat.push(`Zona: ${fraccionamiento}`);
+    const paramOrigenFlat = partesOrigenFlat.join(" · ");
+
+    const partesDetallesFlat = [];
+    if (valorEst > 0) partesDetallesFlat.push(`Valor: $${valorEst.toLocaleString()}`);
+    if (saldoDeu > 0) partesDetallesFlat.push(`Deuda: $${saldoDeu.toLocaleString()}`);
+    const detFinancierosFlat = partesDetallesFlat.length > 0 ? partesDetallesFlat.join(" · ") + " · " : "";
+    const paramDetallesFlat = `${detFinancierosFlat}Detalles: ${situacion.slice(0, 100).replace(/[\r\n\t]/g, " ")}`;
+
+    // 3. Notificación de WhatsApp
+    try {
+      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead_v2";
+      const plantillaIdioma = process.env.WHATSAPP_TEMPLATE_AGENTE_LANG || "es";
+
+      let bodyParamCount = 3;
+      let tieneBotonDinamico = false;
+      let urlPatternSuffix: "id" | "path" | "complete" = "path";
+      let plantillaIdiomaReal = plantillaIdioma;
+
+      const rTemplates = await listarPlantillasAprobadas();
+      if (rTemplates.ok && rTemplates.plantillas) {
+        let templateInfo = rTemplates.plantillas.find(
+          (t) => t.nombre === plantillaNombre && t.idioma === plantillaIdioma
+        );
+        if (!templateInfo) {
+          templateInfo = rTemplates.plantillas.find((t) => t.nombre === plantillaNombre);
+        }
+        if (templateInfo) {
+          plantillaIdiomaReal = templateInfo.idioma;
+          if (templateInfo.components) {
+            const bodyComp = templateInfo.components.find((c: any) => c.type === "BODY");
+            if (bodyComp && bodyComp.text) {
+              const matches = bodyComp.text.match(/\{\{\d+\}\}/g);
+              bodyParamCount = matches ? new Set(matches).size : 0;
+            }
+            const buttonComp = templateInfo.components.find((c: any) => c.type === "BUTTONS");
+            if (buttonComp && buttonComp.buttons) {
+              const urlBtn = buttonComp.buttons.find(
+                (b: any) => b.type === "URL" && b.url && b.url.includes("{{1}}")
+              );
+              if (urlBtn) {
+                tieneBotonDinamico = true;
+                const urlPattern = urlBtn.url;
+                if (urlPattern.endsWith("/expediente/{{1}}")) {
+                  urlPatternSuffix = "id";
+                } else if (urlPattern.endsWith("/{{1}}")) {
+                  urlPatternSuffix = "path";
+                } else {
+                  urlPatternSuffix = "complete";
+                }
+              }
+            }
+          }
+        }
+      }
+
+      let parametrosCuerpo: string[] = [];
+      let urlBotonParam: string | undefined = undefined;
+
+      if (bodyParamCount === 8) {
+        parametrosCuerpo = [
+          cliente,
+          telefonoCliente || "No registrado",
+          origen,
+          tipoCredito || "No definido",
+          fraccionamiento || "No definida",
+          valorEst > 0 ? `$${valorEst.toLocaleString()}` : "No especificado",
+          saldoDeu > 0 ? `$${saldoDeu.toLocaleString()}` : "No especificada",
+          situacion.slice(0, 200).replace(/[\r\n\t]/g, " ")
+        ];
+      } else {
+        if (tieneBotonDinamico) {
+          // Mapear cuerpo
+          if (bodyParamCount >= 1) parametrosCuerpo.push(paramClienteFlat);
+          if (bodyParamCount >= 2) parametrosCuerpo.push(paramOrigenFlat);
+          if (bodyParamCount >= 3) parametrosCuerpo.push(paramDetallesFlat);
+          if (bodyParamCount >= 4) parametrosCuerpo.push(`${CRM_URL}/expediente/${d.id}`);
+          while (parametrosCuerpo.length < bodyParamCount) {
+            parametrosCuerpo.push("");
+          }
+
+          // Mapear botón dinámico
+          if (urlPatternSuffix === "id") {
+            urlBotonParam = d.id;
+          } else if (urlPatternSuffix === "path") {
+            urlBotonParam = `expediente/${d.id}`;
+          } else {
+            urlBotonParam = `${CRM_URL}/expediente/${d.id}`;
+          }
+        } else {
+          // Mapeo plano heredado / fallback
+          if (bodyParamCount >= 4) {
+            parametrosCuerpo = [
+              paramClienteFlat,
+              paramOrigenFlat,
+              paramDetallesFlat,
+              `${CRM_URL}/expediente/${d.id}`,
+            ];
+          } else {
+            parametrosCuerpo = [
+              paramClienteFlat,
+              paramOrigenFlat,
+              paramDetallesFlat,
+            ];
+          }
+        }
+      }
+
+      const resWa = await enviarWhatsAppPlantilla(
+        asesor.telefono,
+        plantillaNombre,
+        plantillaIdiomaReal,
+        parametrosCuerpo,
+        urlBotonParam
+      );
+
+      if (!resWa.ok) {
+        console.error(`Error de WhatsApp al notificar asignación a ${asesor.nombre}:`, resWa.error);
+      } else {
+        console.log(`WhatsApp de asignación enviado exitosamente a ${asesor.nombre}`);
+      }
+    } catch (err) {
+      console.error("Error al enviar WhatsApp de asignación:", err);
+    }
+  } catch (err) {
+    console.error("Fallo general en notificarAsignacionAsesor:", err);
+  }
+}
+

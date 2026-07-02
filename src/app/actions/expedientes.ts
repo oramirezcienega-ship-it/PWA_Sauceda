@@ -201,6 +201,13 @@ export async function crearExpediente(
     expedienteId: id,
     prospectoId: datos.prospectoId,
   });
+
+  // Notificar al asesor si fue asignado de inicio
+  if (datos.asesorId) {
+    const { notificarAsignacionAsesor } = await import("@/lib/notificaciones-sistema");
+    void notificarAsignacionAsesor(id, datos.asesorId);
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 
@@ -275,6 +282,12 @@ export async function actualizarExpediente(
   if (antes?.prospecto_id && antes.prospecto_id !== datos.prospectoId) {
     const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
     await sincronizarEstatusProspecto(sb, antes.prospecto_id);
+  }
+
+  // Notificar al asesor si cambió o se asignó por primera vez
+  if (cambios.includes("asesor_id") && datos.asesorId) {
+    const { notificarAsignacionAsesor } = await import("@/lib/notificaciones-sistema");
+    void notificarAsignacionAsesor(id, datos.asesorId);
   }
 
   return aExpediente(data as FilaExpediente);
