@@ -20,7 +20,7 @@ export default async function PaginaTablero() {
     <main className="min-h-screen pb-10">
       <Encabezado />
 
-      <div className="mx-auto max-w-6xl px-4 pt-5">
+      <div className="mx-auto max-w-[1700px] px-4 pt-5">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-titular text-3xl font-semibold text-verde-profundo">

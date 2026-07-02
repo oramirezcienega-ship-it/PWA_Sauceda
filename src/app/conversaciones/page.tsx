@@ -8,7 +8,7 @@ export default function PaginaConversaciones() {
   return (
     <main className="min-h-screen pb-6">
       <Encabezado />
-      <div className="mx-auto max-w-6xl px-4 pt-5">
+      <div className="mx-auto max-w-[1700px] px-4 pt-5">
         <div className="mb-3">
           <h1 className="font-titular text-xl sm:text-2xl md:text-3xl font-semibold text-verde-profundo">
             Conversaciones

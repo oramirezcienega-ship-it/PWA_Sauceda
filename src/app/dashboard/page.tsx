@@ -41,7 +41,7 @@ export default async function PaginaDashboard() {
     return (
       <main className="min-h-screen pb-10 bg-crema/10">
         <Encabezado />
-        <div className="mx-auto max-w-6xl px-4 pt-5">
+        <div className="mx-auto max-w-[1700px] px-4 pt-5">
           <div className="mb-4 flex flex-col gap-2">
             {/* Título y Botón en la misma fila */}
             <div className="flex items-center justify-between gap-3">
