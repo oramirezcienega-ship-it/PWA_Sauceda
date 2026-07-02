@@ -175,6 +175,12 @@ const RESPUESTAS_RAPIDAS: RespuestaRapida[] = [
     titulo: "Seguimiento de Documentos",
     texto: "Hola, te escribo para dar seguimiento a los documentos que teníamos pendientes para tu trámite. Quedo al pendiente si tienes alguna duda.",
     categoria: "Seguimiento"
+  },
+  {
+    atajo: "inspeccion",
+    titulo: "Agendar Inspección Física",
+    texto: "Hola, te escribo de SAUCEDA Bienes Raíces. Estamos listos para coordinar la inspección física de tu propiedad. ¿Qué día de esta semana te queda mejor para recibir al inspector?",
+    categoria: "Seguimiento"
   }
 ];
 
