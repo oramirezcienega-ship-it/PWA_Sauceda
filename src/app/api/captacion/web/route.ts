@@ -59,9 +59,9 @@ export async function GET(request: NextRequest) {
         "notificacion_nuevo_lead_v2",
         "es_MX",
         [
-          "👤 *Contacto:*\n• Nombre: Prueba Debug\n• Teléfono: " + telPrueba,
-          "📍 *Canal e Ingreso:*\n• Canal: debug-api",
-          "💰 *Datos Financieros:*\n• Valor Propiedad: $1,000,000\n\n💬 *Detalles:*\nPrueba de depuración."
+          "Nombre: Prueba Debug · Teléfono: " + telPrueba,
+          "Canal: debug-api · Crédito: Infonavit · Zona: Las Brisas",
+          "Valor: $1,000,000 · Detalles: Prueba de depuración sin saltos de linea."
         ]
       );
     }

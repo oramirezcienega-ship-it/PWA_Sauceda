@@ -48,27 +48,19 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     const saldoDeu = d.saldo_deuda || 0;
     const fraccionamiento = d.fraccionamiento && d.fraccionamiento !== "Por definir" ? d.fraccionamiento : "";
 
-    // Construir parámetros ricos con emojis, negritas y saltos de línea para mejor legibilidad
-    const paramCliente = `👤 *Contacto:*
-• Nombre: ${cliente}
-• Teléfono: ${telefonoCliente || "No registrado"}`;
+    // Construir parámetros planos (sin saltos de línea ni tabuladores para evitar el error 132018 de Meta)
+    const paramClienteFlat = `Nombre: ${cliente} · Teléfono: ${telefonoCliente || "No registrado"}`;
 
-    const partesOrigen = [`• Canal: ${origen}`];
-    if (tipoCredito) partesOrigen.push(`• Crédito: ${tipoCredito}`);
-    if (fraccionamiento) partesOrigen.push(`• Zona: ${fraccionamiento}`);
-    const paramOrigen = `📍 *Canal e Ingreso:*
-${partesOrigen.join("\n")}`;
+    const partesOrigenFlat = [`Canal: ${origen}`];
+    if (tipoCredito) partesOrigenFlat.push(`Crédito: ${tipoCredito}`);
+    if (fraccionamiento) partesOrigenFlat.push(`Zona: ${fraccionamiento}`);
+    const paramOrigenFlat = partesOrigenFlat.join(" · ");
 
-    const partesDetalles = [];
-    if (valorEst > 0) partesDetalles.push(`• Valor Propiedad: $${valorEst.toLocaleString()}`);
-    if (saldoDeu > 0) partesDetalles.push(`• Adeudo/Deuda: $${saldoDeu.toLocaleString()}`);
-    
-    const detFinancieros = partesDetalles.length > 0 
-      ? `💰 *Datos Financieros:*\n${partesDetalles.join("\n")}\n\n` 
-      : "";
-
-    const paramDetalles = `${detFinancieros}💬 *Detalles:*
-${situacion.slice(0, 150)}`;
+    const partesDetallesFlat = [];
+    if (valorEst > 0) partesDetallesFlat.push(`Valor: $${valorEst.toLocaleString()}`);
+    if (saldoDeu > 0) partesDetallesFlat.push(`Deuda: $${saldoDeu.toLocaleString()}`);
+    const detFinancierosFlat = partesDetallesFlat.length > 0 ? partesDetallesFlat.join(" · ") + " · " : "";
+    const paramDetallesFlat = `${detFinancierosFlat}Detalles: ${situacion.slice(0, 100).replace(/[\r\n\t]/g, " ")}`;
 
     // 2. Obtener perfiles de usuarios activos
     const { data: perfiles, error: errPerf } = await sb
@@ -185,39 +177,53 @@ ${situacion.slice(0, 150)}`;
       let parametrosCuerpo: string[] = [];
       let urlBotonParam: string | undefined = undefined;
 
-      if (tieneBotonDinamico) {
-        // Mapear cuerpo
-        if (bodyParamCount >= 1) parametrosCuerpo.push(paramCliente);
-        if (bodyParamCount >= 2) parametrosCuerpo.push(paramOrigen);
-        if (bodyParamCount >= 3) parametrosCuerpo.push(paramDetalles);
-        if (bodyParamCount >= 4) parametrosCuerpo.push(`${CRM_URL}/expediente/${d.id}`);
-        while (parametrosCuerpo.length < bodyParamCount) {
-          parametrosCuerpo.push("");
-        }
-
-        // Mapear botón dinámico
-        if (urlPatternSuffix === "id") {
-          urlBotonParam = d.id;
-        } else if (urlPatternSuffix === "path") {
-          urlBotonParam = `expediente/${d.id}`;
-        } else {
-          urlBotonParam = `${CRM_URL}/expediente/${d.id}`;
-        }
+      if (bodyParamCount === 8) {
+        // Formato para plantilla con 8 variables estructuradas (sin saltos de línea ni tabuladores en parámetros)
+        parametrosCuerpo = [
+          cliente,
+          telefonoCliente || "No registrado",
+          origen,
+          tipoCredito || "No definido",
+          fraccionamiento || "No definida",
+          valorEst > 0 ? `$${valorEst.toLocaleString()}` : "No especificado",
+          saldoDeu > 0 ? `$${saldoDeu.toLocaleString()}` : "No especificada",
+          situacion.slice(0, 200).replace(/[\r\n\t]/g, " ")
+        ];
       } else {
-        // Mapeo plano heredado / fallback
-        if (bodyParamCount >= 4) {
-          parametrosCuerpo = [
-            paramCliente,
-            paramOrigen,
-            paramDetalles,
-            `${CRM_URL}/expediente/${d.id}`,
-          ];
+        if (tieneBotonDinamico) {
+          // Mapear cuerpo
+          if (bodyParamCount >= 1) parametrosCuerpo.push(paramClienteFlat);
+          if (bodyParamCount >= 2) parametrosCuerpo.push(paramOrigenFlat);
+          if (bodyParamCount >= 3) parametrosCuerpo.push(paramDetallesFlat);
+          if (bodyParamCount >= 4) parametrosCuerpo.push(`${CRM_URL}/expediente/${d.id}`);
+          while (parametrosCuerpo.length < bodyParamCount) {
+            parametrosCuerpo.push("");
+          }
+
+          // Mapear botón dinámico
+          if (urlPatternSuffix === "id") {
+            urlBotonParam = d.id;
+          } else if (urlPatternSuffix === "path") {
+            urlBotonParam = `expediente/${d.id}`;
+          } else {
+            urlBotonParam = `${CRM_URL}/expediente/${d.id}`;
+          }
         } else {
-          parametrosCuerpo = [
-            paramCliente,
-            paramOrigen,
-            paramDetalles,
-          ];
+          // Mapeo plano heredado / fallback
+          if (bodyParamCount >= 4) {
+            parametrosCuerpo = [
+              paramClienteFlat,
+              paramOrigenFlat,
+              paramDetallesFlat,
+              `${CRM_URL}/expediente/${d.id}`,
+            ];
+          } else {
+            parametrosCuerpo = [
+              paramClienteFlat,
+              paramOrigenFlat,
+              paramDetallesFlat,
+            ];
+          }
         }
       }
 
