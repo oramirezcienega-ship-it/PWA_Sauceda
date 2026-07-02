@@ -66,11 +66,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const { listarPlantillasAprobadas } = await import("@/lib/whatsapp");
+    const rTemplates = await listarPlantillasAprobadas();
+
     return NextResponse.json({
       ok: true,
       perfiles,
       errPerf,
       keysWhatsApp,
+      templatesList: rTemplates.plantillas,
+      templatesError: rTemplates.error,
       resultadoEnvio
     }, { headers: CORS });
   } catch (err: any) {
