@@ -130,7 +130,7 @@ ${situacion.slice(0, 150)}`;
 
     // 5. Notificaciones por WhatsApp (vía Meta Cloud API con Plantilla)
     try {
-      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead";
+      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead_v2";
       const plantillaIdioma = process.env.WHATSAPP_TEMPLATE_AGENTE_LANG || "es";
 
       // Intentar obtener info de la plantilla en Meta para mapear parámetros correctamente
