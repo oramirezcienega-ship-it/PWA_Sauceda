@@ -36,55 +36,6 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
-export async function GET(request: NextRequest) {
-  const CORS = corsHeaders(request);
-  try {
-    const sb = (await import("@/lib/supabase/server")).supabaseServidor();
-    
-    // 1. Obtener perfiles activos
-    const { data: perfiles, error: errPerf } = await sb
-      .from("perfiles")
-      .select("id, nombre, rol, activo, telefono")
-      .eq("activo", true);
-      
-    const keysWhatsApp = Object.keys(process.env).filter(k => k.startsWith("WHATSAPP"));
-
-    // 2. Intentar enviar a un número de prueba si viene en los query params
-    const telPrueba = request.nextUrl.searchParams.get("telefono");
-    let resultadoEnvio = null;
-    if (telPrueba) {
-      const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
-      resultadoEnvio = await enviarWhatsAppPlantilla(
-        telPrueba,
-        "notificacion_nuevo_lead_v2",
-        "es_MX",
-        [
-          "Nombre: Prueba Debug · Teléfono: " + telPrueba,
-          "Canal: debug-api · Crédito: Infonavit · Zona: Las Brisas",
-          "Valor: $1,000,000 · Detalles: Prueba de depuración sin saltos de linea."
-        ]
-      );
-    }
-
-    const { listarPlantillasAprobadas } = await import("@/lib/whatsapp");
-    const rTemplates = await listarPlantillasAprobadas();
-
-    return NextResponse.json({
-      ok: true,
-      perfiles,
-      errPerf,
-      keysWhatsApp,
-      templatesList: rTemplates.plantillas,
-      templatesError: rTemplates.error,
-      resultadoEnvio
-    }, { headers: CORS });
-  } catch (err: any) {
-    return NextResponse.json({
-      ok: false,
-      error: err.message
-    }, { status: 500, headers: CORS });
-  }
-}
 
 export async function POST(request: NextRequest) {
   const CORS = corsHeaders(request);
