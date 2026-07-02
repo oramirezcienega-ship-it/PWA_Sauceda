@@ -47,6 +47,8 @@ export async function GET(request: NextRequest) {
       .select("id, nombre, rol, activo, telefono")
       .eq("activo", true);
       
+    const keysWhatsApp = Object.keys(process.env).filter(k => k.startsWith("WHATSAPP"));
+
     // 2. Intentar enviar a un número de prueba si viene en los query params
     const telPrueba = request.nextUrl.searchParams.get("telefono");
     let resultadoEnvio = null;
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
       resultadoEnvio = await enviarWhatsAppPlantilla(
         telPrueba,
         "notificacion_nuevo_lead_v2",
-        "es",
+        "es_MX",
         [
           "👤 *Contacto:*\n• Nombre: Prueba Debug\n• Teléfono: " + telPrueba,
           "📍 *Canal e Ingreso:*\n• Canal: debug-api",
@@ -68,6 +70,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       perfiles,
       errPerf,
+      keysWhatsApp,
       resultadoEnvio
     }, { headers: CORS });
   } catch (err: any) {
