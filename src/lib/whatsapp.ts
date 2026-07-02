@@ -165,16 +165,16 @@ export async function enviarWhatsAppPlantilla(
     );
     const bodyText = await res.text();
     if (!res.ok) {
-      console.error("WhatsApp (plantilla) no enviado:", res.status, bodyText);
-      let metaMsg = "";
+      let errorDetalle = bodyText;
       try {
-        metaMsg = JSON.parse(bodyText)?.error?.message ?? "";
+        const parsed = JSON.parse(bodyText);
+        errorDetalle = parsed?.error ? JSON.stringify(parsed.error) : bodyText;
       } catch {
         // respuesta no-JSON
       }
       return {
         ok: false,
-        error: metaMsg || `Meta respondió con error ${res.status}.`,
+        error: errorDetalle,
       };
     }
     let messageId: string | undefined;
