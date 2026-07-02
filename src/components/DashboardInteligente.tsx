@@ -251,15 +251,27 @@ export function DashboardInteligente() {
   const [syncTab, setSyncTab] = useState<"facebook" | "tiktok" | "organico">("facebook");
   const [sincronizandoHistorial, setSincronizandoHistorial] = useState(false);
   const [sincronizandoOrganico, setSincronizandoOrganico] = useState(false);
-  const [fbToken, setFbToken] = useState("");
-  const [fbAdAccountId, setFbAdAccountId] = useState("1269333735358072");
-  const [fbPageId, setFbPageId] = useState("");
+  const [fbToken, setFbToken] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("crm_fb_token") ?? "") : ""
+  );
+  const [fbAdAccountId, setFbAdAccountId] = useState(() =>
+    typeof window !== "undefined"
+      ? (localStorage.getItem("crm_fb_ad_account_id") ?? "1269333735358072")
+      : "1269333735358072"
+  );
+  const [fbPageId, setFbPageId] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("crm_fb_page_id") ?? "") : ""
+  );
   const [diasOrganicos, setDiasOrganicos] = useState(14);
   const [fbFechaInicio, setFbFechaInicio] = useState("2026-05-01");
 
   // Credenciales de TikTok
-  const [tkToken, setTkToken] = useState("");
-  const [tkAdvertiserId, setTkAdvertiserId] = useState("");
+  const [tkToken, setTkToken] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("crm_tk_token") ?? "") : ""
+  );
+  const [tkAdvertiserId, setTkAdvertiserId] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("crm_tk_advertiser_id") ?? "") : ""
+  );
   const [tkFechaInicio, setTkFechaInicio] = useState("2026-05-01");
   const [sincronizandoTikTok, setSincronizandoTikTok] = useState(false);
 
@@ -493,6 +505,9 @@ export function DashboardInteligente() {
       alert("Por favor introduce el Token de Acceso y el ID de Página de Facebook.");
       return;
     }
+    // Guardar credenciales en localStorage para no volver a pedirlas
+    localStorage.setItem("crm_fb_token", fbToken.trim());
+    localStorage.setItem("crm_fb_page_id", fbPageId.trim());
     setSincronizandoOrganico(true);
     try {
       const res = await sincronizarMetricasOrganicasMeta(fbToken, fbPageId, diasOrganicos);
@@ -2921,11 +2936,33 @@ export function DashboardInteligente() {
             </div>
 
             {syncTab === "facebook" ? (
-              <form onSubmit={handleSincronizarHistorial} className="space-y-4">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                // Guardar credenciales Meta Ads en localStorage
+                localStorage.setItem("crm_fb_token", fbToken.trim());
+                localStorage.setItem("crm_fb_ad_account_id", fbAdAccountId.trim());
+                handleSincronizarHistorial(e);
+              }} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    Meta Access Token (con permiso ads_read)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Meta Access Token (con permiso ads_read)
+                    </label>
+                    {localStorage.getItem("crm_fb_token") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.removeItem("crm_fb_token");
+                          localStorage.removeItem("crm_fb_ad_account_id");
+                          setFbToken("");
+                          setFbAdAccountId("1269333735358072");
+                        }}
+                        className="text-[9px] text-red-400 hover:text-red-600 font-semibold transition"
+                      >
+                        🗑 Limpiar guardado
+                      </button>
+                    )}
+                  </div>
                   <textarea
                     value={fbToken}
                     onChange={(e) => setFbToken(e.target.value)}
@@ -2933,6 +2970,9 @@ export function DashboardInteligente() {
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
                     required
                   />
+                  {fbToken && (
+                    <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ Token guardado localmente — se rellena automáticamente</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -2991,11 +3031,33 @@ export function DashboardInteligente() {
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleSincronizarTikTok} className="space-y-4">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                // Guardar credenciales TikTok en localStorage
+                localStorage.setItem("crm_tk_token", tkToken.trim());
+                localStorage.setItem("crm_tk_advertiser_id", tkAdvertiserId.trim());
+                handleSincronizarTikTok(e);
+              }} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    TikTok Developer Access Token
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      TikTok Developer Access Token
+                    </label>
+                    {localStorage.getItem("crm_tk_token") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.removeItem("crm_tk_token");
+                          localStorage.removeItem("crm_tk_advertiser_id");
+                          setTkToken("");
+                          setTkAdvertiserId("");
+                        }}
+                        className="text-[9px] text-red-400 hover:text-red-600 font-semibold transition"
+                      >
+                        🗑 Limpiar guardado
+                      </button>
+                    )}
+                  </div>
                   <textarea
                     value={tkToken}
                     onChange={(e) => setTkToken(e.target.value)}
@@ -3003,6 +3065,9 @@ export function DashboardInteligente() {
                     className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono h-20 resize-none"
                     required
                   />
+                  {tkToken && (
+                    <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ Token guardado localmente — se rellena automáticamente</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -3066,16 +3131,35 @@ export function DashboardInteligente() {
             {syncTab === "organico" && (
               <form onSubmit={handleSincronizarOrganicoMeta} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                    Meta Access Token (con permisos read_insights, instagram_basic)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Meta Access Token (con permisos read_insights, instagram_basic)
+                    </label>
+                    {localStorage.getItem("crm_fb_token") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.removeItem("crm_fb_token");
+                          localStorage.removeItem("crm_fb_page_id");
+                          setFbToken("");
+                          setFbPageId("");
+                        }}
+                        className="text-[9px] text-red-400 hover:text-red-600 font-semibold transition"
+                      >
+                        🗑 Limpiar guardado
+                      </button>
+                    )}
+                  </div>
                   <textarea
                     value={fbToken}
                     onChange={(e) => setFbToken(e.target.value)}
                     placeholder="Escribe o pega tu token de acceso de Facebook Graph API..."
-                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none min-h-[60px]"
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none min-h-[60px] font-mono resize-none"
                     required
                   />
+                  {fbToken && (
+                    <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ Token guardado localmente — se rellena automáticamente</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -3088,9 +3172,12 @@ export function DashboardInteligente() {
                       value={fbPageId}
                       onChange={(e) => setFbPageId(e.target.value)}
                       placeholder="Ej: 1029384756"
-                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-[#2D4A2B] focus:outline-none font-mono"
                       required
                     />
+                    {fbPageId && (
+                      <p className="text-[9px] text-emerald-600 font-semibold mt-1">✓ ID guardado</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
