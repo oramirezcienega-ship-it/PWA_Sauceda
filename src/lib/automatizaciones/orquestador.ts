@@ -652,18 +652,27 @@ async function buscarYEnrolarLeadsInactivos(
     limiteInactividad.setDate(limiteInactividad.getDate() - 3);
     const limiteISO = limiteInactividad.toISOString();
 
-    // 3. Buscar expedientes inactivos
+    // 3. Buscar expedientes inactivos (excluir leads del conmutador/sistema)
     const { data: expedientes } = await sb
       .from("expedientes")
       .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, ultimo_movimiento")
       .in("etapa", ["nuevo-lead", "contactado"])
-      .lt("ultimo_movimiento", limiteISO);
+      .lt("ultimo_movimiento", limiteISO)
+      .not("cliente", "ilike", "%Conmutador%")   // Excluir leads del conmutador IA
+      .not("cliente", "ilike", "%Test%")          // Excluir leads de prueba
+      .not("cliente", "ilike", "%Prueba%");       // Excluir leads de prueba en español
 
     if (!expedientes || expedientes.length === 0) return;
 
     // 4. Filtrar los que ya están en alguna secuencia activa y enrolar
     for (const exp of expedientes) {
       if (!exp.telefono) continue;
+
+      // Excluir números no mexicanos (deben empezar con 52 al normalizarse, o ser de 10 dígitos)
+      const telLimpio = exp.telefono.replace(/\D/g, "");
+      const esMexicano = telLimpio.length === 10 ||
+        (telLimpio.startsWith("52") && telLimpio.length >= 12 && telLimpio.length <= 13);
+      if (!esMexicano) continue; // Saltar números de EE.UU. u otros países
 
       // Verificar si ya está enrolado activamente en CUALQUIER secuencia
       const { data: enrolado } = await sb
