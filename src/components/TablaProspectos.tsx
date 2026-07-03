@@ -11,7 +11,12 @@ import {
   eliminarProspectosMasivo,
 } from "@/app/actions/prospectos";
 import { useOrden } from "@/hooks/useOrden";
-import { listarSecuencias, enrolarLead, listarEnrollments } from "@/app/actions/secuencias";
+import {
+  listarSecuencias,
+  enrolarLead,
+  listarEnrollments,
+  cambiarEstadoEnrollment,
+} from "@/app/actions/secuencias";
 import { ThOrden } from "./ThOrden";
 import { EstatusProspectoBadge } from "./EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
@@ -60,15 +65,44 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
           nombre: p.nombreCompleto,
           email: p.correo || undefined,
           prospectoId: p.id,
+          forzarCambio: true,
         }).catch((err) => console.warn(`No se pudo enrolar a ${p.nombreCompleto}:`, err.message));
       }
       setSel(new Set());
-      alert("Enrolamiento masivo completado.");
       router.refresh();
     } finally {
       setTrabajando(false);
     }
   }
+
+  async function detenerSecuenciaSeleccion() {
+    setTrabajando(true);
+    try {
+      const seleccionados = orden.ordenados.filter((p) => sel.has(p.id));
+      for (const p of seleccionados) {
+        const enrollment = enrollments.find(
+          (en) => en.prospecto_id === p.id || en.phone === p.telefono,
+        );
+        if (enrollment) {
+          await cambiarEstadoEnrollment(enrollment.id, "salido").catch((err) =>
+            console.warn(`No se pudo detener secuencia de ${p.nombreCompleto}:`, err.message),
+          );
+        }
+      }
+      setSel(new Set());
+      router.refresh();
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  // ¿Algún prospecto seleccionado tiene secuencia activa?
+  const algunoConSecuencia = ids.some((id) => {
+    const p = orden.ordenados.find((pr) => pr.id === id);
+    return p && enrollments.some(
+      (en) => en.prospecto_id === p.id || en.phone === p.telefono,
+    );
+  });
 
   const idsVisibles = orden.ordenados.map((p) => p.id);
 
@@ -178,6 +212,17 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 ))}
               </select>
             </label>
+          )}
+
+          {algunoConSecuencia && (
+            <button
+              type="button"
+              disabled={trabajando}
+              onClick={detenerSecuenciaSeleccion}
+              className="rounded-md border border-amber-400/40 bg-white px-3 py-1 text-xs text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
+            >
+              Detener secuencia
+            </button>
           )}
 
           {confirmarBorrado ? (

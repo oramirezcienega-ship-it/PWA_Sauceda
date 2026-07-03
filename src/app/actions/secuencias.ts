@@ -218,11 +218,13 @@ export async function enrolarLead(datos: {
   email?: string;
   prospectoId?: string;
   expedienteId?: string;
+  /** Si true, detiene cualquier secuencia activa antes de enrolar en la nueva. */
+  forzarCambio?: boolean;
 }) {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  // Verificar si ya está enrolado y activo en esta secuencia
+  // Verificar si ya está enrolado y activo en esta misma secuencia
   const { data: existente } = await sb
     .from("sequence_enrollments")
     .select("id")
@@ -233,6 +235,27 @@ export async function enrolarLead(datos: {
 
   if (existente) {
     throw new Error("El lead ya está enrolado activamente en esta secuencia.");
+  }
+
+  if (datos.forzarCambio) {
+    // Detener cualquier enrollment activo en OTRA secuencia antes de enrolar
+    const { data: enrollmentActivo } = await sb
+      .from("sequence_enrollments")
+      .select("id")
+      .eq("phone", datos.phone)
+      .eq("status", "activo")
+      .maybeSingle();
+
+    if (enrollmentActivo) {
+      await sb
+        .from("sequence_enrollments")
+        .update({
+          status: "salido",
+          razon_salida: "manual",
+          ultimo_contacto_at: new Date().toISOString(),
+        })
+        .eq("id", enrollmentActivo.id);
+    }
   }
 
   // Obtener canal_id del prospecto o expediente si existe
