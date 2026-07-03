@@ -581,7 +581,16 @@ export function DetalleExpediente({ id }: { id: string }) {
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
           {/* Línea de tiempo de la Secuencia de Automatización */}
-          <TimelineSecuencia phoneOrId={expediente.id} />
+          <TimelineSecuencia
+            phoneOrId={expediente.id}
+            datosEnrolamiento={{
+              phone: expediente.telefono || "",
+              nombre: [expediente.cliente, expediente.primer_apellido, expediente.segundo_apellido].filter(Boolean).join(" "),
+              email: expediente.email || undefined,
+              prospectoId: expediente.prospecto_id || undefined,
+              expedienteId: expediente.id,
+            }}
+          />
 
           {/* Historial de conversaciones de WhatsApp */}
           {expediente.telefono && (
