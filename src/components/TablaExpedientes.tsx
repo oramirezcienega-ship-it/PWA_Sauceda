@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
 import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
@@ -9,7 +10,12 @@ import { type EtapaId, type Expediente, labelTipoNegocio } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
-import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
+import {
+  listarSecuencias,
+  enrolarLead,
+  listarEnrollments,
+  cambiarEstadoEnrollment,
+} from "@/app/actions/secuencias";
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
@@ -43,6 +49,7 @@ export function TablaExpedientes({
 }: {
   expedientes: Expediente[];
 }) {
+  const router = useRouter();
   const { moverEtapa, moverEtapaMasivo, eliminarMasivo } = useExpedientes();
   const orden = useOrden(expedientes, COMPARADORES);
 
@@ -51,11 +58,16 @@ export function TablaExpedientes({
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
   const [secuencias, setSecuencias] = useState<any[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
 
   useEffect(() => {
     listarSecuencias()
       .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
-      .catch(() => {});
+      .catch((err) => console.error("Error al cargar secuencias:", err));
+
+    listarEnrollments()
+      .then((lista) => setEnrollments(lista.filter((e) => e.status === "activo")))
+      .catch((err) => console.error("Error al cargar enrolamientos:", err));
   }, []);
 
   const idsVisibles = orden.ordenados.map((e) => e.id);
@@ -115,20 +127,50 @@ export function TablaExpedientes({
     setTrabajando(true);
     try {
       const seleccionados = orden.ordenados.filter((e) => sel.has(e.id));
-      for (const e of seleccionados) {
+      for (const exp of seleccionados) {
         await enrolarLead({
           sequenceId,
-          phone: e.telefono,
-          nombre: e.nombreCompleto,
-          expedienteId: e.id,
-        }).catch((err) => console.warn(`No se pudo enrolar ${e.nombreCompleto}:`, err.message));
+          phone: exp.telefono,
+          nombre: exp.nombreCompleto,
+          expedienteId: exp.id,
+          forzarCambio: true,
+        }).catch((err) => console.warn(`No se pudo enrolar a ${exp.nombreCompleto}:`, err.message));
       }
       setSel(new Set());
-      alert("Enrolamiento completado.");
+      router.refresh();
     } finally {
       setTrabajando(false);
     }
   }
+
+  async function detenerSecuenciaSeleccion() {
+    setTrabajando(true);
+    try {
+      const seleccionados = orden.ordenados.filter((e) => sel.has(e.id));
+      for (const exp of seleccionados) {
+        const enrollment = enrollments.find(
+          (en) => en.expediente_id === exp.id || en.phone === exp.telefono,
+        );
+        if (enrollment) {
+          await cambiarEstadoEnrollment(enrollment.id, "salido").catch((err) =>
+            console.warn(`No se pudo detener secuencia de ${exp.nombreCompleto}:`, err.message),
+          );
+        }
+      }
+      setSel(new Set());
+      router.refresh();
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  // ¿Algún expediente seleccionado tiene secuencia activa?
+  const algunoConSecuencia = ids.some((id) => {
+    const exp = orden.ordenados.find((e) => e.id === id);
+    return exp && enrollments.some(
+      (en) => en.expediente_id === exp.id || en.phone === exp.telefono,
+    );
+  });
 
   if (expedientes.length === 0) {
     return (
@@ -193,6 +235,20 @@ export function TablaExpedientes({
             </label>
           )}
 
+<<<<<<< HEAD
+=======
+          {algunoConSecuencia && (
+            <button
+              type="button"
+              disabled={trabajando}
+              onClick={detenerSecuenciaSeleccion}
+              className="rounded-md border border-amber-400/40 bg-white px-3 py-1 text-xs text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
+            >
+              Detener secuencia
+            </button>
+          )}
+
+>>>>>>> 1b12813 (feat(secuencias): enrolar/detener secuencia masivo en Panel y Prospectos)
           {confirmarBorrado ? (
             <span className="inline-flex items-center gap-2">
               <span className="text-carbon/70">
