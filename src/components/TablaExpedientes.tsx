@@ -235,8 +235,6 @@ export function TablaExpedientes({
             </label>
           )}
 
-<<<<<<< HEAD
-=======
           {algunoConSecuencia && (
             <button
               type="button"
@@ -248,7 +246,6 @@ export function TablaExpedientes({
             </button>
           )}
 
->>>>>>> 1b12813 (feat(secuencias): enrolar/detener secuencia masivo en Panel y Prospectos)
           {confirmarBorrado ? (
             <span className="inline-flex items-center gap-2">
               <span className="text-carbon/70">
