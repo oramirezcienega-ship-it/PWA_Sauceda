@@ -317,7 +317,12 @@ async function leadRespondio(
     return true;
   }
 
-  // 2. Si tiene expediente, verificar si cambió de etapa a "cerrado" o "perdido"
+  // 2. Si tiene expediente, verificar si cambió de etapa a "cerrado" o "perdido".
+  //    OJO: NO se considera "contactado" como respuesta. La etapa "contactado" es un
+  //    estado de entrada válido para la secuencia de reactivación/rescate (un lead que
+  //    fue contactado por nosotros pero quedó inactivo). Si la tratáramos como respuesta,
+  //    el primer paso de la secuencia nunca se enviaría: el lead saldría en la primera
+  //    pasada del cron antes de disparar ningún mensaje.
   if (enrollment.expediente_id) {
     const { data: exp } = await sb
       .from("expedientes")
@@ -325,7 +330,7 @@ async function leadRespondio(
       .eq("id", enrollment.expediente_id)
       .maybeSingle();
 
-    if (exp && (exp.etapa === "cerrado" || exp.etapa === "perdido" || exp.etapa === "contactado")) {
+    if (exp && (exp.etapa === "cerrado" || exp.etapa === "perdido")) {
       return true;
     }
   }
