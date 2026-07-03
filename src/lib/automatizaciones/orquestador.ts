@@ -135,7 +135,7 @@ export async function orquestador(): Promise<{
                   // NOTA: No se pasa token de botón URL porque la mayoría de plantillas no tienen
                   // componente de botón. Si una plantilla futura necesita botón URL, se deberá
                   // indicar explícitamente en la notación del paso, por ej: [plantilla: nombre, con_boton]
-                  const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
+                  const { enviarWhatsAppPlantilla, renderizarPlantilla } = await import("@/lib/whatsapp");
                   const waRes = await enviarWhatsAppPlantilla(
                     enrollment.phone,
                     plantillaNombre,
@@ -146,7 +146,15 @@ export async function orquestador(): Promise<{
                   exito = waRes.ok;
                   errorDetalle = waRes.error || "";
                   if (waRes.ok) waMessageId = waRes.messageId;
-                  contenidoEnviado = `[Plantilla: ${plantillaNombre}] ${parametros.join(" | ")}`;
+
+                  // Guardar en el historial el mensaje REAL que vio el cliente
+                  // (cuerpo de la plantilla con {{n}} ya sustituidos), no la
+                  // etiqueta interna. Si no se puede reconstruir, usar la
+                  // etiqueta como respaldo para no perder el registro.
+                  const textoRenderizado = await renderizarPlantilla(plantillaNombre, idioma, parametros);
+                  contenidoEnviado =
+                    textoRenderizado ||
+                    `[Plantilla: ${plantillaNombre}] ${parametros.join(" | ")}`;
                 } else {
                   const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
                   exito = waRes.ok;
