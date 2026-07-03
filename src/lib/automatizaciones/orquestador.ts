@@ -132,24 +132,16 @@ export async function orquestador(): Promise<{
                   const textoRestante = mensajeFormateado.replace(/\[plantilla:[^\]]+\]/, "").trim();
                   const parametros = textoRestante ? textoRestante.split("|").map(p => p.trim()) : [enrollment.nombre];
 
-                  // Si hay expediente, consultar su token para el enlace del portal del cliente
-                  let token: string | undefined;
-                  if (enrollment.expediente_id) {
-                    const { data: exp } = await sb
-                      .from("expedientes")
-                      .select("token")
-                      .eq("id", enrollment.expediente_id)
-                      .maybeSingle();
-                    if (exp?.token) token = exp.token;
-                  }
-
+                  // NOTA: No se pasa token de botón URL porque la mayoría de plantillas no tienen
+                  // componente de botón. Si una plantilla futura necesita botón URL, se deberá
+                  // indicar explícitamente en la notación del paso, por ej: [plantilla: nombre, con_boton]
                   const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
                   const waRes = await enviarWhatsAppPlantilla(
                     enrollment.phone,
                     plantillaNombre,
                     idioma,
                     parametros,
-                    token
+                    undefined  // Sin componente de botón URL
                   );
                   exito = waRes.ok;
                   errorDetalle = waRes.error || "";
