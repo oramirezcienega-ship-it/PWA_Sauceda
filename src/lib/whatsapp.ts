@@ -281,3 +281,49 @@ export async function listarPlantillasAprobadas(): Promise<{
     return { ok: false, error: "Error de red al consultar Meta.", plantillas: [] };
   }
 }
+
+// Caché ligero en memoria de las plantillas de Meta para no consultar la Graph API
+// en cada envío del lote del orquestador. TTL corto: las plantillas cambian poco.
+let _cachePlantillas: { ts: number; plantillas: PlantillaWhatsApp[] } | null = null;
+const _TTL_PLANTILLAS_MS = 60_000;
+
+async function obtenerPlantillasCacheadas(): Promise<PlantillaWhatsApp[] | null> {
+  if (_cachePlantillas && Date.now() - _cachePlantillas.ts < _TTL_PLANTILLAS_MS) {
+    return _cachePlantillas.plantillas;
+  }
+  const { ok, plantillas } = await listarPlantillasAprobadas();
+  if (!ok) return null;
+  _cachePlantillas = { ts: Date.now(), plantillas };
+  return plantillas;
+}
+
+/**
+ * Reconstruye el texto final de una plantilla tal como lo recibe el cliente:
+ * toma el cuerpo aprobado en Meta y sustituye {{1}}, {{2}}… por los parámetros
+ * enviados. Sirve para guardar en el historial exactamente lo que vio el lead,
+ * en lugar de una etiqueta interna con corchetes.
+ *
+ * Regresa null si no se puede obtener el cuerpo (error de red, plantilla no
+ * encontrada) para que quien lo llame use un texto de respaldo y nunca rompa
+ * el envío.
+ */
+export async function renderizarPlantilla(
+  nombre: string,
+  idioma: string,
+  parametros: string[],
+): Promise<string | null> {
+  const plantillas = await obtenerPlantillasCacheadas();
+  if (!plantillas) return null;
+
+  const plantilla =
+    plantillas.find((p) => p.nombre === nombre && p.idioma === idioma) ??
+    plantillas.find((p) => p.nombre === nombre);
+
+  if (!plantilla || !plantilla.cuerpo) return null;
+
+  let texto = plantilla.cuerpo;
+  parametros.forEach((valor, i) => {
+    texto = texto.replace(new RegExp(`\\{\\{\\s*${i + 1}\\s*\\}\\}`, "g"), valor);
+  });
+  return texto;
+}
