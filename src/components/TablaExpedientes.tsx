@@ -9,6 +9,7 @@ import { type EtapaId, type Expediente, labelTipoNegocio } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
+import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
@@ -49,6 +50,13 @@ export function TablaExpedientes({
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
+  const [secuencias, setSecuencias] = useState<any[]>([]);
+
+  useEffect(() => {
+    listarSecuencias()
+      .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
+      .catch(() => {});
+  }, []);
 
   const idsVisibles = orden.ordenados.map((e) => e.id);
 
@@ -103,6 +111,25 @@ export function TablaExpedientes({
     }
   }
 
+  async function enrolarSeleccionEnSecuencia(sequenceId: string) {
+    setTrabajando(true);
+    try {
+      const seleccionados = orden.ordenados.filter((e) => sel.has(e.id));
+      for (const e of seleccionados) {
+        await enrolarLead({
+          sequenceId,
+          phone: e.telefono,
+          nombre: e.nombreCompleto,
+          expedienteId: e.id,
+        }).catch((err) => console.warn(`No se pudo enrolar ${e.nombreCompleto}:`, err.message));
+      }
+      setSel(new Set());
+      alert("Enrolamiento completado.");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
   if (expedientes.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-carbon/15 p-8 text-center text-sm text-carbon/40">
@@ -141,6 +168,30 @@ export function TablaExpedientes({
               ))}
             </select>
           </label>
+
+          {secuencias.length > 0 && (
+            <label className="flex items-center gap-1.5 text-carbon/70">
+              Enrolar en secuencia:
+              <select
+                defaultValue=""
+                disabled={trabajando}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    void enrolarSeleccionEnSecuencia(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="">— elige secuencia —</option>
+                {secuencias.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {confirmarBorrado ? (
             <span className="inline-flex items-center gap-2">

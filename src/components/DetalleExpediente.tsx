@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
@@ -15,6 +15,7 @@ import { labelTipoNegocio } from "@/lib/types";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
+import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 
 /**
  * Vista de detalle de un expediente.
@@ -28,6 +29,33 @@ export function DetalleExpediente({ id }: { id: string }) {
   const expediente = obtenerExpediente(id);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [mostrarControlesTraspaso, setMostrarControlesTraspaso] = useState(false);
+  const [secuencias, setSecuencias] = useState<any[]>([]);
+  const [enrolandoSecuencia, setEnrolandoSecuencia] = useState(false);
+
+  useEffect(() => {
+    listarSecuencias()
+      .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
+      .catch(() => {});
+  }, []);
+
+  async function enrolarEnSecuencia(sequenceId: string) {
+    if (!expediente || !sequenceId) return;
+    setEnrolandoSecuencia(true);
+    try {
+      await enrolarLead({
+        sequenceId,
+        phone: expediente.telefono,
+        nombre: expediente.nombreCompleto,
+        expedienteId: expediente.id,
+      });
+      alert("Expediente enrolado en la secuencia exitosamente.");
+      recargar();
+    } catch (err: any) {
+      alert(`Error al enrolar: ${err.message}`);
+    } finally {
+      setEnrolandoSecuencia(false);
+    }
+  }
 
   // Expediente inexistente. Mientras carga el estado persistido evitamos
   // mostrar el mensaje de "no encontrado" (podría ser un id válido aún no leído).
@@ -165,16 +193,46 @@ export function DetalleExpediente({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* Asesor Selector */}
-        <div className="flex items-center gap-1.5 text-xs text-carbon/70 pt-2 border-t border-carbon/5">
-          <span className="text-[10px] uppercase font-bold text-carbon/40">Atiende:</span>
-          <AsesorSelector
-            entidadId={expediente.id}
-            tipoEntidad="expediente"
-            asesorIdActual={expediente.asesorId ?? null}
-            asesorNombreActual={expediente.asesorNombre ?? null}
-            onAsignado={recargar}
-          />
+        {/* Asesor Selector y Secuencia — misma fila en desktop, apilados en móvil */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-carbon/5">
+          <div className="flex items-center gap-1.5 text-xs text-carbon/70 flex-1">
+            <span className="text-[10px] uppercase font-bold text-carbon/40 shrink-0">Atiende:</span>
+            <AsesorSelector
+              entidadId={expediente.id}
+              tipoEntidad="expediente"
+              asesorIdActual={expediente.asesorId ?? null}
+              asesorNombreActual={expediente.asesorNombre ?? null}
+              onAsignado={recargar}
+            />
+          </div>
+
+          {secuencias.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-carbon/70 sm:border-l sm:border-carbon/10 sm:pl-2">
+              <span className="text-[10px] uppercase font-bold text-carbon/40 shrink-0">Secuencia:</span>
+              {expediente.secuenciaNombre ? (
+                <span className="rounded-full bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[10px] font-bold text-sauce truncate max-w-[140px]" title={expediente.secuenciaNombre}>
+                  {expediente.secuenciaNombre}
+                </span>
+              ) : (
+                <select
+                  defaultValue=""
+                  disabled={enrolandoSecuencia}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      void enrolarEnSecuencia(e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="rounded-md border border-carbon/15 bg-white px-2 py-0.5 text-[10px] text-verde-profundo outline-none focus:border-sauce disabled:opacity-50"
+                >
+                  <option value="">+ Agregar a secuencia</option>
+                  {secuencias.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
