@@ -504,6 +504,28 @@ export function SecuenciasClient() {
           {/* Vista 2: Panel de Control */}
           {vistaActiva === "panel" && (
             <div className="space-y-4">
+              {/* Resumen de analíticos siempre visible al cargar */}
+              {analytics && (
+                <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm text-center">
+                    <p className="text-xl font-bold text-[#2D4A2B]">{analytics.global.totalLeads}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Leads Totales</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm text-center">
+                    <p className="text-xl font-bold text-amber-600">{analytics.global.activos}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Activos</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm text-center">
+                    <p className="text-xl font-bold text-emerald-600">{analytics.global.salidosRespondio}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Respondieron</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm text-center">
+                    <p className="text-xl font-bold text-[#C9A961]">{analytics.global.tasaRespuestaGlobal}%</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Conversión</p>
+                  </div>
+                </div>
+              )}
+
               {secuencias.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
                   No hay secuencias creadas todavía. Abre el Constructor para crear tu primera secuencia.
