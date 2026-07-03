@@ -135,7 +135,7 @@ export function TimelineSecuencia({ phoneOrId }: TimelineSecuenciaProps) {
                 labelEstado = "RECIBIDO";
               } else if (ac.status === "respondido") {
                 badgeStyle = "bg-teal-50 text-teal-700 border border-teal-100";
-                labelEstado = "LEÍDO / RESPONDIDO";
+                labelEstado = "LEÍDO";
               } else if (ac.status === "fallido") {
                 badgeStyle = "bg-rojo/5 text-rojo border border-rojo/10";
                 labelEstado = "FALLIDO";
@@ -192,6 +192,37 @@ export function TimelineSecuencia({ phoneOrId }: TimelineSecuenciaProps) {
                 </div>
               );
             })}
+
+            {/* Tarjeta de respuesta del lead — aparece al final cuando salió por haber contestado */}
+            {enrollment.razon_salida === "respondio" && enrollment.status === "salido" && (
+              <div className="relative">
+                <span className="absolute -left-[23px] top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-white bg-verde-profundo" />
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-verde-profundo">💬 Lead respondió</span>
+                    <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-verde-profundo/10 text-verde-profundo border border-verde-profundo/20">
+                      RESPONDIÓ
+                    </span>
+                    {enrollment.ultimo_contacto_at && (
+                      <span className="text-[10px] text-carbon/40 font-mono">
+                        {new Date(enrollment.ultimo_contacto_at).toLocaleString("es-MX", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                          hour12: false,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-verde-profundo/80 bg-verde-profundo/5 px-2.5 py-2 rounded-lg border border-verde-profundo/10 leading-relaxed font-medium">
+                    El lead contestó al mensaje de la secuencia. La secuencia se detuvo y Sofía IA tomó la conversación.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

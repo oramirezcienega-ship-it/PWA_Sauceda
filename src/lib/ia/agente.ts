@@ -91,6 +91,7 @@ interface FilaExp {
   etapa: string | null;
   situacion: string | null;
   tipo_credito?: string | null;
+  tipo_negocio?: string | null;
   direccion_propiedad?: string | null;
   link_google_maps?: string | null;
   necesidad?: string | null;
@@ -214,6 +215,7 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
         exp.fraccionamiento !== "Por definir" &&
         `Fraccionamiento/zona: ${exp.fraccionamiento}`,
       exp.direccion_propiedad && `Dirección exacta de la propiedad: ${exp.direccion_propiedad}`,
+      exp.tipo_negocio && `Tipo de negocio: ${exp.tipo_negocio}`,
       exp.tipo_credito && `Tipo de crédito / adeudo: ${exp.tipo_credito}`,
       exp.valor_estimado && exp.valor_estimado > 0 && `Valor estimado de la vivienda: $${exp.valor_estimado}`,
       exp.saldo_deuda && exp.saldo_deuda > 0 && `Saldo aproximado de deuda: $${exp.saldo_deuda}`,
@@ -332,11 +334,15 @@ export async function responderConIA(
 
     // Toma de control humano: si la última respuesta saliente la mandó una
     // persona (agente distinto de "IA" y no vacío), la IA no interviene.
+    // Los mensajes de la secuencia automatizada ("Sistema (Secuencia)") NO
+    // cuentan como toma de control — el lead que responde a un mensaje de
+    // rescate debe ser atendido por Sofía con su contexto completo.
+    const AGENTES_AUTOMATICOS = new Set([NOMBRE_AGENTE, "Sistema (Secuencia)", "Sistema"]);
     const ultimoOut = historia
       .slice()
       .reverse()
       .find((f) => f.direccion === "out");
-    if (ultimoOut && ultimoOut.agente && ultimoOut.agente !== NOMBRE_AGENTE) {
+    if (ultimoOut && ultimoOut.agente && !AGENTES_AUTOMATICOS.has(ultimoOut.agente)) {
       return;
     }
 
@@ -346,7 +352,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, direccion_propiedad, link_google_maps, necesidad, tipo_negocio, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
