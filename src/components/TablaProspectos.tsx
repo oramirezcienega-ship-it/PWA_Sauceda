@@ -96,14 +96,6 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
     }
   }
 
-  // ¿Algún prospecto seleccionado tiene secuencia activa?
-  const algunoConSecuencia = ids.some((id) => {
-    const p = orden.ordenados.find((pr) => pr.id === id);
-    return p && enrollments.some(
-      (en) => en.prospecto_id === p.id || en.phone === p.telefono,
-    );
-  });
-
   const idsVisibles = orden.ordenados.map((p) => p.id);
 
   // Limpia de la selección los ids que ya no estén en la lista.
@@ -135,6 +127,14 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
 
   const ids = Array.from(sel);
   const todosMarcados = ids.length > 0 && ids.length === idsVisibles.length;
+
+  // ¿Algún prospecto seleccionado tiene secuencia activa?
+  const algunoConSecuencia = ids.some((id) => {
+    const p = orden.ordenados.find((pr) => pr.id === id);
+    return p && enrollments.some(
+      (en) => en.prospecto_id === p.id || en.phone === p.telefono,
+    );
+  });
 
   async function cambiarOrigenSeleccion(origen: OrigenAdquisicion) {
     setTrabajando(true);
