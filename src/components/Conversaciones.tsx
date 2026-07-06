@@ -13,13 +13,20 @@ import {
   finalizarConversacion,
   asignarAgente,
   listarAsesoresActivos,
+  listarRespuestasRapidas,
+  type RespuestaRapidaDB,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
+import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
+import { DocumentosVentas } from "./DocumentosVentas";
+import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
 } from "@/lib/types";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
+
+type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
 const INPUT =
   "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
@@ -108,84 +115,27 @@ function Countdown24h({
   );
 }
 
-interface RespuestaRapida {
-  atajo: string;
-  titulo: string;
-  texto: string;
-  categoria: string;
-}
-
-const RESPUESTAS_RAPIDAS: RespuestaRapida[] = [
-  {
-    atajo: "saludo",
-    titulo: "Saludo Inicial",
-    texto: "¡Hola! Me pongo en contacto contigo de Sauceda Bienes Raíces. Vi tu interés en nuestro portal. ¿Cómo te puedo ayudar hoy?",
-    categoria: "General"
-  },
-  {
-    atajo: "agendado",
-    titulo: "Contacto Agendado",
-    texto: "Hola, de acuerdo a lo agendado, te contacto para platicar sobre tus opciones inmobiliarias. ¿Tienes unos minutos libres?",
-    categoria: "General"
-  },
-  {
-    atajo: "infonavit",
-    titulo: "Información Infonavit",
-    texto: "En Sauceda Bienes Raíces te ayudamos a precalificar tu crédito Infonavit y te asesoramos para elegir la mejor opción de vivienda que se adapte a tu puntaje y saldo de subcuenta. ¿Te gustaría que revisemos tu puntaje?",
-    categoria: "Productos"
-  },
-  {
-    atajo: "banco",
-    titulo: "Crédito Bancario",
-    texto: "Trabajamos con los principales bancos del país para conseguirte la mejor tasa de interés y CAT para tu crédito hipotecario. Hacemos todo el trámite de preaprobación sin costo para ti. ¿Quieres que hagamos una simulación?",
-    categoria: "Productos"
-  },
-  {
-    atajo: "servicios",
-    titulo: "Servicios Integrales",
-    texto: "Ofrecemos asesoría en compra, venta, renta, avalúos y regularización de propiedades en León y zona Bajío, garantizando total seguridad jurídica en tu transacción.",
-    categoria: "Productos"
-  },
-  {
-    atajo: "privacidad",
-    titulo: "Aviso de Privacidad",
-    texto: "En Sauceda Bienes Raíces protegemos tus datos. Puedes consultar nuestro aviso de privacidad completo en cualquier momento en saucedamx.com",
-    categoria: "FAQs"
-  },
-  {
-    atajo: "horario",
-    titulo: "Horarios de Oficina",
-    texto: "Nuestros horarios de oficina son de Lunes a Viernes de 9:00 AM a 6:00 PM y Sábados de 9:00 AM a 2:00 PM. Fuera de este horario, seguimos a tus órdenes en nuestros canales digitales.",
-    categoria: "FAQs"
-  },
-  {
-    atajo: "requisitos",
-    titulo: "Requisitos de Compra",
-    texto: "Para iniciar tu trámite de compra requerimos identificación oficial (INE/Pasaporte), CURP, RFC, comprobante de domicilio y tu precalificación de crédito vigente (si aplica).",
-    categoria: "FAQs"
-  },
-  {
-    atajo: "llamada",
-    titulo: "Llamada Perdida / Recontacto",
-    texto: "Hola, intenté llamarte pero no logré contactarte. Avísame a qué hora te queda mejor que te llame. ¡Saludos!",
-    categoria: "Seguimiento"
-  },
-  {
-    atajo: "documentos",
-    titulo: "Seguimiento de Documentos",
-    texto: "Hola, te escribo para dar seguimiento a los documentos que teníamos pendientes para tu trámite. Quedo al pendiente si tienes alguna duda.",
-    categoria: "Seguimiento"
-  },
-  {
-    atajo: "inspeccion",
-    titulo: "Agendar Inspección Física",
-    texto: "Hola, te escribo de SAUCEDA Bienes Raíces. Estamos listos para coordinar la inspección física de tu propiedad. ¿Qué día de esta semana te queda mejor para recibir al inspector?",
-    categoria: "Seguimiento"
+/** Resuelve parámetros {{nombre}}, {{asesor}}, etc. en el texto de una respuesta rápida. */
+function resolverParametros(
+  texto: string,
+  detalle: ConversacionDetalle | null,
+  usuario: { nombre: string } | null,
+): string {
+  let t = texto;
+  if (detalle?.nombre) {
+    t = t.replace(/\{\{nombre\}\}/g, detalle.nombre.split(" ")[0]);
+    t = t.replace(/\{\{nombre_completo\}\}/g, detalle.nombre);
   }
-];
+  if (usuario?.nombre) {
+    t = t.replace(/\{\{asesor\}\}/g, usuario.nombre);
+  }
+  // {{fraccionamiento}} requiere datos del expediente — se deja sin resolver si no hay info
+  return t;
+}
 
 /** Bandeja de conversaciones de WhatsApp (lista + hilo + responder). */
 export function Conversaciones() {
+  const [tab, setTab] = useState<TabPrincipal>("bandeja");
   const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
@@ -208,6 +158,9 @@ export function Conversaciones() {
   const [filtroAtajos, setFiltroAtajos] = useState("");
   const [indiceAtajoSeleccionado, setIndiceAtajoSeleccionado] = useState(0);
   const [mostrarDropdownMenu, setMostrarDropdownMenu] = useState(false);
+  const [respuestasRapidas, setRespuestasRapidas] = useState<RespuestaRapidaDB[]>([]);
+  const [mostrarAdjuntar, setMostrarAdjuntar] = useState(false);
+  const [enviandoDoc, setEnviandoDoc] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -258,6 +211,10 @@ export function Conversaciones() {
     listarAsesoresActivos()
       .then((r) => setAsesores(r))
       .catch(() => setAsesores([]));
+
+    listarRespuestasRapidas()
+      .then((r) => setRespuestasRapidas(r))
+      .catch(() => setRespuestasRapidas([]));
 
     rolUsuarioActual()
       .then((rol) => setEsAdmin(rol === "admin"))
@@ -374,14 +331,15 @@ export function Conversaciones() {
     }
   });
 
-  const filteredAtajos = RESPUESTAS_RAPIDAS.filter((r) =>
+  const filteredAtajos = respuestasRapidas.filter((r) =>
     r.atajo.toLowerCase().includes(filtroAtajos.toLowerCase()) ||
     r.titulo.toLowerCase().includes(filtroAtajos.toLowerCase())
   );
 
   function insertarRespuesta(textoRespuesta: string) {
+    const textoResuelto = resolverParametros(textoRespuesta, detalle, usuario);
     if (!textareaRef.current) {
-      setTexto(textoRespuesta);
+      setTexto(textoResuelto);
       setMostrarAtajos(false);
       setMostrarDropdownMenu(false);
       return;
@@ -392,30 +350,41 @@ export function Conversaciones() {
     
     const lastHashIndex = textBeforeCursor.lastIndexOf("#");
     if (lastHashIndex !== -1) {
-      const nuevoTexto = textBeforeCursor.slice(0, lastHashIndex) + textoRespuesta + textAfterCursor;
+      const nuevoTexto = textBeforeCursor.slice(0, lastHashIndex) + textoResuelto + textAfterCursor;
       setTexto(nuevoTexto);
       setMostrarAtajos(false);
       setMostrarDropdownMenu(false);
-      
       setTimeout(() => {
         if (textareaRef.current) {
-          const nuevaPos = lastHashIndex + textoRespuesta.length;
+          const nuevaPos = lastHashIndex + textoResuelto.length;
           textareaRef.current.focus();
           textareaRef.current.setSelectionRange(nuevaPos, nuevaPos);
         }
       }, 0);
     } else {
-      const nuevoTexto = textBeforeCursor + textoRespuesta + textAfterCursor;
+      const nuevoTexto = textBeforeCursor + textoResuelto + textAfterCursor;
       setTexto(nuevoTexto);
       setMostrarDropdownMenu(false);
-      
       setTimeout(() => {
         if (textareaRef.current) {
-          const nuevaPos = cursor + textoRespuesta.length;
+          const nuevaPos = cursor + textoResuelto.length;
           textareaRef.current.focus();
           textareaRef.current.setSelectionRange(nuevaPos, nuevaPos);
         }
       }, 0);
+    }
+  }
+
+  async function enviarDocumento(doc: DocumentoVenta) {
+    if (!sel) return;
+    setEnviandoDoc(true);
+    setMostrarAdjuntar(false);
+    const r = await enviarDocumentoConversacion(sel, doc.id);
+    setEnviandoDoc(false);
+    if (!r.ok) {
+      setAviso(r.error ?? "No se pudo enviar el documento.");
+    } else {
+      await refrescar(sel);
     }
   }
 
@@ -463,6 +432,48 @@ export function Conversaciones() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Navegación de tabs */}
+      <div className="flex items-center gap-1 border-b border-carbon/10 pb-0">
+        {(["bandeja", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
+          const labels: Record<TabPrincipal, string> = {
+            bandeja: "💬 Bandeja",
+            documentos: "📂 Documentos",
+            respuestas: "⚡ Respuestas Rápidas",
+          };
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition ${
+                tab === t
+                  ? "border-sauce text-verde-profundo bg-sauce/5"
+                  : "border-transparent text-carbon/50 hover:text-carbon hover:bg-carbon/5"
+              }`}
+            >
+              {labels[t]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab: Documentos */}
+      {tab === "documentos" && (
+        <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
+          <DocumentosVentas />
+        </div>
+      )}
+
+      {/* Tab: Respuestas Rápidas */}
+      {tab === "respuestas" && (
+        <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
+          <RespuestasRapidasEditor />
+        </div>
+      )}
+
+      {/* Tab: Bandeja (contenido original) */}
+      {tab === "bandeja" && <>
+
       {/* Diagnóstico del agente de IA */}
       {esAdmin && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-carbon/10 bg-white px-3 py-2 shadow-sm">
@@ -930,8 +941,8 @@ export function Conversaciones() {
                           </div>
                           
                           {/* Agrupación por Categorías */}
-                          {["General", "Productos", "FAQs", "Seguimiento"].map((cat) => {
-                            const list = RESPUESTAS_RAPIDAS.filter((r) => r.categoria === cat);
+                          {["General", "Productos", "FAQs", "Seguimiento", "Otro"].map((cat) => {
+                            const list = respuestasRapidas.filter((r) => r.categoria === cat);
                             if (list.length === 0) return null;
                             return (
                               <div key={cat} className="mt-1.5">
@@ -969,6 +980,37 @@ export function Conversaciones() {
                       onKeyDown={handleKeyDown}
                       disabled={!detalle.ventanaAbierta}
                     />
+                    {/* Botón adjuntar documento */}
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMostrarAdjuntar(!mostrarAdjuntar)}
+                        disabled={enviandoDoc}
+                        title="Adjuntar documento"
+                        className="flex h-[42px] w-[42px] items-center justify-center rounded-md border border-carbon/20 bg-white text-lg hover:bg-sauce/10 hover:border-sauce/40 transition disabled:opacity-50"
+                      >
+                        {enviandoDoc ? <span className="text-sm animate-pulse">⏳</span> : "📎"}
+                      </button>
+                      {/* Modal de selección de documentos */}
+                      {mostrarAdjuntar && (
+                        <div className="absolute right-0 bottom-full mb-2 z-50 w-80 max-h-96 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
+                          <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between">
+                            <span className="text-xs font-bold text-verde-profundo">Enviar documento</span>
+                            <button
+                              type="button"
+                              onClick={() => setMostrarAdjuntar(false)}
+                              className="text-carbon/40 hover:text-carbon text-sm"
+                            >✕</button>
+                          </div>
+                          <div className="p-2">
+                            <DocumentosVentas
+                              modoSelector
+                              onSeleccionar={(doc) => enviarDocumento(doc)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={enviarTexto}
@@ -984,6 +1026,7 @@ export function Conversaciones() {
           )}
         </div>
       </div>
+      </> /* fin tab bandeja */}
     </div>
   );
 }
