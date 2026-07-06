@@ -514,3 +514,60 @@ export async function listarAsesoresActivos(): Promise<{ id: string; nombre: str
   return (data as { id: string; nombre: string }[]) ?? [];
 }
 
+
+// ─── Respuestas Rápidas ──────────────────────────────────────────────────────
+
+export interface RespuestaRapidaDB {
+  id: string;
+  atajo: string;
+  titulo: string;
+  texto: string;
+  categoria: string;
+  orden: number;
+  created_at: string;
+}
+
+/** Lista todas las respuestas rápidas ordenadas. */
+export async function listarRespuestasRapidas(): Promise<RespuestaRapidaDB[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("respuestas_rapidas")
+    .select("*")
+    .order("orden", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RespuestaRapidaDB[];
+}
+
+/** Crea o actualiza una respuesta rápida. */
+export async function guardarRespuestaRapida(datos: {
+  id?: string;
+  atajo: string;
+  titulo: string;
+  texto: string;
+  categoria: string;
+  orden?: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { id, ...campos } = datos;
+
+  if (id) {
+    const { error } = await sb.from("respuestas_rapidas").update(campos).eq("id", id);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await sb.from("respuestas_rapidas").insert(campos);
+    if (error) return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** Elimina una respuesta rápida. */
+export async function eliminarRespuestaRapida(id: string): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { error } = await sb.from("respuestas_rapidas").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

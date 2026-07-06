@@ -94,6 +94,56 @@ export async function enviarWhatsAppTexto(
   }
 }
 
+/** Envía un documento (PDF, Word, etc.) por WhatsApp usando una URL pública. */
+export async function enviarWhatsAppDocumento(
+  telefono: string,
+  documentoUrl: string,
+  nombreArchivo: string,
+  caption?: string,
+): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+  const tel = normalizarTelefono(telefono);
+  if (!tel) return { ok: false, error: "Teléfono inválido." };
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return { ok: false, error: "WhatsApp no configurado." };
+
+  try {
+    const body: Record<string, unknown> = {
+      messaging_product: "whatsapp",
+      to: tel,
+      type: "document",
+      document: {
+        link: documentoUrl,
+        filename: nombreArchivo,
+        ...(caption ? { caption } : {}),
+      },
+    };
+
+    const res = await fetch(
+      `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      return { ok: false, error: j?.error?.message ?? `Error ${res.status}` };
+    }
+
+    const j = await res.json().catch(() => ({}));
+    return { ok: true, messageId: j?.messages?.[0]?.id };
+  } catch (err) {
+    console.error("Error al enviar documento WhatsApp:", err);
+    return { ok: false, error: "Error de red al enviar el documento." };
+  }
+}
+
 /**
  * Envía un mensaje por WhatsApp usando una PLANTILLA aprobada (best-effort).
  * Sirve para el primer contacto "en frío" (fuera de la ventana de 24 h).
