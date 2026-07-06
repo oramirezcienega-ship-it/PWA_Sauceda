@@ -94,12 +94,13 @@ export async function enviarWhatsAppTexto(
   }
 }
 
-/** Envía un documento (PDF, Word, etc.) por WhatsApp usando una URL pública. */
+/** Envía un documento o imagen por WhatsApp usando una URL pública. */
 export async function enviarWhatsAppDocumento(
   telefono: string,
   documentoUrl: string,
   nombreArchivo: string,
   caption?: string,
+  tipoMime?: string | null,
 ): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   const tel = normalizarTelefono(telefono);
   if (!tel) return { ok: false, error: "Teléfono inválido." };
@@ -107,17 +108,22 @@ export async function enviarWhatsAppDocumento(
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneId) return { ok: false, error: "WhatsApp no configurado." };
 
+  const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
+
   try {
-    const body: Record<string, unknown> = {
-      messaging_product: "whatsapp",
-      to: tel,
-      type: "document",
-      document: {
-        link: documentoUrl,
-        filename: nombreArchivo,
-        ...(caption ? { caption } : {}),
-      },
-    };
+    const body: Record<string, unknown> = esImagen
+      ? {
+          messaging_product: "whatsapp",
+          to: tel,
+          type: "image",
+          image: { link: documentoUrl, ...(caption ? { caption } : {}) },
+        }
+      : {
+          messaging_product: "whatsapp",
+          to: tel,
+          type: "document",
+          document: { link: documentoUrl, filename: nombreArchivo, ...(caption ? { caption } : {}) },
+        };
 
     const res = await fetch(
       `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
