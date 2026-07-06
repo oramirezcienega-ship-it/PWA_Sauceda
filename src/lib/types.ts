@@ -118,6 +118,8 @@ export interface Expediente {
   secuenciaNombre?: string | null;
   ultimaActividadTitulo?: string | null;
   ultimaActividadFecha?: string | null;
+  /** Marca permanente: el expediente no cumple criterios de servicio. Bloquea todo contacto. */
+  noViable?: boolean;
 }
 
 /**
@@ -192,6 +194,8 @@ export interface Prospecto {
   asesorId?: string | null;
   /** Nombre del asesor asignado (solo lectura, vía join). */
   asesorNombre?: string | null;
+  /** Marca permanente: el prospecto no cumple criterios de servicio. Bloquea todo contacto. */
+  noViable?: boolean;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */

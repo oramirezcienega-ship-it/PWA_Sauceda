@@ -397,6 +397,20 @@ export async function moverEtapaMasivo(
   }
 }
 
+/** Marca o desmarca un expediente como No Viable. */
+export async function marcarExpedienteNoViable(id: string, noViable: boolean): Promise<void> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("expedientes")
+    .update({ no_viable: noViable })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/expediente/${id}`);
+  revalidatePath("/");
+}
+
 /** Elimina varios expedientes a la vez (acción masiva). */
 export async function eliminarExpedientesMasivo(ids: string[]): Promise<void> {
   await requireAdmin();

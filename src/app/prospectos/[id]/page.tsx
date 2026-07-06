@@ -13,6 +13,7 @@ import { BotonLlamar } from "@/components/BotonLlamar";
 import { ConversacionHistorica } from "@/components/ConversacionHistorica";
 import { LlamadasHistoricas } from "@/components/LlamadasHistoricas";
 import { TimelineSecuencia } from "@/components/TimelineSecuencia";
+import { BotonNoViable } from "@/components/BotonNoViable";
 
 export const dynamic = "force-dynamic";
 
@@ -68,13 +69,23 @@ export default async function PaginaProspecto({
               </span>
               <EstatusProspectoBadge estatus={prospecto.estatus} />
               <CalificacionProspectoBadge calificacion={prospecto.calificacion} />
+              {prospecto.noViable && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rojo/10 border border-rojo/30 px-2.5 py-0.5 text-[11px] font-bold text-rojo">
+                  🚫 No viable
+                </span>
+              )}
             </div>
-            <div className="mt-2.5">
+            <div className="mt-2.5 flex flex-wrap items-center gap-3">
               <AsesorSelector
                 entidadId={prospecto.id}
                 tipoEntidad="prospecto"
                 asesorIdActual={prospecto.asesorId ?? null}
                 asesorNombreActual={prospecto.asesorNombre ?? null}
+              />
+              <BotonNoViable
+                entidadId={prospecto.id}
+                tipo="prospecto"
+                noViable={prospecto.noViable ?? false}
               />
             </div>
           </div>

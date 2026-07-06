@@ -58,6 +58,7 @@ export interface FilaExpediente {
   prospectos?: { origen: OrigenAdquisicion } | null;
   asesor_id?: string | null;
   perfiles?: { nombre: string } | null;
+  no_viable?: boolean;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -98,6 +99,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     createdAt: fila.created_at ?? "",
     asesorId: fila.asesor_id ?? null,
     asesorNombre: fila.perfiles?.nombre ?? null,
+    noViable: fila.no_viable ?? false,
   };
 }
 
@@ -156,6 +158,7 @@ export interface FilaProspecto {
   calificacion?: CalificacionProspecto;
   asesor_id?: string | null;
   perfiles?: { nombre: string } | null;
+  no_viable?: boolean;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -185,6 +188,7 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     calificacion: fila.calificacion ?? "frio",
     asesorId: fila.asesor_id ?? null,
     asesorNombre: fila.perfiles?.nombre ?? null,
+    noViable: fila.no_viable ?? false,
   };
 }
 

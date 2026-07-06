@@ -224,6 +224,23 @@ export async function enrolarLead(datos: {
   await requireAdmin();
   const sb = supabaseServidor();
 
+  // Verificar si el expediente o prospecto está marcado como No Viable
+  if (datos.expedienteId) {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("no_viable")
+      .eq("id", datos.expedienteId)
+      .maybeSingle();
+    if (exp?.no_viable) throw new Error("Este expediente está marcado como No Viable y no puede enrolarse en ninguna secuencia.");
+  } else if (datos.prospectoId) {
+    const { data: pr } = await sb
+      .from("prospectos")
+      .select("no_viable")
+      .eq("id", datos.prospectoId)
+      .maybeSingle();
+    if (pr?.no_viable) throw new Error("Este prospecto está marcado como No Viable y no puede enrolarse en ninguna secuencia.");
+  }
+
   // Verificar si ya está enrolado y activo en esta misma secuencia
   const { data: existente } = await sb
     .from("sequence_enrollments")

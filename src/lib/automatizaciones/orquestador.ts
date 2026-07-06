@@ -665,12 +665,13 @@ async function buscarYEnrolarLeadsInactivos(
     limiteInactividad.setDate(limiteInactividad.getDate() - 3);
     const limiteISO = limiteInactividad.toISOString();
 
-    // 3. Buscar expedientes inactivos
+    // 3. Buscar expedientes inactivos (excluir No Viables)
     const { data: expedientes } = await sb
       .from("expedientes")
       .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, ultimo_movimiento")
       .in("etapa", ["nuevo-lead", "contactado"])
-      .lt("ultimo_movimiento", limiteISO);
+      .lt("ultimo_movimiento", limiteISO)
+      .eq("no_viable", false);
 
     if (!expedientes || expedientes.length === 0) return;
 

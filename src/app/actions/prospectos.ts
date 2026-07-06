@@ -260,3 +260,16 @@ export async function listarProspectosMin(): Promise<
     }),
   );
 }
+
+/** Marca o desmarca un prospecto como No Viable. */
+export async function marcarProspectoNoViable(id: string, noViable: boolean): Promise<void> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("prospectos")
+    .update({ no_viable: noViable })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/prospectos/${id}`);
+}
