@@ -145,7 +145,7 @@ export async function enviarDocumentoConversacion(
 
   if (!doc) return { ok: false, error: "Documento no encontrado." };
 
-  const result = await enviarWhatsAppDocumento(telefono, doc.url, doc.nombre_archivo, caption);
+  const result = await enviarWhatsAppDocumento(telefono, doc.url, doc.nombre_archivo, caption, doc.tipo_mime);
   if (!result.ok) return result;
 
   // Registrar el envío en mensajes_whatsapp
