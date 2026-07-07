@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { enviarMessengerTexto } from "@/lib/messenger";
 import { variantesTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
 import type {
@@ -11,6 +12,17 @@ import type {
   ConversacionResumen,
   MensajeChat,
 } from "@/lib/types";
+
+/** Devuelve true si el identificador es un canal de red social (no es teléfono). */
+function esCanalSocial(telefono: string): boolean {
+  return telefono.startsWith("messenger:") || telefono.startsWith("instagram:");
+}
+
+/** Variantes de búsqueda para el identificador (social: solo exacto; tel: múltiples formatos). */
+function variantesId(telefono: string): string[] {
+  if (esCanalSocial(telefono)) return [telefono];
+  return variantesTelefono(telefono);
+}
 
 /**
  * Server actions del módulo CONVERSACIONES de WhatsApp (bandeja bidireccional).
@@ -171,7 +183,7 @@ export async function obtenerConversacion(
   const { data, error } = await sb
     .from("mensajes_whatsapp")
     .select("*")
-    .in("telefono", variantesTelefono(telefono))
+    .in("telefono", variantesId(telefono))
     .order("created_at", { ascending: true })
     .limit(500);
   if (error) throw new Error(error.message);
@@ -334,7 +346,7 @@ async function idsDeTelefono(
   const { data } = await sb
     .from("mensajes_whatsapp")
     .select("expediente_id, prospecto_id")
-    .in("telefono", variantesTelefono(telefono))
+    .in("telefono", variantesId(telefono))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -356,7 +368,20 @@ export async function responderConversacion(
   const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
   const agente = await nombreAgenteActual(sb);
 
-  const r = await enviarWhatsAppTexto(telefono, texto);
+  let r: { ok: boolean; error?: string; messageId?: string };
+  let canal: string;
+  if (telefono.startsWith("messenger:")) {
+    const psid = telefono.slice("messenger:".length);
+    r = await enviarMessengerTexto(psid, texto);
+    canal = "Messenger";
+  } else if (telefono.startsWith("instagram:")) {
+    const psid = telefono.slice("instagram:".length);
+    r = await enviarMessengerTexto(psid, texto);
+    canal = "Instagram";
+  } else {
+    r = await enviarWhatsAppTexto(telefono, texto);
+    canal = "WhatsApp";
+  }
   await sb.from("mensajes_whatsapp").insert({
     telefono,
     texto,
@@ -365,13 +390,13 @@ export async function responderConversacion(
     prospecto_id: prospectoId,
     estado: r.ok ? "enviado" : "error",
     agente,
-    wa_message_id: r.messageId || null,
+    wa_message_id: (r as any).messageId || null,
   });
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
       expedienteId,
       tipo: "mensaje",
-      titulo: "Respuesta por WhatsApp",
+      titulo: `Respuesta por ${canal}`,
       detalle: texto,
     });
   }
@@ -397,7 +422,7 @@ export async function eliminarConversacion(
   const { error } = await sb
     .from("mensajes_whatsapp")
     .delete()
-    .in("telefono", variantesTelefono(telefono));
+    .in("telefono", variantesId(telefono));
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
@@ -455,7 +480,7 @@ export async function finalizarConversacion(
   const { data: ultimo } = await sb
     .from("mensajes_whatsapp")
     .select("id")
-    .in("telefono", variantesTelefono(telefono))
+    .in("telefono", variantesId(telefono))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -483,7 +508,7 @@ export async function asignarAgente(
   const { data: ultimo } = await sb
     .from("mensajes_whatsapp")
     .select("id")
-    .in("telefono", variantesTelefono(telefono))
+    .in("telefono", variantesId(telefono))
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -31,7 +31,36 @@ type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 const INPUT =
   "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
 
+type CanalMensajeria = "messenger" | "instagram" | "whatsapp";
+
+function canalDe(telefono: string): CanalMensajeria {
+  if (telefono.startsWith("messenger:")) return "messenger";
+  if (telefono.startsWith("instagram:")) return "instagram";
+  return "whatsapp";
+}
+
+function CanalBadge({ telefono, size = "sm" }: { telefono: string; size?: "sm" | "xs" }) {
+  const canal = canalDe(telefono);
+  if (canal === "messenger") return (
+    <span title="Facebook Messenger" className={`shrink-0 rounded font-bold ${size === "xs" ? "text-[8px] px-1 py-0.5" : "text-[9px] px-1.5 py-0.5"} bg-blue-100 text-blue-700 border border-blue-200`}>
+      Messenger
+    </span>
+  );
+  if (canal === "instagram") return (
+    <span title="Instagram DM" className={`shrink-0 rounded font-bold ${size === "xs" ? "text-[8px] px-1 py-0.5" : "text-[9px] px-1.5 py-0.5"} bg-pink-100 text-pink-700 border border-pink-200`}>
+      Instagram
+    </span>
+  );
+  return (
+    <span title="WhatsApp" className={`shrink-0 rounded font-bold ${size === "xs" ? "text-[8px] px-1 py-0.5" : "text-[9px] px-1.5 py-0.5"} bg-green-100 text-green-700 border border-green-200`}>
+      WhatsApp
+    </span>
+  );
+}
+
 export function coincidenTelefonos(tel1: string, tel2: string): boolean {
+  const esSocial = (t: string) => t.startsWith("messenger:") || t.startsWith("instagram:");
+  if (esSocial(tel1) || esSocial(tel2)) return tel1 === tel2;
   const t1 = tel1.replace(/\D/g, "");
   const t2 = tel2.replace(/\D/g, "");
   if (!t1 || !t2) return false;
@@ -660,8 +689,9 @@ export function Conversaciones() {
                   </span>
 
                   <span className="flex w-full items-center justify-between gap-2 mt-2">
-                    <span className="font-mono text-[9px] text-carbon/40">
-                      {c.telefono} · {horaCorta(c.ultimaFecha)}
+                    <span className="flex items-center gap-1 font-mono text-[9px] text-carbon/40 min-w-0">
+                      <CanalBadge telefono={c.telefono} size="xs" />
+                      <span className="truncate">{c.telefono} · {horaCorta(c.ultimaFecha)}</span>
                     </span>
                     <span className="shrink-0">
                       {!c.atiende || c.atiende === "" ? (
@@ -726,6 +756,7 @@ export function Conversaciones() {
 
                 {/* Fila 2: Enlaces y metadatos */}
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[9px] text-carbon/50">
+                  <CanalBadge telefono={detalle.telefono} />
                   <span>{detalle.telefono}</span>
                   {detalle.expedienteId && (
                     <>
@@ -882,8 +913,8 @@ export function Conversaciones() {
                 )}
 
                 <div className="space-y-1.5 relative">
-                  {/* Advertencia de ventana de 24h expirada */}
-                  {!detalle.ventanaAbierta && (
+                  {/* Advertencia de ventana de 24h expirada (solo WhatsApp) */}
+                  {!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp" && (
                     <div className="rounded-md border border-dorado/30 bg-dorado/5 px-2.5 py-1.5 text-[10px] text-carbon/70 flex items-start gap-1.5 leading-relaxed">
                       <span className="shrink-0 mt-0.5">⚠️</span>
                       <span>
@@ -975,10 +1006,14 @@ export function Conversaciones() {
                       value={texto}
                       onChange={handleTextareaChange}
                       rows={2}
-                      placeholder={detalle.ventanaAbierta ? "Escribe un mensaje o usa #..." : "Ventana cerrada - No puedes enviar mensajes"}
+                      placeholder={
+                        (detalle.ventanaAbierta || canalDe(detalle.telefono) !== "whatsapp")
+                          ? "Escribe un mensaje o usa #..."
+                          : "Ventana cerrada - No puedes enviar mensajes"
+                      }
                       className={`${INPUT} disabled:bg-slate-50 disabled:text-carbon/40`}
                       onKeyDown={handleKeyDown}
-                      disabled={!detalle.ventanaAbierta}
+                      disabled={!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp"}
                     />
                     {/* Botón adjuntar documento */}
                     <div className="relative shrink-0">
@@ -1014,7 +1049,7 @@ export function Conversaciones() {
                     <button
                       type="button"
                       onClick={enviarTexto}
-                      disabled={enviando || !texto.trim() || !detalle.ventanaAbierta}
+                      disabled={enviando || !texto.trim() || (!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp")}
                       className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
                     >
                       {enviando ? "…" : "Enviar"}
