@@ -478,22 +478,12 @@ export async function finalizarConversacion(
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   const sb = supabaseServidor();
-  const { data: ultimo } = await sb
-    .from("mensajes_whatsapp")
-    .select("id")
-    .in("telefono", variantesId(telefono))
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
-  if (!ultimo) {
-    return { ok: false, error: "No hay mensajes en esta conversación." };
-  }
-
+  // Actualizar el estado finalizado para todos los mensajes de todas las variantes de este teléfono
   const { error } = await sb
     .from("mensajes_whatsapp")
     .update({ finalizado })
-    .eq("id", ultimo.id);
+    .in("telefono", variantesId(telefono));
 
   if (error) return { ok: false, error: error.message };
   return { ok: true };
