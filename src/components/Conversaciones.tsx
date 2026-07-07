@@ -358,6 +358,13 @@ export function Conversaciones() {
     } else {
       return c.finalizado;
     }
+  }).sort((a, b) => {
+    // Pendientes (último mensaje entrante sin responder) siempre primero
+    const aPendiente = !a.finalizado && a.ultimaDireccion === "in" ? 0 : 1;
+    const bPendiente = !b.finalizado && b.ultimaDireccion === "in" ? 0 : 1;
+    if (aPendiente !== bPendiente) return aPendiente - bPendiente;
+    // Dentro de cada grupo, más reciente primero
+    return b.ultimaFecha.localeCompare(a.ultimaFecha);
   });
 
   const filteredAtajos = respuestasRapidas.filter((r) =>
@@ -649,20 +656,20 @@ export function Conversaciones() {
                   key={c.telefono}
                   type="button"
                   onClick={() => abrir(c.telefono)}
-                  className={`flex w-full flex-col items-start border-b border-carbon/5 px-3 py-2.5 text-left transition rounded-lg ${
+                  className={`flex w-full flex-col items-start px-3 py-2.5 text-left transition rounded-lg ${
                     sel === c.telefono
                       ? "bg-sauce/10 border-l-4 border-l-sauce"
                       : pendiente
-                      ? "bg-dorado/8 border-l-4 border-l-dorado hover:bg-dorado/15"
-                      : "hover:bg-crema/40"
+                      ? "bg-red-50 border-l-4 border-l-red-500 hover:bg-red-100 shadow-sm"
+                      : "border-b border-carbon/5 hover:bg-crema/40"
                   }`}
                 >
                   <span className="flex w-full items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5 min-w-0">
                       {pendiente && (
-                        <span className="shrink-0 h-2 w-2 rounded-full bg-dorado animate-pulse" title="Mensaje sin responder" />
+                        <span className="shrink-0 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" title="Pendiente de respuesta" />
                       )}
-                      <span className={`truncate font-titular font-semibold text-sm ${pendiente ? "text-carbon" : "text-verde-profundo"}`}>
+                      <span className={`truncate font-titular font-semibold text-sm ${pendiente ? "text-red-700" : "text-verde-profundo"}`}>
                         {c.nombre}
                       </span>
                     </span>
@@ -671,7 +678,12 @@ export function Conversaciones() {
                       ventanaAbierta={c.ventanaAbierta}
                     />
                   </span>
-                  <span className="mt-0.5 w-full truncate text-xs text-carbon/50 font-normal">
+                  {pendiente && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                      ● Pendiente de respuesta
+                    </span>
+                  )}
+                  <span className={`mt-0.5 w-full truncate text-xs font-normal ${pendiente ? "text-red-600 font-medium" : "text-carbon/50"}`}>
                     {c.ultimoTexto || "—"}
                   </span>
                   
