@@ -42,7 +42,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/login") ||
     path.startsWith("/seguimiento") ||
     path.startsWith("/privacidad") ||
-    path.startsWith("/cotizacion")
+    path.startsWith("/cotizacion") ||
+    path.startsWith("/agenda")
   );
 }
 
