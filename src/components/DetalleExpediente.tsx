@@ -585,9 +585,8 @@ export function DetalleExpediente({ id }: { id: string }) {
             phoneOrId={expediente.id}
             datosEnrolamiento={{
               phone: expediente.telefono || "",
-              nombre: [expediente.cliente, expediente.primer_apellido, expediente.segundo_apellido].filter(Boolean).join(" "),
-              email: expediente.email || undefined,
-              prospectoId: expediente.prospecto_id || undefined,
+              nombre: [expediente.cliente, expediente.primerApellido, expediente.segundoApellido].filter(Boolean).join(" "),
+              prospectoId: expediente.prospectoId || undefined,
               expedienteId: expediente.id,
             }}
           />

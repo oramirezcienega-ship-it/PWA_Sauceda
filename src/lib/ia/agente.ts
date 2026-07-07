@@ -4,6 +4,7 @@ import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
+import { generarAudioTTS, subirAudioAMeta, enviarWhatsAppAudio } from "@/lib/ia/audio";
 
 /**
  * AGENTE DE IA (Claude) para responder automáticamente las conversaciones
@@ -443,6 +444,34 @@ export async function responderConIA(
       r = await enviarInstagramTexto(igsid, textoRespuesta);
     } else {
       r = await enviarWhatsAppTexto(canal, textoRespuesta);
+      
+      // Si la respuesta en texto fue exitosa y está activa la respuesta por audio,
+      // generamos y enviamos el audio en segundo plano.
+      if (r.ok && process.env.IA_RESPONDER_CON_AUDIO === "on") {
+        (async () => {
+          try {
+            console.log(`[WhatsApp Outbound Voice] Generando audio de respuesta para ${canal}...`);
+            const audioBuffer = await generarAudioTTS(textoRespuesta);
+            if (audioBuffer) {
+              const mediaId = await subirAudioAMeta(audioBuffer, "audio/mpeg", "respuesta.mp3");
+              if (mediaId) {
+                const resAudio = await enviarWhatsAppAudio(canal, mediaId);
+                if (resAudio.ok) {
+                  console.log(`[WhatsApp Outbound Voice] Audio de respuesta enviado con éxito a ${canal}`);
+                } else {
+                  console.warn(`[WhatsApp Outbound Voice] No se pudo enviar el audio: ${resAudio.error}`);
+                }
+              } else {
+                console.warn("[WhatsApp Outbound Voice] No se pudo subir el audio a Meta.");
+              }
+            } else {
+              console.warn("[WhatsApp Outbound Voice] No se pudo generar el buffer de audio TTS.");
+            }
+          } catch (audioErr) {
+            console.error("[WhatsApp Outbound Voice] Error en el flujo de audio saliente:", audioErr);
+          }
+        })();
+      }
     }
 
     await sb.from("mensajes_whatsapp").insert({

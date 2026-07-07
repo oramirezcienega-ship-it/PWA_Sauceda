@@ -4,6 +4,7 @@ import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
+import { transcribirAudioMeta } from "@/lib/ia/audio";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -20,6 +21,7 @@ export interface MensajeWhatsApp {
   mensaje?: string;
   /** Id del mensaje en Meta (para no duplicarlo si reintenta el webhook). */
   waMessageId?: string;
+  audioId?: string;
   referral?: {
     source_url?: string;
     source_id?: string;
@@ -44,6 +46,7 @@ interface PayloadWhatsApp {
           from?: string;
           type?: string;
           text?: { body?: string };
+          audio?: { id?: string };
           referral?: {
             source_url?: string;
             source_id?: string;
@@ -83,6 +86,7 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
           nombre: nombrePorWaId[m.from],
           mensaje: texto,
           waMessageId: m.id,
+          audioId: m.type === "audio" ? m.audio?.id : undefined,
           referral: m.referral,
         });
       }
@@ -235,6 +239,22 @@ export async function registrarLeadWhatsApp(
   lead: MensajeWhatsApp,
 ): Promise<void> {
   const sb = supabaseServidor();
+
+  // Si es un audio, transcribirlo usando Whisper antes de continuar
+  if (lead.audioId) {
+    try {
+      console.log(`[WhatsApp Inbound Voice] Se detectó audio con id ${lead.audioId} para ${lead.telefono}. Transcribiendo...`);
+      const textoTranscrito = await transcribirAudioMeta(lead.audioId);
+      if (textoTranscrito) {
+        lead.mensaje = textoTranscrito;
+        console.log(`[WhatsApp Inbound Voice] Transcripción exitosa: "${textoTranscrito}"`);
+      } else {
+        console.warn("[WhatsApp Inbound Voice] No se pudo obtener la transcripción del audio.");
+      }
+    } catch (err) {
+      console.error("[WhatsApp Inbound Voice] Error al transcribir audio:", err);
+    }
+  }
 
   // Teléfono normalizado (canónico) y sus variantes para deduplicar.
   const telefono = normalizarTelefono(lead.telefono);
