@@ -50,7 +50,9 @@ function esRutaPublica(path: string): boolean {
   return (
     path.startsWith("/login") ||
     path.startsWith("/seguimiento") ||
-    path.startsWith("/privacidad")
+    path.startsWith("/privacidad") ||
+    path.startsWith("/cotizacion") ||
+    path.startsWith("/agenda")
   );
 }
 
