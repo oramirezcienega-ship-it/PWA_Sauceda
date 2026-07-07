@@ -42,6 +42,8 @@ export function ReservarCitaCliente({
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [citaConfirmada, setCitaConfirmada] = useState<any | null>(null);
 
+  const [clienteNombrePublico, setClienteNombrePublico] = useState("");
+
   // Pre-llenar datos si viene prospectoId
   useEffect(() => {
     if (!prospectoId) return;
@@ -51,6 +53,7 @@ export function ReservarCitaCliente({
         const datos = await obtenerProspectoPublico(prospectoId!);
         if (datos) {
           setNombre(datos.nombre);
+          setClienteNombrePublico(datos.nombre);
           setTelefono(datos.telefono);
           setCorreo(datos.correo);
         }
@@ -295,6 +298,13 @@ export function ReservarCitaCliente({
                 <p className="text-white/80">Duración: {asesor.duracion_cita} minutos</p>
               </div>
             </div>
+
+            {clienteNombrePublico && (
+              <div className="border-t border-white/10 pt-4 space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-white/40 font-bold">Invitación para</p>
+                <p className="font-titular text-sm font-semibold text-crema leading-snug">{clienteNombrePublico}</p>
+              </div>
+            )}
           </div>
 
           <div className="text-[10px] text-white/40 leading-relaxed pt-6 border-t border-white/5">
@@ -305,8 +315,14 @@ export function ReservarCitaCliente({
         {/* Panel Derecho: Selector de Fecha y Formulario */}
         <div className="md:col-span-8 p-6 md:p-8 space-y-6">
           <div className="border-b border-carbon/10 pb-4">
-            <h1 className="font-titular text-2xl font-bold text-verde-profundo">Selecciona fecha y hora</h1>
-            <p className="text-xs text-carbon/50 mt-1">Busca los espacios disponibles en la agenda de tu asesor.</p>
+            <h1 className="font-titular text-2xl font-bold text-verde-profundo">
+              {clienteNombrePublico ? `¡Hola, ${clienteNombrePublico.split(" ")[0]}! 👋` : "Selecciona fecha y hora"}
+            </h1>
+            <p className="text-xs text-carbon/50 mt-1">
+              {clienteNombrePublico
+                ? `Elige el horario que mejor te convenga para tu cita con ${asesor.nombre}.`
+                : "Busca los espacios disponibles en la agenda de tu asesor."}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
