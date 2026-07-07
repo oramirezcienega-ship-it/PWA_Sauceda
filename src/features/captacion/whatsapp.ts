@@ -277,12 +277,14 @@ export async function registrarLeadWhatsApp(
       console.log(`[WhatsApp Inbound Voice] Se detectó audio con id ${lead.audioId} para ${lead.telefono}. Transcribiendo...`);
       const textoTranscrito = await transcribirAudioMeta(lead.audioId);
       if (textoTranscrito) {
-        lead.mensaje = textoTranscrito;
+        lead.mensaje = `[audio:${lead.audioId}] ${textoTranscrito}`;
         console.log(`[WhatsApp Inbound Voice] Transcripción exitosa: "${textoTranscrito}"`);
       } else {
+        lead.mensaje = `[audio:${lead.audioId}] (mensaje de tipo audio)`;
         console.warn("[WhatsApp Inbound Voice] No se pudo obtener la transcripción del audio.");
       }
     } catch (err) {
+      lead.mensaje = `[audio:${lead.audioId}] (mensaje de tipo audio)`;
       console.error("[WhatsApp Inbound Voice] Error al transcribir audio:", err);
     }
   }

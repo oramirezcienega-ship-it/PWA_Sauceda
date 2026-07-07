@@ -162,6 +162,36 @@ function resolverParametros(
   return t;
 }
 
+/** Renderiza el texto del mensaje, soportando reproductores de audio para audios de WhatsApp */
+function renderizarContenidoMensaje(texto: string) {
+  if (texto && texto.startsWith("[audio:")) {
+    const match = texto.match(/^\[audio:([^\]]+)\]\s*(.*)$/);
+    if (match) {
+      const mediaId = match[1];
+      const resto = match[2];
+      return (
+        <div className="space-y-1.5 min-w-[220px]">
+          <div className="flex items-center gap-1.5 text-[10px] text-carbon/40 font-semibold select-none">
+            <span>🎙️ Mensaje de voz de WhatsApp</span>
+          </div>
+          <audio
+            src={`/api/conversaciones/audio?mediaId=${mediaId}`}
+            controls
+            className="h-8 w-full max-w-[250px] outline-none"
+            preload="metadata"
+          />
+          {resto && resto !== "(mensaje de tipo audio)" && (
+            <p className="text-[11px] italic bg-carbon/5 p-2 rounded-lg border border-carbon/5 mt-1 text-carbon/80 leading-relaxed font-normal">
+              "{resto}"
+            </p>
+          )}
+        </div>
+      );
+    }
+  }
+  return <span>{texto}</span>;
+}
+
 /** Bandeja de conversaciones de WhatsApp (lista + hilo + responder). */
 export function Conversaciones() {
   const [tab, setTab] = useState<TabPrincipal>("bandeja");
@@ -906,13 +936,13 @@ export function Conversaciones() {
                     className={`flex ${m.direccion === "out" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[78%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm ${
+                      className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${
                         m.direccion === "out"
-                          ? "bg-sauce text-crema"
+                          ? "bg-sauce text-crema whitespace-pre-line"
                           : "bg-white border border-carbon/5 text-carbon"
                       }`}
                     >
-                      {m.texto}
+                      {renderizarContenidoMensaje(m.texto)}
                       <span
                         className={`mt-1 block text-right text-[10px] ${
                           m.direccion === "out" ? "text-crema/70" : "text-carbon/40"
