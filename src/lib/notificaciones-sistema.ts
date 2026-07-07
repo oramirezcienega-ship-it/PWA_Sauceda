@@ -261,6 +261,44 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
 }
 
 /**
+ * Notifica in-app cuando llega un mensaje nuevo de un contacto existente.
+ * No envía WhatsApp ni email (evita ruido por cada mensaje).
+ */
+export async function notificarMensajeEntrante(datos: {
+  telefono: string;
+  texto: string;
+  nombre: string;
+  expedienteId: string | null;
+  prospectoId: string | null;
+}): Promise<void> {
+  try {
+    const sb = supabaseServidor();
+    const { data: perfiles } = await sb
+      .from("perfiles")
+      .select("id, rol, activo")
+      .eq("activo", true);
+    if (!perfiles || perfiles.length === 0) return;
+
+    const enlace = datos.expedienteId
+      ? `/conversaciones?tel=${encodeURIComponent(datos.telefono)}`
+      : `/conversaciones?tel=${encodeURIComponent(datos.telefono)}`;
+
+    const texto = (datos.texto || "").slice(0, 100);
+    const notifs = perfiles.map((p) => ({
+      perfil_id: p.id,
+      titulo: `💬 Mensaje de ${datos.nombre}`,
+      cuerpo: texto || "(mensaje sin texto)",
+      enlace,
+      leido: false,
+    }));
+
+    await sb.from("notificaciones").insert(notifs);
+  } catch (err) {
+    console.error("Error al notificar mensaje entrante:", err);
+  }
+}
+
+/**
  * Notifica a un asesor específico cuando se le asigna un expediente.
  * Reutiliza el mismo formato de plantilla para mayor simplicidad y consistencia.
  */

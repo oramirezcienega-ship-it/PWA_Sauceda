@@ -406,6 +406,8 @@ export interface ConversacionResumen {
   atiende: string;
   ultimoInboundFecha: string | null;
   finalizado: boolean;
+  /** Dirección del último mensaje: 'in' = cliente esperando respuesta, 'out' = ya respondimos. */
+  ultimaDireccion: "in" | "out";
 }
 
 /** Detalle de una conversación (hilo completo). */

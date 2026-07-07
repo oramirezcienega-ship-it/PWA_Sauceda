@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
               const pageToken = isInstagram
                 ? (process.env.INSTAGRAM_PAGE_TOKEN || process.env.MESSENGER_PAGE_TOKEN)
                 : process.env.MESSENGER_PAGE_TOKEN;
+              const adsToken = process.env.META_ADS_TOKEN || pageToken;
 
               // 1. Consultar perfil de Facebook/Instagram Graph API para obtener el nombre real
               if (pageToken) {
@@ -123,9 +124,9 @@ export async function POST(request: NextRequest) {
                 }
 
                 const adId = referral.ad_id;
-                if (adId && pageToken) {
+                if (adId && adsToken) {
                   try {
-                    const adUrl = `https://graph.facebook.com/v21.0/${adId}?fields=name,campaign{name},adset{name}&access_token=${pageToken}`;
+                    const adUrl = `https://graph.facebook.com/v21.0/${adId}?fields=name,campaign{name},adset{name}&access_token=${adsToken}`;
                     const adRes = await fetch(adUrl);
                     if (adRes.ok) {
                       const adData = await adRes.json();

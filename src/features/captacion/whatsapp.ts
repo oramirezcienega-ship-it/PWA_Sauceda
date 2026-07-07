@@ -177,6 +177,7 @@ export async function guardarMensajeEntrante(
     expedienteId: string | null;
     prospectoId: string | null;
     waMessageId?: string;
+    nombre?: string;
   },
 ): Promise<boolean> {
   try {
@@ -191,8 +192,38 @@ export async function guardarMensajeEntrante(
     // error (p. ej. choque del índice único) => ya existía, no es nuevo.
     const esNuevo = !error;
     if (esNuevo) {
-      // Sacar de secuencias de automatización si estaba activo
       await comprobarYSalirDeSecuenciaPorMensaje(sb, datos.telefono);
+      // Notificación in-app para todos los asesores activos
+      try {
+        let nombre = datos.nombre || datos.telefono;
+        if (!datos.nombre) {
+          if (datos.expedienteId) {
+            const { data: exp } = await sb
+              .from("expedientes")
+              .select("cliente, primer_apellido")
+              .eq("id", datos.expedienteId)
+              .maybeSingle();
+            if (exp) nombre = [exp.cliente, (exp as any).primer_apellido].filter(Boolean).join(" ") || nombre;
+          } else if (datos.prospectoId) {
+            const { data: pro } = await sb
+              .from("prospectos")
+              .select("nombre, primer_apellido")
+              .eq("id", datos.prospectoId)
+              .maybeSingle();
+            if (pro) nombre = [pro.nombre, (pro as any).primer_apellido].filter(Boolean).join(" ") || nombre;
+          }
+        }
+        const { notificarMensajeEntrante } = await import("@/lib/notificaciones-sistema");
+        void notificarMensajeEntrante({
+          telefono: datos.telefono,
+          texto: datos.texto,
+          nombre,
+          expedienteId: datos.expedienteId,
+          prospectoId: datos.prospectoId,
+        });
+      } catch (notifErr) {
+        console.error("Error al enviar notificación de mensaje entrante:", notifErr);
+      }
     }
     return esNuevo;
   } catch (err) {
@@ -251,7 +282,7 @@ export async function registrarLeadWhatsApp(
     }
 
     const adId = lead.referral.source_id;
-    const token = process.env.WHATSAPP_TOKEN || process.env.MESSENGER_PAGE_TOKEN;
+    const token = process.env.META_ADS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.MESSENGER_PAGE_TOKEN;
     if (adId && token) {
       try {
         const adUrl = `https://graph.facebook.com/v21.0/${adId}?fields=name,campaign{name},adset{name}&access_token=${token}`;

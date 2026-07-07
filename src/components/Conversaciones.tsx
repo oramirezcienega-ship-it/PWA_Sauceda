@@ -642,18 +642,29 @@ export function Conversaciones() {
                 No hay conversaciones en esta pestaña.
               </p>
             ) : (
-              conversacionesFiltradas.map((c) => (
+              conversacionesFiltradas.map((c) => {
+                const pendiente = !c.finalizado && c.ultimaDireccion === "in";
+                return (
                 <button
                   key={c.telefono}
                   type="button"
                   onClick={() => abrir(c.telefono)}
-                  className={`flex w-full flex-col items-start border-b border-carbon/5 px-3 py-2.5 text-left transition hover:bg-crema/40 rounded-lg ${
-                    sel === c.telefono ? "bg-sauce/10 border-l-4 border-l-sauce" : ""
+                  className={`flex w-full flex-col items-start border-b border-carbon/5 px-3 py-2.5 text-left transition rounded-lg ${
+                    sel === c.telefono
+                      ? "bg-sauce/10 border-l-4 border-l-sauce"
+                      : pendiente
+                      ? "bg-dorado/8 border-l-4 border-l-dorado hover:bg-dorado/15"
+                      : "hover:bg-crema/40"
                   }`}
                 >
                   <span className="flex w-full items-center justify-between gap-2">
-                    <span className="truncate font-titular font-semibold text-verde-profundo text-sm">
-                      {c.nombre}
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {pendiente && (
+                        <span className="shrink-0 h-2 w-2 rounded-full bg-dorado animate-pulse" title="Mensaje sin responder" />
+                      )}
+                      <span className={`truncate font-titular font-semibold text-sm ${pendiente ? "text-carbon" : "text-verde-profundo"}`}>
+                        {c.nombre}
+                      </span>
                     </span>
                     <Countdown24h
                       ultimoInboundFecha={c.ultimoInboundFecha}
@@ -710,7 +721,8 @@ export function Conversaciones() {
                     </span>
                   </span>
                 </button>
-              ))
+              );
+              })}
             )}
           </div>
         </div>

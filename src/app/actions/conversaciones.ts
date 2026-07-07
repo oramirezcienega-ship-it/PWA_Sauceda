@@ -168,6 +168,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       ultimoInboundFecha: ultimoInbound?.created_at ?? null,
       finalizado: ultimo.finalizado ?? false,
       atiende: atiendeFinal,
+      ultimaDireccion: ultimo.direccion,
     });
   });
   resumenes.sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha));
@@ -595,4 +596,38 @@ export async function eliminarRespuestaRapida(id: string): Promise<{ ok: boolean
   const { error } = await sb.from("respuestas_rapidas").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * Cuenta cuántas conversaciones abiertas tienen el último mensaje entrante
+ * (el cliente escribió y nadie ha respondido todavía).
+ * Se usa para el badge del menú de Conversaciones.
+ */
+export async function contarConversacionesPendientes(): Promise<number> {
+  try {
+    const { usuarioActual } = await import("@/lib/supabase/cliente-sesion");
+    const u = await usuarioActual();
+    if (!u) return 0;
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("mensajes_whatsapp")
+      .select("telefono, direccion, finalizado, created_at")
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    if (!data) return 0;
+    // Agrupar por teléfono y tomar el último mensaje de cada hilo
+    const porTel = new Map<string, { direccion: string; finalizado: boolean }>();
+    for (const f of data as { telefono: string; direccion: string; finalizado?: boolean; created_at: string }[]) {
+      if (!porTel.has(f.telefono)) {
+        porTel.set(f.telefono, { direccion: f.direccion, finalizado: f.finalizado ?? false });
+      }
+    }
+    let count = 0;
+    porTel.forEach(({ direccion, finalizado }) => {
+      if (!finalizado && direccion === "in") count++;
+    });
+    return count;
+  } catch {
+    return 0;
+  }
 }

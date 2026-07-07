@@ -15,6 +15,7 @@ import {
   eliminarNotificacion,
   type NotificacionApp,
 } from "@/app/actions/notificaciones";
+import { contarConversacionesPendientes } from "@/app/actions/conversaciones";
 
 /**
  * Estructura (chrome) del panel del admin: menú de navegación en una columna
@@ -52,6 +53,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [abierto, setAbierto] = useState(false);
   const [notificaciones, setNotificaciones] = useState<NotificacionApp[]>([]);
   const [notifsAbierto, setNotifsAbierto] = useState(false);
+  const [conversacionesPendientes, setConversacionesPendientes] = useState(0);
 
   useEffect(() => {
     rolUsuarioActual()
@@ -68,8 +70,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const refrescarNotificaciones = async () => {
     if (esRutaPublica(pathname)) return;
     try {
-      const lista = await listarNotificaciones();
+      const [lista, pendientes] = await Promise.all([
+        listarNotificaciones(),
+        contarConversacionesPendientes(),
+      ]);
       setNotificaciones(lista);
+      setConversacionesPendientes(pendientes);
     } catch (err) {
       console.error("Error al cargar notificaciones:", err);
     }
@@ -244,19 +250,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const navegacion = (
     <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
-      {enlaces.map((l) => (
-        <Link
-          key={l.href}
-          href={l.href}
-          className={`rounded-md px-3 py-2 text-sm transition ${
-            activo(l.href)
-              ? "bg-crema/15 font-medium text-crema"
-              : "text-crema/80 hover:bg-crema/10"
-          }`}
-        >
-          {l.label}
-        </Link>
-      ))}
+      {enlaces.map((l) => {
+        const esConversaciones = l.href === "/conversaciones";
+        return (
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition ${
+              activo(l.href)
+                ? "bg-crema/15 font-medium text-crema"
+                : "text-crema/80 hover:bg-crema/10"
+            }`}
+          >
+            <span>{l.label}</span>
+            {esConversaciones && conversacionesPendientes > 0 && (
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rojo px-1.5 text-[10px] font-bold text-crema animate-pulse">
+                {conversacionesPendientes > 99 ? "99+" : conversacionesPendientes}
+              </span>
+            )}
+          </Link>
+        );
+      })}
     </nav>
   );
 
