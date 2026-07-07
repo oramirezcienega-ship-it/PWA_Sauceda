@@ -32,6 +32,7 @@ const ENLACES = [
   { href: "/prospectos", label: "Prospectos" },
   { href: "/construccion", label: "Construcción" },
   { href: "/conversaciones", label: "Conversaciones" },
+  { href: "/agenda", label: "Agenda" },
   { href: "/secuencias", label: "Secuencias" },
   { href: "/dashboard/llamadas", label: "Llamadas" },
   { href: "/reportes", label: "Reportes" },
@@ -43,7 +44,7 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/seguimiento") ||
     path.startsWith("/privacidad") ||
     path.startsWith("/cotizacion") ||
-    path.startsWith("/agenda")
+    path.startsWith("/agenda/")
   );
 }
 

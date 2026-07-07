@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.agenda_bloqueos (
 CREATE TABLE IF NOT EXISTS public.agenda_citas (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   perfil_id        UUID NOT NULL REFERENCES public.perfiles(id) ON DELETE CASCADE,
+  prospecto_id     UUID REFERENCES public.prospectos(id) ON DELETE SET NULL,
   cliente_nombre   TEXT NOT NULL,
   cliente_telefono TEXT NOT NULL,
   cliente_email    TEXT,
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.agenda_citas (
 -- 4. Índices para agilizar consultas
 CREATE INDEX IF NOT EXISTS agenda_bloqueos_perfil_fecha_idx ON public.agenda_bloqueos(perfil_id, fecha);
 CREATE INDEX IF NOT EXISTS agenda_citas_perfil_fecha_idx ON public.agenda_citas(perfil_id, fecha);
+CREATE INDEX IF NOT EXISTS agenda_citas_prospecto_idx ON public.agenda_citas(prospecto_id);
 
 -- 5. Habilitar RLS (Row Level Security)
 ALTER TABLE public.agenda_bloqueos ENABLE ROW LEVEL SECURITY;

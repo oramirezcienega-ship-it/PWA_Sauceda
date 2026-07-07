@@ -52,7 +52,7 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/seguimiento") ||
     path.startsWith("/privacidad") ||
     path.startsWith("/cotizacion") ||
-    path.startsWith("/agenda")
+    path.startsWith("/agenda/")
   );
 }
 

@@ -208,6 +208,7 @@ export function ModalAgendaUsuario({ usuario, onClose }: ModalAgendaUsuarioProps
         hora_inicio: citaHora,
         hora_fin: horaFin,
         notas: citaNotas || undefined,
+        estado: "confirmada",
       });
 
       setCitas((prev) => [...prev, nueva].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora_inicio.localeCompare(b.hora_inicio)));

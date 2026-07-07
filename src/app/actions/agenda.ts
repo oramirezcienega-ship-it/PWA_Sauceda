@@ -6,6 +6,7 @@ import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesio
 export interface Cita {
   id: string;
   perfil_id: string;
+  prospecto_id?: string | null;
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
@@ -193,6 +194,7 @@ export async function crearCita(datos: {
   hora_fin: string;
   notas?: string;
   prospecto_id?: string;
+  estado?: "pendiente" | "confirmada" | "cancelada";
 }) {
   const sb = supabaseServidor();
 
@@ -211,6 +213,7 @@ export async function crearCita(datos: {
     .from("agenda_citas")
     .insert({
       perfil_id: datos.perfil_id,
+      prospecto_id: datos.prospecto_id || null,
       cliente_nombre: datos.cliente_nombre.trim(),
       cliente_telefono: datos.cliente_telefono.trim(),
       cliente_email: datos.cliente_email?.trim() || null,
@@ -219,7 +222,7 @@ export async function crearCita(datos: {
       hora_inicio: datos.hora_inicio,
       hora_fin: datos.hora_fin,
       notas: datos.notas?.trim() || null,
-      estado: "confirmada",
+      estado: datos.estado || "pendiente",
     })
     .select()
     .single();
@@ -400,5 +403,60 @@ export async function obtenerProspectoPublico(prospectoId: string) {
     nombre: nombreCompleto,
     telefono: data.telefono || "",
     correo: data.correo || "",
+  };
+}
+
+/**
+ * Confirma una cita agendada, cambiando su estado a 'confirmada'.
+ * Requiere rol de administrador/asesor.
+ */
+export async function confirmarCita(citaId: string) {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { error } = await sb
+    .from("agenda_citas")
+    .update({ estado: "confirmada" })
+    .eq("id", citaId);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Obtiene las citas y bloqueos de un asesor en un rango de fechas.
+ * Requiere rol de administrador/asesor.
+ */
+export async function obtenerAgendaRango(
+  perfilId: string,
+  inicio: string,
+  fin: string
+) {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data: citas, error: errCitas } = await sb
+    .from("agenda_citas")
+    .select("*")
+    .eq("perfil_id", perfilId)
+    .gte("fecha", inicio)
+    .lte("fecha", fin)
+    .neq("estado", "cancelada")
+    .order("hora_inicio", { ascending: true });
+
+  if (errCitas) throw new Error(errCitas.message);
+
+  const { data: bloqueos, error: errBloqueos } = await sb
+    .from("agenda_bloqueos")
+    .select("*")
+    .eq("perfil_id", perfilId)
+    .gte("fecha", inicio)
+    .lte("fecha", fin)
+    .order("hora_inicio", { ascending: true });
+
+  if (errBloqueos) throw new Error(errBloqueos.message);
+
+  return {
+    citas: (citas || []) as Cita[],
+    bloqueos: (bloqueos || []) as Bloqueo[],
   };
 }
