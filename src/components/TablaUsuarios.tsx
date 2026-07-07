@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { actualizarUsuario, eliminarUsuario, actualizarPasswordUsuario } from "@/app/actions/usuarios";
 import type { UsuarioApp } from "@/app/actions/usuarios";
 import { CalendarioGuardias } from "./CalendarioGuardias";
+import { ModalAgendaUsuario } from "./ModalAgendaUsuario";
 
 /** Tarjeta individual de usuario en formato fila (horizontal). */
 interface TarjetaUsuarioProps {
@@ -11,10 +12,11 @@ interface TarjetaUsuarioProps {
   onUpdate: (id: string, cambios: Partial<UsuarioApp>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onConfigConmutador: (u: UsuarioApp) => void;
+  onConfigAgenda: (u: UsuarioApp) => void;
   usuarioActualId: string;
 }
 
-function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActualId }: TarjetaUsuarioProps) {
+function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAgenda, usuarioActualId }: TarjetaUsuarioProps) {
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
@@ -235,11 +237,11 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
         <span className="font-mono text-carbon/80 truncate">{u.telefono || "Sin teléfono"}</span>
       </div>
 
-      {/* 3. Ajustes Conmutador */}
+      {/* 3. Ajustes Conmutador y Agenda */}
       <div className="col-span-1 md:col-span-3 flex items-center justify-between gap-2.5 rounded-xl border border-carbon/5 bg-crema p-2.5 shadow-sm min-w-0">
         <div className="min-w-0">
-          <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">Conmutador</span>
-          <span className="block truncate text-xs text-carbon/70">
+          <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">Conmutador e IVR</span>
+          <span className="block truncate text-xs text-carbon/70 font-semibold text-verde-profundo">
             {u.disponible_llamadas ? `🟢 Guardia` : "⚪ Inactivo"}
           </span>
           {u.disponible_llamadas && u.telefono_desvio && (
@@ -248,13 +250,22 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, usuarioActu
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => onConfigConmutador(u)}
-          className="rounded-lg border border-carbon/10 bg-carbon/5 px-2 py-1 text-[10px] font-semibold text-carbon/70 transition hover:border-carbon/20 hover:bg-carbon/10 flex-shrink-0"
-        >
-          ⚙️ Ajustes
-        </button>
+        <div className="flex flex-col gap-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => onConfigConmutador(u)}
+            className="rounded-lg border border-carbon/10 bg-carbon/5 px-2 py-1 text-[10px] font-semibold text-carbon/75 transition hover:border-carbon/20 hover:bg-carbon/10 text-left"
+          >
+            ⚙️ Conmutador
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfigAgenda(u)}
+            className="rounded-lg border border-sauce/20 bg-sauce/5 px-2 py-1 text-[10px] font-semibold text-verde-profundo transition hover:border-sauce/40 hover:bg-sauce/15 text-left"
+          >
+            📅 Agenda/Citas
+          </button>
+        </div>
       </div>
 
       {/* 4. Badges (Rol y Estado) */}
@@ -312,6 +323,7 @@ export function TablaUsuarios({
   usuarioActualId: string;
 }) {
   const [usuarios, setUsuarios] = useState<UsuarioApp[]>(inicial);
+  const [usuarioAgenda, setUsuarioAgenda] = useState<UsuarioApp | null>(null);
 
   // Estados para el modal de configuración del conmutador
   const [agenteConmutador, setAgenteConmutador] = useState<UsuarioApp | null>(null);
@@ -436,6 +448,7 @@ export function TablaUsuarios({
               onUpdate={handleUpdateUsuario}
               onDelete={handleDeleteUsuario}
               onConfigConmutador={abrirConfigConmutador}
+              onConfigAgenda={setUsuarioAgenda}
               usuarioActualId={usuarioActualId}
             />
           ))}
@@ -608,6 +621,13 @@ export function TablaUsuarios({
             </div>
           </div>
         </div>
+      )}
+
+      {usuarioAgenda && (
+        <ModalAgendaUsuario
+          usuario={usuarioAgenda}
+          onClose={() => setUsuarioAgenda(null)}
+        />
       )}
     </>
   );

@@ -14,6 +14,7 @@ import { ConversacionHistorica } from "@/components/ConversacionHistorica";
 import { LlamadasHistoricas } from "@/components/LlamadasHistoricas";
 import { TimelineSecuencia } from "@/components/TimelineSecuencia";
 import { BotonNoViable } from "@/components/BotonNoViable";
+import { LinkCitaWidget } from "@/components/LinkCitaWidget";
 
 export const dynamic = "force-dynamic";
 
@@ -154,6 +155,15 @@ export default async function PaginaProspecto({
             <p className="text-sm text-carbon/80">{prospecto.notas}</p>
           </div>
         )}
+
+        <LinkCitaWidget
+          asesorId={prospecto.asesorId ?? null}
+          asesorNombre={prospecto.asesorNombre ?? null}
+          prospectoId={prospecto.id}
+          prospectoNombre={prospecto.nombreCompleto}
+          prospectoTelefono={prospecto.telefono ?? null}
+          siteUrl={process.env.SITE_URL || "http://localhost:3000"}
+        />
 
         {/* Expedientes relacionados */}
         <div className="mt-6 flex items-center justify-between">
