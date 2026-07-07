@@ -135,7 +135,7 @@ export async function orquestador(): Promise<{
                   // NOTA: No se pasa token de botón URL porque la mayoría de plantillas no tienen
                   // componente de botón. Si una plantilla futura necesita botón URL, se deberá
                   // indicar explícitamente en la notación del paso, por ej: [plantilla: nombre, con_boton]
-                  const { enviarWhatsAppPlantilla, renderizarPlantilla } = await import("@/lib/whatsapp");
+                  const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
                   const waRes = await enviarWhatsAppPlantilla(
                     enrollment.phone,
                     plantillaNombre,
@@ -146,15 +146,7 @@ export async function orquestador(): Promise<{
                   exito = waRes.ok;
                   errorDetalle = waRes.error || "";
                   if (waRes.ok) waMessageId = waRes.messageId;
-
-                  // Guardar en el historial el mensaje REAL que vio el cliente
-                  // (cuerpo de la plantilla con {{n}} ya sustituidos), no la
-                  // etiqueta interna. Si no se puede reconstruir, usar la
-                  // etiqueta como respaldo para no perder el registro.
-                  const textoRenderizado = await renderizarPlantilla(plantillaNombre, idioma, parametros);
-                  contenidoEnviado =
-                    textoRenderizado ||
-                    `[Plantilla: ${plantillaNombre}] ${parametros.join(" | ")}`;
+                  contenidoEnviado = `[Plantilla: ${plantillaNombre}] ${parametros.join(" | ")}`;
                 } else {
                   const waRes = await enviarWhatsAppTexto(enrollment.phone, mensajeFormateado);
                   exito = waRes.ok;
@@ -325,12 +317,7 @@ async function leadRespondio(
     return true;
   }
 
-  // 2. Si tiene expediente, verificar si cambió de etapa a "cerrado" o "perdido".
-  //    OJO: NO se considera "contactado" como respuesta. La etapa "contactado" es un
-  //    estado de entrada válido para la secuencia de reactivación/rescate (un lead que
-  //    fue contactado por nosotros pero quedó inactivo). Si la tratáramos como respuesta,
-  //    el primer paso de la secuencia nunca se enviaría: el lead saldría en la primera
-  //    pasada del cron antes de disparar ningún mensaje.
+  // 2. Si tiene expediente, verificar si cambió de etapa a "cerrado" o "perdido"
   if (enrollment.expediente_id) {
     const { data: exp } = await sb
       .from("expedientes")
@@ -338,7 +325,7 @@ async function leadRespondio(
       .eq("id", enrollment.expediente_id)
       .maybeSingle();
 
-    if (exp && (exp.etapa === "cerrado" || exp.etapa === "perdido")) {
+    if (exp && (exp.etapa === "cerrado" || exp.etapa === "perdido" || exp.etapa === "contactado")) {
       return true;
     }
   }
@@ -665,19 +652,27 @@ async function buscarYEnrolarLeadsInactivos(
     limiteInactividad.setDate(limiteInactividad.getDate() - 3);
     const limiteISO = limiteInactividad.toISOString();
 
-    // 3. Buscar expedientes inactivos (excluir No Viables)
+    // 3. Buscar expedientes inactivos (excluir leads del conmutador/sistema)
     const { data: expedientes } = await sb
       .from("expedientes")
       .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, ultimo_movimiento")
       .in("etapa", ["nuevo-lead", "contactado"])
       .lt("ultimo_movimiento", limiteISO)
-      .eq("no_viable", false);
+      .not("cliente", "ilike", "%Conmutador%")   // Excluir leads del conmutador IA
+      .not("cliente", "ilike", "%Test%")          // Excluir leads de prueba
+      .not("cliente", "ilike", "%Prueba%");       // Excluir leads de prueba en español
 
     if (!expedientes || expedientes.length === 0) return;
 
     // 4. Filtrar los que ya están en alguna secuencia activa y enrolar
     for (const exp of expedientes) {
       if (!exp.telefono) continue;
+
+      // Excluir números no mexicanos (deben empezar con 52 al normalizarse, o ser de 10 dígitos)
+      const telLimpio = exp.telefono.replace(/\D/g, "");
+      const esMexicano = telLimpio.length === 10 ||
+        (telLimpio.startsWith("52") && telLimpio.length >= 12 && telLimpio.length <= 13);
+      if (!esMexicano) continue; // Saltar números de EE.UU. u otros países
 
       // Verificar si ya está enrolado activamente en CUALQUIER secuencia
       const { data: enrolado } = await sb

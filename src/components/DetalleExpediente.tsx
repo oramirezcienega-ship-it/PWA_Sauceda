@@ -16,7 +16,6 @@ import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
-import { BotonNoViable } from "./BotonNoViable";
 
 /**
  * Vista de detalle de un expediente.
@@ -148,18 +147,11 @@ export function DetalleExpediente({ id }: { id: string }) {
 
       {/* Cabecera limpia y justificada */}
       <div className="mt-4 space-y-2">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="font-titular text-2xl sm:text-3xl font-bold text-verde-profundo leading-tight">
-              {expediente.nombreCompleto}
-            </h1>
-            {expediente.noViable && (
-              <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-rojo/10 border border-rojo/30 px-2.5 py-0.5 text-[11px] font-bold text-rojo">
-                🚫 No viable
-              </span>
-            )}
-          </div>
-          <span className="font-mono text-xs text-carbon/40 shrink-0 select-all mt-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="font-titular text-2xl sm:text-3xl font-bold text-verde-profundo leading-tight">
+            {expediente.nombreCompleto}
+          </h1>
+          <span className="font-mono text-xs text-carbon/40 shrink-0 select-all">
             {expediente.id}
           </span>
         </div>
@@ -214,7 +206,7 @@ export function DetalleExpediente({ id }: { id: string }) {
             />
           </div>
 
-          {!expediente.noViable && secuencias.length > 0 && (
+          {secuencias.length > 0 && (
             <div className="flex items-center gap-1.5 text-xs text-carbon/70 sm:border-l sm:border-carbon/10 sm:pl-2">
               <span className="text-[10px] uppercase font-bold text-carbon/40 shrink-0">Secuencia:</span>
               {expediente.secuenciaNombre ? (
@@ -241,15 +233,6 @@ export function DetalleExpediente({ id }: { id: string }) {
               )}
             </div>
           )}
-
-          <div className="sm:border-l sm:border-carbon/10 sm:pl-2">
-            <BotonNoViable
-              entidadId={expediente.id}
-              tipo="expediente"
-              noViable={expediente.noViable ?? false}
-              onCambio={recargar}
-            />
-          </div>
         </div>
       </div>
 
@@ -598,7 +581,15 @@ export function DetalleExpediente({ id }: { id: string }) {
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
           {/* Línea de tiempo de la Secuencia de Automatización */}
-          <TimelineSecuencia phoneOrId={expediente.id} />
+          <TimelineSecuencia
+            phoneOrId={expediente.id}
+            datosEnrolamiento={{
+              phone: expediente.telefono || "",
+              nombre: [expediente.cliente, expediente.primerApellido, expediente.segundoApellido].filter(Boolean).join(" "),
+              prospectoId: expediente.prospectoId || undefined,
+              expedienteId: expediente.id,
+            }}
+          />
 
           {/* Historial de conversaciones de WhatsApp */}
           {expediente.telefono && (
