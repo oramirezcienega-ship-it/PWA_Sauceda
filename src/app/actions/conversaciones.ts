@@ -200,7 +200,7 @@ export async function obtenerConversacion(
       .select("id, cliente, primer_apellido, segundo_apellido, prospecto_id, telefono, perfiles:asesor_id(nombre)");
     
     const exp = (exps ?? []).find(
-      (e) => (e.telefono || "").replace(/\D/g, "").slice(-10) === digitos
+      (e: any) => (e.telefono || "").replace(/\D/g, "").slice(-10) === digitos
     );
 
     let expId: string | null = null;
@@ -223,7 +223,7 @@ export async function obtenerConversacion(
         .from("prospectos")
         .select("id, nombre, primer_apellido, segundo_apellido, telefono, perfiles:asesor_id(nombre)");
       const pros = (prosList ?? []).find(
-        (p) => (p.telefono || "").replace(/\D/g, "").slice(-10) === digitos
+        (p: any) => (p.telefono || "").replace(/\D/g, "").slice(-10) === digitos
       );
       if (pros) {
         prosId = pros.id;
