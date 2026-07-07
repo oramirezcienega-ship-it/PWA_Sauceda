@@ -794,12 +794,19 @@ export function Conversaciones() {
                     <button
                       type="button"
                       onClick={async () => {
+                        const seVaACerrar = !detalle.finalizado;
                         setEnviando(true);
-                        const res = await finalizarConversacion(detalle.telefono, !detalle.finalizado);
+                        const res = await finalizarConversacion(detalle.telefono, seVaACerrar);
                         setEnviando(false);
                         if (!res.ok) {
                           setAviso(res.error ?? "Error al cambiar estado.");
+                        } else if (seVaACerrar) {
+                          // Al CERRAR: quitar la selección para que desaparezca de "Abiertas"
+                          setSel(null);
+                          setDetalle(null);
+                          await refrescar(null);
                         } else {
+                          // Al REABRIR: mantener seleccionada para seguir viendo el chat
                           await refrescar(detalle.telefono);
                         }
                       }}
