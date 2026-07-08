@@ -33,6 +33,7 @@ export type TipoNegocioId =
   | "promocion_venta"
   | "solo_tramite"
   | "construccion"
+  | "construccion-impermeabilizacion"
   | "otro";
 
 export function labelTipoNegocio(tipo: string): string {
@@ -45,6 +46,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Solo Trámite";
     case "construccion":
       return "Sauceda Construye";
+    case "construccion-impermeabilizacion":
+      return "Construcción-Impermeabilización";
     case "otro":
       return "Otro";
     default:

@@ -246,7 +246,8 @@ export function FormularioExpediente({
             <option value="traspaso_compra">Traspaso / Compra de casa</option>
             <option value="promocion_venta">Promoción de venta</option>
             <option value="solo_tramite">Solo trámite</option>
-            <option value="construccion">Sauceda Construye</option>
+            <option value="construccion">Sauceda Construye (General)</option>
+            <option value="construccion-impermeabilizacion">Construcción-Impermeabilización</option>
             <option value="otro">Otro</option>
           </select>
         </Campo>
