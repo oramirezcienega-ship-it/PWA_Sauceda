@@ -332,6 +332,51 @@ export function VisualizadorCotizacionCliente({
               </div>
             </div>
 
+            {/* Nota Técnica Específica de Impermeabilización */}
+            {cotizacion.servicioTipo === "impermeabilizacion" && (
+              <div className="bg-amber-50/50 border border-amber-200/60 p-5 rounded-2xl space-y-3 font-cuerpo print:hidden">
+                <div className="flex items-center gap-2 text-amber-700 font-titular font-bold text-sm">
+                  <span>⚠️</span>
+                  <h4>NOTA IMPORTANTE:</h4>
+                </div>
+                <div className="text-xs text-carbon/70 space-y-2 leading-relaxed">
+                  <p>
+                    Las cotizaciones que te envié están basadas en los metros que mencionaste.
+                  </p>
+                  <p className="font-semibold text-carbon/80">
+                    PERO la inspección técnica EN SITIO es ESENCIAL porque:
+                  </p>
+                  <ul className="space-y-1 pl-1">
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-amber-600 font-bold">✓</span>
+                      <span>Confirmamos los metros exactos (muchas veces varían).</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-amber-600 font-bold">✓</span>
+                      <span>Identificamos bordes, cornisas y áreas anexas que también necesitan impermeabilización.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-amber-600 font-bold">✓</span>
+                      <span>Evaluamos el estado de muros, drenajes y bajadas de agua.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-amber-600 font-bold">✓</span>
+                      <span>Detectamos trabajos adicionales que pudieran ser necesarios.</span>
+                    </li>
+                  </ul>
+                  <p>
+                    En ocasiones, lo que parece 30m² en realidad son 35-40m² cuando se incluyen todos los lados y áreas adyacentes.
+                  </p>
+                  <p className="font-medium text-carbon/80">
+                    Por eso la visita técnica es <span className="font-bold text-verde-profundo">GRATUITA y SIN COMPROMISO</span>. Te damos la cotización final exacta después de inspeccionarlo.
+                  </p>
+                  <p className="text-sauce font-semibold pt-1 text-xs">
+                    ¿Agendamos para que nuestro técnico confirme todos los detalles?
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* 3. Condiciones de Servicio */}
             <div className="space-y-3">
               <h3 className="font-titular text-sm font-bold text-verde-profundo uppercase tracking-wider">Condiciones Comerciales y Garantía</h3>
