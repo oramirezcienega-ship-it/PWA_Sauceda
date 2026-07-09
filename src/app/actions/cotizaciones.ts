@@ -67,6 +67,7 @@ function aCotizacionConcepto(fila: any): CotizacionConcepto {
     unidad: fila.unidad,
     costoUnitario: Number(fila.costo_unitario || 0),
     precioUnitario: Number(fila.precio_unitario || 0),
+    descuento: Number(fila.descuento || 0),
     importe: Number(fila.importe || 0),
     createdAt: fila.created_at
   };
@@ -276,6 +277,7 @@ export async function obtenerCotizacionPorToken(
       cantidad: Number(f.cantidad || 0),
       unidad: f.unidad,
       precioUnitario: Number(f.precio_unitario || 0),
+      descuento: Number(f.descuento || 0),
       importe: Number(f.importe || 0),
       createdAt: f.created_at
     })),
@@ -387,6 +389,7 @@ export async function guardarConceptosCotizacion(
     unidad: string;
     costoUnitario: number;
     precioUnitario: number;
+    descuento?: number;
   }[]
 ): Promise<{ ok: boolean; costoEstimado: number; precioFinal: number }> {
   await requireAdmin();
@@ -411,7 +414,9 @@ export async function guardarConceptosCotizacion(
   let totalPrecio = 0;
 
   const filasInsertar = conceptos.map((c) => {
-    const importe = c.cantidad * c.precioUnitario;
+    const desc = c.descuento || 0;
+    const precioConDescuento = c.precioUnitario * (1 - desc / 100);
+    const importe = c.cantidad * precioConDescuento;
     totalCosto += c.cantidad * c.costoUnitario;
     totalPrecio += importe;
     return {
@@ -421,6 +426,7 @@ export async function guardarConceptosCotizacion(
       unidad: c.unidad,
       costo_unitario: c.costoUnitario,
       precio_unitario: c.precioUnitario,
+      descuento: desc,
       importe
     };
   });

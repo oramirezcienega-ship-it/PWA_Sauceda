@@ -576,6 +576,18 @@ export interface CotizacionConcepto {
   unidad: string;
   costoUnitario: number;
   precioUnitario: number;
+  descuento?: number;
   importe: number;
   createdAt: string;
 }
+
+export interface ProductoServicio {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  unidad: string;
+  costoUnitario: number;
+  precioUnitario: number;
+  createdAt: string;
+}
+

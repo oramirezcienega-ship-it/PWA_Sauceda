@@ -267,33 +267,45 @@ export function VisualizadorCotizacionCliente({
 
             {/* 2. Desglose de Conceptos */}
             <div className="space-y-4">
+              {/* Desglose de inversión */}
               <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">2</span>
                 Desglose e Importe de la Inversión
               </h3>
               <div className="overflow-x-auto rounded-xl border border-carbon/5">
-                <table className="w-full border-collapse text-left text-xs min-w-[550px]">
-                  <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
-                    <tr>
-                      <th className="px-4 py-3">Descripción del Concepto / Insumo</th>
-                      <th className="px-4 py-3 text-center">Cantidad</th>
-                      <th className="px-4 py-3 text-center">Unidad</th>
-                      <th className="px-4 py-3 text-right">P. Unitario</th>
-                      <th className="px-4 py-3 text-right">Importe</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-carbon/5">
-                    {conceptos.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-50/20">
-                        <td className="px-4 py-3 font-medium">{c.descripcion}</td>
-                        <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
-                        <td className="px-4 py-3 text-center">{c.unidad}</td>
-                        <td className="px-4 py-3 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
-                        <td className="px-4 py-3 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {(() => {
+                  const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
+                  return (
+                    <table className="w-full border-collapse text-left text-xs min-w-[550px]">
+                      <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
+                        <tr>
+                          <th className="px-4 py-3">Descripción del Concepto / Insumo</th>
+                          <th className="px-4 py-3 text-center">Cantidad</th>
+                          <th className="px-4 py-3 text-center">Unidad</th>
+                          <th className="px-4 py-3 text-right font-mono">P. Unitario</th>
+                          {tieneDescuento && <th className="px-4 py-3 text-center">Desc.</th>}
+                          <th className="px-4 py-3 text-right">Importe</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-carbon/5">
+                        {conceptos.map((c) => (
+                          <tr key={c.id} className="hover:bg-slate-50/20">
+                            <td className="px-4 py-3 font-medium">{c.descripcion}</td>
+                            <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
+                            <td className="px-4 py-3 text-center">{c.unidad}</td>
+                            <td className="px-4 py-3 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
+                            {tieneDescuento && (
+                              <td className="px-4 py-3 text-center text-rose-600 font-semibold font-mono">
+                                {c.descuento ? `-${c.descuento}%` : "—"}
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
               {/* Total Callout */}

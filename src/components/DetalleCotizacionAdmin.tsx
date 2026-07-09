@@ -44,8 +44,9 @@ export function DetalleCotizacionAdmin({
   const [mensajeInspeccion, setMensajeInspeccion] = useState({ tipo: "", texto: "" });
 
   // --- State para Presupuesto ---
+  const [catalogoProductos, setCatalogoProductos] = useState<any[]>([]);
   const [conceptosEditables, setConceptosEditables] = useState<
-    { descripcion: string; cantidad: number; unidad: string; costoUnitario: number; precioUnitario: number }[]
+    { descripcion: string; cantidad: number; unidad: string; costoUnitario: number; precioUnitario: number; descuento: number }[]
   >(
     conceptosIniciales.map((c) => ({
       descripcion: c.descripcion,
@@ -53,8 +54,18 @@ export function DetalleCotizacionAdmin({
       unidad: c.unidad,
       costoUnitario: c.costoUnitario,
       precioUnitario: c.precioUnitario,
+      descuento: c.descuento || 0,
     }))
   );
+
+  useEffect(() => {
+    import("@/app/actions/productos").then(({ listarProductosServicios }) => {
+      listarProductosServicios()
+        .then(setCatalogoProductos)
+        .catch(console.error);
+    });
+  }, []);
+
   const [guardandoConceptos, setGuardandoConceptos] = useState(false);
   const [mensajeConceptos, setMensajeConceptos] = useState({ tipo: "", texto: "" });
 
@@ -113,7 +124,7 @@ export function DetalleCotizacionAdmin({
   const agregarFilaConcepto = () => {
     setConceptosEditables((prev) => [
       ...prev,
-      { descripcion: "", cantidad: 1, unidad: "m2", costoUnitario: 0, precioUnitario: 0 },
+      { descripcion: "", cantidad: 1, unidad: "m2", costoUnitario: 0, precioUnitario: 0, descuento: 0 },
     ]);
   };
 
@@ -130,6 +141,26 @@ export function DetalleCotizacionAdmin({
         return c;
       })
     );
+  };
+
+  const handleCargarDesdeCatalogo = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const prodId = e.target.value;
+    if (!prodId) return;
+    const prod = catalogoProductos.find((p) => p.id === prodId);
+    if (!prod) return;
+
+    setConceptosEditables((prev) => [
+      ...prev,
+      {
+        descripcion: prod.nombre,
+        cantidad: 1,
+        unidad: prod.unidad,
+        costoUnitario: prod.costoUnitario,
+        precioUnitario: prod.precioUnitario,
+        descuento: 0,
+      },
+    ]);
+    e.target.value = "";
   };
 
   const handleGuardarConceptos = async () => {
@@ -164,19 +195,22 @@ export function DetalleCotizacionAdmin({
         }));
         
         // Refrescar conceptos de base de datos
-        // En un caso real, podemos volver a fetchear los mapeados con ID
-        // Hacemos una recarga parcial simulada
-        setConceptos(conceptosEditables.map((c, idx) => ({
-          id: `temp-${idx}`,
-          cotizacionId: cotizacion.id,
-          descripcion: c.descripcion,
-          cantidad: c.cantidad,
-          unidad: c.unidad,
-          costoUnitario: c.costoUnitario,
-          precioUnitario: c.precioUnitario,
-          importe: c.cantidad * c.precioUnitario,
-          createdAt: new Date().toISOString()
-        })));
+        setConceptos(conceptosEditables.map((c, idx) => {
+          const desc = c.descuento || 0;
+          const precioConDescuento = c.precioUnitario * (1 - desc / 100);
+          return {
+            id: `temp-${idx}`,
+            cotizacionId: cotizacion.id,
+            descripcion: c.descripcion,
+            cantidad: c.cantidad,
+            unidad: c.unidad,
+            costoUnitario: c.costoUnitario,
+            precioUnitario: c.precioUnitario,
+            descuento: desc,
+            importe: c.cantidad * precioConDescuento,
+            createdAt: new Date().toISOString()
+          };
+        }));
       }
     } catch (err) {
       setMensajeConceptos({ tipo: "error", texto: err instanceof Error ? err.message : "Error al guardar conceptos" });
@@ -530,19 +564,35 @@ export function DetalleCotizacionAdmin({
         {/* --- PESTAÑA PRESUPUESTO (CONCEPTOS) --- */}
         {pestaña === "presupuesto" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between border-b pb-2">
+            <div className="flex items-center justify-between border-b pb-2 flex-wrap gap-2">
               <div>
                 <h3 className="font-titular text-lg font-semibold text-verde-profundo">Presupuesto de Obra</h3>
                 <p className="text-xs text-carbon/40 mt-0.5">El desglose de materiales, mano de obra y rendimientos.</p>
               </div>
               {puedeCostear && (
-                <button
-                  type="button"
-                  onClick={agregarFilaConcepto}
-                  className="rounded-lg bg-sauce/15 text-sauce px-3 py-1.5 text-xs font-semibold hover:bg-sauce hover:text-white transition"
-                >
-                  + Agregar Concepto
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {catalogoProductos.length > 0 && (
+                    <select
+                      onChange={handleCargarDesdeCatalogo}
+                      defaultValue=""
+                      className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-semibold text-carbon/70 outline-none focus:border-sauce"
+                    >
+                      <option value="">📦 Seleccionar de Catálogo...</option>
+                      {catalogoProductos.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} ({formatMoneda(p.precioUnitario)})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={agregarFilaConcepto}
+                    className="rounded-lg bg-sauce/15 text-sauce px-3 py-1.5 text-xs font-semibold hover:bg-sauce hover:text-white transition whitespace-nowrap"
+                  >
+                    + Agregar Concepto Libre
+                  </button>
+                </div>
               )}
             </div>
 
@@ -560,20 +610,21 @@ export function DetalleCotizacionAdmin({
 
                 {conceptosEditables.length === 0 ? (
                   <div className="p-8 text-center text-carbon/40 border border-dashed rounded-xl">
-                    No hay conceptos en el presupuesto. Haz clic en "+ Agregar Concepto" para comenzar.
+                    No hay conceptos en el presupuesto. Carga uno del catálogo o haz clic en "+ Agregar Concepto Libre" para comenzar.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs min-w-[700px]">
+                    <table className="w-full text-left border-collapse text-xs min-w-[750px]">
                       <thead>
                         <tr className="border-b border-carbon/10 text-carbon/40 font-semibold uppercase tracking-wider">
-                          <th className="pb-2 w-[40%]">Descripción del Concepto</th>
-                          <th className="pb-2 text-center w-[10%]">Cant.</th>
-                          <th className="pb-2 text-center w-[10%]">Unidad</th>
-                          {(!esOperaciones || esAdmin) && <th className="pb-2 text-right w-[12%]">Costo Int. Unit.</th>}
-                          <th className="pb-2 text-right w-[12%]">Precio Unit.</th>
+                          <th className="pb-2 w-[35%]">Descripción del Concepto</th>
+                          <th className="pb-2 text-center w-[8%]">Cant.</th>
+                          <th className="pb-2 text-center w-[8%]">Unidad</th>
+                          {(!esOperaciones || esAdmin) && <th className="pb-2 text-right w-[11%]">Costo Int. Unit.</th>}
+                          <th className="pb-2 text-right w-[11%]">Precio Unit.</th>
+                          <th className="pb-2 text-center w-[10%]">Desc. %</th>
                           <th className="pb-2 text-right w-[12%]">Importe</th>
-                          <th className="pb-2 text-center w-[4%]"></th>
+                          <th className="pb-2 text-center w-[5%]"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-carbon/5 font-cuerpo">
@@ -608,6 +659,7 @@ export function DetalleCotizacionAdmin({
                                 <option value="pza">pza</option>
                                 <option value="lote">lote</option>
                                 <option value="m3">m³</option>
+                                <option value="servicio">servicio</option>
                               </select>
                             </td>
                             {(!esOperaciones || esAdmin) && (
@@ -626,7 +678,7 @@ export function DetalleCotizacionAdmin({
                             )}
                             <td className="py-2.5 text-right">
                               <div className="flex items-center justify-end gap-1">
-                                <span className="text-carbon/40">$</span>
+                                  <span className="text-carbon/40">$</span>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -636,8 +688,22 @@ export function DetalleCotizacionAdmin({
                                 />
                               </div>
                             </td>
+                            <td className="py-2.5 text-center">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  value={c.descuento || 0}
+                                  onChange={(e) => actualizarFilaConcepto(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value))))}
+                                  className="w-12 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
+                                />
+                                <span className="text-carbon/40">%</span>
+                              </div>
+                            </td>
                             <td className="py-2.5 text-right font-mono font-semibold text-carbon/80">
-                              {formatMoneda(c.cantidad * c.precioUnitario)}
+                              {formatMoneda(c.cantidad * c.precioUnitario * (1 - (c.descuento || 0) / 100))}
                             </td>
                             <td className="py-2.5 text-center">
                               <button
