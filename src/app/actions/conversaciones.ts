@@ -6,7 +6,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
-import { variantesTelefono } from "@/lib/telefono";
+import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
 import type {
   ConversacionDetalle,
@@ -127,12 +127,13 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   if (error) throw new Error(error.message);
   const filas = (data as FilaMsg[]) ?? [];
 
-  // Agrupa por teléfono (vienen en orden descendente: el primero es el más nuevo).
+  // Agrupa por teléfono normalizado (vienen en orden descendente: el primero es el más nuevo).
   const porTel = new Map<string, FilaMsg[]>();
   filas.forEach((f) => {
-    const arr = porTel.get(f.telefono) ?? [];
+    const telNorm = esCanalSocial(f.telefono) ? f.telefono : normalizarTelefono(f.telefono);
+    const arr = porTel.get(telNorm) ?? [];
     arr.push(f);
-    porTel.set(f.telefono, arr);
+    porTel.set(telNorm, arr);
   });
 
   // Resuelve nombres desde los expedientes enlazados (una sola consulta).
@@ -510,7 +511,7 @@ export async function responderConversacion(
   }
 
   await sb.from("mensajes_whatsapp").insert({
-    telefono,
+    telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
     texto,
     direccion: "out",
     expediente_id: expedienteId,
@@ -578,7 +579,7 @@ export async function responderConPlantilla(
     `[plantilla: ${plantilla}]` +
     (parametros && parametros.length ? ` ${parametros.join(" | ")}` : "");
   await sb.from("mensajes_whatsapp").insert({
-    telefono,
+    telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
     texto: resumen,
     direccion: "out",
     expediente_id: expedienteId,
