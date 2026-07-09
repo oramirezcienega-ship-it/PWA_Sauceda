@@ -381,7 +381,7 @@ async function generarRespuesta(
     },
     body: JSON.stringify({
       model: MODELO,
-      max_tokens: 400,
+      max_tokens: 1500,
       system,
       messages: mensajes,
     }),
@@ -515,9 +515,10 @@ export async function responderConIA(
       habitada?: string | null;
     } = {};
 
+    let limpio = "";
     try {
       // Limpieza robusta del JSON antes de parsear
-      let limpio = textoAI.trim();
+      limpio = textoAI.trim();
       
       // Quitar bloques de código markdown ```json ... ``` o ``` ... ```
       if (limpio.startsWith("```")) {
@@ -543,9 +544,33 @@ export async function responderConIA(
       textoRespuesta = parsed.respuesta || "";
       datosExtraidos = parsed.datosExtraidos || {};
     } catch (err) {
-      console.warn("IA: Error al parsear JSON estructurado. Se usará fallback de texto original.", err);
-      // Fallback por si Claude no devolvió JSON
-      textoRespuesta = textoAI;
+      console.warn("IA: Error al parsear JSON estructurado. Se usará fallback de extracción limpia.", err);
+      // Fallback: Si el texto contiene la clave "respuesta", intentamos extraer solo su contenido para no mandar el JSON crudo al cliente
+      const indexRespuesta = limpio.indexOf('"respuesta"');
+      if (indexRespuesta !== -1) {
+        try {
+          // Un regex simple para extraer el valor de la clave "respuesta"
+          const match = limpio.match(/"respuesta"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          if (match && match[1]) {
+            // Reemplazar saltos de línea escapados
+            textoRespuesta = match[1]
+              .replace(/\\n/g, "\n")
+              .replace(/\\"/g, '"')
+              .replace(/\\\\/g, '\\');
+          }
+        } catch (regErr) {
+          console.error("IA: Error al extraer respuesta vía Regex:", regErr);
+        }
+      }
+      
+      // Si a pesar del regex no obtuvimos nada y el texto no parece JSON, usamos el texto completo original
+      if (!textoRespuesta) {
+        if (limpio.startsWith("{") || limpio.includes('"respuesta"')) {
+          textoRespuesta = "Hola, una disculpa. Tuvimos un inconveniente al procesar tu solicitud, pero en un momento te atendemos.";
+        } else {
+          textoRespuesta = textoAI;
+        }
+      }
     }
 
     if (!textoRespuesta) return;
