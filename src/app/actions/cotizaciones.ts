@@ -237,7 +237,7 @@ export async function obtenerCotizacionPorToken(
 
   const { data: filasConceptos, error: errCon } = await sb
     .from("cotizacion_conceptos")
-    .select("id, cotizacion_id, descripcion, cantidad, unidad, precio_unitario, importe, created_at")
+    .select("id, cotizacion_id, descripcion, cantidad, unidad, precio_unitario, descuento, importe, created_at")
     .eq("cotizacion_id", cot.id)
     .order("created_at", { ascending: true });
 
