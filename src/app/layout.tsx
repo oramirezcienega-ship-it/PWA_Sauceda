@@ -34,8 +34,8 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "SAUCEDA · BPM de Traspasos INFONAVIT",
-  description: "Tradición con tecnología.",
+  title: "SAUCEDA · Soluciones Inmobiliarias y Construcción",
+  description: "Tradición con tecnología. León, Gto.",
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon.svg",

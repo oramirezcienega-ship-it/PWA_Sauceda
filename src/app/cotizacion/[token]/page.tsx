@@ -1,12 +1,36 @@
 import { obtenerCotizacionPorToken } from "@/app/actions/cotizaciones";
 import { VisualizadorCotizacionCliente } from "@/components/VisualizadorCotizacionCliente";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 
 interface PaginaPropuestaProps {
   params: {
     token: string;
+  };
+}
+
+export async function generateMetadata({ params }: PaginaPropuestaProps): Promise<Metadata> {
+  try {
+    const datos = await obtenerCotizacionPorToken(params.token);
+    if (datos?.cotizacion) {
+      const { cotizacion } = datos;
+      const servicio = cotizacion.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
+                       cotizacion.servicioTipo === "pintura" ? "Pintura" :
+                       cotizacion.servicioTipo === "losa" ? "Construcción de Losa" :
+                       cotizacion.servicioTipo === "remodelacion" ? "Remodelación" : "Servicio";
+      return {
+        title: `SAUCEDA · Propuesta Comercial (Folio ${cotizacion.id})`,
+        description: `Propuesta de ${servicio} para ${cotizacion.prospectoNombre?.split(" ")[0]}. Revisa, descarga el PDF y autoriza en línea.`,
+      };
+    }
+  } catch (e) {
+    // ignorar
+  }
+  return {
+    title: "SAUCEDA · Propuesta Comercial",
+    description: "Portal seguro de autorizaciones comerciales de construcción.",
   };
 }
 
