@@ -803,11 +803,12 @@ export async function contarConversacionesPendientes(): Promise<number> {
       .order("created_at", { ascending: false })
       .limit(2000);
     if (!data) return 0;
-    // Agrupar por teléfono y tomar el último mensaje de cada hilo
+    // Agrupar por teléfono normalizado y tomar el último mensaje de cada hilo
     const porTel = new Map<string, { direccion: string; finalizado: boolean }>();
     for (const f of data as { telefono: string; direccion: string; finalizado?: boolean; created_at: string }[]) {
-      if (!porTel.has(f.telefono)) {
-        porTel.set(f.telefono, { direccion: f.direccion, finalizado: f.finalizado ?? false });
+      const telNorm = esCanalSocial(f.telefono) ? f.telefono : normalizarTelefono(f.telefono);
+      if (!porTel.has(telNorm)) {
+        porTel.set(telNorm, { direccion: f.direccion, finalizado: f.finalizado ?? false });
       }
     }
     let count = 0;
