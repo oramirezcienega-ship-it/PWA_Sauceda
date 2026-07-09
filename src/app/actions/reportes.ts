@@ -1,7 +1,7 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { ETAPAS } from "@/lib/etapas";
 import { ORIGENES } from "@/lib/origenes";
 import type { EtapaId } from "@/lib/types";
@@ -125,10 +125,12 @@ export interface ResumenAsesor {
   }[];
 }
 
-/** Obtiene el resumen de KPIs, tareas y leads para el asesor actual. */
+/** Obtiene el resumen de KPIs, tareas y leads para el asesor/operador actual. */
 export async function resumenAsesor(): Promise<ResumenAsesor> {
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
+  const colId = rol === "asesor" ? ("asesor_id" as const) : ("operador_id" as const);
   const sb = supabaseServidor();
 
   // 1. Obtener todas las tareas del asesor
@@ -193,11 +195,11 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
     }
   }
 
-  // 4b. Agregar prospectos asignados directamente por la columna de asesor_id
+  // 4b. Agregar prospectos asignados directamente por la columna de asesor_id/operador_id
   const { data: directProspectos } = await sb
     .from("prospectos")
     .select("id, nombre, primer_apellido, segundo_apellido, telefono, created_at")
-    .eq("asesor_id", usuario.id);
+    .eq(colId, usuario.id);
   
   if (directProspectos) {
     directProspectos.forEach((p) => {
@@ -213,11 +215,11 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
     });
   }
 
-  // 4c. Agregar expedientes asignados directamente por la columna de asesor_id
+  // 4c. Agregar expedientes asignados directamente por la columna de asesor_id/operador_id
   const { data: directExpedientes } = await sb
     .from("expedientes")
     .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, telefono, created_at, fraccionamiento, etapa, notas, tipo_negocio")
-    .eq("asesor_id", usuario.id);
+    .eq(colId, usuario.id);
 
   const directProspectoIdsFromExp: string[] = [];
   if (directExpedientes) {

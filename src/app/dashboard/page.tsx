@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
 export default async function PaginaDashboard() {
   const rol = await rolUsuarioActual();
 
-  if (rol === "asesor") {
+  if (rol === "asesor" || rol === "operaciones") {
     const user = await obtenerUsuarioActual();
-    const usuarioNombre = user?.nombre || "Asesor";
+    const usuarioNombre = user?.nombre || (rol === "asesor" ? "Asesor" : "Operario");
     
     let r;
     try {
