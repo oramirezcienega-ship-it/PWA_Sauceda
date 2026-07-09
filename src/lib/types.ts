@@ -73,21 +73,23 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     texto.includes("humedad") ||
     texto.includes("impermeable") ||
     texto.includes("filtracion") ||
-    texto.includes("filtración")
+    texto.includes("filtración") ||
+    texto.includes("azotea") ||
+    texto.includes("concreto") ||
+    texto.includes("construccion") ||
+    texto.includes("construcción") ||
+    texto.includes("reparacion") ||
+    texto.includes("reparación")
   ) {
     return "construccion-impermeabilizacion";
   }
 
   if (
     texto.includes("construye") ||
-    texto.includes("construccion") ||
-    texto.includes("construcción") ||
     texto.includes("remodela") ||
     texto.includes("amplia") ||
     texto.includes("ampliación") ||
-    texto.includes("albañil") ||
-    texto.includes("reparacion") ||
-    texto.includes("reparación")
+    texto.includes("albañil")
   ) {
     return "construccion";
   }

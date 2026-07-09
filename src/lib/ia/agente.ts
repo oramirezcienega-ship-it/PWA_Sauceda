@@ -144,63 +144,111 @@ Pregunta de forma amigable:
 3. Menciona que nosotros nos encargamos del trámite y que un asesor le contactará para cotizar el servicio.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 4):
-Debes atender al prospecto guiándote por el flujo conversacional estándar y adaptándote a lo que responda, manteniendo siempre un tono cercano, accesible, transparente y sin presión. Sigue este flujo y las plantillas/respuestas según los siguientes desencadenantes (triggers):
+Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 4 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 2.0). Utiliza un tono cálido, natural, accesible y sin presión:
 
-- Trigger costos / paquetes (Usuario pregunta costos o qué paquetes hay):
-  Presenta de manera atractiva los paquetes:
-  * 🟡 PAQUETE ESTÁNDAR (RECOMENDADO): Impermeabilizante 3.5 + gravilla (roja o gris), $200 por m² (ej. azotea de 30m² = $6,000), Garantía: 5 años, Tiempo: 1 día de ejecución (depende de los metros). Ideal para: solución equilibrada, casas habitadas.
-  * 🔵 PAQUETE PREMIUM (MÁXIMA DURABILIDAD): Impermeabilizante 4.0 poliéster + gravilla (roja o gris), $250 por m², Garantía: 10 años, Tiempo: 1 día igual depende de la cantidad de metros. Ideal para: máxima durabilidad, inversión a largo plazo.
-  Pregunta al final de forma natural: "¿Cuántos metros cuadrados tienes para impermeabilizar?"
+- PASO 1: MENSAJE INICIAL (Al detectar el negocio)
+  Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos la colonia (@colonia) ni los metros cuadrados (@metros) en el historial o en los datos del cliente, envía exactamente este mensaje:
+  "¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción.
 
-- Trigger recomendación (Usuario pregunta cuál es mejor o pide recomendación):
-  * Cliente típico: Explica según la urgencia: Goteras ahora -> BÁSICO o ESTÁNDAR. Evitar goteras sin re-invertir pronto en 3-4 años -> ESTÁNDAR o PREMIUM. Negocio/Comercio/Terraza habitada -> PREMIUM (Máxima durabilidad, con garantía largo plazo).
-    Pregunta diagnóstica simple para dar recomendación exacta:
-    - ¿Dónde está la zona que gotea? (azotea, terraza, baño, sótano)
-    - ¿Cuántos metros cuadrados aprox?
-    - ¿Está goteando AHORA o es preventivo?
-    - ¿Cuál es tu presupuesto ideal?
-  * Cliente Premium/Inversionista (pregunta por garantía larga, comercial o durabilidad): Recomienda el PAQUETE PREMIUM explicando que, aunque su costo inicial es más alto (es ~$500 más por m² que Estándar), cuenta con Garantía de 10 años y usa Polyurea 2K como material premium (utilizado en CDMX y Monterrey, sin costuras, aplicación rápida y altamente resistente a variaciones climáticas).
+  Somos especialistas en impermeabilización profesional. Tenemos dos opciones que se adaptan a tu presupuesto y necesidades.
 
-- Trigger proceso y agenda (Usuario pregunta cuándo pueden venir o cómo es el proceso):
-  Explica los 5 pasos de forma transparente:
-  1. Recolección de datos (ubicación, metros, tipo de zona, situación).
-  2. Visita técnica GRATUITA sin compromiso (nuestro técnico va a inspeccionar y tomar fotos, dura 30-45 min).
-  3. Cotización detallada en 24h por WhatsApp/email (precio final y garantía).
-  4. Agendado de ejecución (fecha y hora exacta).
-  5. Garantía de 3/7/10 años y seguimiento.
-  Pregunta final para cerrar la cita: "¿Vamos a agendar tu visita técnica?" pidiendo nombre, teléfono, dirección/fraccionamiento y metros aproximados.
+  Para darte una cotización personalizada, necesito algunos datos:
 
-- Trigger recolecta datos técnicos para agendar (Usuario avanza en proceso):
-  * Si faltan todos o la mayoría, pide: 1) Nombre, 2) Ubicación de la propiedad, 3) Metros cuadrados aprox (largo x ancho), 4) ¿Qué necesita impermeabilizarse? (Azotea, Terraza, Baño, Sótano, Otro), 5) ¿Está filtrando agua AHORA o es preventivo?
-  * Si ya proporcionó algunos datos, valida con ✓ lo que ya tienes y pide con ❓ lo que falte (sin repetir).
+  1️⃣ ¿En qué colonia de León estás ubicado?
+  2️⃣ ¿Cuántos metros cuadrados aproximadamente?
 
-- Trigger confirmación (Tienes todos los datos para la visita):
-  Confirma el resumen con formato visual usando emojis:
-  📍 VISITA TÉCNICA GRATUITA
-  👤 Nombre: [Nombre]
-  📍 Dirección: [Ubicación]
-  📐 Metros a impermeabilizar: [m²]
-  🏗️ Tipo: [Zona]
-  💧 Estado: [Gotea/Preventivo]
-  Menciona que la disponibilidad de la visita la validamos con una liga que le haremos llegar cuando le asignemos al operario técnico en los próximos minutos. Recuerda que la visita es gratis sin compromiso, y en 24h recibirá el presupuesto detallado. Termina preguntando: "¿Confirmamos qué día?"
+  Con esa información te presento nuestros dos productos."
 
-- Trigger pregunta de garantía:
-  Explica que si se filtra dentro del plazo cubre reparación sin costo. BÁSICO: 3 años, ESTÁNDAR: 7 años, PREMIUM: 10 años. Condiciones: Uso normal y limpieza básica de desagües.
+- PASO 2: PRESENTACIÓN DE OPCIONES (Respuesta 2)
+  Se activa en cuanto el cliente proporciona la colonia (@colonia) y los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
+  Calcula matemáticamente los precios totales para la cantidad de metros cuadrados proporcionada:
+    - Precio del Paquete Estándar = @metros * 200
+    - Precio del Paquete Premium = @metros * 260
+  Envía exactamente el siguiente mensaje (reemplazando @metros, @colonia, @precio_estandar y @precio_premium con los valores correspondientes):
+  "Perfecto. Para @metros m² en @colonia, aquí están nuestras opciones:
 
-- Trigger objeción de precio (Dice que es caro o pide descuento):
-  Explica la diferencia entre impermeabilización barata/mala vs bien hecha (durabilidad). Precios orientativos: BÁSICO ($400/m², 3 años), ESTÁNDAR ($600/m², 7 años), PREMIUM ($900/m², 10 años). Sugiere iniciar con BÁSICO si el presupuesto es ajustado y escalar después.
+  🟡 PAQUETE ESTÁNDAR - $200/m²
+  Impermeabilizante 3.5 + gravilla (roja o gris a tu elección)
+  ✓ Garantía 5 años
+  ✓ Ideal para: Solución equilibrada, mantenimiento regular
+  ✓ Tiempo de ejecución: 2-3 días
 
-- Trigger comparación técnica (Compara materiales):
-  Membrana Asfáltica (Estándar, 5-7 años, rollo pegado, precio medio, requiere parche si se daña) vs Polyurea 2K (Premium, 10+ años, químico de 2 componentes aplicado directo, sin costuras, alta resistencia, costo más alto). Recomienda según caso (negocio/inversión -> Polyurea, casa propia -> Membrana).
+  🔵 PAQUETE PREMIUM - $260/m²
+  Impermeabilizante 4.0 poliéster + gravilla (roja o gris a tu elección)
+  ✓ Garantía 10 años
+  ✓ Ideal para: Máxima durabilidad, inversión a largo plazo
+  ✓ Tiempo de ejecución: 2-3 días
 
-- Trigger referencias (Pide trabajos previos):
-  Envia a la galería web: saucedamx.com/construye/impermeabilizacion y ofrece mandar fotos por email o hablar con clientes.
+  DIFERENCIAS CLAVE:
+  El impermeabilizante 4.0 Premium es más resistente al clima y al paso del tiempo. Si tu azotea está expuesta a mucho sol o lluvia intensa, el Premium te dará mayor tranquilidad por más años.
 
-- Trigger financiamiento / formas de pago:
-  Contado (efectivo/transferencia), tarjeta de crédito y transferencia bancaria.
+  Para tu caso específico (@metros m²):
+  🟡 ESTÁNDAR: $@precio_estandar total
+  🔵 PREMIUM: $@precio_premium total
 
-- Trigger otros servicios de construcción:
-  Menciona que el foco actual de Sauceda Construye es la impermeabilización, pero planeamos remodelaciones, reparaciones y mejoras estructurales a futuro (año 2).
+  ¿Cuál te interesa más?"
+
+- PASO 3: ELECCIÓN DE PAQUETE (Respuesta 3A o 3B)
+  - Si el cliente elige el paquete ESTÁNDAR (o una opción equivalente), responde exactamente (calculando e insertando el precio y metros):
+    "Excelente. Has elegido el Paquete ESTÁNDAR.
+
+    Tu cotización: $@precio_estandar para @metros m²
+
+    Incluye:
+    ✓ Diagnóstico técnico gratuito
+    ✓ Preparación y limpieza de superficie
+    ✓ Aplicación profesional del impermeabilizante
+    ✓ Gravilla de protección (roja o gris)
+    ✓ Garantía por escrito (5 años)
+
+    El siguiente paso es una inspección en sitio. Nuestro técnico revisará:
+    - Los metros exactos (a veces varían)
+    - Bordes, cornisas y áreas adyacentes
+    - Drenajes y bajadas de agua
+    - Cualquier trabajo adicional necesario
+
+    Voy a enviarte la cotización formal y un link para que agendes tu inspección técnica gratuita. 
+
+    ¿Cuál es tu nombre y teléfono?"
+
+  - Si el cliente elige el paquete PREMIUM (o una opción equivalente), responde exactamente (calculando e insertando el precio y metros):
+    "Excelente. Has elegido el Paquete PREMIUM.
+
+    Tu cotización: $@precio_premium para @metros m²
+
+    Incluye:
+    ✓ Diagnóstico técnico gratuito
+    ✓ Preparación y limpieza profesional de superficie
+    ✓ Aplicación profesional del impermeabilizante 4.0
+    ✓ Gravilla de protección (roja o gris)
+    ✓ Garantía por escrito (10 años)
+
+    El siguiente paso es una inspección en sitio. Nuestro técnico revisará:
+    - Los metros exactos (a veces varían)
+    - Bordes, cornisas y áreas adyacentes
+    - Drenajes y bajadas de agua
+    - Cualquier trabajo adicional necesario
+
+    Voy a enviarte la cotización formal y un link para que agendes tu inspección técnica gratuita.
+
+    ¿Cuál es tu nombre y teléfono?"
+
+- PASO 4: ENVÍO DE COTIZACIÓN Y LINK (Respuesta 4)
+  Se activa en cuanto el cliente proporciona su nombre y teléfono (o si ya los conocemos).
+  Genera la respuesta usando marcadores de posición para los enlaces, y la aplicación los reemplazará dinámicamente con los links reales.
+  Envía exactamente el siguiente mensaje (reemplazando @nombre, @metros, y @precio_cotizado según corresponda, y usando los marcadores exactos):
+  "Perfecto, @nombre. 
+
+  Te estoy enviando:
+
+  📋 Tu cotización formal para @metros m² ($@precio_cotizado)
+  🔗 Un link para agendar tu inspección técnica gratuita
+
+  Revisa la cotización y en el link puedes elegir el día que mejor te venga.
+
+  Cualquier duda, aquí estoy. 
+
+  ¡Gracias por elegirnos! 💚"
 
 REGLA CRÍTICA DE CONTEXTO:
 Si la información ya está presente en los "Datos del cliente" abajo (como la ubicación/fraccionamiento, dirección exacta de la propiedad, tipo de crédito, valor de la casa, monto de la deuda o detalles de impermeabilización) porque el cliente ya la proporcionó previamente, NO debes volver a preguntársela en absoluto. En su lugar, reconócela/valídala amablemente en tu saludo y continúa directamente con la información que falte.
@@ -232,7 +280,7 @@ Estilo:
 
 IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluyes explicaciones antes ni después del JSON. El formato debe ser exactamente:
 {
-  "respuesta": "El mensaje de texto corto (1 a 3 frases) que se enviará al cliente por WhatsApp.",
+  "respuesta": "El mensaje de texto que se enviará al cliente por WhatsApp (siguiendo estrictamente las plantillas del flujo de impermeabilización si corresponde).",
   "datosExtraidos": {
     "fraccionamiento": "Nombre del fraccionamiento/zona si el cliente lo mencionó claramente en la conversación, de lo contrario null",
     "valor_estimado": "Valor aproximado de la propiedad como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
@@ -242,10 +290,12 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
-    "descalificado": "true si el cliente menciona un adeudo, hipoteca o embargo con un agiotista, prestamista informal o particular/privado (rompiendo políticas de compra), de lo contrario false",
-    "motivo_descalificacion": "El motivo corto (ej. 'deuda_agiotista') si descalificado es true, de lo contrario null",
     "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite' o 'construccion-impermeabilizacion' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
-    "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null"
+    "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
+    "colonia": "La colonia de León proporcionada por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
+    "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
+    "paquete_elegido": "El paquete elegido por el cliente ('estandar' o 'premium') si lo seleccionó, de lo contrario null",
+    "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null"
   }
 }
 
@@ -500,75 +550,9 @@ export async function responderConIA(
 
     if (!textoRespuesta) return;
 
-    let r: { ok: boolean; error?: string };
-    const canal = (ctx.telefono.startsWith("messenger:") || ctx.telefono.startsWith("instagram:"))
-      ? ctx.telefono
-      : (exp?.canal_id || ctx.telefono);
-
-    const esMessenger = canal.startsWith("messenger:");
-    const esInstagram = canal.startsWith("instagram:");
-
-    if (esMessenger) {
-      const psid = canal.slice(10);
-      r = await enviarMessengerTexto(psid, textoRespuesta);
-    } else if (esInstagram) {
-      const igsid = canal.slice(10);
-      r = await enviarInstagramTexto(igsid, textoRespuesta);
-    } else {
-      r = await enviarWhatsAppTexto(canal, textoRespuesta);
-      
-      // Si la respuesta en texto fue exitosa y está activa la respuesta por audio,
-      // generamos y enviamos el audio en segundo plano.
-      if (r.ok && process.env.IA_RESPONDER_CON_AUDIO === "on") {
-        (async () => {
-          try {
-            console.log(`[WhatsApp Outbound Voice] Generando audio de respuesta para ${canal}...`);
-            const audioBuffer = await generarAudioTTS(textoRespuesta);
-            if (audioBuffer) {
-              const mediaId = await subirAudioAMeta(audioBuffer, "audio/mpeg", "respuesta.mp3");
-              if (mediaId) {
-                const resAudio = await enviarWhatsAppAudio(canal, mediaId);
-                if (resAudio.ok) {
-                  console.log(`[WhatsApp Outbound Voice] Audio de respuesta enviado con éxito a ${canal}`);
-                } else {
-                  console.warn(`[WhatsApp Outbound Voice] No se pudo enviar el audio: ${resAudio.error}`);
-                }
-              } else {
-                console.warn("[WhatsApp Outbound Voice] No se pudo subir el audio a Meta.");
-              }
-            } else {
-              console.warn("[WhatsApp Outbound Voice] No se pudo generar el buffer de audio TTS.");
-            }
-          } catch (audioErr) {
-            console.error("[WhatsApp Outbound Voice] Error en el flujo de audio saliente:", audioErr);
-          }
-        })();
-      }
-    }
-
-    await sb.from("mensajes_whatsapp").insert({
-      telefono: ctx.telefono,
-      texto: textoRespuesta,
-      direccion: "out",
-      expediente_id: ctx.expedienteId ?? null,
-      estado: r.ok ? "enviado" : "error",
-      agente: NOMBRE_AGENTE,
-    });
-
-    if (r.ok && ctx.expedienteId) {
-      let canalLabel = "WhatsApp";
-      if (esMessenger) canalLabel = "Messenger";
-      if (esInstagram) canalLabel = "Instagram";
-
-      await registrarActividad(sb, {
-        expedienteId: ctx.expedienteId,
-        tipo: "mensaje",
-        titulo: `Respuesta automática (IA) por ${canalLabel}`,
-        detalle: textoRespuesta,
-      });
-
-      // Procesamos la actualización de datos extraídos
-      const updates: Record<string, any> = {};
+    // --- PROCESAMIENTO DE DATOS EXTRAÍDOS ---
+    const updates: Record<string, any> = {};
+    if (ctx.expedienteId) {
       if (datosExtraidos.fraccionamiento) {
         updates.fraccionamiento = datosExtraidos.fraccionamiento;
       }
@@ -613,12 +597,137 @@ export async function responderConIA(
         updates.necesidad = (datosExtraidos as any).necesidad;
       }
 
+      // Nuevos campos Sofía 2.0 (Impermeabilización)
+      if ((datosExtraidos as any).colonia) {
+        updates.fraccionamiento = (datosExtraidos as any).colonia;
+      }
+      if ((datosExtraidos as any).cliente_nombre) {
+        updates.cliente = (datosExtraidos as any).cliente_nombre;
+      }
+      if ((datosExtraidos as any).cliente_telefono) {
+        const telLimpio = String((datosExtraidos as any).cliente_telefono).replace(/\D/g, "");
+        if (telLimpio.length >= 10) {
+          updates.telefono = telLimpio.slice(-10);
+        }
+      }
+
+      const esImper = exp?.tipo_negocio === "construccion-impermeabilizacion" || updates.tipo_negocio === "construccion-impermeabilizacion";
+      
+      // Formatear necesidad si tenemos datos técnicos de impermeabilización
+      if (esImper && (datosExtraidos as any).metros && (datosExtraidos as any).paquete_elegido) {
+        const m = (datosExtraidos as any).metros;
+        const paq = String((datosExtraidos as any).paquete_elegido).toUpperCase();
+        const col = (datosExtraidos as any).colonia || datosExtraidos.fraccionamiento || exp?.fraccionamiento || "";
+        updates.necesidad = `Impermeabilización de ${m} m² - Paquete ${paq}${col ? ` en col. ${col}` : ""}`;
+      }
+
+      // --- CREACIÓN DE COTIZACIÓN AUTOMÁTICA (Supabase) Y REEMPLAZO DE LINKS ---
+      if (esImper && exp) {
+        const m = (datosExtraidos as any).metros;
+        const paq = (datosExtraidos as any).paquete_elegido;
+        const nombreCliente = (datosExtraidos as any).cliente_nombre || exp.cliente;
+        const telefonoCliente = (datosExtraidos as any).cliente_telefono || exp.telefono;
+
+        if (m && paq && nombreCliente && telefonoCliente) {
+          try {
+            // Verificar si ya existe una cotización
+            const { data: cotizacionesExistentes } = await sb
+              .from("cotizaciones")
+              .select("id, token")
+              .eq("expediente_id", ctx.expedienteId);
+
+            let tokenCot = "";
+            let idCot = "";
+
+            if (cotizacionesExistentes && cotizacionesExistentes.length > 0) {
+              tokenCot = cotizacionesExistentes[0].token;
+              idCot = cotizacionesExistentes[0].id;
+            } else {
+              // Generar folio de forma local
+              const { data: todasLasCots } = await sb.from("cotizaciones").select("id");
+              const ids = (todasLasCots ?? []).map((c) => c.id as string);
+              const numeros = ids.map((id) => parseInt(id.replace(/\D/g, ""), 10)).filter((n) => !Number.isNaN(n));
+              const max = numeros.length ? Math.max(...numeros) : 0;
+              idCot = `COT-${String(max + 1).padStart(3, "0")}`;
+
+              const precioM2 = String(paq).toLowerCase() === "premium" ? 260 : 200;
+              const precioTotal = Number(m) * precioM2;
+
+              // Insertar cotización
+              const { data: nuevaCot, error: errInsertCot } = await sb
+                .from("cotizaciones")
+                .insert({
+                  id: idCot,
+                  prospecto_id: exp.prospecto_id,
+                  expediente_id: ctx.expedienteId,
+                  servicio_tipo: "impermeabilizacion",
+                  estatus: "esperando_visita",
+                  requiere_visita: true,
+                  precio_final: precioTotal,
+                  notas_internas: "Creada automáticamente por el chatbot Sofía."
+                })
+                .select("token")
+                .single();
+
+              if (errInsertCot) {
+                console.error("IA: Error al crear cotización en BD:", errInsertCot);
+              } else if (nuevaCot) {
+                tokenCot = nuevaCot.token;
+
+                // Insertar concepto
+                const descConcepto = String(paq).toLowerCase() === "premium"
+                  ? "Paquete PREMIUM - Impermeabilizante 4.0 poliéster + gravilla (10 años de garantía)"
+                  : "Paquete ESTÁNDAR - Impermeabilizante 3.5 + gravilla (5 años de garantía)";
+
+                const { error: errInsertConcepto } = await sb
+                  .from("cotizacion_conceptos")
+                  .insert({
+                    cotizacion_id: idCot,
+                    descripcion: descConcepto,
+                    cantidad: Number(m),
+                    unidad: "m2",
+                    precio_unitario: precioM2,
+                    importe: precioTotal
+                  });
+
+                if (errInsertConcepto) {
+                  console.error("IA: Error al crear conceptos de cotización:", errInsertConcepto);
+                }
+
+                // Mover expediente a etapa 'visita'
+                updates.etapa = "visita";
+
+                await registrarActividad(sb, {
+                  expedienteId: ctx.expedienteId,
+                  tipo: "construccion",
+                  titulo: `Cotización automática creada (${idCot})`,
+                  detalle: `Paquete: ${paq.toUpperCase()}. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita.`,
+                });
+              }
+            }
+
+            // Reemplazar marcadores si tenemos el token
+            if (tokenCot) {
+              const urlCot = `${MARCA.web}/cotizacion/${tokenCot}`;
+              const urlAgenda = `https://calendly.com/sauceda-construye/inspeccion-gratuita?cotizacion=${idCot}`;
+
+              textoRespuesta = textoRespuesta
+                .replace(/\[LINK_COTIZACION\]/g, urlCot)
+                .replace(/\[LINK_AGENDADO\]/g, urlAgenda);
+            }
+          } catch (cotErr) {
+            console.error("IA: Excepción al automatizar cotización de impermeabilización:", cotErr);
+          }
+        }
+      }
+
+      // Guardar actualizaciones de datos extraídos en base de datos
       if (Object.keys(updates).length > 0) {
         const { error: errUpdate } = await sb
           .from("expedientes")
           .update(updates)
           .eq("id", ctx.expedienteId);
-        
+
         if (errUpdate) {
           console.error("IA: Error al actualizar expediente con datos:", errUpdate);
         } else {
@@ -670,6 +779,76 @@ export async function responderConIA(
           });
         }
       }
+    }
+
+    // --- ENVÍO DEL MENSAJE POR WHATSAPP/MESSENGER/INSTAGRAM ---
+    let r: { ok: boolean; error?: string };
+    const canal = (ctx.telefono.startsWith("messenger:") || ctx.telefono.startsWith("instagram:"))
+      ? ctx.telefono
+      : (exp?.canal_id || ctx.telefono);
+
+    const esMessenger = canal.startsWith("messenger:");
+    const esInstagram = canal.startsWith("instagram:");
+
+    if (esMessenger) {
+      const psid = canal.slice(10);
+      r = await enviarMessengerTexto(psid, textoRespuesta);
+    } else if (esInstagram) {
+      const igsid = canal.slice(10);
+      r = await enviarInstagramTexto(igsid, textoRespuesta);
+    } else {
+      r = await enviarWhatsAppTexto(canal, textoRespuesta);
+
+      // Si la respuesta en texto fue exitosa y está activa la respuesta por audio,
+      // generamos y enviamos el audio en segundo plano.
+      if (r.ok && process.env.IA_RESPONDER_CON_AUDIO === "on") {
+        (async () => {
+          try {
+            console.log(`[WhatsApp Outbound Voice] Generando audio de respuesta para ${canal}...`);
+            const audioBuffer = await generarAudioTTS(textoRespuesta);
+            if (audioBuffer) {
+              const mediaId = await subirAudioAMeta(audioBuffer, "audio/mpeg", "respuesta.mp3");
+              if (mediaId) {
+                const resAudio = await enviarWhatsAppAudio(canal, mediaId);
+                if (resAudio.ok) {
+                  console.log(`[WhatsApp Outbound Voice] Audio de respuesta enviado con éxito a ${canal}`);
+                } else {
+                  console.warn(`[WhatsApp Outbound Voice] No se pudo enviar el audio: ${resAudio.error}`);
+                }
+              } else {
+                console.warn("[WhatsApp Outbound Voice] No se pudo subir el audio a Meta.");
+              }
+            } else {
+              console.warn("[WhatsApp Outbound Voice] No se pudo generar el buffer de audio TTS.");
+            }
+          } catch (audioErr) {
+            console.error("[WhatsApp Outbound Voice] Error en el flujo de audio saliente:", audioErr);
+          }
+        })();
+      }
+    }
+
+    // --- REGISTRO DEL MENSAJE Y LA ACTIVIDAD DE ENVÍO ---
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: ctx.telefono,
+      texto: textoRespuesta,
+      direccion: "out",
+      expediente_id: ctx.expedienteId ?? null,
+      estado: r.ok ? "enviado" : "error",
+      agente: NOMBRE_AGENTE,
+    });
+
+    if (r.ok && ctx.expedienteId) {
+      let canalLabel = "WhatsApp";
+      if (esMessenger) canalLabel = "Messenger";
+      if (esInstagram) canalLabel = "Instagram";
+
+      await registrarActividad(sb, {
+        expedienteId: ctx.expedienteId,
+        tipo: "mensaje",
+        titulo: `Respuesta automática (IA) por ${canalLabel}`,
+        detalle: textoRespuesta,
+      });
     }
   } catch (err) {
     console.error("IA: no se pudo responder:", err);
