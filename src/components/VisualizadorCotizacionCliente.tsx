@@ -182,13 +182,22 @@ export function VisualizadorCotizacionCliente({
         <div className="bg-white rounded-3xl border border-carbon/10 shadow-xl overflow-hidden">
           
           {/* Banner Principal */}
-          <div className="bg-gradient-to-r from-verde-profundo to-sauce p-8 text-white">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="font-mono text-xs bg-crema/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-crema">Propuesta Técnica Comercial</span>
-              <span className="font-mono text-sm font-bold text-dorado">{cotizacion.id}</span>
+          <div className="bg-gradient-to-r from-verde-profundo to-sauce p-8 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className="font-mono text-xs bg-crema/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-crema">Propuesta Técnica Comercial</span>
+                <span className="font-mono text-sm font-bold text-dorado">{cotizacion.id}</span>
+              </div>
+              <h2 className="font-titular text-2xl font-bold text-crema">Cotización de {getServicioLabel(cotizacion.servicioTipo)}</h2>
+              <p className="text-xs text-crema/80 mt-1">Preparada especialmente para: <span className="font-semibold">{cotizacion.prospectoNombre}</span></p>
             </div>
-            <h2 className="font-titular text-2xl font-bold text-crema">Cotización de {getServicioLabel(cotizacion.servicioTipo)}</h2>
-            <p className="text-xs text-crema/80 mt-1">Preparada especialmente para: <span className="font-semibold">{cotizacion.prospectoNombre}</span></p>
+            
+            <button
+              onClick={() => window.print()}
+              className="rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition print:hidden shadow-sm self-start sm:self-center"
+            >
+              🖨️ Guardar PDF / Imprimir
+            </button>
           </div>
 
           <div className="p-6 sm:p-8 space-y-8">
@@ -402,9 +411,32 @@ export function VisualizadorCotizacionCliente({
       )}
 
       {/* Pie de Página */}
-      <div className="text-center text-xs text-carbon/40 mt-8 font-cuerpo">
+      <div className="text-center text-xs text-carbon/40 mt-8 font-cuerpo print:hidden">
         SAUCEDA · Este es un portal seguro para la aprobación técnica de servicios de construcción. León, Gto.
       </div>
+
+      <style>{`
+        @media print {
+          body {
+            background-color: white !important;
+            color: black !important;
+          }
+          .print\\:hidden, button, form, nav, footer, .border-green-200 {
+            display: none !important;
+          }
+          .bg-white, .bg-slate-50 {
+            background-color: transparent !important;
+            border-color: #e2e8f0 !important;
+          }
+          .shadow-xl, .shadow-md, .shadow-sm {
+            box-shadow: none !important;
+          }
+          .max-w-4xl {
+            max-width: 100% !important;
+            padding: 0 !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -911,7 +911,7 @@ export function DetalleCotizacionAdmin({
                         {/* Compartir por WhatsApp */}
                         <a
                           href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
-                            `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta técnica y cotización para el servicio en tu domicilio. Puedes ver los detalles y aceptarla aquí: ${enlaceCliente}`
+                            `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos, descargar la cotización en PDF y autorizarla en línea por sistema: ${enlaceCliente}`
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"
