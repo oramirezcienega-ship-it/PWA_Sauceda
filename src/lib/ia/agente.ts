@@ -4,6 +4,7 @@ import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
+import { variantesTelefono } from "@/lib/telefono";
 import { generarAudioTTS, subirAudioAMeta, enviarWhatsAppAudio } from "@/lib/ia/audio";
 
 /**
@@ -361,11 +362,11 @@ export async function responderConIA(
   try {
     if (!iaAgenteActivo()) return;
 
-    // Historial reciente del hilo.
+    // Historial reciente del hilo usando variantes de teléfono.
     const { data } = await sb
       .from("mensajes_whatsapp")
       .select("direccion, texto, agente, created_at")
-      .eq("telefono", ctx.telefono)
+      .in("telefono", variantesTelefono(ctx.telefono))
       .order("created_at", { ascending: true })
       .limit(MAX_HISTORIAL);
     const historia = (data as FilaMsg[]) ?? [];

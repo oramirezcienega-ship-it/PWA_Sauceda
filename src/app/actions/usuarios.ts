@@ -280,3 +280,66 @@ export async function reasignarAsesor(
       .eq("prospecto_id", id);
   }
 }
+
+/** Obtiene una lista de operarios activos para selects. */
+export async function listarOperariosActivos(): Promise<{ id: string; nombre: string }[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("perfiles")
+    .select("id, nombre")
+    .eq("activo", true)
+    .eq("rol", "operaciones")
+    .order("nombre", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as { id: string; nombre: string }[];
+}
+
+/** Reasigna un operador a un expediente o prospecto con sincronización bidireccional. */
+export async function reasignarOperador(
+  id: string,
+  tipo: "expediente" | "prospecto",
+  operadorId: string | null,
+): Promise<void> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  if (tipo === "expediente") {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("prospecto_id")
+      .eq("id", id)
+      .maybeSingle();
+
+    const { error: errExp } = await sb
+      .from("expedientes")
+      .update({
+        operador_id: operadorId,
+        ultimo_movimiento: new Date().toISOString().slice(0, 10),
+      })
+      .eq("id", id);
+    if (errExp) throw new Error(errExp.message);
+
+    if (exp?.prospecto_id) {
+      await sb
+        .from("prospectos")
+        .update({ operador_id: operadorId })
+        .eq("id", exp.prospecto_id);
+    }
+  } else {
+    const { error: errPros } = await sb
+      .from("prospectos")
+      .update({ operador_id: operadorId })
+      .eq("id", id);
+    if (errPros) throw new Error(errPros.message);
+
+    await sb
+      .from("expedientes")
+      .update({
+        operador_id: operadorId,
+        ultimo_movimiento: new Date().toISOString().slice(0, 10),
+      })
+      .eq("prospecto_id", id);
+  }
+}
+

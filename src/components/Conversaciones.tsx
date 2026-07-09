@@ -15,6 +15,8 @@ import {
   listarAsesoresActivos,
   listarRespuestasRapidas,
   type RespuestaRapidaDB,
+  eliminarMensajeIndividual,
+  editarMensajeIndividual,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
@@ -338,6 +340,38 @@ export function Conversaciones() {
     setSel(null);
     setDetalle(null);
     await refrescar(null);
+  }
+
+  async function borrarMensaje(mensajeId: string) {
+    const ok = window.confirm("¿Seguro que deseas eliminar este mensaje de forma permanente?");
+    if (!ok) return;
+    setEnviando(true);
+    setAviso(null);
+    const r = await eliminarMensajeIndividual(mensajeId);
+    setEnviando(false);
+    if (!r.ok) {
+      setAviso(r.error ?? "No se pudo eliminar el mensaje.");
+    } else {
+      if (sel) await refrescar(sel);
+    }
+  }
+
+  async function iniciarEdicion(mensajeId: string, textoActual: string) {
+    const nuevoTexto = window.prompt("Editar mensaje:", textoActual);
+    if (nuevoTexto === null) return;
+    if (!nuevoTexto.trim()) {
+      alert("El texto no puede estar vacío.");
+      return;
+    }
+    setEnviando(true);
+    setAviso(null);
+    const r = await editarMensajeIndividual(mensajeId, nuevoTexto.trim());
+    setEnviando(false);
+    if (!r.ok) {
+      setAviso(r.error ?? "No se pudo editar el mensaje.");
+    } else {
+      if (sel) await refrescar(sel);
+    }
   }
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel);
@@ -933,8 +967,43 @@ export function Conversaciones() {
                 {detalle.mensajes.map((m) => (
                   <div
                     key={m.id}
-                    className={`flex ${m.direccion === "out" ? "justify-end" : "justify-start"}`}
+                    className={`flex group items-center gap-2 ${m.direccion === "out" ? "justify-end" : "justify-start"}`}
                   >
+                    {/* Botones de acción en hover para borrar/editar */}
+                    {m.direccion === "out" && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex gap-1 text-[10px] select-none shrink-0 order-first">
+                        <button
+                          type="button"
+                          onClick={() => iniciarEdicion(m.id, m.texto)}
+                          className="p-1 hover:bg-carbon/5 rounded text-carbon/40 hover:text-sauce transition-colors"
+                          title="Editar mensaje"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => borrarMensaje(m.id)}
+                          className="p-1 hover:bg-carbon/5 rounded text-carbon/40 hover:text-rojo transition-colors"
+                          title="Eliminar mensaje"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    )}
+
+                    {m.direccion === "in" && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex text-[10px] select-none shrink-0 order-last">
+                        <button
+                          type="button"
+                          onClick={() => borrarMensaje(m.id)}
+                          className="p-1 hover:bg-carbon/5 rounded text-carbon/40 hover:text-rojo transition-colors"
+                          title="Eliminar mensaje"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    )}
+
                     <div
                       className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${
                         m.direccion === "out"

@@ -13,7 +13,7 @@ export default function PaginaNuevoUsuario() {
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
-  const [rol, setRol] = useState<"admin" | "asesor">("asesor");
+  const [rol, setRol] = useState<"admin" | "asesor" | "operaciones">("asesor");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -99,10 +99,11 @@ export default function PaginaNuevoUsuario() {
           <Campo etiqueta="Rol">
             <select
               value={rol}
-              onChange={(e) => setRol(e.target.value as "admin" | "asesor")}
+              onChange={(e) => setRol(e.target.value as "admin" | "asesor" | "operaciones")}
               className={INPUT}
             >
               <option value="asesor">Asesor (opera, sin gestión de usuarios)</option>
+              <option value="operaciones">Operario (opera construcción/inspecciones)</option>
               <option value="admin">Administrador (acceso total)</option>
             </select>
           </Campo>

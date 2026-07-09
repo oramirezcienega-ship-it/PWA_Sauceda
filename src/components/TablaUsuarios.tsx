@@ -124,7 +124,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
             <select
               value={rol}
               onChange={(e) => {
-                const nuevoRol = e.target.value as "admin" | "asesor";
+                const nuevoRol = e.target.value as "admin" | "asesor" | "operaciones";
                 if (u.id === usuarioActualId && nuevoRol !== "admin") {
                   alert("No puedes cambiar tu propio rol de administrador.");
                   return;
@@ -137,6 +137,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
             >
               <option value="admin">Administrador</option>
               <option value="asesor">Asesor</option>
+              <option value="operaciones">Operario</option>
             </select>
           </div>
 
@@ -270,13 +271,19 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
 
       {/* 4. Badges (Rol y Estado) */}
       <div className="col-span-1 md:col-span-2 flex flex-row md:flex-col gap-1.5 items-center md:items-start min-w-0">
-        {u.rol === "admin" ? (
+        {u.rol === "admin" && (
           <span className="inline-flex items-center rounded-full border border-dorado/20 bg-dorado/15 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-800">
             👑 Admin
           </span>
-        ) : (
+        )}
+        {u.rol === "asesor" && (
           <span className="inline-flex items-center rounded-full border border-sauce/10 bg-sauce/10 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo">
             💼 Asesor
+          </span>
+        )}
+        {u.rol === "operaciones" && (
+          <span className="inline-flex items-center rounded-full border border-cielo/25 bg-cielo/20 px-2.5 py-0.5 text-[10px] font-semibold text-sky-800">
+            🛠️ Operario
           </span>
         )}
         {u.activo ? (

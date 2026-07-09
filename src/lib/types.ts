@@ -56,6 +56,63 @@ export function labelTipoNegocio(tipo: string): string {
 }
 
 /**
+ * Analiza el mensaje inicial y el nombre de la campaña para auto-detectar
+ * el tipo de negocio/servicio de interés.
+ */
+export function detectarTipoNegocio(mensaje: string, campaignName?: string): TipoNegocioId {
+  const texto = `${mensaje} ${campaignName ?? ""}`.toLowerCase();
+
+  if (
+    texto.includes("impermeabili") ||
+    texto.includes("gotera") ||
+    texto.includes("humedad") ||
+    texto.includes("impermeable") ||
+    texto.includes("filtracion") ||
+    texto.includes("filtración")
+  ) {
+    return "construccion-impermeabilizacion";
+  }
+
+  if (
+    texto.includes("construye") ||
+    texto.includes("construccion") ||
+    texto.includes("construcción") ||
+    texto.includes("remodela") ||
+    texto.includes("amplia") ||
+    texto.includes("ampliación") ||
+    texto.includes("albañil") ||
+    texto.includes("reparacion") ||
+    texto.includes("reparación")
+  ) {
+    return "construccion";
+  }
+
+  if (
+    texto.includes("tramite") ||
+    texto.includes("trámite") ||
+    texto.includes("gesti") ||
+    texto.includes("armado") ||
+    texto.includes("expediente")
+  ) {
+    return "solo_tramite";
+  }
+
+  if (
+    texto.includes("promocion") ||
+    texto.includes("promoción") ||
+    texto.includes("venda") ||
+    texto.includes("comision") ||
+    texto.includes("comisión") ||
+    texto.includes("vender") ||
+    texto.includes("promover")
+  ) {
+    return "promocion_venta";
+  }
+
+  return "traspaso_compra";
+}
+
+/**
  * Expediente de un traspaso INFONAVIT.
  * Representa el caso de un cliente a lo largo del flujo de operación.
  */
@@ -109,6 +166,10 @@ export interface Expediente {
   asesorId?: string | null;
   /** Nombre del asesor asignado (solo lectura, vía join). */
   asesorNombre?: string | null;
+  /** Operador técnico asignado al expediente. Null si no está asignado. */
+  operadorId?: string | null;
+  /** Nombre del operador técnico asignado (solo lectura, vía join). */
+  operadorNombre?: string | null;
   /** Origen de adquisición del prospecto enlazado (solo lectura, vía join). */
   origenProspecto: OrigenAdquisicion | null;
   /** Identificador técnico del canal de redes sociales (ej. messenger:PSID) */
@@ -132,7 +193,7 @@ export interface Expediente {
  */
 export type DatosExpediente = Omit<
   Expediente,
-  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto" | "asesorNombre"
+  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto" | "asesorNombre" | "operadorNombre"
 >;
 
 /** Origen de adquisición de un prospecto (lista fija). */
@@ -197,12 +258,16 @@ export interface Prospecto {
   asesorId?: string | null;
   /** Nombre del asesor asignado (solo lectura, vía join). */
   asesorNombre?: string | null;
+  /** Operador técnico asignado al prospecto. Null si no está asignado. */
+  operadorId?: string | null;
+  /** Nombre del operador técnico asignado (solo lectura, vía join). */
+  operadorNombre?: string | null;
   /** Marca permanente: el prospecto no cumple criterios de servicio. Bloquea todo contacto. */
   noViable?: boolean;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
-export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto" | "asesorNombre">;
+export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto" | "asesorNombre" | "operadorNombre">;
 
 // ------------------------------------------------------------
 // MÓDULO FORMULARIOS

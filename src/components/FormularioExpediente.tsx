@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { ETAPAS } from "@/lib/etapas";
 import type { DatosExpediente } from "@/lib/types";
-import { listarAsesoresActivos } from "@/app/actions/usuarios";
+import { listarAsesoresActivos, listarOperariosActivos } from "@/app/actions/usuarios";
 
 /** Valores por defecto para un expediente nuevo. */
 const VACIO: DatosExpediente = {
@@ -31,6 +31,7 @@ const VACIO: DatosExpediente = {
   estadoFisico: "",
   habitada: "",
   asesorId: null,
+  operadorId: null,
 };
 
 /**
@@ -56,9 +57,11 @@ export function FormularioExpediente({
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
+  const [operadores, setOperadores] = useState<{ id: string; nombre: string }[]>([]);
 
   useEffect(() => {
     listarAsesoresActivos().then(setAsesores).catch(() => setAsesores([]));
+    listarOperariosActivos().then(setOperadores).catch(() => setOperadores([]));
   }, []);
 
   function actualizar<K extends keyof DatosExpediente>(
@@ -349,6 +352,25 @@ export function FormularioExpediente({
             {asesores.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.nombre}
+              </option>
+            ))}
+          </select>
+        </Campo>
+      )}
+
+      {operadores.length > 0 && (
+        <Campo etiqueta="Operador técnico asignado">
+          <select
+            value={datos.operadorId ?? ""}
+            onChange={(e) =>
+              actualizar("operadorId", e.target.value || null)
+            }
+            className={INPUT}
+          >
+            <option value="">Sin operador</option>
+            {operadores.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.nombre}
               </option>
             ))}
           </select>

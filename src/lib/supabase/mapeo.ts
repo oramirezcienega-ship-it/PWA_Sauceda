@@ -57,6 +57,9 @@ export interface FilaExpediente {
   /** Origen del prospecto enlazado (cuando se pide vía join). */
   prospectos?: { origen: OrigenAdquisicion } | null;
   asesor_id?: string | null;
+  operador_id?: string | null;
+  asesor?: { nombre: string } | null;
+  operador?: { nombre: string } | null;
   perfiles?: { nombre: string } | null;
   no_viable?: boolean;
 }
@@ -98,7 +101,9 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     habitada: fila.habitada ?? "",
     createdAt: fila.created_at ?? "",
     asesorId: fila.asesor_id ?? null,
-    asesorNombre: fila.perfiles?.nombre ?? null,
+    asesorNombre: fila.asesor?.nombre ?? fila.perfiles?.nombre ?? null,
+    operadorId: fila.operador_id ?? null,
+    operadorNombre: fila.operador?.nombre ?? null,
     noViable: fila.no_viable ?? false,
   };
 }
@@ -130,6 +135,7 @@ export function aFila(datos: DatosExpediente) {
     estado_fisico: datos.estadoFisico ?? null,
     habitada: datos.habitada ?? null,
     asesor_id: datos.asesorId ?? null,
+    operador_id: datos.operadorId ?? null,
   };
 }
 
@@ -157,6 +163,9 @@ export interface FilaProspecto {
   estatus?: EstatusProspecto;
   calificacion?: CalificacionProspecto;
   asesor_id?: string | null;
+  operador_id?: string | null;
+  asesor?: { nombre: string } | null;
+  operador?: { nombre: string } | null;
   perfiles?: { nombre: string } | null;
   no_viable?: boolean;
 }
@@ -187,7 +196,9 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     estatus: fila.estatus ?? "nuevo",
     calificacion: fila.calificacion ?? "frio",
     asesorId: fila.asesor_id ?? null,
-    asesorNombre: fila.perfiles?.nombre ?? null,
+    asesorNombre: fila.asesor?.nombre ?? fila.perfiles?.nombre ?? null,
+    operadorId: fila.operador_id ?? null,
+    operadorNombre: fila.operador?.nombre ?? null,
     noViable: fila.no_viable ?? false,
   };
 }
@@ -212,5 +223,6 @@ export function aFilaProspecto(datos: DatosProspecto) {
     estatus: datos.estatus,
     calificacion: datos.calificacion,
     asesor_id: datos.asesorId ?? null,
+    operador_id: datos.operadorId ?? null,
   };
 }

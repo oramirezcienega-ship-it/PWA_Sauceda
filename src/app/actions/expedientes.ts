@@ -47,10 +47,12 @@ export async function listarExpedientes(): Promise<Expediente[]> {
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, prospectos(origen), perfiles:asesor_id(nombre)");
+    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)");
 
-  if (rol === "asesor" || rol === "operaciones") {
+  if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
+  } else if (rol === "operaciones") {
+    query = query.eq("operador_id", usuario.id);
   }
 
   const { data, error } = await query.order("id", { ascending: true });
@@ -174,7 +176,7 @@ export async function crearExpediente(
   const { data, error } = await sb
     .from("expedientes")
     .insert({ id, ...aFila(datos), ultimo_movimiento: hoyISO() })
-    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
+    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
@@ -217,6 +219,9 @@ export async function actualizarExpediente(
   datos: DatosExpediente,
 ): Promise<Expediente> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
   // Lee el estado anterior para detectar qué columnas cambian (automatizaciones).
@@ -225,6 +230,13 @@ export async function actualizarExpediente(
     .select("*")
     .eq("id", id)
     .maybeSingle();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (antes?.[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para modificar este expediente.");
+    }
+  }
 
   const nuevos = aFila(datos);
   if (nuevos.etapa === "perdido") {
@@ -235,7 +247,7 @@ export async function actualizarExpediente(
     .from("expedientes")
     .update({ ...nuevos, ultimo_movimiento: hoyISO() })
     .eq("id", id)
-    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
+    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
@@ -296,14 +308,24 @@ export async function actualizarExpediente(
 /** Cambia la etapa de un expediente. */
 export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
   // Obtener prospecto_id antes de actualizar
   const { data: exp } = await sb
     .from("expedientes")
-    .select("prospecto_id")
+    .select("prospecto_id, asesor_id, operador_id")
     .eq("id", id)
     .maybeSingle();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (exp?.[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para modificar este expediente.");
+    }
+  }
 
   const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
   if (etapa === "perdido") {
@@ -468,7 +490,23 @@ export async function enviarEnlacePortalWhatsApp(
 /** Elimina un expediente. */
 export async function eliminarExpediente(id: string): Promise<void> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("asesor_id, operador_id")
+      .eq("id", id)
+      .maybeSingle();
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (exp?.[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para eliminar este expediente.");
+    }
+  }
+
   const { error } = await sb.from("expedientes").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

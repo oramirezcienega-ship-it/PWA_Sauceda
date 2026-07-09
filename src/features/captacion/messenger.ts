@@ -2,6 +2,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
+import { detectarTipoNegocio } from "@/lib/types";
 import { 
   hoyISO, 
   siguienteId, 
@@ -94,12 +95,12 @@ async function registrarLeadSocial(
   // Buscar si ya existe un expediente asociado por canal_id o por telefono (retrocompatibilidad)
   const { data: existentes } = await sb
     .from("expedientes")
-    .select("id, notas, campaign_name, adset_name, ad_name, telefono, canal_id")
+    .select("id, notas, campaign_name, adset_name, ad_name, telefono, canal_id, tipo_negocio")
     .or(`canal_id.eq.${canalIdKey},telefono.eq.${canalIdKey}`)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; canal_id?: string; telefono?: string };
+    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; canal_id?: string; telefono?: string; tipo_negocio?: string };
     const nota = `${exp.notas ?? ""}\n[${canalLabel} ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
@@ -112,6 +113,14 @@ async function registrarLeadSocial(
     // Asegurar que canal_id esté poblado
     if (!exp.canal_id) {
       updateData.canal_id = canalIdKey;
+    }
+
+    // Si el tipo de negocio era traspaso_compra (default) y ahora se detecta algo distinto, lo actualizamos.
+    if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio) {
+      const detectado = detectarTipoNegocio(lead.mensaje ?? "", lead.campaign_name);
+      if (detectado !== "traspaso_compra") {
+        updateData.tipo_negocio = detectado;
+      }
     }
 
     await sb
@@ -135,6 +144,7 @@ async function registrarLeadSocial(
 
   // Si es un expediente completamente nuevo
   const id = await siguienteId(sb);
+  const tipoNegocio = detectarTipoNegocio(lead.mensaje ?? "", lead.campaign_name);
   await sb.from("expedientes").insert({
     id,
     cliente: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
@@ -153,6 +163,7 @@ async function registrarLeadSocial(
     campaign_name: lead.campaign_name || "",
     adset_name: lead.adset_name || "",
     ad_name: lead.ad_name || "",
+    tipo_negocio: tipoNegocio,
   });
 
   const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");

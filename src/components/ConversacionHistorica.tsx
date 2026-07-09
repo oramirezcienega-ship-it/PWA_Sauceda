@@ -38,20 +38,40 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
 
   const mensajes = detalle?.mensajes || [];
 
+  const esMessenger = telefono.startsWith("messenger:");
+  const esInstagram = telefono.startsWith("instagram:");
+
+  let tituloCanal = "Historial de WhatsApp";
+  let txtSinMensajes = "No hay mensajes de WhatsApp registrados con este contacto.";
+  let badgeEstilo = "border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800";
+  let idCanalVisible = telefono;
+
+  if (esMessenger) {
+    tituloCanal = "Historial de Messenger";
+    txtSinMensajes = "No hay mensajes de Facebook Messenger registrados con este contacto.";
+    badgeEstilo = "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800";
+    idCanalVisible = `Messenger: ${telefono.slice(10)}`;
+  } else if (esInstagram) {
+    tituloCanal = "Historial de Instagram DMs";
+    txtSinMensajes = "No hay mensajes de Instagram registrados con este contacto.";
+    badgeEstilo = "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100 hover:text-pink-800";
+    idCanalVisible = `Instagram: ${telefono.slice(10)}`;
+  }
+
   return (
     <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm mb-6">
       <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="text-lg font-titular font-semibold text-verde-profundo">
-            💬 Historial de WhatsApp
+            💬 {tituloCanal}
           </span>
           <span className="font-mono text-xs text-carbon/40">
-            ({telefono})
+            ({idCanalVisible})
           </span>
         </div>
         <Link
           href={`/conversaciones?tel=${telefono}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700 transition hover:bg-green-100 hover:text-green-800"
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition ${badgeEstilo}`}
           title="Responder o ver en la bandeja"
         >
           Ir a Bandeja de Entrada →
@@ -60,7 +80,7 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
 
       {mensajes.length === 0 ? (
         <div className="py-8 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
-          <p className="text-sm text-carbon/40">No hay mensajes de WhatsApp registrados con este contacto.</p>
+          <p className="text-sm text-carbon/40">{txtSinMensajes}</p>
         </div>
       ) : (
         <div className="max-h-[300px] overflow-y-auto rounded-lg border border-carbon/5 bg-crema/10 p-3 flex flex-col gap-3 scrollbar-sutil">

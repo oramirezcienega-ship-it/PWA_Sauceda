@@ -42,10 +42,12 @@ export async function listarProspectos(): Promise<Prospecto[]> {
   const sb = supabaseServidor();
   let query = sb
     .from("prospectos")
-    .select("*, perfiles:asesor_id(nombre)");
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre)");
 
-  if (rol === "asesor" || rol === "operaciones") {
+  if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
+  } else if (rol === "operaciones") {
+    query = query.eq("operador_id", usuario.id);
   }
 
   const { data, error } = await query.order("id", { ascending: true });
@@ -58,19 +60,29 @@ export async function obtenerProspecto(
   id: string,
 ): Promise<{ prospecto: Prospecto; expedientes: Expediente[] } | null> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
   const { data: filaProspecto, error } = await sb
     .from("prospectos")
-    .select("*, perfiles:asesor_id(nombre)")
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!filaProspecto) return null;
 
+  if (rol === "asesor" || rol === "operaciones") {
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (filaProspecto[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para ver este prospecto.");
+    }
+  }
+
   const { data: filasExp, error: errExp } = await sb
     .from("expedientes")
-    .select("*, prospectos(origen), perfiles:asesor_id(nombre)")
+    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .eq("prospecto_id", id)
     .order("id", { ascending: true });
   if (errExp) throw new Error(errExp.message);
@@ -116,12 +128,28 @@ export async function actualizarProspecto(
   datos: DatosProspecto,
 ): Promise<Prospecto> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { data: antes } = await sb
+      .from("prospectos")
+      .select("asesor_id, operador_id")
+      .eq("id", id)
+      .maybeSingle();
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (antes?.[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para modificar este prospecto.");
+    }
+  }
+
   const { data, error } = await sb
     .from("prospectos")
     .update(aFilaProspecto(datos))
     .eq("id", id)
-    .select("*, perfiles:asesor_id(nombre)")
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
@@ -147,7 +175,23 @@ export async function actualizarProspecto(
 /** Elimina un prospecto (sus expedientes quedan sin prospecto). */
 export async function eliminarProspecto(id: string): Promise<void> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { data: antes } = await sb
+      .from("prospectos")
+      .select("asesor_id, operador_id")
+      .eq("id", id)
+      .maybeSingle();
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (antes?.[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para eliminar este prospecto.");
+    }
+  }
+
   const { error } = await sb.from("prospectos").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
@@ -264,7 +308,23 @@ export async function listarProspectosMin(): Promise<
 /** Marca o desmarca un prospecto como No Viable. */
 export async function marcarProspectoNoViable(id: string, noViable: boolean): Promise<void> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { data: antes } = await sb
+      .from("prospectos")
+      .select("asesor_id, operador_id")
+      .eq("id", id)
+      .maybeSingle();
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+    if (antes?.[colId] !== usuario.id) {
+      throw new Error("No estás autorizado para modificar este prospecto.");
+    }
+  }
+
   const { error } = await sb
     .from("prospectos")
     .update({ no_viable: noViable })

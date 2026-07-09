@@ -11,6 +11,7 @@ import { Actividades } from "./Actividades";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
+import { OperadorSelector } from "./OperadorSelector";
 import { labelTipoNegocio } from "@/lib/types";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
@@ -195,15 +196,27 @@ export function DetalleExpediente({ id }: { id: string }) {
 
         {/* Asesor Selector y Secuencia — misma fila en desktop, apilados en móvil */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-carbon/5">
-          <div className="flex items-center gap-1.5 text-xs text-carbon/70 flex-1">
-            <span className="text-[10px] uppercase font-bold text-carbon/40 shrink-0">Atiende:</span>
-            <AsesorSelector
-              entidadId={expediente.id}
-              tipoEntidad="expediente"
-              asesorIdActual={expediente.asesorId ?? null}
-              asesorNombreActual={expediente.asesorNombre ?? null}
-              onAsignado={recargar}
-            />
+          <div className="flex flex-wrap items-center gap-4 text-xs text-carbon/70 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-bold text-carbon/40 shrink-0">Atiende:</span>
+              <AsesorSelector
+                entidadId={expediente.id}
+                tipoEntidad="expediente"
+                asesorIdActual={expediente.asesorId ?? null}
+                asesorNombreActual={expediente.asesorNombre ?? null}
+                onAsignado={recargar}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-carbon/10 pt-1.5 sm:pt-0 sm:pl-4">
+              <span className="text-[10px] uppercase font-bold text-carbon/40 shrink-0">Operador:</span>
+              <OperadorSelector
+                entidadId={expediente.id}
+                tipoEntidad="expediente"
+                operadorIdActual={expediente.operadorId ?? null}
+                operadorNombreActual={expediente.operadorNombre ?? null}
+                onAsignado={recargar}
+              />
+            </div>
           </div>
 
           {secuencias.length > 0 && (

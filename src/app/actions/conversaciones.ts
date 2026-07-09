@@ -1,10 +1,11 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
+import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
 import type {
@@ -83,10 +84,44 @@ function nombreDe(e: {
 /** Lista las conversaciones (una por teléfono, con su último mensaje). */
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
-  const { data, error } = await sb
-    .from("mensajes_whatsapp")
-    .select("*")
+
+  let query = sb.from("mensajes_whatsapp").select("*");
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
+
+    const { data: exps } = await sb
+      .from("expedientes")
+      .select("id")
+      .eq(colId, usuario.id);
+    const expIds = (exps ?? []).map((e) => e.id);
+
+    const { data: pros } = await sb
+      .from("prospectos")
+      .select("id")
+      .eq(colId, usuario.id);
+    const prosIds = (pros ?? []).map((p) => p.id);
+
+    const orFilters: string[] = [];
+    if (expIds.length > 0) {
+      orFilters.push(`expediente_id.in.(${expIds.join(",")})`);
+    }
+    if (prosIds.length > 0) {
+      orFilters.push(`prospecto_id.in.(${prosIds.join(",")})`);
+    }
+
+    if (orFilters.length > 0) {
+      query = query.or(orFilters.join(","));
+    } else {
+      return [];
+    }
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(1000);
   if (error) throw new Error(error.message);
@@ -175,12 +210,88 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   return resumenes;
 }
 
+/** Verifica si el usuario actual tiene acceso a la conversación según su rol (asesor/operaciones). */
+async function verificarAccesoConversacion(
+  sb: ReturnType<typeof supabaseServidor>,
+  usuario: { id: string },
+  rol: "admin" | "asesor" | "operaciones",
+  telefono: string,
+  expedienteId: string | null,
+  prospectoId: string | null,
+): Promise<boolean> {
+  if (rol === "admin") return true;
+
+  const colId = rol === "asesor" ? ("asesor_id" as const) : ("operador_id" as const);
+
+  if (expedienteId) {
+    const { data } = await sb
+      .from("expedientes")
+      .select("asesor_id, operador_id")
+      .eq("id", expedienteId)
+      .maybeSingle();
+    const row = data as { asesor_id: string | null; operador_id: string | null } | null;
+    if (row && row[colId] === usuario.id) {
+      return true;
+    }
+  }
+
+  if (prospectoId) {
+    const { data } = await sb
+      .from("prospectos")
+      .select("asesor_id, operador_id")
+      .eq("id", prospectoId)
+      .maybeSingle();
+    const row = data as { asesor_id: string | null; operador_id: string | null } | null;
+    if (row && row[colId] === usuario.id) {
+      return true;
+    }
+  }
+
+  // Fallback normalización últimos 10 dígitos
+  const digitos = telefono.replace(/\D/g, "").slice(-10);
+  if (digitos) {
+    const { data: exps } = await sb
+      .from("expedientes")
+      .select("id, telefono, asesor_id, operador_id");
+    const exp = (exps as { id: string; telefono: string | null; asesor_id: string | null; operador_id: string | null }[] ?? []).find(
+      (e) => (e.telefono || "").replace(/\D/g, "").slice(-10) === digitos
+    );
+    if (exp && exp[colId] === usuario.id) {
+      return true;
+    } else if (!exp) {
+      const { data: prosList } = await sb
+        .from("prospectos")
+        .select("id, telefono, asesor_id, operador_id");
+      const pros = (prosList as { id: string; telefono: string | null; asesor_id: string | null; operador_id: string | null }[] ?? []).find(
+        (p) => (p.telefono || "").replace(/\D/g, "").slice(-10) === digitos
+      );
+      if (pros && pros[colId] === usuario.id) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /** Devuelve el hilo completo de una conversación. */
 export async function obtenerConversacion(
   telefono: string,
 ): Promise<ConversacionDetalle | null> {
   await requireAdmin();
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const autorizado = await verificarAccesoConversacion(sb, usuario, rol, telefono, expedienteId, prospectoId);
+    if (!autorizado) {
+      throw new Error("No tienes autorización para ver esta conversación.");
+    }
+  }
+
   const { data, error } = await sb
     .from("mensajes_whatsapp")
     .select("*")
@@ -365,24 +476,39 @@ export async function responderConversacion(
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   if (!texto.trim()) return { ok: false, error: "El mensaje está vacío." };
+  const usuario = await usuarioActual();
+  if (!usuario) return { ok: false, error: "No autorizado." };
+  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const autorizado = await verificarAccesoConversacion(sb, usuario, rol, telefono, expedienteId, prospectoId);
+    if (!autorizado) {
+      return { ok: false, error: "No tienes autorización para responder en esta conversación." };
+    }
+  }
+
   const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
   const agente = await nombreAgenteActual(sb);
 
-  let r: { ok: boolean; error?: string; messageId?: string };
-  let canal: string;
+  let r: { ok: boolean; error?: string; messageId?: string } = { ok: false };
+  let canalLabel = "WhatsApp";
+
   if (telefono.startsWith("messenger:")) {
-    const psid = telefono.slice("messenger:".length);
-    r = await enviarMessengerTexto(psid, texto);
-    canal = "Messenger";
+    const psid = telefono.slice(10);
+    const res = await enviarMessengerTexto(psid, texto);
+    r = { ok: res.ok, error: res.error };
+    canalLabel = "Messenger";
   } else if (telefono.startsWith("instagram:")) {
-    const psid = telefono.slice("instagram:".length);
-    r = await enviarMessengerTexto(psid, texto);
-    canal = "Instagram";
+    const igsid = telefono.slice(10);
+    const res = await enviarInstagramTexto(igsid, texto);
+    r = { ok: res.ok, error: res.error };
+    canalLabel = "Instagram";
   } else {
     r = await enviarWhatsAppTexto(telefono, texto);
-    canal = "WhatsApp";
   }
+
   await sb.from("mensajes_whatsapp").insert({
     telefono,
     texto,
@@ -393,11 +519,12 @@ export async function responderConversacion(
     agente,
     wa_message_id: (r as any).messageId || null,
   });
+
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
       expedienteId,
       tipo: "mensaje",
-      titulo: `Respuesta por ${canal}`,
+      titulo: `Respuesta por ${canalLabel}`,
       detalle: texto,
     });
   }
@@ -528,6 +655,76 @@ export async function listarAsesoresActivos(): Promise<{ id: string; nombre: str
     .order("nombre", { ascending: true });
   if (error) throw new Error(error.message);
   return (data as { id: string; nombre: string }[]) ?? [];
+}
+
+/** Elimina un mensaje individual de la conversación por su ID. */
+export async function eliminarMensajeIndividual(
+  mensajeId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!mensajeId) return { ok: false, error: "Falta el ID del mensaje." };
+  const usuario = await usuarioActual();
+  if (!usuario) return { ok: false, error: "No autorizado." };
+  const { rol } = await rolDe(usuario.id);
+  const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { data: msg } = await sb
+      .from("mensajes_whatsapp")
+      .select("expediente_id, prospecto_id, telefono")
+      .eq("id", mensajeId)
+      .maybeSingle();
+
+    if (!msg) return { ok: false, error: "Mensaje no encontrado." };
+
+    const autorizado = await verificarAccesoConversacion(sb, usuario, rol, msg.telefono, msg.expediente_id, msg.prospecto_id);
+    if (!autorizado) {
+      return { ok: false, error: "No tienes autorización para modificar este mensaje." };
+    }
+  }
+
+  const { error } = await sb
+    .from("mensajes_whatsapp")
+    .delete()
+    .eq("id", mensajeId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Edita el texto de un mensaje individual por su ID. */
+export async function editarMensajeIndividual(
+  mensajeId: string,
+  nuevoTexto: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!mensajeId) return { ok: false, error: "Falta el ID del mensaje." };
+  if (!nuevoTexto.trim()) return { ok: false, error: "El texto no puede estar vacío." };
+  const usuario = await usuarioActual();
+  if (!usuario) return { ok: false, error: "No autorizado." };
+  const { rol } = await rolDe(usuario.id);
+  const sb = supabaseServidor();
+
+  if (rol === "asesor" || rol === "operaciones") {
+    const { data: msg } = await sb
+      .from("mensajes_whatsapp")
+      .select("expediente_id, prospecto_id, telefono")
+      .eq("id", mensajeId)
+      .maybeSingle();
+
+    if (!msg) return { ok: false, error: "Mensaje no encontrado." };
+
+    const autorizado = await verificarAccesoConversacion(sb, usuario, rol, msg.telefono, msg.expediente_id, msg.prospecto_id);
+    if (!autorizado) {
+      return { ok: false, error: "No tienes autorización para modificar este mensaje." };
+    }
+  }
+
+  const { error } = await sb
+    .from("mensajes_whatsapp")
+    .update({ texto: nuevoTexto.trim() })
+    .eq("id", mensajeId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 

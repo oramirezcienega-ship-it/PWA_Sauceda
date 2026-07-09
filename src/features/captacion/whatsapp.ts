@@ -5,6 +5,7 @@ import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
+import { detectarTipoNegocio } from "@/lib/types";
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -330,12 +331,12 @@ export async function registrarLeadWhatsApp(
   // Dedupe del expediente por teléfono (cualquier formato equivalente).
   const { data: existentes } = await sb
     .from("expedientes")
-    .select("id, notas, campaign_name, adset_name, ad_name")
+    .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio")
     .in("telefono", variantesTel)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string };
+    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; tipo_negocio?: string };
     const nota = `${exp.notas ?? ""}\n[WhatsApp ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
@@ -344,6 +345,14 @@ export async function registrarLeadWhatsApp(
     if (campaign_name && campaign_name !== exp.campaign_name) updateData.campaign_name = campaign_name;
     if (adset_name && adset_name !== exp.adset_name) updateData.adset_name = adset_name;
     if (ad_name && ad_name !== exp.ad_name) updateData.ad_name = ad_name;
+
+    // Si el tipo de negocio era traspaso_compra (default) y ahora se detecta algo distinto, lo actualizamos.
+    if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio) {
+      const detectado = detectarTipoNegocio(lead.mensaje ?? "", campaign_name);
+      if (detectado !== "traspaso_compra") {
+        updateData.tipo_negocio = detectado;
+      }
+    }
 
     await sb
       .from("expedientes")
@@ -362,6 +371,7 @@ export async function registrarLeadWhatsApp(
   }
 
   const id = await siguienteId(sb);
+  const tipoNegocio = detectarTipoNegocio(lead.mensaje ?? "", campaign_name);
   await sb.from("expedientes").insert({
     id,
     cliente: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
@@ -379,6 +389,7 @@ export async function registrarLeadWhatsApp(
     campaign_name,
     adset_name,
     ad_name,
+    tipo_negocio: tipoNegocio,
   });
 
   const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
