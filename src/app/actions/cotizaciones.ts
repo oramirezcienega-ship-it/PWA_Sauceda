@@ -19,6 +19,7 @@ function aCotizacion(fila: any): Cotizacion {
   return {
     id: fila.id,
     prospectoId: fila.prospecto_id,
+    expedienteId: fila.expediente_id,
     prospectoNombre: fila.prospectos?.nombre || "",
     prospectoTelefono: fila.prospectos?.telefono || "",
     servicioTipo: fila.servicio_tipo,
@@ -74,6 +75,7 @@ function aCotizacionConcepto(fila: any): CotizacionConcepto {
 // 1. Crear Cotización
 export async function crearCotizacion(datos: {
   prospectoId: string;
+  expedienteId?: string | null;
   servicioTipo: ServicioConstruccionTipo;
   requiereVisita: boolean;
   fechaVisita?: string | null;
@@ -96,6 +98,7 @@ export async function crearCotizacion(datos: {
     .insert({
       id,
       prospecto_id: datos.prospectoId,
+      expediente_id: datos.expedienteId || null,
       servicio_tipo: datos.servicioTipo,
       estatus,
       requiere_visita: datos.requiereVisita,
@@ -115,8 +118,27 @@ export async function crearCotizacion(datos: {
     detalle: `Servicio: ${datos.servicioTipo}. Estatus inicial: ${estatus}.`
   });
 
+  if (datos.expedienteId) {
+    await registrarActividad(sb, {
+      expedienteId: datos.expedienteId,
+      tipo: "construccion",
+      titulo: `Cotización vinculada (${id})`,
+      detalle: `Servicio: ${datos.servicioTipo}. Estatus inicial: ${estatus}.`
+    });
+    
+    // Mover expediente a etapa 'cotizacion'
+    await sb
+      .from("expedientes")
+      .update({
+        etapa: datos.requiereVisita ? "visita" : "cotizacion",
+        ultimo_movimiento: new Date().toISOString().split("T")[0]
+      })
+      .eq("id", datos.expedienteId);
+  }
+
   return aCotizacion(data);
 }
+
 
 // 2. Listar Cotizaciones
 export async function listarCotizaciones(): Promise<Cotizacion[]> {
@@ -344,6 +366,8 @@ export async function guardarReporteVisita(
       .eq("id", cotizacionId);
   }
 
+  await sincronizarEtapaExpediente(sb, cotizacionId);
+
   await registrarActividad(sb, {
     prospectoId: cot.prospecto_id,
     tipo: "construccion",
@@ -424,6 +448,8 @@ export async function guardarConceptosCotizacion(
 
   if (errUpd) throw new Error(errUpd.message);
 
+  await sincronizarEtapaExpediente(sb, cotizacionId);
+
   await registrarActividad(sb, {
     prospectoId: cot.prospecto_id,
     tipo: "construccion",
@@ -478,6 +504,8 @@ export async function aprobarCotizacionComercial(
     .single();
 
   if (error) throw new Error(error.message);
+
+  await sincronizarEtapaExpediente(sb, id);
 
   await registrarActividad(sb, {
     prospectoId: cotPrev.prospecto_id,
@@ -538,6 +566,8 @@ export async function aprobarCotizacionOperativa(
 
   if (error) throw new Error(error.message);
 
+  await sincronizarEtapaExpediente(sb, id);
+
   await registrarActividad(sb, {
     prospectoId: cotPrev.prospecto_id,
     tipo: "construccion",
@@ -586,6 +616,8 @@ export async function marcarComoEnviada(id: string): Promise<Cotizacion> {
     .single();
 
   if (error) throw new Error(error.message);
+
+  await sincronizarEtapaExpediente(sb, id);
 
   await registrarActividad(sb, {
     prospectoId: cot.prospecto_id,
@@ -638,5 +670,94 @@ export async function aceptarCotizacionCliente(
     detalle: `Aceptada formalmente por: ${firmaNombre} a través del portal de cliente.`
   });
 
+  // Sincronizar etapa del expediente
+  await sincronizarEtapaExpediente(sb, cot.id);
+
   return { ok: true, id: cot.id };
 }
+
+/** 11. Listar Cotizaciones de un Expediente */
+export async function obtenerCotizacionesDeExpediente(
+  expedienteId: string
+): Promise<Cotizacion[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data, error } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos(nombre, telefono),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .eq("expediente_id", expedienteId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(aCotizacion);
+}
+
+/** Helper para sincronizar automáticamente la etapa del expediente según el estatus de la cotización. */
+export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) {
+  try {
+    const { data: cot } = await sb
+      .from("cotizaciones")
+      .select("expediente_id, estatus, requiere_visita")
+      .eq("id", cotizacionId)
+      .maybeSingle();
+
+    if (!cot || !cot.expediente_id) return;
+
+    let nuevaEtapa: string | null = null;
+
+    switch (cot.estatus) {
+      case "borrador":
+      case "calculando_costo":
+      case "pendiente_aprobacion":
+      case "aprobada":
+      case "enviada":
+        // Si requiere visita y está en borrador o esperando visita, la etapa es 'visita'
+        if (cot.requiere_visita && (cot.estatus === "borrador" || cot.estatus === "esperando_visita" || cot.estatus === "en_inspeccion")) {
+          nuevaEtapa = "visita";
+        } else {
+          nuevaEtapa = "cotizacion";
+        }
+        break;
+      case "esperando_visita":
+      case "en_inspeccion":
+        nuevaEtapa = "visita";
+        break;
+      case "aceptada":
+        nuevaEtapa = "propuesta-aceptada";
+        break;
+      case "rechazada":
+      case "archivada":
+        nuevaEtapa = "perdido";
+        break;
+    }
+
+    if (nuevaEtapa) {
+      const { error: errUpd } = await sb
+        .from("expedientes")
+        .update({
+          etapa: nuevaEtapa,
+          ultimo_movimiento: new Date().toISOString().split("T")[0]
+        })
+        .eq("id", cot.expediente_id);
+
+      if (!errUpd) {
+        await registrarActividad(sb, {
+          expedienteId: cot.expediente_id,
+          tipo: "etapa",
+          titulo: `Etapa sincronizada a ${nuevaEtapa} (Sinc. Automática)`,
+          detalle: `La etapa del expediente se actualizó automáticamente debido a que el estatus de la cotización ${cotizacionId} pasó a '${cot.estatus}'.`
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Error en sincronizarEtapaExpediente:", err);
+  }
+}
+

@@ -1,4 +1,4 @@
-import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
+import { obtenerEtapasPorNegocio, obtenerEtapasPorId } from "@/lib/etapas";
 import type { EtapaId } from "@/lib/types";
 
 /**
@@ -6,7 +6,7 @@ import type { EtapaId } from "@/lib/types";
  * por líneas. Completadas en verde (✓), la actual en azul, las siguientes en
  * gris. "Perdido" se muestra como estado aparte.
  */
-export function AvanceTraspaso({ etapa }: { etapa: EtapaId }) {
+export function AvanceTraspaso({ etapa, tipoNegocio }: { etapa: EtapaId; tipoNegocio?: string | null }) {
   if (etapa === "perdido") {
     return (
       <div className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
@@ -15,8 +15,13 @@ export function AvanceTraspaso({ etapa }: { etapa: EtapaId }) {
     );
   }
 
-  const actualOrden = ETAPAS_POR_ID[etapa].orden;
-  const pasos = ETAPAS.filter((e) => e.id !== "perdido");
+  const etapas = obtenerEtapasPorNegocio(tipoNegocio);
+  const mapa = obtenerEtapasPorId(tipoNegocio);
+  
+  const actualEtapa = mapa[etapa];
+  const actualOrden = actualEtapa ? actualEtapa.orden : 0;
+  
+  const pasos = etapas.filter((e) => e.id !== "perdido");
   const ultimo = pasos.length - 1;
 
   return (
@@ -80,3 +85,4 @@ export function AvanceTraspaso({ etapa }: { etapa: EtapaId }) {
     </div>
   );
 }
+

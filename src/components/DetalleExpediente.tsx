@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
-import { etapaAnterior, etapaSiguiente, ETAPAS_POR_ID } from "@/lib/etapas";
+import { etapaAnterior, etapaSiguiente, ETAPAS_POR_ID, obtenerEtapasPorNegocio } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
 import { Actividades } from "./Actividades";
@@ -12,11 +12,12 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
 import { OperadorSelector } from "./OperadorSelector";
-import { labelTipoNegocio } from "@/lib/types";
+import { labelTipoNegocio, type Cotizacion } from "@/lib/types";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
+import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 
 /**
  * Vista de detalle de un expediente.
@@ -32,12 +33,22 @@ export function DetalleExpediente({ id }: { id: string }) {
   const [mostrarControlesTraspaso, setMostrarControlesTraspaso] = useState(false);
   const [secuencias, setSecuencias] = useState<any[]>([]);
   const [enrolandoSecuencia, setEnrolandoSecuencia] = useState(false);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
 
   useEffect(() => {
     listarSecuencias()
       .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
       .catch(() => {});
   }, []);
+
+  // Cargar cotizaciones vinculadas si aplica
+  useEffect(() => {
+    if (expediente?.id) {
+      obtenerCotizacionesDeExpediente(expediente.id)
+        .then((list) => setCotizaciones(list))
+        .catch(console.error);
+    }
+  }, [expediente?.id]);
 
   async function enrolarEnSecuencia(sequenceId: string) {
     if (!expediente || !sequenceId) return;
@@ -83,14 +94,15 @@ export function DetalleExpediente({ id }: { id: string }) {
     );
   }
 
-  const anterior = etapaAnterior(expediente.etapa);
-  const siguiente = etapaSiguiente(expediente.etapa);
+  const anterior = etapaAnterior(expediente.etapa, expediente.tipoNegocio);
+  const siguiente = etapaSiguiente(expediente.etapa, expediente.tipoNegocio);
 
-  const etapasLista = Object.values(ETAPAS_POR_ID);
+  const etapasLista = obtenerEtapasPorNegocio(expediente.tipoNegocio);
   const totalEtapas = etapasLista.length;
   const etapaActualIndex = etapasLista.findIndex(e => e.id === expediente.etapa);
   const etapaNumero = etapaActualIndex !== -1 ? etapaActualIndex + 1 : 1;
   const porcentajeAvance = Math.round((etapaNumero / totalEtapas) * 100);
+
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
@@ -177,7 +189,7 @@ export function DetalleExpediente({ id }: { id: string }) {
         <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-[10px] uppercase font-bold text-carbon/40">Etapa:</span>
-            <EtapaBadge etapa={expediente.etapa} />
+            <EtapaBadge etapa={expediente.etapa} tipoNegocio={expediente.tipoNegocio} />
           </div>
           
           <div className="flex items-center gap-1.5 text-xs">
@@ -258,7 +270,7 @@ export function DetalleExpediente({ id }: { id: string }) {
               <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
                 Avance del traspaso
               </p>
-              <AvanceTraspaso etapa={expediente.etapa} />
+              <AvanceTraspaso etapa={expediente.etapa} tipoNegocio={expediente.tipoNegocio} />
               
               {/* Mover de etapa Desktop */}
               <div className="mt-4 flex gap-3 border-t border-carbon/5 pt-4">
@@ -603,6 +615,95 @@ export function DetalleExpediente({ id }: { id: string }) {
               expedienteId: expediente.id,
             }}
           />
+
+          {/* Módulo de Cotizaciones y Propuesta Comercial (Sauceda Construye) */}
+          {expediente.tipoNegocio === "construccion-impermeabilizacion" && (
+            <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
+                    📋 Cotizaciones y Propuestas
+                  </h3>
+                  <p className="text-xs text-carbon/50">
+                    Propuestas comerciales y visitas técnicas asociadas
+                  </p>
+                </div>
+                <Link
+                  href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
+                  className="rounded-lg bg-sauce/10 border border-sauce/20 hover:bg-sauce hover:text-white transition px-3 py-1.5 text-xs font-semibold text-sauce flex items-center gap-1"
+                >
+                  + Nueva Cotización
+                </Link>
+              </div>
+
+              {cotizaciones.length === 0 ? (
+                <div className="py-6 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
+                  <p className="text-xs text-carbon/40 mb-2">No hay cotizaciones para este expediente.</p>
+                  <Link
+                    href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
+                    className="inline-flex items-center gap-1 text-xs text-sauce hover:underline font-semibold"
+                  >
+                    Crear primera cotización →
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {cotizaciones.map((c) => (
+                    <div key={c.id} className="p-3.5 rounded-xl border border-carbon/10 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col xs:flex-row xs:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/construccion/${c.id}`} className="font-mono font-bold text-sauce hover:underline">
+                            {c.id}
+                          </Link>
+                          <span className="text-xs font-semibold text-carbon/60">
+                            {c.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
+                             c.servicioTipo === "pintura" ? "Pintura" :
+                             c.servicioTipo === "losa" ? "Losa" :
+                             c.servicioTipo === "remodelacion" ? "Remodelación" : "Otro"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-carbon/40 mt-0.5">
+                          Actualizada: {new Date(c.updatedAt).toLocaleDateString("es-MX")}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between xs:justify-end gap-3 flex-wrap">
+                        <div className="text-right">
+                          <span className="block text-xs font-bold text-verde-profundo font-mono">
+                            {c.precioFinal > 0 ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(c.precioFinal) : "—"}
+                          </span>
+                          <span className="text-[10px] text-carbon/40 uppercase tracking-wide">Precio Venta</span>
+                        </div>
+                        
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                            c.estatus === "aceptada" ? "bg-green-100 text-green-700" :
+                            c.estatus === "rechazada" ? "bg-red-100 text-red-700" :
+                            c.estatus === "esperando_visita" ? "bg-amber-100 text-amber-700" :
+                            "bg-slate-100 text-slate-700"
+                          }`}>
+                            {c.estatus.replace("_", " ")}
+                          </span>
+
+                          {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
+                            <a
+                              href={`/cotizacion/${c.token}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
+                              title="Ver vista pública del cliente"
+                            >
+                              🔗 Portal Cliente
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Historial de conversaciones de WhatsApp */}
           {expediente.telefono && (

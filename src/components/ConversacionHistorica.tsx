@@ -2,12 +2,52 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { obtenerConversacion } from "@/app/actions/conversaciones";
+import { obtenerConversacion, eliminarMensajeIndividual, editarMensajeIndividual } from "@/app/actions/conversaciones";
 import type { ConversacionDetalle } from "@/lib/types";
 
 export function ConversacionHistorica({ telefono }: { telefono: string }) {
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
   const [cargando, setCargando] = useState(true);
+
+  async function borrarMensaje(mensajeId: string) {
+    const ok = window.confirm("¿Seguro que deseas eliminar este mensaje de forma permanente?");
+    if (!ok) return;
+    try {
+      const r = await eliminarMensajeIndividual(mensajeId);
+      if (!r.ok) {
+        alert(r.error ?? "No se pudo eliminar el mensaje.");
+      } else {
+        if (telefono) {
+          const res = await obtenerConversacion(telefono);
+          setDetalle(res);
+        }
+      }
+    } catch (err: any) {
+      alert("Error al eliminar mensaje: " + err.message);
+    }
+  }
+
+  async function iniciarEdicion(mensajeId: string, textoActual: string) {
+    const nuevoTexto = window.prompt("Editar mensaje:", textoActual);
+    if (nuevoTexto === null) return;
+    if (!nuevoTexto.trim()) {
+      alert("El texto no puede estar vacío.");
+      return;
+    }
+    try {
+      const r = await editarMensajeIndividual(mensajeId, nuevoTexto.trim());
+      if (!r.ok) {
+        alert(r.error ?? "No se pudo editar el mensaje.");
+      } else {
+        if (telefono) {
+          const res = await obtenerConversacion(telefono);
+          setDetalle(res);
+        }
+      }
+    } catch (err: any) {
+      alert("Error al editar mensaje: " + err.message);
+    }
+  }
 
   useEffect(() => {
     async function cargar() {
@@ -89,7 +129,7 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
             return (
               <div
                 key={m.id}
-                className={`flex flex-col max-w-[80%] ${
+                className={`flex flex-col max-w-[85%] group ${
                   esCliente ? "self-start items-start" : "self-end items-end"
                 }`}
               >
@@ -100,15 +140,40 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                   </span>
                 )}
                 
-                {/* Burbuja de texto */}
-                <div
-                  className={`rounded-lg px-3 py-2 text-xs leading-normal shadow-sm whitespace-pre-wrap ${
-                    esCliente
-                      ? "bg-white text-carbon border border-carbon/5 rounded-tl-none"
-                      : "bg-[#2D4A2B] text-crema rounded-tr-none"
-                  }`}
-                >
-                  {m.texto}
+                {/* Contenedor horizontal para burbuja y botones de acción */}
+                <div className={`flex items-center gap-2 ${esCliente ? "flex-row" : "flex-row-reverse"}`}>
+                  {/* Burbuja de texto */}
+                  <div
+                    className={`rounded-lg px-3 py-2 text-xs leading-normal shadow-sm whitespace-pre-wrap ${
+                      esCliente
+                        ? "bg-white text-carbon border border-carbon/5 rounded-tl-none"
+                        : "bg-[#2D4A2B] text-crema rounded-tr-none"
+                    }`}
+                  >
+                    {m.texto}
+                  </div>
+
+                  {/* Botones de acción en hover */}
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex gap-1 text-[11px] select-none shrink-0">
+                    {!esCliente && (
+                      <button
+                        type="button"
+                        onClick={() => iniciarEdicion(m.id, m.texto)}
+                        className="p-1 hover:bg-carbon/5 rounded text-carbon/40 hover:text-sauce transition-colors"
+                        title="Editar mensaje"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => borrarMensaje(m.id)}
+                      className="p-1 hover:bg-carbon/5 rounded text-carbon/40 hover:text-rojo transition-colors"
+                      title="Eliminar mensaje"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
 
                 {/* Hora y Estado */}

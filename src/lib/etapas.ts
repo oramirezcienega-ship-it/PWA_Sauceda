@@ -79,6 +79,57 @@ export const ETAPAS: Etapa[] = [
   },
 ];
 
+export const ETAPAS_CONSTRUCCION: Etapa[] = [
+  {
+    id: "interes",
+    nombre: "Interés (Expediente)",
+    orden: 0,
+    descripcion: "Cliente interesado, expediente inicial creado.",
+    nombreCliente: "Interés",
+    descripcionCliente: "Hemos recibido tus datos y estamos revisando tu caso.",
+  },
+  {
+    id: "cotizacion",
+    nombre: "Cotización",
+    orden: 1,
+    descripcion: "Cotización en borrador o en costeo.",
+    nombreCliente: "Cotización en preparación",
+    descripcionCliente: "Estamos preparando tu cotización.",
+  },
+  {
+    id: "visita",
+    nombre: "Visita Técnica",
+    orden: 2,
+    descripcion: "Visita técnica programada o en inspección.",
+    nombreCliente: "Visita Técnica",
+    descripcionCliente: "Programando o realizando la visita técnica a tu propiedad.",
+  },
+  {
+    id: "propuesta-aceptada",
+    nombre: "Propuesta Aceptada",
+    orden: 3,
+    descripcion: "La cotización fue aprobada y aceptada por el cliente.",
+    nombreCliente: "Propuesta Aceptada",
+    descripcionCliente: "¡Has aceptado nuestra propuesta! Programando orden de trabajo.",
+  },
+  {
+    id: "venta",
+    nombre: "Venta (Cerrado)",
+    orden: 4,
+    descripcion: "Venta cerrada y obra ejecutada/cobrada.",
+    nombreCliente: "Servicio Concluido",
+    descripcionCliente: "¡Tu servicio se concluyó con éxito! Gracias por confiar en nosotros.",
+  },
+  {
+    id: "perdido",
+    nombre: "Perdido",
+    orden: 5,
+    descripcion: "Cotización rechazada o no prosperó.",
+    nombreCliente: "En pausa",
+    descripcionCliente: "Por ahora tu cotización no continúa. Si tienes dudas, contáctanos.",
+  },
+];
+
 /** Mapa de acceso rápido por id de etapa. */
 export const ETAPAS_POR_ID: Record<EtapaId, Etapa> = ETAPAS.reduce(
   (acc, etapa) => {
@@ -88,14 +139,43 @@ export const ETAPAS_POR_ID: Record<EtapaId, Etapa> = ETAPAS.reduce(
   {} as Record<EtapaId, Etapa>,
 );
 
+export const ETAPAS_CONSTRUCCION_POR_ID: Record<string, Etapa> = ETAPAS_CONSTRUCCION.reduce(
+  (acc, etapa) => {
+    acc[etapa.id] = etapa;
+    return acc;
+  },
+  {} as Record<string, Etapa>,
+);
+
+export function obtenerEtapasPorNegocio(tipoNegocio?: string | null): Etapa[] {
+  if (tipoNegocio === "construccion-impermeabilizacion") {
+    return ETAPAS_CONSTRUCCION;
+  }
+  return ETAPAS;
+}
+
+export function obtenerEtapasPorId(tipoNegocio?: string | null): Record<EtapaId, Etapa> {
+  if (tipoNegocio === "construccion-impermeabilizacion") {
+    return ETAPAS_CONSTRUCCION_POR_ID as any;
+  }
+  return ETAPAS_POR_ID;
+}
+
 /** Devuelve la etapa siguiente en el flujo, o null si ya es la última. */
-export function etapaSiguiente(id: EtapaId): Etapa | null {
-  const actual = ETAPAS_POR_ID[id];
-  return ETAPAS.find((e) => e.orden === actual.orden + 1) ?? null;
+export function etapaSiguiente(id: EtapaId, tipoNegocio?: string | null): Etapa | null {
+  const etapas = obtenerEtapasPorNegocio(tipoNegocio);
+  const mapa = obtenerEtapasPorId(tipoNegocio);
+  const actual = mapa[id];
+  if (!actual) return null;
+  return etapas.find((e) => e.orden === actual.orden + 1) ?? null;
 }
 
 /** Devuelve la etapa anterior en el flujo, o null si ya es la primera. */
-export function etapaAnterior(id: EtapaId): Etapa | null {
-  const actual = ETAPAS_POR_ID[id];
-  return ETAPAS.find((e) => e.orden === actual.orden - 1) ?? null;
+export function etapaAnterior(id: EtapaId, tipoNegocio?: string | null): Etapa | null {
+  const etapas = obtenerEtapasPorNegocio(tipoNegocio);
+  const mapa = obtenerEtapasPorId(tipoNegocio);
+  const actual = mapa[id];
+  if (!actual) return null;
+  return etapas.find((e) => e.orden === actual.orden - 1) ?? null;
 }
+

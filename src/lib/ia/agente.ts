@@ -396,17 +396,20 @@ export async function responderConIA(
       }
     }
 
-    // Toma de control humano: si la última respuesta saliente la mandó una
-    // persona (agente distinto de "IA" y no vacío), la IA no interviene.
+    // Toma de control humano: si el último mensaje asignado en el hilo lo
+    // tiene un asesor o persona (agente distinto de "IA" y no vacío), la IA
+    // no interviene. Esto cubre tanto respuestas directas de humanos como
+    // asignaciones explícitas de chat desde la bandeja.
     // Los mensajes de la secuencia automatizada ("Sistema (Secuencia)") NO
     // cuentan como toma de control — el lead que responde a un mensaje de
     // rescate debe ser atendido por Sofía con su contexto completo.
     const AGENTES_AUTOMATICOS = new Set([NOMBRE_AGENTE, "Sistema (Secuencia)", "Sistema"]);
-    const ultimoOut = historia
+    const ultimoConAgente = historia
       .slice()
       .reverse()
-      .find((f) => f.direccion === "out");
-    if (ultimoOut && ultimoOut.agente && !AGENTES_AUTOMATICOS.has(ultimoOut.agente)) {
+      .find((f) => f.agente && f.agente.trim() !== "");
+    if (ultimoConAgente && ultimoConAgente.agente && !AGENTES_AUTOMATICOS.has(ultimoConAgente.agente)) {
+      console.log(`IA: Ignorando respuesta automática para ${ctx.telefono} porque el chat está tomado por: ${ultimoConAgente.agente}`);
       return;
     }
 

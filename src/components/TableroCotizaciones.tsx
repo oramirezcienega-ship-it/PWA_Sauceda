@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { crearCotizacion } from "@/app/actions/cotizaciones";
 import type { Cotizacion, ServicioConstruccionTipo, CotizacionEstatus } from "@/lib/types";
 
@@ -18,6 +18,12 @@ export function TableroCotizaciones({
   inspectores,
 }: TableroCotizacionesProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  const queryProspectoId = searchParams?.get("prospectoId") || "";
+  const queryExpedienteId = searchParams?.get("expedienteId") || "";
+  const queryCrear = searchParams?.get("crear") === "true" || searchParams?.get("crear") === "1";
+
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(cotizacionesIniciales);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState("");
@@ -26,6 +32,7 @@ export function TableroCotizaciones({
 
   // Form State
   const [prospectoId, setProspectoId] = useState("");
+  const [expedienteId, setExpedienteId] = useState("");
   const [servicioTipo, setServicioTipo] = useState<ServicioConstruccionTipo>("pintura");
   const [requiereVisita, setRequiereVisita] = useState(true);
   const [fechaVisita, setFechaVisita] = useState("");
@@ -33,6 +40,19 @@ export function TableroCotizaciones({
   const [notasInternas, setNotasInternas] = useState("");
   const [cargando, setCargando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
+
+  // Cargar parámetros de URL si existen
+  useEffect(() => {
+    if (queryProspectoId) {
+      setProspectoId(queryProspectoId);
+    }
+    if (queryExpedienteId) {
+      setExpedienteId(queryExpedienteId);
+    }
+    if (queryCrear) {
+      setModalAbierto(true);
+    }
+  }, [queryProspectoId, queryExpedienteId, queryCrear]);
 
   const handleCrear = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +70,7 @@ export function TableroCotizaciones({
       setErrorForm("");
       const nueva = await crearCotizacion({
         prospectoId,
+        expedienteId: expedienteId || null,
         servicioTipo,
         requiereVisita,
         fechaVisita: requiereVisita ? new Date(fechaVisita).toISOString() : null,
@@ -62,6 +83,7 @@ export function TableroCotizaciones({
       
       // Reset form
       setProspectoId("");
+      setExpedienteId("");
       setServicioTipo("pintura");
       setRequiereVisita(true);
       setFechaVisita("");
@@ -76,6 +98,7 @@ export function TableroCotizaciones({
       setCargando(false);
     }
   };
+
 
   const cotizacionesFiltradas = cotizaciones.filter((c) => {
     const coincideBusqueda =

@@ -12,7 +12,12 @@ export type EtapaId =
   | "documentos"
   | "notaria"
   | "cerrado"
-  | "perdido";
+  | "perdido"
+  | "interes"
+  | "cotizacion"
+  | "visita"
+  | "propuesta-aceptada"
+  | "venta";
 
 /** Definición visual y de orden de una etapa. */
 export interface Etapa {
@@ -527,6 +532,7 @@ export type CotizacionEstatus =
 export interface Cotizacion {
   id: string;
   prospectoId: string;
+  expedienteId?: string | null;
   prospectoNombre?: string;
   prospectoTelefono?: string;
   servicioTipo: ServicioConstruccionTipo;
