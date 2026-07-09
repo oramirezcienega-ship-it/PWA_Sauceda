@@ -72,6 +72,7 @@ export function DetalleCotizacionAdmin({
   const [procesandoAprobacion, setProcesandoAprobacion] = useState(false);
   const [mensajeAprobacion, setMensajeAprobacion] = useState({ tipo: "", texto: "" });
   const [copiado, setCopiado] = useState(false);
+  const [enviandoAPI, setEnviandoAPI] = useState(false);
 
   // --- Acciones de Inspección ---
   const agregarFoto = () => {
@@ -274,6 +275,38 @@ export function DetalleCotizacionAdmin({
     navigator.clipboard.writeText(enlaceCliente);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
+  };
+
+  const handleEnviarWhatsAppAPI = async () => {
+    if (!cotizacion.prospectoTelefono) return;
+    try {
+      setEnviandoAPI(true);
+      setMensajeAprobacion({ tipo: "", texto: "" });
+      
+      const textoMensaje = `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos, descargar la cotización en PDF y autorizarla en línea por sistema: ${enlaceCliente}`;
+
+      const { responderConversacion } = await import("@/app/actions/conversaciones");
+      const res = await responderConversacion(cotizacion.prospectoTelefono, textoMensaje);
+
+      if (res.ok) {
+        setMensajeAprobacion({
+          tipo: "ok",
+          texto: "Mensaje enviado con éxito y registrado en la conversación del cliente ✓",
+        });
+      } else {
+        setMensajeAprobacion({
+          tipo: "error",
+          texto: res.error || "Fallo al enviar el mensaje de WhatsApp desde el chat.",
+        });
+      }
+    } catch (err) {
+      setMensajeAprobacion({
+        tipo: "error",
+        texto: err instanceof Error ? err.message : "Error al enviar por API.",
+      });
+    } finally {
+      setEnviandoAPI(false);
+    }
   };
 
   const formatMoneda = (val: number) => {
@@ -907,22 +940,35 @@ export function DetalleCotizacionAdmin({
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-2">
-                        {/* Compartir por WhatsApp */}
+                      <div className="flex gap-2 pt-2 flex-wrap">
+                        {/* Compartir por WhatsApp Web */}
                         <a
                           href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
                             `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos, descargar la cotización en PDF y autorizarla en línea por sistema: ${enlaceCliente}`
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] text-white px-4 py-2 text-xs font-semibold hover:bg-[#128C7E] transition shadow-sm"
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-100 border border-carbon/15 text-carbon/80 px-4 py-2 text-xs font-semibold hover:bg-slate-200 transition shadow-sm"
+                        >
+                          <svg className="w-4 h-4 fill-current text-[#25D366]" viewBox="0 0 24 24">
+                            <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.37 5.054L2 22l5.13-1.346a9.945 9.945 0 004.88 1.28c5.505 0 9.988-4.478 9.989-9.984C22.01 6.477 17.528 2 12.012 2zm6.36 14.195c-.277.78-1.6 1.436-2.23 1.5-1.12.1-3.21-.6-5.71-3.1-2.07-2.07-3.07-4.14-3.07-5.13 0-1.12.77-1.74 1.1-2.04.28-.26.54-.3.72-.3.17 0 .34 0 .5.01.16 0 .38-.06.58.42.2.49.7 1.7.77 1.83.07.13.1.28.01.46-.09.18-.18.3-.32.46-.14.16-.3.36-.43.48-.15.14-.3.29-.13.58.18.29.8 1.3 1.7 2.1.86.76 1.8 1.14 2.1 1.28.3.14.47.12.65-.08.18-.2.78-.9.98-1.2.2-.3.4-.26.68-.16.27.1 1.73.81 2.03.96.3.15.5.22.58.36.08.14.08.82-.2 1.6z"/>
+                          </svg>
+                          Abrir WhatsApp Web
+                        </a>
+
+                        {/* Compartir por WhatsApp API oficial */}
+                        <button
+                          type="button"
+                          onClick={handleEnviarWhatsAppAPI}
+                          disabled={enviandoAPI || !cotizacion.prospectoTelefono}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] text-white px-4 py-2 text-xs font-semibold hover:bg-[#128C7E] transition shadow-sm disabled:opacity-50"
                         >
                           {/* SVG Whatsapp */}
                           <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                             <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.37 5.054L2 22l5.13-1.346a9.945 9.945 0 004.88 1.28c5.505 0 9.988-4.478 9.989-9.984C22.01 6.477 17.528 2 12.012 2zm6.36 14.195c-.277.78-1.6 1.436-2.23 1.5-1.12.1-3.21-.6-5.71-3.1-2.07-2.07-3.07-4.14-3.07-5.13 0-1.12.77-1.74 1.1-2.04.28-.26.54-.3.72-.3.17 0 .34 0 .5.01.16 0 .38-.06.58.42.2.49.7 1.7.77 1.83.07.13.1.28.01.46-.09.18-.18.3-.32.46-.14.16-.3.36-.43.48-.15.14-.3.29-.13.58.18.29.8 1.3 1.7 2.1.86.76 1.8 1.14 2.1 1.28.3.14.47.12.65-.08.18-.2.78-.9.98-1.2.2-.3.4-.26.68-.16.27.1 1.73.81 2.03.96.3.15.5.22.58.36.08.14.08.82-.2 1.6z"/>
                           </svg>
-                          Enviar por WhatsApp
-                        </a>
+                          {enviandoAPI ? "Enviando..." : "Enviar por WhatsApp (Chat CRM)"}
+                        </button>
                       </div>
                     </div>
                   )}
