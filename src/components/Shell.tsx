@@ -33,9 +33,6 @@ const ENLACES = [
   { href: "/construccion", label: "Construcción" },
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/agenda", label: "Agenda" },
-  { href: "/secuencias", label: "Secuencias" },
-  { href: "/dashboard/llamadas", label: "Llamadas" },
-  { href: "/reportes", label: "Reportes" },
 ];
 
 function esRutaPublica(path: string): boolean {
@@ -227,6 +224,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const enlaces = esAdmin
     ? [
         ...ENLACES,
+        { href: "/secuencias", label: "Secuencias" },
+        { href: "/dashboard/llamadas", label: "Llamadas" },
+        { href: "/reportes", label: "Reportes" },
         { href: "/reportes/dashboard-inteligente", label: "Dashboard Inteligente" },
         { href: "/usuarios", label: "Usuarios" },
       ]
