@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   aprobarCotizacionOperativa,
   marcarComoEnviada,
 } from "@/app/actions/cotizaciones";
+import { listarProductosServicios } from "@/app/actions/productos";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -59,11 +60,9 @@ export function DetalleCotizacionAdmin({
   );
 
   useEffect(() => {
-    import("@/app/actions/productos").then(({ listarProductosServicios }) => {
-      listarProductosServicios()
-        .then(setCatalogoProductos)
-        .catch(console.error);
-    });
+    listarProductosServicios()
+      .then(setCatalogoProductos)
+      .catch(console.error);
   }, []);
 
   const [guardandoConceptos, setGuardandoConceptos] = useState(false);
