@@ -335,7 +335,7 @@ export function VisualizadorCotizacionCliente({
 
             {/* Nota Técnica Específica de Impermeabilización */}
             {cotizacion.servicioTipo === "impermeabilizacion" && (
-              <div className="bg-amber-50/50 border border-amber-200/60 p-5 rounded-2xl space-y-3 font-cuerpo print:hidden">
+              <div className="bg-amber-50/50 border border-amber-200/60 p-5 rounded-2xl space-y-3 font-cuerpo">
                 <div className="flex items-center gap-2 text-amber-700 font-titular font-bold text-sm">
                   <span>⚠️</span>
                   <h4>NOTA IMPORTANTE:</h4>
