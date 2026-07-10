@@ -321,13 +321,14 @@ export function VisualizadorCotizacionCliente({
               <div className="bg-slate-50 p-6 rounded-2xl border border-carbon/5 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div>
                   <div className="text-sm font-bold text-carbon/80">Presupuesto Cerrado Llave en Mano</div>
-                  <div className="text-xs text-carbon/40 mt-0.5">Incluye materiales de alta calidad, mano de obra y supervisión técnica.</div>
+                  <div className="text-xs text-carbon/40 mt-0.5">Incluye materiales de alta calidad, mano de obra y supervisión técnica. Precios más IVA.</div>
                 </div>
                 <div className="text-center sm:text-right">
-                  <div className="text-xs text-carbon/40 uppercase font-semibold">Total Neto de Inversión</div>
+                  <div className="text-xs text-carbon/40 uppercase font-semibold">Total de Inversión (Antes de IVA)</div>
                   <div className="font-mono text-3xl font-extrabold text-verde-profundo mt-1">
                     {formatMoneda(cotizacion.precioFinal)}
                   </div>
+                  <div className="text-[10px] text-carbon/40 font-bold block mt-0.5">+ IVA (Antes de Impuestos)</div>
                 </div>
               </div>
             </div>
@@ -381,6 +382,7 @@ export function VisualizadorCotizacionCliente({
             <div className="space-y-3">
               <h3 className="font-titular text-sm font-bold text-verde-profundo uppercase tracking-wider">Condiciones Comerciales y Garantía</h3>
               <ul className="list-disc pl-4 text-xs text-carbon/60 space-y-1">
+                <li><span className="font-semibold text-carbon/75">Precios:</span> Todos los precios expresados son más IVA (16% de Impuesto al Valor Agregado).</li>
                 <li><span className="font-semibold text-carbon/75">Vigencia:</span> Esta cotización cuenta con una vigencia de 15 días a partir de su envío.</li>
                 <li><span className="font-semibold text-carbon/75">Forma de pago:</span> Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.</li>
                 <li><span className="font-semibold text-carbon/75">Garantía:</span> Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.</li>

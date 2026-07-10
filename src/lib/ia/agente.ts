@@ -165,15 +165,15 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
     - Precio del Paquete Estándar = @metros * 200
     - Precio del Paquete Premium = @metros * 260
   Envía exactamente el siguiente mensaje (reemplazando @metros, @colonia, @precio_estandar y @precio_premium con los valores correspondientes):
-  "Perfecto. Para @metros m² en @colonia, aquí están nuestras opciones:
+  "Perfecto. Para @metros m² en @colonia, aquí están nuestras opciones (precios más IVA):
 
-  🟡 PAQUETE ESTÁNDAR - $200/m²
+  🟡 PAQUETE ESTÁNDAR - $200/m² (+ IVA)
   Impermeabilizante 3.5 + gravilla (roja o gris a tu elección)
   ✓ Garantía 5 años
   ✓ Ideal para: Solución equilibrada, mantenimiento regular
   ✓ Tiempo de ejecución: 2-3 días
 
-  🔵 PAQUETE PREMIUM - $260/m²
+  🔵 PAQUETE PREMIUM - $260/m² (+ IVA)
   Impermeabilizante 4.0 poliéster + gravilla (roja o gris a tu elección)
   ✓ Garantía 10 años
   ✓ Ideal para: Máxima durabilidad, inversión a largo plazo
@@ -183,8 +183,8 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   El impermeabilizante 4.0 Premium es más resistente al clima y al paso del tiempo. Si tu azotea está expuesta a mucho sol o lluvia intensa, el Premium te dará mayor tranquilidad por más años.
 
   Para tu caso específico (@metros m²):
-  🟡 ESTÁNDAR: $@precio_estandar total
-  🔵 PREMIUM: $@precio_premium total
+  🟡 ESTÁNDAR: $@precio_estandar total (+ IVA)
+  🔵 PREMIUM: $@precio_premium total (+ IVA)
 
   ¿Cuál te interesa más?"
 
@@ -192,7 +192,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   - Si el cliente elige el paquete ESTÁNDAR (o una opción equivalente), responde exactamente (calculando e insertando el precio y metros):
     "Excelente. Has elegido el Paquete ESTÁNDAR.
 
-    Tu cotización: $@precio_estandar para @metros m²
+    Tu cotización: $@precio_estandar para @metros m² (+ IVA)
 
     Incluye:
     ✓ Diagnóstico técnico gratuito
@@ -214,7 +214,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   - Si el cliente elige el paquete PREMIUM (o una opción equivalente), responde exactamente (calculando e insertando el precio y metros):
     "Excelente. Has elegido el Paquete PREMIUM.
 
-    Tu cotización: $@precio_premium para @metros m²
+    Tu cotización: $@precio_premium para @metros m² (+ IVA)
 
     Incluye:
     ✓ Diagnóstico técnico gratuito
@@ -241,7 +241,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
 
   Te estoy enviando:
 
-  📋 Tu cotización formal para @metros m² ($@precio_cotizado)
+  📋 Tu cotización formal para @metros m² ($@precio_cotizado + IVA)
   🔗 Un link para agendar tu inspección técnica gratuita
 
   Revisa la cotización y en el link puedes elegir el día que mejor te venga.
