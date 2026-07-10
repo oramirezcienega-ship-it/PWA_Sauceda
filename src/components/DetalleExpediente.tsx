@@ -18,6 +18,8 @@ import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
+import { LinkCitaWidget } from "./LinkCitaWidget";
+
 
 /**
  * Vista de detalle de un expediente.
@@ -34,6 +36,13 @@ export function DetalleExpediente({ id }: { id: string }) {
   const [secuencias, setSecuencias] = useState<any[]>([]);
   const [enrolandoSecuencia, setEnrolandoSecuencia] = useState(false);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [siteUrl, setSiteUrl] = useState("https://app.saucedamx.com");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSiteUrl(window.location.origin);
+    }
+  }, []);
 
   useEffect(() => {
     listarSecuencias()
@@ -263,8 +272,32 @@ export function DetalleExpediente({ id }: { id: string }) {
 
       {/* Columna única centrada para un diseño premium y ordenado */}
       <div className="mt-6 space-y-6">
-          {/* Avance por etapas */}
-          <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
+        {/* Enlaces de agendamiento de citas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <LinkCitaWidget
+            asesorId={expediente.asesorId ?? null}
+            asesorNombre={expediente.asesorNombre ?? null}
+            prospectoId={expediente.prospectoId || ""}
+            prospectoNombre={expediente.cliente}
+            prospectoTelefono={expediente.telefono ?? null}
+            siteUrl={siteUrl}
+          />
+
+          <LinkCitaWidget
+            asesorId={expediente.operadorId ?? null}
+            asesorNombre={expediente.operadorNombre ?? null}
+            prospectoId={expediente.prospectoId || ""}
+            prospectoNombre={expediente.cliente}
+            prospectoTelefono={expediente.telefono ?? null}
+            siteUrl={siteUrl}
+            titulo="📅 Enlace de Agendamiento de Inspección"
+            tipoCitaPredefinido="inspeccion"
+            rolEtiqueta="Operador"
+          />
+        </div>
+
+        {/* Avance por etapas */}
+        <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
             {/* Vista Desktop (Completa) */}
             <div className="hidden md:block">
               <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">

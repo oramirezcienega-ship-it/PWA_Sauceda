@@ -15,6 +15,8 @@ import { LlamadasHistoricas } from "@/components/LlamadasHistoricas";
 import { TimelineSecuencia } from "@/components/TimelineSecuencia";
 import { BotonNoViable } from "@/components/BotonNoViable";
 import { LinkCitaWidget } from "@/components/LinkCitaWidget";
+import { OperadorSelector } from "@/components/OperadorSelector";
+
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +84,12 @@ export default async function PaginaProspecto({
                 tipoEntidad="prospecto"
                 asesorIdActual={prospecto.asesorId ?? null}
                 asesorNombreActual={prospecto.asesorNombre ?? null}
+              />
+              <OperadorSelector
+                entidadId={prospecto.id}
+                tipoEntidad="prospecto"
+                operadorIdActual={prospecto.operadorId ?? null}
+                operadorNombreActual={prospecto.operadorNombre ?? null}
               />
               <BotonNoViable
                 entidadId={prospecto.id}
@@ -156,14 +164,28 @@ export default async function PaginaProspecto({
           </div>
         )}
 
-        <LinkCitaWidget
-          asesorId={prospecto.asesorId ?? null}
-          asesorNombre={prospecto.asesorNombre ?? null}
-          prospectoId={prospecto.id}
-          prospectoNombre={prospecto.nombreCompleto}
-          prospectoTelefono={prospecto.telefono ?? null}
-          siteUrl={process.env.SITE_URL || "http://localhost:3000"}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <LinkCitaWidget
+            asesorId={prospecto.asesorId ?? null}
+            asesorNombre={prospecto.asesorNombre ?? null}
+            prospectoId={prospecto.id}
+            prospectoNombre={prospecto.nombreCompleto}
+            prospectoTelefono={prospecto.telefono ?? null}
+            siteUrl={process.env.SITE_URL || "http://localhost:3000"}
+          />
+
+          <LinkCitaWidget
+            asesorId={prospecto.operadorId ?? null}
+            asesorNombre={prospecto.operadorNombre ?? null}
+            prospectoId={prospecto.id}
+            prospectoNombre={prospecto.nombreCompleto}
+            prospectoTelefono={prospecto.telefono ?? null}
+            siteUrl={process.env.SITE_URL || "http://localhost:3000"}
+            titulo="📅 Enlace de Agendamiento de Inspección"
+            tipoCitaPredefinido="inspeccion"
+            rolEtiqueta="Operador"
+          />
+        </div>
 
         {/* Expedientes relacionados */}
         <div className="mt-6 flex items-center justify-between">

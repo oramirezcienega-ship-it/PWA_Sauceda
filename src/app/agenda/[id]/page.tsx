@@ -10,6 +10,7 @@ interface PaginaAgendaProps {
   };
   searchParams?: {
     prospecto_id?: string;
+    tipo?: string;
   };
 }
 
@@ -55,6 +56,7 @@ export default async function PaginaAgendaAsesor({
           duracion_cita: asesor.duracion_cita || 60,
         }}
         prospectoId={searchParams?.prospecto_id}
+        tipoCitaPredefinido={searchParams?.tipo}
       />
     </main>
   );

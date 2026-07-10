@@ -15,11 +15,13 @@ interface ReservarCitaClienteProps {
     duracion_cita: number;
   };
   prospectoId?: string;
+  tipoCitaPredefinido?: string;
 }
 
 export function ReservarCitaCliente({
   asesor,
   prospectoId,
+  tipoCitaPredefinido,
 }: ReservarCitaClienteProps) {
   // Configuración del calendario
   const hoy = new Date();
@@ -36,8 +38,18 @@ export function ReservarCitaCliente({
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [correo, setCorreo] = useState("");
-  const [tipoCita, setTipoCita] = useState<"venta" | "asesoria">("venta");
+  const [tipoCita, setTipoCita] = useState<"venta" | "asesoria" | "inspeccion">("venta");
   const [notas, setNotas] = useState("");
+
+  useEffect(() => {
+    if (tipoCitaPredefinido === "inspeccion") {
+      setTipoCita("inspeccion");
+    } else if (tipoCitaPredefinido === "asesoria") {
+      setTipoCita("asesoria");
+    } else if (tipoCitaPredefinido === "venta") {
+      setTipoCita("venta");
+    }
+  }, [tipoCitaPredefinido]);
 
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [citaConfirmada, setCitaConfirmada] = useState<any | null>(null);
@@ -179,7 +191,11 @@ export function ReservarCitaCliente({
     });
 
     const mensaje = `Hola, acabo de reservar una cita de ${
-      citaConfirmada.tipo_cita === "venta" ? "Venta" : "Asesoría"
+      citaConfirmada.tipo_cita === "inspeccion"
+        ? "Inspección Técnica en Sitio"
+        : citaConfirmada.tipo_cita === "venta"
+        ? "Venta"
+        : "Asesoría"
     } con ${asesor.nombre} para el día ${fechaLegible} a las ${citaConfirmada.hora_inicio.slice(
       0,
       5
@@ -241,7 +257,11 @@ export function ReservarCitaCliente({
             <div className="flex justify-between border-b border-carbon/5 pb-2">
               <span className="text-carbon/50">Tipo de cita:</span>
               <span className="font-semibold text-carbon">
-                {citaConfirmada.tipo_cita === "venta" ? "Cita de Venta" : "Asesoría Comercial"}
+                {citaConfirmada.tipo_cita === "inspeccion"
+                  ? "Inspección Técnica en Sitio"
+                  : citaConfirmada.tipo_cita === "venta"
+                  ? "Cita de Venta"
+                  : "Asesoría Comercial"}
               </span>
             </div>
             <div className="flex justify-between">
@@ -290,7 +310,9 @@ export function ReservarCitaCliente({
               <div className="flex items-start gap-2">
                 <span className="text-sauce">📅</span>
                 <p className="text-white/80 leading-snug">
-                  Agenda tu cita de venta presencial o asesoría virtual de manera sencilla.
+                  {tipoCita === "inspeccion"
+                    ? "Agenda la inspección técnica en sitio para tu propiedad de manera sencilla."
+                    : "Agenda tu cita de venta presencial o asesoría virtual de manera sencilla."}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -320,8 +342,8 @@ export function ReservarCitaCliente({
             </h1>
             <p className="text-xs text-carbon/50 mt-1">
               {clienteNombrePublico
-                ? `Elige el horario que mejor te convenga para tu cita con ${asesor.nombre}.`
-                : "Busca los espacios disponibles en la agenda de tu asesor."}
+                ? `Elige el horario que mejor te convenga para tu ${tipoCita === "inspeccion" ? "inspección" : "cita"} con ${asesor.nombre}.`
+                : `Busca los espacios disponibles en la agenda de tu ${tipoCita === "inspeccion" ? "operador" : "asesor"}.`}
             </p>
           </div>
 
@@ -494,11 +516,12 @@ export function ReservarCitaCliente({
                   </label>
                   <select
                     value={tipoCita}
-                    onChange={(e) => setTipoCita(e.target.value as "venta" | "asesoria")}
+                    onChange={(e) => setTipoCita(e.target.value as "venta" | "asesoria" | "inspeccion")}
                     className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none focus:border-sauce focus:ring-2 focus:ring-sauce/20"
                   >
                     <option value="venta">Cita de Venta (Presencial)</option>
                     <option value="asesoria">Asesoría de Traspaso (Virtual/Presencial)</option>
+                    <option value="inspeccion">Inspección Técnica en Sitio</option>
                   </select>
                 </div>
               </div>

@@ -133,15 +133,27 @@ export async function actualizarProspecto(
   const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
+  // Obtener estado anterior
+  const { data: antes } = await sb
+    .from("prospectos")
+    .select("asesor_id, operador_id")
+    .eq("id", id)
+    .maybeSingle();
+
   if (rol === "asesor" || rol === "operaciones") {
-    const { data: antes } = await sb
-      .from("prospectos")
-      .select("asesor_id, operador_id")
-      .eq("id", id)
-      .maybeSingle();
     const colId = rol === "asesor" ? "asesor_id" : "operador_id";
     if (antes?.[colId] !== usuario.id) {
       throw new Error("No estás autorizado para modificar este prospecto.");
+    }
+  }
+
+  if (datos.operadorId && datos.operadorId !== antes?.operador_id) {
+    const { validarAgendaOperador } = await import("@/app/actions/agenda");
+    const agendaValida = await validarAgendaOperador(datos.operadorId);
+    if (!agendaValida) {
+      throw new Error(
+        "El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.",
+      );
     }
   }
 
@@ -153,7 +165,7 @@ export async function actualizarProspecto(
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza los campos compartidos (nombre + teléfono + asesor) hacia los
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador) hacia los
   // expedientes enlazados a este prospecto.
   await sb
     .from("expedientes")
@@ -166,6 +178,7 @@ export async function actualizarProspecto(
       adset_name: datos.adsetName,
       campaign_name: datos.campaignName,
       asesor_id: datos.asesorId ?? null,
+      operador_id: datos.operadorId ?? null,
     })
     .eq("prospecto_id", id);
 

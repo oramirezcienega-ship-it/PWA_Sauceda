@@ -1,6 +1,6 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { notificarAgenteEmail } from "@/lib/email";
-import { enviarWhatsAppPlantilla, listarPlantillasAprobadas } from "@/lib/whatsapp";
+import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, listarPlantillasAprobadas } from "@/lib/whatsapp";
 
 /**
  * Despachador central de notificaciones para eventos del sistema.
@@ -492,6 +492,177 @@ export async function notificarAsignacionAsesor(
     }
   } catch (err) {
     console.error("Fallo general en notificarAsignacionAsesor:", err);
+  }
+}
+
+/**
+ * Envía automáticamente al cliente el enlace con la agenda del operario técnico asignado.
+ */
+export async function notificarAsignacionOperarioACliente(
+  sb: any,
+  expedienteId: string | null,
+  prospectoId: string | null,
+  operadorId: string
+): Promise<void> {
+  try {
+    // 1. Obtener la información del operario
+    const { data: operario } = await sb
+      .from("perfiles")
+      .select("nombre")
+      .eq("id", operadorId)
+      .maybeSingle();
+
+    if (!operario) return;
+
+    // 2. Obtener la información del cliente y teléfono
+    let clienteNombre = "";
+    let clienteTelefono = "";
+    let pId = prospectoId;
+
+    if (expedienteId) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("cliente, primer_apellido, segundo_apellido, telefono, prospecto_id")
+        .eq("id", expedienteId)
+        .maybeSingle();
+      if (exp) {
+        clienteNombre = [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean).join(" ");
+        clienteTelefono = exp.telefono || "";
+        if (!pId) pId = exp.prospecto_id;
+      }
+    } else if (prospectoId) {
+      const { data: pros } = await sb
+        .from("prospectos")
+        .select("nombre, primer_apellido, segundo_apellido, telefono")
+        .eq("id", prospectoId)
+        .maybeSingle();
+      if (pros) {
+        clienteNombre = [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ");
+        clienteTelefono = pros.telefono || "";
+      }
+    }
+
+    if (!clienteTelefono) {
+      console.warn("No hay teléfono para enviar la agenda del operario.");
+      return;
+    }
+
+    // 3. Generar enlace
+    const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
+    const linkAgenda = `${SITE_URL}/agenda/${operadorId}?prospecto_id=${pId || ""}&tipo=inspeccion`;
+
+    const mensaje = `Hola ${clienteNombre}. Para programar la inspección en sitio de tu propiedad, te comparto el enlace de la agenda de nuestro operario ${operario.nombre} para que selecciones el día y la hora que mejor te convenga: ${linkAgenda}`;
+
+    // 4. Enviar WhatsApp
+    const r = await enviarWhatsAppTexto(clienteTelefono, mensaje);
+
+    // 5. Registrar en mensajes_whatsapp
+    const telNormalizado = (clienteTelefono || "").replace(/\D/g, "");
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: telNormalizado.startsWith("52") && telNormalizado.length >= 12 ? telNormalizado : (telNormalizado.length === 10 ? "52" + telNormalizado : telNormalizado),
+      texto: mensaje,
+      direccion: "out",
+      expediente_id: expedienteId,
+      prospecto_id: pId,
+      estado: r.ok ? "enviado" : "error",
+      agente: "Sistema",
+      wa_message_id: r.messageId || null,
+    });
+
+    // 6. Registrar actividad
+    if (expedienteId) {
+      await sb.from("actividades").insert({
+        expediente_id: expedienteId,
+        tipo: "sistema",
+        descripcion: `Enlace de agenda de operario ${operario.nombre} enviado automáticamente por WhatsApp.`,
+      });
+    } else if (pId) {
+      await sb.from("actividades").insert({
+        prospecto_id: pId,
+        tipo: "sistema",
+        descripcion: `Enlace de agenda de operario ${operario.nombre} enviado automáticamente por WhatsApp.`,
+      });
+    }
+  } catch (err) {
+    console.error("Error en notificarAsignacionOperarioACliente:", err);
+  }
+}
+
+/**
+ * Notifica al asesor asignado cuando un cliente programa una cita.
+ */
+export async function notificarCitaAgendadaAsesor(
+  sb: any,
+  cita: {
+    perfil_id: string;
+    prospecto_id?: string | null;
+    cliente_nombre: string;
+    tipo_cita: string;
+    fecha: string;
+    hora_inicio: string;
+  }
+): Promise<void> {
+  try {
+    if (!cita.prospecto_id) return;
+
+    // 1. Obtener el prospecto y su asesor asignado, más el nombre del operario
+    const { data: pros } = await sb
+      .from("prospectos")
+      .select("asesor_id, nombre, primer_apellido, segundo_apellido")
+      .eq("id", cita.prospecto_id)
+      .maybeSingle();
+
+    if (!pros || !pros.asesor_id) return;
+
+    const { data: operario } = await sb
+      .from("perfiles")
+      .select("nombre")
+      .eq("id", cita.perfil_id)
+      .maybeSingle();
+
+    const operarioNombre = operario?.nombre || "Operario";
+    const clienteNombre = [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ");
+
+    // Formatear fecha legible
+    const [y, m, d] = cita.fecha.split("-").map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const fechaLegible = dateObj.toLocaleDateString("es-MX", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+
+    const tipoCitaTexto = cita.tipo_cita === "inspeccion"
+      ? "Inspección Técnica en Sitio"
+      : cita.tipo_cita === "venta"
+      ? "Cita de Venta"
+      : "Asesoría Comercial";
+
+    const titulo = `📅 Cita de ${cita.tipo_cita === "inspeccion" ? "Inspección" : "Agenda"} Programada`;
+    const cuerpo = `El cliente ${clienteNombre} agendó una ${tipoCitaTexto} con ${operarioNombre} para el día ${fechaLegible} a las ${cita.hora_inicio.slice(0, 5)}hs.`;
+
+    // 2. Insertar notificación In-App para el asesor
+    await sb.from("notificaciones").insert({
+      perfil_id: pros.asesor_id,
+      titulo,
+      cuerpo,
+      enlace: `/prospectos/${cita.prospecto_id}`,
+      leido: false,
+    });
+
+    // 3. Notificar al asesor vía WhatsApp si tiene número configurado
+    const { data: asesor } = await sb
+      .from("perfiles")
+      .select("nombre, telefono, activo")
+      .eq("id", pros.asesor_id)
+      .maybeSingle();
+
+    if (asesor && asesor.activo && asesor.telefono && asesor.telefono.trim()) {
+      const mensajeWA = `📅 *Cita Programada*\n\nHola ${asesor.nombre},\n\nEl cliente *${clienteNombre}* ha seleccionado fecha para su *${tipoCitaTexto}*:\n• Con: ${operarioNombre}\n• Fecha: ${fechaLegible}\n• Hora: ${cita.hora_inicio.slice(0, 5)}hs\n\nVer prospecto: ${process.env.SITE_URL || "https://app.saucedamx.com"}/prospectos/${cita.prospecto_id}`;
+      await enviarWhatsAppTexto(asesor.telefono, mensajeWA);
+    }
+  } catch (err) {
+    console.error("Error al notificar cita agendada al asesor:", err);
   }
 }
 

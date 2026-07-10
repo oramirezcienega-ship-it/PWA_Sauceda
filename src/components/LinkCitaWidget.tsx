@@ -9,6 +9,9 @@ interface LinkCitaWidgetProps {
   prospectoNombre: string;
   prospectoTelefono: string | null;
   siteUrl: string;
+  titulo?: string;
+  tipoCitaPredefinido?: "venta" | "asesoria" | "inspeccion";
+  rolEtiqueta?: string;
 }
 
 export function LinkCitaWidget({
@@ -18,23 +21,30 @@ export function LinkCitaWidget({
   prospectoNombre,
   prospectoTelefono,
   siteUrl,
+  titulo,
+  tipoCitaPredefinido,
+  rolEtiqueta,
 }: LinkCitaWidgetProps) {
   const [copiado, setCopiado] = useState(false);
+
+  const widgetTitulo = titulo || "Enlace de Agendamiento de Cita";
+  const etiqueta = rolEtiqueta || "Asesor";
 
   if (!asesorId) {
     return (
       <div className="mt-4 rounded-xl border border-dashed border-carbon/20 bg-carbon/5 p-4 text-center">
         <p className="text-sm font-semibold text-carbon/60 flex items-center justify-center gap-1.5">
-          <span>📅</span> Enlace de Cita no disponible
+          <span>📅</span> {widgetTitulo} no disponible
         </p>
         <p className="text-xs text-carbon/40 mt-1">
-          Asigna un asesor en la parte superior para poder generar su enlace de citas.
+          Asigna un {etiqueta.toLowerCase()} en la parte superior para poder generar su enlace.
         </p>
       </div>
     );
   }
 
-  const urlReserva = `${siteUrl}/agenda/${asesorId}?prospecto_id=${prospectoId}`;
+  const tipoCitaParam = tipoCitaPredefinido ? `&tipo=${tipoCitaPredefinido}` : "";
+  const urlReserva = `${siteUrl}/agenda/${asesorId}?prospecto_id=${prospectoId}${tipoCitaParam}`;
 
   async function handleCopiar() {
     try {
@@ -47,7 +57,9 @@ export function LinkCitaWidget({
   }
 
   // Mensaje pre-llenado de WhatsApp
-  const mensajeWhatsApp = `Hola ${prospectoNombre}, te comparto este enlace para que puedas seleccionar el horario que mejor te convenga para nuestra cita o asesoría: ${urlReserva}`;
+  const mensajeWhatsApp = tipoCitaPredefinido === "inspeccion"
+    ? `Hola ${prospectoNombre}, para la inspección técnica en sitio de tu propiedad, te comparto el enlace de la agenda de nuestro operario para que selecciones el día y la hora que prefieras: ${urlReserva}`
+    : `Hola ${prospectoNombre}, te comparto este enlace para que puedas seleccionar el horario que mejor te convenga para nuestra cita o asesoría: ${urlReserva}`;
   const whatsappUrl = prospectoTelefono
     ? `https://wa.me/${prospectoTelefono.replace(/\D/g, "")}?text=${encodeURIComponent(mensajeWhatsApp)}`
     : `https://wa.me/?text=${encodeURIComponent(mensajeWhatsApp)}`;
@@ -56,10 +68,10 @@ export function LinkCitaWidget({
     <div className="mt-4 rounded-xl border border-sauce/20 bg-white p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
-          <span>📅</span> Enlace de Agendamiento de Cita
+          <span>📅</span> {widgetTitulo}
         </h3>
         <span className="text-[10px] text-carbon/50 font-medium">
-          Asesor: <strong>{asesorNombre}</strong>
+          {etiqueta}: <strong>{asesorNombre}</strong>
         </span>
       </div>
 

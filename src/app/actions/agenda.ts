@@ -10,7 +10,7 @@ export interface Cita {
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
-  tipo_cita: "venta" | "asesoria";
+  tipo_cita: "venta" | "asesoria" | "inspeccion";
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
@@ -188,7 +188,7 @@ export async function crearCita(datos: {
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
-  tipo_cita: "venta" | "asesoria";
+  tipo_cita: "venta" | "asesoria" | "inspeccion";
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
@@ -232,13 +232,18 @@ export async function crearCita(datos: {
   // Si hay un prospecto_id, registramos una actividad en su bitácora
   if (datos.prospecto_id) {
     try {
+      const tipoTxt = datos.tipo_cita === "inspeccion" ? "inspección en sitio" : (datos.tipo_cita === "venta" ? "venta" : "asesoría");
       await sb.from("actividades").insert({
         prospecto_id: datos.prospecto_id,
         tipo: "cita",
-        descripcion: `Cita de ${datos.tipo_cita === "venta" ? "venta" : "asesoría"} agendada para el ${datos.fecha} a las ${datos.hora_inicio.slice(0, 5)}hs.`,
+        descripcion: `Cita de ${tipoTxt} agendada para el ${datos.fecha} a las ${datos.hora_inicio.slice(0, 5)}hs.`,
       });
+
+      // Notificar al asesor asignado
+      const { notificarCitaAgendadaAsesor } = await import("@/lib/notificaciones-sistema");
+      void notificarCitaAgendadaAsesor(sb, data);
     } catch (err) {
-      console.error("Error al registrar actividad de cita:", err);
+      console.error("Error al registrar actividad y notificar asesor:", err);
     }
   }
 
@@ -459,4 +464,46 @@ export async function obtenerAgendaRango(
     citas: (citas || []) as Cita[],
     bloqueos: (bloqueos || []) as Bloqueo[],
   };
+}
+
+/**
+ * Valida si un operador tiene disponibilidad semanal y slots libres en los próximos dias.
+ */
+export async function validarAgendaOperador(
+  perfilId: string,
+  diasLimite = 14
+): Promise<boolean> {
+  const sb = supabaseServidor();
+
+  // 1. Obtener perfil del operador
+  const { data: perfil, error } = await sb
+    .from("perfiles")
+    .select("horarios_agenda, activo")
+    .eq("id", perfilId)
+    .maybeSingle();
+
+  if (error || !perfil || !perfil.activo) return false;
+
+  const horarios = (perfil.horarios_agenda as any) || {};
+  const tieneHorarioConfigurado = Object.values(horarios).some(
+    (dia: any) => Array.isArray(dia) && dia.length > 0
+  );
+
+  // Si no tiene ningún horario configurado en la semana, no es válido.
+  if (!tieneHorarioConfigurado) return false;
+
+  // 2. Verificar si tiene al menos un slot disponible en los próximos diasLimite
+  const hoy = new Date();
+  for (let i = 0; i < diasLimite; i++) {
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    const fechaStr = fecha.toISOString().slice(0, 10);
+
+    const slots = await obtenerSlotsDisponibles(perfilId, fechaStr);
+    if (slots.length > 0) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -8,6 +8,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
+import { validarAgendaOperador } from "@/app/actions/agenda";
 import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
@@ -166,6 +167,15 @@ export async function crearExpediente(
   await requireAdmin();
   const sb = supabaseServidor();
 
+  if (datos.operadorId) {
+    const agendaValida = await validarAgendaOperador(datos.operadorId);
+    if (!agendaValida) {
+      throw new Error(
+        "El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.",
+      );
+    }
+  }
+
   // Genera el folio correlativo a partir de los existentes.
   const { data: existentes, error: errLista } = await sb
     .from("expedientes")
@@ -180,11 +190,14 @@ export async function crearExpediente(
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza el asesor con el prospecto (bidireccional)
+  // Sincroniza el asesor y operador con el prospecto (bidireccional)
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
-      .update({ asesor_id: datos.asesorId ?? null })
+      .update({
+        asesor_id: datos.asesorId ?? null,
+        operador_id: datos.operadorId ?? null,
+      })
       .eq("id", datos.prospectoId);
     const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
     await sincronizarEstatusProspecto(sb, datos.prospectoId);
@@ -210,6 +223,12 @@ export async function crearExpediente(
     void notificarAsignacionAsesor(id, datos.asesorId);
   }
 
+  // Notificar al cliente sobre el operario asignado de inicio
+  if (datos.operadorId) {
+    const { notificarAsignacionOperarioACliente } = await import("@/lib/notificaciones-sistema");
+    void notificarAsignacionOperarioACliente(sb, id, datos.prospectoId || null, datos.operadorId);
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 
@@ -230,6 +249,15 @@ export async function actualizarExpediente(
     .select("*")
     .eq("id", id)
     .maybeSingle();
+
+  if (datos.operadorId && datos.operadorId !== antes?.operador_id) {
+    const agendaValida = await validarAgendaOperador(datos.operadorId);
+    if (!agendaValida) {
+      throw new Error(
+        "El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.",
+      );
+    }
+  }
 
   if (rol === "asesor" || rol === "operaciones") {
     const colId = rol === "asesor" ? "asesor_id" : "operador_id";
@@ -271,7 +299,7 @@ export async function actualizarExpediente(
     }
   }
 
-  // Sincroniza los campos compartidos (nombre + teléfono + asesor) con el prospecto.
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador) con el prospecto.
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
@@ -284,6 +312,7 @@ export async function actualizarExpediente(
         adset_name: datos.adsetName,
         campaign_name: datos.campaignName,
         asesor_id: datos.asesorId ?? null,
+        operador_id: datos.operadorId ?? null,
       })
       .eq("id", datos.prospectoId);
     const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
@@ -300,6 +329,12 @@ export async function actualizarExpediente(
   if (cambios.includes("asesor_id") && datos.asesorId) {
     const { notificarAsignacionAsesor } = await import("@/lib/notificaciones-sistema");
     void notificarAsignacionAsesor(id, datos.asesorId);
+  }
+
+  // Notificar al cliente si cambió o se asignó por primera vez el operario
+  if (cambios.includes("operador_id") && datos.operadorId) {
+    const { notificarAsignacionOperarioACliente } = await import("@/lib/notificaciones-sistema");
+    void notificarAsignacionOperarioACliente(sb, id, datos.prospectoId || null, datos.operadorId);
   }
 
   return aExpediente(data as FilaExpediente);

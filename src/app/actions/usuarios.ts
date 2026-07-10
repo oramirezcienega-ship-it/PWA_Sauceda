@@ -7,6 +7,8 @@ import {
   rolDe,
   usuarioActual,
 } from "@/lib/supabase/cliente-sesion";
+import { notificarAsignacionOperarioACliente } from "@/lib/notificaciones-sistema";
+import { validarAgendaOperador } from "@/app/actions/agenda";
 
 /**
  * Server actions del módulo USUARIOS (gestión del equipo operativo).
@@ -304,6 +306,15 @@ export async function reasignarOperador(
   await requireAdmin();
   const sb = supabaseServidor();
 
+  if (operadorId) {
+    const agendaValida = await validarAgendaOperador(operadorId);
+    if (!agendaValida) {
+      throw new Error(
+        "El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.",
+      );
+    }
+  }
+
   if (tipo === "expediente") {
     const { data: exp } = await sb
       .from("expedientes")
@@ -326,12 +337,24 @@ export async function reasignarOperador(
         .update({ operador_id: operadorId })
         .eq("id", exp.prospecto_id);
     }
+
+    if (operadorId) {
+      void notificarAsignacionOperarioACliente(sb, id, exp?.prospecto_id || null, operadorId);
+    }
   } else {
     const { error: errPros } = await sb
       .from("prospectos")
       .update({ operador_id: operadorId })
       .eq("id", id);
     if (errPros) throw new Error(errPros.message);
+
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("id")
+      .eq("prospecto_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     await sb
       .from("expedientes")
@@ -340,6 +363,10 @@ export async function reasignarOperador(
         ultimo_movimiento: new Date().toISOString().slice(0, 10),
       })
       .eq("prospecto_id", id);
+
+    if (operadorId) {
+      void notificarAsignacionOperarioACliente(sb, exp?.id || null, id, operadorId);
+    }
   }
 }
 
