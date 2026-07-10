@@ -7,12 +7,58 @@ import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
 import { ListadoLeadsDashboard } from "@/components/ListadoLeadsDashboard";
 import { ResumenKpisAsesor } from "@/components/ResumenKpisAsesor";
+import { FiltrosDashboard } from "@/components/FiltrosDashboard";
 
 export const dynamic = "force-dynamic";
 
 /** Dashboard principal del sistema. Adaptativo según el rol (Admin u Asesor). */
-export default async function PaginaDashboard() {
+export default async function PaginaDashboard({
+  searchParams,
+}: {
+  searchParams: {
+    rango?: string;
+    desde?: string;
+    hasta?: string;
+  };
+}) {
   const rol = await rolUsuarioActual();
+
+  // Calcular limites de fecha a partir de los searchParams
+  let fechaInicio: string | undefined = undefined;
+  let fechaFin: string | undefined = undefined;
+
+  const rango = searchParams.rango || "todos";
+
+  if (rango !== "todos") {
+    const ahora = new Date();
+    if (rango === "hoy") {
+      const hoyInicio = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+      fechaInicio = hoyInicio.toISOString();
+      const hoyFin = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), 23, 59, 59, 999);
+      fechaFin = hoyFin.toISOString();
+    } else if (rango === "7dias") {
+      const hace7dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
+      hace7dias.setHours(0, 0, 0, 0);
+      fechaInicio = hace7dias.toISOString();
+    } else if (rango === "mes") {
+      const mesInicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+      fechaInicio = mesInicio.toISOString();
+    } else if (rango === "anio") {
+      const anioInicio = new Date(ahora.getFullYear(), 0, 1);
+      fechaInicio = anioInicio.toISOString();
+    } else if (rango === "personalizado") {
+      if (searchParams.desde) {
+        const d = new Date(searchParams.desde);
+        d.setHours(0, 0, 0, 0);
+        fechaInicio = d.toISOString();
+      }
+      if (searchParams.hasta) {
+        const h = new Date(searchParams.hasta);
+        h.setHours(23, 59, 59, 999);
+        fechaFin = h.toISOString();
+      }
+    }
+  }
 
   if (rol === "asesor" || rol === "operaciones") {
     const user = await obtenerUsuarioActual();
@@ -20,7 +66,7 @@ export default async function PaginaDashboard() {
     
     let r;
     try {
-      r = await resumenAsesor();
+      r = await resumenAsesor(fechaInicio, fechaFin);
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : "Error";
       return (
@@ -61,6 +107,8 @@ export default async function PaginaDashboard() {
               Hola, <span className="font-semibold text-verde-profundo">{usuarioNombre}</span>. Aquí tienes tus tareas e indicadores.
             </p>
           </div>
+
+          <FiltrosDashboard />
 
           {/* Tarjetas de Métricas (Colapsable en Móvil) */}
           <ResumenKpisAsesor
@@ -137,7 +185,7 @@ export default async function PaginaDashboard() {
   // Dashboard del Administrador (global)
   let r;
   try {
-    r = await resumenOperacion();
+    r = await resumenOperacion(fechaInicio, fechaFin);
   } catch (err) {
     const mensaje = err instanceof Error ? err.message : "Error";
     return (
@@ -157,6 +205,7 @@ export default async function PaginaDashboard() {
 
   const maxEtapa = Math.max(1, ...r.porEtapa.map((e) => e.total));
   const maxOrigen = Math.max(1, ...r.porOrigen.map((o) => o.total));
+  const maxTipoNegocio = Math.max(1, ...r.porTipoNegocio.map((t) => t.total));
 
   return (
     <main className="min-h-screen pb-10 bg-crema/5">
@@ -168,6 +217,8 @@ export default async function PaginaDashboard() {
         <p className="mt-1 text-sm text-carbon/60">
           Resumen general de la operación.
         </p>
+
+        <FiltrosDashboard />
 
         {/* Tarjetas de métricas */}
         <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -202,7 +253,7 @@ export default async function PaginaDashboard() {
           </span>
         </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Embudo de conversión */}
           <div className="rounded-xl border border-carbon/10 bg-white p-5">
             <h2 className="mb-4 font-titular text-lg font-semibold text-verde-profundo">
@@ -243,6 +294,28 @@ export default async function PaginaDashboard() {
                     total={o.total}
                     max={maxOrigen}
                     color="bg-cielo"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tipo de negocio */}
+          <div className="rounded-xl border border-carbon/10 bg-white p-5">
+            <h2 className="mb-4 font-titular text-lg font-semibold text-verde-profundo">
+              Tipo de negocio
+            </h2>
+            {r.porTipoNegocio.length === 0 ? (
+              <p className="text-sm text-carbon/40">Sin datos de tipo de negocio.</p>
+            ) : (
+              <div className="space-y-2">
+                {r.porTipoNegocio.map((t) => (
+                  <Barra
+                    key={t.tipoNegocio}
+                    etiqueta={t.nombre}
+                    total={t.total}
+                    max={maxTipoNegocio}
+                    color="bg-dorado"
                   />
                 ))}
               </div>

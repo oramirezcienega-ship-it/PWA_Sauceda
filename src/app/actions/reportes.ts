@@ -4,7 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { ETAPAS } from "@/lib/etapas";
 import { ORIGENES } from "@/lib/origenes";
-import type { EtapaId } from "@/lib/types";
+import { type EtapaId, labelTipoNegocio } from "@/lib/types";
 import { obtenerUsuarioActual } from "@/app/actions/usuarios";
 
 /** Resumen general de la operación para el dashboard. */
@@ -20,28 +20,50 @@ export interface ResumenOperacion {
   valorPipeline: number;
   porEtapa: { etapa: EtapaId; nombre: string; total: number }[];
   porOrigen: { origen: string; nombre: string; total: number }[];
+  porTipoNegocio: { tipoNegocio: string; nombre: string; total: number }[];
 }
 
-export async function resumenOperacion(): Promise<ResumenOperacion> {
+export async function resumenOperacion(
+  fechaInicio?: string,
+  fechaFin?: string
+): Promise<ResumenOperacion> {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  const { data: exps, error: e1 } = await sb
+  let queryExps = sb
     .from("expedientes")
-    .select("etapa, valor_estimado");
+    .select("etapa, valor_estimado, created_at, tipo_negocio");
+  if (fechaInicio) {
+    queryExps = queryExps.gte("created_at", fechaInicio);
+  }
+  if (fechaFin) {
+    queryExps = queryExps.lte("created_at", fechaFin);
+  }
+  const { data: exps, error: e1 } = await queryExps;
   if (e1) throw new Error(e1.message);
-  const { data: prosp, error: e2 } = await sb
+
+  let queryProsp = sb
     .from("prospectos")
-    .select("origen, valor_campana");
+    .select("origen, valor_campana, created_at");
+  if (fechaInicio) {
+    queryProsp = queryProsp.gte("created_at", fechaInicio);
+  }
+  if (fechaFin) {
+    queryProsp = queryProsp.lte("created_at", fechaFin);
+  }
+  const { data: prosp, error: e2 } = await queryProsp;
   if (e2) throw new Error(e2.message);
 
   const expedientes = (exps ?? []) as {
     etapa: EtapaId;
     valor_estimado: number;
+    created_at: string;
+    tipo_negocio?: string | null;
   }[];
   const prospectos = (prosp ?? []) as {
     origen: string;
     valor_campana: number;
+    created_at: string;
   }[];
 
   const totalExpedientes = expedientes.length;
@@ -78,6 +100,19 @@ export async function resumenOperacion(): Promise<ResumenOperacion> {
     .filter((o) => o.total > 0)
     .sort((a, b) => b.total - a.total);
 
+  // Agrupamiento por tipo de negocio
+  const todosTipos = Array.from(
+    new Set(expedientes.map((e) => e.tipo_negocio || "otro"))
+  );
+  const porTipoNegocio = todosTipos
+    .map((t) => ({
+      tipoNegocio: t,
+      nombre: labelTipoNegocio(t),
+      total: expedientes.filter((e) => (e.tipo_negocio || "otro") === t).length,
+    }))
+    .filter((t) => t.total > 0)
+    .sort((a, b) => b.total - a.total);
+
   return {
     totalLeads,
     totalExpedientes,
@@ -90,6 +125,7 @@ export async function resumenOperacion(): Promise<ResumenOperacion> {
     valorPipeline,
     porEtapa,
     porOrigen,
+    porTipoNegocio,
   };
 }
 
@@ -126,7 +162,10 @@ export interface ResumenAsesor {
 }
 
 /** Obtiene el resumen de KPIs, tareas y leads para el asesor/operador actual. */
-export async function resumenAsesor(): Promise<ResumenAsesor> {
+export async function resumenAsesor(
+  fechaInicio?: string,
+  fechaFin?: string
+): Promise<ResumenAsesor> {
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
   const { rol } = await rolDe(usuario.id);
@@ -196,10 +235,17 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   }
 
   // 4b. Agregar prospectos asignados directamente por la columna de asesor_id/operador_id
-  const { data: directProspectos } = await sb
+  let queryDirectProps = sb
     .from("prospectos")
     .select("id, nombre, primer_apellido, segundo_apellido, telefono, created_at")
     .eq(colId, usuario.id);
+  if (fechaInicio) {
+    queryDirectProps = queryDirectProps.gte("created_at", fechaInicio);
+  }
+  if (fechaFin) {
+    queryDirectProps = queryDirectProps.lte("created_at", fechaFin);
+  }
+  const { data: directProspectos } = await queryDirectProps;
   
   if (directProspectos) {
     directProspectos.forEach((p) => {
@@ -216,10 +262,17 @@ export async function resumenAsesor(): Promise<ResumenAsesor> {
   }
 
   // 4c. Agregar expedientes asignados directamente por la columna de asesor_id/operador_id
-  const { data: directExpedientes } = await sb
+  let queryDirectExps = sb
     .from("expedientes")
     .select("id, prospecto_id, cliente, primer_apellido, segundo_apellido, telefono, created_at, fraccionamiento, etapa, notas, tipo_negocio")
     .eq(colId, usuario.id);
+  if (fechaInicio) {
+    queryDirectExps = queryDirectExps.gte("created_at", fechaInicio);
+  }
+  if (fechaFin) {
+    queryDirectExps = queryDirectExps.lte("created_at", fechaFin);
+  }
+  const { data: directExpedientes } = await queryDirectExps;
 
   const directProspectoIdsFromExp: string[] = [];
   if (directExpedientes) {
