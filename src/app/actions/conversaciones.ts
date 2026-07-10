@@ -202,7 +202,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       ultimaFecha: ultimo.created_at,
       ventanaAbierta: ventanaAbierta(arr),
       ultimoInboundFecha: ultimoInbound?.created_at ?? null,
-      finalizado: ultimo.finalizado ?? false,
+      finalizado: (ultimo.finalizado ?? false) || !ventanaAbierta(arr),
       atiende: atiendeFinal,
       ultimaDireccion: ultimo.direccion,
     });
@@ -444,7 +444,7 @@ export async function obtenerConversacion(
     ventanaAbierta: ventanaAbierta(filas),
     mensajes,
     ultimoInboundFecha: ultimoInbound?.created_at ?? null,
-    finalizado: ultimo?.finalizado ?? false,
+    finalizado: (ultimo?.finalizado ?? false) || !ventanaAbierta(filas),
     nombreExpediente: nombreExpediente || undefined,
     nombreProspecto: nombreProspecto || undefined,
     atiende: atiendeFinal,
@@ -803,17 +803,24 @@ export async function contarConversacionesPendientes(): Promise<number> {
       .order("created_at", { ascending: false })
       .limit(2000);
     if (!data) return 0;
-    // Agrupar por teléfono normalizado y tomar el último mensaje de cada hilo
-    const porTel = new Map<string, { direccion: string; finalizado: boolean }>();
+    // Agrupar por teléfono normalizado y almacenar todas sus filas para calcular la ventana
+    const porTel = new Map<string, { direccion: string; finalizado: boolean; creado: string; filas: any[] }>();
     for (const f of data as { telefono: string; direccion: string; finalizado?: boolean; created_at: string }[]) {
       const telNorm = esCanalSocial(f.telefono) ? f.telefono : normalizarTelefono(f.telefono);
-      if (!porTel.has(telNorm)) {
-        porTel.set(telNorm, { direccion: f.direccion, finalizado: f.finalizado ?? false });
-      }
+      const registro = porTel.get(telNorm) || { direccion: f.direccion, finalizado: f.finalizado ?? false, creado: f.created_at, filas: [] };
+      registro.filas.push(f);
+      porTel.set(telNorm, registro);
     }
     let count = 0;
-    porTel.forEach(({ direccion, finalizado }) => {
-      if (!finalizado && direccion === "in") count++;
+    const ahora = Date.now();
+    porTel.forEach(({ direccion, finalizado, filas }) => {
+      const ventana = filas.some(
+        (f) =>
+          f.direccion === "in" &&
+          ahora - new Date(f.created_at).getTime() < 24 * 60 * 60 * 1000
+      );
+      const finalizadoReal = finalizado || !ventana;
+      if (!finalizadoReal && direccion === "in") count++;
     });
     return count;
   } catch {
