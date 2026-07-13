@@ -9,8 +9,22 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   let telefono = searchParams.get("telefono");
   let prospectoId = searchParams.get("prospectoId");
+  let verConfig = searchParams.get("verConfig");
 
   const sb = supabaseServidor();
+
+  if (verConfig) {
+    try {
+      const { data } = await sb
+        .from("configuracion_agente")
+        .select("*")
+        .eq("clave", "ia_instrucciones")
+        .maybeSingle();
+      return NextResponse.json({ ok: true, ia_instrucciones: data?.valor || "" });
+    } catch (err: any) {
+      return NextResponse.json({ ok: false, error: err.message });
+    }
+  }
 
   try {
     // Si no se especifica teléfono, buscar el último de mensajes_whatsapp
