@@ -923,6 +923,18 @@ export async function generarMensajeRetoque(
     const historia = (data as FilaMsg[]) ?? [];
     if (historia.length === 0) return "";
 
+    // Filtrar mensajes de sistema, plantillas o secuencias automatizadas técnicas
+    // para que la IA no se confunda con sintaxis técnica e intente "rellenarla"
+    const historiaConversacional = historia.filter((m) => {
+      const txt = (m.texto || "").trim();
+      if (!txt) return false;
+      if (txt.startsWith("[Plantilla:") || txt.startsWith("[Secuencia]")) return false;
+      if (m.agente === "Sistema" || m.agente === "Sistema (Secuencia)") return false;
+      return true;
+    });
+
+    if (historiaConversacional.length === 0) return "";
+
     // Contexto del expediente
     let exp: FilaExp | null = null;
     const { data: e } = await sb
@@ -951,7 +963,9 @@ REGLAS DE ESTILO Y TONO:
   * Si hablaban de Impermeabilización de azotea: pregúntale si pudo revisar los precios o si le interesa que agendemos la inspección gratuita de su azotea.
   * Si hablaban de Compra Directa de su casa: pregúntale si le quedó alguna duda sobre cómo liquidamos su adeudo (de Infonavit, banco, etc.) o si le gustaría agendar una llamada.
   * Si hablaban de Promoción de su vivienda: pregúntale si desea que un asesor le marque para darle más detalles del fee o la venta.
-- Escribe ÚNICAMENTE el texto del mensaje a enviar, sin formato JSON, sin comillas adicionales y sin introducciones.
+- Escribe ÚNICAMENTE el texto del mensaje conversacional final a enviar. 
+- PROHIBIDO: No escribas formatos JSON, no uses comillas adicionales ni introducciones.
+- PROHIBIDO: No uses placeholders como "tu propiedad en X", no incluyas barras horizontales, corchetes, ni palabras como "| tipo_negocio" o nombres de servicios técnicos. Escribe puramente un mensaje humano conversacional.
 
 Datos del cliente para referencia:
 - Nombre: ${nombreCliente}
@@ -959,7 +973,7 @@ Datos del cliente para referencia:
 - Fraccionamiento/Zona: ${exp?.fraccionamiento || "No especificado"}
 - Necesidad reportada: ${exp?.necesidad || "No especificada"}`;
 
-    const mensajesInput = aMensajes(historia);
+    const mensajesInput = aMensajes(historiaConversacional);
     if (mensajesInput.length === 0) return "";
 
     const respuestaRetoque = await generarRespuesta(systemPrompt, mensajesInput);

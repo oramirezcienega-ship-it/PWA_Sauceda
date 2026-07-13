@@ -793,6 +793,20 @@ export async function retoqueAutomaticoLedsInactivos(
 
         const ultimoMsg = mensajes[0];
 
+        // Regla de Ventana de 24 horas de Meta:
+        // Buscamos el último mensaje recibido del cliente (direccion = 'in').
+        // Si han pasado más de 24 horas desde su último mensaje (o nunca ha enviado uno),
+        // WhatsApp no permite el envío de textos libres (daría error 470).
+        const ultimoMsgCliente = mensajes.find((m) => m.direccion === "in");
+        if (!ultimoMsgCliente) continue;
+
+        const diffClienteMs = Date.now() - new Date(ultimoMsgCliente.created_at).getTime();
+        const diffClienteHoras = diffClienteMs / (1000 * 60 * 60);
+        if (diffClienteHoras > 24) {
+          // Fuera de la ventana de 24 horas, ignoramos retoque libre de IA
+          continue;
+        }
+
         // Regla: El último mensaje debe ser saliente (enviado por la IA o el sistema, no un humano)
         const esSalienteAutomatizado =
           ultimoMsg.direccion === "out" &&
@@ -803,7 +817,7 @@ export async function retoqueAutomaticoLedsInactivos(
 
         if (!esSalienteAutomatizado) continue;
 
-        // Regla: Antigüedad entre 12 y 22 horas
+        // Regla: Antigüedad entre 12 y 22 horas del último mensaje saliente automatizado
         const diffMs = Date.now() - new Date(ultimoMsg.created_at).getTime();
         const diffHoras = diffMs / (1000 * 60 * 60);
 
