@@ -235,20 +235,23 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
 
 - PASO 4: ENVÍO DE COTIZACIÓN Y LINK (Respuesta 4)
   Se activa en cuanto el cliente proporciona su nombre y teléfono (o si ya los conocemos).
-  Genera la respuesta usando marcadores de posición para los enlaces, y la aplicación los reemplazará dinámicamente con los links reales.
+  Genera la respuesta utilizando los marcadores de posición exactos [LINK_COTIZACION] y [LINK_AGENDADO], los cuales la aplicación reemplazará dinámicamente con los enlaces reales.
   Envía exactamente el siguiente mensaje (reemplazando @nombre, @metros, y @precio_cotizado según corresponda, y usando los marcadores exactos):
   "Perfecto, @nombre. 
 
   Te estoy enviando:
 
-  📋 Tu cotización formal para @metros m² ($@precio_cotizado + IVA)
-  🔗 Un link para agendar tu inspección técnica gratuita
+  📋 Tu cotización formal para @metros m² ($@precio_cotizado + IVA): [LINK_COTIZACION]
+  🔗 Un link para agendar tu inspección técnica gratuita con Alex, nuestro operario: [LINK_AGENDADO]
 
   Revisa la cotización y en el link puedes elegir el día que mejor te venga.
 
   Cualquier duda, aquí estoy. 
 
   ¡Gracias por elegirnos! 💚"
+
+REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
+NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y cotiza el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente.
 
 REGLA CRÍTICA DE CONTEXTO:
 Si la información ya está presente en los "Datos del cliente" abajo (como la ubicación/fraccionamiento, dirección exacta de la propiedad, tipo de crédito, valor de la casa, monto de la deuda o detalles de impermeabilización) porque el cliente ya la proporcionó previamente, NO debes volver a preguntársela en absoluto. En su lugar, reconócela/valídala amablemente en tu saludo y continúa directamente con la información que falte.
@@ -719,14 +722,31 @@ export async function responderConIA(
                   console.error("IA: Error al crear conceptos de cotización:", errInsertConcepto);
                 }
 
-                // Mover expediente a etapa 'visita'
+                // Mover expediente a etapa 'visita' y asignar operario Alex
                 updates.etapa = "visita";
+                try {
+                  const { data: perfAlex } = await sb
+                    .from("perfiles")
+                    .select("id")
+                    .ilike("nombre", "%Alex%")
+                    .eq("activo", true)
+                    .maybeSingle();
+
+                  if (perfAlex) {
+                    updates.asesor_id = perfAlex.id;
+                    console.log(`[Asignación Automática] Asignando operario Alex (${perfAlex.id}) al expediente ${ctx.expedienteId}`);
+                  } else {
+                    console.warn("[Asignación Automática] No se encontró operario activo 'Alex' en la tabla perfiles.");
+                  }
+                } catch (alexErr) {
+                  console.error("[Asignación Automática] Error al buscar operario Alex:", alexErr);
+                }
 
                 await registrarActividad(sb, {
                   expedienteId: ctx.expedienteId,
                   tipo: "construccion",
                   titulo: `Cotización automática creada (${idCot})`,
-                  detalle: `Paquete: ${paq.toUpperCase()}. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita.`,
+                  detalle: `Paquete: ${paq.toUpperCase()}. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita. Operario asignado: Alex.`,
                 });
               }
             }
@@ -734,7 +754,7 @@ export async function responderConIA(
             // Reemplazar marcadores si tenemos el token
             if (tokenCot) {
               const urlCot = `${MARCA.web}/cotizacion/${tokenCot}`;
-              const urlAgenda = `https://calendly.com/sauceda-construye/inspeccion-gratuita?cotizacion=${idCot}`;
+              const urlAgenda = `https://calendly.com/sauceda-construye/inspeccion-gratuita-alex?cotizacion=${idCot}`;
 
               textoRespuesta = textoRespuesta
                 .replace(/\[LINK_COTIZACION\]/g, urlCot)
