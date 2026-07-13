@@ -125,6 +125,56 @@ export async function orquestador(): Promise<{
           let contenidoEnviado = "";
           let waMessageId: string | undefined = undefined;
 
+          // Verificar ventana de 24 horas del cliente para canal whatsapp
+          let usarPlantillaReactivacion = false;
+          let plantillaNombre = "";
+
+          if (step.canal === "whatsapp") {
+            const { normalizarTelefono } = await import("@/lib/telefono");
+            const telNormalizado = normalizarTelefono(enrollment.phone);
+            
+            const { data: ultimoMsgCliente } = await sb
+              .from("mensajes_whatsapp")
+              .select("created_at")
+              .eq("telefono", telNormalizado)
+              .eq("direccion", "in")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const ventanaCerrada = !ultimoMsgCliente || (Date.now() - new Date(ultimoMsgCliente.created_at).getTime()) > 24 * 60 * 60 * 1000;
+            
+            if (ventanaCerrada) {
+              // Obtener tipo de negocio del expediente
+              let tipoNegocio = "";
+              if (enrollment.expediente_id) {
+                const { data: exp } = await sb
+                  .from("expedientes")
+                  .select("tipo_negocio")
+                  .eq("id", enrollment.expediente_id)
+                  .maybeSingle();
+                tipoNegocio = exp?.tipo_negocio || "";
+              }
+
+              // Mapear tipo de negocio a plantilla de Meta
+              let plantilla = "reactivacion_impermeabilizacion"; // Fallback por defecto
+              const negocioNormalizado = (tipoNegocio || "").trim();
+
+              if (negocioNormalizado === "construccion-impermeabilizacion") {
+                plantilla = "reactivacion_impermeabilizacion";
+              } else if (negocioNormalizado === "traspaso_compra") {
+                plantilla = "reactivacion_compra_directa";
+              } else if (negocioNormalizado === "promocion_venta") {
+                plantilla = "reactivacion_promocion_venta";
+              } else if (negocioNormalizado === "solo_tramite") {
+                plantilla = "reactivacion_solo_tramite";
+              }
+
+              usarPlantillaReactivacion = true;
+              plantillaNombre = plantilla;
+            }
+          }
+
           // Mapear y sustituir variables {nombre} y {fraccionamiento}
           const mensajeFormateado = await formatearMensaje(sb, step.mensaje || "", enrollment);
           const asuntoFormateado = step.asunto_email ? await formatearMensaje(sb, step.asunto_email, enrollment) : "";
@@ -133,8 +183,36 @@ export async function orquestador(): Promise<{
           switch (step.canal) {
             case "whatsapp":
               contenidoEnviado = mensajeFormateado;
-              // Soporte para plantillas de WhatsApp si el mensaje comienza con "[plantilla: nombre_plantilla]"
-              if (mensajeFormateado.startsWith("[plantilla:")) {
+              
+              // Si la ventana de 24 horas está cerrada y el mensaje del paso no está configurado explícitamente como plantilla,
+              // forzamos el envío inteligente usando la plantilla de marketing de Meta correspondiente
+              if (usarPlantillaReactivacion && !mensajeFormateado.startsWith("[plantilla:")) {
+                const primerNombre = (enrollment.nombre || "Cliente").split(" ")[0] || "Cliente";
+                const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
+                
+                const waRes = await enviarWhatsAppPlantilla(
+                  enrollment.phone,
+                  plantillaNombre,
+                  "es_MX",
+                  [primerNombre]
+                );
+                exito = waRes.ok;
+                errorDetalle = waRes.error || "";
+                if (waRes.ok) waMessageId = waRes.messageId;
+
+                // Registrar texto representativo de la plantilla en el historial del CRM
+                let textoMensaje = `[Plantilla: ${plantillaNombre}] Hola ${primerNombre}`;
+                if (plantillaNombre === "reactivacion_impermeabilizacion") {
+                  textoMensaje = `[Plantilla: reactivacion_impermeabilizacion] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Construye. 🛠️ Notamos que estabas interesado en impermeabilizar tu azotea. ¿Te gustaría que agendemos una inspección técnica gratuita y sin compromiso esta semana para darte tu presupuesto exacto?`;
+                } else if (plantillaNombre === "reactivacion_compra_directa") {
+                  textoMensaje = `[Plantilla: reactivacion_compra_directa] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Bienes Raíces. 🏡 ¿Tienes alguna duda sobre cómo compramos tu casa al contado y liquidamos tu adeudo (de Infonavit, banco, etc.)? Si gustas, podemos agendar una llamada breve con un asesor.`;
+                } else if (plantillaNombre === "reactivacion_promocion_venta") {
+                  textoMensaje = `[Plantilla: reactivacion_promocion_venta] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Bienes Raíces. 📈 ¿Te gustaría que un asesor te platique cómo te ayudamos a vender tu propiedad en León al mejor precio y de forma segura?`;
+                } else if (plantillaNombre === "reactivacion_solo_tramite") {
+                  textoMensaje = `[Plantilla: reactivacion_solo_tramite] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Bienes Raíces. ⚖️ ¿Pudiste revisar los requisitos para el trámite de tu crédito o propiedad? Si gustas, te apoyamos a resolver tus dudas.`;
+                }
+                contenidoEnviado = textoMensaje;
+              } else if (mensajeFormateado.startsWith("[plantilla:")) {
                 const match = mensajeFormateado.match(/\[plantilla:\s*([^\]\s,]+)(?:\s*,\s*([^\]\s]+))?\]/);
                 const plantillaNombre = match ? match[1] : null;
                 const idioma = match && match[2] ? match[2] : "es_MX";
@@ -144,9 +222,6 @@ export async function orquestador(): Promise<{
                   const textoRestante = mensajeFormateado.replace(/\[plantilla:[^\]]+\]/, "").trim();
                   const parametros = textoRestante ? textoRestante.split("|").map(p => p.trim()) : [enrollment.nombre];
 
-                  // NOTA: No se pasa token de botón URL porque la mayoría de plantillas no tienen
-                  // componente de botón. Si una plantilla futura necesita botón URL, se deberá
-                  // indicar explícitamente en la notación del paso, por ej: [plantilla: nombre, con_boton]
                   const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
                   const waRes = await enviarWhatsAppPlantilla(
                     enrollment.phone,

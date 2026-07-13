@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { obtenerDatosCRM, type CRMData, type CRMMessage } from "@/app/actions/crm";
-import { analizarConversacionConIA, obtenerConfiguracionAgente, guardarConfiguracionAgente, generarPlanMejoraConsolidado, marcarMejoraComoAplicada } from "@/app/actions/analisis-ia";
+import { analizarConversacionConIA, obtenerConfiguracionAgente, guardarConfiguracionAgente, generarPlanMejoraConsolidado, marcarMejoraComoAplicada, enviarPlantillaReactivacionManual } from "@/app/actions/analisis-ia";
 import { rolUsuarioActual } from "@/app/actions/usuarios";
 import Link from "next/link";
 import {
@@ -1294,6 +1294,7 @@ interface VistaAnalisisIAProps {
 
 function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
+  const [cargandoReactivacionMap, setCargandoReactivacionMap] = useState<Record<string, boolean>>({});
   const [errorMap, setErrorMap] = useState<Record<string, string>>({});
   const [soloPerdidos, setSoloPerdidos] = useState(true);
   const [filtroCalidad, setFiltroCalidad] = useState("todos");
@@ -1871,28 +1872,74 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
                     {expanded ? "Ocultar chat completo" : `Ver chat completo (${l.conversacionCompleta.length} mensajes)`}
                   </button>
 
-                  {analizado && (
-                    <button
-                      onClick={async () => {
-                        const nuevaAplicada = !l.analisisIA.mejora_aplicada;
-                        const idL = l.phone || l.id;
-                        const res = await marcarMejoraComoAplicada(idL, nuevaAplicada);
-                        if (res.ok) {
-                          onUpdateLead(l.phone, {
-                            ...l.analisisIA,
-                            mejora_aplicada: nuevaAplicada
-                          });
-                        }
-                      }}
-                      className={`rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
-                        l.analisisIA.mejora_aplicada
-                          ? "bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200"
-                          : "bg-[#C9A961]/15 hover:bg-[#C9A961]/25 text-[#9C7F42] border border-[#C9A961]/30"
-                      }`}
-                    >
-                      {l.analisisIA.mejora_aplicada ? "Desmarcar aplicada" : "Marcar aplicada"}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      if (!analizado) return null;
+                      const ultimoMsgCliente = [...l.conversacionCompleta].reverse().find((m: any) => m.role === "user");
+                      const ventanaCerrada = !ultimoMsgCliente || (Date.now() - new Date(ultimoMsgCliente.created_at).getTime()) > 24 * 60 * 60 * 1000;
+                      
+                      if (!ventanaCerrada || !l.analisisIA.recuperable) return null;
+
+                      const cargando = !!cargandoReactivacionMap[l.phone];
+
+                      return (
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`¿Estás seguro de que deseas enviar la plantilla de marketing de WhatsApp a ${l.name}?`)) return;
+                            setCargandoReactivacionMap((prev) => ({ ...prev, [l.phone]: true }));
+                            try {
+                              const res = await enviarPlantillaReactivacionManual(
+                                l.phone,
+                                l.tipo_negocio || "",
+                                l.name,
+                                l.id
+                              );
+                              if (res.ok) {
+                                alert("¡Plantilla de reactivación enviada con éxito!");
+                              } else {
+                                alert("Error al enviar plantilla: " + (res.error || "Rechazo de Meta"));
+                              }
+                            } catch (err: any) {
+                              alert("Error al procesar el envío: " + err.message);
+                            } finally {
+                              setCargandoReactivacionMap((prev) => ({ ...prev, [l.phone]: false }));
+                            }
+                          }}
+                          disabled={cargando}
+                          className="rounded-lg bg-[#2D4A2B] hover:bg-[#5C7A52] text-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {cargando ? (
+                            <span className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            "⚡ Reactivar con Plantilla"
+                          )}
+                        </button>
+                      );
+                    })()}
+
+                    {analizado && (
+                      <button
+                        onClick={async () => {
+                          const nuevaAplicada = !l.analisisIA.mejora_aplicada;
+                          const idL = l.phone || l.id;
+                          const res = await marcarMejoraComoAplicada(idL, nuevaAplicada);
+                          if (res.ok) {
+                            onUpdateLead(l.phone, {
+                              ...l.analisisIA,
+                              mejora_aplicada: nuevaAplicada
+                            });
+                          }
+                        }}
+                        className={`rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
+                          l.analisisIA.mejora_aplicada
+                            ? "bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200"
+                            : "bg-[#C9A961]/15 hover:bg-[#C9A961]/25 text-[#9C7F42] border border-[#C9A961]/30"
+                        }`}
+                      >
+                        {l.analisisIA.mejora_aplicada ? "Desmarcar aplicada" : "Marcar aplicada"}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {expanded && (
