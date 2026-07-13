@@ -61,6 +61,12 @@ export async function GET(request: Request) {
 
       if (pErr) traceLog.prospecto_error = pErr.message;
       traceLog.total_prospectos_bd = todosProspectos?.length || 0;
+      traceLog.todos_prospectos = (todosProspectos ?? []).map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        telefono: p.telefono,
+        telefono_normalizado: p.telefono ? normalizarTelefono(p.telefono) : null
+      }));
 
       const telCanon = normalizarTelefono(telefono);
       const diezDigitosTarget = telCanon.slice(-10);

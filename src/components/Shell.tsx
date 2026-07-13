@@ -229,6 +229,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         { href: "/reportes", label: "Reportes" },
         { href: "/reportes/dashboard-inteligente", label: "Dashboard Inteligente" },
         { href: "/usuarios", label: "Usuarios" },
+        { href: "/consejo", label: "El Consejo" },
       ]
     : ENLACES;
 
