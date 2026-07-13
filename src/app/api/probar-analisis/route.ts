@@ -37,63 +37,84 @@ export async function GET(request: Request) {
     
     // Ejecutamos directamente sin requireAdmin en este endpoint de test para que corra
     // de forma pública y no falle por sesión al abrirlo en navegador
-    
     // Copia simplificada de la lógica de analizarConversacionConIA pero sin validación de sesión
     let mensajes: Array<{ role: "user" | "assistant"; text: string; created_at: string }> = [];
     const variantes = variantesTelefono(telefono);
+    const traceLog: any = {
+      variantes,
+      prospecto: null,
+      expediente: null,
+      lead_estandar: null,
+      conv_estandar: null,
+      msgs_estandar_count: 0,
+      msgs_fallback_count: 0,
+      filtrosOr_fallback: []
+    };
 
     // Buscar prospecto y expediente asociados para obtener IDs y hacer búsquedas cruzadas robustas
     let prospectoId = "";
     let expedienteId = "";
     try {
-      const { data: prospecto } = await sb
+      const { data: prospecto, error: pErr } = await sb
         .from("prospectos")
-        .select("id")
+        .select("id, nombre")
         .in("telefono", variantes)
         .maybeSingle();
       
+      if (pErr) traceLog.prospecto_error = pErr.message;
       if (prospecto) {
         prospectoId = prospecto.id;
-        const { data: exp } = await sb
+        traceLog.prospecto = prospecto;
+        
+        const { data: exp, error: eErr } = await sb
           .from("expedientes")
-          .select("id")
+          .select("id, etapa, prospecto_id")
           .eq("prospecto_id", prospecto.id)
           .maybeSingle();
+        
+        if (eErr) traceLog.expediente_error = eErr.message;
         if (exp) {
           expedienteId = exp.id;
+          traceLog.expediente = exp;
         }
       }
-    } catch {
-      // Ignorar si la tabla prospectos/expedientes no existe
+    } catch (err: any) {
+      traceLog.prospecto_catch_error = err.message;
     }
 
     try {
       // Intentar esquema estándar
-      const { data: lead } = await sb
+      const { data: lead, error: lErr } = await sb
         .from("leads")
-        .select("id")
+        .select("id, name, phone")
         .in("phone", variantes)
         .maybeSingle();
 
+      if (lErr) traceLog.lead_estandar_error = lErr.message;
       if (lead) {
-        const { data: conv } = await sb
+        traceLog.lead_estandar = lead;
+        const { data: conv, error: cErr } = await sb
           .from("conversations")
-          .select("id")
+          .select("id, lead_id")
           .eq("lead_id", lead.id)
           .maybeSingle();
 
+        if (cErr) traceLog.conv_estandar_error = cErr.message;
         if (conv) {
-          const { data: msgs } = await sb
+          traceLog.conv_estandar = conv;
+          const { data: msgs, error: mErr } = await sb
             .from("messages")
             .select("role, text, created_at")
             .eq("conversation_id", conv.id)
             .order("created_at", { ascending: true });
 
+          if (mErr) traceLog.msgs_estandar_error = mErr.message;
           mensajes = (msgs as any[]) ?? [];
+          traceLog.msgs_estandar_count = mensajes.length;
         }
       }
-    } catch {
-      // Si falla, se asume esquema fallback
+    } catch (err: any) {
+      traceLog.estandar_catch_error = err.message;
     }
 
     // Fallback si no hay mensajes en esquema estándar
@@ -106,21 +127,37 @@ export async function GET(request: Request) {
         filtrosOr.push(`expediente_id.eq.${expedienteId}`);
       }
 
-      const { data: msgs } = await sb
-        .from("mensajes_whatsapp")
-        .select("direccion, texto, created_at")
-        .or(filtrosOr.join(","))
-        .order("created_at", { ascending: true });
+      traceLog.filtrosOr_fallback = filtrosOr;
 
-      mensajes = (msgs ?? []).map((m) => ({
-        role: m.direccion === "in" ? "user" : "assistant",
-        text: m.texto || "",
-        created_at: m.created_at
-      }));
+      try {
+        const { data: msgs, error: mwErr } = await sb
+          .from("mensajes_whatsapp")
+          .select("id, direccion, texto, created_at, telefono, prospecto_id, expediente_id")
+          .or(filtrosOr.join(","))
+          .order("created_at", { ascending: true });
+
+        if (mwErr) traceLog.msgs_fallback_error = mwErr.message;
+        if (msgs) {
+          mensajes = msgs.map((m) => ({
+            role: m.direccion === "in" ? "user" : "assistant",
+            text: m.texto || "",
+            created_at: m.created_at
+          }));
+          traceLog.msgs_fallback_count = mensajes.length;
+          traceLog.msgs_fallback_sample = msgs.slice(0, 3); // Muestra de los primeros 3 mensajes
+        }
+      } catch (err: any) {
+        traceLog.fallback_catch_error = err.message;
+      }
     }
 
     if (mensajes.length === 0) {
-      throw new Error("No hay mensajes en esta conversación para analizar.");
+      return NextResponse.json({
+        ok: false,
+        telefono,
+        error_message: "No hay mensajes en esta conversación para analizar.",
+        traceLog,
+      });
     }
 
     const conversacionFormateada = mensajes
