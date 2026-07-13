@@ -707,31 +707,15 @@ async function buscarYEnrolarLeadsInactivos(
   sb: ReturnType<typeof supabaseServidor>
 ): Promise<void> {
   try {
-    // 1. Encontrar secuencia de reactivación activa
-    const { data: secuencias } = await sb
+    // 1. Obtener todas las secuencias de reactivación activas para evaluar segmentación
+    const { data: todasLasSecuencias } = await sb
       .from("automation_sequences")
-      .select("id, nombre")
-      .eq("status", "activa")
-      .eq("segmento", "sin_respuesta")
-      .limit(1);
+      .select("id, nombre, segmento")
+      .eq("status", "activa");
 
-    let secuenciaId = secuencias && secuencias.length > 0 ? secuencias[0].id : null;
-    let secuenciaNombre = secuencias && secuencias.length > 0 ? secuencias[0].nombre : null;
-
-    if (!secuenciaId) {
-      // Buscar una con nombre "reactiva" o similar
-      const { data: seqAlternativa } = await sb
-        .from("automation_sequences")
-        .select("id, nombre")
-        .eq("status", "activa")
-        .ilike("nombre", "%reactiva%")
-        .limit(1);
-      
-      if (!seqAlternativa || seqAlternativa.length === 0) {
-        return; // No hay ninguna secuencia de reactivación configurada y activa
-      }
-      secuenciaId = seqAlternativa[0].id;
-      secuenciaNombre = seqAlternativa[0].nombre;
+    const secuenciasActivas = todasLasSecuencias || [];
+    if (secuenciasActivas.length === 0) {
+      return; // No hay ninguna secuencia configurada y activa
     }
 
     // 2. Definir fecha límite (3 días de inactividad)
@@ -739,10 +723,10 @@ async function buscarYEnrolarLeadsInactivos(
     limiteInactividad.setDate(limiteInactividad.getDate() - 3);
     const limiteISO = limiteInactividad.toISOString();
 
-    // 3. Buscar expedientes inactivos (excluir leads del conmutador/sistema)
+    // 3. Buscar expedientes inactivos con su tipo_negocio (excluir leads del conmutador/sistema)
     const { data: expedientes } = await sb
       .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, ultimo_movimiento")
+      .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, tipo_negocio, ultimo_movimiento")
       .in("etapa", ["nuevo-lead", "contactado"])
       .lt("ultimo_movimiento", limiteISO)
       .not("cliente", "ilike", "%Conmutador%")   // Excluir leads del conmutador IA
@@ -771,13 +755,35 @@ async function buscarYEnrolarLeadsInactivos(
 
       if (enrolado) continue; // Ya está en una secuencia activa, ignorar
 
-      // Enrolar en la secuencia de reactivación
+      // DETERMINAR LA MEJOR SECUENCIA PARA ESTE LEAD SEGÚN SU TIPO DE NEGOCIO:
+      // A. Buscar secuencia específica cuyo segmento coincida con el tipo_negocio del expediente
+      let secuenciaElegida = secuenciasActivas.find(
+        (s) => s.segmento === exp.tipo_negocio && exp.tipo_negocio
+      );
+
+      // B. Fallback 1: Buscar secuencia con segmento 'sin_respuesta' o 'todos'
+      if (!secuenciaElegida) {
+        secuenciaElegida = secuenciasActivas.find(
+          (s) => s.segmento === "sin_respuesta" || s.segmento === "todos"
+        );
+      }
+
+      // C. Fallback 2: Buscar secuencia cuyo nombre contenga la palabra 'reactiva'
+      if (!secuenciaElegida) {
+        secuenciaElegida = secuenciasActivas.find(
+          (s) => (s.nombre || "").toLowerCase().includes("reactiva")
+        );
+      }
+
+      // Si definitivamente no encontramos ninguna secuencia apta, saltamos el lead
+      if (!secuenciaElegida) continue;
+
       const nombreCompleto = [exp.cliente, exp.primer_apellido, exp.segundo_apellido]
         .filter(Boolean)
         .join(" ");
 
       await sb.from("sequence_enrollments").insert({
-        sequence_id: secuenciaId,
+        sequence_id: secuenciaElegida.id,
         phone: exp.telefono,
         nombre: nombreCompleto || "Cliente",
         prospecto_id: exp.prospecto_id || null,
@@ -793,7 +799,7 @@ async function buscarYEnrolarLeadsInactivos(
         prospecto_id: exp.prospecto_id || null,
         tipo: "sistema",
         titulo: "Enrolamiento por inactividad",
-        detalle: `Enrolado automáticamente en la secuencia '${secuenciaNombre}' tras 3 días sin actividad.`,
+        detalle: `Enrolado automáticamente en la secuencia '${secuenciaElegida.nombre}' tras 3 días sin actividad (Tipo: ${exp.tipo_negocio || "sin especificar"}).`,
       });
     }
   } catch (err) {
