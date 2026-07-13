@@ -21,8 +21,20 @@ export async function orquestador(): Promise<{
   const errores: string[] = [];
 
   try {
-    // 0. Buscar e inscribir prospectos/expedientes inactivos en secuencias de reactivación
+    // 0. Buscar e inscribir prospectos/expedientes inactivos en secuencias de reactivación (3 días)
     await buscarYEnrolarLeadsInactivos(sb);
+
+    // 0b. Ejecutar retoques automáticos para reactivación a corto plazo (12-22 horas)
+    try {
+      const resRetoque = await retoqueAutomaticoLedsInactivos(sb);
+      procesados += resRetoque.procesados;
+      accionesEjecutadas += resRetoque.enviados;
+      if (resRetoque.errores.length > 0) {
+        errores.push(...resRetoque.errores.map((e) => `[Retoque] ${e}`));
+      }
+    } catch (retErr: any) {
+      errores.push(`[Retoque] Error crítico: ${retErr.message}`);
+    }
 
     // 1. Obtener enrollments activos
     const { data: enrollments, error: errEnrollments } = await sb
@@ -713,3 +725,158 @@ async function buscarYEnrolarLeadsInactivos(
     console.error("Error en buscarYEnrolarLeadsInactivos:", err);
   }
 }
+
+/**
+ * Busca leads inactivos (entre 12 y 22 horas) y les envía un retoque de WhatsApp generado por IA
+ * para reactivar la conversación antes de que expire la ventana de 24 horas.
+ */
+export async function retoqueAutomaticoLedsInactivos(
+  sb: ReturnType<typeof supabaseServidor>
+): Promise<{ procesados: number; enviados: number; errores: string[] }> {
+  let procesados = 0;
+  let enviados = 0;
+  const errores: string[] = [];
+
+  try {
+    // 0. Si no es horario permitido comercialmente, salir de inmediato
+    if (!esHorarioPermitido()) {
+      return { procesados: 0, enviados: 0, errores: [] };
+    }
+
+    // 1. Obtener expedientes activos (no en etapa terminal y no marcados como no_viable)
+    const { data: expedientes, error: errExps } = await sb
+      .from("expedientes")
+      .select("id, cliente, telefono, tipo_negocio, etapa, no_viable, prospecto_id")
+      .not("telefono", "is", null);
+
+    if (errExps) {
+      throw new Error(`Error leyendo expedientes para retoque: ${errExps.message}`);
+    }
+
+    const expsActivos = (expedientes || []).filter(
+      (e) =>
+        e.etapa !== "cerrado" &&
+        e.etapa !== "perdido" &&
+        e.etapa !== "venta" &&
+        !e.no_viable
+    );
+
+    if (expsActivos.length === 0) {
+      return { procesados: 0, enviados: 0, errores: [] };
+    }
+
+    // Cargar dinámicamente el generador de retoques para evitar dependencias circulares
+    const { generarMensajeRetoque } = await import("@/lib/ia/agente");
+    const { registrarActividad } = await import("@/lib/actividades");
+
+    for (const exp of expsActivos) {
+      procesados++;
+      const telefono = exp.telefono;
+      if (!telefono) continue;
+
+      try {
+        // Excluir números no válidos de WhatsApp (deben tener un formato válido)
+        const telLimpio = telefono.replace(/\D/g, "");
+        const esMexicano = telLimpio.length === 10 ||
+          (telLimpio.startsWith("52") && telLimpio.length >= 12 && telLimpio.length <= 13);
+        if (!esMexicano) continue;
+
+        // 2. Obtener los últimos mensajes de este expediente para evaluar inactividad
+        const { data: mensajes, error: errMsgs } = await sb
+          .from("mensajes_whatsapp")
+          .select("direccion, created_at, agente, texto")
+          .eq("expediente_id", exp.id)
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (errMsgs || !mensajes || mensajes.length === 0) continue;
+
+        const ultimoMsg = mensajes[0];
+
+        // Regla: El último mensaje debe ser saliente (enviado por la IA o el sistema, no un humano)
+        const esSalienteAutomatizado =
+          ultimoMsg.direccion === "out" &&
+          (ultimoMsg.agente === "IA" ||
+            ultimoMsg.agente === "Sistema (Secuencia)" ||
+            ultimoMsg.agente === "Sistema" ||
+            !ultimoMsg.agente);
+
+        if (!esSalienteAutomatizado) continue;
+
+        // Regla: Antigüedad entre 12 y 22 horas
+        const diffMs = Date.now() - new Date(ultimoMsg.created_at).getTime();
+        const diffHoras = diffMs / (1000 * 60 * 60);
+
+        if (diffHoras < 12 || diffHoras > 22) continue;
+
+        // Regla: No duplicar el retoque en este ciclo de silencio.
+        // Si ya hay un mensaje de retoque (agente = 'IA (Retoque)') enviado en el bloque de salida actual
+        // (es decir, después de cualquier mensaje del cliente), lo ignoramos.
+        // Como el último mensaje es saliente y cumple las condiciones, verificamos si ya existe algún
+        // mensaje con agente 'IA (Retoque)' en el historial de mensajes de este bloque saliente.
+        let yaRetocado = false;
+        for (const msg of mensajes) {
+          if (msg.direccion === "in") {
+            // Llegamos al último mensaje entrante del cliente, paramos la búsqueda
+            break;
+          }
+          if (msg.direccion === "out" && msg.agente === "IA (Retoque)") {
+            yaRetocado = true;
+            break;
+          }
+        }
+
+        if (yaRetocado) continue;
+
+        // 3. Generar mensaje de retoque personalizado usando IA
+        const textoRetoque = await generarMensajeRetoque(sb, telefono, exp.id);
+        if (!textoRetoque || textoRetoque.trim().length === 0) continue;
+
+        // 4. Enviar el retoque por WhatsApp
+        const waRes = await enviarWhatsAppTexto(telefono, textoRetoque);
+
+        if (waRes.ok) {
+          enviados++;
+          
+          // Registrar mensaje saliente de retoque
+          await sb.from("mensajes_whatsapp").insert({
+            telefono: telefono,
+            texto: textoRetoque,
+            direccion: "out",
+            expediente_id: exp.id,
+            prospecto_id: exp.prospecto_id || null,
+            estado: "enviado",
+            agente: "IA (Retoque)",
+            wa_message_id: waRes.messageId || null,
+          });
+
+          // Registrar la actividad en el expediente
+          await registrarActividad(sb, {
+            expedienteId: exp.id,
+            tipo: "sistema",
+            titulo: "Retoque automático enviado (IA)",
+            detalle: textoRetoque,
+          });
+
+          console.log(`[Retoque Automático] WhatsApp de seguimiento enviado con éxito a ${telefono}: "${textoRetoque}"`);
+        } else {
+          errores.push(`Error enviando retoque a ${telefono}: ${waRes.error || "Error de envío"}`);
+        }
+
+        // Rate limit entre envíos
+        if (enviados > 0) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+
+      } catch (leadErr: any) {
+        errores.push(`Error procesando lead ${exp.id} para retoque: ${leadErr.message}`);
+      }
+    }
+  } catch (err: any) {
+    console.error("Error crítico en retoqueAutomaticoLedsInactivos:", err);
+    errores.push(`Error crítico en retoque: ${err.message}`);
+  }
+
+  return { procesados, enviados, errores };
+}
+

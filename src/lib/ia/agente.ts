@@ -879,3 +879,74 @@ export async function responderConIA(
     console.error("IA: no se pudo responder:", err);
   }
 }
+
+/**
+ * Genera un mensaje de retoque (follow-up) personalizado mediante IA
+ * basándose en el historial de la conversación.
+ */
+export async function generarMensajeRetoque(
+  sb: SupabaseClient,
+  telefono: string,
+  expedienteId: string,
+): Promise<string> {
+  try {
+    if (!iaAgenteActivo()) return "";
+
+    // Historial reciente de la conversación
+    const { data } = await sb
+      .from("mensajes_whatsapp")
+      .select("direccion, texto, agente, created_at")
+      .in("telefono", variantesTelefono(telefono))
+      .order("created_at", { ascending: true })
+      .limit(12);
+
+    const historia = (data as FilaMsg[]) ?? [];
+    if (historia.length === 0) return "";
+
+    // Contexto del expediente
+    let exp: FilaExp | null = null;
+    const { data: e } = await sb
+      .from("expedientes")
+      .select(
+        "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, necesidad, valor_estimado, saldo_deuda, telefono"
+      )
+      .eq("id", expedienteId)
+      .maybeSingle();
+    exp = (e as FilaExp) ?? null;
+
+    const nombreCliente = exp ? [exp.cliente, exp.primer_apellido].filter(Boolean).join(" ") : "Cliente";
+    
+    // System Prompt especializado para el retoque / seguimiento
+    const systemPrompt = `Eres Sofía, el asistente virtual de SAUCEDA Bienes Raíces y SAUCEDA Construye (empresa en León, Guanajuato).
+Anteriormente estabas conversando con el cliente de nombre "${nombreCliente}" sobre nuestros servicios. 
+La conversación se quedó pausada desde tu última respuesta hace unas horas porque el cliente ya no contestó.
+
+Tu objetivo ahora es escribir un único mensaje de retoque (follow-up) muy amigable, natural y súper corto (de 1 a 2 frases como máximo) para reactivar el contacto y preguntarle si tiene alguna duda, si pudo revisar la información o si requiere que programemos una visita/llamada, según corresponda de acuerdo a lo que estaban hablando.
+
+REGLAS DE ESTILO Y TONO:
+- Sé sumamente cálido, educado y cercano.
+- No presiones al cliente. Hazlo ver como un seguimiento amigable y servicial.
+- El mensaje debe ser corto (máximo 2 frases).
+- Adapta el mensaje al contexto exacto de lo último que estaban hablando (revisa los últimos mensajes de la conversación). Por ejemplo:
+  * Si hablaban de Impermeabilización de azotea: pregúntale si pudo revisar los precios o si le interesa que agendemos la inspección gratuita de su azotea.
+  * Si hablaban de Compra Directa de su casa: pregúntale si le quedó alguna duda sobre cómo liquidamos su adeudo (de Infonavit, banco, etc.) o si le gustaría agendar una llamada.
+  * Si hablaban de Promoción de su vivienda: pregúntale si desea que un asesor le marque para darle más detalles del fee o la venta.
+- Escribe ÚNICAMENTE el texto del mensaje a enviar, sin formato JSON, sin comillas adicionales y sin introducciones.
+
+Datos del cliente para referencia:
+- Nombre: ${nombreCliente}
+- Tipo de Negocio/Interés: ${exp?.tipo_negocio || "No especificado"}
+- Fraccionamiento/Zona: ${exp?.fraccionamiento || "No especificado"}
+- Necesidad reportada: ${exp?.necesidad || "No especificada"}`;
+
+    const mensajesInput = aMensajes(historia);
+    if (mensajesInput.length === 0) return "";
+
+    const respuestaRetoque = await generarRespuesta(systemPrompt, mensajesInput);
+    return respuestaRetoque.trim();
+  } catch (err) {
+    console.error("Error al generar mensaje de retoque con IA:", err);
+    return "";
+  }
+}
+
