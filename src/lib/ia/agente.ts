@@ -456,7 +456,7 @@ export async function responderConIA(
     // Los mensajes de la secuencia automatizada ("Sistema (Secuencia)") NO
     // cuentan como toma de control — el lead que responde a un mensaje de
     // rescate debe ser atendido por Sofía con su contexto completo.
-    const AGENTES_AUTOMATICOS = new Set([NOMBRE_AGENTE, "Sistema (Secuencia)", "Sistema"]);
+    const AGENTES_AUTOMATICOS = new Set([NOMBRE_AGENTE, "Sistema (Secuencia)", "Sistema", "IA (Retoque)"]);
     const ultimoConAgente = historia
       .slice()
       .reverse()
