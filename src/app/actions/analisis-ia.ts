@@ -2,7 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
-import { variantesTelefono } from "@/lib/telefono";
+import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 
 export interface AnalisisIA {
   telefono: string;
@@ -59,25 +59,33 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
   let prospectoId = "";
   let expedienteId = "";
   try {
-    const { data: prospecto } = await sb
+    const { data: todosProspectos } = await sb
       .from("prospectos")
-      .select("id")
-      .in("telefono", variantes)
-      .maybeSingle();
+      .select("id, telefono, nombre");
+
+    const telCanon = normalizarTelefono(telefono);
+    const diezDigitosTarget = telCanon.slice(-10);
+
+    const prospectoCoincidente = (todosProspectos ?? []).find((p) => {
+      if (!p.telefono) return false;
+      const pCanon = normalizarTelefono(p.telefono);
+      const pDiez = pCanon.slice(-10);
+      return pDiez === diezDigitosTarget;
+    });
     
-    if (prospecto) {
-      prospectoId = prospecto.id;
+    if (prospectoCoincidente) {
+      prospectoId = prospectoCoincidente.id;
       const { data: exp } = await sb
         .from("expedientes")
         .select("id")
-        .eq("prospecto_id", prospecto.id)
+        .eq("prospecto_id", prospectoCoincidente.id)
         .maybeSingle();
       if (exp) {
         expedienteId = exp.id;
       }
     }
-  } catch {
-    // Ignorar si la tabla prospectos/expedientes no existe
+  } catch (err) {
+    console.error("Error al buscar prospecto en memoria:", err);
   }
 
   try {

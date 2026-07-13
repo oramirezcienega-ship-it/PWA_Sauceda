@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { analizarConversacionConIA } from "@/app/actions/analisis-ia";
-import { variantesTelefono } from "@/lib/telefono";
+import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 
 export const dynamic = "force-dynamic";
 
@@ -55,21 +55,31 @@ export async function GET(request: Request) {
     let prospectoId = "";
     let expedienteId = "";
     try {
-      const { data: prospecto, error: pErr } = await sb
+      const { data: todosProspectos, error: pErr } = await sb
         .from("prospectos")
-        .select("id, nombre")
-        .in("telefono", variantes)
-        .maybeSingle();
-      
+        .select("id, telefono, nombre");
+
       if (pErr) traceLog.prospecto_error = pErr.message;
-      if (prospecto) {
-        prospectoId = prospecto.id;
-        traceLog.prospecto = prospecto;
+      traceLog.total_prospectos_bd = todosProspectos?.length || 0;
+
+      const telCanon = normalizarTelefono(telefono);
+      const diezDigitosTarget = telCanon.slice(-10);
+
+      const prospectoCoincidente = (todosProspectos ?? []).find((p) => {
+        if (!p.telefono) return false;
+        const pCanon = normalizarTelefono(p.telefono);
+        const pDiez = pCanon.slice(-10);
+        return pDiez === diezDigitosTarget;
+      });
+      
+      if (prospectoCoincidente) {
+        prospectoId = prospectoCoincidente.id;
+        traceLog.prospecto = prospectoCoincidente;
         
         const { data: exp, error: eErr } = await sb
           .from("expedientes")
           .select("id, etapa, prospecto_id")
-          .eq("prospecto_id", prospecto.id)
+          .eq("prospecto_id", prospectoCoincidente.id)
           .maybeSingle();
         
         if (eErr) traceLog.expediente_error = eErr.message;
@@ -77,6 +87,8 @@ export async function GET(request: Request) {
           expedienteId = exp.id;
           traceLog.expediente = exp;
         }
+      } else {
+        traceLog.prospecto_busqueda_msg = "No se encontró prospecto coincidente en memoria.";
       }
     } catch (err: any) {
       traceLog.prospecto_catch_error = err.message;
