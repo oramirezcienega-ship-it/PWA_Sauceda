@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { variantesTelefono } from "@/lib/telefono";
 
 export interface AnalisisIA {
   telefono: string;
@@ -50,15 +51,16 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
   await requireAdmin();
   const sb = supabaseServidor();
 
-  // 1. Obtener mensajes para este teléfono
+  // 1. Obtener mensajes para este teléfono considerando variantes
   let mensajes: Array<{ role: "user" | "assistant"; text: string; created_at: string }> = [];
+  const variantes = variantesTelefono(telefono);
 
   try {
     // Intentar esquema estándar
     const { data: lead } = await sb
       .from("leads")
       .select("id")
-      .eq("phone", telefono)
+      .in("phone", variantes)
       .maybeSingle();
 
     if (lead) {
@@ -87,7 +89,7 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
     const { data: msgs } = await sb
       .from("mensajes_whatsapp")
       .select("direccion, texto, created_at")
-      .eq("telefono", telefono)
+      .in("telefono", variantes)
       .order("created_at", { ascending: true });
 
     mensajes = (msgs ?? []).map((m) => ({
