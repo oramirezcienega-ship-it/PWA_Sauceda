@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   let telefono = searchParams.get("telefono");
+  let prospectoId = searchParams.get("prospectoId");
 
   const sb = supabaseServidor();
 
@@ -52,52 +53,72 @@ export async function GET(request: Request) {
     };
 
     // Buscar prospecto y expediente asociados para obtener IDs y hacer búsquedas cruzadas robustas
-    let prospectoId = "";
-    let expedienteId = "";
-    try {
-      const { data: todosProspectos, error: pErr } = await sb
-        .from("prospectos")
-        .select("id, telefono, nombre");
+    let prospectoIdResuelto = prospectoId || "";
+    let expedienteIdResuelto = "";
 
-      if (pErr) traceLog.prospecto_error = pErr.message;
-      traceLog.total_prospectos_bd = todosProspectos?.length || 0;
-      traceLog.todos_prospectos = (todosProspectos ?? []).map(p => ({
-        id: p.id,
-        nombre: p.nombre,
-        telefono: p.telefono,
-        telefono_normalizado: p.telefono ? normalizarTelefono(p.telefono) : null
-      }));
-
-      const telCanon = normalizarTelefono(telefono);
-      const diezDigitosTarget = telCanon.slice(-10);
-
-      const prospectoCoincidente = (todosProspectos ?? []).find((p) => {
-        if (!p.telefono) return false;
-        const pCanon = normalizarTelefono(p.telefono);
-        const pDiez = pCanon.slice(-10);
-        return pDiez === diezDigitosTarget;
-      });
-      
-      if (prospectoCoincidente) {
-        prospectoId = prospectoCoincidente.id;
-        traceLog.prospecto = prospectoCoincidente;
-        
+    if (prospectoIdResuelto) {
+      traceLog.prospectoId_peticion = prospectoIdResuelto;
+      try {
         const { data: exp, error: eErr } = await sb
           .from("expedientes")
           .select("id, etapa, prospecto_id")
-          .eq("prospecto_id", prospectoCoincidente.id)
+          .eq("prospecto_id", prospectoIdResuelto)
           .maybeSingle();
         
         if (eErr) traceLog.expediente_error = eErr.message;
         if (exp) {
-          expedienteId = exp.id;
+          expedienteIdResuelto = exp.id;
           traceLog.expediente = exp;
         }
-      } else {
-        traceLog.prospecto_busqueda_msg = "No se encontró prospecto coincidente en memoria.";
+      } catch (err: any) {
+        traceLog.expediente_catch_error = err.message;
       }
-    } catch (err: any) {
-      traceLog.prospecto_catch_error = err.message;
+    } else {
+      try {
+        const { data: todosProspectos, error: pErr } = await sb
+          .from("prospectos")
+          .select("id, telefono, nombre");
+
+        if (pErr) traceLog.prospecto_error = pErr.message;
+        traceLog.total_prospectos_bd = todosProspectos?.length || 0;
+        traceLog.todos_prospectos = (todosProspectos ?? []).map(p => ({
+          id: p.id,
+          nombre: p.nombre,
+          telefono: p.telefono,
+          telefono_normalizado: p.telefono ? normalizarTelefono(p.telefono) : null
+        }));
+
+        const telCanon = normalizarTelefono(telefono);
+        const diezDigitosTarget = telCanon.slice(-10);
+
+        const prospectoCoincidente = (todosProspectos ?? []).find((p) => {
+          if (!p.telefono) return false;
+          const pCanon = normalizarTelefono(p.telefono);
+          const pDiez = pCanon.slice(-10);
+          return pDiez === diezDigitosTarget;
+        });
+        
+        if (prospectoCoincidente) {
+          prospectoIdResuelto = prospectoCoincidente.id;
+          traceLog.prospecto = prospectoCoincidente;
+          
+          const { data: exp, error: eErr } = await sb
+            .from("expedientes")
+            .select("id, etapa, prospecto_id")
+            .eq("prospecto_id", prospectoCoincidente.id)
+            .maybeSingle();
+          
+          if (eErr) traceLog.expediente_error = eErr.message;
+          if (exp) {
+            expedienteIdResuelto = exp.id;
+            traceLog.expediente = exp;
+          }
+        } else {
+          traceLog.prospecto_busqueda_msg = "No se encontró prospecto coincidente en memoria.";
+        }
+      } catch (err: any) {
+        traceLog.prospecto_catch_error = err.message;
+      }
     }
 
     try {
@@ -137,12 +158,15 @@ export async function GET(request: Request) {
 
     // Fallback si no hay mensajes en esquema estándar
     if (mensajes.length === 0) {
-      const filtrosOr = [`telefono.in.(${variantes.map(v => `"${v}"`).join(",")})`];
-      if (prospectoId) {
-        filtrosOr.push(`prospecto_id.eq.${prospectoId}`);
+      const filtrosOr = [];
+      if (telefono) {
+        filtrosOr.push(`telefono.in.(${variantes.map(v => `"${v}"`).join(",")})`);
       }
-      if (expedienteId) {
-        filtrosOr.push(`expediente_id.eq.${expedienteId}`);
+      if (prospectoIdResuelto) {
+        filtrosOr.push(`prospecto_id.eq.${prospectoIdResuelto}`);
+      }
+      if (expedienteIdResuelto) {
+        filtrosOr.push(`expediente_id.eq.${expedienteIdResuelto}`);
       }
 
       traceLog.filtrosOr_fallback = filtrosOr;

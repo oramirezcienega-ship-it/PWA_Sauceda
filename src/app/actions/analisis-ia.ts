@@ -47,7 +47,7 @@ export async function obtenerTodosLosAnalisis(): Promise<AnalisisIA[]> {
  * Analiza un hilo de conversación utilizando Claude (Anthropic) y guarda
  * el resultado en caché dentro de Supabase.
  */
-export async function analizarConversacionConIA(telefono: string): Promise<AnalisisIA> {
+export async function analizarConversacionConIA(telefono: string, prospectoId?: string): Promise<AnalisisIA> {
   await requireAdmin();
   const sb = supabaseServidor();
 
@@ -56,36 +56,53 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
   const variantes = variantesTelefono(telefono);
 
   // Buscar prospecto y expediente asociados para obtener IDs y hacer búsquedas cruzadas robustas
-  let prospectoId = "";
-  let expedienteId = "";
-  try {
-    const { data: todosProspectos } = await sb
-      .from("prospectos")
-      .select("id, telefono, nombre");
+  let prospectoIdResuelto = prospectoId || "";
+  let expedienteIdResuelto = "";
 
-    const telCanon = normalizarTelefono(telefono);
-    const diezDigitosTarget = telCanon.slice(-10);
-
-    const prospectoCoincidente = (todosProspectos ?? []).find((p) => {
-      if (!p.telefono) return false;
-      const pCanon = normalizarTelefono(p.telefono);
-      const pDiez = pCanon.slice(-10);
-      return pDiez === diezDigitosTarget;
-    });
-    
-    if (prospectoCoincidente) {
-      prospectoId = prospectoCoincidente.id;
+  if (prospectoIdResuelto) {
+    try {
       const { data: exp } = await sb
         .from("expedientes")
         .select("id")
-        .eq("prospecto_id", prospectoCoincidente.id)
+        .eq("prospecto_id", prospectoIdResuelto)
         .maybeSingle();
       if (exp) {
-        expedienteId = exp.id;
+        expedienteIdResuelto = exp.id;
       }
+    } catch (expErr) {
+      console.error("Error al buscar expediente por prospectoId:", expErr);
     }
-  } catch (err) {
-    console.error("Error al buscar prospecto en memoria:", err);
+  } else {
+    // Si no se proporcionó prospectoId, intentar buscar en memoria usando el teléfono
+    try {
+      const { data: todosProspectos } = await sb
+        .from("prospectos")
+        .select("id, telefono, nombre");
+
+      const telCanon = normalizarTelefono(telefono);
+      const diezDigitosTarget = telCanon.slice(-10);
+
+      const prospectoCoincidente = (todosProspectos ?? []).find((p) => {
+        if (!p.telefono) return false;
+        const pCanon = normalizarTelefono(p.telefono);
+        const pDiez = pCanon.slice(-10);
+        return pDiez === diezDigitosTarget;
+      });
+      
+      if (prospectoCoincidente) {
+        prospectoIdResuelto = prospectoCoincidente.id;
+        const { data: exp } = await sb
+          .from("expedientes")
+          .select("id")
+          .eq("prospecto_id", prospectoCoincidente.id)
+          .maybeSingle();
+        if (exp) {
+          expedienteIdResuelto = exp.id;
+        }
+      }
+    } catch (err) {
+      console.error("Error al buscar prospecto en memoria:", err);
+    }
   }
 
   try {
@@ -119,12 +136,15 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
 
   // Fallback si no hay mensajes en esquema estándar
   if (mensajes.length === 0) {
-    const filtrosOr = [`telefono.in.(${variantes.map(v => `"${v}"`).join(",")})`];
-    if (prospectoId) {
-      filtrosOr.push(`prospecto_id.eq.${prospectoId}`);
+    const filtrosOr = [];
+    if (telefono) {
+      filtrosOr.push(`telefono.in.(${variantes.map(v => `"${v}"`).join(",")})`);
     }
-    if (expedienteId) {
-      filtrosOr.push(`expediente_id.eq.${expedienteId}`);
+    if (prospectoIdResuelto) {
+      filtrosOr.push(`prospecto_id.eq.${prospectoIdResuelto}`);
+    }
+    if (expedienteIdResuelto) {
+      filtrosOr.push(`expediente_id.eq.${expedienteIdResuelto}`);
     }
 
     const { data: msgs } = await sb

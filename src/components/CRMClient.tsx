@@ -1449,11 +1449,11 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
   }, [leadsAnalizados]);
 
   // Ejecuta el análisis de una conversación individual
-  const handleAnalizar = async (phone: string) => {
+  const handleAnalizar = async (phone: string, leadId?: string) => {
     setLoadingMap((prev) => ({ ...prev, [phone]: true }));
     setErrorMap((prev) => ({ ...prev, [phone]: "" }));
     try {
-      const result = await analizarConversacionConIA(phone);
+      const result = await analizarConversacionConIA(phone, leadId);
       onUpdateLead(phone, result);
     } catch (err) {
       console.error(err);
@@ -1475,7 +1475,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
     setAnalizandoTodo(true);
     for (const l of noAnalizados) {
       try {
-        const result = await analizarConversacionConIA(l.phone);
+        const result = await analizarConversacionConIA(l.phone, l.id);
         onUpdateLead(l.phone, result);
       } catch (err) {
         console.error("Fallo al analizar", l.phone, err);
@@ -1780,7 +1780,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
                         Esta conversación aún no ha sido evaluada por el modelo de IA. Haz clic en el botón para solicitar el diagnóstico automático de Claude.
                       </p>
                       <button
-                        onClick={() => handleAnalizar(l.phone)}
+                        onClick={() => handleAnalizar(l.phone, l.id)}
                         disabled={loading}
                         className="rounded-lg bg-[#2D4A2B] hover:bg-[#5C7A52] text-white px-4 py-2.5 text-xs font-semibold shadow-sm transition disabled:opacity-50 shrink-0 flex items-center justify-center gap-1.5 min-w-[140px]"
                       >
