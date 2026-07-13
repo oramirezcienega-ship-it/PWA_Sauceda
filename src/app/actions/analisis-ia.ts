@@ -12,6 +12,7 @@ export interface AnalisisIA {
   calidad_lead: "alta" | "media" | "baja";
   recomendacion: string;
   recuperable: boolean;
+  mejora_aplicada?: boolean;
   created_at: string;
 }
 
@@ -254,7 +255,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON válido. No incluyas explicaciones an
 
   // 4. Validar y normalizar campos obligatorios
   const analisis: Omit<AnalisisIA, "created_at"> = {
-    telefono,
+    telefono: telefono || prospectoIdResuelto,
     resumen: parsedAnalysis.resumen || "Sin resumen disponible.",
     punto_de_quiebre: parsedAnalysis.punto_de_quiebre || "No determinado.",
     razon_perdida: parsedAnalysis.razon_perdida || "No especificada.",
@@ -262,7 +263,8 @@ Responde EXCLUSIVAMENTE con un objeto JSON válido. No incluyas explicaciones an
       ? parsedAnalysis.calidad_lead
       : "media",
     recomendacion: parsedAnalysis.recomendacion || "Sin recomendaciones.",
-    recuperable: !!parsedAnalysis.recuperable
+    recuperable: !!parsedAnalysis.recuperable,
+    mejora_aplicada: false
   };
 
   // 5. Guardar en la base de datos (analisis_ia)
@@ -459,6 +461,26 @@ Responde con el siguiente formato estructurado usando etiquetas delimitadoras (n
       ok: false,
       error: err instanceof Error ? err.message : "Error al procesar la respuesta de la IA."
     };
+  }
+}
+
+/**
+ * Marca una recomendación/conversación individual como que ya se aplicó su mejora en el prompt global.
+ */
+export async function marcarMejoraComoAplicada(identificador: string, aplicada: boolean = true): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  try {
+    const sb = supabaseServidor();
+    const { error } = await sb
+      .from("analisis_ia")
+      .update({ mejora_aplicada: aplicada })
+      .eq("telefono", identificador);
+
+    if (error) throw error;
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al marcar mejora como aplicada:", err);
+    return { ok: false, error: err.message };
   }
 }
 

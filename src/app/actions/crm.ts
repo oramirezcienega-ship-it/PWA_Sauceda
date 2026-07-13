@@ -16,6 +16,7 @@ export interface CRMLead {
 export interface CRMConversation {
   id: string;
   lead_id: string;
+  tipo_negocio?: string;
   qualified: "verde" | "amarillo" | "rojo";
   status: "sin contactar" | "en proceso" | "calificado" | "perdido";
   created_at: string;
@@ -44,6 +45,7 @@ export interface CRMData {
     tiempoUltimoMensaje: string; // Ej: "Hace 2 horas" o "Sin mensajes"
     sinRespuestaSofia: boolean; // Si lleva >24h sin respuesta de Sofía
     ultimoTexto: string;
+    tipo_negocio?: string;
     conversacionCompleta: CRMMessage[];
     analisisIA?: {
       telefono: string;
@@ -53,6 +55,7 @@ export interface CRMData {
       calidad_lead: "alta" | "media" | "baja";
       recomendacion: string;
       recuperable: boolean;
+      mejora_aplicada?: boolean;
       created_at: string;
     };
   }>;
@@ -176,7 +179,7 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
     
     const [pRes, eRes, mwRes] = await Promise.all([
       sb.from("prospectos").select("*"),
-      sb.from("expedientes").select("id, prospecto_id, etapa, created_at"),
+      sb.from("expedientes").select("id, prospecto_id, etapa, tipo_negocio, created_at"),
       sb.from("mensajes_whatsapp").select("*").order("created_at", { ascending: true })
     ]);
 
@@ -214,6 +217,7 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
       return {
         id: e.id,
         lead_id: e.prospecto_id || "",
+        tipo_negocio: e.tipo_negocio || "",
         qualified,
         status,
         created_at: e.created_at
@@ -345,8 +349,9 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
       tiempoUltimoMensaje,
       sinRespuestaSofia,
       ultimoTexto,
+      tipo_negocio: conv?.tipo_negocio || "",
       conversacionCompleta: msgs,
-      analisisIA: analisisMap.get(l.phone)
+      analisisIA: analisisMap.get(l.phone) || (l.phone ? null : analisisMap.get(l.id))
     };
   });
 

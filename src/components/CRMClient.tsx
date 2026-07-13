@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { obtenerDatosCRM, type CRMData, type CRMMessage } from "@/app/actions/crm";
-import { analizarConversacionConIA, obtenerConfiguracionAgente, guardarConfiguracionAgente, generarPlanMejoraConsolidado } from "@/app/actions/analisis-ia";
+import { analizarConversacionConIA, obtenerConfiguracionAgente, guardarConfiguracionAgente, generarPlanMejoraConsolidado, marcarMejoraComoAplicada } from "@/app/actions/analisis-ia";
 import { rolUsuarioActual } from "@/app/actions/usuarios";
 import Link from "next/link";
 import {
@@ -1298,6 +1298,8 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
   const [soloPerdidos, setSoloPerdidos] = useState(true);
   const [filtroCalidad, setFiltroCalidad] = useState("todos");
   const [filtroRecuperable, setFiltroRecuperable] = useState("todos");
+  const [filtroNegocio, setFiltroNegocio] = useState("todos");
+  const [filtroMejora, setFiltroMejora] = useState("nuevas");
   const [expandidoMap, setExpandidoMap] = useState<Record<string, boolean>>({});
   const [analizandoTodo, setAnalizandoTodo] = useState(false);
 
@@ -1386,6 +1388,24 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
         return false;
       }
 
+      // Filtro por tipo de negocio
+      if (filtroNegocio !== "todos") {
+        if (l.tipo_negocio !== filtroNegocio) {
+          return false;
+        }
+      }
+
+      // Filtro por mejora aplicada (Historial vs Nuevas)
+      if (filtroMejora !== "todas") {
+        const esAplicada = l.analisisIA?.mejora_aplicada === true;
+        if (filtroMejora === "nuevas" && esAplicada) {
+          return false;
+        }
+        if (filtroMejora === "aplicadas" && !esAplicada) {
+          return false;
+        }
+      }
+
       if (l.analisisIA) {
         if (filtroCalidad !== "todos" && l.analisisIA.calidad_lead !== filtroCalidad) {
           return false;
@@ -1404,7 +1424,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
 
       return true;
     });
-  }, [leads, soloPerdidos, filtroCalidad, filtroRecuperable]);
+  }, [leads, soloPerdidos, filtroCalidad, filtroRecuperable, filtroNegocio, filtroMejora]);
 
   // Leads que sí están analizados para los KPI superiores
   const leadsAnalizados = useMemo(() => {
@@ -1650,6 +1670,28 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
             <option value="si">Solo Recuperables</option>
             <option value="no">Solo No Recuperables</option>
           </select>
+
+          <select
+            value={filtroNegocio}
+            onChange={(e) => setFiltroNegocio(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-[#5C7A52]"
+          >
+            <option value="todos">Negocio: Todos</option>
+            <option value="construccion-impermeabilizacion">Impermeabilización</option>
+            <option value="traspaso_compra">Compra Directa</option>
+            <option value="promocion_venta">Promoción Venta</option>
+            <option value="solo_tramite">Solo Trámite</option>
+          </select>
+
+          <select
+            value={filtroMejora}
+            onChange={(e) => setFiltroMejora(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-[#5C7A52]"
+          >
+            <option value="nuevas">Mejoras: Nuevas (Pendientes)</option>
+            <option value="aplicadas">Mejoras: Aplicadas (Historial)</option>
+            <option value="todas">Mejoras: Todas</option>
+          </select>
         </div>
 
         {leads.filter((l) => !l.analisisIA && (l.status === "perdido" || l.qualified === "rojo") && l.conversacionCompleta.length > 0).length > 0 && (
@@ -1740,6 +1782,16 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
                       </span>
                     )}
 
+                    {analizado && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-0.5 ${
+                        l.analisisIA.mejora_aplicada
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                          : "bg-amber-100 text-[#8F6B23] border-amber-200"
+                      }`}>
+                        {l.analisisIA.mejora_aplicada ? "Mejora Aplicada ✓" : "Mejora Pendiente ⚡"}
+                      </span>
+                    )}
+
                     {!analizado && (
                       <span className="bg-slate-100 text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
                         Pendiente Análisis
@@ -1803,7 +1855,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-slate-100">
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                   <button
                     onClick={() => setExpandidoMap((prev) => ({ ...prev, [l.phone]: !expanded }))}
                     className="text-xs font-bold text-slate-500 hover:text-slate-800 transition flex items-center gap-1"
@@ -1819,39 +1871,62 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
                     {expanded ? "Ocultar chat completo" : `Ver chat completo (${l.conversacionCompleta.length} mensajes)`}
                   </button>
 
-                  {expanded && (
-                    <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl max-h-80 overflow-y-auto p-4 space-y-3 scrollbar-sutil">
-                      {l.conversacionCompleta.map((msg: any) => {
-                        const esUser = msg.role === "user";
-                        return (
-                          <div key={msg.id} className={`flex ${esUser ? "justify-end" : "justify-start"}`}>
-                            <div
-                              className={`max-w-[85%] rounded-xl px-3.5 py-2 text-[11px] shadow-sm border ${
-                                esUser
-                                  ? "bg-[#2D4A2B] text-white rounded-br-none border-[#2D4A2B]"
-                                  : "bg-white text-slate-800 rounded-bl-none border-slate-200"
-                              }`}
-                            >
-                              {!esUser && (
-                                <span className="text-[9px] font-bold text-[#5C7A52] block mb-0.5 uppercase tracking-wide">
-                                  Sofía / IA
-                                </span>
-                              )}
-                              <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
-                              <span
-                                className={`text-[8px] block text-right mt-1 opacity-60 font-mono ${
-                                  esUser ? "text-slate-300" : "text-slate-500"
-                                }`}
-                              >
-                                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {analizado && (
+                    <button
+                      onClick={async () => {
+                        const nuevaAplicada = !l.analisisIA.mejora_aplicada;
+                        const idL = l.phone || l.id;
+                        const res = await marcarMejoraComoAplicada(idL, nuevaAplicada);
+                        if (res.ok) {
+                          onUpdateLead(l.phone, {
+                            ...l.analisisIA,
+                            mejora_aplicada: nuevaAplicada
+                          });
+                        }
+                      }}
+                      className={`rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
+                        l.analisisIA.mejora_aplicada
+                          ? "bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200"
+                          : "bg-[#C9A961]/15 hover:bg-[#C9A961]/25 text-[#9C7F42] border border-[#C9A961]/30"
+                      }`}
+                    >
+                      {l.analisisIA.mejora_aplicada ? "Desmarcar aplicada" : "Marcar aplicada"}
+                    </button>
                   )}
                 </div>
+
+                {expanded && (
+                  <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl max-h-80 overflow-y-auto p-4 space-y-3 scrollbar-sutil">
+                    {l.conversacionCompleta.map((msg: any) => {
+                      const esUser = msg.role === "user";
+                      return (
+                        <div key={msg.id} className={`flex ${esUser ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className={`max-w-[85%] rounded-xl px-3.5 py-2 text-[11px] shadow-sm border ${
+                              esUser
+                                ? "bg-[#2D4A2B] text-white rounded-br-none border-[#2D4A2B]"
+                                : "bg-white text-slate-800 rounded-bl-none border-slate-200"
+                            }`}
+                          >
+                            {!esUser && (
+                              <span className="text-[9px] font-bold text-[#5C7A52] block mb-0.5 uppercase tracking-wide">
+                                Sofía / IA
+                              </span>
+                            )}
+                            <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
+                            <span
+                              className={`text-[8px] block text-right mt-1 opacity-60 font-mono ${
+                                esUser ? "text-slate-300" : "text-slate-500"
+                              }`}
+                            >
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })
