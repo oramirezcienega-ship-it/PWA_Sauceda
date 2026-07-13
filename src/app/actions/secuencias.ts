@@ -197,8 +197,7 @@ export async function listarEnrollments(sequenceId?: string) {
         nombre,
         steps:sequence_steps(*)
       ),
-      actions:sequence_actions(*),
-      expediente:expedientes(tipo_negocio)
+      actions:sequence_actions(*)
     `)
     .order("enrolled_at", { ascending: false });
 
@@ -206,9 +205,39 @@ export async function listarEnrollments(sequenceId?: string) {
     query = query.eq("sequence_id", sequenceId);
   }
 
-  const { data, error } = await query;
+  const { data: enrollments, error } = await query;
   if (error) throw new Error(error.message);
-  return data || [];
+
+  if (!enrollments || enrollments.length === 0) {
+    return [];
+  }
+
+  // Resolver en memoria el tipo_negocio de los expedientes de forma segura
+  try {
+    const expedienteIds = Array.from(
+      new Set(enrollments.map((en: any) => en.expediente_id).filter(Boolean))
+    ) as string[];
+
+    if (expedienteIds.length > 0) {
+      const { data: exps, error: errExps } = await sb
+        .from("expedientes")
+        .select("id, tipo_negocio")
+        .in("id", expedienteIds);
+
+      if (!errExps && exps) {
+        const expMap = new Map(exps.map((e: any) => [e.id, e]));
+        return enrollments.map((en: any) => ({
+          ...en,
+          expediente: en.expediente_id ? expMap.get(en.expediente_id) || null : null
+        }));
+      }
+    }
+  } catch (errResolve) {
+    console.error("Error al resolver tipo_negocio para enrollments:", errResolve);
+  }
+
+  // Retornar en caso de fallo o ausencia de expedientes
+  return enrollments.map((en: any) => ({ ...en, expediente: null }));
 }
 
 /** Enrola un prospecto existente en una secuencia */
