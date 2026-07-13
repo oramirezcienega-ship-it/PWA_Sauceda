@@ -197,7 +197,8 @@ export async function listarEnrollments(sequenceId?: string) {
         nombre,
         steps:sequence_steps(*)
       ),
-      actions:sequence_actions(*)
+      actions:sequence_actions(*),
+      expediente:expedientes(tipo_negocio)
     `)
     .order("enrolled_at", { ascending: false });
 

@@ -78,6 +78,7 @@ export function SecuenciasClient() {
 
   // Estado para el Monitoreo en Tiempo Real (Analytics)
   const [filtroEstadoMonitoreo, setFiltroEstadoMonitoreo] = useState<"todos" | "activo" | "respondio" | "otros">("todos");
+  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion-impermeabilizacion">("todos");
   const [busquedaLeadMonitoreo, setBusquedaLeadMonitoreo] = useState("");
 
   const enrollmentsFiltrados = useMemo(() => {
@@ -91,6 +92,12 @@ export function SecuenciasClient() {
         if (esActivo || esRespondio) return false;
       }
 
+      // 1b. Filtrar por tipo de negocio
+      if (filtroNegocioMonitoreo !== "todos") {
+        const negocioExp = en.expediente?.tipo_negocio || "no_definido";
+        if (negocioExp !== filtroNegocioMonitoreo) return false;
+      }
+
       // 2. Filtrar por búsqueda
       if (busquedaLeadMonitoreo.trim() !== "") {
         const query = busquedaLeadMonitoreo.toLowerCase();
@@ -102,7 +109,7 @@ export function SecuenciasClient() {
 
       return true;
     });
-  }, [enrollments, filtroEstadoMonitoreo, busquedaLeadMonitoreo]);
+  }, [enrollments, filtroEstadoMonitoreo, filtroNegocioMonitoreo, busquedaLeadMonitoreo]);
 
   // Carga inicial de datos
   useEffect(() => {
@@ -1128,8 +1135,20 @@ export function SecuenciasClient() {
                       placeholder="Buscar por lead o secuencia..."
                       value={busquedaLeadMonitoreo}
                       onChange={(e) => setBusquedaLeadMonitoreo(e.target.value)}
-                      className="rounded border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#2D4A2B] w-full md:w-56 placeholder-slate-400"
+                      className="rounded border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#2D4A2B] w-full md:w-48 placeholder-slate-400 bg-white"
                     />
+
+                    <select
+                      value={filtroNegocioMonitoreo}
+                      onChange={(e) => setFiltroNegocioMonitoreo(e.target.value as any)}
+                      className="rounded border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#2D4A2B] bg-white text-slate-700 font-semibold"
+                    >
+                      <option value="todos">Todos los Negocios</option>
+                      <option value="traspaso_compra">Compra Directa (Traspaso)</option>
+                      <option value="promocion_venta">Promoción de Viviendas</option>
+                      <option value="solo_tramite">Armado de Expediente</option>
+                      <option value="construccion-impermeabilizacion">Impermeabilización (Construcción)</option>
+                    </select>
                     
                     <div className="flex rounded border border-slate-200 p-0.5 bg-slate-50 shrink-0 text-xs">
                       {(
@@ -1200,6 +1219,24 @@ export function SecuenciasClient() {
                                   <p className="text-[10px] text-slate-600 font-medium">
                                     Secuencia: <span className="text-slate-800 font-bold">{en.sequence?.nombre || "N/A"}</span>
                                   </p>
+                                  {en.expediente?.tipo_negocio && (
+                                    <div className="mt-1">
+                                      <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-wider ${
+                                        en.expediente.tipo_negocio === "construccion-impermeabilizacion"
+                                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                          : en.expediente.tipo_negocio === "traspaso_compra"
+                                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                          : en.expediente.tipo_negocio === "promocion_venta"
+                                          ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                          : "bg-slate-50 text-slate-700 border border-slate-200"
+                                      }`}>
+                                        {en.expediente.tipo_negocio === "construccion-impermeabilizacion" ? "Impermeabilización" :
+                                         en.expediente.tipo_negocio === "traspaso_compra" ? "Compra Directa" :
+                                         en.expediente.tipo_negocio === "promocion_venta" ? "Promoción" :
+                                         en.expediente.tipo_negocio === "solo_tramite" ? "Trámite" : en.expediente.tipo_negocio}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                               <td className="py-3 text-slate-600 pr-2">
