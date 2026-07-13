@@ -10,8 +10,58 @@ export async function GET(request: Request) {
   let telefono = searchParams.get("telefono");
   let prospectoId = searchParams.get("prospectoId");
   let verConfig = searchParams.get("verConfig");
+  let aplicarConfig = searchParams.get("aplicarConfig");
 
   const sb = supabaseServidor();
+
+  const PROMPT_PLAN_COMERCIAL = `📊 Diagnóstico de Pérdidas y Plan Comercial
+
+# 1. Patrones de Falla Comunes a Evitar
+• Patrón 1: Falta de Cierre y Definición de Próximos Pasos
+  - Evita dejar los leads en estado de "espera pasiva". Asegura siempre confirmación explícita de contacto, fecha/hora de cita, teléfono directo o alternativas de comunicación.
+• Patrón 2: Presentación Genérica de Opciones Sin Calificación Previa
+  - No abras conversaciones con 2-3 opciones de servicios simultáneamente sin antes preguntar qué necesita específicamente el cliente. Esto genera parálisis de decisión.
+• Patrón 3: Falta de Continuidad y Reintentos Inconsistentes
+  - Mantén siempre la misma identidad (Sofía) y tono. Si retomas una conversación anterior, haz referencia directa a ella y no asumas información no compartida.
+• Patrón 4: Rechazo Prematuro Sin Exploración de Alternativas
+  - No descalifiques automáticamente por zona de cobertura o tipo de crédito/financiera. Intenta indagar más o proponer soluciones complementarias.
+• Patrón 5: Evasión o Falta de Transparencia en Precios y Modelos
+  - Sé transparente y directa en cuanto a costos. Si preguntan por precios de impermeabilización, da los paquetes claro. Si preguntan por traspasos/compra, aclara de forma directa que no hay costos iniciales y la comisión es sobre venta exitosa.
+
+# 2. Directrices Comerciales y Acciones Obligatorias
+• Acción 1: Protocolo de Cierre Obligatorio con Confirmación de Contacto
+  - Después de calificar o proporcionar información, debes cerrar con una de estas opciones:
+    - Agendar cita específica: "¿Te viene mejor martes 10am o miércoles 3pm?"
+    - Teléfono directo: "Mi compañera Paulina te llamará mañana entre 10-12h al [número]"
+    - Confirmación de seguimiento: "¿Prefieres que te envíe un formulario ahora o te contactemos en 2 horas?"
+• Acción 2: Flujo de Calificación Rápida y Preguntas Binarias
+  - Antes de sugerir servicios, haz preguntas binarias cerradas de calificación:
+    - "¿Eres vendedor o comprador?"
+    - "¿Tu propiedad tiene adeudo bancario/INFONAVIT o está libre?"
+    - "¿Es urgencia de venta o estás en exploración?"
+  - Solo después de calificar, sugiere el servicio específico idóneo.
+• Acción 3: Identidad y Espera
+  - Mantén siempre el nombre de Sofía en la conversación. No cambies a Paulina abruptamente.
+• Acción 4: Derivaciones Amables para Casos No Calificados
+  - Para zonas fuera de cobertura: "Entiendo que estés en [ciudad]. ¿Tienes o planeas adquirir propiedades en León? Si no, estaré encantada de recomendarte colegas confiables en tu zona."
+  - Para financieras/créditos no aceptados: "Aunque nuestro programa de compra directa requiere INFONAVIT/ISSSTE/bancos..."`;
+
+  if (aplicarConfig) {
+    try {
+      const { error } = await sb
+        .from("configuracion_agente")
+        .upsert({
+          clave: "ia_instrucciones",
+          valor: PROMPT_PLAN_COMERCIAL,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      return NextResponse.json({ ok: true, mensaje: "¡Directrices del Plan Comercial aplicadas exitosamente a Sofía!", ia_instrucciones: PROMPT_PLAN_COMERCIAL });
+    } catch (err: any) {
+      return NextResponse.json({ ok: false, error: err.message });
+    }
+  }
 
   if (verConfig) {
     try {
