@@ -55,6 +55,31 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
   let mensajes: Array<{ role: "user" | "assistant"; text: string; created_at: string }> = [];
   const variantes = variantesTelefono(telefono);
 
+  // Buscar prospecto y expediente asociados para obtener IDs y hacer búsquedas cruzadas robustas
+  let prospectoId = "";
+  let expedienteId = "";
+  try {
+    const { data: prospecto } = await sb
+      .from("prospectos")
+      .select("id")
+      .in("telefono", variantes)
+      .maybeSingle();
+    
+    if (prospecto) {
+      prospectoId = prospecto.id;
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("id")
+        .eq("prospecto_id", prospecto.id)
+        .maybeSingle();
+      if (exp) {
+        expedienteId = exp.id;
+      }
+    }
+  } catch {
+    // Ignorar si la tabla prospectos/expedientes no existe
+  }
+
   try {
     // Intentar esquema estándar
     const { data: lead } = await sb
@@ -86,10 +111,18 @@ export async function analizarConversacionConIA(telefono: string): Promise<Anali
 
   // Fallback si no hay mensajes en esquema estándar
   if (mensajes.length === 0) {
+    const filtrosOr = [`telefono.in.(${variantes.map(v => `"${v}"`).join(",")})`];
+    if (prospectoId) {
+      filtrosOr.push(`prospecto_id.eq.${prospectoId}`);
+    }
+    if (expedienteId) {
+      filtrosOr.push(`expediente_id.eq.${expedienteId}`);
+    }
+
     const { data: msgs } = await sb
       .from("mensajes_whatsapp")
       .select("direccion, texto, created_at")
-      .in("telefono", variantes)
+      .or(filtrosOr.join(","))
       .order("created_at", { ascending: true });
 
     mensajes = (msgs ?? []).map((m) => ({
