@@ -501,11 +501,11 @@ export async function enviarPlantillaReactivacionManual(
     const sb = supabaseServidor();
     
     // 1. Mapear tipo de negocio a plantilla de Meta
-    let plantilla = "reactivacion_impermeabilizacion"; // Fallback por defecto
+    let plantilla = "reactivacion_impermeabilizacio"; // Fallback por defecto
     const negocioNormalizado = (tipoNegocio || "").trim();
 
     if (negocioNormalizado === "construccion-impermeabilizacion") {
-      plantilla = "reactivacion_impermeabilizacion";
+      plantilla = "reactivacion_impermeabilizacio";
     } else if (negocioNormalizado === "traspaso_compra") {
       plantilla = "reactivacion_compra_directa";
     } else if (negocioNormalizado === "promocion_venta") {
@@ -532,8 +532,8 @@ export async function enviarPlantillaReactivacionManual(
     // 3. Registrar mensaje saliente en la BD
     // Construimos un texto descriptivo del mensaje para el historial
     let textoMensaje = `[Plantilla: ${plantilla}] Hola ${primerNombre}`;
-    if (plantilla === "reactivacion_impermeabilizacion") {
-      textoMensaje = `[Plantilla: reactivacion_impermeabilizacion] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Construye. 🛠️ Notamos que estabas interesado en impermeabilizar tu azotea. ¿Te gustaría que agendemos una inspección técnica gratuita y sin compromiso esta semana para darte tu presupuesto exacto?`;
+    if (plantilla === "reactivacion_impermeabilizacio") {
+      textoMensaje = `[Plantilla: reactivacion_impermeabilizacio] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Construye. 🛠️ Notamos que estabas interesado en impermeabilizar tu azotea. ¿Te gustaría que agendemos una inspección técnica gratuita y sin compromiso esta semana para darte tu presupuesto exacto?`;
     } else if (plantilla === "reactivacion_compra_directa") {
       textoMensaje = `[Plantilla: reactivacion_compra_directa] Hola ${primerNombre}, te saluda Sofía de SAUCEDA Bienes Raíces. 🏡 ¿Tienes alguna duda sobre cómo compramos tu casa al contado y liquidamos tu adeudo (de Infonavit, banco, etc.)? Si gustas, podemos agendar una llamada breve con un asesor.`;
     } else if (plantilla === "reactivacion_promocion_venta") {
