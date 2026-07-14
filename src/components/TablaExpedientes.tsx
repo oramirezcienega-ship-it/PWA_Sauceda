@@ -10,6 +10,7 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
+import { BotonLlamar } from "./BotonLlamar";
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
@@ -504,12 +505,15 @@ export function TablaExpedientes({
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Teléfono</p>
                   {exp.telefono ? (
-                    <a
-                      href={`tel:${exp.telefono}`}
-                      className="font-mono text-sauce font-semibold hover:underline block mt-0.5 text-xs"
-                    >
-                      {exp.telefono}
-                    </a>
+                    <div className="flex flex-col gap-1 mt-0.5">
+                      <a
+                        href={`tel:${exp.telefono}`}
+                        className="font-mono text-sauce font-semibold hover:underline block text-xs"
+                      >
+                        {exp.telefono}
+                      </a>
+                      <BotonLlamar telefono={exp.telefono} prospectoId={exp.prospectoId} />
+                    </div>
                   ) : (
                     <p className="text-carbon/50 mt-0.5">—</p>
                   )}

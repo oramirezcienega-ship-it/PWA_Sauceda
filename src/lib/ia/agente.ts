@@ -105,6 +105,7 @@ interface FilaExp {
   sin_pagos?: string | null;
   estado_fisico?: string | null;
   habitada?: string | null;
+  asesor_id?: string | null;
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
@@ -242,7 +243,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Te estoy enviando:
 
   📋 Tu cotización formal para @metros m² ($@precio_cotizado + IVA): [LINK_COTIZACION]
-  🔗 Un link para agendar tu inspección técnica gratuita con Alex, nuestro operario: [LINK_AGENDADO]
+  🔗 Un link para agendar tu inspección técnica gratuita con nuestro operario: [LINK_AGENDADO]
 
   Revisa la cotización y en el link puedes elegir el día que mejor te venga.
 
@@ -472,7 +473,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
@@ -651,6 +652,9 @@ export async function responderConIA(
 
       // --- CREACIÓN DE COTIZACIÓN AUTOMÁTICA (Supabase) Y REEMPLAZO DE LINKS ---
       if (esImper && exp) {
+        let tokenCot = "";
+        let idCot = "";
+
         const m = (datosExtraidos as any).metros;
         const paq = (datosExtraidos as any).paquete_elegido;
         const nombreCliente = (datosExtraidos as any).cliente_nombre || exp.cliente;
@@ -663,9 +667,6 @@ export async function responderConIA(
               .from("cotizaciones")
               .select("id, token")
               .eq("expediente_id", ctx.expedienteId);
-
-            let tokenCot = "";
-            let idCot = "";
 
             if (cotizacionesExistentes && cotizacionesExistentes.length > 0) {
               tokenCot = cotizacionesExistentes[0].token;
@@ -751,10 +752,50 @@ export async function responderConIA(
               }
             }
 
+            // Fallback: si no tenemos tokenCot pero la respuesta tiene los marcadores, recuperamos la cotización de la BD
+            if (!tokenCot && (textoRespuesta.includes("[LINK_COTIZACION]") || textoRespuesta.includes("[LINK_AGENDADO]"))) {
+              try {
+                const { data: cots } = await sb
+                  .from("cotizaciones")
+                  .select("id, token")
+                  .eq("expediente_id", ctx.expedienteId)
+                  .order("created_at", { ascending: false });
+
+                if (cots && cots.length > 0) {
+                  tokenCot = cots[0].token;
+                  idCot = cots[0].id;
+                }
+              } catch (fallbackErr) {
+                console.error("IA: Error en fallback de búsqueda de cotización:", fallbackErr);
+              }
+            }
+
             // Reemplazar marcadores si tenemos el token
             if (tokenCot) {
               const urlCot = `${MARCA.web}/cotizacion/${tokenCot}`;
-              const urlAgenda = `https://calendly.com/sauceda-construye/inspeccion-gratuita-alex?cotizacion=${idCot}`;
+              
+              // Intentar obtener el operador asignado al expediente para usar la agenda interna de la app
+              let operadorId = updates.asesor_id || exp?.asesor_id;
+              if (!operadorId) {
+                try {
+                  const { data: perfAlex } = await sb
+                    .from("perfiles")
+                    .select("id")
+                    .ilike("nombre", "%Alex%")
+                    .eq("activo", true)
+                    .maybeSingle();
+                  if (perfAlex) {
+                    operadorId = perfAlex.id;
+                  }
+                } catch (err) {
+                  console.error("IA: Error al buscar operario para agenda en fallback:", err);
+                }
+              }
+
+              // Si tenemos un operadorId, usamos la agenda interna nativa del CRM
+              const urlAgenda = operadorId
+                ? `${MARCA.web}/agenda/${operadorId}?prospecto_id=${exp?.prospecto_id || ""}&tipo=inspeccion`
+                : `https://calendly.com/sauceda-construye/inspeccion-gratuita-alex?cotizacion=${idCot}`;
 
               textoRespuesta = textoRespuesta
                 .replace(/\[LINK_COTIZACION\]/g, urlCot)
