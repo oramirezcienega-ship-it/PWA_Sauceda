@@ -90,7 +90,8 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       console.error("Error al guardar notificaciones en la base de datos:", errInsert.message);
     }
 
-    // 4. Notificaciones por Email (vía Resend)
+    // 4. Notificaciones por Email (Desactivadas para evitar spam a todos los asesores, ahora se envían solo al asignar asesor)
+    /*
     try {
       const { data: authUsers, error: errAuth } = await sb.auth.admin.listUsers();
       if (!errAuth && authUsers?.users) {
@@ -119,6 +120,7 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     } catch (err) {
       console.error("Error al enviar correos de notificación:", err);
     }
+    */
 
     // 5. Notificaciones por WhatsApp (vía Meta Cloud API con Plantilla)
     try {
@@ -489,6 +491,31 @@ export async function notificarAsignacionAsesor(
       }
     } catch (err) {
       console.error("Error al enviar WhatsApp de asignación:", err);
+    }
+
+    // 4. Notificación por Email al asesor asignado
+    try {
+      const { data: authUser, error: errAuth } = await sb.auth.admin.getUserById(asesorId);
+      if (!errAuth && authUser?.user?.email) {
+        const email = authUser.user.email;
+        await notificarAgenteEmail(
+          email,
+          `Expediente Asignado: ${cliente}`,
+          `¡Expediente Asignado!`,
+          `Hola ${asesor.nombre},\n\nSe te ha asignado un nuevo prospecto/expediente en la plataforma:\n\n` +
+            `• Cliente: ${cliente}\n` +
+            `• Origen: ${origen}\n` +
+            `• Detalles: ${situacion}\n\n` +
+            `Por favor, ingresa al panel para atenderlo de inmediato.`,
+          `Ver expediente`,
+          `${CRM_URL}/expediente/${d.id}`
+        );
+        console.log(`Correo de asignación enviado exitosamente a ${asesor.nombre} (${email})`);
+      } else {
+        console.warn(`No se pudo obtener el correo de autenticación para el asesor ${asesor.nombre} (ID: ${asesorId}).`);
+      }
+    } catch (err) {
+      console.error("Error al enviar correo de asignación al asesor:", err);
     }
   } catch (err) {
     console.error("Fallo general en notificarAsignacionAsesor:", err);
