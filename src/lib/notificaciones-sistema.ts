@@ -578,7 +578,7 @@ export async function notificarAsignacionOperarioACliente(
     const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
     const linkAgenda = `${SITE_URL}/agenda/${operadorId}?prospecto_id=${pId || ""}&tipo=inspeccion`;
 
-    const mensaje = `Hola ${clienteNombre}. Para programar la inspección en sitio de tu propiedad, te comparto el enlace de la agenda de nuestro operario ${operario.nombre} para que selecciones el día y la hora que mejor te convenga: ${linkAgenda}`;
+    const mensaje = `Hola ${clienteNombre}. Para programar la inspección en sitio de tu propiedad, te comparto el enlace de la agenda de nuestro operario para que selecciones el día y la hora que mejor te convenga: ${linkAgenda}`;
 
     // 4. Enviar WhatsApp
     const r = await enviarWhatsAppTexto(clienteTelefono, mensaje);
