@@ -1,13 +1,14 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
-import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
+import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { detectarTipoNegocio } from "@/lib/types";
 import { 
   hoyISO, 
   siguienteId, 
   siguienteIdProspecto, 
-  guardarMensajeEntrante 
+  guardarMensajeEntrante,
+  triggerResponderBackground
 } from "@/features/captacion/whatsapp";
 
 /**
@@ -137,7 +138,7 @@ async function registrarLeadSocial(
     });
 
     if (nuevo) {
-      await responderConIA(sb, { telefono: canalIdKey, expedienteId: exp.id });
+      await triggerResponderBackground(canalIdKey, exp.id);
     }
     return;
   }
@@ -200,7 +201,7 @@ async function registrarLeadSocial(
   void notificarNuevoLead(id);
 
   if (iaOn && nuevoMensaje) {
-    await responderConIA(sb, { telefono: canalIdKey, expedienteId: id });
+    await triggerResponderBackground(canalIdKey, id);
   }
 }
 
