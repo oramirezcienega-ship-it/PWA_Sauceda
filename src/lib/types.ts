@@ -39,6 +39,7 @@ export type TipoNegocioId =
   | "solo_tramite"
   | "construccion"
   | "construccion-impermeabilizacion"
+  | "construccion-remodelacion"
   | "otro";
 
 export function labelTipoNegocio(tipo: string): string {
@@ -53,6 +54,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye";
     case "construccion-impermeabilizacion":
       return "Construcción-Impermeabilización";
+    case "construccion-remodelacion":
+      return "Construcción-Remodelación";
     case "otro":
       return "Otro";
     default:
@@ -66,6 +69,15 @@ export function labelTipoNegocio(tipo: string): string {
  */
 export function detectarTipoNegocio(mensaje: string, campaignName?: string): TipoNegocioId {
   const texto = `${mensaje} ${campaignName ?? ""}`.toLowerCase();
+
+  if (
+    texto.includes("remodela") ||
+    texto.includes("remodelacion") ||
+    texto.includes("remodelación") ||
+    texto.includes("remodelar")
+  ) {
+    return "construccion-remodelacion";
+  }
 
   if (
     texto.includes("impermeabili") ||
@@ -86,7 +98,6 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
 
   if (
     texto.includes("construye") ||
-    texto.includes("remodela") ||
     texto.includes("amplia") ||
     texto.includes("ampliación") ||
     texto.includes("albañil")
