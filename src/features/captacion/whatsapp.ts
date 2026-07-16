@@ -16,12 +16,8 @@ export async function triggerResponderBackground(
     const baseUrl = process.env.SITE_URL || "http://localhost:3000";
     const secret = process.env.CRON_SECRET || "";
     
-    // Si estamos en Netlify o producción, llamamos a la Netlify Background Function,
-    // de lo contrario usamos la API Route local de Next.js.
-    const esNetlify = process.env.NETLIFY === "true" || process.env.NODE_ENV === "production";
-    const endpoint = esNetlify 
-      ? `${baseUrl}/.netlify/functions/responder-background`
-      : `${baseUrl}/api/ia/responder-background`;
+    // Usamos directamente la API Route de Next.js para asegurar la resolución de aliases y contexto
+    const endpoint = `${baseUrl}/api/ia/responder-background`;
 
     console.log(`[IA Trigger] Enviando petición a: ${endpoint}`);
 
@@ -402,6 +398,19 @@ export async function registrarLeadWhatsApp(
       prospectoId,
       waMessageId: lead.waMessageId,
     });
+
+    // Interceptar mensajes de audio
+    if (lead.audioId) {
+      await manejarFlujoAudio(sb, {
+        telefono,
+        expedienteId: exp.id,
+        prospectoId,
+        clienteNombre: exp.cliente,
+        tipoNegocio: exp.tipo_negocio || "Por definir"
+      });
+      return;
+    }
+
     // Respuesta automática del agente de IA (si está activo y no hay humano).
     if (nuevo) await triggerResponderBackground(telefono, exp.id);
     return;
@@ -453,6 +462,28 @@ export async function registrarLeadWhatsApp(
     prospectoId,
     waMessageId: lead.waMessageId,
   });
+
+  // Interceptar mensajes de audio
+  if (lead.audioId) {
+    await manejarFlujoAudio(sb, {
+      telefono,
+      expedienteId: id,
+      prospectoId,
+      clienteNombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
+      tipoNegocio: tipoNegocio || "Por definir"
+    });
+    
+    // También enviamos la bienvenida de sistema normal (pero omitiendo la respuesta de la IA)
+    await enviarBienvenida(sb, id, {
+      ventanaWhatsAppAbierta: true,
+      omitirWhatsApp: true, // Ya respondimos con el handler de audio
+    });
+
+    // Notificar al equipo sobre el nuevo lead
+    void notificarNuevoLead(id);
+    return;
+  }
+
   // Bienvenida automática. El cliente nos escribió: ventana de 24 h abierta,
   // así que el WhatsApp puede ir como texto libre. Si la IA está activa, ella
   // dará la bienvenida por WhatsApp (se omite el mensaje fijo para no duplicar).
@@ -471,6 +502,63 @@ export async function registrarLeadWhatsApp(
 
   // Respuesta automática del agente de IA al primer mensaje (si está activo).
   if (iaOn && nuevoMensaje) await triggerResponderBackground(telefono, id);
+}
+
+/**
+ * Lógica dedicada para gestionar la llegada de mensajes de audio:
+ * - Envía respuesta de texto de sistema.
+ * - Registra la respuesta en la base de datos de Supabase.
+ * - Envía notificaciones de alerta de WhatsApp a Oscar y Paulina de forma inmediata.
+ */
+async function manejarFlujoAudio(
+  sb: ReturnType<typeof supabaseServidor>,
+  ctx: {
+    telefono: string;
+    expedienteId: string;
+    prospectoId: string;
+    clienteNombre: string;
+    tipoNegocio: string;
+  }
+): Promise<void> {
+  const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+  
+  const mensajeRespuesta = "¡Recibí tu audio! 👍 Para atenderte mejor, uno de nuestros asesores te marca en los próximos 15 minutos.";
+  
+  console.log(`[Audio Handler] Enviando respuesta automática de audio a ${ctx.telefono}...`);
+  
+  // 1. Enviar respuesta por WhatsApp
+  const resSend = await enviarWhatsAppTexto(ctx.telefono, mensajeRespuesta);
+  
+  // 2. Registrar en la base de datos como mensaje saliente
+  await sb.from("mensajes_whatsapp").insert({
+    telefono: ctx.telefono,
+    texto: mensajeRespuesta,
+    direccion: "out",
+    expediente_id: ctx.expedienteId,
+    prospecto_id: ctx.prospectoId,
+    agente: "Sistema",
+    estado: resSend.ok ? "enviado" : "error",
+    wa_message_id: resSend.messageId || null
+  });
+
+  // 3. Notificar a Oscar y Paulina
+  const notifMsg = `🔊 *¡Alerta de Audio!*
+*Cliente:* ${ctx.clienteNombre}
+*Teléfono:* ${ctx.telefono}
+*Negocio:* ${ctx.tipoNegocio}
+El cliente ha enviado un audio. El bot de la IA se ha pausado para esta conversación y no responderá de forma automática. Por favor, atienda a la brevedad en el CRM.`;
+
+  console.log("[Audio Handler] Enviando notificaciones a Oscar y Paulina...");
+  
+  // Oscar (524778110444)
+  await enviarWhatsAppTexto("524778110444", notifMsg).catch(err => 
+    console.error("Error al notificar a Oscar por audio:", err)
+  );
+  
+  // Paulina (524772166180)
+  await enviarWhatsAppTexto("524772166180", notifMsg).catch(err => 
+    console.error("Error al notificar a Paulina por audio:", err)
+  );
 }
 
 /**

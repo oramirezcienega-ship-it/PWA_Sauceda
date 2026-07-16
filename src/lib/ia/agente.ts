@@ -106,6 +106,8 @@ interface FilaExp {
   estado_fisico?: string | null;
   habitada?: string | null;
   asesor_id?: string | null;
+  ultimo_paso_flujo?: string | null;
+  ultimo_paso_alcanzado?: string | null;
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
@@ -284,6 +286,13 @@ Si la información ya está presente en los "Datos del cliente" abajo (como la u
 REGLA DE CRÉDITOS NO ADMITIDOS (AGIOTISTAS / PRESTAMISTAS PARTICULARES):
 Si el cliente menciona que su propiedad tiene una hipoteca, adeudo o embargo con un AGIOTISTA, PRESTAMISTA INFORMAL o persona física particular (en lugar de instituciones oficiales como INFONAVIT, FOVISSSTE o bancos), debes informarle de inmediato y con amabilidad que por políticas de la empresa SAUCEDA Bienes Raíces únicamente compra o traspasa propiedades con deudas de instituciones formales y que NO podemos atender deudas con prestamistas particulares. Despídete amablemente de ellos sin solicitar más datos.
 
+REGLA GEOGRÁFICA (CRÍTICA):
+- Únicamente operamos en la ciudad de León, Guanajuato.
+- Si el cliente menciona que se encuentra en otra ciudad (por ejemplo, Querétaro, Lagos de Moreno, Silao, etc.) o que su propiedad está fuera de León, Gto:
+  - ANTES de despedirte, debes preguntarle exactamente o de forma muy similar: "Por ahora operamos solo en León, Gto. ¿Tienes alguna propiedad en León donde podamos ayudarte?"
+  - Si responde que SÍ tiene propiedad en León, continúas con el flujo normal.
+  - Si responde que NO (o insiste en que no tiene ninguna propiedad en León), despídete de forma muy amable. En tu JSON de respuesta, en "datosExtraidos", debes incluir la propiedad "fuera_de_zona": true.
+
 REGLA DE TELÉFONO DE CONTACTO (CRÍTICA):
 Si notas en los "Datos del cliente" abajo que el teléfono de contacto figura como "No registrado" (es decir, el prospecto viene de redes sociales y aún no nos proporciona su número móvil real), es tu prioridad absoluta solicitarle amablemente su número de teléfono o WhatsApp durante la charla de forma fluida y natural, explicándole que es para que un asesor pueda continuar el contacto.
 
@@ -323,7 +332,9 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "colonia": "La colonia de León proporcionada por el cliente si el tipo de negocio es impermeabilización o construcción, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
     "paquete_elegido": "El paquete elegido por el cliente ('estandar' o 'premium') si lo seleccionó, de lo contrario null",
-    "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null"
+    "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
+    "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir colonia/metros), 'paso_2' (al mostrar precios de paquetes para los m²), 'paso_3' (al confirmar el paquete elegido y pedir nombre y teléfono) o 'paso_4' (al enviar links de agendamiento y cotización). Si el tipo de negocio no es impermeabilización, pon null"
   }
 }
 
@@ -368,10 +379,17 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
       exp.habitada && `Vivienda habitada: ${exp.habitada}`,
       exp.etapa && `Etapa del trámite: ${exp.etapa}`,
       exp.situacion && `Situación reportada: ${exp.situacion}`,
+      exp.ultimo_paso_flujo && `Último paso de flujo de impermeabilización ejecutado: ${exp.ultimo_paso_flujo}`,
+      exp.ultimo_paso_alcanzado && `Paso del funnel más avanzado alcanzado: ${exp.ultimo_paso_alcanzado}`,
     ].filter(Boolean);
     if (partes.length) contexto = `\n\nDatos del cliente:\n${partes.join("\n")}`;
   }
-  return [base, extra && `\nIndicaciones adicionales del negocio:\n${extra}`, contexto]
+
+  const instruccionesFlujo = (exp && exp.tipo_negocio === "construccion-impermeabilizacion" && exp.ultimo_paso_flujo)
+    ? `\n\nESTADO DE CONVERSIÓN CRÍTICO:\nEl último paso del flujo de impermeabilización que ya ejecutaste con este cliente es "${exp.ultimo_paso_flujo}". Está ESTRICTAMENTE PROHIBIDO repetir preguntas, enviar mensajes o solicitar información de este paso o de pasos anteriores. Debes avanzar de inmediato al siguiente paso del flujo (por ejemplo, si el último paso ejecutado fue paso_3 y el cliente ya dio su nombre y teléfono, debes continuar ejecutando el paso_4 y enviarle sus links de agendamiento y cotización).`
+    : "";
+
+  return [base, extra && `\nIndicaciones adicionales del negocio:\n${extra}`, instruccionesFlujo, contexto]
     .filter(Boolean)
     .join("\n");
 }
@@ -497,7 +515,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
@@ -541,6 +559,8 @@ export async function responderConIA(
       sin_pagos?: string | null;
       estado_fisico?: string | null;
       habitada?: string | null;
+      fuera_de_zona?: boolean | null;
+      paso_flujo?: string | null;
     } = {};
 
     let limpio = "";
@@ -606,6 +626,44 @@ export async function responderConIA(
     // --- PROCESAMIENTO DE DATOS EXTRAÍDOS ---
     const updates: Record<string, any> = {};
     if (ctx.expedienteId) {
+      // 1. Regla Geográfica Suave: Marcar como fuera_de_zona si el cliente no opera en León
+      if (datosExtraidos.fuera_de_zona === true) {
+        updates.etapa = "fuera_de_zona";
+        console.log(`[Regla Geográfica] Expediente ${ctx.expedienteId} marcado fuera_de_zona.`);
+      }
+
+      // 2. Tracking de Embudo y Control de Flujo (Impermeabilización)
+      const esImperFlujo = exp?.tipo_negocio === "construccion-impermeabilizacion";
+      if (esImperFlujo && datosExtraidos.paso_flujo) {
+        const pasoDetectado = datosExtraidos.paso_flujo;
+        updates.ultimo_paso_flujo = pasoDetectado;
+
+        // Mapear paso_flujo a ultimo_paso_alcanzado (embudo)
+        let pasoAlcanzado = exp?.ultimo_paso_alcanzado || "lead_entro";
+        
+        if (pasoDetectado === "paso_1") {
+          pasoAlcanzado = "respondio_paso1";
+        } else if (pasoDetectado === "paso_2") {
+          pasoAlcanzado = "vio_precios";
+        } else if (pasoDetectado === "paso_3") {
+          pasoAlcanzado = "eligio_paquete";
+        } else if (pasoDetectado === "paso_4") {
+          pasoAlcanzado = "recibio_link";
+        }
+
+        // Si estamos en paso_3 pero el cliente ya dio su nombre y teléfono, es "dio_contacto"
+        const tieneNombre = datosExtraidos.cliente_nombre || exp?.cliente;
+        const tieneTel = (datosExtraidos as any).telefono_real || exp?.telefono;
+        const tieneAmbos = tieneNombre && tieneTel && !tieneNombre.includes("Lead WhatsApp") && !tieneNombre.includes("Conmutador");
+
+        if (pasoDetectado === "paso_3" && tieneAmbos) {
+          pasoAlcanzado = "dio_contacto";
+        }
+
+        updates.ultimo_paso_alcanzado = pasoAlcanzado;
+        console.log(`[Funnel Tracking] paso_flujo: ${pasoDetectado} -> ultimo_paso_alcanzado: ${pasoAlcanzado}`);
+      }
+
       if (datosExtraidos.fraccionamiento) {
         updates.fraccionamiento = datosExtraidos.fraccionamiento;
       }
@@ -794,9 +852,10 @@ export async function responderConIA(
               }
             }
 
-            // Reemplazar marcadores si tenemos el token
-            if (tokenCot) {
-              const urlCot = `${MARCA.web}/cotizacion/${tokenCot}`;
+            // Reemplazar marcadores garantizado (incluso si no hay token de cotización)
+            if (textoRespuesta.includes("[LINK_COTIZACION]") || textoRespuesta.includes("[LINK_AGENDADO]")) {
+              const siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+              const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
               
               // Intentar obtener el operador asignado al expediente para usar la agenda interna de la app
               let operadorId = updates.asesor_id || exp?.asesor_id;
@@ -816,10 +875,10 @@ export async function responderConIA(
                 }
               }
 
-              // Si tenemos un operadorId, usamos la agenda interna nativa del CRM
+              // Si tenemos un operadorId, usamos la agenda interna nativa del CRM. De lo contrario, un link general de inspección
               const urlAgenda = operadorId
-                ? `${MARCA.web}/agenda/${operadorId}?prospecto_id=${exp?.prospecto_id || ""}&tipo=inspeccion`
-                : `https://calendly.com/sauceda-construye/inspeccion-gratuita-alex?cotizacion=${idCot}`;
+                ? `${siteUrl}/agenda/${operadorId}?prospecto_id=${exp?.prospecto_id || ""}&tipo=inspeccion`
+                : `${siteUrl}/agenda/inspeccion-general?prospecto_id=${exp?.prospecto_id || ""}`;
 
               textoRespuesta = textoRespuesta
                 .replace(/\[LINK_COTIZACION\]/g, urlCot)

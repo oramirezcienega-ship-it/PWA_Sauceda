@@ -179,6 +179,34 @@ export async function orquestador(): Promise<{
           const mensajeFormateado = await formatearMensaje(sb, step.mensaje || "", enrollment);
           const asuntoFormateado = step.asunto_email ? await formatearMensaje(sb, step.asunto_email, enrollment) : "";
 
+          // VALIDACIÓN DE SEGURIDAD UNIVERSAL: Evitar mensajes con placeholders rotos o no reemplazados
+          const tienePlaceholdersRotos = 
+            mensajeFormateado.includes("{nombre}") ||
+            mensajeFormateado.includes("{fraccionamiento}") ||
+            mensajeFormateado.includes("@metros") ||
+            mensajeFormateado.includes("@colonia") ||
+            mensajeFormateado.includes("@precio") ||
+            mensajeFormateado.includes("@nombre") ||
+            /por definir/i.test(mensajeFormateado);
+
+          if (tienePlaceholdersRotos) {
+            console.warn(`[Orquestador] Seguridad: Se canceló el envío a ${enrollment.phone} por placeholders rotos detectados en el mensaje: "${mensajeFormateado}"`);
+            
+            // Registrar acción como fallida con detalle explicativo
+            await registrarAccion(sb, {
+              enrollment_id: enrollment.id,
+              step_id: step.id,
+              canal: step.canal,
+              status: "fallido",
+              contenido_enviado: mensajeFormateado,
+              error_detalle: "Envío cancelado automáticamente: Se detectaron placeholders rotos o datos incompletos (como 'Por definir')."
+            });
+
+            // Avanzar el paso de la secuencia para no congelar la cola del lead
+            await avanzarStep(sb, enrollment.id, enrollment.step_actual + 1);
+            continue;
+          }
+
           // Ejecutar según el canal
           switch (step.canal) {
             case "whatsapp":
@@ -634,7 +662,9 @@ async function formatearMensaje(
       .select("fraccionamiento")
       .eq("id", enrollment.expediente_id)
       .maybeSingle();
-    const frac = exp?.fraccionamiento || "su zona de interés";
+    const frac = (exp?.fraccionamiento && exp.fraccionamiento.toLowerCase() !== "por definir" && exp.fraccionamiento.trim() !== "")
+      ? exp.fraccionamiento
+      : "su zona de interés";
     msg = msg.replace(/{fraccionamiento}/gi, frac);
   } else {
     msg = msg.replace(/{fraccionamiento}/gi, "su zona de interés");
