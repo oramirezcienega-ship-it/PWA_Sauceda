@@ -164,9 +164,9 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
             No se encontraron productos o servicios en el catálogo.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-250px)]">
             <table className="w-full border-collapse text-left text-sm">
-              <thead className="bg-slate-50 border-b border-carbon/10 font-titular font-semibold text-carbon/60 text-xs uppercase tracking-wider">
+              <thead className="bg-slate-50 sticky top-0 z-10 border-b border-carbon/10 font-titular font-semibold text-carbon/60 text-xs uppercase tracking-wider shadow-sm">
                 <tr>
                   <th className="px-6 py-4 w-[12%]">Código</th>
                   <th className="px-6 py-4 w-[30%]">Concepto / Nombre</th>

@@ -1176,15 +1176,15 @@ export function SecuenciasClient() {
                 </div>
 
                 {/* Tabla de Monitoreo */}
-                <div className="overflow-x-auto">
+                <div className="overflow-auto max-h-[calc(100vh-250px)]">
                   {enrollmentsFiltrados.length === 0 ? (
                     <div className="text-center py-10 text-slate-400 text-xs">
                       No se encontraron enrolamientos que coincidan con la búsqueda o filtro.
                     </div>
                   ) : (
                     <table className="w-full text-xs min-w-[700px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400 font-semibold text-left">
+                      <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+                        <tr className="border-b border-slate-100 text-slate-400 font-semibold text-left bg-white">
                           <th className="py-2.5 w-1/4">Lead y Secuencia</th>
                           <th className="py-2.5 w-1/6">Ingreso</th>
                           <th className="py-2.5 w-1/6">Último Contacto</th>

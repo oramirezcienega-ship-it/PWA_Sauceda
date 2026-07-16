@@ -139,10 +139,10 @@ export function TablaLlamadas({ inicial }: { inicial: LlamadaConmutadorApp[] }) 
       </div>
 
       {/* Tabla para Escritorio */}
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil shadow-sm">
+      <div className="hidden md:block max-h-[calc(100vh-220px)] overflow-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil shadow-sm">
         <table className="w-full min-w-[800px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-carbon/10 bg-crema/60 text-left">
+          <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+            <tr className="border-b border-carbon/10 bg-crema/90 text-left">
               <Th>Fecha / Hora</Th>
               <Th>Cliente</Th>
               <Th>Asesor asignado</Th>

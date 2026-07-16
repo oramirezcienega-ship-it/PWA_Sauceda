@@ -215,9 +215,9 @@ export function TableroCotizaciones({
             No se encontraron cotizaciones con los filtros actuales.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-250px)]">
             <table className="w-full border-collapse text-left text-sm">
-              <thead className="bg-slate-50 border-b border-carbon/10 font-titular font-semibold text-carbon/60 text-xs uppercase tracking-wider">
+              <thead className="bg-slate-50 sticky top-0 z-10 border-b border-carbon/10 font-titular font-semibold text-carbon/60 text-xs uppercase tracking-wider shadow-sm">
                 <tr>
                   <th className="px-6 py-4">Folio</th>
                   <th className="px-6 py-4">Cliente</th>

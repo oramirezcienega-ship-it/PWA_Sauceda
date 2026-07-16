@@ -236,10 +236,10 @@ export function TablaExpedientes({
         </div>
       )}
 
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
+      <div className="hidden md:block max-h-[calc(100vh-220px)] overflow-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
         <table className="w-full min-w-[1300px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-carbon/10 bg-crema/60 text-left">
+          <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+            <tr className="border-b border-carbon/10 bg-crema/90 text-left">
               <th className="w-10 px-3 py-2.5">
                 <input
                   type="checkbox"
