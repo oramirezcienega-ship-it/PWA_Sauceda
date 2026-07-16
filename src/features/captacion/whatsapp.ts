@@ -16,6 +16,11 @@ export async function triggerResponderBackground(
     const baseUrl = process.env.SITE_URL || "http://localhost:3000";
     const secret = process.env.CRON_SECRET || "";
     
+    // Desactivar temporalmente la validación de certificados auto-firmados en entornos de staging o locales
+    if (baseUrl.includes("crm-staging.saucedamx.com") || baseUrl.includes("192.168.100") || baseUrl.includes("localhost")) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    }
+    
     // Usamos directamente la API Route de Next.js para asegurar la resolución de aliases y contexto
     const endpoint = `${baseUrl}/api/ia/responder-background`;
 
