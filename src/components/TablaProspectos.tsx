@@ -28,6 +28,7 @@ import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   nombre: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
+  fecha: (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
   telefono: (a, b) => a.telefono.localeCompare(b.telefono, "es"),
   ciudad: (a, b) => a.ciudad.localeCompare(b.ciudad, "es"),
   origen: (a, b) =>
@@ -459,10 +460,10 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
         </div>
       )}
 
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
+      <div className="hidden md:block max-h-[calc(100vh-220px)] overflow-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil">
         <table className="w-full min-w-[900px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-carbon/10 bg-crema/60 text-left">
+          <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+            <tr className="border-b border-carbon/10 bg-crema/90 text-left">
               <th className="w-10 px-3 py-2.5">
                 <input
                   type="checkbox"
@@ -475,6 +476,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
               {(
               [
                 ["nombre", "Prospecto", "izquierda"],
+                ["fecha", "Registro", "izquierda"],
                 ["asesor", "Asesor", "izquierda"],
                 ["telefono", "Teléfono", "izquierda"],
                 ["ciudad", "Ciudad", "izquierda"],
@@ -535,6 +537,9 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   <span className="ml-2 font-mono text-[10px] text-carbon/40">
                     {p.id}
                   </span>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-carbon/70 whitespace-nowrap">
+                  {p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "—"}
                 </td>
                 <td className="px-3 py-2.5 text-carbon/70">
                   {p.asesorNombre || (
@@ -659,6 +664,12 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Ciudad</p>
                   <p className="text-carbon/75 font-medium mt-0.5 truncate">{p.ciudad || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Registro</p>
+                  <p className="text-carbon/75 font-medium mt-0.5 text-xs">
+                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "—"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-carbon/40">Asesor</p>

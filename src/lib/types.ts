@@ -271,6 +271,7 @@ export interface Prospecto {
   operadorNombre?: string | null;
   /** Marca permanente: el prospecto no cumple criterios de servicio. Bloquea todo contacto. */
   noViable?: boolean;
+  createdAt?: string;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
