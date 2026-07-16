@@ -16,8 +16,16 @@ export async function triggerResponderBackground(
     const baseUrl = process.env.SITE_URL || "http://localhost:3000";
     const secret = process.env.CRON_SECRET || "";
     
-    // Hacemos el fetch esperando que retorne el 202 de Netlify de forma casi instantánea (<50ms)
-    const res = await fetch(`${baseUrl}/api/ia/responder-background`, {
+    // Si estamos en Netlify o producción, llamamos a la Netlify Background Function,
+    // de lo contrario usamos la API Route local de Next.js.
+    const esNetlify = process.env.NETLIFY === "true" || process.env.NODE_ENV === "production";
+    const endpoint = esNetlify 
+      ? `${baseUrl}/.netlify/functions/responder-background`
+      : `${baseUrl}/api/ia/responder-background`;
+
+    console.log(`[IA Trigger] Enviando petición a: ${endpoint}`);
+
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
