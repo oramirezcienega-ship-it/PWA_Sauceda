@@ -168,6 +168,7 @@ export interface FilaProspecto {
   operador?: { nombre: string } | null;
   perfiles?: { nombre: string } | null;
   no_viable?: boolean;
+  created_at?: string;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -200,6 +201,7 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     operadorId: fila.operador_id ?? null,
     operadorNombre: fila.operador?.nombre ?? null,
     noViable: fila.no_viable ?? false,
+    createdAt: fila.created_at ?? "",
   };
 }
 

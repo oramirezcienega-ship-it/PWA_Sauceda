@@ -12,9 +12,11 @@ export type DireccionOrden = "asc" | "desc";
 export function useOrden<T>(
   items: T[],
   comparadores: Record<string, (a: T, b: T) => number>,
+  defaultClave: string | null = null,
+  defaultDir: DireccionOrden = "asc",
 ) {
-  const [clave, setClave] = useState<string | null>(null);
-  const [dir, setDir] = useState<DireccionOrden>("asc");
+  const [clave, setClave] = useState<string | null>(defaultClave);
+  const [dir, setDir] = useState<DireccionOrden>(defaultDir);
 
   function ordenarPor(k: string) {
     if (clave === k) {

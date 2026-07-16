@@ -2,10 +2,39 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
-import { iaAgenteActivo, responderConIA } from "@/lib/ia/agente";
+import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { detectarTipoNegocio } from "@/lib/types";
+
+/** Dispara asíncronamente el procesamiento de respuesta de la IA en segundo plano */
+export async function triggerResponderBackground(
+  telefono: string,
+  expedienteId?: string | null,
+): Promise<void> {
+  try {
+    const baseUrl = process.env.SITE_URL || "http://localhost:3000";
+    const secret = process.env.CRON_SECRET || "";
+    
+    // Hacemos el fetch esperando que retorne el 202 de Netlify de forma casi instantánea (<50ms)
+    const res = await fetch(`${baseUrl}/api/ia/responder-background`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify({ telefono, expedienteId }),
+    });
+
+    if (!res.ok) {
+      console.error(`[IA Trigger] Error al encolar respuesta en segundo plano: ${res.status} ${await res.text()}`);
+    } else {
+      console.log(`[IA Trigger] Encolado con éxito para ${telefono} (status: ${res.status})`);
+    }
+  } catch (err) {
+    console.error("[IA Trigger] Error de red disparando la respuesta en segundo plano:", err);
+  }
+}
 
 /**
  * MÓDULO: CAPTACIÓN · WhatsApp (Meta Cloud API)
@@ -366,7 +395,7 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
     // Respuesta automática del agente de IA (si está activo y no hay humano).
-    if (nuevo) await responderConIA(sb, { telefono, expedienteId: exp.id });
+    if (nuevo) await triggerResponderBackground(telefono, exp.id);
     return;
   }
 
@@ -433,7 +462,7 @@ export async function registrarLeadWhatsApp(
   void notificarNuevoLead(id);
 
   // Respuesta automática del agente de IA al primer mensaje (si está activo).
-  if (iaOn && nuevoMensaje) await responderConIA(sb, { telefono, expedienteId: id });
+  if (iaOn && nuevoMensaje) await triggerResponderBackground(telefono, id);
 }
 
 /**

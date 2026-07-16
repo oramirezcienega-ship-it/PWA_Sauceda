@@ -370,3 +370,16 @@ export async function reasignarOperador(
   }
 }
 
+/** Lista todos los perfiles activos para asignación. */
+export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string }[]> {
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("perfiles")
+    .select("id, nombre, rol")
+    .eq("activo", true)
+    .order("nombre", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+

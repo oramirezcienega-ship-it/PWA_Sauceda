@@ -26,7 +26,7 @@ export interface DatosSecuencia {
   nombre: string;
   descripcion?: string;
   status: "activa" | "pausada" | "archivada";
-  segmento: "sin_contactar" | "sin_respuesta" | "rojo" | "todos";
+  segmento: string;
   steps: DatosPaso[];
 }
 

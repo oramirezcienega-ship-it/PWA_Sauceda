@@ -17,6 +17,8 @@ import type {
   Expediente,
   OrigenAdquisicion,
   Prospecto,
+  EstatusProspecto,
+  CalificacionProspecto,
 } from "@/lib/types";
 
 /**
@@ -346,3 +348,127 @@ export async function marcarProspectoNoViable(id: string, noViable: boolean): Pr
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/prospectos/${id}`);
 }
+
+/** Cambia el estatus de varios prospectos a la vez (acción masiva). */
+export async function cambiarEstatusMasivo(
+  ids: string[],
+  estatus: EstatusProspecto,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("prospectos")
+    .update({ estatus })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+}
+
+/** Cambia la calificación de varios prospectos a la vez (acción masiva). */
+export async function cambiarCalificacionMasivo(
+  ids: string[],
+  calificacion: CalificacionProspecto,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("prospectos")
+    .update({ calificacion })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+}
+
+/** Asigna un asesor a varios prospectos a la vez (acción masiva). */
+export async function asignarAsesorMasivo(
+  ids: string[],
+  asesorId: string | null,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+
+  // 1. Actualizar el asesor de los prospectos
+  const { error: errPros } = await sb
+    .from("prospectos")
+    .update({ asesor_id: asesorId })
+    .in("id", ids);
+  if (errPros) throw new Error(errPros.message);
+
+  // 2. Sincronizar con los expedientes enlazados
+  const { error: errExp } = await sb
+    .from("expedientes")
+    .update({
+      asesor_id: asesorId,
+      ultimo_movimiento: new Date().toISOString().slice(0, 10),
+    })
+    .in("prospecto_id", ids);
+  if (errExp) throw new Error(errExp.message);
+
+  // 3. Notificar a los asesores
+  if (asesorId) {
+    const { notificarAsignacionAsesor } = await import("@/lib/notificaciones-sistema");
+    const { data: exps } = await sb
+      .from("expedientes")
+      .select("id")
+      .in("prospecto_id", ids);
+    if (exps) {
+      for (const e of exps) {
+        void notificarAsignacionAsesor(e.id, asesorId);
+      }
+    }
+  }
+}
+
+/** Asigna un operador a varios prospectos a la vez (acción masiva). */
+export async function asignarOperadorMasivo(
+  ids: string[],
+  operadorId: string | null,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+
+  if (operadorId) {
+    const { validarAgendaOperador } = await import("@/app/actions/agenda");
+    const agendaValida = await validarAgendaOperador(operadorId);
+    if (!agendaValida) {
+      throw new Error(
+        "El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.",
+      );
+    }
+  }
+
+  const sb = supabaseServidor();
+
+  // 1. Actualizar prospectos
+  const { error: errPros } = await sb
+    .from("prospectos")
+    .update({ operador_id: operadorId })
+    .in("id", ids);
+  if (errPros) throw new Error(errPros.message);
+
+  // 2. Actualizar expedientes
+  const { error: errExp } = await sb
+    .from("expedientes")
+    .update({
+      operador_id: operadorId,
+      ultimo_movimiento: new Date().toISOString().slice(0, 10),
+    })
+    .in("prospecto_id", ids);
+  if (errExp) throw new Error(errExp.message);
+
+  // 3. Notificar a los clientes
+  if (operadorId) {
+    const { notificarAsignacionOperarioACliente } = await import("@/lib/notificaciones-sistema");
+    const { data: exps } = await sb
+      .from("expedientes")
+      .select("id, prospecto_id")
+      .in("prospecto_id", ids);
+    if (exps) {
+      for (const e of exps) {
+        void notificarAsignacionOperarioACliente(sb, e.id, e.prospecto_id, operadorId);
+      }
+    }
+  }
+}
+

@@ -637,9 +637,9 @@ export function CRMClient() {
               </div>
 
               {/* Tabla */}
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[calc(100vh-250px)]">
                 <table className="w-full border-collapse text-left">
-                  <thead className="bg-slate-100 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-600">
+                  <thead className="bg-slate-100 sticky top-0 z-10 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-600 shadow-sm">
                     <tr>
                       <th className="px-6 py-3">Nombre / Teléfono</th>
                       <th className="px-6 py-3">Fecha de Entrada</th>
