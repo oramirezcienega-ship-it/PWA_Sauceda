@@ -5,11 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ORIGENES, ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
-import type { OrigenAdquisicion, Prospecto } from "@/lib/types";
+import type { OrigenAdquisicion, Prospecto, EstatusProspecto, CalificacionProspecto } from "@/lib/types";
 import {
   cambiarOrigenMasivo,
   eliminarProspectosMasivo,
+  cambiarEstatusMasivo,
+  cambiarCalificacionMasivo,
+  asignarAsesorMasivo,
+  asignarOperadorMasivo,
 } from "@/app/actions/prospectos";
+import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { useOrden } from "@/hooks/useOrden";
 import {
   listarSecuencias,
@@ -43,6 +48,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
   const [trabajando, setTrabajando] = useState(false);
   const [secuencias, setSecuencias] = useState<any[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [perfiles, setPerfiles] = useState<{ id: string; nombre: string; rol: string }[]>([]);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
 
   useEffect(() => {
     listarSecuencias()
@@ -52,9 +59,14 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
     listarEnrollments()
       .then((lista) => setEnrollments(lista.filter((e) => e.status === "activo")))
       .catch((err) => console.error("Error al cargar enrolamientos en tabla:", err));
+
+    listarPerfilesActivos()
+      .then(setPerfiles)
+      .catch((err) => console.error("Error al cargar perfiles en tabla:", err));
   }, []);
 
   async function enrolarSeleccionEnSecuencia(sequenceId: string) {
+    setErrorAccion(null);
     setTrabajando(true);
     try {
       const seleccionados = orden.ordenados.filter((p) => sel.has(p.id));
@@ -70,12 +82,15 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
       }
       setSel(new Set());
       router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al enrolar en secuencia");
     } finally {
       setTrabajando(false);
     }
   }
 
   async function detenerSecuenciaSeleccion() {
+    setErrorAccion(null);
     setTrabajando(true);
     try {
       const seleccionados = orden.ordenados.filter((p) => sel.has(p.id));
@@ -91,6 +106,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
       }
       setSel(new Set());
       router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al detener secuencia");
     } finally {
       setTrabajando(false);
     }
@@ -137,23 +154,85 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
   });
 
   async function cambiarOrigenSeleccion(origen: OrigenAdquisicion) {
+    setErrorAccion(null);
     setTrabajando(true);
     try {
       await cambiarOrigenMasivo(ids, origen);
       setSel(new Set());
       router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al cambiar origen");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function cambiarEstatusSeleccion(estatus: EstatusProspecto) {
+    setErrorAccion(null);
+    setTrabajando(true);
+    try {
+      await cambiarEstatusMasivo(ids, estatus);
+      setSel(new Set());
+      router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al cambiar estatus");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function cambiarCalificacionSeleccion(calificacion: CalificacionProspecto) {
+    setErrorAccion(null);
+    setTrabajando(true);
+    try {
+      await cambiarCalificacionMasivo(ids, calificacion);
+      setSel(new Set());
+      router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al cambiar calificación");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function asignarAsesorSeleccion(asesorId: string | null) {
+    setErrorAccion(null);
+    setTrabajando(true);
+    try {
+      await asignarAsesorMasivo(ids, asesorId);
+      setSel(new Set());
+      router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al asignar asesor");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function asignarOperadorSeleccion(operadorId: string | null) {
+    setErrorAccion(null);
+    setTrabajando(true);
+    try {
+      await asignarOperadorMasivo(ids, operadorId);
+      setSel(new Set());
+      router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al asignar operador");
     } finally {
       setTrabajando(false);
     }
   }
 
   async function eliminarSeleccion() {
+    setErrorAccion(null);
     setTrabajando(true);
     try {
       await eliminarProspectosMasivo(ids);
       setSel(new Set());
       setConfirmarBorrado(false);
       router.refresh();
+    } catch (err: any) {
+      setErrorAccion(err.message || "Error al eliminar prospectos");
     } finally {
       setTrabajando(false);
     }
@@ -163,105 +242,220 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
     <div className="space-y-2">
       {/* Barra de acciones masivas */}
       {ids.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sauce/30 bg-sauce/5 px-3 py-2 text-sm">
-          <span className="font-medium text-verde-profundo">
-            {ids.length} seleccionado{ids.length === 1 ? "" : "s"}
-          </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-sauce/30 bg-sauce/5 px-3 py-2 text-sm">
+            <span className="font-medium text-verde-profundo">
+              {ids.length} seleccionado{ids.length === 1 ? "" : "s"}
+            </span>
 
-          <label className="flex items-center gap-1.5 text-carbon/70">
-            Cambiar origen:
-            <select
-              defaultValue=""
-              disabled={trabajando}
-              onChange={(e) => {
-                if (e.target.value) {
-                  void cambiarOrigenSeleccion(e.target.value as OrigenAdquisicion);
-                  e.target.value = "";
-                }
-              }}
-              className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
-            >
-              <option value="">— elige origen —</option>
-              {ORIGENES.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {secuencias.length > 0 && (
+            {/* Cambiar Origen */}
             <label className="flex items-center gap-1.5 text-carbon/70">
-              Enrolar en secuencia:
+              Origen:
               <select
                 defaultValue=""
                 disabled={trabajando}
                 onChange={(e) => {
                   if (e.target.value) {
-                    void enrolarSeleccionEnSecuencia(e.target.value);
+                    void cambiarOrigenSeleccion(e.target.value as OrigenAdquisicion);
                     e.target.value = "";
                   }
                 }}
                 className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
               >
-                <option value="">— elige secuencia —</option>
-                {secuencias.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre}
+                <option value="">— origen —</option>
+                {ORIGENES.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nombre}
                   </option>
                 ))}
               </select>
             </label>
-          )}
 
-          {algunoConSecuencia && (
-            <button
-              type="button"
-              disabled={trabajando}
-              onClick={detenerSecuenciaSeleccion}
-              className="rounded-md border border-amber-400/40 bg-white px-3 py-1 text-xs text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
-            >
-              Detener secuencia
-            </button>
-          )}
+            {/* Cambiar Estatus */}
+            <label className="flex items-center gap-1.5 text-carbon/70">
+              Estatus:
+              <select
+                defaultValue=""
+                disabled={trabajando}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    void cambiarEstatusSeleccion(e.target.value as EstatusProspecto);
+                    e.target.value = "";
+                  }
+                }}
+                className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="">— estatus —</option>
+                <option value="nuevo">Nuevo</option>
+                <option value="en_conversacion">En conversación</option>
+                <option value="sin_contacto">Sin contacto</option>
+                <option value="expediente_abierto">Expediente abierto</option>
+                <option value="cliente">Cliente</option>
+                <option value="no_viable">No viable</option>
+              </select>
+            </label>
 
-          {confirmarBorrado ? (
-            <span className="inline-flex items-center gap-2">
-              <span className="text-carbon/70">¿Eliminar {ids.length}?</span>
+            {/* Cambiar Calificación */}
+            <label className="flex items-center gap-1.5 text-carbon/70">
+              Calificación:
+              <select
+                defaultValue=""
+                disabled={trabajando}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    void cambiarCalificacionSeleccion(e.target.value as CalificacionProspecto);
+                    e.target.value = "";
+                  }
+                }}
+                className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="">— calif —</option>
+                <option value="caliente">Caliente 🔥</option>
+                <option value="templado">Templado ⚡</option>
+                <option value="frio">Frío ❄️</option>
+                <option value="descalificado">Descalificado ❌</option>
+              </select>
+            </label>
+
+            {/* Asignar Asesor */}
+            <label className="flex items-center gap-1.5 text-carbon/70">
+              Asesor:
+              <select
+                defaultValue=""
+                disabled={trabajando}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const val = e.target.value === "desasignar" ? null : e.target.value;
+                    void asignarAsesorSeleccion(val);
+                    e.target.value = "";
+                  }
+                }}
+                className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="">— asesor —</option>
+                <option value="desasignar">Sin asignar / Quitar</option>
+                {perfiles
+                  .filter((p) => p.rol === "asesor")
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            {/* Asignar Operador */}
+            <label className="flex items-center gap-1.5 text-carbon/70">
+              Operador:
+              <select
+                defaultValue=""
+                disabled={trabajando}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const val = e.target.value === "desasignar" ? null : e.target.value;
+                    void asignarOperadorSeleccion(val);
+                    e.target.value = "";
+                  }
+                }}
+                className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="">— operador —</option>
+                <option value="desasignar">Sin asignar / Quitar</option>
+                {perfiles
+                  .filter((p) => p.rol === "operaciones" || p.rol === "admin")
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} ({p.rol === "admin" ? "Admin" : "Operador"})
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            {secuencias.length > 0 && (
+              <label className="flex items-center gap-1.5 text-carbon/70">
+                Secuencia:
+                <select
+                  defaultValue=""
+                  disabled={trabajando}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      void enrolarSeleccionEnSecuencia(e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+                >
+                  <option value="">— secuencia —</option>
+                  {secuencias.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {algunoConSecuencia && (
               <button
                 type="button"
                 disabled={trabajando}
-                onClick={eliminarSeleccion}
-                className="rounded bg-rojo px-2 py-1 text-xs font-medium text-crema hover:opacity-90 disabled:opacity-60"
+                onClick={detenerSecuenciaSeleccion}
+                className="rounded-md border border-amber-400/40 bg-white px-3 py-1 text-xs text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
               >
-                Sí, eliminar
+                Detener secuencia
               </button>
+            )}
+
+            {confirmarBorrado ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="text-carbon/70">¿Eliminar {ids.length}?</span>
+                <button
+                  type="button"
+                  disabled={trabajando}
+                  onClick={eliminarSeleccion}
+                  className="rounded bg-rojo px-2 py-1 text-xs font-medium text-crema hover:opacity-90 disabled:opacity-60"
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmarBorrado(false)}
+                  className="rounded px-2 py-1 text-xs text-carbon/60 hover:text-carbon"
+                >
+                  Cancelar
+                </button>
+              </span>
+            ) : (
               <button
                 type="button"
-                onClick={() => setConfirmarBorrado(false)}
-                className="rounded px-2 py-1 text-xs text-carbon/60 hover:text-carbon"
+                disabled={trabajando}
+                onClick={() => setConfirmarBorrado(true)}
+                className="rounded-md border border-rojo/30 bg-white px-3 py-1 text-xs text-rojo transition hover:bg-rojo/10 disabled:opacity-60"
               >
-                Cancelar
+                Eliminar
               </button>
-            </span>
-          ) : (
+            )}
+
             <button
               type="button"
-              disabled={trabajando}
-              onClick={() => setConfirmarBorrado(true)}
-              className="rounded-md border border-rojo/30 bg-white px-3 py-1 text-xs text-rojo transition hover:bg-rojo/10 disabled:opacity-60"
+              onClick={() => setSel(new Set())}
+              className="ml-auto text-xs text-carbon/50 underline hover:text-carbon"
             >
-              Eliminar
+              limpiar selección
             </button>
-          )}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setSel(new Set())}
-            className="ml-auto text-xs text-carbon/50 underline hover:text-carbon"
-          >
-            limpiar selección
-          </button>
+          {errorAccion && (
+            <div className="rounded-lg border border-rojo/30 bg-rojo/10 px-3 py-2 text-xs text-rojo flex items-center justify-between">
+              <span>{errorAccion}</span>
+              <button
+                onClick={() => setErrorAccion(null)}
+                className="font-bold underline hover:opacity-85 text-rojo/80"
+              >
+                Cerrar
+              </button>
+            </div>
+          )}
         </div>
       )}
 
