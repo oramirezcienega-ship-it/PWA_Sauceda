@@ -6,8 +6,6 @@ export const config = {
   api: {
     bodyParser: true,
   },
-  // Configuración para que Netlify compile esto como una Background Function
-  type: "experimental-background",
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
