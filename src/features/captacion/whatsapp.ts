@@ -13,7 +13,18 @@ export async function triggerResponderBackground(
   expedienteId?: string | null,
 ): Promise<void> {
   try {
-    const baseUrl = process.env.SITE_URL || "http://localhost:3000";
+    let baseUrl = process.env.SITE_URL || "http://localhost:3000";
+    try {
+      const { headers } = await import("next/headers");
+      const host = headers().get("host");
+      if (host) {
+        const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
+        baseUrl = `${protocol}://${host}`;
+      }
+    } catch (e) {
+      // Ignorar si se ejecuta fuera de una petición activa (por ejemplo, en un cron)
+    }
+
     const secret = process.env.CRON_SECRET || "";
     
     // Desactivar temporalmente la validación de certificados auto-firmados en entornos de staging o locales
