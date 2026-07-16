@@ -42,7 +42,7 @@ const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
 /** Tabla de prospectos con columnas ordenables y selección múltiple. */
 export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
   const router = useRouter();
-  const orden = useOrden(prospectos, COMPARADORES);
+  const orden = useOrden(prospectos, COMPARADORES, "fecha", "desc");
 
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
@@ -475,8 +475,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
               </th>
               {(
               [
-                ["nombre", "Prospecto", "izquierda"],
                 ["fecha", "Registro", "izquierda"],
+                ["nombre", "Prospecto", "izquierda"],
                 ["asesor", "Asesor", "izquierda"],
                 ["telefono", "Teléfono", "izquierda"],
                 ["ciudad", "Ciudad", "izquierda"],
@@ -527,6 +527,9 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                     className="cursor-pointer"
                   />
                 </td>
+                <td className="px-3 py-2.5 text-xs text-carbon/70 whitespace-nowrap">
+                  {p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "—"}
+                </td>
                 <td className="px-3 py-2.5">
                   <Link
                     href={`/prospectos/${p.id}`}
@@ -537,9 +540,6 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   <span className="ml-2 font-mono text-[10px] text-carbon/40">
                     {p.id}
                   </span>
-                </td>
-                <td className="px-3 py-2.5 text-xs text-carbon/70 whitespace-nowrap">
-                  {p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "—"}
                 </td>
                 <td className="px-3 py-2.5 text-carbon/70">
                   {p.asesorNombre || (

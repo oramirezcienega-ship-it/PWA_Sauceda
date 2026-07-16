@@ -15,6 +15,7 @@ import { BotonLlamar } from "./BotonLlamar";
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
   cliente: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
+  fecha: (a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""),
   fraccionamiento: (a, b) =>
     a.fraccionamiento.localeCompare(b.fraccionamiento, "es"),
   tipoNegocio: (a, b) =>
@@ -45,7 +46,7 @@ export function TablaExpedientes({
   expedientes: Expediente[];
 }) {
   const { moverEtapa, moverEtapaMasivo, eliminarMasivo } = useExpedientes();
-  const orden = useOrden(expedientes, COMPARADORES);
+  const orden = useOrden(expedientes, COMPARADORES, "fecha", "desc");
 
   // Selección múltiple (por id). Se limpia cuando cambia el set de filas.
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -251,6 +252,7 @@ export function TablaExpedientes({
               </th>
               {(
               [
+                ["fecha", "Registro", "izquierda"],
                 ["cliente", "Expediente", "izquierda"],
                 ["asesor", "Asesor", "izquierda"],
                 ["fraccionamiento", "Fraccionamiento", "izquierda"],
@@ -295,6 +297,9 @@ export function TablaExpedientes({
                   className="cursor-pointer"
                 />
               </td>
+              <td className="px-3 py-2.5 align-top text-xs text-carbon/70 whitespace-nowrap">
+                {exp.createdAt ? new Date(exp.createdAt).toLocaleDateString("es-MX") : "—"}
+              </td>
               <td className="px-3 py-2.5 align-top">
                 <Link
                   href={`/expediente/${exp.id}`}
@@ -306,19 +311,6 @@ export function TablaExpedientes({
                   <span className="font-mono text-carbon/40 font-semibold bg-carbon/5 px-1.5 py-0.5 rounded w-max">
                     {exp.id}
                   </span>
-                  {exp.createdAt && (
-                    <span className="text-carbon/45 whitespace-nowrap">
-                      📅 {new Date(exp.createdAt).toLocaleString("es-MX", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                        hour12: false
-                      })}
-                    </span>
-                  )}
                 </div>
               </td>
               <td className="px-3 py-2.5 align-top text-carbon/70">
