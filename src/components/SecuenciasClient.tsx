@@ -67,7 +67,7 @@ export function SecuenciasClient() {
     nombre: "",
     descripcion: "",
     status: "activa" as "activa" | "pausada" | "archivada",
-    segmento: "todos" as "sin_contactar" | "sin_respuesta" | "rojo" | "todos",
+    segmento: "todos" as string,
     steps: [] as DatosPaso[],
   });
 
@@ -743,10 +743,14 @@ export function SecuenciasClient() {
                     onChange={(e) => setConstructorData({ ...constructorData, segmento: e.target.value as any })}
                     className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#2D4A2B]"
                   >
-                    <option value="todos">Todos</option>
+                    <option value="todos">Todos (Genérico)</option>
                     <option value="sin_contactar">Sin contactar</option>
                     <option value="sin_respuesta">Sin respuesta</option>
                     <option value="rojo">Semáforo Rojo</option>
+                    <option value="construccion-impermeabilizacion">Construcción: Impermeabilización</option>
+                    <option value="traspaso_compra">Bienes Raíces: Compra Directa</option>
+                    <option value="promocion_venta">Bienes Raíces: Promoción Venta</option>
+                    <option value="solo_tramite">Bienes Raíces: Solo Trámite</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
