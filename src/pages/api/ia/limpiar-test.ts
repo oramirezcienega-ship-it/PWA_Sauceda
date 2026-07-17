@@ -9,8 +9,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Verificación de seguridad básica con token
   const authHeader = req.headers.authorization;
-  const tokenQuery = req.query.token;
-  const expectedToken = process.env.CRON_SECRET || "saucedamkt2026sec";
+  const expectedToken = process.env.CRON_SECRET;
+
+  if (!expectedToken) {
+    return res.status(500).json({ error: "CRON_SECRET no configurado en el servidor." });
+  }
 
   const isAuthorized = 
     (authHeader === `Bearer ${expectedToken}`) || 
