@@ -108,6 +108,9 @@ interface FilaExp {
   asesor_id?: string | null;
   ultimo_paso_flujo?: string | null;
   ultimo_paso_alcanzado?: string | null;
+  campaign_name?: string | null;
+  adset_name?: string | null;
+  ad_name?: string | null;
 }
 
 /** Construye las instrucciones (system prompt) del asistente. */
@@ -365,6 +368,9 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
       nombre && `Nombre del cliente: ${nombre}`,
       `Teléfono de contacto: ${telReal}`,
       exp.canal_id && `Canal vinculado: ${exp.canal_id}`,
+      exp.campaign_name && `Campaña Meta de origen: ${exp.campaign_name}`,
+      exp.adset_name && `Grupo de anuncios de origen: ${exp.adset_name}`,
+      exp.ad_name && `Anuncio de origen: ${exp.ad_name}`,
       exp.fraccionamiento &&
         exp.fraccionamiento !== "Por definir" &&
         `Fraccionamiento/zona: ${exp.fraccionamiento}`,
@@ -516,7 +522,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado, campaign_name, adset_name, ad_name"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
@@ -562,6 +568,8 @@ export async function responderConIA(
       habitada?: string | null;
       fuera_de_zona?: boolean | null;
       paso_flujo?: string | null;
+      cliente_nombre?: string | null;
+      telefono_real?: string | null;
     } = {};
 
     let limpio = "";
@@ -654,7 +662,7 @@ export async function responderConIA(
 
         // Si estamos en paso_3 pero el cliente ya dio su nombre y teléfono, es "dio_contacto"
         const tieneNombre = datosExtraidos.cliente_nombre || exp?.cliente;
-        const tieneTel = (datosExtraidos as any).telefono_real || exp?.telefono;
+        const tieneTel = datosExtraidos.telefono_real || exp?.telefono;
         const tieneAmbos = tieneNombre && tieneTel && !tieneNombre.includes("Lead WhatsApp") && !tieneNombre.includes("Conmutador");
 
         if (pasoDetectado === "paso_3" && tieneAmbos) {
