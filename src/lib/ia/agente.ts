@@ -859,7 +859,7 @@ export async function responderConIA(
               if (host) {
                 if (host.includes("sslip.io")) {
                   siteUrl = "https://crm-staging.saucedamx.com";
-                } else {
+                } else if (!process.env.SITE_URL) {
                   const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
                   siteUrl = `${protocol}://${host}`;
                 }
