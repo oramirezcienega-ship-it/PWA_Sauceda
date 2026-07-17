@@ -38,6 +38,8 @@ function aCotizacion(fila: any): Cotizacion {
     aprobadoOperativoByNombre: fila.perfiles_operativo?.nombre || "",
     token: fila.token,
     notasInternas: fila.notas_internas || "",
+    condicionesPago: fila.condiciones_pago || 'Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.',
+    garantia: fila.garantia || 'Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.',
     createdAt: fila.created_at,
     updatedAt: fila.updated_at
   };
@@ -267,6 +269,8 @@ export async function obtenerCotizacionPorToken(
       aprobadoComercial: cot.aprobadoComercial,
       aprobadoOperativo: cot.aprobadoOperativo,
       token: cot.token,
+      condicionesPago: cot.condicionesPago,
+      garantia: cot.garantia,
       createdAt: cot.createdAt,
       updatedAt: cot.updatedAt
     },
@@ -765,5 +769,35 @@ export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) 
   } catch (err) {
     console.error("Error en sincronizarEtapaExpediente:", err);
   }
+}
+
+/** 12. Guardar Condiciones Comerciales y Garantía */
+export async function guardarCondicionesCotizacion(
+  id: string,
+  condicionesPago: string,
+  garantia: string
+): Promise<Cotizacion> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data, error } = await sb
+    .from("cotizaciones")
+    .update({
+      condiciones_pago: condicionesPago,
+      garantia: garantia,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", id)
+    .select(`
+      *,
+      prospectos(nombre, telefono),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return aCotizacion(data);
 }
 

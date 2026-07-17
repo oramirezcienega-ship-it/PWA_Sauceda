@@ -565,6 +565,8 @@ export interface Cotizacion {
   aprobadoOperativoByNombre?: string | null;
   token: string;
   notasInternas: string;
+  condicionesPago: string;
+  garantia: string;
   createdAt: string;
   updatedAt: string;
 }

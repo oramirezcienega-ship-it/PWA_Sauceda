@@ -203,7 +203,7 @@ export function VisualizadorCotizacionCliente({
           <div className="p-6 sm:p-8 space-y-8">
             
             {/* 1. Reporte de Inspección */}
-            {reporteVisita && (
+            {reporteVisita && cotizacion.servicioTipo !== "impermeabilizacion" && (
               <div className="space-y-4">
                 <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
@@ -384,8 +384,8 @@ export function VisualizadorCotizacionCliente({
               <ul className="list-disc pl-4 text-xs text-carbon/60 space-y-1">
                 <li><span className="font-semibold text-carbon/75">Precios:</span> Todos los precios expresados son más IVA (16% de Impuesto al Valor Agregado).</li>
                 <li><span className="font-semibold text-carbon/75">Vigencia:</span> Esta cotización cuenta con una vigencia de 15 días a partir de su envío.</li>
-                <li><span className="font-semibold text-carbon/75">Forma de pago:</span> Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.</li>
-                <li><span className="font-semibold text-carbon/75">Garantía:</span> Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.</li>
+                <li><span className="font-semibold text-carbon/75">Forma de pago:</span> {cotizacion.condicionesPago}</li>
+                <li><span className="font-semibold text-carbon/75">Garantía:</span> {cotizacion.garantia}</li>
               </ul>
             </div>
 
