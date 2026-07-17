@@ -454,7 +454,7 @@ async function generarRespuesta(
  */
 export async function responderConIA(
   sb: SupabaseClient,
-  ctx: { telefono: string; expedienteId?: string | null },
+  ctx: { telefono: string; expedienteId?: string | null; host?: string },
 ): Promise<void> {
   try {
     if (!iaAgenteActivo()) return;
@@ -855,19 +855,14 @@ export async function responderConIA(
 
             if (textoRespuesta.includes("[LINK_COTIZACION]") || textoRespuesta.includes("[LINK_AGENDADO]")) {
               let siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
-              try {
-                const { headers } = await import("next/headers");
-                const host = headers().get("host");
-                if (host) {
-                  if (host.includes("sslip.io")) {
-                    siteUrl = "https://crm-staging.saucedamx.com";
-                  } else {
-                    const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
-                    siteUrl = `${protocol}://${host}`;
-                  }
+              const host = ctx.host;
+              if (host) {
+                if (host.includes("sslip.io")) {
+                  siteUrl = "https://crm-staging.saucedamx.com";
+                } else {
+                  const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
+                  siteUrl = `${protocol}://${host}`;
                 }
-              } catch (e) {
-                // Fallback
               }
               const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
               

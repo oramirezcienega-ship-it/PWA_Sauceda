@@ -31,8 +31,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`[IA Background] Iniciando procesamiento asíncrono para el teléfono: ${telefono}, expediente: ${expedienteId}`);
     
+    const host = req.headers.host || undefined;
     const sb = supabaseServidor();
-    await responderConIA(sb, { telefono, expedienteId });
+    await responderConIA(sb, { telefono, expedienteId, host });
     
     console.log(`[IA Background] Procesamiento finalizado con éxito para ${telefono}`);
     return res.status(200).json({ ok: true });
