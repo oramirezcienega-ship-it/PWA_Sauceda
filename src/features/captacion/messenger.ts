@@ -118,7 +118,10 @@ async function registrarLeadSocial(
 
     // Si el tipo de negocio era traspaso_compra (default) y ahora se detecta algo distinto, lo actualizamos.
     if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio) {
-      const detectado = detectarTipoNegocio(lead.mensaje ?? "", lead.campaign_name);
+      const detectado = detectarTipoNegocio(
+        lead.mensaje ?? "",
+        [lead.campaign_name, lead.adset_name, lead.ad_name].filter(Boolean).join(" ")
+      );
       if (detectado !== "traspaso_compra") {
         updateData.tipo_negocio = detectado;
       }
@@ -145,7 +148,10 @@ async function registrarLeadSocial(
 
   // Si es un expediente completamente nuevo
   const id = await siguienteId(sb);
-  const tipoNegocio = detectarTipoNegocio(lead.mensaje ?? "", lead.campaign_name);
+  const tipoNegocio = detectarTipoNegocio(
+    lead.mensaje ?? "",
+    [lead.campaign_name, lead.adset_name, lead.ad_name].filter(Boolean).join(" ")
+  );
   await sb.from("expedientes").insert({
     id,
     cliente: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,

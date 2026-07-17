@@ -15,6 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: "CRON_SECRET no configurado en el servidor." });
   }
 
+  const tokenQuery = req.query.token as string;
   const isAuthorized = 
     (authHeader === `Bearer ${expectedToken}`) || 
     (tokenQuery === expectedToken);

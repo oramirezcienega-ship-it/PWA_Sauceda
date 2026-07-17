@@ -384,12 +384,12 @@ export async function registrarLeadWhatsApp(
   // Dedupe del expediente por teléfono (cualquier formato equivalente).
   const { data: existentes } = await sb
     .from("expedientes")
-    .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio")
+    .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente")
     .in("telefono", variantesTel)
     .limit(1);
 
   if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; tipo_negocio?: string };
+    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; tipo_negocio?: string; cliente?: string };
     const nota = `${exp.notas ?? ""}\n[WhatsApp ${hoyISO()}] ${
       lead.mensaje ?? ""
     }`.trim();
@@ -401,7 +401,10 @@ export async function registrarLeadWhatsApp(
 
     // Si el tipo de negocio era traspaso_compra (default) y ahora se detecta algo distinto, lo actualizamos.
     if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio) {
-      const detectado = detectarTipoNegocio(lead.mensaje ?? "", campaign_name);
+      const detectado = detectarTipoNegocio(
+        lead.mensaje ?? "",
+        [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
+      );
       if (detectado !== "traspaso_compra") {
         updateData.tipo_negocio = detectado;
       }
@@ -425,7 +428,7 @@ export async function registrarLeadWhatsApp(
         telefono,
         expedienteId: exp.id,
         prospectoId,
-        clienteNombre: exp.cliente,
+        clienteNombre: exp.cliente || "",
         tipoNegocio: exp.tipo_negocio || "Por definir"
       });
       return;
@@ -437,7 +440,10 @@ export async function registrarLeadWhatsApp(
   }
 
   const id = await siguienteId(sb);
-  const tipoNegocio = detectarTipoNegocio(lead.mensaje ?? "", campaign_name);
+  const tipoNegocio = detectarTipoNegocio(
+    lead.mensaje ?? "",
+    [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
+  );
   await sb.from("expedientes").insert({
     id,
     cliente: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
