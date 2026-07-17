@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const sb = supabaseServidor();
-    console.log(`[Reset Usuario] Iniciando reseteo completo para: ${email}`);
+    console.log(`[Reset Usuario] Iniciando reseteo para correo: ${email}`);
 
     // 1. Buscar en Supabase Auth Admin
     const { data: { users }, error: errAuthList } = await sb.auth.admin.listUsers();
@@ -68,7 +68,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .insert({
           id: authUser.id, // Debe coincidir con el auth.users.id
           nombre: "Alejandro Córdova Barajas",
-          correo: email,
           activo: true,
           rol: "asesor",
           horarios_agenda: defaultHorarios,
@@ -85,7 +84,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .from("perfiles")
         .update({
           nombre: "Alejandro Córdova Barajas",
-          correo: email,
           activo: true,
           rol: "asesor",
           horarios_agenda: defaultHorarios,
