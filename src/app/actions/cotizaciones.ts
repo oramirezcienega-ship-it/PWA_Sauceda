@@ -229,8 +229,8 @@ export async function obtenerCotizacionPorToken(
 
   const cot = aCotizacion(filaCot);
 
-  // El cliente solo puede verla si ya fue procesada y aprobada
-  const estatusPermitidos: CotizacionEstatus[] = ['aprobada', 'enviada', 'aceptada', 'rechazada'];
+  // El cliente solo puede verla si ya fue procesada, aprobada, o está en espera de visita (preliminar)
+  const estatusPermitidos: CotizacionEstatus[] = ['aprobada', 'enviada', 'aceptada', 'rechazada', 'esperando_visita'];
   if (!estatusPermitidos.includes(cot.estatus)) {
     throw new Error("Esta propuesta aún no está disponible para su visualización.");
   }
