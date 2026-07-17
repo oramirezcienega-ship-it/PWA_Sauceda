@@ -853,9 +853,22 @@ export async function responderConIA(
               }
             }
 
-            // Reemplazar marcadores garantizado (incluso si no hay token de cotización)
             if (textoRespuesta.includes("[LINK_COTIZACION]") || textoRespuesta.includes("[LINK_AGENDADO]")) {
-              const siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+              let siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+              try {
+                const { headers } = await import("next/headers");
+                const host = headers().get("host");
+                if (host) {
+                  if (host.includes("sslip.io")) {
+                    siteUrl = "https://crm-staging.saucedamx.com";
+                  } else {
+                    const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
+                    siteUrl = `${protocol}://${host}`;
+                  }
+                }
+              } catch (e) {
+                // Fallback
+              }
               const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
               
               // Intentar obtener el operador asignado al expediente para usar la agenda interna de la app
