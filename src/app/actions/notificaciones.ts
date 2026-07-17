@@ -91,3 +91,21 @@ export async function eliminarNotificacion(id: string): Promise<void> {
     console.error("Error al eliminar notificación:", err);
   }
 }
+
+/** Elimina todas las notificaciones del historial del usuario actual. */
+export async function eliminarTodasLasNotificaciones(): Promise<void> {
+  try {
+    const u = await usuarioActual();
+    if (!u) return;
+
+    const sb = supabaseServidor();
+    const { error } = await sb
+      .from("notificaciones")
+      .delete()
+      .eq("perfil_id", u.id);
+
+    if (error) throw new Error(error.message);
+  } catch (err) {
+    console.error("Error al eliminar todas las notificaciones:", err);
+  }
+}

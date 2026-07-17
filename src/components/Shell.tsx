@@ -13,6 +13,7 @@ import {
   marcarNotificacionLeida,
   marcarTodasComoLeidas,
   eliminarNotificacion,
+  eliminarTodasLasNotificaciones,
   type NotificacionApp,
 } from "@/app/actions/notificaciones";
 import { contarConversacionesPendientes } from "@/app/actions/conversaciones";
@@ -53,11 +54,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [notificaciones, setNotificaciones] = useState<NotificacionApp[]>([]);
   const [notifsAbierto, setNotifsAbierto] = useState(false);
   const [conversacionesPendientes, setConversacionesPendientes] = useState(0);
+  const [notificadosIds, setNotificadosIds] = useState<string[]>([]);
 
   useEffect(() => {
     rolUsuarioActual()
       .then((rol) => setEsAdmin(rol === "admin"))
       .catch(() => setEsAdmin(false));
+  }, []);
+
+  // Solicitar permiso de notificaciones al montar la PWA
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
   }, []);
 
   // Cierra el cajón al cambiar de ruta.
@@ -66,13 +77,59 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setNotifsAbierto(false);
   }, [pathname]);
 
+  const lanzarNotificacionNativa = (n: NotificacionApp) => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const options: any = {
+      body: n.cuerpo,
+      icon: "/icons/icon.svg",
+      badge: "/icons/icon.svg",
+      tag: "sauceda-pwa-notif-" + n.id,
+      renotify: true,
+      requireInteraction: true, // Notificación persistente tanto en Android como iOS PWA
+      vibrate: [200, 100, 200],
+      data: { enlace: n.enlace }
+    };
+
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(n.titulo, options);
+      });
+    } else {
+      new Notification(n.titulo, {
+        body: n.cuerpo,
+        icon: "/icons/icon.svg",
+        requireInteraction: true
+      });
+    }
+  };
+
   const refrescarNotificaciones = async () => {
-    if (esRutaPublica(pathname)) return;
+    if (esRutaPublica(pathname || "")) return;
     try {
       const [lista, pendientes] = await Promise.all([
         listarNotificaciones(),
         contarConversacionesPendientes(),
       ]);
+
+      // Evaluar nuevas notificaciones sin leer para disparar la alerta nativa
+      setNotificadosIds((prevIds) => {
+        // En la primera carga no alertamos del histórico, solo registramos los IDs
+        if (prevIds.length === 0) {
+          return lista.map((n) => n.id);
+        }
+
+        const nuevosIds = [...prevIds];
+        lista.forEach((n) => {
+          if (!n.leido && !prevIds.includes(n.id)) {
+            lanzarNotificacionNativa(n);
+            nuevosIds.push(n.id);
+          }
+        });
+        return nuevosIds;
+      });
+
       setNotificaciones(lista);
       setConversacionesPendientes(pendientes);
     } catch (err) {
@@ -81,7 +138,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    if (esRutaPublica(pathname)) return;
+    if (esRutaPublica(pathname || "")) return;
     refrescarNotificaciones();
     const id = setInterval(refrescarNotificaciones, 15000);
     return () => clearInterval(id);
@@ -98,13 +155,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       await marcarNotificacionLeida(n.id);
     }
     if (n.enlace) {
-      router.push(n.enlace);
+      router.push(n.enlace || "");
     }
   };
 
   const clickMarcarTodas = async () => {
     setNotificaciones((prev) => prev.map((x) => ({ ...x, leido: true })));
     await marcarTodasComoLeidas();
+  };
+
+  const clickEliminarTodas = async () => {
+    setNotificaciones([]);
+    await eliminarTodasLasNotificaciones();
   };
 
   const clickEliminar = async (e: React.MouseEvent, id: string) => {
@@ -132,14 +194,24 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const renderNotificacionesLista = (isDesktop: boolean) => (
     <div className="flex items-center justify-between border-b border-carbon/5 px-3 py-2 pb-2">
       <span className="text-sm font-semibold">Notificaciones</span>
-      {unreadCount > 0 && (
-        <button
-          onClick={clickMarcarTodas}
-          className="text-[11px] font-medium text-sauce hover:underline"
-        >
-          Marcar todo leído
-        </button>
-      )}
+      <div className="flex gap-2.5">
+        {unreadCount > 0 && (
+          <button
+            onClick={clickMarcarTodas}
+            className="text-[11px] font-medium text-sauce hover:underline"
+          >
+            Marcar todo leído
+          </button>
+        )}
+        {notificaciones.length > 0 && (
+          <button
+            onClick={clickEliminarTodas}
+            className="text-[11px] font-medium text-rojo hover:underline"
+          >
+            Borrar todo
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -187,7 +259,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   // Monitorear inactividad del usuario (30 minutos)
   useEffect(() => {
-    if (esRutaPublica(pathname)) return;
+    if (esRutaPublica(pathname || "")) return;
 
     let timer: NodeJS.Timeout;
 
@@ -219,7 +291,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     };
   }, [pathname]);
 
-  if (esRutaPublica(pathname)) return <>{children}</>;
+  if (esRutaPublica(pathname || "")) return <>{children}</>;
 
   const enlaces = esAdmin
     ? [
@@ -234,7 +306,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     : ENLACES;
 
   const activo = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    href === "/" ? (pathname || "") === "/" : (pathname || "").startsWith(href);
 
   const marca = (
     <Link href="/" className="flex items-center gap-2 px-4 py-4 leading-none">

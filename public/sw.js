@@ -63,3 +63,29 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(request).then((r) => r || caches.match("/login"))),
   );
 });
+
+// Manejo de clic en notificaciones (PWA Persistente)
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  
+  const urlParaAbrir = event.notification.data?.enlace 
+    ? new URL(event.notification.data.enlace, self.location.origin).href 
+    : self.location.origin;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientes) => {
+      // Buscar si ya hay una pestaña abierta de la app y enfocarla
+      for (const cliente of clientes) {
+        if (cliente.url.startsWith(self.location.origin)) {
+          // Navegar a la URL del enlace y enfocar
+          cliente.navigate(urlParaAbrir);
+          return cliente.focus();
+        }
+      }
+      // Si no, abrir una nueva pestaña
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(urlParaAbrir);
+      }
+    })
+  );
+});
