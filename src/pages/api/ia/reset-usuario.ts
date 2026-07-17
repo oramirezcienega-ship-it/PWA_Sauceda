@@ -2,8 +2,12 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseServidor } from "@/lib/supabase/server";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const secretToken = process.env.CRON_SECRET || "saucedamkt2026sec";
+  const secretToken = process.env.CRON_SECRET;
   const tokenQuery = req.query.token;
+
+  if (!secretToken) {
+    return res.status(500).json({ error: "CRON_SECRET no configurado en el servidor." });
+  }
 
   if (tokenQuery !== secretToken) {
     return res.status(401).json({ error: "Unauthorized" });
