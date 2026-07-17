@@ -44,7 +44,10 @@ export function LinkCitaWidget({
   }
 
   const tipoCitaParam = tipoCitaPredefinido ? `&tipo=${tipoCitaPredefinido}` : "";
-  const urlReserva = `${siteUrl}/agenda/${asesorId}?prospecto_id=${prospectoId}${tipoCitaParam}`;
+  const baseOrigin = (typeof window !== "undefined" && window.location.origin)
+    ? window.location.origin
+    : (siteUrl && !siteUrl.includes("localhost:3000") ? siteUrl : "https://app.saucedamx.com");
+  const urlReserva = `${baseOrigin}/agenda/${asesorId}?prospecto_id=${prospectoId}${tipoCitaParam}`;
 
   async function handleCopiar() {
     try {
