@@ -9,6 +9,7 @@ import {
   aprobarCotizacionComercial,
   aprobarCotizacionOperativa,
   marcarComoEnviada,
+  guardarCondicionesCotizacion,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
@@ -67,6 +68,12 @@ export function DetalleCotizacionAdmin({
 
   const [guardandoConceptos, setGuardandoConceptos] = useState(false);
   const [mensajeConceptos, setMensajeConceptos] = useState({ tipo: "", texto: "" });
+
+  // --- State para Condiciones y Garantía ---
+  const [condicionesPago, setCondicionesPago] = useState(cotizacionInicial.condicionesPago || "Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.");
+  const [garantia, setGarantia] = useState(cotizacionInicial.garantia || "Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.");
+  const [guardandoCondiciones, setGuardandoCondiciones] = useState(false);
+  const [mensajeCondiciones, setMensajeCondiciones] = useState({ tipo: "", texto: "" });
 
   // --- State para Aprobaciones ---
   const [procesandoAprobacion, setProcesandoAprobacion] = useState(false);
@@ -216,6 +223,20 @@ export function DetalleCotizacionAdmin({
       setMensajeConceptos({ tipo: "error", texto: err instanceof Error ? err.message : "Error al guardar conceptos" });
     } finally {
       setGuardandoConceptos(false);
+    }
+  };
+
+  const handleGuardarCondiciones = async () => {
+    try {
+      setGuardandoCondiciones(true);
+      setMensajeCondiciones({ tipo: "", texto: "" });
+      const res = await guardarCondicionesCotizacion(cotizacion.id, condicionesPago.trim(), garantia.trim());
+      setCotizacion(res);
+      setMensajeCondiciones({ tipo: "ok", texto: "Condiciones de servicio y garantía guardadas con éxito." });
+    } catch (err) {
+      setMensajeCondiciones({ tipo: "error", texto: err instanceof Error ? err.message : "Error al guardar condiciones" });
+    } finally {
+      setGuardandoCondiciones(false);
     }
   };
 
@@ -631,7 +652,8 @@ export function DetalleCotizacionAdmin({
             {!puedeCostear ? (
               <p className="text-sm text-carbon/50 py-6 text-center">Tu rol no tiene permisos para cotizar conceptos financieros.</p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-6 font-sans">
+                <div className="space-y-4">
                 {mensajeConceptos.texto && (
                   <div className={`p-3 text-xs border rounded-lg ${
                     mensajeConceptos.tipo === "ok" ? "bg-green-50 border-green-200 text-green-700" : "bg-rose-50 border-rojo/20 text-rojo"
@@ -769,6 +791,57 @@ export function DetalleCotizacionAdmin({
                   </div>
                 </div>
               </div>
+
+              {/* Editor de Condiciones Comerciales y Garantía */}
+                <div className="bg-slate-50 border border-carbon/10 p-5 rounded-2xl space-y-4 mt-6">
+                  <div>
+                    <h4 className="font-titular font-semibold text-sm text-verde-profundo">Condiciones Comerciales & Garantía</h4>
+                    <p className="text-xs text-carbon/50 mt-0.5">Edita las formas de pago y garantía que aparecerán en la propuesta del cliente.</p>
+                  </div>
+
+                  {mensajeCondiciones.texto && (
+                    <div className={`p-3 text-xs border rounded-lg ${
+                      mensajeCondiciones.tipo === "ok" ? "bg-green-50 border-green-200 text-green-700" : "bg-rose-50 border-rojo/20 text-rojo"
+                    }`}>
+                      {mensajeCondiciones.texto}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Forma de Pago / Condiciones Comerciales</label>
+                      <textarea
+                        value={condicionesPago}
+                        onChange={(e) => setCondicionesPago(e.target.value)}
+                        rows={3}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs focus:border-sauce focus:outline-none font-sans"
+                        placeholder="Ej. Anticipo del 50%..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Términos de Garantía</label>
+                      <textarea
+                        value={garantia}
+                        onChange={(e) => setGarantia(e.target.value)}
+                        rows={3}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs focus:border-sauce focus:outline-none font-sans"
+                        placeholder="Ej. Todos los trabajos cuentan con garantía..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      disabled={guardandoCondiciones}
+                      onClick={handleGuardarCondiciones}
+                      className="rounded-lg bg-verde-profundo px-4 py-2 text-xs font-semibold text-white hover:bg-sauce disabled:opacity-50 transition shadow-sm"
+                    >
+                      {guardandoCondiciones ? "Guardando..." : "Guardar Condiciones"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -789,7 +862,7 @@ export function DetalleCotizacionAdmin({
             {/* Mensajes de Validación Operativa */}
             {cotizacion.requiereVisita && !reporteVisita && (
               <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-medium">
-                ⚠️ Falta registrar el reporte de la visita técnica física antes de proceder a la aprobación.
+                ⚠️ Esta cotización tiene visita técnica física programada, pero aún no se ha registrado el reporte (no bloquea aprobación).
               </div>
             )}
             {conceptos.length === 0 && (
@@ -831,7 +904,7 @@ export function DetalleCotizacionAdmin({
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleAprobarComercial(true)}
-                          disabled={procesandoAprobacion || (cotizacion.requiereVisita && !reporteVisita) || conceptos.length === 0}
+                          disabled={procesandoAprobacion || conceptos.length === 0}
                           className="rounded-lg bg-green-600 text-white px-4 py-2 text-xs font-semibold hover:bg-green-700 disabled:opacity-50 transition"
                         >
                           Firmar Aprobación
@@ -881,7 +954,7 @@ export function DetalleCotizacionAdmin({
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleAprobarOperativo(true)}
-                          disabled={procesandoAprobacion || (cotizacion.requiereVisita && !reporteVisita) || conceptos.length === 0}
+                          disabled={procesandoAprobacion || conceptos.length === 0}
                           className="rounded-lg bg-green-600 text-white px-4 py-2 text-xs font-semibold hover:bg-green-700 disabled:opacity-50 transition"
                         >
                           Firmar Aprobación
