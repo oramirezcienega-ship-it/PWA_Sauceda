@@ -14,15 +14,19 @@ export async function triggerResponderBackground(
 ): Promise<void> {
   try {
     let baseUrl = process.env.SITE_URL || "http://localhost:3000";
-    try {
-      const { headers } = await import("next/headers");
-      const host = headers().get("host");
-      if (host) {
-        const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
-        baseUrl = `${protocol}://${host}`;
+    
+    // Solo intentar resolver dinámicamente si no hay una SITE_URL explícita
+    if (!process.env.SITE_URL) {
+      try {
+        const { headers } = await import("next/headers");
+        const host = headers().get("x-forwarded-host") || headers().get("host");
+        if (host) {
+          const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
+          baseUrl = `${protocol}://${host}`;
+        }
+      } catch (e) {
+        // Ignorar si se ejecuta fuera de una petición activa
       }
-    } catch (e) {
-      // Ignorar si se ejecuta fuera de una petición activa (por ejemplo, en un cron)
     }
 
     const secret = process.env.CRON_SECRET || "";
