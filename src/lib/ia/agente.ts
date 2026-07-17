@@ -873,7 +873,7 @@ export async function responderConIA(
                   const { data: perfAlex } = await sb
                     .from("perfiles")
                     .select("id")
-                    .ilike("nombre", "%Alex%")
+                    .or("nombre.ilike.%Alex%,nombre.ilike.%Alejandro%")
                     .eq("activo", true)
                     .maybeSingle();
                   if (perfAlex) {
