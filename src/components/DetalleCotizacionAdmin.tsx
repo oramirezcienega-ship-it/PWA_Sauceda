@@ -42,22 +42,25 @@ export function DetalleCotizacionAdmin({
   const [condSitio, setCondSitio] = useState(reporteVisitaInicial?.condicionesSitio || "");
   const [largo, setLargo] = useState<string>(String(reporteVisitaInicial?.medidas?.largo || ""));
   const [ancho, setAncho] = useState<string>(String(reporteVisitaInicial?.medidas?.ancho || ""));
-  const [altura, setAltura] = useState<string>(String(reporteVisitaInicial?.medidas?.altura || ""));
-  const [fotoUrlInput, setFotoUrlInput] = useState("");
   const [fotos, setFotos] = useState<string[]>(reporteVisitaInicial?.fotos || []);
   const [guardandoInspeccion, setGuardandoInspeccion] = useState(false);
   const [mensajeInspeccion, setMensajeInspeccion] = useState({ tipo: "", texto: "" });
 
-  const [tecnicoNombre, setTecnicoNombre] = useState(reporteVisitaInicial?.medidas?.tecnicoNombre || "");
+  const [tecnicoNombre, setTecnicoNombre] = useState(
+    reporteVisitaInicial?.medidas?.tecnicoNombre || cotizacionInicial.inspectorNombre || ""
+  );
   const [fechaVisitaRealizada, setFechaVisitaRealizada] = useState(
-    reporteVisitaInicial?.medidas?.fechaVisita || (reporteVisitaInicial?.fechaInspeccion ? new Date(reporteVisitaInicial.fechaInspeccion).toISOString().split("T")[0] : new Date().toISOString().split("T")[0])
+    reporteVisitaInicial?.medidas?.fechaVisita || 
+    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().split("T")[0] : new Date().toISOString().split("T")[0])
   );
   const [horaVisitaRealizada, setHoraVisitaRealizada] = useState(
-    reporteVisitaInicial?.medidas?.horaVisita || (reporteVisitaInicial?.fechaInspeccion ? new Date(reporteVisitaInicial.fechaInspeccion).toTimeString().split(" ")[0].slice(0, 5) : new Date().toTimeString().split(" ")[0].slice(0, 5))
+    reporteVisitaInicial?.medidas?.horaVisita || 
+    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toTimeString().split(" ")[0].slice(0, 5) : new Date().toTimeString().split(" ")[0].slice(0, 5))
   );
   const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [dictandoObs, setDictandoObs] = useState(false);
   const [dictandoCond, setDictandoCond] = useState(false);
+  const [rotaciones, setRotaciones] = useState<Record<string, number>>(reporteVisitaInicial?.medidas?.rotaciones || {});
 
   // --- State para Cambio de Requerimiento de Visita ---
   const [requiereVisita, setRequiereVisita] = useState(cotizacionInicial.requiereVisita);
@@ -265,7 +268,6 @@ export function DetalleCotizacionAdmin({
 
       const lVal = Number(largo) || 0;
       const aVal = Number(ancho) || 0;
-      const hVal = Number(altura) || 0;
       const areaVal = lVal * aVal;
 
       // Combinar fecha y hora
@@ -281,11 +283,11 @@ export function DetalleCotizacionAdmin({
         medidas: { 
           largo: lVal, 
           ancho: aVal, 
-          altura: hVal, 
           areaCalculada: areaVal,
           tecnicoNombre: tecnicoNombre.trim(),
           fechaVisita: fechaVisitaRealizada,
-          horaVisita: horaVisitaRealizada
+          horaVisita: horaVisitaRealizada,
+          rotaciones
         },
         fotos,
         fechaInspeccion: customFechaInspeccion
@@ -793,7 +795,7 @@ export function DetalleCotizacionAdmin({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
                   <div>
                     <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Largo (metros)</label>
                     <input
@@ -812,17 +814,6 @@ export function DetalleCotizacionAdmin({
                       step="0.01"
                       value={ancho}
                       onChange={(e) => setAncho(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Altura de Trabajo (m) - Opcional</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={altura}
-                      onChange={(e) => setAltura(e.target.value)}
                       placeholder="0.00"
                       className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
                     />
@@ -882,20 +873,6 @@ export function DetalleCotizacionAdmin({
                 <div className="space-y-2 border-t pt-4">
                   <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Fotografías del Sitio (Anteproyecto)</label>
                   <div className="flex gap-2 flex-wrap items-center">
-                    <input
-                      type="url"
-                      value={fotoUrlInput}
-                      onChange={(e) => setFotoUrlInput(e.target.value)}
-                      placeholder="Pega la URL de una foto"
-                      className="flex-1 min-w-[200px] rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={agregarFoto}
-                      className="rounded-lg bg-slate-100 text-carbon/80 border px-4 py-2 text-sm font-semibold hover:bg-slate-200 transition"
-                    >
-                      Añadir URL
-                    </button>
                     <div className="relative">
                       <input
                         type="file"
@@ -919,15 +896,33 @@ export function DetalleCotizacionAdmin({
                   {fotos.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                       {fotos.map((f, idx) => (
-                        <div key={idx} className="relative rounded-lg border overflow-hidden aspect-video group">
+                        <div key={idx} className="relative rounded-lg border overflow-hidden aspect-video bg-slate-900 group">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={f} alt={`Levantamiento ${idx + 1}`} className="object-cover w-full h-full" />
+                          <img 
+                            src={f} 
+                            alt={`Levantamiento ${idx + 1}`} 
+                            className="object-contain w-full h-full transition-transform duration-200" 
+                            style={{ transform: `rotate(${rotaciones[f] || 0}deg)` }}
+                          />
                           <button
                             type="button"
                             onClick={() => eliminarFoto(idx)}
-                            className="absolute top-1 right-1 h-6 w-6 bg-rojo/90 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                            className="absolute top-1 right-1 h-6 w-6 bg-rojo/90 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm z-10"
+                            title="Eliminar foto"
                           >
                             ✕
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentAngle = rotaciones[f] || 0;
+                              const nextAngle = (currentAngle + 90) % 360;
+                              setRotaciones(prev => ({ ...prev, [f]: nextAngle }));
+                            }}
+                            className="absolute bottom-1 right-1 h-6 w-6 bg-verde-profundo/90 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm z-10"
+                            title="Rotar foto 90°"
+                          >
+                            🔄
                           </button>
                         </div>
                       ))}

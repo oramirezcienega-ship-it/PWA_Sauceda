@@ -181,9 +181,6 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
                     <tbody>
                       <tr className="border-b"><td className="py-2 text-carbon/50">Largo</td><td className="py-2 font-mono text-right">{reporteVisita.medidas.largo || 0} m</td></tr>
                       <tr className="border-b"><td className="py-2 text-carbon/50">Ancho</td><td className="py-2 font-mono text-right">{reporteVisita.medidas.ancho || 0} m</td></tr>
-                      {reporteVisita.medidas.altura > 0 && (
-                        <tr className="border-b"><td className="py-2 text-carbon/50">Altura de Trabajo</td><td className="py-2 font-mono text-right">{reporteVisita.medidas.altura || 0} m</td></tr>
-                      )}
                       <tr><td className="py-2 text-carbon/50 font-bold">Área Estimada</td><td className="py-2 font-mono font-bold text-verde-profundo text-right">{reporteVisita.medidas.areaCalculada || 0} m²</td></tr>
                     </tbody>
                   </table>
@@ -199,7 +196,12 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {reporteVisita.fotos.map((f, idx) => (
                     <div key={idx} className="rounded-xl overflow-hidden border border-carbon/10 shadow-sm aspect-video bg-slate-900">
-                      <img src={f} alt={`Evidencia de diagnóstico ${idx + 1}`} className="object-cover w-full h-full" />
+                      <img 
+                        src={f} 
+                        alt={`Evidencia de diagnóstico ${idx + 1}`} 
+                        className="object-contain w-full h-full" 
+                        style={{ transform: `rotate(${reporteVisita.medidas?.rotaciones?.[f] || 0}deg)` }}
+                      />
                     </div>
                   ))}
                 </div>
