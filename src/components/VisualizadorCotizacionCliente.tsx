@@ -203,11 +203,21 @@ export function VisualizadorCotizacionCliente({
           <div className="p-6 sm:p-8 space-y-8">
             
             {/* 1. Reporte de Inspección */}
-            {reporteVisita && cotizacion.servicioTipo !== "impermeabilizacion" && (
+            {reporteVisita && (
               <div className="space-y-4">
-                <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
-                  Levantamiento y Diagnóstico Técnico
+                <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
+                    Levantamiento y Diagnóstico Técnico
+                  </span>
+                  <a
+                    href={`/reporte-visita/${cotizacion.token}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs bg-sauce/15 text-sauce hover:bg-sauce hover:text-white px-2.5 py-1 rounded font-semibold transition flex items-center gap-1 font-titular print:hidden"
+                  >
+                    📄 Ver Reporte Independiente ↗
+                  </a>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="md:col-span-2 space-y-3">
