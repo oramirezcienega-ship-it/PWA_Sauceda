@@ -174,6 +174,7 @@ export function DetalleCotizacionAdmin({
       setMensajeInspeccion({ tipo: "", texto: "" });
       
       const nuevasUrls: string[] = [];
+      let ultimoError = "";
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const formData = new FormData();
@@ -183,7 +184,8 @@ export function DetalleCotizacionAdmin({
         if (res && res.ok && res.url) {
           nuevasUrls.push(res.url);
         } else {
-          console.error("Error al subir imagen:", res?.error || "Respuesta vacía del servidor.");
+          ultimoError = res?.error || "Respuesta vacía del servidor.";
+          console.error("Error al subir imagen:", ultimoError);
         }
       }
 
@@ -196,7 +198,7 @@ export function DetalleCotizacionAdmin({
       } else {
         setMensajeInspeccion({
           tipo: "error",
-          texto: "No se pudo subir ninguna imagen."
+          texto: ultimoError ? `No se pudo subir ninguna imagen. Detalle: ${ultimoError}` : "No se pudo subir ninguna imagen."
         });
       }
     } catch (err) {

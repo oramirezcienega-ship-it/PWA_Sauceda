@@ -513,7 +513,7 @@ export async function subirFotoVisita(formData: FormData): Promise<{ ok: boolean
       return { ok: false, error: `El archivo supera el límite de ${MAX_MB} MB.` };
     }
 
-    const path = `visitas/${Date.now()}-${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const path = `visita-${Date.now()}-${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const buffer = Buffer.from(await archivo.arrayBuffer());
 
     const { data: uploadData, error: uploadError } = await sb.storage
