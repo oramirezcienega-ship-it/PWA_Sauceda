@@ -177,10 +177,10 @@ export function DetalleCotizacionAdmin({
         formData.append("archivo", file);
         
         const res = await subirFotoVisita(formData);
-        if (res.ok && res.url) {
+        if (res && res.ok && res.url) {
           nuevasUrls.push(res.url);
         } else {
-          console.error("Error al subir imagen:", res.error);
+          console.error("Error al subir imagen:", res?.error || "Respuesta vacía del servidor.");
         }
       }
 

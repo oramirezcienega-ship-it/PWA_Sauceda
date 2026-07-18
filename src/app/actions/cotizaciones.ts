@@ -501,34 +501,39 @@ export async function actualizarRequerimientoVisita(
 
 // 5c. Subir Fotografía de Visita Técnica a Supabase Storage (público)
 export async function subirFotoVisita(formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
 
-  const archivo = formData.get("archivo") as File | null;
-  if (!archivo || archivo.size === 0) return { ok: false, error: "No se adjuntó ningún archivo." };
+    const archivo = formData.get("archivo") as File | null;
+    if (!archivo || archivo.size === 0) return { ok: false, error: "No se adjuntó ningún archivo." };
 
-  const MAX_MB = 10;
-  if (archivo.size > MAX_MB * 1024 * 1024) {
-    return { ok: false, error: `El archivo supera el límite de ${MAX_MB} MB.` };
+    const MAX_MB = 10;
+    if (archivo.size > MAX_MB * 1024 * 1024) {
+      return { ok: false, error: `El archivo supera el límite de ${MAX_MB} MB.` };
+    }
+
+    const path = `visitas/${Date.now()}-${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+
+    const { data: uploadData, error: uploadError } = await sb.storage
+      .from("documentos-ventas")
+      .upload(path, buffer, {
+        contentType: archivo.type || "image/jpeg",
+        upsert: false,
+      });
+
+    if (uploadError) return { ok: false, error: uploadError.message };
+
+    const { data: urlData } = sb.storage
+      .from("documentos-ventas")
+      .getPublicUrl(uploadData.path);
+
+    return { ok: true, url: urlData.publicUrl };
+  } catch (err) {
+    console.error("Error en subirFotoVisita:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "Error desconocido al subir foto" };
   }
-
-  const path = `visitas/${Date.now()}-${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const buffer = Buffer.from(await archivo.arrayBuffer());
-
-  const { data: uploadData, error: uploadError } = await sb.storage
-    .from("documentos-ventas")
-    .upload(path, buffer, {
-      contentType: archivo.type || "image/jpeg",
-      upsert: false,
-    });
-
-  if (uploadError) return { ok: false, error: uploadError.message };
-
-  const { data: urlData } = sb.storage
-    .from("documentos-ventas")
-    .getPublicUrl(uploadData.path);
-
-  return { ok: true, url: urlData.publicUrl };
 }
 
 // 6. Guardar Conceptos y Calcular Totales (Presupuesto)
