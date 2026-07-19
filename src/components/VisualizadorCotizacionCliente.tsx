@@ -203,11 +203,21 @@ export function VisualizadorCotizacionCliente({
           <div className="p-6 sm:p-8 space-y-8">
             
             {/* 1. Reporte de Inspección */}
-            {reporteVisita && cotizacion.servicioTipo !== "impermeabilizacion" && (
+            {reporteVisita && (
               <div className="space-y-4">
-                <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
-                  Levantamiento y Diagnóstico Técnico
+                <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
+                    Levantamiento y Diagnóstico Técnico
+                  </span>
+                  <a
+                    href={`/reporte-visita/${cotizacion.token}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs bg-sauce/15 text-sauce hover:bg-sauce hover:text-white px-2.5 py-1 rounded font-semibold transition flex items-center gap-1 font-titular print:hidden"
+                  >
+                    📄 Ver Reporte Independiente ↗
+                  </a>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="md:col-span-2 space-y-3">
@@ -226,14 +236,10 @@ export function VisualizadorCotizacionCliente({
                   
                   {/* Ficha de Medidas */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-carbon/5 h-fit text-sm">
-                    <div className="text-xs font-semibold text-carbon/40 uppercase mb-2">Medidas de Levantamiento</div>
                     <table className="w-full text-xs">
                       <tbody>
                         <tr className="border-b"><td className="py-1.5 text-carbon/50">Largo</td><td className="py-1.5 font-mono text-right">{reporteVisita.medidas.largo || 0} m</td></tr>
                         <tr className="border-b"><td className="py-1.5 text-carbon/50">Ancho</td><td className="py-1.5 font-mono text-right">{reporteVisita.medidas.ancho || 0} m</td></tr>
-                        {reporteVisita.medidas.altura > 0 && (
-                          <tr className="border-b"><td className="py-1.5 text-carbon/50">Altura</td><td className="py-1.5 font-mono text-right">{reporteVisita.medidas.altura || 0} m</td></tr>
-                        )}
                         <tr><td className="py-1.5 text-carbon/50 font-bold">Área Estimada</td><td className="py-1.5 font-mono font-bold text-verde-profundo text-right">{reporteVisita.medidas.areaCalculada || 0} m²</td></tr>
                       </tbody>
                     </table>
@@ -246,8 +252,12 @@ export function VisualizadorCotizacionCliente({
                     <div className="text-xs font-semibold text-carbon/40 uppercase">Evidencia Fotográfica del Diagnóstico</div>
                     <div className="relative rounded-2xl overflow-hidden bg-slate-900 aspect-video max-w-lg mx-auto">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={reporteVisita.fotos[slideActivo]} alt="Evidencia de diagnóstico" className="object-contain w-full h-full" />
-                      
+                      <img 
+                        src={reporteVisita.fotos[slideActivo]} 
+                        alt="Evidencia de diagnóstico" 
+                        className="object-contain w-full h-full transition-transform duration-200" 
+                        style={{ transform: `rotate(${reporteVisita.medidas?.rotaciones?.[reporteVisita.fotos[slideActivo]] || 0}deg)` }}
+                      />
                       {reporteVisita.fotos.length > 1 && (
                         <>
                           <button

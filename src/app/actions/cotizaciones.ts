@@ -299,6 +299,61 @@ export async function obtenerCotizacionPorToken(
   };
 }
 
+// 4b. Obtener Reporte de Visita Técnica por Token (Acceso público cliente, sin bloqueos de estatus)
+export async function obtenerReporteVisitaPorToken(
+  token: string
+): Promise<{ cotizacion: Omit<Cotizacion, 'notasInternas' | 'costoEstimado'>; reporteVisita: Omit<VisitaReporte, 'inspectorId'> | null } | null> {
+  const sb = supabaseServidor();
+
+  const { data: filaCot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos(nombre, telefono),
+      perfiles_inspector:inspector_id(nombre)
+    `)
+    .eq("token", token)
+    .maybeSingle();
+
+  if (errCot || !filaCot) return null;
+
+  const cot = aCotizacion(filaCot);
+
+  const { data: filaReporte, error: errRep } = await sb
+    .from("visitas_reportes")
+    .select("id, cotizacion_id, fecha_inspeccion, observaciones_tecnicas, condiciones_sitio, medidas, fotos, created_at, perfiles:inspector_id(nombre)")
+    .eq("cotizacion_id", cot.id)
+    .maybeSingle();
+
+  if (errRep) throw new Error(errRep.message);
+
+  return {
+    cotizacion: {
+      id: cot.id,
+      prospectoId: cot.prospectoId,
+      prospectoNombre: cot.prospectoNombre,
+      prospectoTelefono: cot.prospectoTelefono,
+      servicioTipo: cot.servicioTipo,
+      estatus: cot.estatus,
+      requiereVisita: cot.requiereVisita,
+      fechaVisita: cot.fechaVisita,
+      inspectorId: cot.inspectorId,
+      inspectorNombre: cot.inspectorNombre,
+      precioFinal: cot.precioFinal,
+      aprobadoComercial: cot.aprobadoComercial,
+      aprobadoComercialByNombre: cot.aprobadoComercialByNombre,
+      aprobadoOperativo: cot.aprobadoOperativo,
+      aprobadoOperativoByNombre: cot.aprobadoOperativoByNombre,
+      token: cot.token,
+      condicionesPago: cot.condicionesPago,
+      garantia: cot.garantia,
+      createdAt: cot.createdAt,
+      updatedAt: cot.updatedAt
+    },
+    reporteVisita: filaReporte ? aVisitaReporte(filaReporte) : null
+  };
+}
+
 // 5. Guardar Reporte de Visita Técnica
 export async function guardarReporteVisita(
   cotizacionId: string,
@@ -307,6 +362,7 @@ export async function guardarReporteVisita(
     condicionesSitio: string;
     medidas: Record<string, any>;
     fotos: string[];
+    fechaInspeccion?: string;
   }
 ): Promise<VisitaReporte> {
   await requireAdmin();
@@ -338,7 +394,7 @@ export async function guardarReporteVisita(
         condiciones_sitio: datosReporte.condicionesSitio,
         medidas: datosReporte.medidas,
         fotos: datosReporte.fotos,
-        fecha_inspeccion: new Date().toISOString()
+        fecha_inspeccion: datosReporte.fechaInspeccion || new Date().toISOString()
       })
       .eq("cotizacion_id", cotizacionId)
       .select("*, perfiles:inspector_id(nombre)")
@@ -354,7 +410,8 @@ export async function guardarReporteVisita(
         observaciones_tecnicas: datosReporte.observacionesTecnicas,
         condiciones_sitio: datosReporte.condicionesSitio,
         medidas: datosReporte.medidas,
-        fotos: datosReporte.fotos
+        fotos: datosReporte.fotos,
+        fecha_inspeccion: datosReporte.fechaInspeccion || new Date().toISOString()
       })
       .select("*, perfiles:inspector_id(nombre)")
       .single();
@@ -382,6 +439,101 @@ export async function guardarReporteVisita(
   });
 
   return aVisitaReporte(res);
+}
+
+// 5b. Actualizar Requerimiento de Visita Técnica y cambiar estatus
+export async function actualizarRequerimientoVisita(
+  cotizacionId: string,
+  requiereVisita: boolean,
+  fechaVisita?: string | null,
+  inspectorId?: string | null
+): Promise<Cotizacion> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select("prospecto_id, estatus, requiere_visita")
+    .eq("id", cotizacionId)
+    .single();
+
+  if (errCot || !cot) throw new Error("Cotización no encontrada.");
+
+  let nuevoEstatus = cot.estatus;
+  if (cot.estatus === "esperando_visita" && !requiereVisita) {
+    nuevoEstatus = "calculando_costo";
+  } else if (cot.estatus === "calculando_costo" && requiereVisita) {
+    nuevoEstatus = "esperando_visita";
+  }
+
+  const { data, error } = await sb
+    .from("cotizaciones")
+    .update({
+      requiere_visita: requiereVisita,
+      fecha_visita: requiereVisita ? (fechaVisita || null) : null,
+      inspector_id: requiereVisita ? (inspectorId || null) : null,
+      estatus: nuevoEstatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", cotizacionId)
+    .select(`
+      *,
+      prospectos(nombre, telefono),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  await sincronizarEtapaExpediente(sb, cotizacionId);
+
+  await registrarActividad(sb, {
+    prospectoId: cot.prospecto_id,
+    tipo: "construccion",
+    titulo: `Requerimiento de visita actualizado (${cotizacionId})`,
+    detalle: `Cambio: requiere visita = ${requiereVisita}. Estatus pasa a: ${nuevoEstatus}.`
+  });
+
+  return aCotizacion(data);
+}
+
+// 5c. Subir Fotografía de Visita Técnica a Supabase Storage (público)
+export async function subirFotoVisita(formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const archivo = formData.get("archivo") as File | null;
+    if (!archivo || archivo.size === 0) return { ok: false, error: "No se adjuntó ningún archivo." };
+
+    const MAX_MB = 10;
+    if (archivo.size > MAX_MB * 1024 * 1024) {
+      return { ok: false, error: `El archivo supera el límite de ${MAX_MB} MB.` };
+    }
+
+    const path = `visita-${Date.now()}-${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+
+    const { data: uploadData, error: uploadError } = await sb.storage
+      .from("documentos-ventas")
+      .upload(path, buffer, {
+        contentType: archivo.type || "image/jpeg",
+        upsert: false,
+      });
+
+    if (uploadError) return { ok: false, error: uploadError.message };
+
+    const { data: urlData } = sb.storage
+      .from("documentos-ventas")
+      .getPublicUrl(uploadData.path);
+
+    return { ok: true, url: urlData.publicUrl };
+  } catch (err) {
+    console.error("Error en subirFotoVisita:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "Error desconocido al subir foto" };
+  }
 }
 
 // 6. Guardar Conceptos y Calcular Totales (Presupuesto)

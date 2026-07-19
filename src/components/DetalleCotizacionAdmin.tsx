@@ -10,8 +10,11 @@ import {
   aprobarCotizacionOperativa,
   marcarComoEnviada,
   guardarCondicionesCotizacion,
+  subirFotoVisita,
+  actualizarRequerimientoVisita,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
+import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -39,11 +42,35 @@ export function DetalleCotizacionAdmin({
   const [condSitio, setCondSitio] = useState(reporteVisitaInicial?.condicionesSitio || "");
   const [largo, setLargo] = useState<string>(String(reporteVisitaInicial?.medidas?.largo || ""));
   const [ancho, setAncho] = useState<string>(String(reporteVisitaInicial?.medidas?.ancho || ""));
-  const [altura, setAltura] = useState<string>(String(reporteVisitaInicial?.medidas?.altura || ""));
-  const [fotoUrlInput, setFotoUrlInput] = useState("");
   const [fotos, setFotos] = useState<string[]>(reporteVisitaInicial?.fotos || []);
   const [guardandoInspeccion, setGuardandoInspeccion] = useState(false);
   const [mensajeInspeccion, setMensajeInspeccion] = useState({ tipo: "", texto: "" });
+
+  const [tecnicoNombre, setTecnicoNombre] = useState(
+    reporteVisitaInicial?.medidas?.tecnicoNombre || cotizacionInicial.inspectorNombre || ""
+  );
+  const [fechaVisitaRealizada, setFechaVisitaRealizada] = useState(
+    reporteVisitaInicial?.medidas?.fechaVisita || 
+    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().split("T")[0] : new Date().toISOString().split("T")[0])
+  );
+  const [horaVisitaRealizada, setHoraVisitaRealizada] = useState(
+    reporteVisitaInicial?.medidas?.horaVisita || 
+    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toTimeString().split(" ")[0].slice(0, 5) : new Date().toTimeString().split(" ")[0].slice(0, 5))
+  );
+  const [subiendoFotos, setSubiendoFotos] = useState(false);
+  const [dictandoObs, setDictandoObs] = useState(false);
+  const [dictandoCond, setDictandoCond] = useState(false);
+  const [rotaciones, setRotaciones] = useState<Record<string, number>>(reporteVisitaInicial?.medidas?.rotaciones || {});
+
+  // --- State para Cambio de Requerimiento de Visita ---
+  const [requiereVisita, setRequiereVisita] = useState(cotizacionInicial.requiereVisita);
+  const [fechaVisitaPlan, setFechaVisitaPlan] = useState(
+    cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().slice(0, 16) : ""
+  );
+  const [inspectorIdPlan, setInspectorIdPlan] = useState(cotizacionInicial.inspectorId || "");
+  const [guardandoRequerimiento, setGuardandoRequerimiento] = useState(false);
+  const [mensajeRequerimiento, setMensajeRequerimiento] = useState({ tipo: "", texto: "" });
+  const [inspectores, setInspectores] = useState<{ id: string; nombre: string; rol: string }[]>([]);
 
   // --- State para Presupuesto ---
   const [catalogoProductos, setCatalogoProductos] = useState<any[]>([]);
@@ -62,7 +89,31 @@ export function DetalleCotizacionAdmin({
 
   useEffect(() => {
     listarProductosServicios()
-      .then(setCatalogoProductos)
+      .then((prods) => {
+        setCatalogoProductos(prods);
+        
+        // Auto-llenar costo unitario si es 0 y coincide con el catálogo
+        setConceptosEditables((prev) =>
+          prev.map((c) => {
+            if (c.costoUnitario === 0) {
+              const match = prods.find(
+                (p) =>
+                  p.nombre.toLowerCase() === c.descripcion.toLowerCase() ||
+                  c.descripcion.toLowerCase().includes(p.nombre.toLowerCase()) ||
+                  p.nombre.toLowerCase().includes(c.descripcion.toLowerCase())
+              );
+              if (match) {
+                return { ...c, costoUnitario: match.costoUnitario };
+              }
+            }
+            return c;
+          })
+        );
+      })
+      .catch(console.error);
+
+    listarPerfilesActivos()
+      .then(setInspectores)
       .catch(console.error);
   }, []);
 
@@ -81,6 +132,125 @@ export function DetalleCotizacionAdmin({
   const [copiado, setCopiado] = useState(false);
   const [enviandoAPI, setEnviandoAPI] = useState(false);
 
+  const handleActualizarRequerimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setGuardandoRequerimiento(true);
+      setMensajeRequerimiento({ tipo: "", texto: "" });
+      const fVisita = requiereVisita ? new Date(fechaVisitaPlan).toISOString() : null;
+      const insId = requiereVisita ? inspectorIdPlan : null;
+
+      const actualizada = await actualizarRequerimientoVisita(
+        cotizacion.id,
+        requiereVisita,
+        fVisita,
+        insId
+      );
+
+      setCotizacion(actualizada);
+      setMensajeRequerimiento({
+        tipo: "ok",
+        texto: "Configuración de visita técnica actualizada exitosamente."
+      });
+      if (!requiereVisita) {
+        setReporteVisita(null);
+      }
+    } catch (err) {
+      setMensajeRequerimiento({
+        tipo: "error",
+        texto: err instanceof Error ? err.message : "Error al actualizar"
+      });
+    } finally {
+      setGuardandoRequerimiento(false);
+    }
+  };
+
+  const handleSubirFotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setSubiendoFotos(true);
+      setMensajeInspeccion({ tipo: "", texto: "" });
+      
+      const nuevasUrls: string[] = [];
+      let ultimoError = "";
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("archivo", file);
+        
+        const res = await subirFotoVisita(formData);
+        if (res && res.ok && res.url) {
+          nuevasUrls.push(res.url);
+        } else {
+          ultimoError = res?.error || "Respuesta vacía del servidor.";
+          console.error("Error al subir imagen:", ultimoError);
+        }
+      }
+
+      if (nuevasUrls.length > 0) {
+        setFotos((prev) => [...prev, ...nuevasUrls]);
+        setMensajeInspeccion({
+          tipo: "ok",
+          texto: `Se cargaron ${nuevasUrls.length} imagen(es) con éxito.`
+        });
+      } else {
+        setMensajeInspeccion({
+          tipo: "error",
+          texto: ultimoError ? `No se pudo subir ninguna imagen. Detalle: ${ultimoError}` : "No se pudo subir ninguna imagen."
+        });
+      }
+    } catch (err) {
+      setMensajeInspeccion({
+        tipo: "error",
+        texto: err instanceof Error ? err.message : "Error al subir imágenes."
+      });
+    } finally {
+      setSubiendoFotos(false);
+      e.target.value = "";
+    }
+  };
+
+  const iniciarDictado = (campo: "obs" | "cond") => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("El dictado por voz no es soportado por este navegador.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "es-MX";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    if (campo === "obs") setDictandoObs(true);
+    if (campo === "cond") setDictandoCond(true);
+
+    recognition.onresult = (event: any) => {
+      const textoDictado = event.results[0][0].transcript;
+      if (campo === "obs") {
+        setObsTecnicas((prev) => prev ? `${prev} ${textoDictado}` : textoDictado);
+      } else {
+        setCondSitio((prev) => prev ? `${prev} ${textoDictado}` : textoDictado);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Error en dictado:", event.error);
+      if (event.error === "not-allowed") {
+        alert("Permiso de micrófono denegado.");
+      }
+    };
+
+    recognition.onend = () => {
+      if (campo === "obs") setDictandoObs(false);
+      if (campo === "cond") setDictandoCond(false);
+    };
+
+    recognition.start();
+  };
+
   // --- Acciones de Inspección ---
   const agregarFoto = () => {
     if (fotoUrlInput.trim()) {
@@ -92,7 +262,6 @@ export function DetalleCotizacionAdmin({
   const eliminarFoto = (index: number) => {
     setFotos((prev) => prev.filter((_, i) => i !== index));
   };
-
   const handleGuardarInspeccion = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -101,21 +270,34 @@ export function DetalleCotizacionAdmin({
 
       const lVal = Number(largo) || 0;
       const aVal = Number(ancho) || 0;
-      const hVal = Number(altura) || 0;
       const areaVal = lVal * aVal;
+
+      // Combinar fecha y hora
+      let customFechaInspeccion: string | undefined = undefined;
+      if (fechaVisitaRealizada) {
+        const timeStr = horaVisitaRealizada || "00:00";
+        customFechaInspeccion = new Date(`${fechaVisitaRealizada}T${timeStr}`).toISOString();
+      }
 
       const rep = await guardarReporteVisita(cotizacion.id, {
         observacionesTecnicas: obsTecnicas,
         condicionesSitio: condSitio,
-        medidas: { largo: lVal, ancho: aVal, altura: hVal, areaCalculada: areaVal },
+        medidas: { 
+          largo: lVal, 
+          ancho: aVal, 
+          areaCalculada: areaVal,
+          tecnicoNombre: tecnicoNombre.trim(),
+          fechaVisita: fechaVisitaRealizada,
+          horaVisita: horaVisitaRealizada,
+          rotaciones
+        },
         fotos,
+        fechaInspeccion: customFechaInspeccion
       });
 
       setReporteVisita(rep);
-      // Recargar cotización para ver estatus actualizado (ya no estará en 'esperando_visita')
       setMensajeInspeccion({ tipo: "ok", texto: "Reporte de inspección técnica guardado exitosamente." });
       
-      // Actualizar el estatus de la cotización localmente
       setCotizacion(prev => ({
         ...prev,
         estatus: prev.estatus === "esperando_visita" ? "calculando_costo" : prev.estatus
@@ -476,11 +658,95 @@ export function DetalleCotizacionAdmin({
           </div>
         )}
 
+
         {/* --- PESTAÑA VISITA TÉCNICA (INSPECCIÓN) --- */}
         {pestaña === "inspeccion" && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-titular text-lg font-semibold text-verde-profundo">Reporte de Levantamiento Físico</h3>
+            {/* Configuración del Requerimiento de Visita */}
+            <div className="bg-slate-50 border border-carbon/10 p-5 rounded-2xl space-y-4">
+              <div>
+                <h4 className="font-titular font-semibold text-sm text-verde-profundo">Configuración de Visita Técnica</h4>
+                <p className="text-xs text-carbon/50 mt-0.5">Controla si este expediente requiere visita física y asigna al inspector correspondiente.</p>
+              </div>
+
+              {mensajeRequerimiento.texto && (
+                <div className={`p-3 text-xs border rounded-lg ${
+                  mensajeRequerimiento.tipo === "ok" ? "bg-green-50 border-green-200 text-green-700" : "bg-rose-50 border-rojo/20 text-rojo"
+                }`}>
+                  {mensajeRequerimiento.texto}
+                </div>
+              )}
+
+              <form onSubmit={handleActualizarRequerimiento} className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="adminRequiereVisita"
+                    checked={requiereVisita}
+                    onChange={(e) => setRequiereVisita(e.target.checked)}
+                    className="rounded text-sauce focus:ring-sauce h-4 w-4"
+                  />
+                  <label htmlFor="adminRequiereVisita" className="text-sm font-medium text-carbon/80 cursor-pointer">
+                    ¿Esta cotización requiere inspección física en el domicilio?
+                  </label>
+                </div>
+
+                {requiereVisita && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Fecha Programada</label>
+                      <input
+                        type="datetime-local"
+                        value={fechaVisitaPlan}
+                        onChange={(e) => setFechaVisitaPlan(e.target.value)}
+                        required={requiereVisita}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Inspector / Operario Asignado</label>
+                      <select
+                        value={inspectorIdPlan}
+                        onChange={(e) => setInspectorIdPlan(e.target.value)}
+                        required={requiereVisita}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none bg-white"
+                      >
+                        <option value="">-- Selecciona un inspector --</option>
+                        {inspectores.map((ins) => (
+                          <option key={ins.id} value={ins.id}>{ins.nombre} ({ins.rol})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={guardandoRequerimiento}
+                    className="rounded-lg bg-verde-profundo text-white px-4 py-2 text-xs font-semibold hover:bg-sauce transition disabled:opacity-50"
+                  >
+                    {guardandoRequerimiento ? "Actualizando..." : "Actualizar Configuración"}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Ficha de Levantamiento Técnico */}
+            <div className="flex items-center justify-between border-b pb-2 pt-4">
+              <div className="flex items-center gap-4">
+                <h3 className="font-titular text-lg font-semibold text-verde-profundo">Reporte de Levantamiento Físico</h3>
+                {reporteVisita && (
+                  <a
+                    href={`/reporte-visita/${cotizacion.token}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs bg-sauce/15 text-sauce hover:bg-sauce hover:text-white px-2.5 py-1 rounded font-semibold transition flex items-center gap-1"
+                  >
+                    📄 Ver Reporte del Cliente
+                  </a>
+                )}
+              </div>
               {reporteVisita && (
                 <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-mono font-bold">Levantado por {reporteVisita.inspectorNombre}</span>
               )}
@@ -499,6 +765,39 @@ export function DetalleCotizacionAdmin({
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Técnico / Operario Visitador</label>
+                    <input
+                      type="text"
+                      value={tecnicoNombre}
+                      onChange={(e) => setTecnicoNombre(e.target.value)}
+                      placeholder="Nombre del técnico"
+                      className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Fecha de Visita Realizada</label>
+                    <input
+                      type="date"
+                      value={fechaVisitaRealizada}
+                      onChange={(e) => setFechaVisitaRealizada(e.target.value)}
+                      required
+                      className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Hora de Visita Realizada</label>
+                    <input
+                      type="time"
+                      value={horaVisitaRealizada}
+                      onChange={(e) => setHoraVisitaRealizada(e.target.value)}
+                      required
+                      className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
                   <div>
                     <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Largo (metros)</label>
                     <input
@@ -521,17 +820,6 @@ export function DetalleCotizacionAdmin({
                       className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Altura de Trabajo (m) - Opcional</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={altura}
-                      onChange={(e) => setAltura(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
-                    />
-                  </div>
                 </div>
 
                 <div className="text-xs font-mono text-carbon/50 pt-1">
@@ -539,7 +827,18 @@ export function DetalleCotizacionAdmin({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Condiciones del Sitio</label>
+                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1 flex justify-between items-center">
+                    <span>Condiciones del Sitio</span>
+                    <button
+                      type="button"
+                      onClick={() => iniciarDictado("cond")}
+                      className={`text-xs font-semibold flex items-center gap-1.5 px-2 py-0.5 rounded transition ${
+                        dictandoCond ? "bg-red-100 text-red-700 animate-pulse font-titular" : "bg-slate-100 text-carbon/60 hover:bg-slate-200 font-titular"
+                      }`}
+                    >
+                      {dictandoCond ? "🔴 Escuchando..." : "🎙️ Dictar por Voz"}
+                    </button>
+                  </label>
                   <input
                     type="text"
                     value={condSitio}
@@ -550,7 +849,18 @@ export function DetalleCotizacionAdmin({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Observaciones Técnicas y Recomendaciones</label>
+                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1 flex justify-between items-center">
+                    <span>Observaciones Técnicas y Recomendaciones</span>
+                    <button
+                      type="button"
+                      onClick={() => iniciarDictado("obs")}
+                      className={`text-xs font-semibold flex items-center gap-1.5 px-2 py-0.5 rounded transition ${
+                        dictandoObs ? "bg-red-100 text-red-700 animate-pulse font-titular" : "bg-slate-100 text-carbon/60 hover:bg-slate-200 font-titular"
+                      }`}
+                    >
+                      {dictandoObs ? "🔴 Escuchando..." : "🎙️ Dictar por Voz"}
+                    </button>
+                  </label>
                   <textarea
                     value={obsTecnicas}
                     onChange={(e) => setObsTecnicas(e.target.value)}
@@ -564,35 +874,57 @@ export function DetalleCotizacionAdmin({
                 {/* Captura de Fotos */}
                 <div className="space-y-2 border-t pt-4">
                   <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Fotografías del Sitio (Anteproyecto)</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={fotoUrlInput}
-                      onChange={(e) => setFotoUrlInput(e.target.value)}
-                      placeholder="Pega la URL de una foto (o simula la subida)"
-                      className="flex-1 rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={agregarFoto}
-                      className="rounded-lg bg-sauce/10 text-sauce px-4 py-2 text-sm font-semibold hover:bg-sauce hover:text-white transition"
-                    >
-                      Añadir Foto
-                    </button>
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <div className="relative">
+                      <input
+                        type="file"
+                        id="select-fotos-visita"
+                        multiple
+                        accept="image/*"
+                        onChange={handleSubirFotos}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="select-fotos-visita"
+                        className={`inline-flex items-center justify-center rounded-lg bg-sauce text-white px-4 py-2 text-sm font-semibold hover:bg-verde-profundo transition cursor-pointer select-none ${
+                          subiendoFotos ? "opacity-50 pointer-events-none" : ""
+                        }`}
+                      >
+                        {subiendoFotos ? "📸 Subiendo..." : "📸 Subir Fotos (Multi)"}
+                      </label>
+                    </div>
                   </div>
 
                   {fotos.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                       {fotos.map((f, idx) => (
-                        <div key={idx} className="relative rounded-lg border overflow-hidden aspect-video group">
+                        <div key={idx} className="relative rounded-lg border overflow-hidden aspect-video bg-slate-900 group">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={f} alt={`Levantamiento ${idx + 1}`} className="object-cover w-full h-full" />
+                          <img 
+                            src={f} 
+                            alt={`Levantamiento ${idx + 1}`} 
+                            className="object-contain w-full h-full transition-transform duration-200" 
+                            style={{ transform: `rotate(${rotaciones[f] || 0}deg)` }}
+                          />
                           <button
                             type="button"
                             onClick={() => eliminarFoto(idx)}
-                            className="absolute top-1 right-1 h-6 w-6 bg-rojo/90 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                            className="absolute top-1 right-1 h-6 w-6 bg-rojo/90 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm z-10"
+                            title="Eliminar foto"
                           >
                             ✕
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentAngle = rotaciones[f] || 0;
+                              const nextAngle = (currentAngle + 90) % 360;
+                              setRotaciones(prev => ({ ...prev, [f]: nextAngle }));
+                            }}
+                            className="absolute bottom-1 right-1 h-6 w-6 bg-verde-profundo/90 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm z-10"
+                            title="Rotar foto 90°"
+                          >
+                            🔄
                           </button>
                         </div>
                       ))}
@@ -1012,6 +1344,50 @@ export function DetalleCotizacionAdmin({
                           </button>
                         </div>
                       </div>
+
+                      {reporteVisita && (
+                        <div className="border-t pt-3">
+                          <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Enlace del Reporte de Visita Técnica</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={`${baseEnlace}/reporte-visita/${cotizacion.token}`}
+                              className="flex-1 rounded-lg border border-carbon/20 px-3 py-2 text-xs font-mono bg-white focus:outline-none"
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${baseEnlace}/reporte-visita/${cotizacion.token}`);
+                                alert("Enlace del reporte copiado al portapapeles.");
+                              }}
+                              className="rounded-lg bg-slate-200 text-carbon/80 px-4 py-2 text-xs font-semibold hover:bg-slate-300 transition"
+                            >
+                              Copiar
+                            </button>
+                            <a
+                              href={`/reporte-visita/${cotizacion.token}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg bg-sauce/15 text-sauce px-4 py-2 text-xs font-semibold hover:bg-sauce hover:text-white transition flex items-center"
+                            >
+                              Ver Reporte
+                            </a>
+                          </div>
+                          
+                          <div className="flex gap-2 pt-2">
+                            <a
+                              href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
+                                `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto el Reporte de Levantamiento Técnico y Diagnóstico del servicio en tu domicilio. Puedes revisarlo a detalle en el siguiente enlace: ${baseEnlace}/reporte-visita/${cotizacion.token}`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 border border-carbon/15 text-carbon/60 px-3 py-1.5 text-[10px] font-semibold hover:bg-slate-200 transition"
+                            >
+                              💬 Compartir Reporte por WhatsApp
+                            </a>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex gap-2 pt-2 flex-wrap">
                         {/* Compartir por WhatsApp Web */}

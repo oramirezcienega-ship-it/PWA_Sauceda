@@ -787,9 +787,29 @@ export async function responderConIA(
               const numeros = ids.map((id) => parseInt(id.replace(/\D/g, ""), 10)).filter((n) => !Number.isNaN(n));
               const max = numeros.length ? Math.max(...numeros) : 0;
               idCot = `COT-${String(max + 1).padStart(3, "0")}`;
-
-              const precioM2 = String(paq).toLowerCase() === "premium" ? 260 : 200;
+              const isPremium = String(paq).toLowerCase() === "premium";
+              const precioM2 = isPremium ? 260 : 200;
               const precioTotal = Number(m) * precioM2;
+
+              // Consultar costo unitario en el catálogo
+              let costoM2 = isPremium ? 190 : 165; // fallbacks razonables
+              try {
+                const nombreBuscar = isPremium ? "%Premium%" : "%Estándar%";
+                const { data: prodCatalog } = await sb
+                  .from("productos_servicios")
+                  .select("costo_unitario")
+                  .ilike("nombre", nombreBuscar)
+                  .eq("categoria", "impermeabilizacion")
+                  .maybeSingle();
+                
+                if (prodCatalog?.costo_unitario) {
+                  costoM2 = Number(prodCatalog.costo_unitario);
+                }
+              } catch (errDb) {
+                console.error("IA: Error al buscar costo en catálogo:", errDb);
+              }
+
+              const costoTotal = Number(m) * costoM2;
 
               // Insertar cotización
               const { data: nuevaCot, error: errInsertCot } = await sb
@@ -802,6 +822,7 @@ export async function responderConIA(
                   estatus: "esperando_visita",
                   requiere_visita: true,
                   precio_final: precioTotal,
+                  costo_estimado: costoTotal,
                   notas_internas: "Creada automáticamente por el chatbot Sofía."
                 })
                 .select("token")
@@ -813,7 +834,7 @@ export async function responderConIA(
                 tokenCot = nuevaCot.token;
 
                 // Insertar concepto
-                const descConcepto = String(paq).toLowerCase() === "premium"
+                const descConcepto = isPremium
                   ? "Paquete PREMIUM - Impermeabilizante 4.0 poliéster + gravilla (10 años de garantía)"
                   : "Paquete ESTÁNDAR - Impermeabilizante 3.5 + gravilla (5 años de garantía)";
 
@@ -825,6 +846,7 @@ export async function responderConIA(
                     cantidad: Number(m),
                     unidad: "m2",
                     precio_unitario: precioM2,
+                    costo_unitario: costoM2,
                     importe: precioTotal
                   });
 
