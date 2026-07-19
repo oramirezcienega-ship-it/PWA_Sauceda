@@ -79,12 +79,22 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
   };
 
   const formatFecha = (fechaStr: string) => {
-    return new Date(fechaStr).toLocaleDateString("es-MX", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    try {
+      const d = new Date(fechaStr);
+      if (isNaN(d.getTime())) return "Fecha inválida";
+      return d.toLocaleDateString("es-MX", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch (e) {
+      try {
+        return fechaStr ? new Date(fechaStr).toISOString().split("T")[0] : "No especificada";
+      } catch (err) {
+        return fechaStr || "No especificada";
+      }
+    }
   };
 
   // Obtener operario/técnico de los datos de medidas o del inspector
@@ -179,9 +189,9 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
                 <div className="bg-slate-50 p-4 rounded-xl border border-carbon/5">
                   <table className="w-full text-xs">
                     <tbody>
-                      <tr className="border-b"><td className="py-2 text-carbon/50">Largo</td><td className="py-2 font-mono text-right">{reporteVisita.medidas.largo || 0} m</td></tr>
-                      <tr className="border-b"><td className="py-2 text-carbon/50">Ancho</td><td className="py-2 font-mono text-right">{reporteVisita.medidas.ancho || 0} m</td></tr>
-                      <tr><td className="py-2 text-carbon/50 font-bold">Área Estimada</td><td className="py-2 font-mono font-bold text-verde-profundo text-right">{reporteVisita.medidas.areaCalculada || 0} m²</td></tr>
+                      <tr className="border-b"><td className="py-2 text-carbon/50">Largo</td><td className="py-2 font-mono text-right">{reporteVisita.medidas?.largo || 0} m</td></tr>
+                      <tr className="border-b"><td className="py-2 text-carbon/50">Ancho</td><td className="py-2 font-mono text-right">{reporteVisita.medidas?.ancho || 0} m</td></tr>
+                      <tr><td className="py-2 text-carbon/50 font-bold">Área Estimada</td><td className="py-2 font-mono font-bold text-verde-profundo text-right">{reporteVisita.medidas?.areaCalculada || 0} m²</td></tr>
                     </tbody>
                   </table>
                 </div>
