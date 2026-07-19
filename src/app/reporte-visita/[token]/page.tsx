@@ -1,6 +1,7 @@
 import { obtenerReporteVisitaPorToken } from "@/app/actions/cotizaciones";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { BotonImprimir } from "@/components/BotonImprimir";
 
 export const dynamic = "force-dynamic";
 
@@ -131,12 +132,7 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
               </p>
             </div>
             
-            <button
-              onClick={() => window.print()}
-              className="rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition print:hidden shadow-sm self-start sm:self-center"
-            >
-              🖨️ Imprimir / Guardar PDF
-            </button>
+            <BotonImprimir />
           </div>
 
           <div className="p-6 sm:p-8 space-y-6">
