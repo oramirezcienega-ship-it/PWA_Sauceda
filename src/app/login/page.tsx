@@ -96,8 +96,8 @@ export default function PaginaLogin() {
     setEntrando(true);
     try {
       const r = await iniciarSesion(correo, password);
-      if (!r.ok) {
-        setError(r.error ?? "Correo o contraseña incorrectos.");
+      if (!r || !r.ok) {
+        setError(r?.error || "Correo o contraseña incorrectos.");
         setEntrando(false);
         return;
       }
