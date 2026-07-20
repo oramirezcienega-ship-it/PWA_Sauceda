@@ -200,6 +200,8 @@ export interface Expediente {
   secuenciaNombre?: string | null;
   ultimaActividadTitulo?: string | null;
   ultimaActividadFecha?: string | null;
+  /** Fecha y hora programada de la instalación profesional. */
+  fechaInstalacion?: string | null;
   /** Marca permanente: el expediente no cumple criterios de servicio. Bloquea todo contacto. */
   noViable?: boolean;
 }
