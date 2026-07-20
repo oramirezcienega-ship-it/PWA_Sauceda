@@ -26,7 +26,8 @@ export async function iniciarSesion(
     }
 
     const sb = supabaseSesion();
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    const cleanPass = typeof password === "string" ? password.trim() : "";
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: cleanPass });
     if (error || !data?.user) {
       console.error("[iniciarSesion error]:", error?.message);
       return { ok: false, error: error?.message || "Correo o contraseña incorrectos." };

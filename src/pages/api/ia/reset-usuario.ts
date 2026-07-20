@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(`[Reset Usuario] Creando nuevo usuario Auth limpio para ${email}...`);
     const { data: createRes, error: errCreateUser } = await sb.auth.admin.createUser({
       email,
-      password: "Sauceda2026!",
+      password: "sauceda123",
       email_confirm: true,
     });
 
@@ -76,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       ok: true,
       mensaje: `Reseteo y sincronización completados con éxito para ${email} en Staging.`,
-      auth: "Contraseña configurada a 'Sauceda2026!' y correo confirmado.",
+      auth: "Contraseña configurada a 'sauceda123' y correo confirmado.",
       perfil: "Perfil de DB vinculado con éxito."
     });
   } catch (err) {
