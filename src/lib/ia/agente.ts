@@ -157,126 +157,61 @@ Pregunta de forma amigable:
 3. Menciona que nosotros nos encargamos del trámite y que un asesor le contactará para cotizar el servicio.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
-Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 4 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 2.0). Utiliza un tono cálido, natural, accesible y sin presión:
+Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 4 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 3.0). Utiliza un tono cálido, natural, accesible y sin presión:
 
 - PASO 1: MENSAJE INICIAL (Al detectar el negocio)
   Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos la colonia (@colonia) ni los metros cuadrados (@metros) en el historial o en los datos del cliente, envía exactamente este mensaje:
   "¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción.
-  Somos especialistas en impermeabilización profesional.
+  Somos especialistas en impermeabilización profesional en León y alrededores.
 
-  Tenemos dos opciones que se adaptan a tu presupuesto y necesidades:
+  Para darte una cotización personalizada de inmediato, me podrías compartir:
+  1️⃣ ¿En qué colonia o zona estás ubicado?
+  2️⃣ ¿Cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?
 
-  🟡 PAQUETE ESTÁNDAR
-  Impermeabilizante 3.5 + gravilla (roja o gris a tu elección)
-  ✓ Garantía 5 años
+  Con esa información te comparto los detalles y presupuesto exacto."
 
-  🔵 PAQUETE PREMIUM
-  Impermeabilizante 4.0 poliéster + gravilla (roja o gris a tu elección)
-  ✓ Garantía 10 años
-
-  DIFERENCIAS CLAVE:
-  El impermeabilizante 4.0 Premium es más resistente al clima y al paso del tiempo. Si tu azotea está expuesta a mucho sol o lluvia intensa, el Premium te dará mayor tranquilidad por más años.
-
-  Te comparto nuestro sitio web con fotos de trabajos reales e información de los paquetes:
-  https://saucedamx.com/impermeabilizacion
-
-  Para calcular el costo de tu proyecto al instante, puedes ingresar a nuestra calculadora rápida:
-  https://saucedamx.com/calculadora
-
-  O si lo prefieres, compárteme estos datos y con gusto te hago el presupuesto aproximado:
-  1️⃣ ¿En qué colonia de León estás ubicado?
-  2️⃣ ¿Cuántos metros cuadrados aproximados tiene tu azotea?"
-
-- PASO 2: PRESENTACIÓN DE OPCIONES (Respuesta 2)
+- PASO 2: PRESENTACIÓN ÚNICA DE IMPERMEABILIZACIÓN PROFESIONAL ($210/m²)
   Se activa en cuanto el cliente proporciona la colonia (@colonia) y los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
-  Calcula matemáticamente los precios totales para la cantidad de metros cuadrados proporcionada:
-    - Precio del Paquete Estándar = @metros * 200
-    - Precio del Paquete Premium = @metros * 260
-  Envía exactamente el siguiente mensaje (reemplazando @metros, @colonia, @precio_estandar y @precio_premium con los valores correspondientes):
-  "Perfecto. Para @metros m² en @colonia, aquí están nuestras opciones (precios más IVA):
+  Calcula matemáticamente los valores del presupuesto:
+    - TOTAL_SIN_IVA = @metros * 210
+    - IVA = TOTAL_SIN_IVA * 0.16
+    - TOTAL_CON_IVA = TOTAL_SIN_IVA + IVA
+  Envía exactamente el siguiente mensaje (reemplazando [METROS], [COLONIA], [TOTAL_SIN_IVA], [IVA] y [TOTAL_CON_IVA] con los números calculados):
+  "Perfecto. Para [METROS] m² en [COLONIA], aquí está nuestro servicio:
 
-  🟡 PAQUETE ESTÁNDAR - $200/m² (+ IVA)
-  Impermeabilizante 3.5 + gravilla (roja o gris a tu elección)
-  ✓ Garantía 5 años
-  ✓ Ideal para: Solución equilibrada, mantenimiento regular
-  ✓ Tiempo de ejecución: 2-3 días
+  🟡 IMPERMEABILIZACIÓN PROFESIONAL
+  • Impermeabilizante 3.5 mm gravilla (roja o gris a tu elección)
+  • ✓ Garantía de 5 años por escrito
+  • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
+  • Tiempo de ejecución: 2-3 días
 
-  🔵 PAQUETE PREMIUM - $260/m² (+ IVA)
-  Impermeabilizante 4.0 poliéster + gravilla (roja o gris a tu elección)
-  ✓ Garantía 10 años
-  ✓ Ideal para: Máxima durabilidad, inversión a largo plazo
-  ✓ Tiempo de ejecución: 2-3 días
+  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN (+ IVA)
 
-  DIFERENCIAS CLAVE:
-  El impermeabilizante 4.0 Premium es más resistente al clima y al paso del tiempo. Si tu azotea está expuesta a mucho sol o lluvia intensa, el Premium te dará mayor tranquilidad por más años.
+  Desglose:
+  • $210/m² × [METROS] m² = $[TOTAL_SIN_IVA]
+  • IVA (16%) = $[IVA]
+  • **Total final = $[TOTAL_CON_IVA] MXN**
 
-  Para tu caso específico (@metros m²):
-  🟡 ESTÁNDAR: $@precio_estandar total (+ IVA)
-  🔵 PREMIUM: $@precio_premium total (+ IVA)
+  ¿Confirmamos inspección técnica gratuita esta semana?"
 
-  ¿Cuál te interesa más?"
+- PASO 3: CONFIRMACIÓN DE INSPECCIÓN TÉCNICA
+  Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "confirmamos", etc.). Responde exactamente:
+  "¡Excelente, [NOMBRE]!
 
-- PASO 3: ELECCIÓN DE PAQUETE (Respuesta 3A o 3B)
-  - Si el cliente elige el paquete ESTÁNDAR (o una opción equivalente), responde exactamente (calculando e insertando el precio y metros):
-    "Excelente. Has elegido el Paquete ESTÁNDAR.
+  He anotado tu inspección técnica gratuita."
 
-    Tu cotización: $@precio_estandar para @metros m² (+ IVA)
-
-    Incluye:
-    ✓ Diagnóstico técnico gratuito
-    ✓ Preparación y limpieza de superficie
-    ✓ Aplicación profesional del impermeabilizante
-    ✓ Gravilla de protección (roja o gris)
-    ✓ Garantía por escrito (5 años)
-
-    El siguiente paso es una inspección en sitio. Nuestro técnico revisará:
-    - Los metros exactos (a veces varían)
-    - Bordes, cornisas y áreas adyacentes
-    - Drenajes y bajadas de agua
-    - Cualquier trabajo adicional necesario
-
-    Voy a enviarte la cotización formal y un link para que agendes tu inspección técnica gratuita. 
-
-    ¿Cuál es tu nombre y teléfono?"
-
-  - Si el cliente elige el paquete PREMIUM (o una opción equivalente), responde exactamente (calculando e insertando el precio y metros):
-    "Excelente. Has elegido el Paquete PREMIUM.
-
-    Tu cotización: $@precio_premium para @metros m² (+ IVA)
-
-    Incluye:
-    ✓ Diagnóstico técnico gratuito
-    ✓ Preparación y limpieza profesional de superficie
-    ✓ Aplicación profesional del impermeabilizante 4.0
-    ✓ Gravilla de protección (roja o gris)
-    ✓ Garantía por escrito (10 años)
-
-    El siguiente paso es una inspección en sitio. Nuestro técnico revisará:
-    - Los metros exactos (a veces varían)
-    - Bordes, cornisas y áreas adyacentes
-    - Drenajes y bajadas de agua
-    - Cualquier trabajo adicional necesario
-
-    Voy a enviarte la cotización formal y un link para que agendes tu inspección técnica gratuita.
-
-    ¿Cuál es tu nombre y teléfono?"
-
-- PASO 4: ENVÍO DE COTIZACIÓN Y LINK (Respuesta 4)
-  Se activa en cuanto el cliente proporciona su nombre y teléfono (o si ya los conocemos).
+- PASO 4: COTIZACIÓN DIGITAL Y AGENDAMIENTO
+  Se activa para enviar los enlaces dinámicos de la cotización formal y agendamiento.
   Genera la respuesta utilizando los marcadores de posición exactos [LINK_COTIZACION] y [LINK_AGENDADO], los cuales la aplicación reemplazará dinámicamente con los enlaces reales.
-  Envía exactamente el siguiente mensaje (reemplazando @nombre, @metros, y @precio_cotizado según corresponda, y usando los marcadores exactos):
-  "Perfecto, @nombre. 
+  Envía exactamente el siguiente mensaje (reemplazando [NOMBRE] según corresponda, y usando los marcadores exactos):
+  "Perfecto, [NOMBRE].
 
-  Te estoy enviando:
+  Te comparto tu cotización digital y enlace para agendar:
 
-  📋 Tu cotización formal para @metros m² ($@precio_cotizado + IVA): [LINK_COTIZACION]
-  🔗 Un link para agendar tu inspección técnica gratuita con nuestro operario: [LINK_AGENDADO]
+  📋 Cotización: [LINK_COTIZACION]
+  📅 Agendar visita: [LINK_AGENDADO]
 
-  Revisa la cotización y en el link puedes elegir el día que mejor te venga.
-
-  Cualquier duda, aquí estoy. 
-
-  ¡Gracias por elegirnos! 💚"
+  ¿Qué horario prefieres esta semana?"
 
 E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA o MANTENIMIENTO TÉCNICO (Servicios 3, 4, 5, 6, 7 - tipo_negocio: 'construccion'):
 Pregunta de forma amigable y progresiva (una a la vez):
@@ -353,10 +288,10 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
     "colonia": "La colonia de León proporcionada por el cliente si el tipo de negocio es impermeabilización o construcción, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
-    "paquete_elegido": "El paquete elegido por el cliente ('estandar' o 'premium') si lo seleccionó, de lo contrario null",
+    "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir colonia/metros), 'paso_2' (al mostrar precios de paquetes para los m²), 'paso_3' (al confirmar el paquete elegido y pedir nombre y teléfono) o 'paso_4' (al enviar links de agendamiento y cotización). Si el tipo de negocio no es impermeabilización, pon null"
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir colonia/metros), 'paso_2' (al presentar el presupuesto a $210/m² con desgloses), 'paso_3' (al confirmar la inspección técnica gratuita) o 'paso_4' (al enviar los enlaces de cotización y agendamiento). Si el tipo de negocio no es impermeabilización, pon null"
   }
 }
 
@@ -752,11 +687,10 @@ export async function responderConIA(
       const esImper = exp?.tipo_negocio === "construccion-impermeabilizacion" || updates.tipo_negocio === "construccion-impermeabilizacion";
       
       // Formatear necesidad si tenemos datos técnicos de impermeabilización
-      if (esImper && (datosExtraidos as any).metros && (datosExtraidos as any).paquete_elegido) {
+      if (esImper && (datosExtraidos as any).metros) {
         const m = (datosExtraidos as any).metros;
-        const paq = String((datosExtraidos as any).paquete_elegido).toUpperCase();
         const col = (datosExtraidos as any).colonia || datosExtraidos.fraccionamiento || exp?.fraccionamiento || "";
-        updates.necesidad = `Impermeabilización de ${m} m² - Paquete ${paq}${col ? ` en col. ${col}` : ""}`;
+        updates.necesidad = `Impermeabilización de ${m} m² - Paquete Estándar ($210/m²)${col ? ` en col. ${col}` : ""}`;
       }
 
       // --- CREACIÓN DE COTIZACIÓN AUTOMÁTICA (Supabase) Y REEMPLAZO DE LINKS ---
@@ -765,11 +699,10 @@ export async function responderConIA(
         let idCot = "";
 
         const m = (datosExtraidos as any).metros;
-        const paq = (datosExtraidos as any).paquete_elegido;
         const nombreCliente = (datosExtraidos as any).cliente_nombre || exp.cliente;
         const telefonoCliente = (datosExtraidos as any).cliente_telefono || exp.telefono;
 
-        if (m && paq && nombreCliente && telefonoCliente) {
+        if (m && nombreCliente && telefonoCliente) {
           try {
             // Verificar si ya existe una cotización
             const { data: cotizacionesExistentes } = await sb
@@ -787,18 +720,16 @@ export async function responderConIA(
               const numeros = ids.map((id) => parseInt(id.replace(/\D/g, ""), 10)).filter((n) => !Number.isNaN(n));
               const max = numeros.length ? Math.max(...numeros) : 0;
               idCot = `COT-${String(max + 1).padStart(3, "0")}`;
-              const isPremium = String(paq).toLowerCase() === "premium";
-              const precioM2 = isPremium ? 260 : 200;
+              const precioM2 = 210;
               const precioTotal = Number(m) * precioM2;
 
               // Consultar costo unitario en el catálogo
-              let costoM2 = isPremium ? 190 : 165; // fallbacks razonables
+              let costoM2 = 165; // fallback razonable
               try {
-                const nombreBuscar = isPremium ? "%Premium%" : "%Estándar%";
                 const { data: prodCatalog } = await sb
                   .from("productos_servicios")
                   .select("costo_unitario")
-                  .ilike("nombre", nombreBuscar)
+                  .ilike("nombre", "%Estándar%")
                   .eq("categoria", "impermeabilizacion")
                   .maybeSingle();
                 
@@ -834,9 +765,7 @@ export async function responderConIA(
                 tokenCot = nuevaCot.token;
 
                 // Insertar concepto
-                const descConcepto = isPremium
-                  ? "Paquete PREMIUM - Impermeabilizante 4.0 poliéster + gravilla (10 años de garantía)"
-                  : "Paquete ESTÁNDAR - Impermeabilizante 3.5 + gravilla (5 años de garantía)";
+                const descConcepto = "Impermeabilización Profesional - Impermeabilizante 3.5 mm + gravilla (5 años de garantía)";
 
                 const { error: errInsertConcepto } = await sb
                   .from("cotizacion_conceptos")
@@ -878,7 +807,7 @@ export async function responderConIA(
                   expedienteId: ctx.expedienteId,
                   tipo: "construccion",
                   titulo: `Cotización automática creada (${idCot})`,
-                  detalle: `Paquete: ${paq.toUpperCase()}. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita. Operario asignado: Alex.`,
+                  detalle: `Impermeabilización Profesional 3.5 mm. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita. Operario asignado: Alex.`,
                 });
               }
             }
