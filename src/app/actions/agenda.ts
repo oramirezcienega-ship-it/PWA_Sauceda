@@ -7,10 +7,12 @@ export interface Cita {
   id: string;
   perfil_id: string;
   prospecto_id?: string | null;
+  expediente_id?: string | null;
+  fraccionamiento?: string | null;
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
-  tipo_cita: "venta" | "asesoria" | "inspeccion";
+  tipo_cita: "venta" | "asesoria" | "inspeccion" | "instalacion";
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
@@ -506,4 +508,126 @@ export async function validarAgendaOperador(
   }
 
   return false;
+}
+
+/**
+ * Programa la fecha de instalación para un expediente, la añade a la agenda del técnico
+ * y opcionalmente notifica al cliente por WhatsApp.
+ */
+export async function programarInstalacionExpediente(data: {
+  expedienteId: string;
+  perfilId?: string | null;
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  notas?: string;
+  notificarCliente?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!data.expedienteId || !data.fecha || !data.horaInicio || !data.horaFin) {
+    return { ok: false, error: "Datos incompletos para agendar la instalación." };
+  }
+
+  const sb = supabaseServidor();
+
+  // 1. Obtener datos del expediente
+  const { data: exp, error: errExp } = await sb
+    .from("expedientes")
+    .select("id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, prospecto_id, asesor_id, operador_id")
+    .eq("id", data.expedienteId)
+    .maybeSingle();
+
+  if (errExp || !exp) {
+    return { ok: false, error: "Expediente no encontrado." };
+  }
+
+  const perfilId = data.perfilId || exp.operador_id || exp.asesor_id;
+  if (!perfilId) {
+    return { ok: false, error: "Debes seleccionar a un técnico/operador para asignar la agenda." };
+  }
+
+  const nombreCliente = [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean).join(" ");
+  const fechaISO = `${data.fecha}T${data.horaInicio}:00`;
+
+  try {
+    // 2. Actualizar fecha_instalacion en el expediente y operador_id
+    await sb
+      .from("expedientes")
+      .update({
+        fecha_instalacion: fechaISO,
+        operador_id: perfilId,
+        etapa: "instalacion",
+      })
+      .eq("id", data.expedienteId);
+
+    // 3. Crear registro en agenda_citas
+    const { error: errCita } = await sb.from("agenda_citas").insert({
+      perfil_id: perfilId,
+      prospecto_id: exp.prospecto_id ?? null,
+      expediente_id: exp.id,
+      fraccionamiento: exp.fraccionamiento ?? null,
+      cliente_nombre: nombreCliente,
+      cliente_telefono: exp.telefono,
+      tipo_cita: "instalacion",
+      fecha: data.fecha,
+      hora_inicio: data.horaInicio,
+      hora_fin: data.horaFin,
+      notas: data.notas || "Instalación profesional programada.",
+      estado: "confirmada",
+    });
+
+    if (errCita) {
+      console.error("Error al crear cita de instalación:", errCita);
+    }
+
+    // 4. Registrar actividad en la bitácora
+    const { registrarActividad } = await import("@/lib/actividades");
+    await registrarActividad(sb, {
+      expedienteId: data.expedienteId,
+      tipo: "construccion",
+      titulo: "🛠️ Fecha de Instalación Programada",
+      detalle: `Programada para el ${data.fecha} de ${data.horaInicio} a ${data.horaFin}. ${data.notas ? `Notas: ${data.notas}` : ""}`,
+    });
+
+    // 5. Notificación por WhatsApp si se solicitó
+    if (data.notificarCliente && exp.telefono) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      const msg = `¡Hola ${exp.cliente}! 🛠️ Te confirmamos que tu instalación profesional de impermeabilización con SAUCEDA ha quedado programada para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\nPor favor asegúrate de tener libre el acceso a la azotea. ¡Cualquier duda quedamos a tus órdenes! 💚`;
+      await enviarWhatsAppTexto(exp.telefono, msg);
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al programar instalación:", err);
+    return { ok: false, error: err.message || "Error al guardar la fecha de instalación." };
+  }
+}
+
+/**
+ * Obtiene todas las citas/visitas futuras organizadas para el dashboard inicial.
+ */
+export async function obtenerProximasCitasEInstalaciones(perfilId?: string | null): Promise<Cita[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  let query = sb
+    .from("agenda_citas")
+    .select("*")
+    .gte("fecha", hoy)
+    .neq("estado", "cancelada")
+    .order("fecha", { ascending: true })
+    .order("hora_inicio", { ascending: true })
+    .limit(20);
+
+  if (perfilId) {
+    query = query.eq("perfil_id", perfilId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("Error al obtener próximas visitas e instalaciones:", error);
+    return [];
+  }
+  return (data || []) as Cita[];
 }

@@ -3,7 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
-import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, subirMediaMeta, enviarWhatsAppSticker } from "@/lib/whatsapp";
+import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, subirMediaMeta, enviarWhatsAppSticker, enviarWhatsAppDocumento } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
@@ -845,10 +845,11 @@ export async function enviarStickerConversacion(
     const buffer = Buffer.from(base64Data, "base64");
 
     // 2. Subir a Meta
-    const mediaId = await subirMediaMeta(buffer, mimeType, fileName, "sticker");
-    if (!mediaId) {
-      return { ok: false, error: "No se pudo subir el sticker a los servidores de WhatsApp." };
+    const resUpload = await subirMediaMeta(buffer, mimeType, fileName, "sticker");
+    if (!resUpload.mediaId) {
+      return { ok: false, error: resUpload.error || "No se pudo subir el sticker a los servidores de WhatsApp." };
     }
+    const mediaId = resUpload.mediaId;
 
     // 3. Enviar sticker
     const r = await enviarWhatsAppSticker(telefono, mediaId);
@@ -885,5 +886,87 @@ export async function enviarStickerConversacion(
   } catch (err: any) {
     console.error("Error al enviar sticker de conversación:", err);
     return { ok: false, error: err.message || "Error al procesar y enviar el sticker." };
+  }
+}
+
+/** Envía cualquier archivo desde la computadora directamente por WhatsApp. */
+export async function enviarArchivoDirectoConversacion(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const telefono = (formData.get("telefono") as string | null)?.trim() || "";
+  const archivo = formData.get("archivo") as File | null;
+  const caption = (formData.get("caption") as string | null)?.trim() || "";
+
+  if (!telefono) return { ok: false, error: "Falta el teléfono." };
+  if (!archivo || archivo.size === 0) return { ok: false, error: "No se seleccionó ningún archivo." };
+
+  const MAX_MB = 16;
+  if (archivo.size > MAX_MB * 1024 * 1024) {
+    return { ok: false, error: `El archivo supera el límite de ${MAX_MB} MB.` };
+  }
+
+  try {
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+    const mimeType = archivo.type || "application/octet-stream";
+    const filename = archivo.name;
+
+    // Determinar categoría para Meta API
+    let metaType: "image" | "sticker" | "document" | "audio" | "video" = "document";
+    if (mimeType.startsWith("image/")) metaType = "image";
+    else if (mimeType.startsWith("video/")) metaType = "video";
+    else if (mimeType.startsWith("audio/")) metaType = "audio";
+
+    // 1. Subir binario a Meta
+    const resUpload = await subirMediaMeta(buffer, mimeType, filename, metaType);
+    if (!resUpload.mediaId) {
+      return { ok: false, error: resUpload.error || "No se pudo cargar el archivo en los servidores de WhatsApp." };
+    }
+    const mediaId = resUpload.mediaId;
+
+    // 2. Enviar por WhatsApp
+    const r = await enviarWhatsAppDocumento(telefono, mediaId, filename, caption, mimeType);
+    if (!r.ok) {
+      return { ok: false, error: r.error ?? "No se pudo enviar el archivo por WhatsApp." };
+    }
+
+    // 3. Registrar mensaje en la BD
+    const sb = supabaseServidor();
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const agente = await nombreAgenteActual(sb);
+
+    let textoFinal = "";
+    if (metaType === "image") {
+      textoFinal = `[image:${mediaId}]${caption ? ` ${caption}` : ""}`;
+    } else if (metaType === "video") {
+      textoFinal = `[video:${mediaId}]${caption ? ` ${caption}` : ""}`;
+    } else {
+      textoFinal = `[document:${mediaId}] ${filename}${caption ? ` — "${caption}"` : ""}`;
+    }
+
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
+      texto: textoFinal,
+      direccion: "out",
+      estado: "enviado",
+      agente,
+      wa_message_id: r.messageId ?? null,
+      expediente_id: expedienteId,
+      prospecto_id: prospectoId,
+    });
+
+    if (expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: "mensaje",
+        titulo: "Archivo adjunto enviado por WhatsApp",
+        detalle: `Se envió el archivo "${filename}" por WhatsApp.`,
+      });
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al enviar archivo directo de conversación:", err);
+    return { ok: false, error: err.message || "Error al procesar el archivo." };
   }
 }

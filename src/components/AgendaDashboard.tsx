@@ -405,8 +405,13 @@ export function AgendaDashboard({
                             </div>
                             <div className="text-xs text-carbon/50 flex flex-wrap gap-x-3 gap-y-0.5 font-medium">
                               <span>🕒 {c.hora_inicio.slice(0, 5)} - {c.hora_fin.slice(0, 5)} hs</span>
+                              {c.fraccionamiento && <span className="font-bold text-verde-profundo">📍 {c.fraccionamiento}</span>}
                               <span>📞 {c.cliente_telefono}</span>
-                              <span className="capitalize">({c.tipo_cita === "venta" ? "venta" : "asesoría"})</span>
+                              <span className="capitalize">
+                                ({c.tipo_cita === "instalacion" ? "🛠️ instalación" :
+                                  c.tipo_cita === "inspeccion" ? "🔍 inspección" :
+                                  c.tipo_cita === "venta" ? "🛍️ venta" : "🎓 asesoría"})
+                              </span>
                             </div>
                             {c.notas && (
                               <p className="text-xs text-carbon/60 bg-carbon/5 px-2.5 py-1.5 rounded-lg italic mt-1">

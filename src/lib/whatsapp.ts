@@ -111,18 +111,21 @@ export async function enviarWhatsAppDocumento(
   const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
 
   try {
+    const esUrl = /^https?:\/\//i.test(documentoUrl);
+    const mediaObj = esUrl ? { link: documentoUrl } : { id: documentoUrl };
+
     const body: Record<string, unknown> = esImagen
       ? {
           messaging_product: "whatsapp",
           to: tel,
           type: "image",
-          image: { link: documentoUrl, ...(caption ? { caption } : {}) },
+          image: { ...mediaObj, ...(caption ? { caption } : {}) },
         }
       : {
           messaging_product: "whatsapp",
           to: tel,
           type: "document",
-          document: { link: documentoUrl, filename: nombreArchivo, ...(caption ? { caption } : {}) },
+          document: { ...mediaObj, filename: nombreArchivo, ...(caption ? { caption } : {}) },
         };
 
     const res = await fetch(
@@ -384,27 +387,28 @@ export async function renderizarPlantilla(
   return texto;
 }
 
-/** Sube un archivo binario a Meta Cloud API y devuelve el media_id. */
+/** Sube un archivo binario a Meta Cloud API y devuelve el media_id (o error). */
 export async function subirMediaMeta(
   buffer: Buffer,
   mimeType: string,
   filename: string,
-  type: "image" | "sticker" | "document" | "audio" | "video"
-): Promise<string | null> {
+  _category?: "image" | "sticker" | "document" | "audio" | "video"
+): Promise<{ mediaId?: string; error?: string }> {
   const token = process.env.WHATSAPP_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (!token || !phoneId) {
     console.error("[Meta Upload] Credenciales de WhatsApp incompletas.");
-    return null;
+    return { error: "WhatsApp no está configurado (faltan credenciales)." };
   }
 
   try {
-    console.log(`[Meta Upload] Subiendo archivo (${filename}, ${mimeType}, tipo: ${type})...`);
+    const effectiveMime = mimeType || "application/octet-stream";
+    console.log(`[Meta Upload] Subiendo archivo (${filename}, ${effectiveMime})...`);
     const formData = new FormData();
     formData.append("messaging_product", "whatsapp");
-    formData.append("type", type);
-    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+    formData.append("type", effectiveMime);
+    const blob = new Blob([new Uint8Array(buffer)], { type: effectiveMime });
     formData.append("file", blob, filename);
 
     const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/media`, {
@@ -415,17 +419,31 @@ export async function subirMediaMeta(
       body: formData
     });
 
+    const bodyText = await res.text();
     if (!res.ok) {
-      console.error(`[Meta Upload] Error subiendo media a Meta: ${res.status} ${await res.text()}`);
-      return null;
+      console.error(`[Meta Upload] Error subiendo media a Meta: ${res.status} ${bodyText}`);
+      let metaMsg = "";
+      try {
+        const j = JSON.parse(bodyText);
+        metaMsg = j?.error?.message ?? "";
+      } catch {
+        // Ignorar
+      }
+      return { error: metaMsg ? `Meta: ${metaMsg}` : `Error ${res.status} al subir archivo a WhatsApp.` };
     }
 
-    const result = await res.json() as { id?: string };
+    let result: { id?: string } = {};
+    try {
+      result = JSON.parse(bodyText);
+    } catch {
+      // Ignorar
+    }
     console.log(`[Meta Upload] Archivo subido con éxito. Media ID: ${result.id ?? ""}`);
-    return result.id || null;
-  } catch (err) {
+    if (!result.id) return { error: "Meta no devolvió un ID de archivo." };
+    return { mediaId: result.id };
+  } catch (err: any) {
     console.error("[Meta Upload] Excepción al subir media a Meta:", err);
-    return null;
+    return { error: err.message || "Error de red al subir archivo a WhatsApp." };
   }
 }
 

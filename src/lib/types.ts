@@ -200,6 +200,8 @@ export interface Expediente {
   secuenciaNombre?: string | null;
   ultimaActividadTitulo?: string | null;
   ultimaActividadFecha?: string | null;
+  /** Fecha y hora programada de la instalación profesional. */
+  fechaInstalacion?: string | null;
   /** Marca permanente: el expediente no cumple criterios de servicio. Bloquea todo contacto. */
   noViable?: boolean;
 }
@@ -367,12 +369,15 @@ export interface MensajeEnviado {
 export type TipoActividad =
   | "nota"
   | "llamada"
+  | "visita"
+  | "instalacion"
   | "correo"
   | "reunion"
   | "mensaje"
   | "formulario"
   | "etapa"
   | "creacion"
+  | "construccion"
   | "sistema";
 
 /** Una entrada de la bitácora de actividades. */
@@ -381,8 +386,10 @@ export interface Actividad {
   tipo: TipoActividad;
   titulo: string;
   detalle: string;
-  /** Fecha/hora ISO. */
+  /** Fecha/hora ISO del registro. */
   fecha: string;
+  /** Fecha/hora programada de la actividad (para llamadas, visitas e instalaciones). */
+  fechaProgramada?: string | null;
 }
 
 // ------------------------------------------------------------

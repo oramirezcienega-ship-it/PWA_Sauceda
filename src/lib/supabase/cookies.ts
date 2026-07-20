@@ -13,10 +13,9 @@ import type { CookieOptions } from "@supabase/ssr";
  */
 export function opcionesCookieSeguras(options?: CookieOptions): CookieOptions {
   return {
-    ...options,
-    httpOnly: true,
+    path: "/",
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: options?.path ?? "/",
+    ...options,
   };
 }

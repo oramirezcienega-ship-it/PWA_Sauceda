@@ -682,17 +682,24 @@ export function ModalAgendaUsuario({ usuario, onClose }: ModalAgendaUsuarioProps
                           <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm text-verde-profundo">{c.cliente_nombre}</span>
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                c.tipo_cita === "venta"
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
+                                c.tipo_cita === "instalacion"
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : c.tipo_cita === "inspeccion"
+                                  ? "bg-blue-100 text-blue-800 border border-blue-300"
+                                  : c.tipo_cita === "venta"
                                   ? "bg-dorado/15 text-yellow-800 border border-dorado/20"
                                   : "bg-cielo/15 text-cielo border border-cielo/20"
                               }`}>
-                                {c.tipo_cita === "venta" ? "🛍️ Cita Venta" : "🎓 Asesoría"}
+                                {c.tipo_cita === "instalacion" ? "🛠️ Instalación" :
+                                 c.tipo_cita === "inspeccion" ? "🔍 Inspección Técnica" :
+                                 c.tipo_cita === "venta" ? "🛍️ Cita Venta" : "🎓 Asesoría"}
                               </span>
                             </div>
                             <div className="text-xs text-carbon/60 flex flex-wrap gap-x-4 gap-y-1">
                               <span>📅 {formatearFecha(c.fecha)}</span>
                               <span>🕒 {c.hora_inicio.slice(0, 5)} - {c.hora_fin.slice(0, 5)}</span>
+                              {c.fraccionamiento && <span className="font-semibold text-verde-profundo">📍 {c.fraccionamiento}</span>}
                               <span>📞 {c.cliente_telefono}</span>
                             </div>
                             {c.notas && (

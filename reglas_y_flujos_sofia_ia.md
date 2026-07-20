@@ -75,116 +75,28 @@ Para proyectos de obra mayor o diseño arquitectónico:
 ---
 
 ## ☔ 4. Flujo Conversacional Estricto de Impermeabilización (`construccion-impermeabilizacion`)
-Sofía cuenta con un embudo conversacional lineal optimizado en 4 pasos para la venta de impermeabilización profesional en León, Gto:
+Sofía cuenta con un embudo conversacional lineal optimizado en 4 pasos para la venta de impermeabilización profesional en León, Gto (Versión 3.0):
 
 ### 📍 PASO 1: Mensaje Inicial (Detección de Interés)
 Si el cliente muestra interés en impermeabilización o goteras y **no** tenemos su ubicación/metros cuadrados en el historial, Sofía envía exactamente este texto:
 > *"¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción.
+> Somos especialistas en impermeabilización profesional en León y alrededores.
 > 
-> Somos especialistas en impermeabilización profesional. Tenemos dos opciones que se adaptan a tu presupuesto y necesidades.
+> Para darte una cotización personalizada de inmediato, me podrías compartir:
+> 1️⃣ ¿En qué colonia o zona estás ubicado?
+> 2️⃣ ¿Cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?
 > 
-> Para darte una cotización personalizada, necesito algunos datos:
-> 
-> 1️⃣ ¿En qué colonia de León estás ubicado?
-> 2️⃣ ¿Cuántos metros cuadrados aproximadamente?
-> 
-> Con esa información te presento nuestros dos productos."*
+> Con esa información te comparto los detalles y presupuesto exacto."*
 
 ---
 
-### 💵 PASO 2: Presentación de Opciones y Cálculo de Precios
-Una vez que el cliente responde la **colonia** y los **metros cuadrados (@metros)**, Sofía realiza internamente el cálculo de los precios del paquete:
-* **Paquete Estándar:** `@metros × $200 MXN` (+ IVA)
-* **Paquete Premium:** `@metros × $260 MXN` (+ IVA)
+### 💵 PASO 2: Presentación Única de Estándar a $210/m²
+Una vez que el cliente responde la **colonia** y los **metros cuadrados (@metros)**, Sofía realiza los cálculos automáticos:
+* `TOTAL_SIN_IVA = @metros × $210`
+* `IVA = TOTAL_SIN_IVA × 0.16`
+* `TOTAL_CON_IVA = TOTAL_SIN_IVA + IVA`
 
 Envía exactamente esta plantilla con los cálculos dinámicos:
-> *"Perfecto. Para **@metros m²** en **@colonia**, aquí están nuestras opciones (precios más IVA):
-> 
-> 🟡 **PAQUETE ESTÁNDAR - $200/m² (+ IVA)**
-> Impermeabilizante 3.5 + gravilla (roja o gris a tu elección)
-> ✓ Garantía 5 años
-> ✓ Ideal para: Solución equilibrada, mantenimiento regular
-> ✓ Tiempo de ejecución: 2-3 días
-> 
-> 🔵 **PAQUETE PREMIUM - $260/m² (+ IVA)**
-> Impermeabilizante 4.0 poliéster + gravilla (roja o gris a tu elección)
-> ✓ Garantía 10 años
-> ✓ Ideal para: Máxima durabilidad, inversión a largo plazo
-> ✓ Tiempo de ejecución: 2-3 días
-> 
-> **DIFERENCIAS CLAVE:**
-> El impermeabilizante 4.0 Premium es más resistente al clima y al paso del tiempo. Si tu azotea está expuesta a mucho sol o lluvia intensa, el Premium te dará mayor tranquilidad por más años.
-> 
-> **Para tu caso específico (@metros m²):**
-> 🟡 ESTÁNDAR: **$@precio_estandar total (+ IVA)**
-> 🔵 PREMIUM: **$@precio_premium total (+ IVA)**
-> 
-> ¿Cuál te interesa más?"*
-
----
-
-### 📦 PASO 3: Elección del Paquete
-Según la elección del cliente, Sofía envía de inmediato la plantilla correspondiente y solicita los datos de contacto:
-
-* **Si elige el Paquete Estándar:**
-  > *"Excelente. Has elegido el Paquete ESTÁNDAR.
-  > 
-  > Tu cotización: **$@precio_estandar** para **@metros m²** (+ IVA)
-  > 
-  > Incluye:
-  > ✓ Diagnóstico técnico gratuito
-  > ✓ Preparación y limpieza de superficie
-  > ✓ Aplicación profesional del impermeabilizante
-  > ✓ Gravilla de protección (roja o gris)
-  > ✓ Garantía por escrito (5 años)
-  > 
-  > El siguiente paso es una inspección en sitio. Nuestro técnico revisará:
-  > - Los metros exactos (a veces varían)
-  > - Bordes, cornisas y áreas adyacentes
-  > - Drenajes y bajadas de agua
-  > - Cualquier trabajo adicional necesario
-  > 
-  > Voy a enviarte la cotización formal y un link para que agendes tu inspección técnica gratuita. 
-  > 
-  > ¿Cuál es tu nombre y teléfono?"*
-
-* **Si elige el Paquete Premium:**
-  > *"Excelente. Has elegido el Paquete PREMIUM.
-  > 
-  > Tu cotización: **$@precio_premium** para **@metros m²** (+ IVA)
-  > 
-  > Incluye:
-  > ✓ Diagnóstico técnico gratuito
-  > ✓ Preparación y limpieza profesional de superficie
-  > ✓ Aplicación profesional del impermeabilizante 4.0
-  > ✓ Gravilla de protección (roja o gris)
-  > ✓ Garantía por escrito (10 años)
-  > 
-  > El siguiente paso es una inspección en sitio. Nuestro técnico revisará:
-  > - Los metros exactos (a veces varían)
-  > - Bordes, cornisas y áreas adyacentes
-  > - Drenajes y bajadas de agua
-  > - Cualquier trabajo adicional necesario
-  > 
-  > Voy a enviarte la cotización formal y un link para que agendes tu inspección técnica gratuita.
-  > 
-  > ¿Cuál es tu nombre y teléfono?"*
-
----
-
-### 🔗 PASO 4: Cierre del Embudo y Links Dinámicos
-Cuando el cliente proporciona su nombre y teléfono (o si ya se conocen), Sofía genera el cierre enviando los marcadores de posición dinámicos que el backend de la app reemplazará por enlaces personalizados:
-> *"Perfecto, **@nombre**. 
-> 
-> Te estoy enviando:
-> 
-> 📋 Tu cotización formal para **@metros m²** (**$@precio_cotizado** + IVA): **[LINK_COTIZACION]**
-> 🔗 Un link para agendar tu inspección técnica gratuita con nuestro operario: **[LINK_AGENDADO]**
-> 
-> Revisa la cotización y en el link puedes elegir el día que mejor te venga.
-> 
-> Cualquier duda, aquí estoy. 
-> 
 > ¡Gracias por elegirnos! 💚"*
 
 ---

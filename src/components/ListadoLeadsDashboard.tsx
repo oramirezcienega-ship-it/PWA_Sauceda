@@ -26,6 +26,8 @@ interface ListadoLeadsDashboardProps {
   leadsIniciales: LeadDashboard[];
 }
 
+import { ProximasVisitasWidget } from "@/components/ProximasVisitasWidget";
+
 export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardProps) {
   // Filtros
   const [busqueda, setBusqueda] = useState("");
@@ -173,6 +175,9 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
 
   return (
     <div className="space-y-4">
+      {/* Widget de Próximas Visitas e Instalaciones */}
+      <ProximasVisitasWidget />
+
       {/* Botón para contraer/expandir filtros */}
       <div className="flex items-center justify-between bg-white border border-carbon/10 rounded-xl p-3 shadow-sm shrink-0">
         <button
