@@ -53,7 +53,7 @@ function Formulario() {
     { id: string; nombre: string }[]
   >([]);
 
-  const prospectoInicial = searchParams.get("prospecto");
+  const prospectoInicial = searchParams?.get("prospecto");
 
   useEffect(() => {
     listarProspectosMin().then(setProspectos).catch(() => setProspectos([]));
