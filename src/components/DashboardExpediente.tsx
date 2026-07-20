@@ -157,13 +157,14 @@ function Timeline({ status }: { status: StatusProceso }) {
 // ─── Sub-componente: Sección colapsable ───────────────────────────────────────
 
 function SeccionInfo({
-  icono, titulo, badge, children, defaultOpen = false,
+  icono, titulo, badge, children, defaultOpen = false, critico,
 }: {
   icono: string;
   titulo: string;
   badge?: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  critico?: boolean;
 }) {
   const [abierto, setAbierto] = useState(defaultOpen);
   return (
@@ -400,10 +401,10 @@ export function DashboardExpediente({
         if (!url || !key) return;
 
         const client = createClient(url, key);
-        const channel = client
-          .channel("expediente-cliente:" + expedienteId)
+        const channel = client.channel("expediente-cliente:" + expedienteId);
+        channel
           .on(
-            "postgres_changes" as Parameters<typeof channel.on>[0],
+            "postgres_changes" as any,
             {
               event: "UPDATE",
               schema: "public",
