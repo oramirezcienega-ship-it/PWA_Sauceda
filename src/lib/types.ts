@@ -369,12 +369,15 @@ export interface MensajeEnviado {
 export type TipoActividad =
   | "nota"
   | "llamada"
+  | "visita"
+  | "instalacion"
   | "correo"
   | "reunion"
   | "mensaje"
   | "formulario"
   | "etapa"
   | "creacion"
+  | "construccion"
   | "sistema";
 
 /** Una entrada de la bitácora de actividades. */
@@ -383,8 +386,10 @@ export interface Actividad {
   tipo: TipoActividad;
   titulo: string;
   detalle: string;
-  /** Fecha/hora ISO. */
+  /** Fecha/hora ISO del registro. */
   fecha: string;
+  /** Fecha/hora programada de la actividad (para llamadas, visitas e instalaciones). */
+  fechaProgramada?: string | null;
 }
 
 // ------------------------------------------------------------

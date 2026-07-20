@@ -332,6 +332,31 @@ export function Conversaciones() {
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Registro local de conversaciones leídas (para quitar 'Pendiente de Respuesta')
+  const [leidasHasta, setLeidasHasta] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const guardadas = localStorage.getItem("sauceda_chats_leidos");
+        if (guardadas) setLeidasHasta(JSON.parse(guardadas));
+      } catch {}
+    }
+  }, []);
+
+  function marcarComoLeida(telefono: string, fechaInbound?: string | null) {
+    const marca = fechaInbound || new Date().toISOString();
+    setLeidasHasta((prev) => {
+      const nuevo = { ...prev, [telefono]: marca };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("sauceda_chats_leidos", JSON.stringify(nuevo));
+        } catch {}
+      }
+      return nuevo;
+    });
+  }
+
   async function ejecutarPruebaIA() {
     setProbandoIA(true);
     setEstadoIA(null);
@@ -413,6 +438,7 @@ export function Conversaciones() {
     setParams([]);
     const d = await obtenerConversacion(telefono);
     setDetalle(d);
+    marcarComoLeida(telefono, d?.ultimoInboundFecha);
   }
 
   async function enviarTexto() {
@@ -888,7 +914,9 @@ export function Conversaciones() {
               </p>
             ) : (
               conversacionesFiltradas.map((c) => {
-                const pendiente = !c.finalizado && c.ultimaDireccion === "in";
+                const fechaLeida = leidasHasta[c.telefono];
+                const leidaReciente = fechaLeida && (!c.ultimoInboundFecha || fechaLeida >= c.ultimoInboundFecha);
+                const pendiente = !c.finalizado && c.ultimaDireccion === "in" && !leidaReciente;
                 return (
                 <button
                   key={c.telefono}
@@ -1095,6 +1123,14 @@ export function Conversaciones() {
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => marcarComoLeida(detalle.telefono, detalle.ultimoInboundFecha)}
+                      className="bg-emerald-50 border border-emerald-200 hover:bg-emerald-600 hover:text-white text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded transition flex items-center gap-0.5 cursor-pointer"
+                      title="Quitar distintivo de respuesta pendiente"
+                    >
+                      ✓ Leída
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
