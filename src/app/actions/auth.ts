@@ -1,6 +1,6 @@
 "use server";
 
-import { supabaseSesion } from "@/lib/supabase/cliente-sesion";
+import { supabaseSesion, rolDe } from "@/lib/supabase/cliente-sesion";
 import { esEmail, limpiarTexto } from "@/lib/validacion";
 
 /**
@@ -14,7 +14,7 @@ import { esEmail, limpiarTexto } from "@/lib/validacion";
 export async function iniciarSesion(
   correo: string,
   password: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; rol?: string }> {
   // Validación/sanitización en el servidor (no se confía en el cliente).
   const email = limpiarTexto(correo, 254).toLowerCase();
   if (!esEmail(email)) {
@@ -25,12 +25,14 @@ export async function iniciarSesion(
   }
 
   const sb = supabaseSesion();
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) {
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error || !data?.user) {
     // Mensaje genérico para no revelar si el correo existe o no.
     return { ok: false, error: "Correo o contraseña incorrectos." };
   }
-  return { ok: true };
+
+  const { rol } = await rolDe(data.user.id);
+  return { ok: true, rol };
 }
 
 /** Cierra la sesión del admin (borra las cookies desde el servidor). */

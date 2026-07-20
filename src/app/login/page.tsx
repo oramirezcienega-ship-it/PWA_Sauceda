@@ -102,9 +102,9 @@ export default function PaginaLogin() {
       setEntrando(false);
       return;
     }
-    // Recarga completa para que el panel cargue ya con la sesión activa
-    // (evita tener que dar F5 tras iniciar sesión).
-    window.location.assign("/");
+    // Redirección adaptativa según el rol devuelto por el servidor
+    const destino = (r.rol === "asesor" || r.rol === "operaciones") ? "/dashboard" : "/";
+    window.location.assign(destino);
   }
 
   return (
