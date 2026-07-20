@@ -12,7 +12,7 @@ export interface Cita {
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
-  tipo_cita: "venta" | "asesoria" | "inspeccion" | "instalacion";
+  tipo_cita: "venta" | "asesoria" | "inspeccion" | "instalacion" | "llamada";
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
@@ -190,7 +190,7 @@ export async function crearCita(datos: {
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
-  tipo_cita: "venta" | "asesoria" | "inspeccion";
+  tipo_cita: "venta" | "asesoria" | "inspeccion" | "instalacion" | "llamada";
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
@@ -556,7 +556,6 @@ export async function programarInstalacionExpediente(data: {
       .update({
         fecha_instalacion: fechaISO,
         operador_id: perfilId,
-        etapa: "instalacion",
       })
       .eq("id", data.expedienteId);
 
@@ -578,6 +577,7 @@ export async function programarInstalacionExpediente(data: {
 
     if (errCita) {
       console.error("Error al crear cita de instalación:", errCita);
+      return { ok: false, error: errCita.message };
     }
 
     // 4. Registrar actividad en la bitácora
@@ -600,6 +600,62 @@ export async function programarInstalacionExpediente(data: {
   } catch (err: any) {
     console.error("Error al programar instalación:", err);
     return { ok: false, error: err.message || "Error al guardar la fecha de instalación." };
+  }
+}
+
+/**
+ * Programa una llamada telefónica asignada a un técnico o asesor.
+ */
+export async function programarLlamadaExpediente(data: {
+  expedienteId?: string | null;
+  prospectoId?: string | null;
+  perfilId: string;
+  clienteNombre: string;
+  clienteTelefono: string;
+  fecha: string;
+  horaInicio: string;
+  horaFin?: string;
+  notas?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!data.perfilId || !data.fecha || !data.horaInicio) {
+    return { ok: false, error: "Faltan datos obligatorios para agendar la llamada." };
+  }
+
+  const sb = supabaseServidor();
+
+  try {
+    const { error: errCita } = await sb.from("agenda_citas").insert({
+      perfil_id: data.perfilId,
+      prospecto_id: data.prospectoId ?? null,
+      expediente_id: data.expedienteId ?? null,
+      cliente_nombre: data.clienteNombre.trim(),
+      cliente_telefono: data.clienteTelefono.trim(),
+      tipo_cita: "llamada",
+      fecha: data.fecha,
+      hora_inicio: data.horaInicio,
+      hora_fin: data.horaFin || data.horaInicio,
+      notas: data.notas || "Llamada telefónica programada.",
+      estado: "pendiente",
+    });
+
+    if (errCita) {
+      return { ok: false, error: errCita.message };
+    }
+
+    if (data.expedienteId) {
+      const { registrarActividad } = await import("@/lib/actividades");
+      await registrarActividad(sb, {
+        expedienteId: data.expedienteId,
+        tipo: "sistema",
+        titulo: "📞 Llamada Programada",
+        detalle: `Llamada agendada para el ${data.fecha} a las ${data.horaInicio}hs. ${data.notas ? `Notas: ${data.notas}` : ""}`,
+      });
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al programar llamada." };
   }
 }
 

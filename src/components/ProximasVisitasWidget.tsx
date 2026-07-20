@@ -11,7 +11,7 @@ interface ProximasVisitasWidgetProps {
 export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) {
   const [citas, setCitas] = useState<Cita[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [filtroTipo, setFiltroTipo] = useState<"todos" | "instalacion" | "inspeccion">("todos");
+  const [filtroTipo, setFiltroTipo] = useState<"todos" | "instalacion" | "inspeccion" | "llamada">("todos");
 
   useEffect(() => {
     let activo = true;
@@ -34,14 +34,16 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
   const citasFiltradas = citas.filter((c) => {
     if (filtroTipo === "instalacion") return c.tipo_cita === "instalacion";
     if (filtroTipo === "inspeccion") return c.tipo_cita === "inspeccion";
+    if (filtroTipo === "llamada") return c.tipo_cita === "llamada";
     return true;
   });
 
   const totalInstalaciones = citas.filter((c) => c.tipo_cita === "instalacion").length;
   const totalInspecciones = citas.filter((c) => c.tipo_cita === "inspeccion").length;
+  const totalLlamadas = citas.filter((c) => c.tipo_cita === "llamada").length;
 
   if (!cargando && citas.length === 0) {
-    return null; // Si no hay citas agendadas no abrumamos la pantalla
+    return null;
   }
 
   return (
@@ -49,15 +51,15 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-titular text-base sm:text-lg font-bold text-carbon flex items-center gap-2">
-            <span>🗓️</span> Próximas Visitas e Instalaciones
+            <span>🗓️</span> Próximas Citas, Llamadas e Instalaciones
           </h3>
           <p className="text-xs text-carbon/50">
-            Agenda del técnico con inspecciones en sitio e instalaciones profesionales
+            Agenda del técnico y asesor con llamadas, inspecciones e instalaciones programadas
           </p>
         </div>
 
-        {/* Filtros por tipo de visita */}
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+        {/* Filtros por tipo de actividad */}
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold flex-wrap">
           <button
             type="button"
             onClick={() => setFiltroTipo("todos")}
@@ -85,6 +87,15 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
           >
             🔍 Inspecciones ({totalInspecciones})
           </button>
+          <button
+            type="button"
+            onClick={() => setFiltroTipo("llamada")}
+            className={`px-3 py-1 rounded-lg transition ${
+              filtroTipo === "llamada" ? "bg-amber-600 text-white shadow-xs font-bold" : "text-amber-700 hover:bg-amber-50"
+            }`}
+          >
+            📞 Llamadas ({totalLlamadas})
+          </button>
         </div>
       </div>
 
@@ -97,6 +108,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
           {citasFiltradas.map((c) => {
             const esInstalacion = c.tipo_cita === "instalacion";
             const esInspeccion = c.tipo_cita === "inspeccion";
+            const esLlamada = c.tipo_cita === "llamada";
 
             return (
               <div
@@ -106,6 +118,8 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                     ? "border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50"
                     : esInspeccion
                     ? "border-blue-200 bg-blue-50/40 hover:bg-blue-50"
+                    : esLlamada
+                    ? "border-amber-200 bg-amber-50/40 hover:bg-amber-50"
                     : "border-carbon/10 bg-slate-50 hover:bg-white"
                 }`}
               >
@@ -117,10 +131,12 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                           ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                           : esInspeccion
                           ? "bg-blue-100 text-blue-800 border-blue-300"
-                          : "bg-amber-100 text-amber-800 border-amber-300"
+                          : esLlamada
+                          ? "bg-amber-100 text-amber-800 border-amber-300"
+                          : "bg-slate-100 text-slate-800 border-slate-300"
                       }`}
                     >
-                      {esInstalacion ? "🛠️ Instalación" : esInspeccion ? "🔍 Inspección Técnica" : "🛍️ Venta / Cita"}
+                      {esInstalacion ? "🛠️ Instalación" : esInspeccion ? "🔍 Inspección Técnica" : esLlamada ? "📞 Llamada Programada" : "🛍️ Venta / Cita"}
                     </span>
                     <span className="text-xs font-mono font-bold text-carbon/70">
                       🕒 {c.hora_inicio.slice(0, 5)} - {c.hora_fin.slice(0, 5)}
@@ -156,6 +172,15 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                     💬 WhatsApp
                   </a>
 
+                  {c.cliente_telefono && (
+                    <a
+                      href={`tel:${c.cliente_telefono}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-sauce/20 bg-sauce/10 px-2.5 py-1 text-xs font-semibold text-sauce transition hover:bg-sauce hover:text-white"
+                    >
+                      📞 Llamar
+                    </a>
+                  )}
+
                   {c.expediente_id ? (
                     <Link
                       href={`/crm?expedienteId=${c.expediente_id}`}
@@ -163,9 +188,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                     >
                       Ver Expediente →
                     </Link>
-                  ) : (
-                    <span className="text-[10px] text-carbon/40">{c.cliente_telefono}</span>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
