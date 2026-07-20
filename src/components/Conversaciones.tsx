@@ -18,6 +18,7 @@ import {
   eliminarMensajeIndividual,
   editarMensajeIndividual,
   enviarStickerConversacion,
+  enviarArchivoDirectoConversacion,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
@@ -325,6 +326,7 @@ export function Conversaciones() {
   const [respuestasRapidas, setRespuestasRapidas] = useState<RespuestaRapidaDB[]>([]);
   const [mostrarAdjuntar, setMostrarAdjuntar] = useState(false);
   const [enviandoDoc, setEnviandoDoc] = useState(false);
+  const [enviandoArchivoDirecto, setEnviandoArchivoDirecto] = useState(false);
   const [mostrarStickers, setMostrarStickers] = useState(false);
   const [enviandoSticker, setEnviandoSticker] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
@@ -632,6 +634,31 @@ export function Conversaciones() {
     } catch (err: any) {
       setAviso(err.message || "Error al enviar el sticker.");
       setEnviandoSticker(false);
+    }
+  }
+
+  async function handleEnviarArchivoDirecto(file: File) {
+    if (!sel) return;
+    setEnviandoArchivoDirecto(true);
+    setMostrarAdjuntar(false);
+    setAviso(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("telefono", sel);
+      fd.append("archivo", file);
+
+      const r = await enviarArchivoDirectoConversacion(fd);
+      setEnviandoArchivoDirecto(false);
+
+      if (!r.ok) {
+        setAviso(r.error ?? "No se pudo enviar el archivo.");
+      } else {
+        await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(err.message || "Error al enviar el archivo.");
+      setEnviandoArchivoDirecto(false);
     }
   }
 
@@ -1298,29 +1325,57 @@ export function Conversaciones() {
                       onKeyDown={handleKeyDown}
                       disabled={!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp"}
                     />
-                    {/* Botón adjuntar documento */}
+                    {/* Botón adjuntar documento/archivo */}
                     <div className="relative shrink-0">
                       <button
                         type="button"
                         onClick={() => setMostrarAdjuntar(!mostrarAdjuntar)}
-                        disabled={enviandoDoc}
-                        title="Adjuntar documento"
+                        disabled={enviandoDoc || enviandoArchivoDirecto}
+                        title="Adjuntar archivo o documento"
                         className="flex h-[42px] w-[42px] items-center justify-center rounded-md border border-carbon/20 bg-white text-lg hover:bg-sauce/10 hover:border-sauce/40 transition disabled:opacity-50"
                       >
-                        {enviandoDoc ? <span className="text-sm animate-pulse">⏳</span> : "📎"}
+                        {enviandoDoc || enviandoArchivoDirecto ? <span className="text-sm animate-pulse">⏳</span> : "📎"}
                       </button>
-                      {/* Modal de selección de documentos */}
+                      {/* Modal de selección de documentos y archivos locales */}
                       {mostrarAdjuntar && (
-                        <div className="absolute right-0 bottom-full mb-2 z-50 w-80 max-h-96 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
-                          <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between">
-                            <span className="text-xs font-bold text-verde-profundo">Enviar documento</span>
+                        <div className="absolute right-0 bottom-full mb-2 z-50 w-80 max-h-[420px] overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
+                          <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between z-10">
+                            <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">📎 Adjuntar Archivo</span>
                             <button
                               type="button"
                               onClick={() => setMostrarAdjuntar(false)}
                               className="text-carbon/40 hover:text-carbon text-sm"
                             >✕</button>
                           </div>
-                          <div className="p-2">
+                          <div className="p-3 space-y-3">
+                            {/* Botón de carga directa desde la computadora */}
+                            <label
+                              htmlFor="direct-file-upload"
+                              className="flex items-center gap-3 border-2 border-dashed border-sauce/40 bg-sauce/5 rounded-lg p-3 cursor-pointer hover:bg-sauce/15 hover:border-sauce transition group"
+                            >
+                              <span className="text-2xl shrink-0 group-hover:scale-110 transition-transform">💻</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-verde-profundo leading-snug">Elegir de mi computadora</p>
+                                <p className="text-[10px] text-carbon/60 leading-tight">PDF, Word, Excel, Imágenes, Videos, etc.</p>
+                              </div>
+                              <input
+                                type="file"
+                                id="direct-file-upload"
+                                className="hidden"
+                                disabled={enviandoArchivoDirecto}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) void handleEnviarArchivoDirecto(f);
+                                }}
+                              />
+                            </label>
+
+                            <div className="relative flex py-0.5 items-center">
+                              <div className="flex-grow border-t border-carbon/10"></div>
+                              <span className="flex-shrink mx-2 text-[9px] uppercase font-bold text-carbon/40 tracking-wider">o seleccionar del CRM</span>
+                              <div className="flex-grow border-t border-carbon/10"></div>
+                            </div>
+
                             <DocumentosVentas
                               modoSelector
                               onSeleccionar={(doc) => enviarDocumento(doc)}

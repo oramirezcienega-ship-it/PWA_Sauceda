@@ -111,18 +111,21 @@ export async function enviarWhatsAppDocumento(
   const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
 
   try {
+    const esUrl = /^https?:\/\//i.test(documentoUrl);
+    const mediaObj = esUrl ? { link: documentoUrl } : { id: documentoUrl };
+
     const body: Record<string, unknown> = esImagen
       ? {
           messaging_product: "whatsapp",
           to: tel,
           type: "image",
-          image: { link: documentoUrl, ...(caption ? { caption } : {}) },
+          image: { ...mediaObj, ...(caption ? { caption } : {}) },
         }
       : {
           messaging_product: "whatsapp",
           to: tel,
           type: "document",
-          document: { link: documentoUrl, filename: nombreArchivo, ...(caption ? { caption } : {}) },
+          document: { ...mediaObj, filename: nombreArchivo, ...(caption ? { caption } : {}) },
         };
 
     const res = await fetch(
