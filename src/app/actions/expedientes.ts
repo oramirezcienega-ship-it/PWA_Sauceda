@@ -720,3 +720,34 @@ export async function guardarNotaExpediente(id: string, nuevaNota: string): Prom
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+/** Obtiene los datos de la promoción y del portal del cliente vinculados al expediente. */
+export async function obtenerPromocionExpediente(expedienteId: string) {
+  const sb = supabaseServidor();
+  const { data: promo } = await sb
+    .from("promociones_expedientes")
+    .select("*")
+    .eq("expediente_id", expedienteId)
+    .maybeSingle();
+
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("session_token_client, status_proceso, fecha_confirmacion, fecha_fotos_agendadas, litigios_bloqueado")
+    .eq("id", expedienteId)
+    .maybeSingle();
+
+  return {
+    promocion: promo ?? null,
+    sessionTokenClient: exp?.session_token_client ?? null,
+    statusProceso: exp?.status_proceso ?? null,
+    fechaConfirmacion: exp?.fecha_confirmacion ?? null,
+    fechaFotosAgendadas: exp?.fecha_fotos_agendadas ?? null,
+    litigiosBloqueado: exp?.litigios_bloqueado ?? false,
+  };
+}
+
+/** Wrapper de Server Action para llamarse desde componentes de cliente. */
+export async function asegurarPortalClienteAction(expedienteId: string) {
+  const sb = supabaseServidor();
+  return asegurarPortalCliente(sb, expedienteId);
+}

@@ -204,6 +204,12 @@ export interface Expediente {
   fechaInstalacion?: string | null;
   /** Marca permanente: el expediente no cumple criterios de servicio. Bloquea todo contacto. */
   noViable?: boolean;
+  /** Token de sesión pública para el portal del cliente. */
+  sessionTokenClient?: string | null;
+  /** Estatus del proceso en el portal del cliente. */
+  statusProceso?: string | null;
+  /** Fecha de confirmación por el cliente. */
+  fechaConfirmacion?: string | null;
 }
 
 /**

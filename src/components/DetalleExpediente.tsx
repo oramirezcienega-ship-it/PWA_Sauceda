@@ -20,6 +20,7 @@ import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 import { LinkCitaWidget } from "./LinkCitaWidget";
 import { programarInstalacionExpediente } from "@/app/actions/agenda";
+import { PromocionVentaWidget } from "./PromocionVentaWidget";
 
 /**
  * Vista de detalle de un expediente.
@@ -676,6 +677,15 @@ export function DetalleExpediente({ id }: { id: string }) {
                 </div>
               )}
             </Bloque>
+          )}
+
+          {/* Módulo de Promoción Venta & Portal del Cliente */}
+          {(expediente.tipoNegocio === "promocion_venta" || expediente.sessionTokenClient) && (
+            <PromocionVentaWidget
+              expedienteId={expediente.id}
+              clienteNombre={expediente.cliente}
+              siteUrl={siteUrl}
+            />
           )}
 
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
