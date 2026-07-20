@@ -383,3 +383,109 @@ export async function renderizarPlantilla(
   });
   return texto;
 }
+
+/** Sube un archivo binario a Meta Cloud API y devuelve el media_id. */
+export async function subirMediaMeta(
+  buffer: Buffer,
+  mimeType: string,
+  filename: string,
+  type: "image" | "sticker" | "document" | "audio" | "video"
+): Promise<string | null> {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneId) {
+    console.error("[Meta Upload] Credenciales de WhatsApp incompletas.");
+    return null;
+  }
+
+  try {
+    console.log(`[Meta Upload] Subiendo archivo (${filename}, ${mimeType}, tipo: ${type})...`);
+    const formData = new FormData();
+    formData.append("messaging_product", "whatsapp");
+    formData.append("type", type);
+    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+    formData.append("file", blob, filename);
+
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/media`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (!res.ok) {
+      console.error(`[Meta Upload] Error subiendo media a Meta: ${res.status} ${await res.text()}`);
+      return null;
+    }
+
+    const result = await res.json() as { id?: string };
+    console.log(`[Meta Upload] Archivo subido con éxito. Media ID: ${result.id ?? ""}`);
+    return result.id || null;
+  } catch (err) {
+    console.error("[Meta Upload] Excepción al subir media a Meta:", err);
+    return null;
+  }
+}
+
+/** Envía un sticker de WhatsApp usando un media_id de Meta. */
+export async function enviarWhatsAppSticker(
+  telefono: string,
+  mediaId: string
+): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+  try {
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const to = normalizarTelefono(telefono);
+
+    if (!token || !phoneId) {
+      return { ok: false, error: "WhatsApp no está configurado (faltan credenciales)." };
+    }
+    if (!to || to.length < 10) {
+      return { ok: false, error: `Teléfono inválido (${to || "vacío"}).` };
+    }
+
+    const res = await fetch(
+      `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to,
+          type: "sticker",
+          sticker: { id: mediaId },
+        }),
+      }
+    );
+
+    const bodyText = await res.text();
+    if (!res.ok) {
+      console.error("WhatsApp Sticker no enviado:", res.status, bodyText);
+      let metaMsg = "";
+      try {
+        const j = JSON.parse(bodyText);
+        metaMsg = j?.error?.message ?? "";
+      } catch {
+        // Ignorar
+      }
+      return { ok: false, error: metaMsg || `Meta respondió con error ${res.status}.` };
+    }
+
+    let messageId: string | undefined;
+    try {
+      const j = JSON.parse(bodyText);
+      messageId = j?.messages?.[0]?.id;
+    } catch {
+      // Ignorar
+    }
+    return { ok: true, messageId };
+  } catch (err) {
+    console.error("Error al enviar WhatsApp Sticker:", err);
+    return { ok: false, error: "Error de red al enviar el sticker." };
+  }
+}

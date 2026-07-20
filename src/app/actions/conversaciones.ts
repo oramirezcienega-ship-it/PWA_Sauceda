@@ -3,7 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
-import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, subirMediaMeta, enviarWhatsAppSticker } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
@@ -825,5 +825,65 @@ export async function contarConversacionesPendientes(): Promise<number> {
     return count;
   } catch {
     return 0;
+  }
+}
+
+/** Envía un sticker de la biblioteca o personalizado a una conversación. */
+export async function enviarStickerConversacion(
+  telefono: string,
+  fileBase64: string,
+  fileName: string,
+  mimeType: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, error: "Falta el teléfono." };
+  if (!fileBase64) return { ok: false, error: "Falta el sticker." };
+
+  try {
+    // 1. Decodificar Base64
+    const base64Data = fileBase64.replace(/^data:[^;]+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+
+    // 2. Subir a Meta
+    const mediaId = await subirMediaMeta(buffer, mimeType, fileName, "sticker");
+    if (!mediaId) {
+      return { ok: false, error: "No se pudo subir el sticker a los servidores de WhatsApp." };
+    }
+
+    // 3. Enviar sticker
+    const r = await enviarWhatsAppSticker(telefono, mediaId);
+    if (!r.ok) {
+      return { ok: false, error: r.error ?? "No se pudo enviar el sticker." };
+    }
+
+    // 4. Registrar en la base de datos
+    const sb = supabaseServidor();
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const agente = await nombreAgenteActual(sb);
+
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
+      texto: `[sticker:${mediaId}]`,
+      direccion: "out",
+      estado: "enviado",
+      agente,
+      wa_message_id: r.messageId ?? null,
+      expediente_id: expedienteId,
+      prospecto_id: prospectoId,
+    });
+
+    if (expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: "mensaje",
+        titulo: "Sticker enviado por WhatsApp",
+        detalle: "Se envió un sticker al cliente.",
+      });
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al enviar sticker de conversación:", err);
+    return { ok: false, error: err.message || "Error al procesar y enviar el sticker." };
   }
 }

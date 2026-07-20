@@ -17,6 +17,7 @@ import {
   type RespuestaRapidaDB,
   eliminarMensajeIndividual,
   editarMensajeIndividual,
+  enviarStickerConversacion,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
@@ -166,29 +167,131 @@ function resolverParametros(
 
 /** Renderiza el texto del mensaje, soportando reproductores de audio para audios de WhatsApp */
 function renderizarContenidoMensaje(texto: string) {
-  if (texto && texto.startsWith("[audio:")) {
-    const match = texto.match(/^\[audio:([^\]]+)\]\s*(.*)$/);
-    if (match) {
-      const mediaId = match[1];
-      const resto = match[2];
-      return (
-        <div className="space-y-1.5 min-w-[220px]">
-          <div className="flex items-center gap-1.5 text-[10px] text-carbon/40 font-semibold select-none">
-            <span>🎙️ Mensaje de voz de WhatsApp</span>
+  if (texto) {
+    if (texto.startsWith("[audio:")) {
+      const match = texto.match(/^\[audio:([^\]]+)\]\s*(.*)$/);
+      if (match) {
+        const mediaId = match[1];
+        const resto = match[2];
+        return (
+          <div className="space-y-1.5 min-w-[220px]">
+            <div className="flex items-center gap-1.5 text-[10px] text-carbon/40 font-semibold select-none">
+              <span>🎙️ Mensaje de voz de WhatsApp</span>
+            </div>
+            <audio
+              src={`/api/conversaciones/audio?mediaId=${mediaId}`}
+              controls
+              className="h-8 w-full max-w-[250px] outline-none"
+              preload="metadata"
+            />
+            {resto && resto !== "(mensaje de tipo audio)" && (
+              <p className="text-[11px] italic bg-carbon/5 p-2 rounded-lg border border-carbon/5 mt-1 text-carbon/80 leading-relaxed font-normal">
+                "{resto}"
+              </p>
+            )}
           </div>
-          <audio
-            src={`/api/conversaciones/audio?mediaId=${mediaId}`}
-            controls
-            className="h-8 w-full max-w-[250px] outline-none"
-            preload="metadata"
-          />
-          {resto && resto !== "(mensaje de tipo audio)" && (
-            <p className="text-[11px] italic bg-carbon/5 p-2 rounded-lg border border-carbon/5 mt-1 text-carbon/80 leading-relaxed font-normal">
-              "{resto}"
-            </p>
-          )}
-        </div>
-      );
+        );
+      }
+    }
+
+    if (texto.startsWith("[image:")) {
+      const match = texto.match(/^\[image:([^\]]+)\]\s*(.*)$/);
+      if (match) {
+        const mediaId = match[1];
+        const caption = match[2];
+        return (
+          <div className="space-y-1 max-w-[280px]">
+            <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
+              <a
+                href={`/api/conversaciones/media?mediaId=${mediaId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="block hover:opacity-90 transition-opacity"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                  alt={caption || "Imagen de WhatsApp"}
+                  className="max-h-[220px] w-full object-contain mx-auto"
+                  loading="lazy"
+                />
+              </a>
+            </div>
+            {caption && <p className="text-xs text-carbon/80 font-normal mt-1 leading-normal">{caption}</p>}
+          </div>
+        );
+      }
+    }
+
+    if (texto.startsWith("[sticker:")) {
+      const match = texto.match(/^\[sticker:([^\]]+)\]/);
+      if (match) {
+        const mediaId = match[1];
+        return (
+          <div className="max-w-[120px] bg-transparent">
+            <a
+              href={`/api/conversaciones/media?mediaId=${mediaId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="block hover:scale-105 transition-transform"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                alt="Sticker"
+                className="h-28 w-28 object-contain"
+                loading="lazy"
+              />
+            </a>
+          </div>
+        );
+      }
+    }
+
+    if (texto.startsWith("[video:")) {
+      const match = texto.match(/^\[video:([^\]]+)\]\s*(.*)$/);
+      if (match) {
+        const mediaId = match[1];
+        const caption = match[2];
+        return (
+          <div className="space-y-1 max-w-[280px]">
+            <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
+              <video
+                src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                controls
+                className="max-h-[220px] w-full object-contain mx-auto"
+                preload="metadata"
+              />
+            </div>
+            {caption && <p className="text-xs text-carbon/80 font-normal mt-1 leading-normal">{caption}</p>}
+          </div>
+        );
+      }
+    }
+
+    if (texto.startsWith("[document:")) {
+      const match = texto.match(/^\[document:([^\]]+)\]\s*(.*)$/);
+      if (match) {
+        const mediaId = match[1];
+        const filename = match[2] || "documento.bin";
+        return (
+          <div className="min-w-[220px] max-w-[280px]">
+            <a
+              href={`/api/conversaciones/media?mediaId=${mediaId}`}
+              download={filename}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-carbon/15 bg-crema/40 p-2.5 text-xs font-semibold text-verde-profundo hover:bg-crema hover:border-sauce transition shadow-sm"
+            >
+              <span className="text-2xl shrink-0 select-none">📄</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-carbon font-medium text-[12px]">{filename}</p>
+                <p className="text-[10px] text-carbon/40 font-normal">Descargar documento</p>
+              </div>
+            </a>
+          </div>
+        );
+      }
     }
   }
   return <span>{texto}</span>;
@@ -222,6 +325,8 @@ export function Conversaciones() {
   const [respuestasRapidas, setRespuestasRapidas] = useState<RespuestaRapidaDB[]>([]);
   const [mostrarAdjuntar, setMostrarAdjuntar] = useState(false);
   const [enviandoDoc, setEnviandoDoc] = useState(false);
+  const [mostrarStickers, setMostrarStickers] = useState(false);
+  const [enviandoSticker, setEnviandoSticker] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -485,6 +590,48 @@ export function Conversaciones() {
       setAviso(r.error ?? "No se pudo enviar el documento.");
     } else {
       await refrescar(sel);
+    }
+  }
+
+  async function handleEnviarSticker(file: File) {
+    if (!sel || !file) return;
+
+    if (!file.name.toLowerCase().endsWith(".webp")) {
+      setAviso("WhatsApp requiere que los stickers estén en formato WebP (.webp)");
+      return;
+    }
+
+    setEnviandoSticker(true);
+    setMostrarStickers(false);
+    setAviso(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        if (!base64) {
+          setAviso("No se pudo leer el archivo de sticker.");
+          setEnviandoSticker(false);
+          return;
+        }
+
+        const r = await enviarStickerConversacion(sel, base64, file.name, file.type || "image/webp");
+        setEnviandoSticker(false);
+
+        if (!r.ok) {
+          setAviso(r.error ?? "No se pudo enviar el sticker.");
+        } else {
+          await refrescar(sel);
+        }
+      };
+      reader.onerror = () => {
+        setAviso("Error al leer el archivo de sticker.");
+        setEnviandoSticker(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setAviso(err.message || "Error al enviar el sticker.");
+      setEnviandoSticker(false);
     }
   }
 
@@ -1006,7 +1153,9 @@ export function Conversaciones() {
 
                     <div
                       className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm ${
-                        m.direccion === "out"
+                        m.texto.startsWith("[sticker:")
+                          ? "bg-transparent text-carbon border-none shadow-none !p-0"
+                          : m.direccion === "out"
                           ? "bg-sauce text-crema whitespace-pre-line"
                           : "bg-white border border-carbon/5 text-carbon"
                       }`}
@@ -1014,7 +1163,11 @@ export function Conversaciones() {
                       {renderizarContenidoMensaje(m.texto)}
                       <span
                         className={`mt-1 block text-right text-[10px] ${
-                          m.direccion === "out" ? "text-crema/70" : "text-carbon/40"
+                          m.texto.startsWith("[sticker:")
+                            ? "text-carbon/40 font-medium"
+                            : m.direccion === "out"
+                            ? "text-crema/70"
+                            : "text-carbon/40"
                         }`}
                       >
                         {m.direccion === "out" && m.agente && `${m.agente} · `}
@@ -1173,6 +1326,58 @@ export function Conversaciones() {
                               onSeleccionar={(doc) => enviarDocumento(doc)}
                             />
                           </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Botón enviar sticker */}
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMostrarStickers(!mostrarStickers)}
+                        disabled={enviandoSticker || (!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp")}
+                        title="Enviar sticker"
+                        className="flex h-[42px] w-[42px] items-center justify-center rounded-md border border-carbon/20 bg-white text-lg hover:bg-sauce/10 hover:border-sauce/40 transition disabled:opacity-50"
+                      >
+                        {enviandoSticker ? <span className="text-sm animate-pulse">⏳</span> : "🏷️"}
+                      </button>
+                      {/* Modal de selección de stickers */}
+                      {mostrarStickers && (
+                        <div className="absolute right-0 bottom-full mb-2 z-50 w-72 rounded-xl border border-carbon/15 bg-white shadow-xl p-3 space-y-3">
+                          <div className="flex items-center justify-between border-b border-carbon/10 pb-1.5">
+                            <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">🏷️ Enviar Sticker</span>
+                            <button
+                              type="button"
+                              onClick={() => setMostrarStickers(false)}
+                              className="text-carbon/40 hover:text-carbon text-xs"
+                            >✕</button>
+                          </div>
+                          
+                          <div className="text-[10px] text-carbon/60 leading-normal space-y-1.5">
+                            <p><strong>Requisitos de WhatsApp:</strong></p>
+                            <ul className="list-disc pl-3.5 space-y-0.5">
+                              <li>Formato WebP (.webp) únicamente.</li>
+                              <li>Dimensiones exactas: 512x512 px.</li>
+                              <li>Fondo transparente y menor a 100 KB.</li>
+                            </ul>
+                          </div>
+
+                          <label
+                            htmlFor="sticker-file"
+                            className="flex flex-col items-center justify-center border-2 border-dashed border-carbon/20 rounded-lg p-4 cursor-pointer hover:border-sauce hover:bg-sauce/5 transition group"
+                          >
+                            <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🖼️</span>
+                            <span className="text-xs font-semibold text-carbon/80 group-hover:text-sauce">Elegir WebP</span>
+                            <input
+                              type="file"
+                              id="sticker-file"
+                              accept="image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) void handleEnviarSticker(f);
+                              }}
+                            />
+                          </label>
                         </div>
                       )}
                     </div>

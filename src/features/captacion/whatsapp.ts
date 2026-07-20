@@ -101,6 +101,10 @@ interface PayloadWhatsApp {
           type?: string;
           text?: { body?: string };
           audio?: { id?: string };
+          image?: { id?: string; caption?: string };
+          sticker?: { id?: string };
+          video?: { id?: string; caption?: string };
+          document?: { id?: string; filename?: string; caption?: string };
           referral?: {
             source_url?: string;
             source_id?: string;
@@ -133,8 +137,24 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
 
       for (const m of value.messages ?? []) {
         if (!m.from) continue;
-        const texto =
-          m.text?.body ?? (m.type ? `(mensaje de tipo ${m.type})` : undefined);
+        
+        let texto = m.text?.body;
+        if (!texto && m.type) {
+          if (m.type === "image" && m.image?.id) {
+            texto = `[image:${m.image.id}]${m.image.caption ? ' ' + m.image.caption : ''}`;
+          } else if (m.type === "sticker" && m.sticker?.id) {
+            texto = `[sticker:${m.sticker.id}]`;
+          } else if (m.type === "video" && m.video?.id) {
+            texto = `[video:${m.video.id}]${m.video.caption ? ' ' + m.video.caption : ''}`;
+          } else if (m.type === "document" && m.document?.id) {
+            texto = `[document:${m.document.id}]${m.document.filename ? ' ' + (m.document.filename || m.document.caption || '') : ''}`;
+          } else if (m.type === "audio" && m.audio?.id) {
+            texto = `[audio:${m.audio.id}] (mensaje de tipo audio)`;
+          } else {
+            texto = `(mensaje de tipo ${m.type})`;
+          }
+        }
+
         mensajes.push({
           telefono: m.from,
           nombre: nombrePorWaId[m.from],
