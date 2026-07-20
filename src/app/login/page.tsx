@@ -94,17 +94,21 @@ export default function PaginaLogin() {
     e.preventDefault();
     setError(null);
     setEntrando(true);
-    // El inicio de sesión ocurre en el SERVIDOR (server action): así las
-    // cookies de sesión se marcan HttpOnly + Secure + SameSite=Lax.
-    const r = await iniciarSesion(correo, password);
-    if (!r.ok) {
-      setError(r.error ?? "Correo o contraseña incorrectos.");
+    try {
+      const r = await iniciarSesion(correo, password);
+      if (!r.ok) {
+        setError(r.error ?? "Correo o contraseña incorrectos.");
+        setEntrando(false);
+        return;
+      }
+      // Redirección adaptativa según el rol devuelto por el servidor
+      const destino = (r.rol === "asesor" || r.rol === "operaciones") ? "/dashboard" : "/";
+      window.location.assign(destino);
+    } catch (err: any) {
+      console.error("Error al iniciar sesión:", err);
+      setError(err?.message || "Error inesperado al conectar con el servidor.");
       setEntrando(false);
-      return;
     }
-    // Redirección adaptativa según el rol devuelto por el servidor
-    const destino = (r.rol === "asesor" || r.rol === "operaciones") ? "/dashboard" : "/";
-    window.location.assign(destino);
   }
 
   return (

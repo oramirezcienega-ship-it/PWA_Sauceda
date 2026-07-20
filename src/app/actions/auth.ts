@@ -15,24 +15,32 @@ export async function iniciarSesion(
   correo: string,
   password: string,
 ): Promise<{ ok: boolean; error?: string; rol?: string }> {
-  // Validación/sanitización en el servidor (no se confía en el cliente).
-  const email = limpiarTexto(correo, 254).toLowerCase();
-  if (!esEmail(email)) {
-    return { ok: false, error: "Correo o contraseña incorrectos." };
-  }
-  if (typeof password !== "string" || password.length < 6 || password.length > 200) {
-    return { ok: false, error: "Correo o contraseña incorrectos." };
-  }
+  try {
+    // Validación/sanitización en el servidor (no se confía en el cliente).
+    const email = limpiarTexto(correo, 254).toLowerCase();
+    if (!esEmail(email)) {
+      return { ok: false, error: "Correo o contraseña incorrectos." };
+    }
+    if (typeof password !== "string" || password.length < 6 || password.length > 200) {
+      return { ok: false, error: "Correo o contraseña incorrectos." };
+    }
 
-  const sb = supabaseSesion();
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error || !data?.user) {
-    // Mensaje genérico para no revelar si el correo existe o no.
-    return { ok: false, error: "Correo o contraseña incorrectos." };
-  }
+    const sb = supabaseSesion();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error || !data?.user) {
+      console.error("[iniciarSesion error]:", error?.message);
+      return { ok: false, error: error?.message || "Correo o contraseña incorrectos." };
+    }
 
-  const { rol } = await rolDe(data.user.id);
-  return { ok: true, rol };
+    const { rol, activo } = await rolDe(data.user.id);
+    if (activo === false) {
+      return { ok: false, error: "Tu usuario se encuentra inactivo." };
+    }
+    return { ok: true, rol };
+  } catch (err: any) {
+    console.error("[iniciarSesion exception]:", err);
+    return { ok: false, error: err?.message || "Error inesperado al validar la sesión." };
+  }
 }
 
 /** Cierra la sesión del admin (borra las cookies desde el servidor). */
