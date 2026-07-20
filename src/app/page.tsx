@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function PaginaTablero() {
   const rol = await rolUsuarioActual();
-  if (rol === "asesor") {
+  if (rol === "asesor" || rol === "operaciones") {
     redirect("/dashboard");
   }
 
