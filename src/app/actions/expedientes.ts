@@ -751,3 +751,103 @@ export async function asegurarPortalClienteAction(expedienteId: string) {
   const sb = supabaseServidor();
   return asegurarPortalCliente(sb, expedienteId);
 }
+
+export interface FotoExpediente {
+  id: string;
+  expediente_id: string;
+  url: string;
+  nombre_archivo: string | null;
+  rotacion: number;
+  orden: number;
+  created_at: string;
+}
+
+/** Obtiene las fotos adjuntas a un expediente. */
+export async function obtenerFotosExpediente(expedienteId: string): Promise<FotoExpediente[]> {
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("fotos_expedientes")
+    .select("*")
+    .eq("expediente_id", expedienteId)
+    .order("orden", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error al obtener fotos del expediente:", error);
+    return [];
+  }
+  return (data || []) as FotoExpediente[];
+}
+
+/** Sube fotos al bucket y las registra en la BD para el expediente. */
+export async function subirFotosExpediente(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const sb = supabaseServidor();
+  const expedienteId = formData.get("expedienteId") as string | null;
+  const archivos = formData.getAll("archivos") as File[];
+
+  if (!expedienteId) return { ok: false, error: "Falta expedienteId." };
+  if (!archivos || archivos.length === 0) return { ok: false, error: "No se adjuntaron fotos." };
+
+  for (const archivo of archivos) {
+    if (!archivo || archivo.size === 0) continue;
+    const cleanName = archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${expedienteId}/${Date.now()}-${cleanName}`;
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+
+    let publicUrl = "";
+
+    const { data: uploadData, error: uploadError } = await sb.storage
+      .from("expedientes-fotos")
+      .upload(path, buffer, {
+        contentType: archivo.type || "image/jpeg",
+        upsert: true,
+      });
+
+    if (!uploadError && uploadData) {
+      const { data: urlData } = sb.storage
+        .from("expedientes-fotos")
+        .getPublicUrl(uploadData.path);
+      publicUrl = urlData.publicUrl;
+    } else {
+      const base64 = buffer.toString("base64");
+      publicUrl = `data:${archivo.type || "image/jpeg"};base64,${base64}`;
+    }
+
+    await sb.from("fotos_expedientes").insert({
+      expediente_id: expedienteId,
+      url: publicUrl,
+      nombre_archivo: archivo.name,
+      rotacion: 0,
+    });
+  }
+
+  return { ok: true };
+}
+
+/** Actualiza la rotación de una foto (0, 90, 180, 270 grados). */
+export async function rotarFotoExpediente(fotoId: string, nuevaRotacion: number): Promise<void> {
+  const sb = supabaseServidor();
+  await sb
+    .from("fotos_expedientes")
+    .update({ rotacion: ((nuevaRotacion % 360) + 360) % 360 })
+    .eq("id", fotoId);
+}
+
+/** Elimina una foto de la galería del expediente. */
+export async function eliminarFotoExpediente(fotoId: string): Promise<void> {
+  const sb = supabaseServidor();
+  const { data: foto } = await sb
+    .from("fotos_expedientes")
+    .select("url")
+    .eq("id", fotoId)
+    .maybeSingle();
+
+  if (foto?.url && foto.url.includes("expedientes-fotos/")) {
+    const match = foto.url.match(/expedientes-fotos\/(.+)$/);
+    if (match) {
+      await sb.storage.from("expedientes-fotos").remove([match[1]]);
+    }
+  }
+
+  await sb.from("fotos_expedientes").delete().eq("id", fotoId);
+}

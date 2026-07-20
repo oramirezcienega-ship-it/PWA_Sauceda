@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { obtenerPromocionExpediente, asegurarPortalClienteAction } from "@/app/actions/expedientes";
+import { GaleriaFotosExpediente } from "./GaleriaFotosExpediente";
 
 interface Props {
   expedienteId: string;
@@ -262,6 +263,9 @@ export function PromocionVentaWidget({ expedienteId, clienteNombre, siteUrl }: P
           </div>
         </div>
       )}
+
+      {/* Galería de Fotos del Inmueble */}
+      <GaleriaFotosExpediente expedienteId={expedienteId} />
     </div>
   );
 }

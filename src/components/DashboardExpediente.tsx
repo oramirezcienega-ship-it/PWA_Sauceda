@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { GaleriaFotosExpediente } from "./GaleriaFotosExpediente";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -628,6 +629,9 @@ export function DashboardExpediente({
             <Campo label="Comentarios" valor={promocion?.comentarios} />
           </SeccionInfo>
         </div>
+
+        {/* Galería de Fotos de la Propiedad (Vista Cliente) */}
+        <GaleriaFotosExpediente expedienteId={expediente.id} readonly />
 
         {/* ── Próximos pasos ── */}
         <div className="bg-verde-profundo/5 border border-sauce/20 rounded-2xl p-5">
