@@ -845,10 +845,11 @@ export async function enviarStickerConversacion(
     const buffer = Buffer.from(base64Data, "base64");
 
     // 2. Subir a Meta
-    const mediaId = await subirMediaMeta(buffer, mimeType, fileName, "sticker");
-    if (!mediaId) {
-      return { ok: false, error: "No se pudo subir el sticker a los servidores de WhatsApp." };
+    const resUpload = await subirMediaMeta(buffer, mimeType, fileName, "sticker");
+    if (!resUpload.mediaId) {
+      return { ok: false, error: resUpload.error || "No se pudo subir el sticker a los servidores de WhatsApp." };
     }
+    const mediaId = resUpload.mediaId;
 
     // 3. Enviar sticker
     const r = await enviarWhatsAppSticker(telefono, mediaId);
@@ -917,10 +918,11 @@ export async function enviarArchivoDirectoConversacion(
     else if (mimeType.startsWith("audio/")) metaType = "audio";
 
     // 1. Subir binario a Meta
-    const mediaId = await subirMediaMeta(buffer, mimeType, filename, metaType);
-    if (!mediaId) {
-      return { ok: false, error: "No se pudo cargar el archivo en los servidores de WhatsApp." };
+    const resUpload = await subirMediaMeta(buffer, mimeType, filename, metaType);
+    if (!resUpload.mediaId) {
+      return { ok: false, error: resUpload.error || "No se pudo cargar el archivo en los servidores de WhatsApp." };
     }
+    const mediaId = resUpload.mediaId;
 
     // 2. Enviar por WhatsApp
     const r = await enviarWhatsAppDocumento(telefono, mediaId, filename, caption, mimeType);
