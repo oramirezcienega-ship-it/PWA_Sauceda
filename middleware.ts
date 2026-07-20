@@ -58,6 +58,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(destino);
   }
 
+  if (user && path.startsWith("/login")) {
+    const destino = request.nextUrl.clone();
+    destino.pathname = "/dashboard";
+    return NextResponse.redirect(destino);
+  }
+
   return response;
 }
 
