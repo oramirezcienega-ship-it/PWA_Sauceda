@@ -203,7 +203,7 @@ async function asegurarProspectoParaExpediente(
     segundo_apellido: datos.segundoApellido || null,
     telefono: datos.telefono || "",
     email: (datos as any).email || null,
-    fraccionamiento: datos.fraccionamiento || null,
+    direccion: datos.direccionPropiedad || "",
     origen: (datos as any).origen || "manual",
     estatus: "contactado",
     asesor_id: datos.asesorId || null,
@@ -377,7 +377,7 @@ export async function actualizarExpediente(
     }
   }
 
-  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador) con el prospecto.
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador + dirección) con el prospecto.
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
@@ -386,6 +386,7 @@ export async function actualizarExpediente(
         primer_apellido: datos.primerApellido,
         segundo_apellido: datos.segundoApellido,
         telefono: datos.telefono,
+        direccion: datos.direccionPropiedad || "",
         ad_name: datos.adName,
         adset_name: datos.adsetName,
         campaign_name: datos.campaignName,
