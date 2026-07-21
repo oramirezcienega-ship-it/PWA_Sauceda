@@ -62,6 +62,9 @@ export interface FilaExpediente {
   operador?: { nombre: string } | null;
   perfiles?: { nombre: string } | null;
   no_viable?: boolean;
+  session_token_client?: string | null;
+  status_proceso?: string | null;
+  fecha_confirmacion?: string | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -105,6 +108,9 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     operadorId: fila.operador_id ?? null,
     operadorNombre: fila.operador?.nombre ?? null,
     noViable: fila.no_viable ?? false,
+    sessionTokenClient: fila.session_token_client ?? null,
+    statusProceso: fila.status_proceso ?? null,
+    fechaConfirmacion: fila.fecha_confirmacion ?? null,
   };
 }
 

@@ -43,6 +43,7 @@ export function DetalleCotizacionAdmin({
   const [largo, setLargo] = useState<string>(String(reporteVisitaInicial?.medidas?.largo || ""));
   const [ancho, setAncho] = useState<string>(String(reporteVisitaInicial?.medidas?.ancho || ""));
   const [fotos, setFotos] = useState<string[]>(reporteVisitaInicial?.fotos || []);
+  const [fotoUrlInput, setFotoUrlInput] = useState("");
   const [guardandoInspeccion, setGuardandoInspeccion] = useState(false);
   const [mensajeInspeccion, setMensajeInspeccion] = useState({ tipo: "", texto: "" });
 

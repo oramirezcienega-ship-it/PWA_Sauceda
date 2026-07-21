@@ -8,9 +8,9 @@ export function FiltrosDashboard() {
   const searchParams = useSearchParams();
 
   // Obtener valores iniciales de la URL
-  const rangoActual = searchParams.get("rango") || "todos";
-  const desdeActual = searchParams.get("desde") || "";
-  const hastaActual = searchParams.get("hasta") || "";
+  const rangoActual = searchParams?.get("rango") || "todos";
+  const desdeActual = searchParams?.get("desde") || "";
+  const hastaActual = searchParams?.get("hasta") || "";
 
   const [rango, setRango] = useState(rangoActual);
   const [desde, setDesde] = useState(desdeActual);

@@ -1,5 +1,6 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
@@ -389,11 +390,79 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     tipo: "etapa",
     titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
   });
+
+  // Trigger automático: Si la etapa pasa a valuación (y tipo_negocio es promoción venta), inicializar portal del cliente
+  if (etapa === "valuacion") {
+    await asegurarPortalCliente(sb, id);
+  }
+
   // Dispara automatizaciones del evento "cambio de etapa".
   await dispararEvento(sb, "cambio-etapa", {
     expedienteId: id,
     cambios: ["etapa"],
   });
+}
+
+/**
+ * Garantiza que exista la fila en promociones_expedientes y genera el
+ * session_token_client + token_expiration si aún no los tiene.
+ * Envía por WhatsApp el enlace público del portal si cuenta con teléfono.
+ */
+export async function asegurarPortalCliente(
+  sb: SupabaseClient,
+  expedienteId: string,
+): Promise<{ token: string; url: string }> {
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("id, cliente, primer_apellido, segundo_apellido, telefono, session_token_client, token_expiration, tipo_negocio")
+    .eq("id", expedienteId)
+    .maybeSingle();
+
+  if (!exp) throw new Error("Expediente no encontrado");
+
+  let token = exp.session_token_client;
+  const expirationDate = new Date();
+  expirationDate.setDate(expirationDate.getDate() + 90);
+
+  if (!token) {
+    token = crypto.randomUUID();
+    await sb
+      .from("expedientes")
+      .update({
+        session_token_client: token,
+        token_expiration: expirationDate.toISOString(),
+      })
+      .eq("id", expedienteId);
+  }
+
+  const { data: promo } = await sb
+    .from("promociones_expedientes")
+    .select("id")
+    .eq("expediente_id", expedienteId)
+    .maybeSingle();
+
+  if (!promo) {
+    const nombreCompleto = [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean).join(" ");
+    await sb.from("promociones_expedientes").insert({
+      expediente_id: expedienteId,
+      nombre_titular: nombreCompleto,
+      telefono_titular: exp.telefono,
+    });
+  }
+
+  const siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+  const urlPortal = `${siteUrl}/expediente-cliente/${expedienteId}?token=${token}`;
+
+  if (exp.telefono) {
+    try {
+      const mensaje = `¡Hola ${exp.cliente || "Cliente"}! 👋 Tu expediente ha pasado a la etapa de Valuación.\n\nPuedes revisar y confirmar la información de tu propiedad en tu portal personalizado:\n${urlPortal}`;
+      await enviarWhatsAppTexto(exp.telefono, mensaje);
+    } catch (e) {
+      console.error("No se pudo enviar WhatsApp con la liga del portal:", e);
+    }
+  }
+
+  return { token, url: urlPortal };
 }
 
 /** Cambia la etapa de varios expedientes a la vez (acción masiva). */
@@ -650,4 +719,135 @@ export async function guardarNotaExpediente(id: string, nuevaNota: string): Prom
     .update({ notas: notasActualizadas, ultimo_movimiento: hoyISO() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+/** Obtiene los datos de la promoción y del portal del cliente vinculados al expediente. */
+export async function obtenerPromocionExpediente(expedienteId: string) {
+  const sb = supabaseServidor();
+  const { data: promo } = await sb
+    .from("promociones_expedientes")
+    .select("*")
+    .eq("expediente_id", expedienteId)
+    .maybeSingle();
+
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("session_token_client, status_proceso, fecha_confirmacion, fecha_fotos_agendadas, litigios_bloqueado")
+    .eq("id", expedienteId)
+    .maybeSingle();
+
+  return {
+    promocion: promo ?? null,
+    sessionTokenClient: exp?.session_token_client ?? null,
+    statusProceso: exp?.status_proceso ?? null,
+    fechaConfirmacion: exp?.fecha_confirmacion ?? null,
+    fechaFotosAgendadas: exp?.fecha_fotos_agendadas ?? null,
+    litigiosBloqueado: exp?.litigios_bloqueado ?? false,
+  };
+}
+
+/** Wrapper de Server Action para llamarse desde componentes de cliente. */
+export async function asegurarPortalClienteAction(expedienteId: string) {
+  const sb = supabaseServidor();
+  return asegurarPortalCliente(sb, expedienteId);
+}
+
+export interface FotoExpediente {
+  id: string;
+  expediente_id: string;
+  url: string;
+  nombre_archivo: string | null;
+  rotacion: number;
+  orden: number;
+  created_at: string;
+}
+
+/** Obtiene las fotos adjuntas a un expediente. */
+export async function obtenerFotosExpediente(expedienteId: string): Promise<FotoExpediente[]> {
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("fotos_expedientes")
+    .select("*")
+    .eq("expediente_id", expedienteId)
+    .order("orden", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error al obtener fotos del expediente:", error);
+    return [];
+  }
+  return (data || []) as FotoExpediente[];
+}
+
+/** Sube fotos al bucket y las registra en la BD para el expediente. */
+export async function subirFotosExpediente(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const sb = supabaseServidor();
+  const expedienteId = formData.get("expedienteId") as string | null;
+  const archivos = formData.getAll("archivos") as File[];
+
+  if (!expedienteId) return { ok: false, error: "Falta expedienteId." };
+  if (!archivos || archivos.length === 0) return { ok: false, error: "No se adjuntaron fotos." };
+
+  for (const archivo of archivos) {
+    if (!archivo || archivo.size === 0) continue;
+    const cleanName = archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${expedienteId}/${Date.now()}-${cleanName}`;
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+
+    let publicUrl = "";
+
+    const { data: uploadData, error: uploadError } = await sb.storage
+      .from("expedientes-fotos")
+      .upload(path, buffer, {
+        contentType: archivo.type || "image/jpeg",
+        upsert: true,
+      });
+
+    if (!uploadError && uploadData) {
+      const { data: urlData } = sb.storage
+        .from("expedientes-fotos")
+        .getPublicUrl(uploadData.path);
+      publicUrl = urlData.publicUrl;
+    } else {
+      const base64 = buffer.toString("base64");
+      publicUrl = `data:${archivo.type || "image/jpeg"};base64,${base64}`;
+    }
+
+    await sb.from("fotos_expedientes").insert({
+      expediente_id: expedienteId,
+      url: publicUrl,
+      nombre_archivo: archivo.name,
+      rotacion: 0,
+    });
+  }
+
+  return { ok: true };
+}
+
+/** Actualiza la rotación de una foto (0, 90, 180, 270 grados). */
+export async function rotarFotoExpediente(fotoId: string, nuevaRotacion: number): Promise<void> {
+  const sb = supabaseServidor();
+  await sb
+    .from("fotos_expedientes")
+    .update({ rotacion: ((nuevaRotacion % 360) + 360) % 360 })
+    .eq("id", fotoId);
+}
+
+/** Elimina una foto de la galería del expediente. */
+export async function eliminarFotoExpediente(fotoId: string): Promise<void> {
+  const sb = supabaseServidor();
+  const { data: foto } = await sb
+    .from("fotos_expedientes")
+    .select("url")
+    .eq("id", fotoId)
+    .maybeSingle();
+
+  if (foto?.url && foto.url.includes("expedientes-fotos/")) {
+    const match = foto.url.match(/expedientes-fotos\/(.+)$/);
+    if (match) {
+      await sb.storage.from("expedientes-fotos").remove([match[1]]);
+    }
+  }
+
+  await sb.from("fotos_expedientes").delete().eq("id", fotoId);
 }

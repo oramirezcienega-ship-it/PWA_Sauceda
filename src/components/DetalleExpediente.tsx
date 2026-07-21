@@ -19,7 +19,8 @@ import { TimelineSecuencia } from "./TimelineSecuencia";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 import { LinkCitaWidget } from "./LinkCitaWidget";
-import { programarInstalacionExpediente } from "@/app/actions/agenda";
+import { programarInstalacionExpediente, programarLlamadaExpediente } from "@/app/actions/agenda";
+import { PromocionVentaWidget } from "./PromocionVentaWidget";
 
 /**
  * Vista de detalle de un expediente.
@@ -48,6 +49,54 @@ export function DetalleExpediente({ id }: { id: string }) {
   const [guardandoInstalacion, setGuardandoInstalacion] = useState(false);
   const [exitoInstalacion, setExitoInstalacion] = useState<string | null>(null);
   const [errorInstalacion, setErrorInstalacion] = useState<string | null>(null);
+
+  // Estado para programación de llamada
+  const [mostrarFormLlamada, setMostrarFormLlamada] = useState(false);
+  const [fechaLlamada, setFechaLlamada] = useState("");
+  const [horaLlamada, setHoraLlamada] = useState("10:00");
+  const [notasLlamada, setNotasLlamada] = useState("");
+  const [guardandoLlamada, setGuardandoLlamada] = useState(false);
+  const [exitoLlamada, setExitoLlamada] = useState<string | null>(null);
+  const [errorLlamada, setErrorLlamada] = useState<string | null>(null);
+
+  async function handleProgramarLlamada(e: React.FormEvent) {
+    e.preventDefault();
+    if (!expediente || !fechaLlamada) return;
+    const perfilId = expediente.operadorId || expediente.asesorId;
+    if (!perfilId) {
+      setErrorLlamada("Debes asignar un asesor o técnico al expediente primero.");
+      return;
+    }
+    setGuardandoLlamada(true);
+    setErrorLlamada(null);
+    setExitoLlamada(null);
+
+    try {
+      const r = await programarLlamadaExpediente({
+        expedienteId: expediente.id,
+        prospectoId: expediente.prospectoId || undefined,
+        perfilId,
+        clienteNombre: expediente.nombreCompleto || expediente.cliente,
+        clienteTelefono: expediente.telefono,
+        fecha: fechaLlamada,
+        horaInicio: horaLlamada,
+        notas: notasLlamada,
+      });
+      setGuardandoLlamada(false);
+
+      if (!r.ok) {
+        setErrorLlamada(r.error ?? "No se pudo agendar la llamada.");
+      } else {
+        setExitoLlamada("¡Llamada programada con éxito en la agenda!");
+        setMostrarFormLlamada(false);
+        setNotasLlamada("");
+        await recargar();
+      }
+    } catch (err: any) {
+      setErrorLlamada(err.message || "Error al programar la llamada.");
+      setGuardandoLlamada(false);
+    }
+  }
 
   async function handleProgramarInstalacion(e: React.FormEvent) {
     e.preventDefault();
@@ -678,6 +727,15 @@ export function DetalleExpediente({ id }: { id: string }) {
             </Bloque>
           )}
 
+          {/* Módulo de Promoción Venta & Portal del Cliente */}
+          {(expediente.tipoNegocio === "promocion_venta" || expediente.sessionTokenClient) && (
+            <PromocionVentaWidget
+              expedienteId={expediente.id}
+              clienteNombre={expediente.cliente}
+              siteUrl={siteUrl}
+            />
+          )}
+
           <Bloque titulo="Situación">{expediente.situacion || "—"}</Bloque>
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
@@ -780,6 +838,95 @@ export function DetalleExpediente({ id }: { id: string }) {
               )}
             </div>
           )}
+
+          {/* Módulo de Programación de Llamada Telefónica */}
+          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
+                  📞 Programar Llamada a Realizar
+                </h3>
+                <p className="text-xs text-carbon/50">
+                  Agendar llamada telefónica para que el técnico o asesor la realice
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarFormLlamada(!mostrarFormLlamada)}
+                className="rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-600 hover:text-white transition px-3 py-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1 cursor-pointer"
+              >
+                {mostrarFormLlamada ? "Cancelar" : "📞 Agendar Llamada"}
+              </button>
+            </div>
+
+            {exitoLlamada && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800">
+                {exitoLlamada}
+              </div>
+            )}
+            {errorLlamada && (
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+                {errorLlamada}
+              </div>
+            )}
+
+            {mostrarFormLlamada && (
+              <form onSubmit={handleProgramarLlamada} className="p-4 rounded-xl border border-carbon/15 bg-slate-50 space-y-3">
+                <h4 className="text-xs font-bold text-verde-profundo uppercase tracking-wider">Programar Llamada de Seguimiento</h4>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Fecha de Llamada</label>
+                    <input
+                      type="date"
+                      required
+                      value={fechaLlamada}
+                      onChange={(e) => setFechaLlamada(e.target.value)}
+                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Hora Tentativa</label>
+                    <input
+                      type="time"
+                      required
+                      value={horaLlamada}
+                      onChange={(e) => setHoraLlamada(e.target.value)}
+                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Notas / Propósito de la Llamada</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Confirmar medidas de azotea / Acordar presupuesto..."
+                    value={notasLlamada}
+                    onChange={(e) => setNotasLlamada(e.target.value)}
+                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setMostrarFormLlamada(false)}
+                    className="px-3 py-1.5 rounded-lg border border-carbon/15 text-xs text-carbon/70 hover:bg-carbon/5"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guardandoLlamada}
+                    className="px-4 py-1.5 rounded-lg bg-sauce hover:bg-verde-profundo text-white text-xs font-bold transition disabled:opacity-50"
+                  >
+                    {guardandoLlamada ? "Guardando..." : "Guardar Llamada en Agenda"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
 
           {/* Módulo de Agendamiento de Instalación */}
           <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">

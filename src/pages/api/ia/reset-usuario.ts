@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const secretToken = process.env.CRON_SECRET;
@@ -73,10 +74,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await sb.from("agenda_bloqueos").delete().eq("perfil_id", nuevoAuthUser.id);
     await sb.from("agenda_citas").delete().eq("perfil_id", nuevoAuthUser.id);
 
+    // 5. Probar autenticación directa con signInWithPassword
+    const anonClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data: testAuth, error: testErr } = await anonClient.auth.signInWithPassword({
+      email,
+      password: "sauceda123"
+    });
+
     return res.status(200).json({
       ok: true,
       mensaje: `Reseteo y sincronización completados con éxito para ${email} en Staging.`,
       auth: "Contraseña configurada a 'sauceda123' y correo confirmado.",
+      testLogin: testErr ? `Error en prueba de login: ${testErr.message}` : `Prueba de login EXITOSA para user ID: ${testAuth.user?.id}`,
       perfil: "Perfil de DB vinculado con éxito."
     });
   } catch (err) {
