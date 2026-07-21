@@ -66,12 +66,19 @@ export async function POST(request: NextRequest) {
         ? "https://app.saucedamx.com/api/captacion/whatsapp"
         : "https://crm.saucedamx.com/api/captacion/whatsapp";
 
+      const headersForward: Record<string, string> = {
+        "Content-Type": "application/json",
+        "x-webhook-mirror": "true",
+      };
+
+      const signature = request.headers.get("x-hub-signature-256");
+      if (signature) {
+        headersForward["x-hub-signature-256"] = signature;
+      }
+
       void fetch(destinoEspejo, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-webhook-mirror": "true",
-        },
+        headers: headersForward,
         body: raw,
       }).catch((e) => console.error("[Webhook Espejo] Error al reexpedir a " + destinoEspejo, e));
     }
