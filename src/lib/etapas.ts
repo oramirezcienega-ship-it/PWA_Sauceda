@@ -130,7 +130,13 @@ export const ETAPAS_CONSTRUCCION: Etapa[] = [
   },
 ];
 
-/** Mapa de acceso rápido por id de etapa. */
+/** Lista unificada de todas las etapas posibles (Traspasos + Construcción). */
+export const TODAS_LAS_ETAPAS: Etapa[] = [
+  ...ETAPAS,
+  ...ETAPAS_CONSTRUCCION.filter((ec) => !ETAPAS.some((e) => e.id === ec.id)),
+];
+
+/** Mapa de acceso rápido por id de etapa para Traspasos. */
 export const ETAPAS_POR_ID: Record<EtapaId, Etapa> = ETAPAS.reduce(
   (acc, etapa) => {
     acc[etapa.id] = etapa;
@@ -147,18 +153,37 @@ export const ETAPAS_CONSTRUCCION_POR_ID: Record<string, Etapa> = ETAPAS_CONSTRUC
   {} as Record<string, Etapa>,
 );
 
+/** Mapa global de todas las etapas por ID. */
+export const TODAS_LAS_ETAPAS_POR_ID: Record<string, Etapa> = TODAS_LAS_ETAPAS.reduce(
+  (acc, etapa) => {
+    acc[etapa.id] = etapa;
+    return acc;
+  },
+  {} as Record<string, Etapa>,
+);
+
+export function esTipoNegocioConstruccion(tipoNegocio?: string | null): boolean {
+  if (!tipoNegocio) return false;
+  return (
+    tipoNegocio === "construccion" ||
+    tipoNegocio.startsWith("construccion-") ||
+    tipoNegocio === "construccion-impermeabilizacion" ||
+    tipoNegocio === "construccion-remodelacion"
+  );
+}
+
 export function obtenerEtapasPorNegocio(tipoNegocio?: string | null): Etapa[] {
-  if (tipoNegocio === "construccion-impermeabilizacion") {
+  if (esTipoNegocioConstruccion(tipoNegocio)) {
     return ETAPAS_CONSTRUCCION;
   }
   return ETAPAS;
 }
 
-export function obtenerEtapasPorId(tipoNegocio?: string | null): Record<EtapaId, Etapa> {
-  if (tipoNegocio === "construccion-impermeabilizacion") {
-    return ETAPAS_CONSTRUCCION_POR_ID as any;
+export function obtenerEtapasPorId(tipoNegocio?: string | null): Record<string, Etapa> {
+  if (esTipoNegocioConstruccion(tipoNegocio)) {
+    return ETAPAS_CONSTRUCCION_POR_ID;
   }
-  return ETAPAS_POR_ID;
+  return TODAS_LAS_ETAPAS_POR_ID;
 }
 
 /** Devuelve la etapa siguiente en el flujo, o null si ya es la última. */

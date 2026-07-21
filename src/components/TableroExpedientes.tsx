@@ -1,12 +1,12 @@
 "use client";
 
 import { useExpedientes } from "@/context/expedientes-context";
-import { ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
+import { TODAS_LAS_ETAPAS, etapaAnterior, etapaSiguiente } from "@/lib/etapas";
 import type { EtapaId, Expediente } from "@/lib/types";
 import { TarjetaExpediente } from "./TarjetaExpediente";
 
 /**
- * Tablero de operación (tipo kanban) de expedientes de traspaso.
+ * Tablero de operación (tipo kanban) de expedientes.
  * Recibe la lista ya filtrada; usa el contexto solo para mover de etapa.
  * Mobile-first: las columnas se desplazan horizontalmente.
  * Cada tarjeta permite mover el expediente a la etapa anterior/siguiente.
@@ -20,7 +20,7 @@ export function TableroExpedientes({
 
   return (
     <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-4">
-      {ETAPAS.map((etapa) => {
+      {TODAS_LAS_ETAPAS.map((etapa) => {
         const enEtapa = expedientes.filter((e) => e.etapa === etapa.id);
         return (
           <section
