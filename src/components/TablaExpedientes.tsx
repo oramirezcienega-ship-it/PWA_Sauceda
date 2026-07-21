@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useExpedientes } from "@/context/expedientes-context";
-import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
+import { TODAS_LAS_ETAPAS, TODAS_LAS_ETAPAS_POR_ID, obtenerEtapasPorNegocio } from "@/lib/etapas";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
 import { type EtapaId, type Expediente, labelTipoNegocio } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
@@ -23,7 +23,9 @@ const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
   origen: (a, b) =>
     (a.origenProspecto ?? "").localeCompare(b.origenProspecto ?? "", "es"),
   telefono: (a, b) => a.telefono.localeCompare(b.telefono, "es"),
-  etapa: (a, b) => ETAPAS_POR_ID[a.etapa].orden - ETAPAS_POR_ID[b.etapa].orden,
+  etapa: (a, b) =>
+    (TODAS_LAS_ETAPAS_POR_ID[a.etapa]?.orden ?? 99) -
+    (TODAS_LAS_ETAPAS_POR_ID[b.etapa]?.orden ?? 99),
   valorEstimado: (a, b) => a.valorEstimado - b.valorEstimado,
   saldoDeuda: (a, b) => a.saldoDeuda - b.saldoDeuda,
   ultimoMovimiento: (a, b) =>
@@ -163,7 +165,7 @@ export function TablaExpedientes({
               className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
             >
               <option value="">— elige etapa —</option>
-              {ETAPAS.map((etapa) => (
+              {TODAS_LAS_ETAPAS.map((etapa) => (
                 <option key={etapa.id} value={etapa.id}>
                   {etapa.nombre}
                 </option>
@@ -342,18 +344,24 @@ export function TablaExpedientes({
               </td>
 
               <td className="px-3 py-2.5 align-top">
-                <select
-                  value={exp.etapa}
-                  onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
-                  className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce focus:ring-2 focus:ring-sauce/30"
-                  aria-label={`Cambiar etapa de ${exp.nombreCompleto}`}
-                >
-                  {ETAPAS.map((etapa) => (
-                    <option key={etapa.id} value={etapa.id}>
-                      {etapa.nombre}
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const opciones = obtenerEtapasPorNegocio(exp.tipoNegocio);
+                  const listaEtapas = opciones.some((o) => o.id === exp.etapa) ? opciones : TODAS_LAS_ETAPAS;
+                  return (
+                    <select
+                      value={exp.etapa}
+                      onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
+                      className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce focus:ring-2 focus:ring-sauce/30"
+                      aria-label={`Cambiar etapa de ${exp.nombreCompleto}`}
+                    >
+                      {listaEtapas.map((etapa) => (
+                        <option key={etapa.id} value={etapa.id}>
+                          {etapa.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
               </td>
 
               <td className="px-3 py-2.5 align-top text-right font-mono text-sauce">
@@ -557,18 +565,24 @@ export function TablaExpedientes({
               <div className="flex items-center justify-between border-t border-carbon/5 pt-3">
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] uppercase tracking-wider text-carbon/40 font-semibold">Etapa</span>
-                  <select
-                    value={exp.etapa}
-                    onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
-                    className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce"
-                    aria-label={`Cambiar etapa de ${exp.nombreCompleto}`}
-                  >
-                    {ETAPAS.map((etapa) => (
-                      <option key={etapa.id} value={etapa.id}>
-                        {etapa.nombre}
-                      </option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const opciones = obtenerEtapasPorNegocio(exp.tipoNegocio);
+                    const listaEtapas = opciones.some((o) => o.id === exp.etapa) ? opciones : TODAS_LAS_ETAPAS;
+                    return (
+                      <select
+                        value={exp.etapa}
+                        onChange={(e) => moverEtapa(exp.id, e.target.value as EtapaId)}
+                        className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none transition hover:border-sauce focus:border-sauce"
+                        aria-label={`Cambiar etapa de ${exp.nombreCompleto}`}
+                      >
+                        {listaEtapas.map((etapa) => (
+                          <option key={etapa.id} value={etapa.id}>
+                            {etapa.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
                 <div className="text-right">
                   <span className="text-[9px] uppercase tracking-wider text-carbon/40 font-semibold block">Último Movimiento</span>

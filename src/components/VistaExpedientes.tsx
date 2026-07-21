@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useExpedientes } from "@/context/expedientes-context";
-import { ETAPAS } from "@/lib/etapas";
+import { TODAS_LAS_ETAPAS } from "@/lib/etapas";
 import type { EtapaId } from "@/lib/types";
 import { TableroExpedientes } from "./TableroExpedientes";
 import { TablaExpedientes } from "./TablaExpedientes";
@@ -196,7 +196,7 @@ export function VistaExpedientes() {
         {/* Fila 2: chips de etapas (multi-selección) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none whitespace-nowrap -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
           <span className="mr-1 text-xs text-carbon/50 shrink-0">Etapas:</span>
-          {ETAPAS.map((etapa) => {
+          {TODAS_LAS_ETAPAS.map((etapa) => {
             const activo = etapasSel.includes(etapa.id);
             return (
               <button
