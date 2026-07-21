@@ -57,6 +57,25 @@ export async function POST(request: NextRequest) {
   try {
     const payload = JSON.parse(raw);
 
+    // Reenvío espejo a crm.saucedamx.com / app.saucedamx.com para mantener ambos al día
+    const host = request.headers.get("host") || "";
+    const esEspejo = request.headers.get("x-webhook-mirror") === "true";
+
+    if (!esEspejo) {
+      const destinoEspejo = host.includes("crm.saucedamx.com")
+        ? "https://app.saucedamx.com/api/captacion/whatsapp"
+        : "https://crm.saucedamx.com/api/captacion/whatsapp";
+
+      void fetch(destinoEspejo, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-mirror": "true",
+        },
+        body: raw,
+      }).catch((e) => console.error("[Webhook Espejo] Error al reexpedir a " + destinoEspejo, e));
+    }
+
     // Procesar actualizaciones de estado de envío (delivered, read, failed)
     await procesarEstadosWhatsApp(payload);
 
