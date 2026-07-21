@@ -7,18 +7,8 @@ import {
   limpiarTexto,
 } from "@/lib/validacion";
 
-// Endpoint de captación del formulario del sitio web (saucedamx.com / Cotizar).
 export const dynamic = "force-dynamic";
 
-// CORS: permitimos el envío desde la landing page (con y sin "www").
-const ORIGENES_PERMITIDOS = new Set([
-  "https://saucedamx.com",
-  "https://www.saucedamx.com",
-  "http://localhost:3000", // pruebas locales
-]);
-
-// Construye las cabeceras CORS validando el Origin de la petición.
-// Solo refleja el origen si coincide con un dominio permitido.
 function corsHeaders(request: NextRequest): Record<string, string> {
   const origin = request.headers.get("origin") || "*";
   return {
@@ -33,14 +23,20 @@ export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
+export async function GET(request: NextRequest) {
+  return NextResponse.json(
+    { ok: true, message: "Webhook n8n-fallback activo en SAUCEDA." },
+    { headers: corsHeaders(request) }
+  );
+}
 
 export async function POST(request: NextRequest) {
   const CORS = corsHeaders(request);
   try {
     const tipo = request.headers.get("content-type") || "";
-    let datos: Record<string, string> = {};
+    let datos: Record<string, any> = {};
     if (tipo.includes("application/json")) {
-      datos = (await request.json()) as Record<string, string>;
+      datos = (await request.json()) as Record<string, any>;
     } else {
       const form = await request.formData();
       form.forEach((v, k) => {
@@ -48,68 +44,57 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Acepta nombres de campo comunes y SANITIZA todo en el servidor
-    // (no se confía en la validación del navegador).
+    console.log("[Webhook n8n-fallback] Payload recibido:", JSON.stringify(datos));
+
+    // Acepta nombres de campo comunes y sanitiza datos
     const nombre = limpiarTexto(
-      datos.nombre || datos.name || datos.fullname,
-      120,
+      datos.nombre || datos.name || datos.fullname || datos.contacto || "Lead del sitio web",
+      120
     );
     const telefono = limpiarTelefono(
-      datos.telefono || datos.tel || datos.phone || datos.celular,
+      datos.telefono || datos.tel || datos.phone || datos.celular
     );
     const correo = limpiarTexto(
       datos.correo || datos.email || datos.mail,
-      254,
+      254
     ).toLowerCase();
     const mensaje = limpiarTexto(
-      datos.mensaje || datos.message || datos.comentarios || datos.comentario,
-      1000,
+      datos.mensaje || datos.message || datos.comentarios || datos.comentario || datos.descripcion,
+      1000
     );
     const tipoCredito = limpiarTexto(
-      datos.tipoCredito || datos.tipo_credito || datos.creditType,
-      100,
+      datos.tipoCredito || datos.tipo_credito || datos.servicio,
+      100
     );
     const direccionPropiedad = limpiarTexto(
-      datos.direccionPropiedad || datos.direccion_propiedad || datos.address || datos.direccion,
-      300,
+      datos.direccionPropiedad || datos.direccion_propiedad || datos.direccion || datos.ubicacion,
+      300
     );
     const linkGoogleMaps = limpiarTexto(
-      datos.linkGoogleMaps || datos.link_google_maps || datos.googleMaps || datos.maps || datos.ubicacion,
-      500,
+      datos.linkGoogleMaps || datos.link_google_maps || datos.googleMaps || datos.maps,
+      500
     );
     const necesidad = limpiarTexto(
-      datos.necesidad || datos.need || datos.motivo,
-      300,
+      datos.necesidad || datos.need || datos.motivo || datos.servicioTipo || datos.tipo_servicio,
+      300
     );
+
     const valorEstimadoRaw = datos.valor_estimado ?? datos.valorEstimado;
     const valorEstimado = valorEstimadoRaw !== undefined ? Number(valorEstimadoRaw) || 0 : undefined;
 
     const saldoDeudaRaw = datos.saldo_deuda ?? datos.saldoDeuda;
     const saldoDeuda = saldoDeudaRaw !== undefined ? Number(saldoDeudaRaw) || 0 : undefined;
 
-    // Debe traer al menos un dato de contacto.
-    if (!nombre && !telefono && !correo) {
-      return NextResponse.json(
-        { ok: false, error: "Faltan datos del lead." },
-        { status: 400, headers: CORS },
-      );
-    }
-    // Si viene correo o teléfono, deben tener un formato válido.
+    // Si viene correo o teléfono, validamos formato si existe
     if (correo && !esEmail(correo)) {
-      return NextResponse.json(
-        { ok: false, error: "El correo no es válido." },
-        { status: 400, headers: CORS },
-      );
+      console.warn("[Webhook n8n-fallback] Correo inválido:", correo);
     }
     if (telefono && !esTelefonoValido(telefono)) {
-      return NextResponse.json(
-        { ok: false, error: "El teléfono no es válido." },
-        { status: 400, headers: CORS },
-      );
+      console.warn("[Webhook n8n-fallback] Teléfono inválido:", telefono);
     }
 
     const token = await registrarLeadWeb({
-      nombre,
+      nombre: nombre || "Contacto del sitio web",
       telefono,
       correo,
       mensaje,
@@ -120,9 +105,15 @@ export async function POST(request: NextRequest) {
       valorEstimado,
       saldoDeuda,
     });
-    return NextResponse.json({ ok: true, token }, { headers: CORS });
+
+    console.log("[Webhook n8n-fallback] Lead registrado con éxito. Token:", token);
+
+    return NextResponse.json({ ok: true, token, success: true }, { headers: CORS });
   } catch (err) {
-    console.error("Error en captación web:", err);
-    return NextResponse.json({ ok: false }, { status: 500, headers: CORS });
+    console.error("[Webhook n8n-fallback] Error procesando lead entrante:", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : "Error interno" },
+      { status: 500, headers: CORS }
+    );
   }
 }

@@ -94,19 +94,21 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   if (rol === "asesor" || rol === "operaciones") {
     const colId = rol === "asesor" ? "asesor_id" : "operador_id";
 
+    // Incluir expedientes asignados al usuario O sin asignar (null)
     const { data: exps } = await sb
       .from("expedientes")
       .select("id")
-      .eq(colId, usuario.id);
+      .or(`${colId}.eq.${usuario.id},${colId}.is.null`);
     const expIds = (exps ?? []).map((e) => e.id);
 
+    // Incluir prospectos asignados al usuario O sin asignar (null)
     const { data: pros } = await sb
       .from("prospectos")
       .select("id")
-      .eq(colId, usuario.id);
+      .or(`${colId}.eq.${usuario.id},${colId}.is.null`);
     const prosIds = (pros ?? []).map((p) => p.id);
 
-    const orFilters: string[] = [];
+    const orFilters: string[] = ["expediente_id.is.null", "prospecto_id.is.null"];
     if (expIds.length > 0) {
       orFilters.push(`expediente_id.in.(${expIds.join(",")})`);
     }
@@ -114,11 +116,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       orFilters.push(`prospecto_id.in.(${prosIds.join(",")})`);
     }
 
-    if (orFilters.length > 0) {
-      query = query.or(orFilters.join(","));
-    } else {
-      return [];
-    }
+    query = query.or(orFilters.join(","));
   }
 
   const { data, error } = await query
