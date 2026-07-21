@@ -64,7 +64,7 @@ export async function buscarGlobal(query: string): Promise<ResultadoBusquedaGlob
           titulo: `📁 ${nombreComp || e.id}`,
           subtitulo: `Folio: ${e.id} · Tel: ${e.telefono || "Sin tel"} · Etapa: ${e.etapa || "nuevo-lead"}`,
           etiqueta: "Expediente",
-          url: `/crm?expedienteId=${e.id}`,
+          url: `/expediente/${e.id}`,
         });
       });
     }
@@ -104,7 +104,7 @@ export async function buscarGlobal(query: string): Promise<ResultadoBusquedaGlob
           titulo: `🗓️ Cita: ${ct.cliente_nombre || "Cliente"}`,
           subtitulo: `Tipo: ${ct.tipo_cita || "cita"} · Fecha: ${ct.fecha} a las ${ct.hora_inicio.slice(0, 5)}hs`,
           etiqueta: "Agenda Cita",
-          url: ct.expediente_id ? `/crm?expedienteId=${ct.expediente_id}` : ct.prospecto_id ? `/prospectos/${ct.prospecto_id}` : "/agenda",
+          url: ct.expediente_id ? `/expediente/${ct.expediente_id}` : ct.prospecto_id ? `/prospectos/${ct.prospecto_id}` : "/agenda",
         });
       });
     }

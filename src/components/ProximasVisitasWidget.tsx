@@ -189,7 +189,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
 
                   {c.expediente_id ? (
                     <Link
-                      href={`/crm?expedienteId=${c.expediente_id}`}
+                      href={`/expediente/${c.expediente_id}`}
                       className="inline-flex items-center gap-1 text-xs font-bold text-sauce hover:underline"
                     >
                       Ver Expediente →

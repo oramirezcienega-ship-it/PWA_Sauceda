@@ -626,7 +626,7 @@ export function DetalleCotizacionAdmin({
                       <td className="py-2 font-mono">
                         {cotizacion.expedienteId ? (
                           <Link
-                            href={`/crm?expedienteId=${cotizacion.expedienteId}`}
+                            href={`/expediente/${cotizacion.expedienteId}`}
                             className="font-bold text-sauce hover:underline inline-flex items-center gap-1"
                           >
                             <span>📁 {cotizacion.expedienteId}</span>
