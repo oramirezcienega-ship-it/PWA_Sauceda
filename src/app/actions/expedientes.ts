@@ -205,7 +205,7 @@ async function asegurarProspectoParaExpediente(
     email: (datos as any).email || null,
     direccion: datos.direccionPropiedad || "",
     origen: (datos as any).origen || "manual",
-    estatus: "contactado",
+    estatus: "nuevo",
     asesor_id: datos.asesorId || null,
     operador_id: datos.operadorId || null,
   });
