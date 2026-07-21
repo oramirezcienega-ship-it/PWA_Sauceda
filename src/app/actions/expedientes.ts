@@ -199,8 +199,8 @@ async function asegurarProspectoParaExpediente(
   const { error: errPros } = await sb.from("prospectos").insert({
     id: nuevoProsId,
     nombre: datos.cliente || "Cliente",
-    primer_apellido: datos.primerApellido || null,
-    segundo_apellido: datos.segundoApellido || null,
+    primer_apellido: datos.primerApellido || "",
+    segundo_apellido: datos.segundoApellido || "",
     telefono: datos.telefono || "",
     correo: (datos as any).email || (datos as any).correo || "",
     direccion: datos.direccionPropiedad || "",
