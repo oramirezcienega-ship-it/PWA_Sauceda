@@ -145,6 +145,12 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
 
                   <p className="font-bold text-sm text-carbon leading-snug truncate">{c.cliente_nombre}</p>
                   
+                  {c.perfil_nombre && (
+                    <p className="text-[11px] font-semibold text-sauce flex items-center gap-1 mt-0.5">
+                      <span>👤</span> Responsable: <span className="font-bold">{c.perfil_nombre}</span>
+                    </p>
+                  )}
+
                   {c.fraccionamiento && (
                     <p className="text-xs font-semibold text-verde-profundo flex items-center gap-1 mt-0.5">
                       <span>📍</span> {c.fraccionamiento}

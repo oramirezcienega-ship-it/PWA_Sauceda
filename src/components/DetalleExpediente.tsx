@@ -21,6 +21,7 @@ import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 import { LinkCitaWidget } from "./LinkCitaWidget";
 import { programarInstalacionExpediente, programarLlamadaExpediente } from "@/app/actions/agenda";
 import { PromocionVentaWidget } from "./PromocionVentaWidget";
+import { listarPerfilesActivos } from "@/app/actions/usuarios";
 
 /**
  * Vista de detalle de un expediente.
@@ -52,6 +53,8 @@ export function DetalleExpediente({ id }: { id: string }) {
 
   // Estado para programación de llamada
   const [mostrarFormLlamada, setMostrarFormLlamada] = useState(false);
+  const [perfiles, setPerfiles] = useState<{ id: string; nombre: string; rol: string }[]>([]);
+  const [perfilLlamadaId, setPerfilLlamadaId] = useState("");
   const [fechaLlamada, setFechaLlamada] = useState("");
   const [horaLlamada, setHoraLlamada] = useState("10:00");
   const [notasLlamada, setNotasLlamada] = useState("");
@@ -59,12 +62,18 @@ export function DetalleExpediente({ id }: { id: string }) {
   const [exitoLlamada, setExitoLlamada] = useState<string | null>(null);
   const [errorLlamada, setErrorLlamada] = useState<string | null>(null);
 
+  useEffect(() => {
+    listarPerfilesActivos()
+      .then((p) => setPerfiles(p))
+      .catch(console.error);
+  }, []);
+
   async function handleProgramarLlamada(e: React.FormEvent) {
     e.preventDefault();
     if (!expediente || !fechaLlamada) return;
-    const perfilId = expediente.operadorId || expediente.asesorId;
-    if (!perfilId) {
-      setErrorLlamada("Debes asignar un asesor o técnico al expediente primero.");
+    const targetPerfilId = perfilLlamadaId || expediente.operadorId || expediente.asesorId;
+    if (!targetPerfilId) {
+      setErrorLlamada("Por favor selecciona la persona (asesor o técnico) asignada para realizar la llamada.");
       return;
     }
     setGuardandoLlamada(true);
@@ -75,7 +84,7 @@ export function DetalleExpediente({ id }: { id: string }) {
       const r = await programarLlamadaExpediente({
         expedienteId: expediente.id,
         prospectoId: expediente.prospectoId || undefined,
-        perfilId,
+        perfilId: targetPerfilId,
         clienteNombre: expediente.nombreCompleto || expediente.cliente,
         clienteTelefono: expediente.telefono,
         fecha: fechaLlamada,
@@ -915,6 +924,25 @@ export function DetalleExpediente({ id }: { id: string }) {
                       className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">
+                    Asignar Llamada a (Asesor o Técnico) *
+                  </label>
+                  <select
+                    required
+                    value={perfilLlamadaId || expediente.operadorId || expediente.asesorId || ""}
+                    onChange={(e) => setPerfilLlamadaId(e.target.value)}
+                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                  >
+                    <option value="">-- Seleccionar Asesor o Técnico --</option>
+                    {perfiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} ({p.rol === "operaciones" ? "Técnico / Operador" : p.rol === "asesor" ? "Asesor Comercial" : "Administrador"})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
