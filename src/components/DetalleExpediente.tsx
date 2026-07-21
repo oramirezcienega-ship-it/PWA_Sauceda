@@ -259,8 +259,28 @@ export function DetalleExpediente({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* Señalética Visual de Identificación: EXPEDIENTE */}
+      <div className="mb-4 rounded-xl border border-emerald-300/40 bg-gradient-to-r from-verde-profundo via-verde-profundo to-emerald-950 px-4 py-3 text-crema shadow-md flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sauce/30 text-lg border border-sauce/40 text-dorado">
+            📁
+          </span>
+          <div>
+            <span className="font-titular text-sm font-bold uppercase tracking-wider text-dorado block">
+              Expediente de Operación Legal / Comercial
+            </span>
+            <span className="text-[11px] text-crema/70 block font-mono">
+              Traspaso · Documentación · Valuación & Notaría
+            </span>
+          </div>
+        </div>
+        <span className="font-mono text-xs font-bold bg-sauce/30 border border-sauce/40 text-crema px-3 py-1 rounded-full shadow-2xs">
+          {expediente.id}
+        </span>
+      </div>
+
       {/* Cabecera limpia y justificada */}
-      <div className="mt-4 space-y-2">
+      <div className="mt-2 space-y-2">
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="font-titular text-2xl sm:text-3xl font-bold text-verde-profundo leading-tight">
             {expediente.nombreCompleto}
