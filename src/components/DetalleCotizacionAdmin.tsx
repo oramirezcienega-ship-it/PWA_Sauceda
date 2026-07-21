@@ -605,6 +605,38 @@ export function DetalleCotizacionAdmin({
                 <table className="w-full text-sm">
                   <tbody>
                     <tr className="border-b"><td className="py-2 text-carbon/50">Cliente</td><td className="py-2 font-semibold">{cotizacion.prospectoNombre}</td></tr>
+                    <tr className="border-b">
+                      <td className="py-2 text-carbon/50">Prospecto Vinculado</td>
+                      <td className="py-2 font-mono">
+                        {cotizacion.prospectoId ? (
+                          <Link
+                            href={`/prospectos/${cotizacion.prospectoId}`}
+                            className="font-bold text-sauce hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>👤 {cotizacion.prospectoId}</span>
+                            <span className="text-xs font-normal text-sauce/80">(Ver prospecto →)</span>
+                          </Link>
+                        ) : (
+                          <span className="italic text-carbon/40">Sin prospecto asignado</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="border-b">
+                      <td className="py-2 text-carbon/50">Expediente Vinculado</td>
+                      <td className="py-2 font-mono">
+                        {cotizacion.expedienteId ? (
+                          <Link
+                            href={`/crm?expedienteId=${cotizacion.expedienteId}`}
+                            className="font-bold text-sauce hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>📁 {cotizacion.expedienteId}</span>
+                            <span className="text-xs font-normal text-sauce/80">(Ver expediente →)</span>
+                          </Link>
+                        ) : (
+                          <span className="italic text-carbon/40">Sin expediente asignado</span>
+                        )}
+                      </td>
+                    </tr>
                     <tr className="border-b"><td className="py-2 text-carbon/50">Teléfono</td><td className="py-2 font-mono">{cotizacion.prospectoTelefono}</td></tr>
                     <tr className="border-b"><td className="py-2 text-carbon/50">Estatus de la Cotización</td><td className="py-2 capitalize font-semibold text-sauce">{cotizacion.estatus.replace("_", " ")}</td></tr>
                     <tr className="border-b"><td className="py-2 text-carbon/50">Fecha de Visita Técnica</td><td className="py-2">{cotizacion.fechaVisita ? new Date(cotizacion.fechaVisita).toLocaleString() : "No agendada"}</td></tr>

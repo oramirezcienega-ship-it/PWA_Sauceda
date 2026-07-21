@@ -17,6 +17,7 @@ import {
   type NotificacionApp,
 } from "@/app/actions/notificaciones";
 import { contarConversacionesPendientes } from "@/app/actions/conversaciones";
+import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
 
 /**
  * Estructura (chrome) del panel del admin: menú de navegación en una columna
@@ -57,6 +58,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [notifsAbierto, setNotifsAbierto] = useState(false);
   const [conversacionesPendientes, setConversacionesPendientes] = useState(0);
   const [notificadosIds, setNotificadosIds] = useState<string[]>([]);
+  const [busquedaAbierta, setBusquedaAbierta] = useState(false);
 
   useEffect(() => {
     rolUsuarioActual()
@@ -327,6 +329,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const navegacion = (
     <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
+      <button
+        type="button"
+        onClick={() => setBusquedaAbierta(true)}
+        className="mb-2 flex w-full items-center justify-between rounded-xl bg-crema/10 hover:bg-crema/20 border border-crema/20 px-3 py-2 text-xs font-bold text-crema transition shadow-xs cursor-pointer"
+      >
+        <span className="flex items-center gap-2">
+          <span>🔍</span>
+          <span>Buscar en todo...</span>
+        </span>
+        <kbd className="rounded bg-black/30 border border-crema/20 px-1.5 py-0.5 text-[9px] font-mono text-crema/70">
+          Ctrl+K
+        </kbd>
+      </button>
+
       {enlaces.map((l) => {
         const esConversaciones = l.href === "/conversaciones";
         return (
@@ -423,6 +439,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="font-display text-lg font-semibold">SAUCEDA</span>
         </Link>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setBusquedaAbierta(true)}
+            className="rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10 hover:text-crema"
+            title="Buscar en todo el sistema"
+          >
+            🔍
+          </button>
           {/* Campana de Notificaciones en Móvil */}
           <div className="relative">
             <button
@@ -477,6 +501,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Contenido (con espacio a la izquierda para la columna en escritorio) */}
       <div className="md:pl-60">{children}</div>
+
+      {/* Modal de Búsqueda Global Omnipresente */}
+      <BuscadorGlobalModal
+        isOpen={busquedaAbierta}
+        onClose={() => setBusquedaAbierta(false)}
+      />
     </div>
   );
 }
