@@ -167,7 +167,7 @@ export async function actualizarProspecto(
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador) hacia los
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador + dirección) hacia los
   // expedientes enlazados a este prospecto.
   await sb
     .from("expedientes")
@@ -176,6 +176,7 @@ export async function actualizarProspecto(
       primer_apellido: datos.primerApellido,
       segundo_apellido: datos.segundoApellido,
       telefono: datos.telefono,
+      direccion_propiedad: datos.direccion || "",
       ad_name: datos.adName,
       adset_name: datos.adsetName,
       campaign_name: datos.campaignName,

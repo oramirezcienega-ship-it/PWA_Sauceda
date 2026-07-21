@@ -199,13 +199,13 @@ async function asegurarProspectoParaExpediente(
   const { error: errPros } = await sb.from("prospectos").insert({
     id: nuevoProsId,
     nombre: datos.cliente || "Cliente",
-    primer_apellido: datos.primerApellido || null,
-    segundo_apellido: datos.segundoApellido || null,
+    primer_apellido: datos.primerApellido || "",
+    segundo_apellido: datos.segundoApellido || "",
     telefono: datos.telefono || "",
-    email: (datos as any).email || null,
-    fraccionamiento: datos.fraccionamiento || null,
-    origen: (datos as any).origen || "manual",
-    estatus: "contactado",
+    correo: (datos as any).email || (datos as any).correo || "",
+    direccion: datos.direccionPropiedad || "",
+    origen: (datos as any).origen || "otro",
+    estatus: "nuevo",
     asesor_id: datos.asesorId || null,
     operador_id: datos.operadorId || null,
   });
@@ -377,7 +377,7 @@ export async function actualizarExpediente(
     }
   }
 
-  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador) con el prospecto.
+  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador + dirección) con el prospecto.
   if (datos.prospectoId) {
     await sb
       .from("prospectos")
@@ -386,6 +386,7 @@ export async function actualizarExpediente(
         primer_apellido: datos.primerApellido,
         segundo_apellido: datos.segundoApellido,
         telefono: datos.telefono,
+        direccion: datos.direccionPropiedad || "",
         ad_name: datos.adName,
         adset_name: datos.adsetName,
         campaign_name: datos.campaignName,
