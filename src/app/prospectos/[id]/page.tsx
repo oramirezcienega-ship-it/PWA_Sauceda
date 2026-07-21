@@ -53,9 +53,29 @@ export default async function PaginaProspecto({
     <main className="min-h-screen pb-10">
       <Encabezado />
       <div className="mx-auto max-w-2xl px-4 py-6">
+        {/* Señalética Visual de Identificación: PROSPECTO */}
+        <div className="mb-4 rounded-xl border border-indigo-300/40 bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-950 px-4 py-3 text-white shadow-md flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/30 text-lg border border-indigo-400/30">
+              👤
+            </span>
+            <div>
+              <span className="font-titular text-sm font-bold uppercase tracking-wider text-indigo-200 block">
+                Ficha de Prospecto
+              </span>
+              <span className="text-[11px] text-indigo-300/80 block font-mono">
+                Lead Comercial · Registro Inicial & Cotización
+              </span>
+            </div>
+          </div>
+          <span className="font-mono text-xs font-bold bg-indigo-500/30 border border-indigo-400/40 text-indigo-100 px-3 py-1 rounded-full shadow-2xs">
+            {prospecto.id}
+          </span>
+        </div>
+
         <Link
           href="/prospectos"
-          className="inline-flex items-center gap-1 text-sm text-sauce hover:text-verde-profundo"
+          className="inline-flex items-center gap-1 text-sm text-sauce hover:text-verde-profundo font-semibold"
         >
           ← Volver a prospectos
         </Link>

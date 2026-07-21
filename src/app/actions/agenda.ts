@@ -6,6 +6,7 @@ import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesio
 export interface Cita {
   id: string;
   perfil_id: string;
+  perfil_nombre?: string | null;
   prospecto_id?: string | null;
   expediente_id?: string | null;
   fraccionamiento?: string | null;
@@ -669,12 +670,12 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
 
   let query = sb
     .from("agenda_citas")
-    .select("*")
+    .select("*, perfiles(nombre)")
     .gte("fecha", hoy)
     .neq("estado", "cancelada")
     .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true })
-    .limit(20);
+    .limit(25);
 
   if (perfilId) {
     query = query.eq("perfil_id", perfilId);
@@ -685,5 +686,8 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     console.error("Error al obtener próximas visitas e instalaciones:", error);
     return [];
   }
-  return (data || []) as Cita[];
+  return (data || []).map((row: any) => ({
+    ...row,
+    perfil_nombre: row.perfiles?.nombre || null,
+  })) as Cita[];
 }
