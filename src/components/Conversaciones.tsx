@@ -451,6 +451,7 @@ export function Conversaciones() {
       setAviso(r.error ?? "No se pudo enviar.");
     } else {
       setTexto("");
+      marcarComoLeida(sel, new Date().toISOString());
     }
     await refrescar(sel);
   }
@@ -983,7 +984,11 @@ export function Conversaciones() {
                       <span className="truncate">{c.telefono} · {horaCorta(c.ultimaFecha)}</span>
                     </span>
                     <span className="shrink-0">
-                      {!c.atiende || c.atiende === "" ? (
+                      {c.ultimaDireccion === "out" ? (
+                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                          ✓ {c.atiende ? `RESPONDIDO (${c.atiende})` : "RESPONDIDO"}
+                        </span>
+                      ) : !c.atiende || c.atiende === "" ? (
                         <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
                           NUEVA / SIN ATENDER
                         </span>

@@ -127,13 +127,16 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   if (error) throw new Error(error.message);
   const filas = (data as FilaMsg[]) ?? [];
 
-  // Agrupa por teléfono normalizado (vienen en orden descendente: el primero es el más nuevo).
+  // Agrupa por los últimos 10 dígitos del teléfono (o canal social) para asociar in/out unívocamente.
   const porTel = new Map<string, FilaMsg[]>();
   filas.forEach((f) => {
-    const telNorm = esCanalSocial(f.telefono) ? f.telefono : normalizarTelefono(f.telefono);
-    const arr = porTel.get(telNorm) ?? [];
+    const key = esCanalSocial(f.telefono)
+      ? f.telefono
+      : (f.telefono || "").replace(/\D/g, "").slice(-10);
+    if (!key) return;
+    const arr = porTel.get(key) ?? [];
     arr.push(f);
-    porTel.set(telNorm, arr);
+    porTel.set(key, arr);
   });
 
   // Resuelve nombres desde los expedientes enlazados (una sola consulta).
@@ -803,13 +806,23 @@ export async function contarConversacionesPendientes(): Promise<number> {
       .order("created_at", { ascending: false })
       .limit(2000);
     if (!data) return 0;
-    // Agrupar por teléfono normalizado y almacenar todas sus filas para calcular la ventana
+    // Agrupar por clave de 10 dígitos (o canal social) para asociar respuestas 'out' con mensajes 'in'
     const porTel = new Map<string, { direccion: string; finalizado: boolean; creado: string; filas: any[] }>();
     for (const f of data as { telefono: string; direccion: string; finalizado?: boolean; created_at: string }[]) {
-      const telNorm = esCanalSocial(f.telefono) ? f.telefono : normalizarTelefono(f.telefono);
-      const registro = porTel.get(telNorm) || { direccion: f.direccion, finalizado: f.finalizado ?? false, creado: f.created_at, filas: [] };
-      registro.filas.push(f);
-      porTel.set(telNorm, registro);
+      const key = esCanalSocial(f.telefono)
+        ? f.telefono
+        : (f.telefono || "").replace(/\D/g, "").slice(-10);
+      if (!key) continue;
+
+      if (!porTel.has(key)) {
+        porTel.set(key, {
+          direccion: f.direccion,
+          finalizado: f.finalizado ?? false,
+          creado: f.created_at,
+          filas: [],
+        });
+      }
+      porTel.get(key)!.filas.push(f);
     }
     let count = 0;
     const ahora = Date.now();
