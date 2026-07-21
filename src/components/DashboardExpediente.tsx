@@ -92,11 +92,19 @@ const PASOS: { status: StatusProceso; label: string; icono: string }[] = [
 ];
 
 const CAMPOS_EDITABLES = new Set([
+  // Legal
+  "nombre_titular", "telefono_titular", "email_titular", "tipo_identificacion",
+  "tiene_escritura", "tiene_comprobante_domicilio",
+  // Crédito
+  "tipo_credito", "expediente_infonavit", "saldo_credito", "tasa_credito",
+  // Propiedad
   "calle", "numero_exterior", "colonia", "ciudad", "estado",
   "metros_construccion", "metros_terreno", "anio_construccion",
   "num_recamaras", "num_banos", "estado_conservacion",
-  "propiedad_ocupada", "nombre_ocupante",
-  "tiene_adeudos", "descripcion_adeudos",
+  // Situación
+  "propiedad_ocupada", "nombre_ocupante", "tiene_adeudos", "descripcion_adeudos",
+  "tiene_litigios", "descripcion_litigios",
+  // Disponibilidad
   "horario_fotos", "disponible_firma", "comentarios",
 ]);
 
@@ -230,19 +238,41 @@ function ModalEdicion({
   onClose: () => void;
   onGuardado: () => void;
 }) {
-  const [valores, setValores] = useState<Record<string, string>>({
+  const [valores, setValores] = useState<Record<string, any>>({
+    // A: Legal
+    nombre_titular: promocion?.nombre_titular ?? "",
+    telefono_titular: promocion?.telefono_titular ?? "",
+    email_titular: promocion?.email_titular ?? "",
+    tipo_identificacion: promocion?.tipo_identificacion ?? "",
+    tiene_escritura: promocion?.tiene_escritura != null ? String(promocion.tiene_escritura) : "false",
+    tiene_comprobante_domicilio: promocion?.tiene_comprobante_domicilio != null ? String(promocion.tiene_comprobante_domicilio) : "false",
+    // B: Crédito
+    tipo_credito: promocion?.tipo_credito ?? "",
+    expediente_infonavit: promocion?.expediente_infonavit ?? "",
+    saldo_credito: promocion?.saldo_credito != null ? String(promocion.saldo_credito) : "",
+    tasa_credito: promocion?.tasa_credito != null ? String(promocion.tasa_credito) : "",
+    // C: Propiedad
     calle: promocion?.calle ?? "",
     numero_exterior: promocion?.numero_exterior ?? "",
     colonia: promocion?.colonia ?? "",
     ciudad: promocion?.ciudad ?? "",
     estado: promocion?.estado ?? "",
-    metros_construccion: String(promocion?.metros_construccion ?? ""),
-    metros_terreno: String(promocion?.metros_terreno ?? ""),
-    anio_construccion: String(promocion?.anio_construccion ?? ""),
-    num_recamaras: String(promocion?.num_recamaras ?? ""),
-    num_banos: String(promocion?.num_banos ?? ""),
+    metros_construccion: promocion?.metros_construccion != null ? String(promocion.metros_construccion) : "",
+    metros_terreno: promocion?.metros_terreno != null ? String(promocion.metros_terreno) : "",
+    anio_construccion: promocion?.anio_construccion != null ? String(promocion.anio_construccion) : "",
+    num_recamaras: promocion?.num_recamaras != null ? String(promocion.num_recamaras) : "",
+    num_banos: promocion?.num_banos != null ? String(promocion.num_banos) : "",
     estado_conservacion: promocion?.estado_conservacion ?? "",
+    // D: Situación
+    propiedad_ocupada: promocion?.propiedad_ocupada != null ? String(promocion.propiedad_ocupada) : "false",
+    nombre_ocupante: promocion?.nombre_ocupante ?? "",
+    tiene_adeudos: promocion?.tiene_adeudos != null ? String(promocion.tiene_adeudos) : "false",
+    descripcion_adeudos: promocion?.descripcion_adeudos ?? "",
+    tiene_litigios: promocion?.tiene_litigios != null ? String(promocion.tiene_litigios) : "false",
+    descripcion_litigios: promocion?.descripcion_litigios ?? "",
+    // E: Disponibilidad
     horario_fotos: promocion?.horario_fotos ?? "",
+    disponible_firma: promocion?.disponible_firma != null ? String(promocion.disponible_firma) : "false",
     comentarios: promocion?.comentarios ?? "",
   });
   const [guardando, setGuardando] = useState(false);
@@ -253,8 +283,16 @@ function ModalEdicion({
     setGuardando(true);
     setError("");
     try {
-      for (const [campo, valor] of Object.entries(valores)) {
+      for (const [campo, rawVal] of Object.entries(valores)) {
         if (!CAMPOS_EDITABLES.has(campo)) continue;
+        let valor: any = rawVal;
+        if (rawVal === "true") valor = true;
+        if (rawVal === "false") valor = false;
+        if (["saldo_credito", "tasa_credito", "metros_construccion", "metros_terreno", "anio_construccion", "num_recamaras", "num_banos"].includes(campo)) {
+          if (rawVal !== "" && !isNaN(Number(rawVal))) {
+            valor = Number(rawVal);
+          }
+        }
         await fetch(`/api/expediente-cliente/${expedienteId}/editar-campo?token=${token}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -270,74 +308,135 @@ function ModalEdicion({
     }
   }
 
+  const secciones = [
+    {
+      titulo: "📋 Información Legal",
+      campos: [
+        { campo: "nombre_titular", label: "Nombre del Titular", tipo: "text" },
+        { campo: "telefono_titular", label: "Teléfono de Contacto", tipo: "text" },
+        { campo: "email_titular", label: "Correo Electrónico", tipo: "text" },
+        { campo: "tipo_identificacion", label: "Tipo de Identificación (INE, Pasaporte)", tipo: "text" },
+        { campo: "tiene_escritura", label: "¿Cuenta con Escritura Pública?", tipo: "select_bool" },
+        { campo: "tiene_comprobante_domicilio", label: "¿Cuenta con Comprobante de Domicilio?", tipo: "select_bool" },
+      ],
+    },
+    {
+      titulo: "💰 Crédito & Deuda",
+      campos: [
+        { campo: "tipo_credito", label: "Tipo de Crédito (INFONAVIT, FOVISSSTE, Bancario)", tipo: "text" },
+        { campo: "expediente_infonavit", label: "N° de Expediente / Crédito", tipo: "text" },
+        { campo: "saldo_credito", label: "Saldo estimado del Crédito ($ MXN)", tipo: "number" },
+        { campo: "tasa_credito", label: "Tasa de Interés (%)", tipo: "number" },
+      ],
+    },
+    {
+      titulo: "🏠 Datos de la Propiedad",
+      campos: [
+        { campo: "calle", label: "Calle", tipo: "text" },
+        { campo: "numero_exterior", label: "Número Exterior", tipo: "text" },
+        { campo: "colonia", label: "Colonia / Fraccionamiento", tipo: "text" },
+        { campo: "ciudad", label: "Ciudad", tipo: "text" },
+        { campo: "estado", label: "Estado", tipo: "text" },
+        { campo: "metros_construccion", label: "m² de Construcción", tipo: "number" },
+        { campo: "metros_terreno", label: "m² de Terreno", tipo: "number" },
+        { campo: "anio_construccion", label: "Año de Construcción", tipo: "number" },
+        { campo: "num_recamaras", label: "Número de Recámaras", tipo: "number" },
+        { campo: "num_banos", label: "Número de Baños", tipo: "number" },
+        { campo: "estado_conservacion", label: "Estado de Conservación", tipo: "text" },
+      ],
+    },
+    {
+      titulo: "⚠️ Situación de la Propiedad",
+      campos: [
+        { campo: "propiedad_ocupada", label: "¿La propiedad se encuentra ocupada actualmente?", tipo: "select_bool" },
+        { campo: "nombre_ocupante", label: "Nombre de la persona que habita la propiedad", tipo: "text" },
+        { campo: "tiene_adeudos", label: "¿Tiene adeudos de predial, agua u otro servicio?", tipo: "select_bool" },
+        { campo: "descripcion_adeudos", label: "Detalles o montos de adeudos", tipo: "textarea" },
+        { campo: "tiene_litigios", label: "¿Tiene algún proceso o demanda jurídica/litigio?", tipo: "select_bool" },
+        { campo: "descripcion_litigios", label: "Detalles del caso o litigio", tipo: "textarea" },
+      ],
+    },
+    {
+      titulo: "📅 Disponibilidad & Citas",
+      campos: [
+        { campo: "horario_fotos", label: "Horarios preferidos para sesión de fotos", tipo: "text" },
+        { campo: "disponible_firma", label: "¿Disponibilidad inmediata para firma de documentos?", tipo: "select_bool" },
+        { campo: "comentarios", label: "Notas o comentarios adicionales", tipo: "textarea" },
+      ],
+    },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
-          <h3 className="font-bold text-verde-profundo font-titular text-lg">Editar información</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="font-bold text-verde-profundo font-titular text-lg">Editar Información del Expediente</h3>
+            <p className="text-xs text-slate-400">Modifica cualquier sección para actualizar tu expediente</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1">✕</button>
         </div>
 
         {yaConfirmado && (
-          <div className="mx-6 mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
-            ⚠️ Tu asesor recibirá una notificación con los cambios que realices.
+          <div className="mx-6 mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 shrink-0">
+            ⚠️ Tu asesor recibirá una notificación automática con los cambios que guardes.
           </div>
         )}
 
-        <div className="px-6 py-4 space-y-3">
-          {[
-            { campo: "calle", label: "Calle", tipo: "text" },
-            { campo: "numero_exterior", label: "Número exterior", tipo: "text" },
-            { campo: "colonia", label: "Colonia", tipo: "text" },
-            { campo: "ciudad", label: "Ciudad", tipo: "text" },
-            { campo: "estado", label: "Estado", tipo: "text" },
-            { campo: "metros_construccion", label: "m² construcción", tipo: "number" },
-            { campo: "metros_terreno", label: "m² terreno", tipo: "number" },
-            { campo: "anio_construccion", label: "Año de construcción", tipo: "number" },
-            { campo: "num_recamaras", label: "Recámaras", tipo: "number" },
-            { campo: "num_banos", label: "Baños", tipo: "number" },
-            { campo: "estado_conservacion", label: "Estado de conservación", tipo: "text" },
-            { campo: "horario_fotos", label: "Horario disponible para fotos", tipo: "text" },
-            { campo: "comentarios", label: "Comentarios", tipo: "textarea" },
-          ].map(({ campo, label, tipo }) => (
-            <div key={campo}>
-              <label className="text-xs text-slate-500 font-medium block mb-1">{label}</label>
-              {tipo === "textarea" ? (
-                <textarea
-                  rows={3}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sauce/30 resize-none"
-                  value={valores[campo] ?? ""}
-                  onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
-                />
-              ) : (
-                <input
-                  type={tipo}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sauce/30"
-                  value={valores[campo] ?? ""}
-                  onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
-                />
-              )}
+        <div className="px-6 py-4 space-y-6 overflow-y-auto flex-1 scrollbar-sutil">
+          {secciones.map((sec) => (
+            <div key={sec.titulo} className="space-y-3 bg-slate-50/70 border border-slate-100 rounded-xl p-4">
+              <h4 className="font-bold text-verde-profundo text-sm font-titular border-b border-slate-200/60 pb-1.5">
+                {sec.titulo}
+              </h4>
+              <div className="space-y-3">
+                {sec.campos.map(({ campo, label, tipo }) => (
+                  <div key={campo}>
+                    <label className="text-xs text-slate-600 font-medium block mb-1">{label}</label>
+                    {tipo === "textarea" ? (
+                      <textarea
+                        rows={2}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sauce/30 resize-none"
+                        value={valores[campo] ?? ""}
+                        onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
+                      />
+                    ) : tipo === "select_bool" ? (
+                      <select
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sauce/30"
+                        value={String(valores[campo])}
+                        onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
+                      >
+                        <option value="false">No / Sin especificar</option>
+                        <option value="true">Sí</option>
+                      </select>
+                    ) : (
+                      <input
+                        type={tipo}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sauce/30"
+                        value={valores[campo] ?? ""}
+                        onChange={(e) => setValores({ ...valores, [campo]: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
 
-          <p className="text-xs text-slate-400 pt-2">
-            Los campos de crédito (tipo, expediente INFONAVIT, saldo) no son editables aquí. Contacta a tu asesor para modificarlos.
-          </p>
-
-          {error && <p className="text-sm text-rojo">{error}</p>}
+          {error && <p className="text-sm font-medium text-rojo bg-red-50 p-2.5 rounded-lg border border-red-200">{error}</p>}
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex gap-3">
+        <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex gap-3 shrink-0">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-600 text-sm font-medium hover:bg-slate-50"
+            className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={guardar}
             disabled={guardando}
-            className="flex-1 py-2.5 bg-cielo text-white rounded-xl text-sm font-semibold disabled:opacity-50"
+            className="flex-1 py-2.5 bg-sauce hover:bg-verde-profundo text-white rounded-xl text-sm font-semibold shadow-md transition-colors disabled:opacity-50"
           >
             {guardando ? "Guardando..." : "Guardar cambios"}
           </button>

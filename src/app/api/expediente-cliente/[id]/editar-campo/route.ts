@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
 
-// Campos que el cliente puede editar directamente (los demás requieren asesor)
+// Campos de la ficha del cliente que se pueden editar
 const CAMPOS_EDITABLES_PROMO = new Set([
+  // Legal
+  "nombre_titular",
+  "telefono_titular",
+  "email_titular",
+  "tipo_identificacion",
+  "tiene_escritura",
+  "tiene_comprobante_domicilio",
+  // Crédito
+  "tipo_credito",
+  "expediente_infonavit",
+  "saldo_credito",
+  "tasa_credito",
+  // Propiedad
   "calle",
   "numero_exterior",
   "colonia",
@@ -15,10 +28,14 @@ const CAMPOS_EDITABLES_PROMO = new Set([
   "num_banos",
   "estado_conservacion",
   "servicios",
+  // Situación
   "propiedad_ocupada",
   "nombre_ocupante",
   "tiene_adeudos",
   "descripcion_adeudos",
+  "tiene_litigios",
+  "descripcion_litigios",
+  // Disponibilidad
   "horario_fotos",
   "disponible_firma",
   "comentarios",
@@ -64,6 +81,22 @@ export async function PUT(
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Sincronizar campos núcleo en la tabla principal `expedientes` si corresponden
+  if (campo === "nombre_titular" && typeof valor === "string" && valor.trim()) {
+    await sb.from("expedientes").update({ cliente: valor.trim() }).eq("id", params.id);
+  } else if (campo === "telefono_titular" && typeof valor === "string" && valor.trim()) {
+    await sb.from("expedientes").update({ telefono: valor.trim() }).eq("id", params.id);
+  } else if (campo === "tipo_credito" && typeof valor === "string") {
+    await sb.from("expedientes").update({ tipo_credito: valor }).eq("id", params.id);
+  } else if (campo === "saldo_credito" && (typeof valor === "number" || typeof valor === "string")) {
+    const num = Number(valor);
+    if (!isNaN(num)) {
+      await sb.from("expedientes").update({ saldo_deuda: num }).eq("id", params.id);
+    }
+  } else if (campo === "tiene_litigios") {
+    await sb.from("expedientes").update({ hay_litigios: Boolean(valor) }).eq("id", params.id);
   }
 
   // Notificar al asesor vía n8n si está configurado

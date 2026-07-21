@@ -161,6 +161,70 @@ export async function obtenerPorToken(
   return data ? aExpediente(data as FilaExpediente) : null;
 }
 
+/** Asegura que exista un prospecto vinculado al expediente (lo busca por teléfono o lo crea en automático). */
+async function asegurarProspectoParaExpediente(
+  sb: ReturnType<typeof supabaseServidor>,
+  datos: DatosExpediente
+): Promise<string> {
+  if (datos.prospectoId) {
+    return datos.prospectoId;
+  }
+
+  const telNorm = (datos.telefono || "").replace(/\D/g, "").slice(-10);
+
+  // 1. Buscar si ya existe un prospecto con el mismo teléfono
+  if (telNorm) {
+    const { data: prosList } = await sb
+      .from("prospectos")
+      .select("id, telefono");
+
+    const existente = (prosList ?? []).find(
+      (p: any) => (p.telefono || "").replace(/\D/g, "").slice(-10) === telNorm
+    );
+
+    if (existente) {
+      return existente.id;
+    }
+  }
+
+  // 2. Si no existe, AUTO-CREAR el Prospecto correspondiente
+  const { data: prospectosExistentes } = await sb.from("prospectos").select("id");
+  const prosIds = (prospectosExistentes ?? []).map((r) => r.id as string);
+  const numeros = prosIds
+    .map((id) => parseInt(id.replace(/\D/g, ""), 10))
+    .filter((n) => !Number.isNaN(n));
+  const max = numeros.length ? Math.max(...numeros) : 0;
+  const nuevoProsId = `PRO-${String(max + 1).padStart(3, "0")}`;
+
+  const { error: errPros } = await sb.from("prospectos").insert({
+    id: nuevoProsId,
+    nombre: datos.cliente || "Cliente",
+    primer_apellido: datos.primerApellido || null,
+    segundo_apellido: datos.segundoApellido || null,
+    telefono: datos.telefono || "",
+    email: (datos as any).email || null,
+    fraccionamiento: datos.fraccionamiento || null,
+    origen: (datos as any).origen || "manual",
+    estatus: "contactado",
+    asesor_id: datos.asesorId || null,
+    operador_id: datos.operadorId || null,
+  });
+
+  if (errPros) {
+    console.error("Error al auto-crear prospecto para expediente:", errPros);
+    return "";
+  }
+
+  await registrarActividad(sb, {
+    prospectoId: nuevoProsId,
+    tipo: "creacion",
+    titulo: "Prospecto auto-creado desde Expediente",
+    detalle: `Generado automáticamente al crear el expediente de ${datos.cliente}.`,
+  });
+
+  return nuevoProsId;
+}
+
 /** Crea un expediente nuevo y devuelve el registro creado. */
 export async function crearExpediente(
   datos: DatosExpediente,
@@ -177,6 +241,12 @@ export async function crearExpediente(
     }
   }
 
+  // Auto-crear o vincular el prospecto si no fue proporcionado expresamente
+  const prospectoIdAuto = await asegurarProspectoParaExpediente(sb, datos);
+  if (prospectoIdAuto) {
+    datos.prospectoId = prospectoIdAuto;
+  }
+
   // Genera el folio correlativo a partir de los existentes.
   const { data: existentes, error: errLista } = await sb
     .from("expedientes")
@@ -186,19 +256,26 @@ export async function crearExpediente(
 
   const { data, error } = await sb
     .from("expedientes")
-    .insert({ id, ...aFila(datos), ultimo_movimiento: hoyISO() })
+    .insert({ id, ...aFila(datos), prospecto_id: datos.prospectoId || null, ultimo_movimiento: hoyISO() })
     .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza el asesor y operador con el prospecto (bidireccional)
+  // Sincroniza todos los campos compartidos con el prospecto (bidireccional)
   if (datos.prospectoId) {
+    const syncObj: Record<string, any> = {
+      nombre: datos.cliente,
+      primer_apellido: datos.primerApellido,
+      segundo_apellido: datos.segundoApellido,
+      telefono: datos.telefono,
+      fraccionamiento: datos.fraccionamiento,
+      asesor_id: datos.asesorId ?? null,
+      operador_id: datos.operadorId ?? null,
+    };
+    if ((datos as any).email !== undefined) syncObj.email = (datos as any).email;
     await sb
       .from("prospectos")
-      .update({
-        asesor_id: datos.asesorId ?? null,
-        operador_id: datos.operadorId ?? null,
-      })
+      .update(syncObj)
       .eq("id", datos.prospectoId);
     const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
     await sincronizarEstatusProspecto(sb, datos.prospectoId);
