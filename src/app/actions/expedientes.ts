@@ -202,7 +202,7 @@ async function asegurarProspectoParaExpediente(
     primer_apellido: datos.primerApellido || null,
     segundo_apellido: datos.segundoApellido || null,
     telefono: datos.telefono || "",
-    email: (datos as any).email || null,
+    correo: (datos as any).email || (datos as any).correo || "",
     direccion: datos.direccionPropiedad || "",
     origen: (datos as any).origen || "manual",
     estatus: "nuevo",
