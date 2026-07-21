@@ -48,8 +48,10 @@ export async function middleware(request: NextRequest) {
   const esPublico =
     path.startsWith("/login") ||
     path.startsWith("/seguimiento") ||
+    path.startsWith("/expediente-cliente") ||
     path.startsWith("/privacidad") ||
     path.startsWith("/cotizacion") ||
+    path.startsWith("/reporte-visita") ||
     path.startsWith("/agenda/");
 
   if (!user && !esPublico) {
