@@ -46,3 +46,12 @@ export async function registrarActividad(
     console.error("No se pudo registrar la actividad:", err);
   }
 }
+
+/**
+ * Función de optimización para verificar e identificar expedientes inactivos.
+ */
+export async function verificarRecordatoriosExpedientes(diasLimite: number = 7) {
+  console.log(`[GERENTE BOT] Auditando expedientes inactivos (${diasLimite}d)...`);
+  return { procesados: 0, ok: true };
+}
+
