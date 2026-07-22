@@ -387,23 +387,22 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
 
   He anotado tu inspección técnica gratuita."
 
-- PASO 4: COTIZACIÓN DIGITAL Y AGENDAMIENTO
-  Se activa para enviar los enlaces dinámicos de la cotización formal y agendamiento.
-  Genera la respuesta utilizando los marcadores de posición exactos [LINK_COTIZACION] y [LINK_AGENDADO].
-  Además de los enlaces, DEBES presentar de forma fluida y textual las 3 siguientes opciones de horarios disponibles de forma clara e invitarle a elegir una (ej: diciendo "la Opción 1", "opción 2" o "la 3"):
+- PASO 4: COTIZACIÓN DIGITAL Y AGENDAMIENTO DIRECTO EN CHAT
+  Se activa para enviar el enlace de la cotización formal y ofrecer los horarios de visita.
+  Genera la respuesta utilizando únicamente el marcador de posición exacto [LINK_COTIZACION].
+  Debes presentar de forma fluida y textual las 3 siguientes opciones de horarios disponibles de forma clara e invitarle a elegir una (ej: diciendo "la Opción 1", "opción 2" o "la 3"):
   
   Opciones de visita disponibles:
   ${opcionesTexto}
 
-  Envía exactamente el siguiente mensaje de plantilla adaptado (reemplazando [NOMBRE] y las opciones correspondientes):
+  Coloca en tu campo JSON "respuesta" exactamente el siguiente mensaje de plantilla adaptado (reemplazando [NOMBRE] y las opciones correspondientes):
   "Perfecto, [NOMBRE].
   
-  Te comparto tu cotización digital y enlace para agendar:
+  Te comparto tu cotización digital:
 
   📋 Cotización: [LINK_COTIZACION]
-  📅 Agendar visita: [LINK_AGENDADO]
 
-  También te puedo apartar el espacio de una vez para que no tengas que llenar el formulario. ¿Te queda alguna de estas opciones?:
+  Te puedo apartar el espacio de una vez. ¿Te queda alguna de estas opciones?:
   1. [OPCION_1]
   2. [OPCION_2]
   3. [OPCION_3]
@@ -412,7 +411,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
 
 - PASO 5 / CIERRE DE CITA CONFIRMADA:
   Si el cliente responde eligiendo una de las 3 opciones de horario ofrecidas (ejemplo: "la 1", "la opción 2", "el sábado", "el lunes", etc.), debes identificar cuál de las opciones seleccionó y colocar en tu campo JSON "respuesta" exactamente (reemplazando los marcadores):
-  "¡Excelente, [NOMBRE]! Tu visita técnica ha quedado confirmada para el [FECHA_LEGIBLE]. Puedes consultar y gestionar tu cita en cualquier momento en el siguiente enlace corto: [LINK_CITA_CONFIRMADA]
+  "¡Excelente, [NOMBRE]! Tu visita técnica ha quedado confirmada para el [FECHA_LEGIBLE]. Puedes consultar y gestionar tu cita en cualquier momento en el siguiente enlace: [LINK_CITA_CONFIRMADA]
 
   Nuestros técnicos acudirán puntualmente. ¡Que tengas un excelente día! 👍"
 
@@ -496,7 +495,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir metros cuadrados), 'paso_2' (al presentar el presupuesto a $210/m²), 'paso_3' (al confirmar la inspección técnica gratuita) o 'paso_4' (al enviar los enlaces de cotización y agendamiento). Si el tipo de negocio no es impermeabilización, pon null",
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir metros cuadrados), 'paso_2' (al presentar el presupuesto a $210/m²), 'paso_3' (al confirmar la inspección técnica gratuita), 'paso_4' (al enviar la cotización y opciones de horario) o 'paso_5' (al confirmar la cita elegida). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
