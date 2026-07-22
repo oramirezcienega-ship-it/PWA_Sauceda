@@ -1168,7 +1168,7 @@ export async function responderConIA(
                   siteUrl = `${protocol}://${host}`;
                 }
               }
-              const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
+              const urlCot = tokenCot ? `${siteUrl}/c/${tokenCot}` : "";
               
               // Intentar obtener el operador asignado al expediente para usar la agenda interna de la app
               let operadorId = updates.asesor_id || exp?.asesor_id;
@@ -1241,7 +1241,7 @@ export async function responderConIA(
                       siteUrl = `${protocol}://${host}`;
                     }
                   }
-                  const linkCitaConfirmada = `${siteUrl}/agenda/cita/${nuevaCita.id}`;
+                  const linkCitaConfirmada = `${siteUrl}/a/${nuevaCita.id}`;
                   textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
 
                   await registrarActividad(sb, {

@@ -459,7 +459,7 @@ async function main() {
       }
 
       const siteUrl = "https://crm-staging.saucedamx.com";
-      const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
+      const urlCot = tokenCot ? `${siteUrl}/c/${tokenCot}` : "";
       const urlAgenda = `${siteUrl}/agenda/inspeccion-general?prospecto_id=${prospecto.id}`;
 
       textoRespuesta = textoRespuesta
@@ -530,7 +530,7 @@ async function main() {
           console.error("Error al crear cita automática en simulación:", errCita.message);
         } else if (nuevaCita?.id) {
           console.log(`[Auto-Scheduling Simulación] Cita creada con ID: ${nuevaCita.id}`);
-          const linkCitaConfirmada = `https://crm-staging.saucedamx.com/agenda/cita/${nuevaCita.id}`;
+          const linkCitaConfirmada = `https://crm-staging.saucedamx.com/a/${nuevaCita.id}`;
           textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
           updates.etapa = "visita";
           if (operadorId) {
