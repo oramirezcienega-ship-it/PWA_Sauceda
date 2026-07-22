@@ -1,6 +1,51 @@
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
+function formatearFechaLegible(fechaStr, horaStr) {
+  try {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    const fecha = new Date(y, m - 1, d);
+    const dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    const meses = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+    const diaSemana = dias[fecha.getDay()];
+    const mesLabel = meses[fecha.getMonth()];
+    const partesHora = horaStr.split(":");
+    let hrs = parseInt(partesHora[0], 10) || 0;
+    const mins = partesHora[1] || "00";
+    const ampm = hrs >= 12 ? "PM" : "AM";
+    hrs = hrs % 12;
+    if (hrs === 0) hrs = 12;
+    return `${diaSemana} ${d} de ${mesLabel} a las ${hrs}:${mins} ${ampm}`;
+  } catch (e) {
+    return `${fechaStr} a las ${horaStr}`;
+  }
+}
+
+function generarSlotsFallback() {
+  const slots = [];
+  const hoy = new Date();
+  let count = 0;
+  for (let i = 1; i < 7; i++) {
+    if (slots.length >= 3) break;
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    if (fecha.getDay() === 0) continue;
+    const fechaStr = fecha.toISOString().slice(0, 10);
+    if (count === 0) {
+      slots.push({ texto: formatearFechaLegible(fechaStr, "10:00:00"), raw: { fecha: fechaStr, hora: "10:00:00" } });
+    } else if (count === 1) {
+      slots.push({ texto: formatearFechaLegible(fechaStr, "16:00:00"), raw: { fecha: fechaStr, hora: "16:00:00" } });
+    } else if (count === 2) {
+      slots.push({ texto: formatearFechaLegible(fechaStr, "11:00:00"), raw: { fecha: fechaStr, hora: "11:00:00" } });
+    }
+    count++;
+  }
+  return slots;
+}
+
 function cargarEnv() {
   try {
     const texto = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
@@ -139,12 +184,72 @@ async function main() {
     ? `\n\nESTADO DE CONVERSIÓN CRÍTICO:\nEl último paso del flujo de impermeabilización que ya ejecutaste con este cliente es "${expInfo.ultimo_paso_flujo}". Está ESTRICTAMENTE PROHIBIDO repetir preguntas, enviar mensajes o solicitar información de este paso o de pasos anteriores. Debes avanzar de inmediato al siguiente paso del flujo.`
     : "";
 
-  const systemPrompt = [basePrompt, extraInstrucciones && `\nIndicaciones adicionales del negocio:\n${extraInstrucciones}`, instruccionesFlujo, contexto]
+  // Cargar slots reales para el simulador
+  let operadorId = expInfo.asesor_id || expInfo.operador_id;
+  if (!operadorId) {
+    const { data: perfAlex } = await sb
+      .from("perfiles")
+      .select("id")
+      .or("nombre.ilike.%Alex%,nombre.ilike.%Alejandro%")
+      .eq("activo", true)
+      .maybeSingle();
+    if (perfAlex) operadorId = perfAlex.id;
+  }
+
+  let slots = [];
+  if (operadorId) {
+    try {
+      const { obtenerSlotsDisponibles } = await import("../src/app/actions/agenda.js");
+      const hoy = new Date();
+      for (let i = 0; i < 14; i++) {
+        if (slots.length >= 3) break;
+        const fecha = new Date(hoy);
+        fecha.setDate(hoy.getDate() + i);
+        const fechaStr = fecha.toISOString().slice(0, 10);
+        const slotsDispo = await obtenerSlotsDisponibles(operadorId, fechaStr);
+        for (const slot of slotsDispo) {
+          if (slots.length >= 3) break;
+          slots.push({
+            texto: formatearFechaLegible(fechaStr, slot.inicio),
+            raw: { fecha: fechaStr, hora: slot.inicio }
+          });
+        }
+      }
+    } catch (e) {
+      // Usar fallbacks
+    }
+  }
+
+  const finalSlots = slots.length >= 3 ? slots : generarSlotsFallback();
+  const opcionesTexto = finalSlots.map((s, idx) => `Opción ${idx + 1}: ${s.texto}`).join("\n");
+
+  let baseFinal = basePrompt
+    .replace(/\${opcionesTexto}/g, opcionesTexto)
+    .replace(/\$\{finalSlots\[0\]\?\.raw\.fecha\}/g, finalSlots[0]?.raw.fecha || "")
+    .replace(/\$\{finalSlots\[0\]\?\.raw\.hora\}/g, finalSlots[0]?.raw.hora || "")
+    .replace(/\[OPCION_1\]/g, finalSlots[0]?.texto || "")
+    .replace(/\[OPCION_2\]/g, finalSlots[1]?.texto || "")
+    .replace(/\[OPCION_3\]/g, finalSlots[2]?.texto || "");
+
+  const systemPrompt = [baseFinal, extraInstrucciones && `\nIndicaciones adicionales del negocio:\n${extraInstrucciones}`, instruccionesFlujo, contexto]
     .filter(Boolean)
     .join("\n");
 
   // 5. Llamar al proveedor seleccionado (Ollama o Claude)
-  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  let proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  try {
+    const { data: dbProv } = await sb
+      .from("configuracion_agente")
+      .select("valor")
+      .eq("clave", "ia_proveedor")
+      .maybeSingle();
+    if (dbProv?.valor && ["anthropic", "kimi", "ollama"].includes(dbProv.valor.trim())) {
+      proveedor = dbProv.valor.trim();
+    }
+  } catch (err) {
+    console.error("Error al obtener proveedor de la BD en simulación:", err);
+  }
+  console.log(`[Simulación] Proveedor seleccionado: ${proveedor}`);
   let rawText = "";
 
   if (proveedor === "ollama") {
@@ -292,7 +397,7 @@ async function main() {
     textoRespuesta = rawText;
   }
 
-  console.log(`\n=== RESPUESTA GENERADA DE SOFÍA ===`);
+  console.log(`\n=== RESPUESTA GENERADA DE SOFÍA (CRUDA) ===`);
   console.log(textoRespuesta);
   console.log(`\nDatos Extraídos:`, datosExtraidos);
 
@@ -354,7 +459,7 @@ async function main() {
       }
 
       const siteUrl = "https://crm-staging.saucedamx.com";
-      const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
+      const urlCot = tokenCot ? `${siteUrl}/c/${tokenCot}` : "";
       const urlAgenda = `${siteUrl}/agenda/inspeccion-general?prospecto_id=${prospecto.id}`;
 
       textoRespuesta = textoRespuesta
@@ -371,6 +476,75 @@ async function main() {
 
   // 7. Actualizar base de datos
   const updates = {};
+  
+  // --- AUTO-AGENDAMIENTO DE INSPECCIÓN EN SIMULADOR ---
+  const fechaConfirmada = datosExtraidos.fecha_inspeccion_confirmada;
+  const horaConfirmada = datosExtraidos.hora_inspeccion_confirmada;
+
+  if (fechaConfirmada && horaConfirmada) {
+    console.log(`[Auto-Scheduling Simulación] Confirmando cita: ${fechaConfirmada} ${horaConfirmada}`);
+    const [h, min] = horaConfirmada.split(":");
+    const hrsFin = String((parseInt(h, 10) + 1) % 24).padStart(2, "0");
+    const horaFin = `${hrsFin}:${min || "00"}:00`;
+
+    const nombreCliente = [expInfo.cliente, "Prueba"].filter(Boolean).join(" ") || "Cliente WhatsApp";
+
+    // Buscar operador Alex
+    let operadorId = expInfo.asesor_id || expInfo.operador_id;
+    if (!operadorId) {
+      try {
+        const { data: perfAlex } = await sb
+          .from("perfiles")
+          .select("id")
+          .or("nombre.ilike.%Alex%,nombre.ilike.%Alejandro%")
+          .eq("activo", true)
+          .maybeSingle();
+        if (perfAlex) operadorId = perfAlex.id;
+      } catch (err) {
+        console.error("Error al buscar Alex en simulación de agenda:", err);
+      }
+    }
+
+    if (operadorId) {
+      try {
+        const { data: nuevaCita, error: errCita } = await sb
+          .from("agenda_citas")
+          .insert({
+            perfil_id: operadorId,
+            prospecto_id: prospecto.id,
+            expediente_id: expediente.id,
+            fraccionamiento: expInfo.fraccionamiento ?? null,
+            cliente_nombre: nombreCliente,
+            cliente_telefono: telefono,
+            tipo_cita: "inspeccion",
+            fecha: fechaConfirmada,
+            hora_inicio: horaConfirmada,
+            hora_fin: horaFin,
+            notas: "Agendado automáticamente por IA (Simulador)",
+            estado: "confirmada",
+          })
+          .select("id")
+          .maybeSingle();
+
+        if (errCita) {
+          console.error("Error al crear cita automática en simulación:", errCita.message);
+        } else if (nuevaCita?.id) {
+          console.log(`[Auto-Scheduling Simulación] Cita creada con ID: ${nuevaCita.id}`);
+          const linkCitaConfirmada = `https://crm-staging.saucedamx.com/a/${nuevaCita.id}`;
+          textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
+          updates.etapa = "visita";
+          if (operadorId) {
+            updates.asesor_id = operadorId;
+          }
+        }
+      } catch (agErr) {
+        console.error("Excepción al auto-agendar cita en simulación:", agErr);
+      }
+    }
+  }
+  // Limpiar marcador si no se usó
+  textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, "");
+
   if (datosExtraidos.paso_flujo) {
     updates.ultimo_paso_flujo = datosExtraidos.paso_flujo;
     let pasoAlcanzado = expInfo.ultimo_paso_alcanzado || "lead_entro";
@@ -407,7 +581,9 @@ async function main() {
   if (errInsertOut) {
     console.error("Error al guardar respuesta saliente:", errInsertOut.message);
   } else {
-    console.log("¡Conversación actualizada en la BD!");
+    console.log("\n=== RESPUESTA ENVIADA (CON ENLACES REEMPLAZADOS) ===");
+    console.log(textoRespuesta);
+    console.log("\n¡Conversación actualizada en la BD!");
   }
 }
 
