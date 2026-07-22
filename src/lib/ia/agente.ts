@@ -382,7 +382,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   ¿Confirmamos inspección técnica gratuita esta semana?"
 
 - PASO 3: CONFIRMACIÓN DE INSPECCIÓN TÉCNICA
-  Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "confirmamos", etc.). Responde exactamente:
+  Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "confirmamos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
   "¡Excelente, [NOMBRE]!
 
   He anotado tu inspección técnica gratuita."
