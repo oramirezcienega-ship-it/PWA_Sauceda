@@ -24,27 +24,91 @@ const MAX_HISTORIAL = 20;
 
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY) && process.env.IA_AGENTE !== "off";
+  if (process.env.IA_AGENTE === "off") return false;
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  if (proveedor === "ollama") return true;
+  if (proveedor === "kimi") return Boolean(process.env.KIMI_API_KEY);
+  return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 /**
  * Diagnóstico del agente: comprueba configuración y hace un "ping" real a
- * Claude para verificar que la key, el modelo y el crédito funcionan.
- * Pensado para un botón "Probar IA" en el panel (no expone la key).
+ * Claude u Ollama para verificar que funcione correctamente.
  */
 export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }> {
+  if (process.env.IA_AGENTE === "off") {
+    return {
+      ok: false,
+      mensaje: "La IA está apagada (IA_AGENTE = off). Cámbiala a 'on' y vuelve a desplegar.",
+    };
+  }
+
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+
+  if (proveedor === "kimi") {
+    const apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey) {
+      return {
+        ok: false,
+        mensaje: "Falta KIMI_API_KEY en este deploy. Agrégala en Coolify y vuelve a desplegar.",
+      };
+    }
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
+    const model = process.env.KIMI_MODEL || "kimi-k3";
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 5,
+          messages: [{ role: "user", content: "ping" }],
+        }),
+      });
+      if (res.ok) {
+        return { ok: true, mensaje: `Kimi API listo ✓ — modelo ${model} responde correctamente.` };
+      }
+      const cuerpo = (await res.text()).slice(0, 200);
+      return { ok: false, mensaje: `Kimi API respondió ${res.status}. ${cuerpo}` };
+    } catch (err) {
+      return { ok: false, mensaje: `No se pudo contactar a Kimi API en ${baseUrl}: ${String(err)}` };
+    }
+  }
+
+  if (proveedor === "ollama") {
+    const url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 5,
+          messages: [{ role: "user", content: "ping" }],
+        }),
+      });
+      if (res.ok) {
+        return { ok: true, mensaje: `Ollama local listo ✓ — modelo ${model} responde correctamente.` };
+      }
+      const cuerpo = (await res.text()).slice(0, 200);
+      return { ok: false, mensaje: `Ollama local respondió ${res.status}. ${cuerpo}` };
+    } catch (err) {
+      return { ok: false, mensaje: `No se pudo contactar a Ollama local en ${url}: ${String(err)}` };
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return {
       ok: false,
       mensaje:
-        "Falta ANTHROPIC_API_KEY en este deploy. Agrégala en Netlify y dispara un Trigger deploy.",
-    };
-  }
-  if (process.env.IA_AGENTE === "off") {
-    return {
-      ok: false,
-      mensaje: "La IA está apagada (IA_AGENTE = off). Cámbiala a 'on' y vuelve a desplegar.",
+        "Falta ANTHROPIC_API_KEY en este deploy. Agrégala en Netlify/Coolify y dispara un Trigger deploy.",
     };
   }
   try {
@@ -160,24 +224,20 @@ D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'co
 Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 4 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 3.0). Utiliza un tono cálido, natural, accesible y sin presión:
 
 - PASO 1: MENSAJE INICIAL (Al detectar el negocio)
-  Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos la colonia (@colonia) ni los metros cuadrados (@metros) en el historial o en los datos del cliente, envía exactamente este mensaje:
+  Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía exactamente este mensaje:
   "¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción.
   Somos especialistas en impermeabilización profesional en León y alrededores.
 
-  Para darte una cotización personalizada de inmediato, me podrías compartir:
-  1️⃣ ¿En qué colonia o zona estás ubicado?
-  2️⃣ ¿Cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?
+  Para darte una cotización personalizada de inmediato, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?
 
-  Con esa información te comparto los detalles y presupuesto exacto."
+  Con esa información te comparto los detalles y presupuesto de inmediato."
 
 - PASO 2: PRESENTACIÓN ÚNICA DE IMPERMEABILIZACIÓN PROFESIONAL ($210/m²)
-  Se activa en cuanto el cliente proporciona la colonia (@colonia) y los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
+  Se activa en cuanto el cliente proporciona los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
   Calcula matemáticamente los valores del presupuesto:
     - TOTAL_SIN_IVA = @metros * 210
-    - IVA = TOTAL_SIN_IVA * 0.16
-    - TOTAL_CON_IVA = TOTAL_SIN_IVA + IVA
-  Envía exactamente el siguiente mensaje (reemplazando [METROS], [COLONIA], [TOTAL_SIN_IVA], [IVA] y [TOTAL_CON_IVA] con los números calculados):
-  "Perfecto. Para [METROS] m² en [COLONIA], aquí está nuestro servicio:
+  Envía el siguiente mensaje (reemplazando [METROS] y [TOTAL_SIN_IVA] con los números calculados):
+  "Perfecto. Para [METROS] m², aquí está nuestro servicio:
 
   🟡 IMPERMEABILIZACIÓN PROFESIONAL
   • Impermeabilizante 3.5 mm gravilla (roja o gris a tu elección)
@@ -185,12 +245,9 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
   • Tiempo de ejecución: 2-3 días
 
-  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN (+ IVA)
+  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
 
-  Desglose:
-  • $210/m² × [METROS] m² = $[TOTAL_SIN_IVA]
-  • IVA (16%) = $[IVA]
-  • **Total final = $[TOTAL_CON_IVA] MXN**
+  [REGLA_PROMO: Si TOTAL_SIN_IVA es mayor a 10000, debes insertar aquí el siguiente párrafo exactamente: "Además, te comento que solo por el mes de julio contamos con 3 meses sin intereses con cualquier tarjeta de crédito. 💳"]
 
   ¿Confirmamos inspección técnica gratuita esta semana?"
 
@@ -286,12 +343,12 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
     "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion' o 'construccion-remodelacion' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
-    "colonia": "La colonia de León proporcionada por el cliente si el tipo de negocio es impermeabilización o construcción, de lo contrario null",
+    "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
     "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir colonia/metros), 'paso_2' (al presentar el presupuesto a $210/m² con desgloses), 'paso_3' (al confirmar la inspección técnica gratuita) o 'paso_4' (al enviar los enlaces de cotización y agendamiento). Si el tipo de negocio no es impermeabilización, pon null"
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir metros cuadrados), 'paso_2' (al presentar el presupuesto a $210/m²), 'paso_3' (al confirmar la inspección técnica gratuita) o 'paso_4' (al enviar los enlaces de cotización y agendamiento). Si el tipo de negocio no es impermeabilización, pon null"
   }
 }
 
@@ -371,13 +428,104 @@ function aMensajes(
   return msgs;
 }
 
-/** Llama a la API de Claude y devuelve el texto de la respuesta. */
+/** Llama a la API de Claude u Ollama y devuelve el texto de la respuesta. */
 async function generarRespuesta(
   system: string,
   mensajes: { role: "user" | "assistant"; content: string }[],
 ): Promise<string> {
+  if (mensajes.length === 0) return "";
+
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+
+  if (proveedor === "ollama") {
+    let url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    // Convertir a endpoint nativo de chat para poder configurar num_ctx y evitar truncado de prompt
+    if (url.endsWith("/v1/chat/completions")) {
+      url = url.replace("/v1/chat/completions", "/api/chat");
+    } else if (!url.endsWith("/api/chat")) {
+      url = url.endsWith("/") ? `${url}api/chat` : `${url}/api/chat`;
+    }
+
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+    
+    try {
+      const messagesOllama = [
+        { role: "system", content: system },
+        ...mensajes.map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: messagesOllama,
+          options: {
+            num_ctx: 16384,
+            temperature: 0.1,
+          },
+          stream: false,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("IA: error de Ollama", res.status, await res.text());
+        return "";
+      }
+
+      const json = await res.json();
+      const texto = json.message?.content || "";
+      return texto.trim();
+    } catch (err) {
+      console.error("IA: excepcion en llamada a Ollama:", err);
+      return "";
+    }
+  }
+
+  if (proveedor === "kimi") {
+    const apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey) return "";
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
+    const model = process.env.KIMI_MODEL || "kimi-k3";
+
+    try {
+      const messagesOpenAI = [
+        { role: "system", content: system },
+        ...mensajes.map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: messagesOpenAI,
+          temperature: 1,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("IA: error de Kimi", res.status, await res.text());
+        return "";
+      }
+
+      const json = await res.json();
+      const texto = json.choices?.[0]?.message?.content || "";
+      return texto.trim();
+    } catch (err) {
+      console.error("IA: excepcion en llamada a Kimi:", err);
+      return "";
+    }
+  }
+
+  // Proveedor por defecto: Anthropic (Claude)
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || mensajes.length === 0) return "";
+  if (!apiKey) return "";
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {

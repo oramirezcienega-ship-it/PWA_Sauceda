@@ -360,10 +360,10 @@ export async function actualizarExpediente(
   // Campos que realmente cambiaron respecto al estado anterior.
   const cambios = antes
     ? Object.keys(nuevos).filter(
-        (k) =>
-          String((antes as Record<string, unknown>)[k] ?? "") !==
-          String((nuevos as Record<string, unknown>)[k] ?? ""),
-      )
+      (k) =>
+        String((antes as Record<string, unknown>)[k] ?? "") !==
+        String((nuevos as Record<string, unknown>)[k] ?? ""),
+    )
     : Object.keys(nuevos);
   if (cambios.length > 0) {
     await dispararEvento(sb, "cambio-campo", { expedienteId: id, cambios });
