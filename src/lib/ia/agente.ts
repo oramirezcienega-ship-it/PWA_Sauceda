@@ -27,6 +27,7 @@ export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
   const proveedor = process.env.IA_PROVEEDOR || "anthropic";
   if (proveedor === "ollama") return true;
+  if (proveedor === "kimi") return Boolean(process.env.KIMI_API_KEY);
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
@@ -43,6 +44,39 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
   }
 
   const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+
+  if (proveedor === "kimi") {
+    const apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey) {
+      return {
+        ok: false,
+        mensaje: "Falta KIMI_API_KEY en este deploy. Agrégala en Coolify y vuelve a desplegar.",
+      };
+    }
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
+    const model = process.env.KIMI_MODEL || "kimi-k3";
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 5,
+          messages: [{ role: "user", content: "ping" }],
+        }),
+      });
+      if (res.ok) {
+        return { ok: true, mensaje: `Kimi API listo ✓ — modelo ${model} responde correctamente.` };
+      }
+      const cuerpo = (await res.text()).slice(0, 200);
+      return { ok: false, mensaje: `Kimi API respondió ${res.status}. ${cuerpo}` };
+    } catch (err) {
+      return { ok: false, mensaje: `No se pudo contactar a Kimi API en ${baseUrl}: ${String(err)}` };
+    }
+  }
 
   if (proveedor === "ollama") {
     const url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
@@ -446,6 +480,45 @@ async function generarRespuesta(
       return texto.trim();
     } catch (err) {
       console.error("IA: excepcion en llamada a Ollama:", err);
+      return "";
+    }
+  }
+
+  if (proveedor === "kimi") {
+    const apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey) return "";
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
+    const model = process.env.KIMI_MODEL || "kimi-k3";
+
+    try {
+      const messagesOpenAI = [
+        { role: "system", content: system },
+        ...mensajes.map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: messagesOpenAI,
+          temperature: 0.1,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("IA: error de Kimi", res.status, await res.text());
+        return "";
+      }
+
+      const json = await res.json();
+      const texto = json.choices?.[0]?.message?.content || "";
+      return texto.trim();
+    } catch (err) {
+      console.error("IA: excepcion en llamada a Kimi:", err);
       return "";
     }
   }

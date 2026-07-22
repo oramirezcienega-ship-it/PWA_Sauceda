@@ -192,6 +192,47 @@ async function main() {
       console.error("Excepcion al conectar con Ollama:", err.message);
       return;
     }
+  } else if (proveedor === "kimi") {
+    const apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey) {
+      console.error("Falta KIMI_API_KEY en .env.local para simular con Kimi.");
+      return;
+    }
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
+    const model = process.env.KIMI_MODEL || "kimi-k3";
+    console.log(`Generando respuesta con Kimi local/remoto (${model})...`);
+
+    try {
+      const messagesOpenAI = [
+        { role: "system", content: systemPrompt },
+        ...msgsAnthropic.map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: messagesOpenAI,
+          temperature: 0.1,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("Error de Kimi:", res.status, await res.text());
+        return;
+      }
+
+      const json = await res.json();
+      rawText = (json.choices?.[0]?.message?.content || "").trim();
+      console.log("Respuesta cruda recibida de Kimi.");
+    } catch (err) {
+      console.error("Excepcion al conectar con Kimi:", err.message);
+      return;
+    }
   } else {
     console.log("Generando respuesta con Claude (Anthropic)...");
     const model = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
