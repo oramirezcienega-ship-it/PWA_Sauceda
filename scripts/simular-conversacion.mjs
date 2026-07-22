@@ -205,6 +205,79 @@ async function main() {
   console.log(textoRespuesta);
   console.log(`\nDatos Extraídos:`, datosExtraidos);
 
+  // Reemplazar marcadores de cotización y agendamiento si es necesario
+  if (textoRespuesta.includes("[LINK_COTIZACION]") || textoRespuesta.includes("[LINK_AGENDADO]")) {
+    try {
+      let tokenCot = "";
+      let idCot = "";
+      const { data: cotizacionesExistentes } = await sb
+        .from("cotizaciones")
+        .select("id, token")
+        .eq("expediente_id", expediente.id);
+
+      if (cotizacionesExistentes && cotizacionesExistentes.length > 0) {
+        tokenCot = cotizacionesExistentes[0].token;
+        idCot = cotizacionesExistentes[0].id;
+      } else {
+        const { data: todasLasCots } = await sb.from("cotizaciones").select("id");
+        const ids = (todasLasCots ?? []).map((c) => c.id);
+        const numeros = ids.map((id) => parseInt(id.replace(/\D/g, ""), 10)).filter((n) => !Number.isNaN(n));
+        const max = numeros.length ? Math.max(...numeros) : 0;
+        idCot = `COT-${String(max + 1).padStart(3, "0")}`;
+        const precioM2 = 210;
+        const m = datosExtraidos.metros || 75;
+        const precioTotal = Number(m) * precioM2;
+        const costoM2 = 165;
+        const costoTotal = Number(m) * costoM2;
+
+        const { data: nuevaCot, error: errInsertCot } = await sb
+          .from("cotizaciones")
+          .insert({
+            id: idCot,
+            prospecto_id: prospecto.id,
+            expediente_id: expediente.id,
+            servicio_tipo: "impermeabilizacion",
+            estatus: "esperando_visita",
+            requiere_visita: true,
+            precio_final: precioTotal,
+            costo_estimado: costoTotal,
+            notas_internas: "Creada automáticamente por el chatbot Sofía (Simulador)."
+          })
+          .select("token")
+          .single();
+
+        if (errInsertCot) {
+          console.error("Error al insertar cotización en simulación:", errInsertCot.message);
+        } else if (nuevaCot) {
+          tokenCot = nuevaCot.token;
+          await sb.from("cotizacion_conceptos").insert({
+            cotizacion_id: idCot,
+            descripcion: "Impermeabilización Profesional - Impermeabilizante 3.5 mm + gravilla (5 años de garantía)",
+            cantidad: Number(m),
+            unidad: "m2",
+            precio_unitario: precioM2,
+            costo_unitario: costoM2,
+            importe: precioTotal
+          });
+        }
+      }
+
+      const siteUrl = "https://crm-staging.saucedamx.com";
+      const urlCot = tokenCot ? `${siteUrl}/cotizacion/${tokenCot}` : "";
+      const urlAgenda = `${siteUrl}/agenda/inspeccion-general?prospecto_id=${prospecto.id}`;
+
+      textoRespuesta = textoRespuesta
+        .replace(/\[LINK_COTIZACION\]/g, urlCot)
+        .replace(/\[LINK_AGENDADO\]/g, urlAgenda);
+        
+      console.log("\n[Simulación] Links de cotización y agenda reemplazados con éxito:");
+      console.log(`- Cotización: ${urlCot}`);
+      console.log(`- Agenda: ${urlAgenda}`);
+    } catch (linkErr) {
+      console.error("Error al reemplazar links en simulación:", linkErr);
+    }
+  }
+
   // 7. Actualizar base de datos
   const updates = {};
   if (datosExtraidos.paso_flujo) {
