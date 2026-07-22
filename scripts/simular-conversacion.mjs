@@ -143,33 +143,83 @@ async function main() {
     .filter(Boolean)
     .join("\n");
 
-  // 5. Llamar a Claude
-  console.log("Generando respuesta con Claude...");
-  const model = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
-  
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1500,
-      system: systemPrompt,
-      messages: msgsAnthropic,
-    }),
-  });
+  // 5. Llamar al proveedor seleccionado (Ollama o Claude)
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  let rawText = "";
 
-  if (!res.ok) {
-    console.error("Error de Anthropic:", res.status, await res.text());
-    return;
+  if (proveedor === "ollama") {
+    let url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    if (url.endsWith("/v1/chat/completions")) {
+      url = url.replace("/v1/chat/completions", "/api/chat");
+    } else if (!url.endsWith("/api/chat")) {
+      url = url.endsWith("/") ? `${url}api/chat` : `${url}/api/chat`;
+    }
+
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+    console.log(`Generando respuesta con Ollama local (${model})...`);
+
+    try {
+      const messagesOllama = [
+        { role: "system", content: systemPrompt },
+        ...msgsAnthropic.map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: messagesOllama,
+          options: {
+            num_ctx: 16384,
+            temperature: 0.1,
+          },
+          stream: false,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("Error de Ollama:", res.status, await res.text());
+        return;
+      }
+
+      const json = await res.json();
+      rawText = (json.message?.content || "").trim();
+      console.log("Respuesta cruda recibida de Ollama.");
+    } catch (err) {
+      console.error("Excepcion al conectar con Ollama:", err.message);
+      return;
+    }
+  } else {
+    console.log("Generando respuesta con Claude (Anthropic)...");
+    const model = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
+    
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1500,
+        system: systemPrompt,
+        messages: msgsAnthropic,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("Error de Anthropic:", res.status, await res.text());
+      return;
+    }
+
+    const json = await res.json();
+    rawText = json.content[0].text.trim();
+    console.log("Respuesta cruda recibida de Claude.");
   }
-
-  const json = await res.json();
-  const rawText = json.content[0].text.trim();
-  console.log("Respuesta cruda recibida.");
 
   // 6. Parsear y procesar datos extraídos
   let limpio = rawText;

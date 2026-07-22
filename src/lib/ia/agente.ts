@@ -404,12 +404,18 @@ async function generarRespuesta(
   const proveedor = process.env.IA_PROVEEDOR || "anthropic";
 
   if (proveedor === "ollama") {
-    const url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    let url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    // Convertir a endpoint nativo de chat para poder configurar num_ctx y evitar truncado de prompt
+    if (url.endsWith("/v1/chat/completions")) {
+      url = url.replace("/v1/chat/completions", "/api/chat");
+    } else if (!url.endsWith("/api/chat")) {
+      url = url.endsWith("/") ? `${url}api/chat` : `${url}/api/chat`;
+    }
+
     const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
     
     try {
-      // Ollama endpoint con formato compatible con OpenAI
-      const messagesOpenAI = [
+      const messagesOllama = [
         { role: "system", content: system },
         ...mensajes.map(m => ({ role: m.role, content: m.content }))
       ];
@@ -421,8 +427,12 @@ async function generarRespuesta(
         },
         body: JSON.stringify({
           model,
-          messages: messagesOpenAI,
-          temperature: 0.1,
+          messages: messagesOllama,
+          options: {
+            num_ctx: 16384,
+            temperature: 0.1,
+          },
+          stream: false,
         }),
       });
 
@@ -432,7 +442,7 @@ async function generarRespuesta(
       }
 
       const json = await res.json();
-      const texto = json.choices?.[0]?.message?.content || "";
+      const texto = json.message?.content || "";
       return texto.trim();
     } catch (err) {
       console.error("IA: excepcion en llamada a Ollama:", err);
