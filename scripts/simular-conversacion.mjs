@@ -322,7 +322,7 @@ async function main() {
         body: JSON.stringify({
           model,
           messages: messagesOpenAI,
-          temperature: 1,
+          temperature: 0.1,
         }),
       });
 
