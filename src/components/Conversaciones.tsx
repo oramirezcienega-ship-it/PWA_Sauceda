@@ -22,6 +22,7 @@ import {
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
+import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import type {
@@ -316,6 +317,8 @@ export function Conversaciones() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [estadoIA, setEstadoIA] = useState<{ ok: boolean; mensaje: string } | null>(null);
   const [probandoIA, setProbandoIA] = useState(false);
+  const [proveedorIA, setProveedorIA] = useState("anthropic");
+  const [cambiandoProveedor, setCambiandoProveedor] = useState(false);
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [asignando, setAsignando] = useState(false);
   const [esAdmin, setEsAdmin] = useState(false);
@@ -368,6 +371,22 @@ export function Conversaciones() {
     setProbandoIA(false);
   }
 
+  async function cambiarProveedor(nuevoProveedor: string) {
+    setCambiandoProveedor(true);
+    try {
+      const ok = await guardarProveedorIA(nuevoProveedor);
+      if (ok) {
+        setProveedorIA(nuevoProveedor);
+        setEstadoIA({ ok: true, mensaje: `Proveedor cambiado a ${nuevoProveedor} con éxito.` });
+      } else {
+        setEstadoIA({ ok: false, mensaje: "Error al guardar el nuevo proveedor." });
+      }
+    } catch {
+      setEstadoIA({ ok: false, mensaje: "Excepción al cambiar el proveedor." });
+    }
+    setCambiandoProveedor(false);
+  }
+
   const refrescar = useCallback(async (telefonoPreseleccionado: string | null) => {
     try {
       const lista = await listarConversaciones();
@@ -410,7 +429,14 @@ export function Conversaciones() {
       .catch(() => setRespuestasRapidas([]));
 
     rolUsuarioActual()
-      .then((rol) => setEsAdmin(rol === "admin"))
+      .then((rol) => {
+        setEsAdmin(rol === "admin");
+        if (rol === "admin") {
+          obtenerProveedorIA()
+            .then((prov) => setProveedorIA(prov))
+            .catch(() => {});
+        }
+      })
       .catch(() => setEsAdmin(false));
 
     obtenerUsuarioActual()
@@ -777,12 +803,26 @@ export function Conversaciones() {
 
       {/* Diagnóstico del agente de IA */}
       {esAdmin && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-carbon/10 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-carbon/10 bg-white px-4 py-2.5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-carbon/60">Proveedor de IA (Sofía):</span>
+            <select
+              value={proveedorIA}
+              disabled={cambiandoProveedor}
+              onChange={(e) => cambiarProveedor(e.target.value)}
+              className="rounded-lg border border-carbon/15 bg-slate-50 text-xs font-semibold text-verde-profundo px-2.5 py-1.5 transition outline-none focus:border-sauce focus:ring-1 focus:ring-sauce/30 disabled:opacity-50 cursor-pointer"
+            >
+              <option value="anthropic">Claude (Anthropic)</option>
+              <option value="kimi">Kimi K3 (Moonshot)</option>
+              <option value="ollama">Local (Ollama)</option>
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={ejecutarPruebaIA}
             disabled={probandoIA}
-            className="shrink-0 rounded-md border border-sauce/40 px-3 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50"
+            className="shrink-0 rounded-lg border border-sauce/40 px-3.5 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50"
           >
             {probandoIA ? "Probando…" : "Probar IA"}
           </button>

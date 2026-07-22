@@ -929,3 +929,41 @@ export async function eliminarFotoExpediente(fotoId: string): Promise<void> {
 
   await sb.from("fotos_expedientes").delete().eq("id", fotoId);
 }
+
+/** Obtiene el proveedor de IA activo desde la base de datos o fallback a process.env. */
+export async function obtenerProveedorIA(): Promise<string> {
+  const sb = supabaseServidor();
+  try {
+    const { data } = await sb
+      .from("configuracion_agente")
+      .select("valor")
+      .eq("clave", "ia_proveedor")
+      .maybeSingle();
+    if (data?.valor) {
+      return data.valor.trim();
+    }
+  } catch (err) {
+    console.error("Error al obtener proveedor de IA:", err);
+  }
+  return process.env.IA_PROVEEDOR || "anthropic";
+}
+
+/** Guarda/actualiza el proveedor de IA activo en la base de datos (requiere ser Admin). */
+export async function guardarProveedorIA(proveedor: string): Promise<void> {
+  await requireAdmin();
+  if (!["anthropic", "kimi", "ollama"].includes(proveedor)) {
+    throw new Error("Proveedor no válido.");
+  }
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("configuracion_agente")
+    .upsert({
+      clave: "ia_proveedor",
+      valor: proveedor,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "clave" });
+  if (error) {
+    throw new Error(`Error al guardar configuración de proveedor: ${error.message}`);
+  }
+}
+

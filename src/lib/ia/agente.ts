@@ -6,6 +6,7 @@ import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
 import { variantesTelefono } from "@/lib/telefono";
 import { generarAudioTTS, subirAudioAMeta, enviarWhatsAppAudio } from "@/lib/ia/audio";
+import { supabaseServidor } from "@/lib/supabase/server";
 
 /**
  * AGENTE DE IA (Claude) para responder automáticamente las conversaciones
@@ -25,10 +26,7 @@ const MAX_HISTORIAL = 20;
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
-  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
-  if (proveedor === "ollama") return true;
-  if (proveedor === "kimi") return Boolean(process.env.KIMI_API_KEY);
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(process.env.ANTHROPIC_API_KEY) || Boolean(process.env.KIMI_API_KEY) || process.env.IA_PROVEEDOR === "ollama";
 }
 
 /**
@@ -43,7 +41,20 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
     };
   }
 
-  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  let proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  try {
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("configuracion_agente")
+      .select("valor")
+      .eq("clave", "ia_proveedor")
+      .maybeSingle();
+    if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
+      proveedor = data.valor.trim();
+    }
+  } catch (err) {
+    console.error("Error al obtener proveedor en diagnosticoIA:", err);
+  }
 
   if (proveedor === "kimi") {
     const apiKey = process.env.KIMI_API_KEY;
@@ -170,6 +181,7 @@ interface FilaExp {
   estado_fisico?: string | null;
   habitada?: string | null;
   asesor_id?: string | null;
+  operador_id?: string | null;
   ultimo_paso_flujo?: string | null;
   ultimo_paso_alcanzado?: string | null;
   campaign_name?: string | null;
@@ -177,8 +189,126 @@ interface FilaExp {
   ad_name?: string | null;
 }
 
+function formatearFechaLegible(fechaStr: string, horaStr: string): string {
+  try {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    const fecha = new Date(y, m - 1, d);
+    const dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    const meses = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+
+    const diaSemana = dias[fecha.getDay()];
+    const mesLabel = meses[fecha.getMonth()];
+
+    const partesHora = horaStr.split(":");
+    let hrs = parseInt(partesHora[0], 10) || 0;
+    const mins = partesHora[1] || "00";
+    const ampm = hrs >= 12 ? "PM" : "AM";
+    hrs = hrs % 12;
+    if (hrs === 0) hrs = 12;
+
+    return `${diaSemana} ${d} de ${mesLabel} a las ${hrs}:${mins} ${ampm}`;
+  } catch (e) {
+    return `${fechaStr} a las ${horaStr}`;
+  }
+}
+
+function generarSlotsFallback(): { texto: string; raw: { fecha: string; hora: string } }[] {
+  const slots: { texto: string; raw: { fecha: string; hora: string } }[] = [];
+  const hoy = new Date();
+  
+  let count = 0;
+  for (let i = 1; i < 7; i++) {
+    if (slots.length >= 3) break;
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    
+    if (fecha.getDay() === 0) continue; // omitir domingos
+    
+    const fechaStr = fecha.toISOString().slice(0, 10);
+    if (count === 0) {
+      slots.push({
+        texto: formatearFechaLegible(fechaStr, "10:00:00"),
+        raw: { fecha: fechaStr, hora: "10:00:00" }
+      });
+    } else if (count === 1) {
+      slots.push({
+        texto: formatearFechaLegible(fechaStr, "16:00:00"),
+        raw: { fecha: fechaStr, hora: "16:00:00" }
+      });
+    } else if (count === 2) {
+      slots.push({
+        texto: formatearFechaLegible(fechaStr, "11:00:00"),
+        raw: { fecha: fechaStr, hora: "11:00:00" }
+      });
+    }
+    count++;
+  }
+  return slots;
+}
+
+async function obtenerSiguientesTresSlots(operadorId: string, sb: SupabaseClient): Promise<{ texto: string; raw: { fecha: string; hora: string } }[]> {
+  try {
+    const { obtenerSlotsDisponibles } = await import("@/app/actions/agenda");
+    const slotsEncontrados: { texto: string; raw: { fecha: string; hora: string } }[] = [];
+    const hoy = new Date();
+    
+    for (let i = 0; i < 14; i++) {
+      if (slotsEncontrados.length >= 3) break;
+      
+      const fecha = new Date(hoy);
+      fecha.setDate(hoy.getDate() + i);
+      const fechaStr = fecha.toISOString().slice(0, 10);
+      
+      const slots = await obtenerSlotsDisponibles(operadorId, fechaStr);
+      for (const slot of slots) {
+        if (slotsEncontrados.length >= 3) break;
+        
+        const legible = formatearFechaLegible(fechaStr, slot.inicio);
+        slotsEncontrados.push({
+          texto: legible,
+          raw: {
+            fecha: fechaStr,
+            hora: slot.inicio
+          }
+        });
+      }
+    }
+    
+    return slotsEncontrados;
+  } catch (err) {
+    console.error("Error al obtener siguientes slots para el agente:", err);
+    return [];
+  }
+}
+
 /** Construye las instrucciones (system prompt) del asistente. */
 async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<string> {
+  // 1. Encontrar el operador asignado o el fallback a Alex
+  let operadorId = exp?.asesor_id || exp?.operador_id;
+  if (!operadorId) {
+    try {
+      const { data: perfAlex } = await sb
+        .from("perfiles")
+        .select("id")
+        .or("nombre.ilike.%Alex%,nombre.ilike.%Alejandro%")
+        .eq("activo", true)
+        .maybeSingle();
+      if (perfAlex) {
+        operadorId = perfAlex.id;
+      }
+    } catch (err) {
+      console.error("IA: Error al buscar Alex en instrucciones:", err);
+    }
+  }
+
+  // 2. Obtener los siguientes 3 slots
+  const slots = operadorId ? await obtenerSiguientesTresSlots(operadorId, sb) : [];
+  const finalSlots = slots.length >= 3 ? slots : generarSlotsFallback();
+  const opcionesTexto = finalSlots.map((s, idx) => `Opción ${idx + 1}: ${s.texto}`).join("\n");
+
   const base = `Eres el asistente virtual de SAUCEDA Bienes Raíces y SAUCEDA Construye, una empresa en León, Guanajuato, México. Tu objetivo principal es identificar cuál de nuestros servicios le interesa al cliente, resolver sus dudas y calificar el caso para que el equipo humano pueda continuar.
 
 Ofrecemos soluciones integrales para la vivienda, todo en un solo lugar. Contamos con los siguientes servicios principales:
@@ -259,16 +389,34 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
 
 - PASO 4: COTIZACIÓN DIGITAL Y AGENDAMIENTO
   Se activa para enviar los enlaces dinámicos de la cotización formal y agendamiento.
-  Genera la respuesta utilizando los marcadores de posición exactos [LINK_COTIZACION] y [LINK_AGENDADO], los cuales la aplicación reemplazará dinámicamente con los enlaces reales.
-  Envía exactamente el siguiente mensaje (reemplazando [NOMBRE] según corresponda, y usando los marcadores exactos):
-  "Perfecto, [NOMBRE].
+  Genera la respuesta utilizando los marcadores de posición exactos [LINK_COTIZACION] y [LINK_AGENDADO].
+  Además de los enlaces, DEBES presentar de forma fluida y textual las 3 siguientes opciones de horarios disponibles de forma clara e invitarle a elegir una (ej: diciendo "la Opción 1", "opción 2" o "la 3"):
+  
+  Opciones de visita disponibles:
+  ${opcionesTexto}
 
+  Envía exactamente el siguiente mensaje de plantilla adaptado (reemplazando [NOMBRE] y las opciones correspondientes):
+  "Perfecto, [NOMBRE].
+  
   Te comparto tu cotización digital y enlace para agendar:
 
   📋 Cotización: [LINK_COTIZACION]
   📅 Agendar visita: [LINK_AGENDADO]
 
-  ¿Qué horario prefieres esta semana?"
+  También te puedo apartar el espacio de una vez para que no tengas que llenar el formulario. ¿Te queda alguna de estas opciones?:
+  1. ${finalSlots[0]?.texto}
+  2. ${finalSlots[1]?.texto}
+  3. ${finalSlots[2]?.texto}
+
+  ¿Cuál prefieres?"
+
+- PASO 5 / CIERRE DE CITA CONFIRMADA:
+  Si el cliente responde eligiendo una de las 3 opciones de horario ofrecidas (ejemplo: "la 1", "la opción 2", "el sábado", "el lunes", etc.), debes identificar cuál de las opciones seleccionó y responder exactamente:
+  "¡Excelente, [NOMBRE]! Tu visita técnica ha quedado confirmada para el [FECHA_LEGIBLE]. Puedes consultar y gestionar tu cita en cualquier momento en el siguiente enlace corto: [LINK_CITA_CONFIRMADA]
+
+  Nuestros técnicos acudirán puntualmente. ¡Que tengas un excelente día! 👍"
+
+  En el objeto JSON en "datosExtraidos", debes agregar los campos "fecha_inspeccion_confirmada" y "hora_inspeccion_confirmada" con la fecha y hora exacta del slot que seleccionó el cliente.
 
 E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA o MANTENIMIENTO TÉCNICO (Servicios 3, 4, 5, 6, 7 - tipo_negocio: 'construccion'):
 Pregunta de forma amigable y progresiva (una a la vez):
@@ -348,7 +496,9 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir metros cuadrados), 'paso_2' (al presentar el presupuesto a $210/m²), 'paso_3' (al confirmar la inspección técnica gratuita) o 'paso_4' (al enviar los enlaces de cotización y agendamiento). Si el tipo de negocio no es impermeabilización, pon null"
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir metros cuadrados), 'paso_2' (al presentar el presupuesto a $210/m²), 'paso_3' (al confirmar la inspección técnica gratuita) o 'paso_4' (al enviar los enlaces de cotización y agendamiento). Si el tipo de negocio no es impermeabilización, pon null",
+    "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
+    "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
 }
 
@@ -432,127 +582,151 @@ function aMensajes(
 async function generarRespuesta(
   system: string,
   mensajes: { role: "user" | "assistant"; content: string }[],
+  sb?: SupabaseClient | null,
 ): Promise<string> {
   if (mensajes.length === 0) return "";
 
-  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  let proveedorOriginal = process.env.IA_PROVEEDOR || "anthropic";
 
-  if (proveedor === "ollama") {
-    let url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
-    // Convertir a endpoint nativo de chat para poder configurar num_ctx y evitar truncado de prompt
-    if (url.endsWith("/v1/chat/completions")) {
-      url = url.replace("/v1/chat/completions", "/api/chat");
-    } else if (!url.endsWith("/api/chat")) {
-      url = url.endsWith("/") ? `${url}api/chat` : `${url}/api/chat`;
-    }
-
-    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
-    
+  if (sb) {
     try {
-      const messagesOllama = [
-        { role: "system", content: system },
-        ...mensajes.map(m => ({ role: m.role, content: m.content }))
-      ];
+      const { data } = await sb
+        .from("configuracion_agente")
+        .select("valor")
+        .eq("clave", "ia_proveedor")
+        .maybeSingle();
+      if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
+        proveedorOriginal = data.valor.trim();
+      }
+    } catch (err) {
+      console.error("Error al obtener ia_proveedor de la base de datos:", err);
+    }
+  }
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: messagesOllama,
-          options: {
-            num_ctx: 16384,
-            temperature: 0.1,
+  // Definir la cadena de proveedores a intentar en caso de fallo
+  const proveedoresAProbar = [proveedorOriginal];
+  if (proveedorOriginal === "kimi") {
+    proveedoresAProbar.push("anthropic"); // Fallback a Claude
+  } else if (proveedorOriginal === "ollama") {
+    proveedoresAProbar.push("anthropic"); // Fallback a Claude
+  } else {
+    proveedoresAProbar.push("kimi"); // Fallback a Kimi
+  }
+
+  for (const proveedor of proveedoresAProbar) {
+    console.log(`[IA Router] Intentando generar respuesta con proveedor: ${proveedor}`);
+    try {
+      if (proveedor === "ollama") {
+        let url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+        // Convertir a endpoint nativo de chat para poder configurar num_ctx y evitar truncado de prompt
+        if (url.endsWith("/v1/chat/completions")) {
+          url = url.replace("/v1/chat/completions", "/api/chat");
+        } else if (!url.endsWith("/api/chat")) {
+          url = url.endsWith("/") ? `${url}api/chat` : `${url}/api/chat`;
+        }
+
+        const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+        const messagesOllama = [
+          { role: "system", content: system },
+          ...mensajes.map(m => ({ role: m.role, content: m.content }))
+        ];
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
           },
-          stream: false,
-        }),
-      });
+          body: JSON.stringify({
+            model,
+            messages: messagesOllama,
+            options: {
+              num_ctx: 16384,
+              temperature: 0.1,
+            },
+            stream: false,
+          }),
+        });
 
-      if (!res.ok) {
-        console.error("IA: error de Ollama", res.status, await res.text());
-        return "";
+        if (!res.ok) {
+          throw new Error(`Ollama respondió status ${res.status}`);
+        }
+
+        const json = await res.json();
+        const texto = (json.message?.content || "").trim();
+        if (texto) return texto;
       }
 
-      const json = await res.json();
-      const texto = json.message?.content || "";
-      return texto.trim();
-    } catch (err) {
-      console.error("IA: excepcion en llamada a Ollama:", err);
-      return "";
+      if (proveedor === "kimi") {
+        const apiKey = process.env.KIMI_API_KEY;
+        if (!apiKey) throw new Error("Falta KIMI_API_KEY");
+        const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
+        const model = process.env.KIMI_MODEL || "kimi-k3";
+
+        const messagesOpenAI = [
+          { role: "system", content: system },
+          ...mensajes.map(m => ({ role: m.role, content: m.content }))
+        ];
+
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "authorization": `Bearer ${apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: messagesOpenAI,
+            temperature: 1,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Kimi respondió status ${res.status}`);
+        }
+
+        const json = await res.json();
+        const texto = (json.choices?.[0]?.message?.content || "").trim();
+        if (texto) return texto;
+      }
+
+      if (proveedor === "anthropic") {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY");
+
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: MODELO,
+            max_tokens: 1500,
+            system,
+            messages: mensajes,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Anthropic respondió status ${res.status}`);
+        }
+
+        const json = await res.json();
+        const texto = (json.content ?? [])
+          .filter((b: any) => b.type === "text")
+          .map((b: any) => b.text ?? "")
+          .join("")
+          .trim();
+        if (texto) return texto;
+      }
+    } catch (err: any) {
+      console.warn(`[IA Router Failover] Proveedor ${proveedor} falló: ${err.message}. Intentando siguiente fallback...`);
     }
   }
 
-  if (proveedor === "kimi") {
-    const apiKey = process.env.KIMI_API_KEY;
-    if (!apiKey) return "";
-    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
-    const model = process.env.KIMI_MODEL || "kimi-k3";
-
-    try {
-      const messagesOpenAI = [
-        { role: "system", content: system },
-        ...mensajes.map(m => ({ role: m.role, content: m.content }))
-      ];
-
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "authorization": `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: messagesOpenAI,
-          temperature: 1,
-        }),
-      });
-
-      if (!res.ok) {
-        console.error("IA: error de Kimi", res.status, await res.text());
-        return "";
-      }
-
-      const json = await res.json();
-      const texto = json.choices?.[0]?.message?.content || "";
-      return texto.trim();
-    } catch (err) {
-      console.error("IA: excepcion en llamada a Kimi:", err);
-      return "";
-    }
-  }
-
-  // Proveedor por defecto: Anthropic (Claude)
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return "";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODELO,
-      max_tokens: 1500,
-      system,
-      messages: mensajes,
-    }),
-  });
-  if (!res.ok) {
-    console.error("IA: error de Anthropic", res.status, await res.text());
-    return "";
-  }
-  const json = (await res.json()) as {
-    content?: { type: string; text?: string }[];
-  };
-  const texto = (json.content ?? [])
-    .filter((b) => b.type === "text")
-    .map((b) => b.text ?? "")
-    .join("")
-    .trim();
-  return texto;
+  console.error("[IA Router Failover] Todos los proveedores configurados fallaron.");
+  return "";
 }
 
 /**
@@ -655,6 +829,7 @@ export async function responderConIA(
     const textoAI = await generarRespuesta(
       await instrucciones(exp, sb),
       aMensajes(historia),
+      sb,
     );
     if (!textoAI) return;
 
@@ -1017,6 +1192,69 @@ export async function responderConIA(
               textoRespuesta = textoRespuesta
                 .replace(/\[LINK_COTIZACION\]/g, urlCot)
                 .replace(/\[LINK_AGENDADO\]/g, urlAgenda);
+
+              // --- AUTO-AGENDAMIENTO DE INSPECCIÓN ---
+              const fechaConfirmada = (datosExtraidos as any).fecha_inspeccion_confirmada;
+              const horaConfirmada = (datosExtraidos as any).hora_inspeccion_confirmada;
+
+              if (fechaConfirmada && horaConfirmada) {
+                console.log(`[Auto-Scheduling] Confirmando cita: ${fechaConfirmada} ${horaConfirmada}`);
+                const [h, min] = horaConfirmada.split(":");
+                const hrsFin = String((parseInt(h, 10) + 1) % 24).padStart(2, "0");
+                const horaFin = `${hrsFin}:${min || "00"}:00`;
+
+                const nombreCliente = [exp.cliente, exp.primer_apellido].filter(Boolean).join(" ") || "Cliente WhatsApp";
+
+                const { data: nuevaCita, error: errCita } = await sb
+                  .from("agenda_citas")
+                  .insert({
+                    perfil_id: operadorId || exp.asesor_id,
+                    prospecto_id: exp.prospecto_id ?? null,
+                    expediente_id: ctx.expedienteId,
+                    fraccionamiento: exp.fraccionamiento ?? null,
+                    cliente_nombre: nombreCliente,
+                    cliente_telefono: exp.telefono || ctx.telefono,
+                    tipo_cita: "inspeccion",
+                    fecha: fechaConfirmada,
+                    hora_inicio: horaConfirmada,
+                    hora_fin: horaFin,
+                    notas: "Agendado automáticamente por Sofía IA",
+                    estado: "confirmada",
+                  })
+                  .select("id")
+                  .maybeSingle();
+
+                if (errCita) {
+                  console.error("IA: Error al crear cita automática:", errCita);
+                } else if (nuevaCita?.id) {
+                  let siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+                  const host = ctx.host;
+                  if (host) {
+                    if (host.includes("sslip.io")) {
+                      siteUrl = "https://crm-staging.saucedamx.com";
+                    } else if (!process.env.SITE_URL) {
+                      const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
+                      siteUrl = `${protocol}://${host}`;
+                    }
+                  }
+                  const linkCitaConfirmada = `${siteUrl}/agenda/cita/${nuevaCita.id}`;
+                  textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
+
+                  await registrarActividad(sb, {
+                    expedienteId: ctx.expedienteId,
+                    tipo: "sistema",
+                    titulo: "📅 Inspección Programada por IA",
+                    detalle: `Visita técnica agendada automáticamente para el ${fechaConfirmada} a las ${horaConfirmada}hs.`,
+                  });
+
+                  updates.etapa = "visita";
+                  if (operadorId) {
+                    updates.asesor_id = operadorId;
+                  }
+                }
+              }
+              // Asegurar que no se envíe el marcador crudo si no se agendó
+              textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, "");
             }
           } catch (cotErr) {
             console.error("IA: Excepción al automatizar cotización de impermeabilización:", cotErr);
