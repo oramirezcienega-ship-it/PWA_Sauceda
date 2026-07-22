@@ -144,7 +144,20 @@ async function main() {
     .join("\n");
 
   // 5. Llamar al proveedor seleccionado (Ollama o Claude)
-  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  let proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  try {
+    const { data: dbProv } = await sb
+      .from("configuracion_agente")
+      .select("valor")
+      .eq("clave", "ia_proveedor")
+      .maybeSingle();
+    if (dbProv?.valor && ["anthropic", "kimi", "ollama"].includes(dbProv.valor.trim())) {
+      proveedor = dbProv.valor.trim();
+    }
+  } catch (err) {
+    console.error("Error al obtener proveedor de la BD en simulación:", err);
+  }
+  console.log(`[Simulación] Proveedor seleccionado: ${proveedor}`);
   let rawText = "";
 
   if (proveedor === "ollama") {
@@ -371,6 +384,75 @@ async function main() {
 
   // 7. Actualizar base de datos
   const updates = {};
+  
+  // --- AUTO-AGENDAMIENTO DE INSPECCIÓN EN SIMULADOR ---
+  const fechaConfirmada = datosExtraidos.fecha_inspeccion_confirmada;
+  const horaConfirmada = datosExtraidos.hora_inspeccion_confirmada;
+
+  if (fechaConfirmada && horaConfirmada) {
+    console.log(`[Auto-Scheduling Simulación] Confirmando cita: ${fechaConfirmada} ${horaConfirmada}`);
+    const [h, min] = horaConfirmada.split(":");
+    const hrsFin = String((parseInt(h, 10) + 1) % 24).padStart(2, "0");
+    const horaFin = `${hrsFin}:${min || "00"}:00`;
+
+    const nombreCliente = [expInfo.cliente, "Prueba"].filter(Boolean).join(" ") || "Cliente WhatsApp";
+
+    // Buscar operador Alex
+    let operadorId = expInfo.asesor_id || expInfo.operador_id;
+    if (!operadorId) {
+      try {
+        const { data: perfAlex } = await sb
+          .from("perfiles")
+          .select("id")
+          .or("nombre.ilike.%Alex%,nombre.ilike.%Alejandro%")
+          .eq("activo", true)
+          .maybeSingle();
+        if (perfAlex) operadorId = perfAlex.id;
+      } catch (err) {
+        console.error("Error al buscar Alex en simulación de agenda:", err);
+      }
+    }
+
+    if (operadorId) {
+      try {
+        const { data: nuevaCita, error: errCita } = await sb
+          .from("agenda_citas")
+          .insert({
+            perfil_id: operadorId,
+            prospecto_id: prospecto.id,
+            expediente_id: expediente.id,
+            fraccionamiento: expInfo.fraccionamiento ?? null,
+            cliente_nombre: nombreCliente,
+            cliente_telefono: telefono,
+            tipo_cita: "inspeccion",
+            fecha: fechaConfirmada,
+            hora_inicio: horaConfirmada,
+            hora_fin: horaFin,
+            notas: "Agendado automáticamente por IA (Simulador)",
+            estado: "confirmada",
+          })
+          .select("id")
+          .maybeSingle();
+
+        if (errCita) {
+          console.error("Error al crear cita automática en simulación:", errCita.message);
+        } else if (nuevaCita?.id) {
+          console.log(`[Auto-Scheduling Simulación] Cita creada con ID: ${nuevaCita.id}`);
+          const linkCitaConfirmada = `https://crm-staging.saucedamx.com/agenda/cita/${nuevaCita.id}`;
+          textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
+          updates.etapa = "visita";
+          if (operadorId) {
+            updates.asesor_id = operadorId;
+          }
+        }
+      } catch (agErr) {
+        console.error("Excepción al auto-agendar cita en simulación:", agErr);
+      }
+    }
+  }
+  // Limpiar marcador si no se usó
+  textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, "");
+
   if (datosExtraidos.paso_flujo) {
     updates.ultimo_paso_flujo = datosExtraidos.paso_flujo;
     let pasoAlcanzado = expInfo.ultimo_paso_alcanzado || "lead_entro";
