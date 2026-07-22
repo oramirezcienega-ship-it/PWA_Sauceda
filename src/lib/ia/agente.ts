@@ -505,7 +505,7 @@ async function generarRespuesta(
         body: JSON.stringify({
           model,
           messages: messagesOpenAI,
-          temperature: 0.1,
+          temperature: 1,
         }),
       });
 
