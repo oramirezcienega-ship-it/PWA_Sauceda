@@ -181,6 +181,15 @@ async function main() {
     limpio = limpio.slice(4).trim();
   }
 
+  // Si no empieza con {, intentar extraer lo que está entre el primer { y el último }
+  if (!limpio.startsWith("{")) {
+    const idxInicio = limpio.indexOf("{");
+    const idxFin = limpio.lastIndexOf("}");
+    if (idxInicio !== -1 && idxFin !== -1 && idxFin > idxInicio) {
+      limpio = limpio.slice(idxInicio, idxFin + 1);
+    }
+  }
+
   let textoRespuesta = "";
   let datosExtraidos = {};
   try {
