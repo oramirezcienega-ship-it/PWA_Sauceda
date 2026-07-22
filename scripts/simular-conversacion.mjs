@@ -397,7 +397,7 @@ async function main() {
     textoRespuesta = rawText;
   }
 
-  console.log(`\n=== RESPUESTA GENERADA DE SOFÍA ===`);
+  console.log(`\n=== RESPUESTA GENERADA DE SOFÍA (CRUDA) ===`);
   console.log(textoRespuesta);
   console.log(`\nDatos Extraídos:`, datosExtraidos);
 
@@ -581,7 +581,9 @@ async function main() {
   if (errInsertOut) {
     console.error("Error al guardar respuesta saliente:", errInsertOut.message);
   } else {
-    console.log("¡Conversación actualizada en la BD!");
+    console.log("\n=== RESPUESTA ENVIADA (CON ENLACES REEMPLAZADOS) ===");
+    console.log(textoRespuesta);
+    console.log("\n¡Conversación actualizada en la BD!");
   }
 }
 
