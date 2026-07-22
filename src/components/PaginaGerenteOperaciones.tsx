@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useTransition } from "react";
 import Head from "next/head";
 import { Shell } from "@/components/Shell";
