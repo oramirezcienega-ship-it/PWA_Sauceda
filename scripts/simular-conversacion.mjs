@@ -1,6 +1,51 @@
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
+function formatearFechaLegible(fechaStr, horaStr) {
+  try {
+    const [y, m, d] = fechaStr.split("-").map(Number);
+    const fecha = new Date(y, m - 1, d);
+    const dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    const meses = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+    const diaSemana = dias[fecha.getDay()];
+    const mesLabel = meses[fecha.getMonth()];
+    const partesHora = horaStr.split(":");
+    let hrs = parseInt(partesHora[0], 10) || 0;
+    const mins = partesHora[1] || "00";
+    const ampm = hrs >= 12 ? "PM" : "AM";
+    hrs = hrs % 12;
+    if (hrs === 0) hrs = 12;
+    return `${diaSemana} ${d} de ${mesLabel} a las ${hrs}:${mins} ${ampm}`;
+  } catch (e) {
+    return `${fechaStr} a las ${horaStr}`;
+  }
+}
+
+function generarSlotsFallback() {
+  const slots = [];
+  const hoy = new Date();
+  let count = 0;
+  for (let i = 1; i < 7; i++) {
+    if (slots.length >= 3) break;
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    if (fecha.getDay() === 0) continue;
+    const fechaStr = fecha.toISOString().slice(0, 10);
+    if (count === 0) {
+      slots.push({ texto: formatearFechaLegible(fechaStr, "10:00:00"), raw: { fecha: fechaStr, hora: "10:00:00" } });
+    } else if (count === 1) {
+      slots.push({ texto: formatearFechaLegible(fechaStr, "16:00:00"), raw: { fecha: fechaStr, hora: "16:00:00" } });
+    } else if (count === 2) {
+      slots.push({ texto: formatearFechaLegible(fechaStr, "11:00:00"), raw: { fecha: fechaStr, hora: "11:00:00" } });
+    }
+    count++;
+  }
+  return slots;
+}
+
 function cargarEnv() {
   try {
     const texto = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
@@ -139,7 +184,54 @@ async function main() {
     ? `\n\nESTADO DE CONVERSIÓN CRÍTICO:\nEl último paso del flujo de impermeabilización que ya ejecutaste con este cliente es "${expInfo.ultimo_paso_flujo}". Está ESTRICTAMENTE PROHIBIDO repetir preguntas, enviar mensajes o solicitar información de este paso o de pasos anteriores. Debes avanzar de inmediato al siguiente paso del flujo.`
     : "";
 
-  const systemPrompt = [basePrompt, extraInstrucciones && `\nIndicaciones adicionales del negocio:\n${extraInstrucciones}`, instruccionesFlujo, contexto]
+  // Cargar slots reales para el simulador
+  let operadorId = expInfo.asesor_id || expInfo.operador_id;
+  if (!operadorId) {
+    const { data: perfAlex } = await sb
+      .from("perfiles")
+      .select("id")
+      .or("nombre.ilike.%Alex%,nombre.ilike.%Alejandro%")
+      .eq("activo", true)
+      .maybeSingle();
+    if (perfAlex) operadorId = perfAlex.id;
+  }
+
+  let slots = [];
+  if (operadorId) {
+    try {
+      const { obtenerSlotsDisponibles } = await import("../src/app/actions/agenda.js");
+      const hoy = new Date();
+      for (let i = 0; i < 14; i++) {
+        if (slots.length >= 3) break;
+        const fecha = new Date(hoy);
+        fecha.setDate(hoy.getDate() + i);
+        const fechaStr = fecha.toISOString().slice(0, 10);
+        const slotsDispo = await obtenerSlotsDisponibles(operadorId, fechaStr);
+        for (const slot of slotsDispo) {
+          if (slots.length >= 3) break;
+          slots.push({
+            texto: formatearFechaLegible(fechaStr, slot.inicio),
+            raw: { fecha: fechaStr, hora: slot.inicio }
+          });
+        }
+      }
+    } catch (e) {
+      // Usar fallbacks
+    }
+  }
+
+  const finalSlots = slots.length >= 3 ? slots : generarSlotsFallback();
+  const opcionesTexto = finalSlots.map((s, idx) => `Opción ${idx + 1}: ${s.texto}`).join("\n");
+
+  let baseFinal = basePrompt
+    .replace(/\${opcionesTexto}/g, opcionesTexto)
+    .replace(/\$\{finalSlots\[0\]\?\.raw\.fecha\}/g, finalSlots[0]?.raw.fecha || "")
+    .replace(/\$\{finalSlots\[0\]\?\.raw\.hora\}/g, finalSlots[0]?.raw.hora || "")
+    .replace(/\[OPCION_1\]/g, finalSlots[0]?.texto || "")
+    .replace(/\[OPCION_2\]/g, finalSlots[1]?.texto || "")
+    .replace(/\[OPCION_3\]/g, finalSlots[2]?.texto || "");
+
+  const systemPrompt = [baseFinal, extraInstrucciones && `\nIndicaciones adicionales del negocio:\n${extraInstrucciones}`, instruccionesFlujo, contexto]
     .filter(Boolean)
     .join("\n");
 

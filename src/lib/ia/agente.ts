@@ -404,9 +404,9 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   📅 Agendar visita: [LINK_AGENDADO]
 
   También te puedo apartar el espacio de una vez para que no tengas que llenar el formulario. ¿Te queda alguna de estas opciones?:
-  1. ${finalSlots[0]?.texto}
-  2. ${finalSlots[1]?.texto}
-  3. ${finalSlots[2]?.texto}
+  1. [OPCION_1]
+  2. [OPCION_2]
+  3. [OPCION_3]
 
   ¿Cuál prefieres?"
 
@@ -556,9 +556,14 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
     ? `\n\nESTADO DE CONVERSIÓN CRÍTICO:\nEl último paso del flujo de impermeabilización que ya ejecutaste con este cliente es "${exp.ultimo_paso_flujo}". Está ESTRICTAMENTE PROHIBIDO repetir preguntas, enviar mensajes o solicitar información de este paso o de pasos anteriores. Debes avanzar de inmediato al siguiente paso del flujo (por ejemplo, si el último paso ejecutado fue paso_3 y el cliente ya dio su nombre y teléfono, debes continuar ejecutando el paso_4 y enviarle sus links de agendamiento y cotización).`
     : "";
 
-  return [base, extra && `\nIndicaciones adicionales del negocio:\n${extra}`, instruccionesFlujo, contexto]
+  const finalPrompt = [base, extra && `\nIndicaciones adicionales del negocio:\n${extra}`, instruccionesFlujo, contexto]
     .filter(Boolean)
     .join("\n");
+
+  return finalPrompt
+    .replace(/\[OPCION_1\]/g, finalSlots[0]?.texto || "")
+    .replace(/\[OPCION_2\]/g, finalSlots[1]?.texto || "")
+    .replace(/\[OPCION_3\]/g, finalSlots[2]?.texto || "");
 }
 
 /** Convierte el historial en mensajes para la API (roles alternados). */
