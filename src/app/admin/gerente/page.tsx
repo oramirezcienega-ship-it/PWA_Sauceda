@@ -1,4 +1,4 @@
-import PaginaGerenteOperaciones from "@/pages/admin/gerente";
+import PaginaGerenteOperaciones from "@/components/PaginaGerenteOperaciones";
 
 export const dynamic = "force-dynamic";
 
