@@ -949,10 +949,10 @@ export async function obtenerProveedorIA(): Promise<string> {
 }
 
 /** Guarda/actualiza el proveedor de IA activo en la base de datos (requiere ser Admin). */
-export async function guardarProveedorIA(proveedor: string): Promise<void> {
+export async function guardarProveedorIA(proveedor: string): Promise<boolean> {
   await requireAdmin();
   if (!["anthropic", "kimi", "ollama"].includes(proveedor)) {
-    throw new Error("Proveedor no válido.");
+    return false;
   }
   const sb = supabaseServidor();
   const { error } = await sb
@@ -962,8 +962,6 @@ export async function guardarProveedorIA(proveedor: string): Promise<void> {
       valor: proveedor,
       updated_at: new Date().toISOString()
     }, { onConflict: "clave" });
-  if (error) {
-    throw new Error(`Error al guardar configuración de proveedor: ${error.message}`);
-  }
+  return !error;
 }
 
