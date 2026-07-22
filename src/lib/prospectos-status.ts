@@ -70,3 +70,12 @@ export async function sincronizarEstatusProspecto(
     console.error(`[Sincronizar Estatus] Error al actualizar prospecto ${prospectoId}:`, errUpdate);
   }
 }
+
+/**
+ * Helper para clasificar la prioridad de atención de prospectos inactivos.
+ */
+export function clasificarPrioridadLead(dias: number, tieneTelefono: boolean): "alta" | "media" | "baja" {
+  if (dias > 2 && tieneTelefono) return "alta";
+  return dias > 1 ? "media" : "baja";
+}
+

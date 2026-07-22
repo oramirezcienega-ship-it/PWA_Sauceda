@@ -128,6 +128,8 @@ export async function actualizarEstatusOptimizacion(
 /**
  * Aplicar un parche de código aprobado directamente a los archivos del proyecto
  */
+import { execSync } from "child_process";
+
 export async function aplicarOptimizacionParche(id: string) {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -179,6 +181,17 @@ export async function aplicarOptimizacionParche(id: string) {
       msgResultado = `Nuevo archivo creado con el parche en ${archivoDestino}.`;
     }
 
+    // Ejecutar git commit y git push a dev automáticamente
+    try {
+      execSync(`git add "${archivoDestino}" && git commit -m "feat(gerente): aplicar optimización ${item.titulo}" && git push origin dev`, {
+        cwd: rootDir,
+        encoding: "utf-8",
+      });
+      msgResultado += " Y subido automáticamente a dev en GitHub.";
+    } catch (gitErr: any) {
+      console.warn("Aviso al hacer git push automático:", gitErr.message);
+    }
+
     const { error: updateErr } = await sb
       .from("optimizaciones_backlog")
       .update({
@@ -194,6 +207,7 @@ export async function aplicarOptimizacionParche(id: string) {
     revalidatePath("/admin/gerente");
     revalidatePath("/gerente");
     return { ok: true, mensaje: msgResultado };
+
   } catch (err: any) {
     const errorMsg = `Error aplicando parche: ${err.message}`;
     await sb
