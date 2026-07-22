@@ -24,27 +24,57 @@ const MAX_HISTORIAL = 20;
 
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY) && process.env.IA_AGENTE !== "off";
+  if (process.env.IA_AGENTE === "off") return false;
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+  if (proveedor === "ollama") return true;
+  return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 /**
  * Diagnóstico del agente: comprueba configuración y hace un "ping" real a
- * Claude para verificar que la key, el modelo y el crédito funcionan.
- * Pensado para un botón "Probar IA" en el panel (no expone la key).
+ * Claude u Ollama para verificar que funcione correctamente.
  */
 export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }> {
+  if (process.env.IA_AGENTE === "off") {
+    return {
+      ok: false,
+      mensaje: "La IA está apagada (IA_AGENTE = off). Cámbiala a 'on' y vuelve a desplegar.",
+    };
+  }
+
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+
+  if (proveedor === "ollama") {
+    const url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 5,
+          messages: [{ role: "user", content: "ping" }],
+        }),
+      });
+      if (res.ok) {
+        return { ok: true, mensaje: `Ollama local listo ✓ — modelo ${model} responde correctamente.` };
+      }
+      const cuerpo = (await res.text()).slice(0, 200);
+      return { ok: false, mensaje: `Ollama local respondió ${res.status}. ${cuerpo}` };
+    } catch (err) {
+      return { ok: false, mensaje: `No se pudo contactar a Ollama local en ${url}: ${String(err)}` };
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return {
       ok: false,
       mensaje:
-        "Falta ANTHROPIC_API_KEY en este deploy. Agrégala en Netlify y dispara un Trigger deploy.",
-    };
-  }
-  if (process.env.IA_AGENTE === "off") {
-    return {
-      ok: false,
-      mensaje: "La IA está apagada (IA_AGENTE = off). Cámbiala a 'on' y vuelve a desplegar.",
+        "Falta ANTHROPIC_API_KEY en este deploy. Agrégala en Netlify/Coolify y dispara un Trigger deploy.",
     };
   }
   try {
@@ -172,7 +202,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Se activa en cuanto el cliente proporciona los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
   Calcula matemáticamente los valores del presupuesto:
     - TOTAL_SIN_IVA = @metros * 210
-  Envía exactamente el siguiente mensaje (reemplazando [METROS] y [TOTAL_SIN_IVA] con los números calculados):
+  Envía el siguiente mensaje (reemplazando [METROS] y [TOTAL_SIN_IVA] con los números calculados):
   "Perfecto. Para [METROS] m², aquí está nuestro servicio:
 
   🟡 IMPERMEABILIZACIÓN PROFESIONAL
@@ -182,6 +212,8 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   • Tiempo de ejecución: 2-3 días
 
   💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
+
+  [REGLA_PROMO: Si TOTAL_SIN_IVA es mayor a 10000, debes insertar aquí el siguiente párrafo exactamente: "Además, te comento que solo por el mes de julio contamos con 3 meses sin intereses con cualquier tarjeta de crédito. 💳"]
 
   ¿Confirmamos inspección técnica gratuita esta semana?"
 
@@ -362,13 +394,55 @@ function aMensajes(
   return msgs;
 }
 
-/** Llama a la API de Claude y devuelve el texto de la respuesta. */
+/** Llama a la API de Claude u Ollama y devuelve el texto de la respuesta. */
 async function generarRespuesta(
   system: string,
   mensajes: { role: "user" | "assistant"; content: string }[],
 ): Promise<string> {
+  if (mensajes.length === 0) return "";
+
+  const proveedor = process.env.IA_PROVEEDOR || "anthropic";
+
+  if (proveedor === "ollama") {
+    const url = process.env.OLLAMA_URL || "http://192.168.100.253:11434/v1/chat/completions";
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+    
+    try {
+      // Ollama endpoint con formato compatible con OpenAI
+      const messagesOpenAI = [
+        { role: "system", content: system },
+        ...mensajes.map(m => ({ role: m.role, content: m.content }))
+      ];
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: messagesOpenAI,
+          temperature: 0.1,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("IA: error de Ollama", res.status, await res.text());
+        return "";
+      }
+
+      const json = await res.json();
+      const texto = json.choices?.[0]?.message?.content || "";
+      return texto.trim();
+    } catch (err) {
+      console.error("IA: excepcion en llamada a Ollama:", err);
+      return "";
+    }
+  }
+
+  // Proveedor por defecto: Anthropic (Claude)
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || mensajes.length === 0) return "";
+  if (!apiKey) return "";
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {

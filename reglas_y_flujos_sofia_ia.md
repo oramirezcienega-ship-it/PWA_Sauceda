@@ -103,6 +103,9 @@ Envía exactamente esta plantilla con los cálculos dinámicos:
 > 
 > 💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
 > 
+> *Nota: Si el presupuesto total es mayor a $10,000 MXN, agrega este párrafo adicional:*
+> > *«Además, te comento que solo por el mes de julio contamos con 3 meses sin intereses con cualquier tarjeta de crédito. 💳»*
+> 
 > ¿Confirmamos inspección técnica gratuita esta semana?"*
 
 ---
