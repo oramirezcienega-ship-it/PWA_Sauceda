@@ -349,3 +349,51 @@ create index if not exists mensajes_whatsapp_expediente_idx
 create unique index if not exists mensajes_whatsapp_wamid_uniq
   on public.mensajes_whatsapp (wa_message_id)
   where wa_message_id is not null;
+
+-- ============================================================
+-- MÓDULO: GERENTE DE OPERACIONES (Alertas y Backlog de Optimizaciones)
+-- ============================================================
+create table if not exists public.alertas_operaciones (
+  id              uuid primary key default gen_random_uuid(),
+  tipo            text not null,
+  titulo          text not null,
+  descripcion     text not null,
+  prioridad       text not null default 'media' check (prioridad in ('baja', 'media', 'alta', 'critica')),
+  estatus         text not null default 'pendiente' check (estatus in ('pendiente', 'en_revision', 'resuelta', 'descartada')),
+  entidad_tipo    text,
+  entidad_id      text,
+  metadatos       jsonb not null default '{}'::jsonb,
+  sugerencia_ia   text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index if not exists alertas_operaciones_estatus_idx
+  on public.alertas_operaciones (estatus, prioridad, created_at desc);
+
+create index if not exists alertas_operaciones_entidad_idx
+  on public.alertas_operaciones (entidad_tipo, entidad_id);
+
+create table if not exists public.optimizaciones_backlog (
+  id                    uuid primary key default gen_random_uuid(),
+  titulo                text not null,
+  descripcion           text not null,
+  categoria             text not null default 'codigo' check (categoria in ('codigo', 'automatizacion', 'proceso', 'base_datos')),
+  codigo_propuesto      text not null,
+  archivo_destino       text not null,
+  parche_diff           text,
+  prioridad             text not null default 'media' check (prioridad in ('baja', 'media', 'alta', 'critica')),
+  estatus               text not null default 'propuesto' check (estatus in ('propuesto', 'aprobado', 'rechazado', 'aplicado', 'fallido')),
+  resultado_aplicacion  text,
+  creado_por            text not null default 'agente_gerente',
+  aprobado_por          uuid references public.perfiles(id) on delete set null,
+  fecha_aprobacion      timestamptz,
+  fecha_aplicacion      timestamptz,
+  metadatos             jsonb not null default '{}'::jsonb,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+
+create index if not exists optimizaciones_backlog_estatus_idx
+  on public.optimizaciones_backlog (estatus, prioridad, created_at desc);
+
