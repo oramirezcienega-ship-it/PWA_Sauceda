@@ -101,10 +101,9 @@ Envía exactamente esta plantilla con los cálculos dinámicos:
 > • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
 > • Tiempo de ejecución: 2-3 días
 > 
-> 💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN*
+> 💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
 > 
-> ¿Confirmamos inspección técnica gratuita esta semana?
-> *Precios antes de IVA"*
+> ¿Confirmamos inspección técnica gratuita esta semana?"*
 
 ---
 

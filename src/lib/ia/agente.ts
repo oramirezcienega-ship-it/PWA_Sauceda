@@ -181,10 +181,9 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
   • Tiempo de ejecución: 2-3 días
 
-  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN*
+  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
 
-  ¿Confirmamos inspección técnica gratuita esta semana?
-  *Precios antes de IVA"
+  ¿Confirmamos inspección técnica gratuita esta semana?"
 
 - PASO 3: CONFIRMACIÓN DE INSPECCIÓN TÉCNICA
   Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "confirmamos", etc.). Responde exactamente:
