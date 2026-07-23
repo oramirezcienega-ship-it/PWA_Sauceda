@@ -129,6 +129,8 @@ export function TableroCotizaciones({
         return <span className="inline-block rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-semibold text-teal-700 uppercase">Enviada a Cliente</span>;
       case "aceptada":
         return <span className="inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white uppercase">Aceptada ✓</span>;
+      case "instalacion":
+        return <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 uppercase">En Instalación</span>;
       case "rechazada":
         return <span className="inline-block rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700 uppercase">Rechazada</span>;
       case "archivada":
@@ -191,12 +193,15 @@ export function TableroCotizaciones({
             <option value="todos">Todos los estatus</option>
             <option value="borrador">Borrador</option>
             <option value="esperando_visita">Esperando Visita</option>
+            <option value="en_inspeccion">En Inspección</option>
             <option value="calculando_costo">En Costeo</option>
             <option value="pendiente_aprobacion">Pendiente Aprobación</option>
             <option value="aprobada">Aprobada</option>
             <option value="enviada">Enviada a Cliente</option>
             <option value="aceptada">Aceptada</option>
+            <option value="instalacion">En Instalación</option>
             <option value="rechazada">Rechazada</option>
+            <option value="archivada">Archivada</option>
           </select>
 
           <button
