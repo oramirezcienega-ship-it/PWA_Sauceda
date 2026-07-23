@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     const mensajes = extraerMensajes(payload);
     for (const mensaje of mensajes) {
-      await registrarLeadWhatsApp(mensaje);
+      await registrarLeadWhatsApp(mensaje, esEspejo);
     }
   } catch (err) {
     console.error("Error procesando webhook de WhatsApp:", err);
