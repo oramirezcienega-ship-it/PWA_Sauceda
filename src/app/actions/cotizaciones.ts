@@ -201,9 +201,16 @@ export async function obtenerCotizacionPorId(
 
   if (errRep) throw new Error(errRep.message);
 
+  const cotizacion = aCotizacion(filaCot);
+  const conceptos = (filasConceptos ?? []).map(aCotizacionConcepto);
+  const totalConceptos = conceptos.reduce((sum, c) => sum + Number(c.importe || 0), 0);
+  if (totalConceptos > 0 && cotizacion.precioFinal !== totalConceptos) {
+    cotizacion.precioFinal = totalConceptos;
+  }
+
   return {
-    cotizacion: aCotizacion(filaCot),
-    conceptos: (filasConceptos ?? []).map(aCotizacionConcepto),
+    cotizacion,
+    conceptos,
     reporteVisita: filaReporte ? aVisitaReporte(filaReporte) : null
   };
 }
@@ -253,6 +260,21 @@ export async function obtenerCotizacionPorToken(
 
   if (errRep) throw new Error(errRep.message);
 
+  const conceptos = (filasConceptos ?? []).map(f => ({
+    id: f.id,
+    cotizacionId: f.cotizacion_id,
+    descripcion: f.descripcion,
+    cantidad: Number(f.cantidad || 0),
+    unidad: f.unidad,
+    precioUnitario: Number(f.precio_unitario || 0),
+    descuento: Number(f.descuento || 0),
+    importe: Number(f.importe || 0),
+    createdAt: f.created_at
+  }));
+
+  const totalConceptos = conceptos.reduce((sum, c) => sum + c.importe, 0);
+  const finalPrecio = totalConceptos > 0 ? totalConceptos : cot.precioFinal;
+
   return {
     cotizacion: {
       id: cot.id,
@@ -265,7 +287,7 @@ export async function obtenerCotizacionPorToken(
       fechaVisita: cot.fechaVisita,
       inspectorId: cot.inspectorId,
       inspectorNombre: cot.inspectorNombre,
-      precioFinal: cot.precioFinal,
+      precioFinal: finalPrecio,
       aprobadoComercial: cot.aprobadoComercial,
       aprobadoOperativo: cot.aprobadoOperativo,
       token: cot.token,
@@ -274,17 +296,7 @@ export async function obtenerCotizacionPorToken(
       createdAt: cot.createdAt,
       updatedAt: cot.updatedAt
     },
-    conceptos: (filasConceptos ?? []).map(f => ({
-      id: f.id,
-      cotizacionId: f.cotizacion_id,
-      descripcion: f.descripcion,
-      cantidad: Number(f.cantidad || 0),
-      unidad: f.unidad,
-      precioUnitario: Number(f.precio_unitario || 0),
-      descuento: Number(f.descuento || 0),
-      importe: Number(f.importe || 0),
-      createdAt: f.created_at
-    })),
+    conceptos,
     reporteVisita: filaReporte ? {
       id: filaReporte.id,
       cotizacionId: filaReporte.cotizacion_id,

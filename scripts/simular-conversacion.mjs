@@ -243,9 +243,13 @@ async function main() {
     .replace(/\[OPCION_2\]/g, finalSlots[1]?.texto || "")
     .replace(/\[OPCION_3\]/g, finalSlots[2]?.texto || "");
 
-  const systemPrompt = [baseFinal, extraInstrucciones && `\nIndicaciones adicionales del negocio:\n${extraInstrucciones}`, instruccionesFlujo, contexto]
+  let systemPrompt = [baseFinal, extraInstrucciones && `\nIndicaciones adicionales del negocio:\n${extraInstrucciones}`, instruccionesFlujo, contexto]
     .filter(Boolean)
     .join("\n");
+
+  if (systemPrompt.includes("JSON")) {
+    systemPrompt = `${systemPrompt}\n\nREGLA CRÍTICA DE RESPUESTA: Tu salida debe ser ESTRICTAMENTE un objeto JSON válido con la estructura solicitada. No agregues introducciones, comentarios ni bloques markdown fuera del JSON. Si estás confirmando una cita (Paso 5), debes incluir en "datosExtraidos" los campos "fecha_inspeccion_confirmada" (YYYY-MM-DD) y "hora_inspeccion_confirmada" (HH:MM). NUNCA escribas o inventes URLs estáticas genéricas de cotización o cita (como saucedamx.com/cotizacion o saucedamx.com/cita-confirmada) ni copies URLs previas del historial. Deja que el sistema use los marcadores [LINK_COTIZACION] y [LINK_CITA_CONFIRMADA] tal cual.`;
+  }
 
   // 5. Llamar al proveedor seleccionado (Ollama o Claude)
   let proveedor = process.env.IA_PROVEEDOR || "anthropic";
