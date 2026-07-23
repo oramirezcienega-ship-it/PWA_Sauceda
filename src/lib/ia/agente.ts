@@ -378,6 +378,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
 
   [REGLA_PROMO: Si TOTAL_SIN_IVA es mayor a 10000, debes insertar aquí el siguiente párrafo exactamente: "Además, te comento que solo por el mes de julio contamos con 3 meses sin intereses con cualquier tarjeta de crédito. 💳"]
+  [REGLA_PAGO: Si TOTAL_SIN_IVA es menor o igual a 10000, debes insertar aquí el siguiente párrafo exactamente: "Te comento que para montos menores a $10,000 MXN, el pago se realiza únicamente con tarjeta de crédito. 💳"]
 
   ¿Confirmamos inspección técnica gratuita esta semana?"
 
@@ -1168,6 +1169,15 @@ export async function responderConIA(
                   siteUrl = `${protocol}://${host}`;
                 }
               }
+
+              // Saneamiento de dominio: redirigir de la landing page estática (saucedamx.com) al CRM (app.saucedamx.com)
+              if (siteUrl.includes("saucedamx.com") && 
+                  !siteUrl.includes("app.saucedamx.com") && 
+                  !siteUrl.includes("crm.saucedamx.com") && 
+                  !siteUrl.includes("crm-staging.saucedamx.com")) {
+                siteUrl = siteUrl.replace(/https?:\/\/(www\.)?saucedamx\.com/, "https://app.saucedamx.com");
+              }
+
               const urlCot = tokenCot ? `${siteUrl}/c/${tokenCot}` : "";
               
               // Intentar obtener el operador asignado al expediente para usar la agenda interna de la app
@@ -1231,16 +1241,6 @@ export async function responderConIA(
                 if (errCita) {
                   console.error("IA: Error al crear cita automática:", errCita);
                 } else if (nuevaCita?.id) {
-                  let siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
-                  const host = ctx.host;
-                  if (host) {
-                    if (host.includes("sslip.io")) {
-                      siteUrl = "https://crm-staging.saucedamx.com";
-                    } else if (!process.env.SITE_URL) {
-                      const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
-                      siteUrl = `${protocol}://${host}`;
-                    }
-                  }
                   const linkCitaConfirmada = `${siteUrl}/a/${nuevaCita.id}`;
                   textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
 
