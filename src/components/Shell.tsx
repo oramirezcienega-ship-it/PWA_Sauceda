@@ -264,6 +264,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   // Monitorear inactividad del usuario (30 minutos)
   useEffect(() => {
     if (esRutaPublica(pathname || "")) return;
+    if (esAdmin) return;
 
     let timer: NodeJS.Timeout;
 
@@ -293,7 +294,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         window.removeEventListener(evento, resetTimer);
       });
     };
-  }, [pathname]);
+  }, [pathname, esAdmin]);
 
   if (esRutaPublica(pathname || "")) return <>{children}</>;
 
