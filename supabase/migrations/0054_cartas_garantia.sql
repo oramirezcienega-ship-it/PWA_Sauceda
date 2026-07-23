@@ -22,8 +22,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS garantias_documentos_cot_idx ON public.garanti
 -- RLS
 ALTER TABLE public.garantias_documentos ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Permitir lectura publica de garantias" ON public.garantias_documentos;
 CREATE POLICY "Permitir lectura publica de garantias" ON public.garantias_documentos
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Permitir todo a usuarios autenticados en garantias" ON public.garantias_documentos;
 CREATE POLICY "Permitir todo a usuarios autenticados en garantias" ON public.garantias_documentos
   FOR ALL TO authenticated USING (true);
