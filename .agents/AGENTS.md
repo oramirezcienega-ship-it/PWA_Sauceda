@@ -17,3 +17,7 @@
   * **Mapeo de Campos de Contacto:** Asegúrate de mapear `email` a la columna **`correo`** en la base de datos.
   * **Restricciones CHECK:** Asegúrate de cumplir con los valores permitidos del check constraint de orígenes y estatus en `prospectos` (ej. usar `'otro'` en lugar de `'manual'`).
 
+* **Privacidad y Datos de Producción en Staging**:
+  * **NUNCA** realizar sincronizaciones o copias directas de datos de producción reales hacia la base de datos de Staging sin anonimizarlos inmediatamente después.
+  * Si se realiza un respaldo o sincronización desde producción, se debe ejecutar inmediatamente el script `node scripts/anonymize-staging-db.js` para enmascarar los datos de clientes (nombres, teléfonos y mensajes) y garantizar que Staging nunca almacene información real de producción desprotegida.
+
