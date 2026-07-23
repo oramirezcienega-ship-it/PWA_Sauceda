@@ -21,6 +21,7 @@ import {
   enviarArchivoDirectoConversacion,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
+import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
 import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
 import { DocumentosVentas } from "./DocumentosVentas";
@@ -309,12 +310,34 @@ export function Conversaciones() {
   const [sel, setSel] = useState<string | null>(null);
   const [soloTel, setSoloTel] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
+  const [documentosCliente, setDocumentosCliente] = useState<{
+    cotizacionToken: string;
+    tieneRemision: boolean;
+    tieneGarantia: boolean;
+  } | null>(null);
+  const [cargandoDocs, setCargandoDocs] = useState(false);
   const [plantillas, setPlantillas] = useState<PlantillaWhatsApp[]>([]);
   const [texto, setTexto] = useState("");
   const [plantillaSel, setPlantillaSel] = useState("");
   const [params, setParams] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+
+  // Cargar documentos del prospecto seleccionado
+  useEffect(() => {
+    if (!detalle?.prospectoId) {
+      setDocumentosCliente(null);
+      return;
+    }
+    setCargandoDocs(true);
+    obtenerUltimosDocumentosDeProspecto(detalle.prospectoId)
+      .then((docs) => setDocumentosCliente(docs))
+      .catch((err) => {
+        console.error("Error al cargar documentos del prospecto:", err);
+        setDocumentosCliente(null);
+      })
+      .finally(() => setCargandoDocs(false));
+  }, [detalle?.prospectoId]);
   const [estadoIA, setEstadoIA] = useState<{ ok: boolean; mensaje: string } | null>(null);
   const [probandoIA, setProbandoIA] = useState(false);
   const [proveedorIA, setProveedorIA] = useState("anthropic");
@@ -531,6 +554,65 @@ export function Conversaciones() {
       setAviso(r.error ?? "No se pudo editar el mensaje.");
     } else {
       if (sel) await refrescar(sel);
+    }
+  }
+
+  function aplicarPlantillaEntrega() {
+    if (!detalle) return;
+    const nombreCliente = detalle.nombre || "Cliente";
+    
+    let links = "";
+    if (documentosCliente?.cotizacionToken) {
+      const base = typeof window !== "undefined" ? window.location.origin : "https://crm.saucedamx.com";
+      
+      if (documentosCliente.tieneRemision) {
+        links += `\n📄 Recibo / Remisión de Venta:\n${base}/cotizacion/remision/${documentosCliente.cotizacionToken}\n`;
+      }
+      if (documentosCliente.tieneGarantia) {
+        links += `\n📜 Carta de Garantía:\n${base}/cotizacion/garantia/${documentosCliente.cotizacionToken}\n`;
+      }
+    }
+
+    if (!links) {
+      alert("Atención: Este cliente aún no tiene una Remisión o Carta de Garantía generada para su última cotización.");
+      return;
+    }
+
+    const mensaje = `¡Hola ${nombreCliente}! Gracias por elegirnos como SAUCEDA Construye.
+
+Te compartimos los enlaces para descargar y consultar tus documentos oficiales de la obra:
+${links}
+Agradecemos mucho tu preferencia. Te invitamos, por favor, a compartirnos tus comentarios y seguirnos en nuestras redes sociales oficiales:
+📘 Facebook: https://www.facebook.com/profile.php?id=61589957630232&locale=es_LA
+🎵 TikTok: https://www.tiktok.com/@saucedamxbr
+📸 Instagram: https://www.instagram.com/saucedamx_/
+
+¡Quedamos a tus órdenes!`;
+
+    setTexto(mensaje);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }
+
+  function aplicarPlantillaSatisfaccion() {
+    if (!detalle) return;
+    const nombreCliente = detalle.nombre || "Cliente";
+
+    const mensaje = `¡Hola ${nombreCliente}! En SAUCEDA Construye nos importa mucho tu opinión para seguir mejorando nuestro servicio.
+
+Te invitamos a calificar brevemente tu experiencia con nosotros en los siguientes aspectos:
+1. Calidad del Servicio / Atención: ⭐⭐⭐⭐⭐
+2. Profesionalismo en la Instalación: ⭐⭐⭐⭐⭐
+3. Tiempo de Respuesta / Entrega: ⭐⭐⭐⭐⭐
+
+Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarnos cualquier comentario adicional sobre tu experiencia.
+
+¡Agradecemos enormemente tu tiempo!`;
+
+    setTexto(mensaje);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
     }
   }
 
@@ -1418,14 +1500,36 @@ export function Conversaciones() {
                   <div className="flex items-center justify-between text-[11px] text-carbon/40 px-1">
                     <span>Escribe <strong className="text-sauce">#</strong> para usar respuestas rápidas</span>
                     
-                    <div className="relative">
+                    <div className="flex items-center gap-2">
+                      {detalle?.prospectoId && (
+                        <button
+                          type="button"
+                          onClick={aplicarPlantillaEntrega}
+                          disabled={cargandoDocs}
+                          title="Escribir mensaje con remisión y garantía"
+                          className="flex items-center gap-1 rounded bg-white hover:bg-slate-50 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-carbon/70 transition shadow-sm"
+                        >
+                          📄 {cargandoDocs ? "Cargando..." : "Plantilla de Entrega"}
+                        </button>
+                      )}
+                      
                       <button
                         type="button"
-                        onClick={() => setMostrarDropdownMenu(!mostrarDropdownMenu)}
-                        className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm"
+                        onClick={aplicarPlantillaSatisfaccion}
+                        title="Escribir encuesta de satisfacción"
+                        className="flex items-center gap-1 rounded bg-white hover:bg-slate-50 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-carbon/70 transition shadow-sm"
                       >
-                        ⚡ Respuestas Rápidas
+                        ⭐ Encuesta Satisfacción
                       </button>
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMostrarDropdownMenu(!mostrarDropdownMenu)}
+                          className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm"
+                        >
+                          ⚡ Respuestas Rápidas
+                        </button>
                       
                       {/* Menú Dropdown de Respuestas Rápidas */}
                       {mostrarDropdownMenu && (
@@ -1461,6 +1565,7 @@ export function Conversaciones() {
                       )}
                     </div>
                   </div>
+                </div>
 
                   {/* Caja de Texto + Botón de Enviar */}
                   <div className="flex items-end gap-2">
