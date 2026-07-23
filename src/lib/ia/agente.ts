@@ -913,6 +913,13 @@ export async function responderConIA(
 
     if (!textoRespuesta) return;
 
+    // --- CORRECCIÓN DE ALUCINACIONES DE URL DEL LLM ---
+    // Si el LLM escribe la URL base sin el token, la reemplazamos con el marcador correspondiente
+    // para que la lógica de abajo inserte la cotización/cita y genere la URL correcta.
+    textoRespuesta = textoRespuesta
+      .replace(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9.-]+\/(?:cotizacion|c)\b(?!\/[a-zA-Z0-9-])\/?/gi, "[LINK_COTIZACION]")
+      .replace(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9.-]+\/(?:cita-confirmada|a)\b(?!\/[a-zA-Z0-9-])\/?/gi, "[LINK_CITA_CONFIRMADA]");
+
     // --- PROCESAMIENTO DE DATOS EXTRAÍDOS ---
     const updates: Record<string, any> = {};
     if (ctx.expedienteId) {
@@ -1205,9 +1212,13 @@ export async function responderConIA(
                 ? `${siteUrl}/agenda/${operadorId}?prospecto_id=${exp?.prospecto_id || ""}&tipo=inspeccion`
                 : `${siteUrl}/agenda/inspeccion-general?prospecto_id=${exp?.prospecto_id || ""}`;
 
-              textoRespuesta = textoRespuesta
-                .replace(/\[LINK_COTIZACION\]/g, urlCot)
-                .replace(/\[LINK_AGENDADO\]/g, urlAgenda);
+              if (!urlCot) {
+                textoRespuesta = textoRespuesta.replace(/.*\[LINK_COTIZACION\].*\n?/g, "");
+              } else {
+                textoRespuesta = textoRespuesta.replace(/\[LINK_COTIZACION\]/g, urlCot);
+              }
+
+              textoRespuesta = textoRespuesta.replace(/\[LINK_AGENDADO\]/g, urlAgenda);
 
               // --- AUTO-AGENDAMIENTO DE INSPECCIÓN ---
               const fechaConfirmada = (datosExtraidos as any).fecha_inspeccion_confirmada;
@@ -1260,7 +1271,7 @@ export async function responderConIA(
                 }
               }
               // Asegurar que no se envíe el marcador crudo si no se agendó
-              textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, "");
+              textoRespuesta = textoRespuesta.replace(/.*\[LINK_CITA_CONFIRMADA\].*\n?/g, "");
             }
           } catch (cotErr) {
             console.error("IA: Excepción al automatizar cotización de impermeabilización:", cotErr);
