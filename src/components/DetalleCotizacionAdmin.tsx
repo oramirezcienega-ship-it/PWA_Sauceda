@@ -13,6 +13,7 @@ import {
   subirFotoVisita,
   actualizarRequerimientoVisita,
   crearRemisionFactura,
+  editarRemisionFactura,
   obtenerRemisionFacturaDeCotizacion,
   obtenerGarantiaDocumento,
   guardarGarantiaDocumento,
@@ -45,6 +46,7 @@ export function DetalleCotizacionAdmin({
   // --- State para Remisión & Factura ---
   const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
   const [cargandoRemision, setCargandoRemision] = useState<boolean>(true);
+  const [editandoRemision, setEditandoRemision] = useState<boolean>(false);
 
   // --- State para Cartas de Garantía ---
   const [garantiaDoc, setGarantiaDoc] = useState<GarantiaDocumento | null>(null);
@@ -652,6 +654,108 @@ export function DetalleCotizacionAdmin({
         router.refresh();
       } else {
         throw new Error("No se pudo completar el registro.");
+      }
+    } catch (err: any) {
+      setMensajeRemisionForm({ tipo: "error", texto: err.message || "Ocurrió un error inesperado." });
+    } finally {
+      setProcesandoRemision(false);
+    }
+  };
+
+  const iniciarEdicionRemision = () => {
+    if (!remisionFactura) return;
+    setTipoDoc(remisionFactura.tipo);
+    setFolioDoc(remisionFactura.folio);
+    setFechaDoc(remisionFactura.fecha);
+    setTipoCambioDoc(String(remisionFactura.tipoCambio));
+    setServiciosExtraDoc(String(remisionFactura.serviciosExtra));
+    setCostoFinancieroDoc(String(remisionFactura.costoFinanciero));
+    setOtrosGastosDoc(String(remisionFactura.otrosGastos));
+    
+    if (remisionFactura.tipo === "factura") {
+      setRfcDoc(remisionFactura.datosDocumento.rfc || "");
+      setRazonSocialDoc(remisionFactura.datosDocumento.razonSocial || "");
+      setRegimenFiscalDoc(remisionFactura.datosDocumento.regimenFiscal || "");
+      setUsoCfdiDoc(remisionFactura.datosDocumento.usoCfdi || "G03");
+      // reset delivery inputs
+      setDireccionEntregaDoc("");
+      setPersonaRecibeDoc("");
+      setFechaInstalacionDoc("");
+    } else {
+      setDireccionEntregaDoc(remisionFactura.datosDocumento.direccionEntrega || "");
+      setPersonaRecibeDoc(remisionFactura.datosDocumento.personaRecibe || "");
+      setFechaInstalacionDoc(remisionFactura.datosDocumento.fechaInstalacion || "");
+      // reset invoice inputs
+      setRfcDoc("");
+      setRazonSocialDoc("");
+      setRegimenFiscalDoc("");
+    }
+    
+    setEditandoRemision(true);
+    setMensajeRemisionForm({ tipo: "", texto: "" });
+  };
+
+  const handleEditarRemisionFactura = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!remisionFactura) return;
+    try {
+      setProcesandoRemision(true);
+      setMensajeRemisionForm({ tipo: "", texto: "" });
+
+      if (!folioDoc.trim()) {
+        throw new Error("El folio del documento es obligatorio.");
+      }
+
+      const datosDoc: Record<string, any> = {};
+      if (tipoDoc === "factura") {
+        if (!rfcDoc.trim() || !razonSocialDoc.trim()) {
+          throw new Error("RFC y Razón Social son obligatorios para facturación.");
+        }
+        datosDoc.rfc = rfcDoc.trim();
+        datosDoc.razonSocial = razonSocialDoc.trim();
+        datosDoc.regimenFiscal = regimenFiscalDoc.trim();
+        datosDoc.usoCfdi = usoCfdiDoc.trim();
+      } else {
+        datosDoc.direccionEntrega = direccionEntregaDoc.trim();
+        datosDoc.personaRecibe = personaRecibeDoc.trim();
+        datosDoc.fechaInstalacion = fechaInstalacionDoc;
+      }
+
+      const res = await editarRemisionFactura(remisionFactura.id, {
+        tipo: tipoDoc,
+        folio: folioDoc.trim(),
+        fecha: fechaDoc,
+        tipoCambio: parseFloat(tipoCambioDoc) || 1.0,
+        datosDocumento: datosDoc,
+        serviciosExtra: parseFloat(serviciosExtraDoc) || 0.0,
+        costoFinanciero: parseFloat(costoFinancieroDoc) || 0.0,
+        otrosGastos: parseFloat(otrosGastosDoc) || 0.0,
+      });
+
+      if (res.ok) {
+        setMensajeRemisionForm({
+          tipo: "ok",
+          texto: `¡Documento (${tipoDoc.toUpperCase()}) actualizado exitosamente!`
+        });
+
+        const updatedDoc = {
+          ...remisionFactura,
+          tipo: tipoDoc,
+          folio: folioDoc.trim(),
+          fecha: fechaDoc,
+          tipoCambio: parseFloat(tipoCambioDoc) || 1.0,
+          datosDocumento: datosDoc,
+          serviciosExtra: parseFloat(serviciosExtraDoc) || 0.0,
+          costoFinanciero: parseFloat(costoFinancieroDoc) || 0.0,
+          otrosGastos: parseFloat(otrosGastosDoc) || 0.0,
+          montoTotal: Number(cotizacion.precioFinal || 0) + (parseFloat(serviciosExtraDoc) || 0.0),
+        };
+        setRemisionFactura(updatedDoc);
+        setEditandoRemision(false);
+
+        router.refresh();
+      } else {
+        throw new Error("No se pudo completar la actualización.");
       }
     } catch (err: any) {
       setMensajeRemisionForm({ tipo: "error", texto: err.message || "Ocurrió un error inesperado." });
@@ -1690,7 +1794,7 @@ export function DetalleCotizacionAdmin({
               <div className="py-12 text-center text-sm text-carbon/50">
                 Cargando datos de venta...
               </div>
-            ) : remisionFactura ? (
+            ) : (remisionFactura && !editandoRemision) ? (
               /* MODO DETALLE: MOSTRAR DOCUMENTO YA GENERADO */
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1702,7 +1806,7 @@ export function DetalleCotizacionAdmin({
                       </span>
                       <h4 className="font-titular text-2xl font-bold mt-1 text-carbon">{remisionFactura.folio}</h4>
                       <p className="text-xs text-carbon/50">Fecha de Registro: {new Date(remisionFactura.fecha).toLocaleDateString()}</p>
-                      <div className="mt-3 font-titular">
+                      <div className="mt-3 font-titular flex gap-2">
                         <a
                           href={`/cotizacion/remision/${cotizacion.token}`}
                           target="_blank"
@@ -1711,6 +1815,13 @@ export function DetalleCotizacionAdmin({
                         >
                           🖨️ Ver Remisión / Imprimir PDF
                         </a>
+                        <button
+                          type="button"
+                          onClick={iniciarEdicionRemision}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border border-carbon/15 px-3 py-1.5 text-xs font-semibold transition shadow-sm"
+                        >
+                          ✏️ Editar Remisión / Factura
+                        </button>
                       </div>
                     </div>
                     <div className="text-right">
@@ -1927,8 +2038,8 @@ export function DetalleCotizacionAdmin({
               </div>
             </>
           ) : (
-              /* MODO CREACIÓN: FORMULARIO PARA CREAR REMISIÓN / FACTURA */
-              <form onSubmit={handleCrearRemisionFactura} className="space-y-6">
+              /* MODO CREACIÓN / EDICIÓN: FORMULARIO PARA CREAR/EDITAR REMISIÓN / FACTURA */
+              <form onSubmit={editandoRemision ? handleEditarRemisionFactura : handleCrearRemisionFactura} className="space-y-6">
                 {mensajeRemisionForm.texto && (
                   <div className={`p-4 rounded-xl text-xs border ${
                     mensajeRemisionForm.tipo === "ok" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"
@@ -1938,7 +2049,9 @@ export function DetalleCotizacionAdmin({
                 )}
 
                 <div className="bg-slate-50 p-5 rounded-2xl border border-carbon/10 space-y-4">
-                  <h4 className="font-titular text-sm font-bold text-carbon/80 border-b pb-2 uppercase tracking-wide">Configuración del Documento</h4>
+                  <h4 className="font-titular text-sm font-bold text-carbon/80 border-b pb-2 uppercase tracking-wide">
+                    Configuración del Documento {editandoRemision ? "(Editar)" : "(Crear)"}
+                  </h4>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
@@ -2146,15 +2259,24 @@ export function DetalleCotizacionAdmin({
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
+                  {editandoRemision && (
+                    <button
+                      type="button"
+                      onClick={() => setEditandoRemision(false)}
+                      className="rounded-xl border border-carbon/20 bg-white hover:bg-slate-50 text-carbon/70 px-6 py-3 text-sm font-semibold transition"
+                    >
+                      Cancelar Edición
+                    </button>
+                  )}
                   <button
                     type="submit"
                     disabled={procesandoRemision}
                     className="rounded-xl bg-sauce hover:bg-verde-profundo text-white px-6 py-3 text-sm font-semibold transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
                   >
                     {procesandoRemision ? (
-                      <>Procesando Cierre...</>
+                      <>{editandoRemision ? "Guardando..." : "Procesando Cierre..."}</>
                     ) : (
-                      <>⚡ Generar y Registrar Cierre Financiero</>
+                      <>{editandoRemision ? "💾 Guardar Cambios" : "⚡ Generar y Registrar Cierre Financiero"}</>
                     )}
                   </button>
                 </div>

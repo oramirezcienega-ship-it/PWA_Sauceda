@@ -1136,6 +1136,124 @@ export async function obtenerRemisionFacturaDeCotizacion(
   };
 }
 
+/** 14b. Editar una Remisión o Factura existente y actualizar sus transacciones financieras */
+export async function editarRemisionFactura(
+  id: string,
+  datos: {
+    tipo: "remision" | "factura";
+    folio: string;
+    fecha: string;
+    tipoCambio: number;
+    datosDocumento: any;
+    serviciosExtra: number;
+    costoFinanciero: number;
+    otrosGastos: number;
+  }
+): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  // 1. Obtener la remisión actual
+  const { data: rem, error: errRem } = await sb
+    .from("remisiones_facturas")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errRem || !rem) throw new Error("Remisión/Factura no encontrada.");
+
+  // 2. Obtener la cotización para recalcular el total
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select("*")
+    .eq("id", rem.cotizacion_id)
+    .maybeSingle();
+
+  if (errCot || !cot) throw new Error("Cotización vinculada no encontrada.");
+
+  const subtotal = Number(cot.precio_final || 0);
+  const total = subtotal + Number(datos.serviciosExtra || 0);
+
+  const oldFolio = rem.folio;
+  const oldTipoLabel = rem.tipo === "remision" ? "Remisión" : "Factura";
+
+  // 3. Actualizar la remisión/factura
+  const { error: errUpd } = await sb
+    .from("remisiones_facturas")
+    .update({
+      tipo: datos.tipo,
+      folio: datos.folio,
+      fecha: datos.fecha,
+      tipo_cambio: Number(datos.tipoCambio || 1.0),
+      datos_documento: datos.datosDocumento || {},
+      servicios_extra: Number(datos.serviciosExtra || 0),
+      costo_financiero: Number(datos.costoFinanciero || 0),
+      otros_gastos: Number(datos.otrosGastos || 0),
+      monto_subtotal: subtotal,
+      monto_total: total,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", id);
+
+  if (errUpd) throw new Error(errUpd.message);
+
+  // 4. Limpiar transacciones financieras viejas de esta remisión
+  if (rem.expediente_id) {
+    const { error: errDel } = await sb
+      .from("transacciones_financieras")
+      .delete()
+      .eq("expediente_id", rem.expediente_id)
+      .or(`concepto.ilike.%${oldFolio}%,concepto.ilike.%${oldTipoLabel}%`);
+
+    if (errDel) console.error("Error al limpiar transacciones previas:", errDel.message);
+
+    // 5. Insertar nuevas transacciones financieras
+    const transacciones = [];
+
+    // Ingreso
+    transacciones.push({
+      fecha: datos.fecha || new Date().toISOString().split("T")[0],
+      tipo: "ingreso",
+      categoria: "venta",
+      concepto: `${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio} - Venta de Cotización ${rem.cotizacion_id}`,
+      monto: total,
+      expediente_id: rem.expediente_id
+    });
+
+    // Costo financiero
+    if (Number(datos.costoFinanciero || 0) > 0) {
+      transacciones.push({
+        fecha: datos.fecha || new Date().toISOString().split("T")[0],
+        tipo: "gasto",
+        categoria: "costo_venta",
+        concepto: `Costo Financiero de ${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio}`,
+        monto: Number(datos.costoFinanciero),
+        expediente_id: rem.expediente_id
+      });
+    }
+
+    // Otros gastos
+    if (Number(datos.otrosGastos || 0) > 0) {
+      transacciones.push({
+        fecha: datos.fecha || new Date().toISOString().split("T")[0],
+        tipo: "gasto",
+        categoria: "costo_venta",
+        concepto: `Otros Gastos de ${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio}`,
+        monto: Number(datos.otrosGastos),
+        expediente_id: rem.expediente_id
+      });
+    }
+
+    const { error: errIns } = await sb
+      .from("transacciones_financieras")
+      .insert(transacciones);
+
+    if (errIns) console.error("Error al re-registrar transacciones financieras:", errIns.message);
+  }
+
+  return { ok: true };
+}
+
 /** 15. Cargar plantilla por defecto e interpolar variables dinámicas */
 export async function prepararGarantiaPorDefecto(
   cotizacionId: string
