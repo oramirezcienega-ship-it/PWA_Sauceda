@@ -13,6 +13,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     unidad: fila.unidad || "m2",
     costoUnitario: Number(fila.costo_unitario || 0),
     precioUnitario: Number(fila.precio_unitario || 0),
+    plantillaGarantia: fila.plantilla_garantia || "",
     createdAt: fila.created_at,
   };
 }
@@ -50,6 +51,7 @@ export async function crearProductoServicio(datos: {
   unidad: string;
   costoUnitario: number;
   precioUnitario: number;
+  plantillaGarantia?: string;
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -69,6 +71,7 @@ export async function crearProductoServicio(datos: {
       unidad: datos.unidad,
       costo_unitario: datos.costoUnitario,
       precio_unitario: datos.precioUnitario,
+      plantilla_garantia: datos.plantillaGarantia || "",
     })
     .select("*")
     .single();
@@ -86,6 +89,7 @@ export async function editarProductoServicio(
     unidad: string;
     costoUnitario: number;
     precioUnitario: number;
+    plantillaGarantia?: string;
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -99,6 +103,7 @@ export async function editarProductoServicio(
       unidad: datos.unidad,
       costo_unitario: datos.costoUnitario,
       precio_unitario: datos.precioUnitario,
+      plantilla_garantia: datos.plantillaGarantia || "",
     })
     .eq("id", id)
     .select("*")

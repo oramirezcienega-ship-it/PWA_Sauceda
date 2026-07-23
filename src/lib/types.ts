@@ -618,6 +618,7 @@ export interface ProductoServicio {
   unidad: string;
   costoUnitario: number;
   precioUnitario: number;
+  plantillaGarantia?: string;
   createdAt: string;
 }
 

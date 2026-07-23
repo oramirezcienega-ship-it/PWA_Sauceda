@@ -24,6 +24,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
   const [unidad, setUnidad] = useState("m2");
   const [costoUnitario, setCostoUnitario] = useState("");
   const [precioUnitario, setPrecioUnitario] = useState("");
+  const [plantillaGarantia, setPlantillaGarantia] = useState("");
   const [cargando, setCargando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
 
@@ -34,6 +35,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
     setUnidad("m2");
     setCostoUnitario("");
     setPrecioUnitario("");
+    setPlantillaGarantia("");
     setErrorForm("");
     setModalAbierto(true);
   };
@@ -45,6 +47,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
     setUnidad(p.unidad);
     setCostoUnitario(String(p.costoUnitario));
     setPrecioUnitario(String(p.precioUnitario));
+    setPlantillaGarantia(p.plantillaGarantia || "");
     setErrorForm("");
     setModalAbierto(true);
   };
@@ -71,6 +74,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
           unidad,
           costoUnitario: cUnit,
           precioUnitario: pUnit,
+          plantillaGarantia: plantillaGarantia.trim(),
         });
 
         setProductos((prev) =>
@@ -84,6 +88,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
           unidad,
           costoUnitario: cUnit,
           precioUnitario: pUnit,
+          plantillaGarantia: plantillaGarantia.trim(),
         });
 
         setProductos((prev) => [nuevo, ...prev]);
@@ -310,6 +315,27 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
                     className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">
+                  Plantilla de Carta de Garantía (Opcional)
+                </label>
+                <textarea
+                  value={plantillaGarantia}
+                  onChange={(e) => setPlantillaGarantia(e.target.value)}
+                  rows={6}
+                  placeholder={`Ej: CARTA DE GARANTÍA
+Obra: [NOMBRE DE LA PROPIEDAD / CLIENTE]
+Ubicación: [DOMICILIO COMPLETO]
+Fecha: [DÍA] de [MES] de [AÑO]
+
+Garantizamos este producto por 10 años...`}
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs focus:border-sauce focus:outline-none font-mono leading-relaxed"
+                />
+                <p className="text-[10px] text-carbon/40 mt-1">
+                  Placeholders soportados: <strong>[NOMBRE DE LA PROPIEDAD / CLIENTE]</strong>, <strong>[DOMICILIO COMPLETO]</strong>, <strong>[DÍA]</strong>, <strong>[MES]</strong>, <strong>[AÑO]</strong>.
+                </p>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
