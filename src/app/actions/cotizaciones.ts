@@ -1491,3 +1491,43 @@ export async function obtenerRemisionPorToken(
   };
 }
 
+/** 20. Obtener los últimos documentos (remisión y garantía) de un prospecto */
+export async function obtenerUltimosDocumentosDeProspecto(
+  prospectoId: string
+): Promise<{ cotizacionToken: string; tieneRemision: boolean; tieneGarantia: boolean } | null> {
+  const sb = supabaseServidor();
+
+  // 1. Cargar la última cotización del prospecto
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select("id, token")
+    .eq("prospecto_id", prospectoId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (errCot || !cot) return null;
+
+  // 2. Verificar si tiene remisión
+  const { data: rem } = await sb
+    .from("remisiones_facturas")
+    .select("id")
+    .eq("cotizacion_id", cot.id)
+    .limit(1)
+    .maybeSingle();
+
+  // 3. Verificar si tiene garantía
+  const { data: gar } = await sb
+    .from("garantias_documentos")
+    .select("id")
+    .eq("cotizacion_id", cot.id)
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    cotizacionToken: cot.token,
+    tieneRemision: !!rem,
+    tieneGarantia: !!gar
+  };
+}
+
