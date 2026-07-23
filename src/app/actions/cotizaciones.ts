@@ -3,7 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
-import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura } from "@/lib/types";
+import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 // Helper para generar el siguiente folio correlativo (COT-001)
 function siguienteId(ids: string[]): string {
@@ -1133,6 +1133,267 @@ export async function obtenerRemisionFacturaDeCotizacion(
     montoTotal: Number(data.monto_total || 0),
     createdAt: data.created_at,
     updatedAt: data.updated_at
+  };
+}
+
+/** 15. Cargar plantilla por defecto e interpolar variables dinámicas */
+export async function prepararGarantiaPorDefecto(
+  cotizacionId: string
+): Promise<{ titulo: string; contenido: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  // 1. Cargar la cotización, prospecto y remisión
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos (
+        nombre,
+        telefono
+      )
+    `)
+    .eq("id", cotizacionId)
+    .maybeSingle();
+
+  if (errCot || !cot) throw new Error("Cotización no encontrada.");
+
+  const { data: remision } = await sb
+    .from("remisiones_facturas")
+    .select("*")
+    .eq("cotizacion_id", cotizacionId)
+    .maybeSingle();
+
+  // 2. Definir fecha y domicilio
+  const nombreCliente = cot.prospectos?.nombre || "Cliente Sin Nombre";
+  const domicilioCompleto = remision?.datos_documento?.direccionEntrega || "Domicilio en Sitio";
+  
+  const ahora = new Date();
+  const meses = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+  ];
+  const dia = ahora.getDate();
+  const mes = meses[ahora.getMonth()];
+  const anio = ahora.getFullYear();
+
+  // 3. Buscar plantilla en productos si hay coincidencia
+  // Si no, o si el servicioTipo === 'impermeabilizacion', usamos la plantilla por defecto
+  let plantilla = "";
+  
+  // Buscar plantilla en los conceptos de la cotización que estén vinculados al catálogo
+  const { data: conceptos } = await sb
+    .from("cotizacion_conceptos")
+    .select("descripcion")
+    .eq("cotizacion_id", cotizacionId);
+
+  if (conceptos && conceptos.length > 0) {
+    for (const c of conceptos) {
+      const { data: prod } = await sb
+        .from("productos_servicios")
+        .select("plantilla_garantia")
+        .ilike("nombre", c.descripcion)
+        .maybeSingle();
+      
+      if (prod?.plantilla_garantia) {
+        plantilla = prod.plantilla_garantia;
+        break;
+      }
+    }
+  }
+
+  if (!plantilla) {
+    // Plantilla estándar de impermeabilización
+    plantilla = `SAUCEDA CONSTRUYE
+CARTA DE GARANTÍA · IMPERMEABILIZACIÓN
+
+Por la presente garantizamos los trabajos de impermeabilización que hemos instalado en la siguiente propiedad:
+
+Obra: [NOMBRE DE LA PROPIEDAD / CLIENTE]
+Ubicación: [DOMICILIO COMPLETO]
+Fecha de aplicación: [DÍA] de [MES] de [AÑO]
+
+Considerando que SAUCEDA Construye ha contratado para los trabajos de impermeabilización en esta propiedad, garantizamos que todos los trabajos realizados con impermeabilizante de la calidad especificada se mantendrán absolutamente impermeables durante el período de garantía establecido.
+
+CONDICIONES DE GARANTÍA:
+
+Período de cobertura
+Los trabajos de impermeabilización se mantendrán absolutamente impermeables durante 10 años a partir de la fecha de aplicación.
+
+Cobertura de defectos
+Si se detecta cualquier defecto de mano de obra o material relacionado con los trabajos de impermeabilización, SAUCEDA Construye se compromete a rectificar dichas fallas sin cargo extra por servicios, mano de obra y materiales. Esto incluye trabajos de reparación de la superficie, limpieza y pruebas de humedad, de forma completa.
+
+Decisión del cliente
+El cliente tiene derecho a autorizar reparaciones o rectificaciones. Dichas reparaciones restablecerán la zona absolutamente impermeable y seca, sin signos de humedad en interiores de la construcción.
+
+Tramitación de reclamaciones
+SAUCEDA Construye se compromete a tramitar cualquier reclamación bajo garantía de forma rápida y justa. Para reportar un problema, contáctanos al +52 477 465 4700 o a través de WhatsApp.
+
+Limitaciones de la garantía
+SAUCEDA Construye no será responsable si:
+- El trabajo es manipulado o la estructura es dañada deliberadamente.
+- El sistema de impermeabilización se daña por contratación, agrietamiento por peso adicional, rasgaduras en trabajos externos, o cualquier calamidad natural fuera de nuestro control.
+- En caso de infiltraciones por manipulación de la carpeta, SAUCEDA Construye se obliga a reparar la zona afectada con un cargo económico determinado según el daño provocado.
+
+Mantenimiento preventivo
+Para garantizar la cobertura completa de esta garantía, recomendamos realizar mantenimiento preventivo a los 6 años después de su aplicación. Consiste en la aplicación de resinas, sellado de traslapés, limpieza y destape de caídas pluviales libres de hojas y basura.
+
+Profesionalismo
+La instalación fue realizada por un aplicador previamente calificado y capacitado en técnicas de impermeabilización.
+
+Esta garantía es válida únicamente en la propiedad especificada y no es transferible.
+
+SAUCEDA Construye · Tradición con tecnología · +52 477 465 4700 · saucedamx.com`;
+  }
+
+  // 4. Interpolación
+  const contenido = plantilla
+    .replace(/\[NOMBRE DE LA PROPIEDAD \/ CLIENTE\]/g, nombreCliente)
+    .replace(/\[DOMICILIO COMPLETO\]/g, domicilioCompleto)
+    .replace(/\[DÍA\]/g, String(dia))
+    .replace(/\[MES\]/g, mes)
+    .replace(/\[AÑO\]/g, String(anio));
+
+  return {
+    titulo: "Carta de Garantía - Impermeabilización",
+    contenido
+  };
+}
+
+/** 16. Obtener Carta de Garantía vinculada a una Cotización */
+export async function obtenerGarantiaDocumento(
+  cotizacionId: string
+): Promise<GarantiaDocumento | null> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data, error } = await sb
+    .from("garantias_documentos")
+    .select("*")
+    .eq("cotizacion_id", cotizacionId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    cotizacionId: data.cotizacion_id,
+    remisionId: data.remision_id,
+    titulo: data.titulo,
+    contenido: data.contenido,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at
+  };
+}
+
+/** 17. Guardar o actualizar Carta de Garantía */
+export async function guardarGarantiaDocumento(
+  cotizacionId: string,
+  remisionId: string | null,
+  titulo: string,
+  contenido: string
+): Promise<{ ok: boolean; id: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  // Buscar si ya existe
+  const { data: existente } = await sb
+    .from("garantias_documentos")
+    .select("id")
+    .eq("cotizacion_id", cotizacionId)
+    .maybeSingle();
+
+  if (existente?.id) {
+    const { error } = await sb
+      .from("garantias_documentos")
+      .update({
+        remision_id: remisionId || null,
+        titulo,
+        contenido,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", existente.id);
+
+    if (error) throw new Error(error.message);
+    return { ok: true, id: existente.id };
+  } else {
+    const { data: nueva, error } = await sb
+      .from("garantias_documentos")
+      .insert({
+        cotizacion_id: cotizacionId,
+        remision_id: remisionId || null,
+        titulo,
+        contenido
+      })
+      .select("id")
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { ok: true, id: nueva.id };
+  }
+}
+
+/** 18. Obtener de manera pública la garantía utilizando el Token de Cotización */
+export async function obtenerGarantiaPorToken(
+  token: string
+): Promise<{ cotizacion: Cotizacion; garantia: GarantiaDocumento } | null> {
+  const sb = supabaseServidor();
+
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos (
+        nombre,
+        telefono
+      )
+    `)
+    .eq("token", token)
+    .maybeSingle();
+
+  if (errCot || !cot) throw new Error("Acceso denegado o propuesta no encontrada.");
+
+  const { data: gar, error: errGar } = await sb
+    .from("garantias_documentos")
+    .select("*")
+    .eq("cotizacion_id", cot.id)
+    .maybeSingle();
+
+  if (errGar || !gar) return null;
+
+  return {
+    cotizacion: {
+      id: cot.id,
+      prospectoId: cot.prospecto_id,
+      expedienteId: cot.expediente_id,
+      prospectoNombre: cot.prospectos?.nombre || "",
+      prospectoTelefono: cot.prospectos?.telefono || "",
+      servicioTipo: cot.servicio_tipo,
+      estatus: cot.estatus,
+      requiereVisita: cot.requiere_visita,
+      fechaVisita: cot.fecha_visita,
+      inspectorId: cot.inspector_id,
+      costoEstimado: Number(cot.costo_estimado || 0),
+      precioFinal: Number(cot.precio_final || 0),
+      aprobadoComercial: cot.aprobado_comercial,
+      aprobadoOperativo: cot.aprobado_operativo,
+      token: cot.token,
+      notasInternas: cot.notas_internas || "",
+      condicionesPago: cot.condiciones_pago || "",
+      garantia: cot.garantia || "",
+      createdAt: cot.created_at,
+      updatedAt: cot.updated_at
+    },
+    garantia: {
+      id: gar.id,
+      cotizacionId: gar.cotizacion_id,
+      remisionId: gar.remision_id,
+      titulo: gar.titulo,
+      contenido: gar.contenido,
+      createdAt: gar.created_at,
+      updatedAt: gar.updated_at
+    }
   };
 }
 

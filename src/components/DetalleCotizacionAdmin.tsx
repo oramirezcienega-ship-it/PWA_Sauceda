@@ -14,10 +14,13 @@ import {
   actualizarRequerimientoVisita,
   crearRemisionFactura,
   obtenerRemisionFacturaDeCotizacion,
+  obtenerGarantiaDocumento,
+  guardarGarantiaDocumento,
+  prepararGarantiaPorDefecto,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
-import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura } from "@/lib/types";
+import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
   cotizacionInicial: Cotizacion;
@@ -42,6 +45,15 @@ export function DetalleCotizacionAdmin({
   // --- State para Remisión & Factura ---
   const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
   const [cargandoRemision, setCargandoRemision] = useState<boolean>(true);
+
+  // --- State para Cartas de Garantía ---
+  const [garantiaDoc, setGarantiaDoc] = useState<GarantiaDocumento | null>(null);
+  const [cargandoGarantia, setCargandoGarantia] = useState<boolean>(true);
+  const [editandoGarantia, setEditandoGarantia] = useState<boolean>(false);
+  const [garantiaTexto, setGarantiaTexto] = useState("");
+  const [garantiaTitulo, setGarantiaTitulo] = useState("Carta de Garantía");
+  const [mensajeGarantia, setMensajeGarantia] = useState({ tipo: "", texto: "" });
+  const [guardandoGarantia, setGuardandoGarantia] = useState(false);
 
   // --- Formulario de Remisión / Factura ---
   const [tipoDoc, setTipoDoc] = useState<"remision" | "factura">("remision");
@@ -166,6 +178,30 @@ export function DetalleCotizacionAdmin({
     } else {
       setRemisionFactura(null);
       setCargandoRemision(false);
+    }
+  }, [cotizacion.id, cotizacion.estatus]);
+
+  useEffect(() => {
+    async function cargarGarantia() {
+      try {
+        setCargandoGarantia(true);
+        const doc = await obtenerGarantiaDocumento(cotizacion.id);
+        setGarantiaDoc(doc);
+        if (doc) {
+          setGarantiaTexto(doc.contenido);
+          setGarantiaTitulo(doc.titulo);
+        }
+      } catch (err) {
+        console.error("Error al cargar carta de garantía:", err);
+      } finally {
+        setCargandoGarantia(false);
+      }
+    }
+    if (cotizacion.estatus === "instalacion" || cotizacion.estatus === "aceptada") {
+      cargarGarantia();
+    } else {
+      setGarantiaDoc(null);
+      setCargandoGarantia(false);
     }
   }, [cotizacion.id, cotizacion.estatus]);
 
@@ -621,6 +657,55 @@ export function DetalleCotizacionAdmin({
       setMensajeRemisionForm({ tipo: "error", texto: err.message || "Ocurrió un error inesperado." });
     } finally {
       setProcesandoRemision(false);
+    }
+  };
+
+  const handleGenerarGarantiaPorDefecto = async () => {
+    try {
+      setGuardandoGarantia(true);
+      setMensajeGarantia({ tipo: "", texto: "" });
+      const def = await prepararGarantiaPorDefecto(cotizacion.id);
+      setGarantiaTexto(def.contenido);
+      setGarantiaTitulo(def.titulo);
+      setEditandoGarantia(true);
+    } catch (err: any) {
+      setMensajeGarantia({ tipo: "error", texto: err.message || "No se pudo generar la plantilla por defecto." });
+    } finally {
+      setGuardandoGarantia(false);
+    }
+  };
+
+  const handleGuardarGarantia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setGuardandoGarantia(true);
+      setMensajeGarantia({ tipo: "", texto: "" });
+
+      if (!garantiaTexto.trim()) {
+        throw new Error("El contenido de la garantía no puede estar vacío.");
+      }
+
+      const res = await guardarGarantiaDocumento(
+        cotizacion.id,
+        remisionFactura?.id || null,
+        garantiaTitulo.trim() || "Carta de Garantía",
+        garantiaTexto
+      );
+
+      if (res.ok) {
+        setMensajeGarantia({
+          tipo: "ok",
+          texto: "Carta de Garantía guardada exitosamente ✓"
+        });
+        setEditandoGarantia(false);
+        // Recargar
+        const doc = await obtenerGarantiaDocumento(cotizacion.id);
+        setGarantiaDoc(doc);
+      }
+    } catch (err: any) {
+      setMensajeGarantia({ tipo: "error", texto: err.message || "Error al guardar la garantía." });
+    } finally {
+      setGuardandoGarantia(false);
     }
   };
 
@@ -1607,7 +1692,8 @@ export function DetalleCotizacionAdmin({
               </div>
             ) : remisionFactura ? (
               /* MODO DETALLE: MOSTRAR DOCUMENTO YA GENERADO */
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-slate-50 border border-carbon/10 p-6 rounded-2xl space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
@@ -1713,7 +1799,124 @@ export function DetalleCotizacionAdmin({
                   </div>
                 </div>
               </div>
-            ) : (
+
+              {/* CARTA DE GARANTÍA */}
+              <div className="border-t pt-6 mt-6 space-y-4">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className="font-titular text-lg font-bold text-verde-profundo uppercase tracking-wide">
+                    📜 Carta de Garantía del Cliente
+                  </h4>
+                  {garantiaDoc && !editandoGarantia && (
+                    <div className="flex gap-2 font-titular">
+                      <button
+                        onClick={() => setEditandoGarantia(true)}
+                        className="rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border px-3 py-1.5 text-xs font-semibold transition"
+                      >
+                        ✏️ Editar Contenido
+                      </button>
+                      <a
+                        href={`/cotizacion/garantia/${cotizacion.token}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg bg-sauce text-white px-4 py-1.5 text-xs font-semibold hover:bg-verde-profundo transition shadow-sm flex items-center gap-1.5"
+                      >
+                        🖨️ Imprimir / Guardar PDF
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {mensajeGarantia.texto && (
+                  <div className={`p-4 rounded-xl text-xs border ${
+                    mensajeGarantia.tipo === "ok" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"
+                  }`}>
+                    {mensajeGarantia.texto}
+                  </div>
+                )}
+
+                {editandoGarantia ? (
+                  /* FORMULARIO DE EDICIÓN O CREACIÓN */
+                  <form onSubmit={handleGuardarGarantia} className="space-y-4">
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Título del Documento</label>
+                        <input
+                          type="text"
+                          required
+                          value={garantiaTitulo}
+                          onChange={(e) => setGarantiaTitulo(e.target.value)}
+                          className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce font-semibold font-titular"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Contenido de la Carta de Garantía</label>
+                        <textarea
+                          rows={16}
+                          required
+                          value={garantiaTexto}
+                          onChange={(e) => setGarantiaTexto(e.target.value)}
+                          className="w-full rounded-lg border border-carbon/20 px-4 py-3 text-xs bg-white focus:outline-none focus:border-sauce font-mono resize-none leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end font-titular">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditandoGarantia(false);
+                          if (garantiaDoc) {
+                            setGarantiaTexto(garantiaDoc.contenido);
+                            setGarantiaTitulo(garantiaDoc.titulo);
+                          }
+                        }}
+                        className="rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border px-4 py-2 text-xs font-semibold transition"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={guardandoGarantia}
+                        className="rounded-lg bg-sauce text-white px-5 py-2 text-xs font-semibold hover:bg-verde-profundo transition shadow-sm"
+                      >
+                        {guardandoGarantia ? "Guardando..." : "Guardar Garantía"}
+                      </button>
+                    </div>
+                  </form>
+                ) : garantiaDoc ? (
+                  /* VISTA DE DOCUMENTO GUARDADO */
+                  <div className="bg-slate-50 border border-carbon/10 p-6 rounded-2xl">
+                    <h5 className="font-titular font-bold text-sm text-carbon/85 border-b pb-2 mb-4">{garantiaTitulo}</h5>
+                    <pre className="text-xs text-carbon/80 whitespace-pre-wrap font-mono leading-relaxed bg-white p-4 rounded-xl border border-carbon/5 max-h-[400px] overflow-y-auto">
+                      {garantiaTexto}
+                    </pre>
+                    <div className="mt-4 flex gap-2 pt-2 border-t text-[10px] text-carbon/50">
+                      <span>Registrado el {new Date(garantiaDoc.createdAt).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <span>Última actualización: {new Date(garantiaDoc.updatedAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  /* COMPILACIÓN INICIAL */
+                  <div className="bg-slate-50 border border-carbon/10 p-8 rounded-2xl text-center space-y-4">
+                    <div className="text-3xl">📜</div>
+                    <div>
+                      <h5 className="font-titular font-bold text-sm text-carbon">Sin Carta de Garantía registrada</h5>
+                      <p className="text-xs text-carbon/50 mt-1 max-w-md mx-auto">
+                        Genera y personaliza la carta de garantía correspondiente a los trabajos de esta obra para compartirla con el cliente.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGenerarGarantiaPorDefecto}
+                      disabled={guardandoGarantia}
+                      className="rounded-lg bg-sauce/15 text-sauce border border-sauce/20 px-5 py-2 text-xs font-semibold hover:bg-sauce hover:text-white transition shadow-sm inline-flex items-center gap-1.5 font-titular"
+                    >
+                      {guardandoGarantia ? "Generando..." : "✨ Generar Carta de Garantía"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
               /* MODO CREACIÓN: FORMULARIO PARA CREAR REMISIÓN / FACTURA */
               <form onSubmit={handleCrearRemisionFactura} className="space-y-6">
                 {mensajeRemisionForm.texto && (

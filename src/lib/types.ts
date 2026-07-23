@@ -639,3 +639,13 @@ export interface RemisionFactura {
   updatedAt: string;
 }
 
+export interface GarantiaDocumento {
+  id: string;
+  cotizacionId: string;
+  remisionId: string | null;
+  titulo: string;
+  contenido: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
