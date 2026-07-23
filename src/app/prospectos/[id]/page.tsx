@@ -16,6 +16,7 @@ import { TimelineSecuencia } from "@/components/TimelineSecuencia";
 import { BotonNoViable } from "@/components/BotonNoViable";
 import { LinkCitaWidget } from "@/components/LinkCitaWidget";
 import { OperadorSelector } from "@/components/OperadorSelector";
+import { WidgetAgendaCitas } from "@/components/WidgetAgendaCitas";
 
 
 export const dynamic = "force-dynamic";
@@ -204,6 +205,15 @@ export default async function PaginaProspecto({
             titulo="📅 Enlace de Agendamiento de Inspección"
             tipoCitaPredefinido="inspeccion"
             rolEtiqueta="Operador"
+          />
+        </div>
+
+        {/* Widget de Agendamiento Directo e Historial de Citas */}
+        <div className="mt-6">
+          <WidgetAgendaCitas
+            prospectoId={prospecto.id}
+            clienteNombre={prospecto.nombreCompleto}
+            clienteTelefono={prospecto.telefono || ""}
           />
         </div>
 

@@ -691,3 +691,139 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     perfil_nombre: row.perfiles?.nombre || null,
   })) as Cita[];
 }
+
+/**
+ * Obtiene las citas (inspecciones, instalaciones, etc.) asociadas a un prospecto y/o expediente.
+ */
+export async function obtenerCitasDeEntidad(
+  prospectoId?: string | null,
+  expedienteId?: string | null
+): Promise<Cita[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  let query = sb
+    .from("agenda_citas")
+    .select("*, perfiles(nombre)")
+    .order("fecha", { ascending: true })
+    .order("hora_inicio", { ascending: true });
+
+  if (prospectoId && expedienteId) {
+    query = query.or(`prospecto_id.eq.${prospectoId},expediente_id.eq.${expedienteId}`);
+  } else if (prospectoId) {
+    query = query.eq("prospecto_id", prospectoId);
+  } else if (expedienteId) {
+    query = query.eq("expediente_id", expedienteId);
+  } else {
+    return [];
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("Error al obtener citas de entidad:", error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    ...row,
+    perfil_nombre: row.perfiles?.nombre || null,
+  })) as Cita[];
+}
+
+/**
+ * Programa una cita de inspección o instalación de manera manual (por administrador)
+ * vinculada a un prospecto y/o expediente, sin verificar la disponibilidad de slots.
+ */
+export async function programarCitaManual(data: {
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  perfilId: string;
+  clienteNombre: string;
+  clienteTelefono: string;
+  tipoCita: "inspeccion" | "instalacion" | "llamada" | "venta" | "asesoria";
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  notas?: string;
+  notificarCliente?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!data.perfilId || !data.fecha || !data.horaInicio || !data.horaFin || !data.clienteNombre || !data.clienteTelefono) {
+    return { ok: false, error: "Faltan datos obligatorios para agendar." };
+  }
+
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Si es instalación y tiene expedienteId, también actualizamos el expediente
+    if (data.tipoCita === "instalacion" && data.expedienteId) {
+      const fechaISO = `${data.fecha}T${data.horaInicio}:00`;
+      await sb
+        .from("expedientes")
+        .update({
+          fecha_instalacion: fechaISO,
+          operador_id: data.perfilId,
+        })
+        .eq("id", data.expedienteId);
+    }
+
+    // 2. Insertar en agenda_citas
+    const { error: errCita } = await sb
+      .from("agenda_citas")
+      .insert({
+        perfil_id: data.perfilId,
+        prospecto_id: data.prospectoId ?? null,
+        expediente_id: data.expedienteId ?? null,
+        cliente_nombre: data.clienteNombre.trim(),
+        cliente_telefono: data.clienteTelefono.trim(),
+        tipo_cita: data.tipoCita,
+        fecha: data.fecha,
+        hora_inicio: data.horaInicio,
+        hora_fin: data.horaFin,
+        notas: data.notas?.trim() || null,
+        estado: "confirmada",
+      });
+
+    if (errCita) {
+      return { ok: false, error: errCita.message };
+    }
+
+    // 3. Registrar actividad en la bitácora
+    if (data.expedienteId) {
+      const { registrarActividad } = await import("@/lib/actividades");
+      const tipoLabel = data.tipoCita === "inspeccion" ? "Inspección Técnica" : (data.tipoCita === "instalacion" ? "Instalación Profesional" : data.tipoCita);
+      await registrarActividad(sb, {
+        expedienteId: data.expedienteId,
+        tipo: "construccion",
+        titulo: `📅 ${tipoLabel} Programada`,
+        detalle: `Programada para el ${data.fecha} de ${data.horaInicio} a ${data.horaFin}. Técnico/Asesor: ${data.perfilId}. ${data.notes || data.notas ? `Notas: ${data.notas || ""}` : ""}`,
+      });
+    } else if (data.prospectoId) {
+      const tipoLabel = data.tipoCita === "inspeccion" ? "Inspección Técnica" : (data.tipoCita === "instalacion" ? "Instalación Profesional" : data.tipoCita);
+      await sb.from("actividades").insert({
+        prospecto_id: data.prospectoId,
+        tipo: "cita",
+        descripcion: `Cita de ${tipoLabel} agendada para el ${data.fecha} a las ${data.horaInicio}.`,
+      });
+    }
+
+    // 4. Notificación por WhatsApp
+    if (data.notificarCliente && data.clienteTelefono) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      let msg = "";
+      if (data.tipoCita === "inspeccion") {
+        msg = `¡Hola ${data.clienteNombre.split(" ")[0]}! 📅 Te confirmamos que tu inspección técnica gratuita en sitio con SAUCEDA ha quedado programada para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\nCualquier duda o cambio quedamos a tus órdenes. ¡Que tengas un excelente día! 💚`;
+      } else if (data.tipoCita === "instalacion") {
+        msg = `¡Hola ${data.clienteNombre.split(" ")[0]}! 🛠️ Te confirmamos que tu instalación profesional de impermeabilización con SAUCEDA ha quedado programada para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\nPor favor asegúrate de tener libre el acceso a la azotea. ¡Cualquier duda quedamos a tus órdenes! 💚`;
+      } else {
+        msg = `¡Hola ${data.clienteNombre.split(" ")[0]}! 📅 Te confirmamos que tenemos programada una cita de tipo *${data.tipoCita}* para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
+      }
+      await enviarWhatsAppTexto(data.clienteTelefono, msg);
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al programar cita manual:", err);
+    return { ok: false, error: err.message || "Error interno al programar." };
+  }
+}

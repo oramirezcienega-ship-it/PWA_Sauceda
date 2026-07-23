@@ -21,6 +21,7 @@ import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 import { LinkCitaWidget } from "./LinkCitaWidget";
 import { programarInstalacionExpediente, programarLlamadaExpediente } from "@/app/actions/agenda";
 import { PromocionVentaWidget } from "./PromocionVentaWidget";
+import { WidgetAgendaCitas } from "./WidgetAgendaCitas";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 
 /**
@@ -39,17 +40,6 @@ export function DetalleExpediente({ id }: { id: string }) {
   const [enrolandoSecuencia, setEnrolandoSecuencia] = useState(false);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [siteUrl, setSiteUrl] = useState("https://app.saucedamx.com");
-
-  // Estado para agendamiento de instalación
-  const [mostrarFormInstalacion, setMostrarFormInstalacion] = useState(false);
-  const [fechaInstalacion, setFechaInstalacion] = useState("");
-  const [horaInicioInstalacion, setHoraInicioInstalacion] = useState("09:00");
-  const [horaFinInstalacion, setHoraFinInstalacion] = useState("13:00");
-  const [notasInstalacion, setNotasInstalacion] = useState("");
-  const [notificarClienteInstalacion, setNotificarClienteInstalacion] = useState(true);
-  const [guardandoInstalacion, setGuardandoInstalacion] = useState(false);
-  const [exitoInstalacion, setExitoInstalacion] = useState<string | null>(null);
-  const [errorInstalacion, setErrorInstalacion] = useState<string | null>(null);
 
   // Estado para programación de llamada
   const [mostrarFormLlamada, setMostrarFormLlamada] = useState(false);
@@ -104,38 +94,6 @@ export function DetalleExpediente({ id }: { id: string }) {
     } catch (err: any) {
       setErrorLlamada(err.message || "Error al programar la llamada.");
       setGuardandoLlamada(false);
-    }
-  }
-
-  async function handleProgramarInstalacion(e: React.FormEvent) {
-    e.preventDefault();
-    if (!expediente || !fechaInstalacion) return;
-    setGuardandoInstalacion(true);
-    setErrorInstalacion(null);
-    setExitoInstalacion(null);
-
-    try {
-      const r = await programarInstalacionExpediente({
-        expedienteId: expediente.id,
-        perfilId: expediente.operadorId || expediente.asesorId,
-        fecha: fechaInstalacion,
-        horaInicio: horaInicioInstalacion,
-        horaFin: horaFinInstalacion,
-        notas: notasInstalacion,
-        notificarCliente: notificarClienteInstalacion,
-      });
-      setGuardandoInstalacion(false);
-
-      if (!r.ok) {
-        setErrorInstalacion(r.error ?? "No se pudo agendar la instalación.");
-      } else {
-        setExitoInstalacion("¡Instalación programada con éxito en la agenda del técnico!");
-        setMostrarFormInstalacion(false);
-        await recargar();
-      }
-    } catch (err: any) {
-      setErrorInstalacion(err.message || "Error al agendar la instalación.");
-      setGuardandoInstalacion(false);
     }
   }
 
@@ -416,6 +374,17 @@ export function DetalleExpediente({ id }: { id: string }) {
             rolEtiqueta="Operador"
           />
         </div>
+
+        {/* Widget de Agendamiento Directo e Historial de Citas del Expediente */}
+        <WidgetAgendaCitas
+          prospectoId={expediente.prospectoId}
+          expedienteId={expediente.id}
+          clienteNombre={expediente.nombreCompleto || expediente.cliente}
+          clienteTelefono={expediente.telefono || ""}
+          onRefresh={async () => {
+            await recargar();
+          }}
+        />
 
         {/* Avance por etapas */}
         <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
@@ -970,137 +939,6 @@ export function DetalleExpediente({ id }: { id: string }) {
                     className="px-4 py-1.5 rounded-lg bg-sauce hover:bg-verde-profundo text-white text-xs font-bold transition disabled:opacity-50"
                   >
                     {guardandoLlamada ? "Guardando..." : "Guardar Llamada en Agenda"}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-
-          {/* Módulo de Agendamiento de Instalación */}
-          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
-                  🛠️ Fecha de Instalación Profesional
-                </h3>
-                <p className="text-xs text-carbon/50">
-                  Programación y agenda de técnico para trabajos de impermeabilización
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMostrarFormInstalacion(!mostrarFormInstalacion)}
-                className="rounded-lg bg-emerald-50 border border-emerald-200 hover:bg-emerald-600 hover:text-white transition px-3 py-1.5 text-xs font-semibold text-emerald-700 flex items-center gap-1 cursor-pointer"
-              >
-                {mostrarFormInstalacion ? "Cancelar" : "📅 Programar Instalación"}
-              </button>
-            </div>
-
-            {expediente.fechaInstalacion && (
-              <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-2xl">🛠️</span>
-                  <div>
-                    <p className="text-xs font-bold text-emerald-800">
-                      Instalación Programada: {new Date(expediente.fechaInstalacion).toLocaleString("es-MX", { dateStyle: "full", timeStyle: "short" })}
-                    </p>
-                    <p className="text-[11px] text-emerald-600 font-medium">
-                      Técnico Asignado: {expediente.operadorNombre || expediente.asesorNombre || "Alex (Técnico)"}
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-bold px-2.5 py-1 uppercase">
-                  Confirmada
-                </span>
-              </div>
-            )}
-
-            {exitoInstalacion && (
-              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
-                {exitoInstalacion}
-              </div>
-            )}
-            {errorInstalacion && (
-              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
-                {errorInstalacion}
-              </div>
-            )}
-
-            {mostrarFormInstalacion && (
-              <form onSubmit={handleProgramarInstalacion} className="p-4 rounded-xl border border-carbon/15 bg-slate-50 space-y-3">
-                <h4 className="text-xs font-bold text-verde-profundo uppercase tracking-wider">Agendar Fecha de Instalación</h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Fecha de Instalación</label>
-                    <input
-                      type="date"
-                      required
-                      value={fechaInstalacion}
-                      onChange={(e) => setFechaInstalacion(e.target.value)}
-                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Hora Inicio</label>
-                    <input
-                      type="time"
-                      required
-                      value={horaInicioInstalacion}
-                      onChange={(e) => setHoraInicioInstalacion(e.target.value)}
-                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Hora Fin (Estimada)</label>
-                    <input
-                      type="time"
-                      required
-                      value={horaFinInstalacion}
-                      onChange={(e) => setHoraFinInstalacion(e.target.value)}
-                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Notas / Instrucciones para el Técnico</label>
-                  <textarea
-                    rows={2}
-                    value={notasInstalacion}
-                    onChange={(e) => setNotasInstalacion(e.target.value)}
-                    placeholder="Ej: Acceso por cochera lateral, llevar escalera de 3 mts..."
-                    className="w-full rounded-lg border border-carbon/20 bg-white p-2.5 text-xs text-carbon focus:border-sauce focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="chkNotificar"
-                    checked={notificarClienteInstalacion}
-                    onChange={(e) => setNotificarClienteInstalacion(e.target.checked)}
-                    className="rounded border-carbon/30 text-sauce focus:ring-sauce cursor-pointer"
-                  />
-                  <label htmlFor="chkNotificar" className="text-xs font-medium text-carbon/80 cursor-pointer">
-                    Enviar notificación de confirmación por WhatsApp al cliente ({expediente.telefono})
-                  </label>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setMostrarFormInstalacion(false)}
-                    className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-medium text-carbon/70 hover:bg-slate-100 transition cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={guardandoInstalacion}
-                    className="rounded-lg bg-verde-profundo text-crema px-4 py-1.5 text-xs font-bold hover:bg-sauce transition disabled:opacity-50 cursor-pointer"
-                  >
-                    {guardandoInstalacion ? "Agendando..." : "Confirmar e Insertar en Agenda"}
                   </button>
                 </div>
               </form>
