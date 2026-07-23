@@ -42,8 +42,10 @@ CREATE INDEX IF NOT EXISTS remisiones_facturas_exp_idx ON public.remisiones_fact
 ALTER TABLE public.remisiones_facturas ENABLE ROW LEVEL SECURITY;
 
 -- 4. Políticas RLS
+DROP POLICY IF EXISTS "Permitir todo a usuarios autenticados" ON public.remisiones_facturas;
 CREATE POLICY "Permitir todo a usuarios autenticados" ON public.remisiones_facturas
   FOR ALL TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "Permitir lectura pública de remisiones/facturas" ON public.remisiones_facturas;
 CREATE POLICY "Permitir lectura pública de remisiones/facturas" ON public.remisiones_facturas
   FOR SELECT USING (true);
