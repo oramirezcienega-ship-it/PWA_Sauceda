@@ -1397,3 +1397,97 @@ export async function obtenerGarantiaPorToken(
   };
 }
 
+/** 19. Obtener remisión/factura y conceptos por el token de cotización */
+export async function obtenerRemisionPorToken(
+  token: string
+): Promise<{ cotizacion: Cotizacion; remision: RemisionFactura; conceptos: CotizacionConcepto[] } | null> {
+  const sb = supabaseServidor();
+
+  // 1. Cargar la cotización
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos (
+        nombre,
+        telefono
+      )
+    `)
+    .eq("token", token)
+    .maybeSingle();
+
+  if (errCot || !cot) throw new Error("Acceso denegado o propuesta no encontrada.");
+
+  // 2. Cargar la remisión vinculada
+  const { data: rem, error: errRem } = await sb
+    .from("remisiones_facturas")
+    .select("*")
+    .eq("cotizacion_id", cot.id)
+    .maybeSingle();
+
+  if (errRem || !rem) return null;
+
+  // 3. Cargar los conceptos
+  const { data: concs, error: errConcs } = await sb
+    .from("cotizacion_conceptos")
+    .select("*")
+    .eq("cotizacion_id", cot.id)
+    .order("created_at", { ascending: true });
+
+  if (errConcs) throw new Error(errConcs.message);
+
+  return {
+    cotizacion: {
+      id: cot.id,
+      prospectoId: cot.prospecto_id,
+      expedienteId: cot.expediente_id,
+      prospectoNombre: cot.prospectos?.nombre || "",
+      prospectoTelefono: cot.prospectos?.telefono || "",
+      servicioTipo: cot.servicio_tipo,
+      estatus: cot.estatus,
+      requiereVisita: cot.requiere_visita,
+      fechaVisita: cot.fecha_visita,
+      inspectorId: cot.inspector_id,
+      costoEstimado: Number(cot.costo_estimado || 0),
+      precioFinal: Number(cot.precio_final || 0),
+      aprobadoComercial: cot.aprobado_comercial,
+      aprobadoOperativo: cot.aprobado_operativo,
+      token: cot.token,
+      notasInternas: cot.notas_internas || "",
+      condicionesPago: cot.condiciones_pago || "",
+      garantia: cot.garantia || "",
+      createdAt: cot.created_at,
+      updatedAt: cot.updated_at
+    },
+    remision: {
+      id: rem.id,
+      cotizacionId: rem.cotizacion_id,
+      expedienteId: rem.expediente_id,
+      tipo: rem.tipo,
+      folio: rem.folio,
+      fecha: rem.fecha,
+      tipoCambio: Number(rem.tipo_cambio || 1.0),
+      datosDocumento: rem.datos_documento || {},
+      serviciosExtra: Number(rem.servicios_extra || 0),
+      costoFinanciero: Number(rem.costo_financiero || 0),
+      otrosGastos: Number(rem.otros_gastos || 0),
+      montoSubtotal: Number(rem.monto_subtotal || 0),
+      montoTotal: Number(rem.monto_total || 0),
+      createdAt: rem.created_at,
+      updatedAt: rem.updated_at
+    },
+    conceptos: (concs ?? []).map((c) => ({
+      id: c.id,
+      cotizacionId: c.cotizacion_id,
+      descripcion: c.descripcion,
+      unidad: c.unidad,
+      cantidad: Number(c.cantidad || 0),
+      costoUnitario: Number(c.costo_unitario || 0),
+      precioUnitario: Number(c.precio_unitario || 0),
+      descuento: Number(c.descuento || 0),
+      importe: Number(c.importe || 0),
+      createdAt: c.created_at
+    }))
+  };
+}
+

@@ -1702,6 +1702,16 @@ export function DetalleCotizacionAdmin({
                       </span>
                       <h4 className="font-titular text-2xl font-bold mt-1 text-carbon">{remisionFactura.folio}</h4>
                       <p className="text-xs text-carbon/50">Fecha de Registro: {new Date(remisionFactura.fecha).toLocaleDateString()}</p>
+                      <div className="mt-3 font-titular">
+                        <a
+                          href={`/cotizacion/remision/${cotizacion.token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-carbon/15 hover:bg-slate-50 text-carbon/80 px-3 py-1.5 text-xs font-semibold transition shadow-sm"
+                        >
+                          🖨️ Ver Remisión / Imprimir PDF
+                        </a>
+                      </div>
                     </div>
                     <div className="text-right">
                       <div className="text-[10px] font-semibold text-carbon/50 uppercase">Monto Total de Venta</div>
