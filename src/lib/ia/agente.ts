@@ -591,6 +591,11 @@ async function generarRespuesta(
 ): Promise<string> {
   if (mensajes.length === 0) return "";
 
+  let systemFinal = system;
+  if (system.includes("JSON")) {
+    systemFinal = `${system}\n\nREGLA CRÍTICA DE RESPUESTA: Tu salida debe ser ESTRICTAMENTE un objeto JSON válido con la estructura solicitada. No agregues introducciones, comentarios ni bloques markdown fuera del JSON. Si estás confirmando una cita (Paso 5), debes incluir en "datosExtraidos" los campos "fecha_inspeccion_confirmada" (YYYY-MM-DD) y "hora_inspeccion_confirmada" (HH:MM). NUNCA escribas o inventes URLs estáticas genéricas de cotización o cita (como saucedamx.com/cotizacion o saucedamx.com/cita-confirmada) ni copies URLs previas del historial. Deja que el sistema use los marcadores [LINK_COTIZACION] y [LINK_CITA_CONFIRMADA] tal cual.`;
+  }
+
   let proveedorOriginal = process.env.IA_PROVEEDOR || "anthropic";
 
   if (sb) {
@@ -632,7 +637,7 @@ async function generarRespuesta(
 
         const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
         const messagesOllama = [
-          { role: "system", content: system },
+          { role: "system", content: systemFinal },
           ...mensajes.map(m => ({ role: m.role, content: m.content }))
         ];
 
@@ -668,7 +673,7 @@ async function generarRespuesta(
         const model = process.env.KIMI_MODEL || "kimi-k3";
 
         const messagesOpenAI = [
-          { role: "system", content: system },
+          { role: "system", content: systemFinal },
           ...mensajes.map(m => ({ role: m.role, content: m.content }))
         ];
 
@@ -708,7 +713,7 @@ async function generarRespuesta(
           body: JSON.stringify({
             model: MODELO,
             max_tokens: 1500,
-            system,
+            system: systemFinal,
             messages: mensajes,
           }),
         });
@@ -1255,7 +1260,9 @@ export async function responderConIA(
                   console.error("IA: Error al crear cita automática:", errCita);
                 } else if (nuevaCita?.id) {
                   const linkCitaConfirmada = `${siteUrl}/a/${nuevaCita.id}`;
-                  textoRespuesta = textoRespuesta.replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada);
+                  textoRespuesta = textoRespuesta
+                    .replace(/\[LINK_CITA_CONFIRMADA\]/g, linkCitaConfirmada)
+                    .replace(/\[LINK_AGENDADO\]/g, linkCitaConfirmada);
 
                   await registrarActividad(sb, {
                     expedienteId: ctx.expedienteId,
