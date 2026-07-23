@@ -8,6 +8,7 @@ import { labelTipoNegocio } from "@/lib/types";
 import { ListadoLeadsDashboard } from "@/components/ListadoLeadsDashboard";
 import { ResumenKpisAsesor } from "@/components/ResumenKpisAsesor";
 import { FiltrosDashboard } from "@/components/FiltrosDashboard";
+import { WidgetSeguimientoExpedientes } from "@/components/WidgetSeguimientoExpedientes";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,9 @@ export default async function PaginaDashboard({
 
               <ListadoLeadsDashboard leadsIniciales={r.leadsAsignados} />
             </div>
+
+            {/* Widget de Seguimiento y Monitoreo de Expedientes */}
+            <WidgetSeguimientoExpedientes />
 
             {/* Sección de Tareas Pendientes */}
             <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
@@ -321,6 +325,11 @@ export default async function PaginaDashboard({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Widget de Seguimiento y Monitoreo de Expedientes */}
+        <div className="mt-6">
+          <WidgetSeguimientoExpedientes />
         </div>
       </div>
     </main>

@@ -965,3 +965,133 @@ export async function guardarProveedorIA(proveedor: string): Promise<boolean> {
   return !error;
 }
 
+export interface ExpedienteSeguimiento {
+  id: string;
+  clienteNombre: string;
+  fraccionamiento: string;
+  tipoNegocio: string;
+  etapa: string;
+  fechaCreacion: string;
+  proximaAccion: string;
+  proximaAccionFecha: string | null;
+  proximaAccionTipo: "cita" | "tarea" | "ninguno";
+  telefono: string;
+}
+
+/** Obtiene los expedientes activos de la operación organizados para seguimiento con su próximo pendiente/acción */
+export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimiento[]> {
+  const usuario = await usuarioActual();
+  if (!usuario) throw new Error("No autorizado.");
+  const { rol } = await rolDe(usuario.id);
+
+  const sb = supabaseServidor();
+  let query = sb
+    .from("expedientes")
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre)");
+
+  if (rol === "asesor") {
+    query = query.eq("asesor_id", usuario.id);
+  } else if (rol === "operaciones") {
+    query = query.eq("operador_id", usuario.id);
+  }
+
+  // Filtrar fuera los expedientes marcados como perdidos
+  query = query.neq("etapa", "perdido");
+
+  const { data: exps, error } = await query.order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const expedientesFilas = exps ?? [];
+  const result: ExpedienteSeguimiento[] = [];
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const expIds = expedientesFilas.map(e => e.id);
+
+  // Obtener citas futuras
+  let citasFuturas: any[] = [];
+  if (expIds.length > 0) {
+    const { data: citas } = await sb
+      .from("agenda_citas")
+      .select("*")
+      .in("expediente_id", expIds)
+      .gte("fecha", hoy)
+      .neq("estado", "cancelada")
+      .order("fecha", { ascending: true })
+      .order("hora_inicio", { ascending: true });
+    citasFuturas = citas || [];
+  }
+
+  // Obtener tareas pendientes
+  let tareasPendientes: any[] = [];
+  if (expIds.length > 0) {
+    const { data: tareas } = await sb
+      .from("asesor_tasks")
+      .select(`
+        *,
+        enrollment:sequence_enrollments(expediente_id)
+      `)
+      .eq("status", "pendiente")
+      .order("agendada_para", { ascending: true });
+    tareasPendientes = (tareas || []).filter(t => t.enrollment?.expediente_id && expIds.includes(t.enrollment.expediente_id));
+  }
+
+  const tipoNegocioLabels: Record<string, string> = {
+    "compra": "Traspaso / Compra Directa",
+    "venta": "Promoción de Venta",
+    "tramite": "Solo Trámite",
+    "construccion": "Construcción / Obra",
+  };
+
+  const etapaLabels: Record<string, string> = {
+    "captacion": "Captación",
+    "analisis": "Análisis y Validación",
+    "documentacion": "Integración de Expediente",
+    "firma": "Firma de Contrato",
+    "espera-aprobacion": "En espera de Aprobación",
+    "pago": "Trámite de Pago",
+    "entregado": "Entregado",
+    "cotizacion": "Cotización en preparación",
+    "visita": "Visita Técnica",
+    "propuesta-aceptada": "Propuesta Aceptada",
+    "venta": "Venta Concluida",
+    "perdido": "Perdido"
+  };
+
+  for (const e of expedientesFilas) {
+    const cita = citasFuturas.find(c => c.expediente_id === e.id);
+    const tarea = tareasPendientes.find(t => t.enrollment?.expediente_id === e.id);
+
+    let proximaAccion = "💬 Seguimiento ordinario (Sin tareas agendadas)";
+    let proximaAccionFecha: string | null = null;
+    let proximaAccionTipo: "cita" | "tarea" | "ninguno" = "ninguno";
+
+    if (cita) {
+      const tipoLabel = cita.tipo_cita === "inspeccion" ? "🔍 Inspección" : (cita.tipo_cita === "instalacion" ? "🛠️ Instalación" : "📅 Cita");
+      proximaAccion = `${tipoLabel}: ${cita.fecha} de ${cita.hora_inicio.slice(0, 5)} a ${cita.hora_fin.slice(0, 5)} hrs`;
+      proximaAccionFecha = `${cita.fecha}T${cita.hora_inicio}`;
+      proximaAccionTipo = "cita";
+    } else if (tarea) {
+      proximaAccion = `⚡ Tarea: ${tarea.tipo} - "${tarea.notas || 'Llamar al cliente'}"`;
+      proximaAccionFecha = tarea.agendada_para;
+      proximaAccionTipo = "tarea";
+    }
+
+    const nombreCompleto = [e.cliente, e.primer_apellido, e.segundo_apellido].filter(Boolean).join(" ");
+
+    result.push({
+      id: e.id,
+      clienteNombre: nombreCompleto,
+      fraccionamiento: e.fraccionamiento || "No especificado",
+      tipoNegocio: tipoNegocioLabels[e.tipo_negocio] || e.tipo_negocio || "Otro",
+      etapa: etapaLabels[e.etapa] || e.etapa || "Sin etapa",
+      fechaCreacion: e.created_at,
+      proximaAccion,
+      proximaAccionFecha,
+      proximaAccionTipo,
+      telefono: e.telefono || ""
+    });
+  }
+
+  return result;
+}
+
