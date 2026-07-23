@@ -342,6 +342,7 @@ export async function comprobarYSalirDeSecuenciaPorMensaje(
  */
 export async function registrarLeadWhatsApp(
   lead: MensajeWhatsApp,
+  esEspejo = false,
 ): Promise<void> {
   const sb = supabaseServidor();
 
@@ -442,6 +443,8 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
 
+    if (esEspejo) return;
+
     // Interceptar mensajes de audio
     if (lead.audioId) {
       await manejarFlujoAudio(sb, {
@@ -488,16 +491,18 @@ export async function registrarLeadWhatsApp(
   await sincronizarEstatusProspecto(sb, prospectoId);
 
   // Enrolar automáticamente en secuencias activas
-  try {
-    const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
-    await enrolarLeadEnSecuenciasActivas(sb, {
-      nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
-      phone: telefono,
-      prospectoId,
-      expedienteId: id,
-    });
-  } catch (err) {
-    console.error("Error al enrolar lead de WhatsApp en secuencias activas:", err);
+  if (!esEspejo) {
+    try {
+      const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
+      await enrolarLeadEnSecuenciasActivas(sb, {
+        nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
+        phone: telefono,
+        prospectoId,
+        expedienteId: id,
+      });
+    } catch (err) {
+      console.error("Error al enrolar lead de WhatsApp en secuencias activas:", err);
+    }
   }
 
   // Guarda el primer mensaje del cliente en el hilo de conversación.
@@ -508,6 +513,8 @@ export async function registrarLeadWhatsApp(
     prospectoId,
     waMessageId: lead.waMessageId,
   });
+
+  if (esEspejo) return;
 
   // Interceptar mensajes de audio
   if (lead.audioId) {

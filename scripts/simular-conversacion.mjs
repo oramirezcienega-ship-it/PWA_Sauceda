@@ -85,11 +85,23 @@ async function main() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const sb = createClient(url, key);
 
-  const telefono = "524778110444";
-  const userText = process.argv[2];
+  let telefono = "524778110444";
+  let userText = process.argv[2];
+
+  if (process.argv[3]) {
+    // Si se pasan dos argumentos: node scripts/simular-conversacion.mjs 524427817150 "Hola"
+    telefono = process.argv[2];
+    userText = process.argv[3];
+  }
+
+  // Normalizar el teléfono para asegurar que tiene formato correcto
+  telefono = telefono.replace(/\D/g, "");
+  if (telefono.length === 10) {
+    telefono = "52" + telefono;
+  }
 
   if (!userText) {
-    console.error("Por favor, proporciona el mensaje del usuario. Ejemplo: node scripts/simular-conversacion.mjs \"Hola, me interesa\"");
+    console.error("Por favor, proporciona el mensaje del usuario. Ejemplo: node scripts/simular-conversacion.mjs \"Hola, me interesa\" o node scripts/simular-conversacion.mjs 524427817150 \"Hola\"");
     return;
   }
 
