@@ -378,6 +378,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN
 
   [REGLA_PROMO: Si TOTAL_SIN_IVA es mayor a 10000, debes insertar aquí el siguiente párrafo exactamente: "Además, te comento que solo por el mes de julio contamos con 3 meses sin intereses con cualquier tarjeta de crédito. 💳"]
+  [REGLA_PAGO: Si TOTAL_SIN_IVA es menor o igual a 10000, debes insertar aquí el siguiente párrafo exactamente: "Te comento que para montos menores a $10,000 MXN, el pago se realiza únicamente con tarjeta de crédito. 💳"]
 
   ¿Confirmamos inspección técnica gratuita esta semana?"
 

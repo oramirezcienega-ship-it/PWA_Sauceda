@@ -36,6 +36,18 @@ export async function orquestador(): Promise<{
       errores.push(`[Retoque] Error crítico: ${retErr.message}`);
     }
 
+    // 0c. Ejecutar seguimiento de llamada a los 30 minutos de inactividad tras el mensaje inicial
+    try {
+      const resSeguimiento = await enviarSeguimiento30Minutos(sb);
+      procesados += resSeguimiento.procesados;
+      accionesEjecutadas += resSeguimiento.enviados;
+      if (resSeguimiento.errores.length > 0) {
+        errores.push(...resSeguimiento.errores.map((e) => `[Seguimiento 30m] ${e}`));
+      }
+    } catch (segErr: any) {
+      errores.push(`[Seguimiento 30m] Error crítico: ${segErr.message}`);
+    }
+
     // 1. Obtener enrollments activos
     const { data: enrollments, error: errEnrollments } = await sb
       .from("sequence_enrollments")
@@ -1000,6 +1012,149 @@ export async function retoqueAutomaticoLedsInactivos(
   } catch (err: any) {
     console.error("Error crítico en retoqueAutomaticoLedsInactivos:", err);
     errores.push(`Error crítico en retoque: ${err.message}`);
+  }
+
+  return { procesados, enviados, errores };
+}
+
+/**
+ * Busca leads inactivos en etapa inicial (entre 30 y 180 minutos) tras el mensaje inicial/bienvenida,
+ * y les envía una oferta automática de llamada por WhatsApp para aclarar cualquier duda.
+ */
+export async function enviarSeguimiento30Minutos(
+  sb: ReturnType<typeof supabaseServidor>
+): Promise<{ procesados: number; enviados: number; errores: string[] }> {
+  let procesados = 0;
+  let enviados = 0;
+  const errores: string[] = [];
+
+  try {
+    // 0. Si no es horario comercial permitido, salir
+    if (!esHorarioPermitido()) {
+      return { procesados: 0, enviados: 0, errores: [] };
+    }
+
+    // 1. Obtener expedientes activos en etapa "nuevo-lead" o "contactado"
+    const { data: expedientes, error: errExps } = await sb
+      .from("expedientes")
+      .select("id, cliente, primer_apellido, segundo_apellido, telefono, prospecto_id, etapa")
+      .in("etapa", ["nuevo-lead", "contactado"])
+      .not("telefono", "is", null);
+
+    if (errExps) {
+      throw new Error(`Error leyendo expedientes para seguimiento 30m: ${errExps.message}`);
+    }
+
+    const expsActivos = expedientes || [];
+    if (expsActivos.length === 0) {
+      return { procesados: 0, enviados: 0, errores: [] };
+    }
+
+    const { registrarActividad } = await import("@/lib/actividades");
+
+    for (const exp of expsActivos) {
+      procesados++;
+      const telefono = exp.telefono;
+      if (!telefono) continue;
+
+      try {
+        // Excluir números no válidos
+        const telLimpio = telefono.replace(/\D/g, "");
+        const esMexicano = telLimpio.length === 10 ||
+          (telLimpio.startsWith("52") && telLimpio.length >= 12 && telLimpio.length <= 13);
+        if (!esMexicano) continue;
+
+        // 2. Obtener los últimos mensajes de este expediente
+        const { data: mensajes, error: errMsgs } = await sb
+          .from("mensajes_whatsapp")
+          .select("direccion, created_at, agente, texto")
+          .eq("expediente_id", exp.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (errMsgs || !mensajes || mensajes.length === 0) continue;
+
+        const ultimoMsg = mensajes[0];
+
+        // El último mensaje debe ser saliente (direccion = 'out')
+        if (ultimoMsg.direccion !== "out") continue;
+
+        // Debe haber al menos un mensaje entrante (el cliente iniciando la conversación)
+        const ultimoMsgCliente = mensajes.find((m) => m.direccion === "in");
+        if (!ultimoMsgCliente) continue;
+
+        // Regla de Ventana de 24 horas
+        const diffClienteMs = Date.now() - new Date(ultimoMsgCliente.created_at).getTime();
+        if (diffClienteMs > 24 * 60 * 60 * 1000) continue;
+
+        // Calcular minutos de inactividad desde nuestro último mensaje saliente
+        const diffUltimoMs = Date.now() - new Date(ultimoMsg.created_at).getTime();
+        const diffMinutos = diffUltimoMs / (1000 * 60);
+
+        // Si ha transcurrido menos de 30 minutos o más de 180 minutos (3 horas), ignorar
+        if (diffMinutos < 30 || diffMinutos > 180) continue;
+
+        // Regla: No duplicar el seguimiento de llamada en este ciclo de silencio.
+        // Si ya hay un mensaje de seguimiento (agente = 'IA (Seguimiento 30m)'), lo ignoramos.
+        let yaEnviadoSeguimiento = false;
+        for (const msg of mensajes) {
+          if (msg.direccion === "in") {
+            break; // Llegamos a la respuesta del cliente, paramos la búsqueda
+          }
+          if (msg.direccion === "out" && msg.agente === "IA (Seguimiento 30m)") {
+            yaEnviadoSeguimiento = true;
+            break;
+          }
+        }
+
+        if (yaEnviadoSeguimiento) continue;
+
+        // 3. Enviar mensaje de seguimiento
+        const nombreCliente = exp.cliente || "Hola";
+        const textoSeguimiento = `¡Hola, ${nombreCliente}! Espero que estés muy bien. Si te quedó alguna duda con la información que te compartí, avísame y con gusto podemos agendar una breve llamada para aclararla sin compromiso. ¿Te gustaría? 📞`;
+
+        const waRes = await enviarWhatsAppTexto(telefono, textoSeguimiento);
+
+        if (waRes.ok) {
+          enviados++;
+
+          // Registrar el mensaje saliente
+          await sb.from("mensajes_whatsapp").insert({
+            telefono: telefono,
+            texto: textoSeguimiento,
+            direccion: "out",
+            expediente_id: exp.id,
+            prospecto_id: exp.prospecto_id || null,
+            estado: "enviado",
+            agente: "IA (Seguimiento 30m)",
+            wa_message_id: waRes.messageId || null,
+          });
+
+          // Registrar actividad en el expediente
+          await registrarActividad(sb, {
+            expedienteId: exp.id,
+            tipo: "sistema",
+            titulo: "Seguimiento 30 min enviado (Llamada)",
+            detalle: textoSeguimiento,
+          });
+
+          console.log(`[Seguimiento 30 Minutos] WhatsApp de llamada enviado con éxito a ${telefono}`);
+        } else {
+          errores.push(`Error enviando seguimiento 30m a ${telefono}: ${waRes.error || "Error de envío"}`);
+        }
+
+        // Rate limit entre envíos
+        if (enviados > 0) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+
+      } catch (leadErr: any) {
+        errores.push(`Error procesando lead ${exp.id} para seguimiento 30m: ${leadErr.message}`);
+      }
+    }
+  } catch (err: any) {
+    console.error("Error crítico en enviarSeguimiento30Minutos:", err);
+    errores.push(`Error crítico en seguimiento 30m: ${err.message}`);
   }
 
   return { procesados, enviados, errores };
