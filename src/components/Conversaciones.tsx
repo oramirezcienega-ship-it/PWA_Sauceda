@@ -1306,11 +1306,83 @@ export function Conversaciones() {
                 <div className="space-y-1.5 relative">
                   {/* Advertencia de ventana de 24h expirada (solo WhatsApp) */}
                   {!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp" && (
-                    <div className="rounded-md border border-dorado/30 bg-dorado/5 px-2.5 py-1.5 text-[10px] text-carbon/70 flex items-start gap-1.5 leading-relaxed">
-                      <span className="shrink-0 mt-0.5">⚠️</span>
-                      <span>
-                        <strong>Ventana de 24h cerrada:</strong> Los mensajes de texto libre podrían no entregarse hasta que el cliente vuelva a escribir.
-                      </span>
+                    <div className="rounded-xl border border-sauce/20 bg-sauce/5 p-4 space-y-3">
+                      <div className="flex items-start gap-1.5 text-xs text-verde-profundo font-semibold leading-relaxed">
+                        <span className="shrink-0">⚠️</span>
+                        <div>
+                          <p><strong>Ventana de 24h cerrada:</strong> Para reactivar este chat, debes enviar una plantilla aprobada por Meta.</p>
+                        </div>
+                      </div>
+                      
+                      {plantillas.length === 0 ? (
+                        <p className="text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider mb-1">Seleccionar Plantilla:</label>
+                            <select
+                              value={plantillaSel}
+                              onChange={(e) => {
+                                setPlantillaSel(e.target.value);
+                                setParams([]);
+                              }}
+                              className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
+                            >
+                              <option value="">— selecciona una plantilla —</option>
+                              {plantillas.map((p) => (
+                                <option key={p.nombre} value={p.nombre}>
+                                  {p.nombre} ({p.categoria})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {plantilla && (
+                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2">
+                              <p className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Vista previa de la plantilla:</p>
+                              <p className="text-xs text-carbon/75 whitespace-pre-line font-mono">{plantilla.cuerpo}</p>
+                              
+                              {plantilla.parametros > 0 && (
+                                <div className="pt-2 border-t border-carbon/5 space-y-2">
+                                  <p className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Variables del mensaje:</p>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {Array.from({ length: plantilla.parametros }).map((_, i) => (
+                                      <div key={i} className="flex items-center gap-2">
+                                        <span className="text-[10px] font-mono text-carbon/50 font-bold">{"{{"}{i + 1}{"}}"}</span>
+                                        <input
+                                          type="text"
+                                          placeholder={`Ingresar valor para la variable ${i + 1}`}
+                                          value={params[i] || ""}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setParams((prev) => {
+                                              const copy = [...prev];
+                                              copy[i] = val;
+                                              return copy;
+                                            });
+                                          }}
+                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon outline-none focus:border-sauce"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="pt-2 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={enviarPlantilla}
+                                  disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
+                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50"
+                                >
+                                  {enviando ? "Enviando..." : "⚡ Enviar Plantilla"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
