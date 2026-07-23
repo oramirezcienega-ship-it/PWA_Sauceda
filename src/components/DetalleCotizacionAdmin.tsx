@@ -12,10 +12,12 @@ import {
   guardarCondicionesCotizacion,
   subirFotoVisita,
   actualizarRequerimientoVisita,
+  crearRemisionFactura,
+  obtenerRemisionFacturaDeCotizacion,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
-import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
+import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
   cotizacionInicial: Cotizacion;
@@ -35,7 +37,36 @@ export function DetalleCotizacionAdmin({
   const [conceptos, setConceptos] = useState<CotizacionConcepto[]>(conceptosIniciales);
   const [reporteVisita, setReporteVisita] = useState<VisitaReporte | null>(reporteVisitaInicial);
 
-  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion">("resumen");
+  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion">("resumen");
+
+  // --- State para Remisión & Factura ---
+  const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
+  const [cargandoRemision, setCargandoRemision] = useState<boolean>(true);
+
+  // --- Formulario de Remisión / Factura ---
+  const [tipoDoc, setTipoDoc] = useState<"remision" | "factura">("remision");
+  const [folioDoc, setFolioDoc] = useState("");
+  const [fechaDoc, setFechaDoc] = useState(new Date().toISOString().split("T")[0]);
+  const [tipoCambioDoc, setTipoCambioDoc] = useState("1.00");
+  const [serviciosExtraDoc, setServiciosExtraDoc] = useState("0.00");
+  const [costoFinancieroDoc, setCostoFinancieroDoc] = useState("0.00");
+  const [otrosGastosDoc, setOtrosGastosDoc] = useState("0.00");
+  const [rfcDoc, setRfcDoc] = useState("");
+  const [razonSocialDoc, setRazonSocialDoc] = useState("");
+  const [regimenFiscalDoc, setRegimenFiscalDoc] = useState("");
+  const [usoCfdiDoc, setUsoCfdiDoc] = useState("G03");
+  const [direccionEntregaDoc, setDireccionEntregaDoc] = useState("");
+  const [personaRecibeDoc, setPersonaRecibeDoc] = useState("");
+  const [fechaInstalacionDoc, setFechaInstalacionDoc] = useState("");
+  const [procesandoRemision, setProcesandoRemision] = useState(false);
+  const [mensajeRemisionForm, setMensajeRemisionForm] = useState({ tipo: "", texto: "" });
+
+  useEffect(() => {
+    if (cotizacion.id) {
+      const sufijo = cotizacion.id.replace("COT-", "");
+      setFolioDoc(tipoDoc === "remision" ? `REM-${sufijo}` : `FAC-${sufijo}`);
+    }
+  }, [tipoDoc, cotizacion.id]);
 
   // --- State para Inspección Técnica ---
   const [obsTecnicas, setObsTecnicas] = useState(reporteVisitaInicial?.observacionesTecnicas || "");
@@ -117,6 +148,26 @@ export function DetalleCotizacionAdmin({
       .then(setInspectores)
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    async function cargarRemision() {
+      try {
+        setCargandoRemision(true);
+        const doc = await obtenerRemisionFacturaDeCotizacion(cotizacion.id);
+        setRemisionFactura(doc);
+      } catch (err) {
+        console.error("Error al cargar remisión/factura:", err);
+      } finally {
+        setCargandoRemision(false);
+      }
+    }
+    if (cotizacion.estatus === "instalacion" || cotizacion.estatus === "aceptada") {
+      cargarRemision();
+    } else {
+      setRemisionFactura(null);
+      setCargandoRemision(false);
+    }
+  }, [cotizacion.id, cotizacion.estatus]);
 
   const [guardandoConceptos, setGuardandoConceptos] = useState(false);
   const [mensajeConceptos, setMensajeConceptos] = useState({ tipo: "", texto: "" });
@@ -513,6 +564,66 @@ export function DetalleCotizacionAdmin({
     }
   };
 
+  const handleCrearRemisionFactura = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setProcesandoRemision(true);
+      setMensajeRemisionForm({ tipo: "", texto: "" });
+
+      if (!folioDoc.trim()) {
+        throw new Error("El folio del documento es obligatorio.");
+      }
+
+      const datosDoc: Record<string, any> = {};
+      if (tipoDoc === "factura") {
+        if (!rfcDoc.trim() || !razonSocialDoc.trim()) {
+          throw new Error("RFC y Razón Social son obligatorios para facturación.");
+        }
+        datosDoc.rfc = rfcDoc.trim();
+        datosDoc.razonSocial = razonSocialDoc.trim();
+        datosDoc.regimenFiscal = regimenFiscalDoc.trim();
+        datosDoc.usoCfdi = usoCfdiDoc.trim();
+      } else {
+        datosDoc.direccionEntrega = direccionEntregaDoc.trim();
+        datosDoc.personaRecibe = personaRecibeDoc.trim();
+        datosDoc.fechaInstalacion = fechaInstalacionDoc;
+      }
+
+      const res = await crearRemisionFactura(cotizacion.id, {
+        tipo: tipoDoc,
+        folio: folioDoc.trim(),
+        fecha: fechaDoc,
+        tipoCambio: parseFloat(tipoCambioDoc) || 1.0,
+        datosDocumento: datosDoc,
+        serviciosExtra: parseFloat(serviciosExtraDoc) || 0.0,
+        costoFinanciero: parseFloat(costoFinancieroDoc) || 0.0,
+        otrosGastos: parseFloat(otrosGastosDoc) || 0.0,
+      });
+
+      if (res.ok) {
+        setMensajeRemisionForm({
+          tipo: "ok",
+          texto: `¡Documento (${tipoDoc.toUpperCase()}) generado exitosamente! La venta ha sido registrada en el balance financiero y el expediente se actualizó a la etapa de venta.`
+        });
+        
+        // Actualizar estatus local de la cotización para reflejar la evolución
+        setCotizacion(prev => ({
+          ...prev,
+          estatus: "instalacion"
+        }));
+
+        // Forzar recarga de datos
+        router.refresh();
+      } else {
+        throw new Error("No se pudo completar el registro.");
+      }
+    } catch (err: any) {
+      setMensajeRemisionForm({ tipo: "error", texto: err.message || "Ocurrió un error inesperado." });
+    } finally {
+      setProcesandoRemision(false);
+    }
+  };
+
   const formatMoneda = (val: number) => {
     return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
   };
@@ -591,6 +702,16 @@ export function DetalleCotizacionAdmin({
         >
           Aprobaciones & Envío
         </button>
+        {(cotizacion.estatus === "aceptada" || cotizacion.estatus === "instalacion") && (
+          <button
+            onClick={() => setPestaña("facturacion")}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+              pestaña === "facturacion" ? "border-sauce text-sauce bg-white" : "border-transparent text-carbon/60 hover:text-carbon"
+            }`}
+          >
+            Facturación & Ventas
+          </button>
+        )}
       </div>
 
       {/* Contenido Pestañas */}
@@ -1463,6 +1584,372 @@ export function DetalleCotizacionAdmin({
             </div>
           </div>
         )}
+
+        {pestaña === "facturacion" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="font-titular text-xl font-bold text-verde-profundo">Evolución Comercial de Cotización</h3>
+                <p className="text-xs text-carbon/60 mt-0.5">
+                  Registra y consulta la evolución de esta propuesta a Remisión de entrega o Factura fiscal.
+                </p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                cotizacion.estatus === "instalacion" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"
+              }`}>
+                {cotizacion.estatus === "instalacion" ? "En Instalación / Venta Cerrada" : "Aceptada - Pendiente Venta"}
+              </span>
+            </div>
+
+            {cargandoRemision ? (
+              <div className="py-12 text-center text-sm text-carbon/50">
+                Cargando datos de venta...
+              </div>
+            ) : remisionFactura ? (
+              /* MODO DETALLE: MOSTRAR DOCUMENTO YA GENERADO */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-50 border border-carbon/10 p-6 rounded-2xl space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-sauce/15 text-sauce px-2 py-0.5 rounded">
+                        {remisionFactura.tipo.toUpperCase()}
+                      </span>
+                      <h4 className="font-titular text-2xl font-bold mt-1 text-carbon">{remisionFactura.folio}</h4>
+                      <p className="text-xs text-carbon/50">Fecha de Registro: {new Date(remisionFactura.fecha).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] font-semibold text-carbon/50 uppercase">Monto Total de Venta</div>
+                      <div className="font-mono text-xl font-bold text-sauce">{formatMoneda(remisionFactura.montoTotal)}</div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-carbon/60">Importe de Cotización (Subtotal):</span>
+                      <span className="font-semibold">{formatMoneda(remisionFactura.montoSubtotal)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-carbon/60">Servicios Extra / Adicionales:</span>
+                      <span className="font-semibold text-emerald-600">+{formatMoneda(remisionFactura.serviciosExtra)}</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2 font-bold text-carbon">
+                      <span>Total de Ingreso Registrado:</span>
+                      <span>{formatMoneda(remisionFactura.montoTotal)}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 space-y-2 text-xs">
+                    <h5 className="font-semibold uppercase text-[10px] text-carbon/50">Gastos Internos del Cierre</h5>
+                    <div className="flex justify-between">
+                      <span className="text-carbon/60">Costo Financiero (Comisiones/Pasarela):</span>
+                      <span className="font-semibold text-red-600">-{formatMoneda(remisionFactura.costoFinanciero)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-carbon/60">Otros Gastos de Venta:</span>
+                      <span className="font-semibold text-red-600">-{formatMoneda(remisionFactura.otrosGastos)}</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2 font-bold text-emerald-800 bg-emerald-50 p-2 rounded">
+                      <span>Margen de Utilidad Neto:</span>
+                      <span>{formatMoneda(remisionFactura.montoTotal - remisionFactura.costoFinanciero - remisionFactura.otrosGastos)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-carbon/10 p-6 rounded-2xl space-y-4">
+                  <h4 className="font-titular text-sm font-bold text-carbon/80 border-b pb-2 uppercase tracking-wide">
+                    {remisionFactura.tipo === "factura" ? "Datos Fiscales de Facturación" : "Datos de Entrega / Instalación"}
+                  </h4>
+
+                  {remisionFactura.tipo === "factura" ? (
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-carbon/50 uppercase">Razón Social</label>
+                        <div className="font-medium mt-0.5 text-carbon">{remisionFactura.datosDocumento.razonSocial}</div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-carbon/50 uppercase">RFC</label>
+                        <div className="font-mono mt-0.5 text-carbon">{remisionFactura.datosDocumento.rfc}</div>
+                      </div>
+                      {remisionFactura.datosDocumento.regimenFiscal && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-carbon/50 uppercase">Régimen Fiscal</label>
+                          <div className="font-medium mt-0.5 text-carbon">{remisionFactura.datosDocumento.regimenFiscal}</div>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-[10px] font-semibold text-carbon/50 uppercase">Uso de CFDI</label>
+                        <div className="font-medium mt-0.5 text-carbon">{remisionFactura.datosDocumento.usoCfdi || "G03 - Gastos en general"}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-carbon/50 uppercase">Dirección de Entrega</label>
+                        <div className="font-medium mt-0.5 text-carbon">{remisionFactura.datosDocumento.direccionEntrega || "No especificada"}</div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-carbon/50 uppercase">Persona que Recibe</label>
+                        <div className="font-medium mt-0.5 text-carbon">{remisionFactura.datosDocumento.personaRecibe || "No especificada"}</div>
+                      </div>
+                      {remisionFactura.datosDocumento.fechaInstalacion && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-carbon/50 uppercase">Fecha Programada de Instalación</label>
+                          <div className="font-semibold text-sauce mt-0.5">{new Date(remisionFactura.datosDocumento.fechaInstalacion).toLocaleDateString()}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {remisionFactura.tipoCambio !== 1 && (
+                    <div className="bg-slate-50 p-3 rounded-lg border text-xs">
+                      <span className="text-carbon/60">Tipo de Cambio Aplicado: </span>
+                      <span className="font-mono font-semibold">{remisionFactura.tipoCambio.toFixed(4)} MXN</span>
+                    </div>
+                  )}
+
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-xs space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">✓ Venta Procesada y Sincronizada</div>
+                    <div>Este expediente comercial ha sido cerrado y las transacciones de ingreso/egresos correspondientes se encuentran registradas en la base de datos de balance general.</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* MODO CREACIÓN: FORMULARIO PARA CREAR REMISIÓN / FACTURA */
+              <form onSubmit={handleCrearRemisionFactura} className="space-y-6">
+                {mensajeRemisionForm.texto && (
+                  <div className={`p-4 rounded-xl text-xs border ${
+                    mensajeRemisionForm.tipo === "ok" ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"
+                  }`}>
+                    {mensajeRemisionForm.texto}
+                  </div>
+                )}
+
+                <div className="bg-slate-50 p-5 rounded-2xl border border-carbon/10 space-y-4">
+                  <h4 className="font-titular text-sm font-bold text-carbon/80 border-b pb-2 uppercase tracking-wide">Configuración del Documento</h4>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Tipo de Evolución</label>
+                      <select
+                        value={tipoDoc}
+                        onChange={(e) => setTipoDoc(e.target.value as "remision" | "factura")}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                      >
+                        <option value="remision">Remisión (Entrega)</option>
+                        <option value="factura">Factura Fiscal</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Folio del Documento</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej: REM-001"
+                        value={folioDoc}
+                        onChange={(e) => setFolioDoc(e.target.value)}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Fecha del Documento</label>
+                      <input
+                        type="date"
+                        required
+                        value={fechaDoc}
+                        onChange={(e) => setFechaDoc(e.target.value)}
+                        className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Desglose Financiero */}
+                  <div className="bg-white border border-carbon/10 p-5 rounded-2xl space-y-4">
+                    <h4 className="font-titular text-sm font-bold text-carbon/80 border-b pb-2 uppercase tracking-wide">Desglose Financiero</h4>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-carbon/60 uppercase mb-1">Subtotal Base (Precio Cotización)</label>
+                        <div className="w-full bg-slate-100 rounded-lg border px-3 py-2 text-xs text-carbon/60 font-mono">
+                          {formatMoneda(cotizacion.precioFinal)}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Servicios Extra (+)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={serviciosExtraDoc}
+                            onChange={(e) => setServiciosExtraDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Tipo de Cambio</label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={tipoCambioDoc}
+                            onChange={(e) => setTipoCambioDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 border-t pt-3">
+                        <div>
+                          <label className="block text-xs font-bold text-red-700/80 uppercase mb-1">Costo Financiero (Pasarela)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={costoFinancieroDoc}
+                            onChange={(e) => setCostoFinancieroDoc(e.target.value)}
+                            className="w-full rounded-lg border border-red-200 px-3 py-2 text-xs bg-white focus:outline-none focus:border-red-500 font-mono text-red-700"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-red-700/80 uppercase mb-1">Otros Gastos Internos</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={otrosGastosDoc}
+                            onChange={(e) => setOtrosGastosDoc(e.target.value)}
+                            className="w-full rounded-lg border border-red-200 px-3 py-2 text-xs bg-white focus:outline-none focus:border-red-500 font-mono text-red-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex justify-between items-center mt-4">
+                        <span className="text-xs font-bold text-emerald-800">Total Ingreso Registrado:</span>
+                        <span className="font-mono text-lg font-bold text-emerald-800">
+                          {formatMoneda(cotizacion.precioFinal + (parseFloat(serviciosExtraDoc) || 0))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Detalles dinámicos según Tipo */}
+                  <div className="bg-white border border-carbon/10 p-5 rounded-2xl space-y-4">
+                    <h4 className="font-titular text-sm font-bold text-carbon/80 border-b pb-2 uppercase tracking-wide">
+                      {tipoDoc === "factura" ? "Detalles del Receptor Fiscal" : "Detalles de Entrega & Programación"}
+                    </h4>
+
+                    {tipoDoc === "factura" ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Razón Social</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ej: Sauceda Soluciones Inmobiliarias S.A. de C.V."
+                            value={razonSocialDoc}
+                            onChange={(e) => setRazonSocialDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">RFC</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ej: SSI150428AA1"
+                            value={rfcDoc}
+                            onChange={(e) => setRfcDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce font-mono uppercase"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Régimen Fiscal</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: 601 - General"
+                              value={regimenFiscalDoc}
+                              onChange={(e) => setRegimenFiscalDoc(e.target.value)}
+                              className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Uso de CFDI</label>
+                            <select
+                              value={usoCfdiDoc}
+                              onChange={(e) => setUsoCfdiDoc(e.target.value)}
+                              className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                            >
+                              <option value="G03">G03 - Gastos en general</option>
+                              <option value="I01">I01 - Construcciones</option>
+                              <option value="S01">S01 - Sin efectos fiscales</option>
+                              <option value="CP01">CP01 - Pagos</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Dirección de Entrega / Servicio</label>
+                          <textarea
+                            rows={2}
+                            placeholder="Dirección completa donde se realizará la instalación"
+                            value={direccionEntregaDoc}
+                            onChange={(e) => setDireccionEntregaDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce resize-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Persona que Recibe / Contacto</label>
+                          <input
+                            type="text"
+                            placeholder="Nombre del cliente o encargado en sitio"
+                            value={personaRecibeDoc}
+                            onChange={(e) => setPersonaRecibeDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-carbon/70 uppercase mb-1">Fecha Programada de Instalación</label>
+                          <input
+                            type="date"
+                            value={fechaInstalacionDoc}
+                            onChange={(e) => setFechaInstalacionDoc(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs bg-white focus:outline-none focus:border-sauce"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    type="submit"
+                    disabled={procesandoRemision}
+                    className="rounded-xl bg-sauce hover:bg-verde-profundo text-white px-6 py-3 text-sm font-semibold transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {procesandoRemision ? (
+                      <>Procesando Cierre...</>
+                    ) : (
+                      <>⚡ Generar y Registrar Cierre Financiero</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );

@@ -553,6 +553,7 @@ export type CotizacionEstatus =
   | 'aprobada'
   | 'enviada'
   | 'aceptada'
+  | 'instalacion'
   | 'rechazada'
   | 'archivada';
 
@@ -618,5 +619,23 @@ export interface ProductoServicio {
   costoUnitario: number;
   precioUnitario: number;
   createdAt: string;
+}
+
+export interface RemisionFactura {
+  id: string;
+  cotizacionId: string | null;
+  expedienteId: string | null;
+  tipo: 'remision' | 'factura';
+  folio: string;
+  fecha: string;
+  tipoCambio: number;
+  datosDocumento: Record<string, any>;
+  serviciosExtra: number;
+  costoFinanciero: number;
+  otrosGastos: number;
+  montoSubtotal: number;
+  montoTotal: number;
+  createdAt: string;
+  updatedAt: string;
 }
 

@@ -3,7 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
-import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus } from "@/lib/types";
+import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura } from "@/lib/types";
 
 // Helper para generar el siguiente folio correlativo (COT-001)
 function siguienteId(ids: string[]): string {
@@ -963,5 +963,176 @@ export async function guardarCondicionesCotizacion(
 
   if (error) throw new Error(error.message);
   return aCotizacion(data);
+}
+
+/** 13. Crear Remisión o Factura a partir de Cotización Aceptada */
+export async function crearRemisionFactura(
+  cotizacionId: string,
+  datos: {
+    tipo: "remision" | "factura";
+    folio: string;
+    fecha: string;
+    tipoCambio: number;
+    datosDocumento: any;
+    serviciosExtra: number;
+    costoFinanciero: number;
+    otrosGastos: number;
+  }
+): Promise<{ ok: boolean; id: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  // 1. Obtener la cotización
+  const { data: cot, error: errCot } = await sb
+    .from("cotizaciones")
+    .select("*")
+    .eq("id", cotizacionId)
+    .maybeSingle();
+
+  if (errCot || !cot) throw new Error("Cotización no encontrada.");
+  if (cot.estatus !== "aceptada" && cot.estatus !== "instalacion") {
+    throw new Error("La cotización debe estar en estado Aceptada o Instalación para generar este documento.");
+  }
+
+  // 2. Calcular montos
+  const subtotal = Number(cot.precio_final || 0);
+  const total = subtotal + Number(datos.serviciosExtra || 0);
+
+  // 3. Insertar remisión / factura
+  const { data: doc, error: errDoc } = await sb
+    .from("remisiones_facturas")
+    .insert({
+      cotizacion_id: cotizacionId,
+      expediente_id: cot.expediente_id,
+      tipo: datos.tipo,
+      folio: datos.folio,
+      fecha: datos.fecha || new Date().toISOString().split("T")[0],
+      tipo_cambio: Number(datos.tipoCambio || 1.0),
+      datos_documento: datos.datosDocumento || {},
+      servicios_extra: Number(datos.serviciosExtra || 0),
+      costo_financiero: Number(datos.costoFinanciero || 0),
+      otros_gastos: Number(datos.otrosGastos || 0),
+      monto_subtotal: subtotal,
+      monto_total: total
+    })
+    .select("id")
+    .single();
+
+  if (errDoc) throw new Error(errDoc.message);
+
+  // 4. Registrar transacciones financieras
+  // Registro de Ingreso (Venta)
+  const transIngreso = {
+    fecha: datos.fecha || new Date().toISOString().split("T")[0],
+    tipo: "ingreso",
+    categoria: "venta",
+    concepto: `${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio} - Venta de Cotización ${cotizacionId}`,
+    monto: total,
+    expediente_id: cot.expediente_id
+  };
+
+  const { error: errIng } = await sb
+    .from("transacciones_financieras")
+    .insert([transIngreso]);
+
+  if (errIng) console.error("Error al registrar ingreso financiero:", errIng.message);
+
+  // Costo financiero
+  if (Number(datos.costoFinanciero || 0) > 0) {
+    const { error: errFin } = await sb
+      .from("transacciones_financieras")
+      .insert([{
+        fecha: datos.fecha || new Date().toISOString().split("T")[0],
+        tipo: "gasto",
+        categoria: "costo_venta",
+        concepto: `Costo Financiero de ${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio}`,
+        monto: Number(datos.costoFinanciero),
+        expediente_id: cot.expediente_id
+      }]);
+    if (errFin) console.error("Error al registrar costo financiero:", errFin.message);
+  }
+
+  // Otros gastos
+  if (Number(datos.otrosGastos || 0) > 0) {
+    const { error: errGas } = await sb
+      .from("transacciones_financieras")
+      .insert([{
+        fecha: datos.fecha || new Date().toISOString().split("T")[0],
+        tipo: "gasto",
+        categoria: "costo_venta",
+        concepto: `Otros Gastos de ${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio}`,
+        monto: Number(datos.otrosGastos),
+        expediente_id: cot.expediente_id
+      }]);
+    if (errGas) console.error("Error al registrar otros gastos:", errGas.message);
+  }
+
+  // 5. Actualizar estatus de la cotización a 'instalacion'
+  const { error: errUpdCot } = await sb
+    .from("cotizaciones")
+    .update({
+      estatus: "instalacion",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", cotizacionId);
+
+  if (errUpdCot) console.error("Error al actualizar estatus de cotización:", errUpdCot.message);
+
+  // 6. Actualizar etapa del expediente a 'venta' (cierre comercial)
+  if (cot.expediente_id) {
+    const { error: errUpdExp } = await sb
+      .from("expedientes")
+      .update({
+        etapa: "venta",
+        ultimo_movimiento: new Date().toISOString().split("T")[0]
+      })
+      .eq("id", cot.expediente_id);
+
+    if (errUpdExp) console.error("Error al actualizar etapa de expediente:", errUpdExp.message);
+
+    await registrarActividad(sb, {
+      expedienteId: cot.expediente_id,
+      tipo: "construccion",
+      titulo: `Documento de Venta Generado (${datos.tipo.toUpperCase()})`,
+      detalle: `${datos.tipo === "remision" ? "Remisión" : "Factura"} registrada con Folio: ${datos.folio}. Total venta: $${total}.`
+    });
+  }
+
+  return { ok: true, id: doc.id };
+}
+
+/** 14. Obtener Remisión o Factura vinculada a una Cotización */
+export async function obtenerRemisionFacturaDeCotizacion(
+  cotizacionId: string
+): Promise<RemisionFactura | null> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data, error } = await sb
+    .from("remisiones_facturas")
+    .select("*")
+    .eq("cotizacion_id", cotizacionId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    cotizacionId: data.cotizacion_id,
+    expedienteId: data.expediente_id,
+    tipo: data.tipo,
+    folio: data.folio,
+    fecha: data.fecha,
+    tipoCambio: Number(data.tipo_cambio || 1.0),
+    datosDocumento: data.datos_documento || {},
+    serviciosExtra: Number(data.servicios_extra || 0),
+    costoFinanciero: Number(data.costo_financiero || 0),
+    otrosGastos: Number(data.otros_gastos || 0),
+    montoSubtotal: Number(data.monto_subtotal || 0),
+    montoTotal: Number(data.monto_total || 0),
+    createdAt: data.created_at,
+    updatedAt: data.updated_at
+  };
 }
 
