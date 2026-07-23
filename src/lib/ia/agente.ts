@@ -939,6 +939,8 @@ export async function responderConIA(
           pasoAlcanzado = "eligio_paquete";
         } else if (pasoDetectado === "paso_4") {
           pasoAlcanzado = "recibio_link";
+        } else if (pasoDetectado === "paso_5") {
+          pasoAlcanzado = "agendo_inspeccion";
         }
 
         // Si estamos en paso_3 pero el cliente ya dio su nombre y teléfono, es "dio_contacto"
