@@ -12,6 +12,47 @@ interface TableroProductosProps {
   productosIniciales: ProductoServicio[];
 }
 
+const DEFAULT_WARRANTY_TEMPLATE = `SAUCEDA CONSTRUYE
+CARTA DE GARANTÍA · IMPERMEABILIZACIÓN
+
+Por la presente garantizamos los trabajos de impermeabilización que hemos instalado en la siguiente propiedad:
+
+Obra: [NOMBRE DE LA PROPIEDAD / CLIENTE]
+Ubicación: [DOMICILIO COMPLETO]
+Fecha de aplicación: [DÍA] de [MES] de [AÑO]
+
+Considerando que SAUCEDA Construye ha contratado para los trabajos de impermeabilización en esta propiedad, garantizamos que todos los trabajos realizados con impermeabilizante de la calidad especificada se mantendrán absolutamente impermeables durante el período de garantía establecido.
+
+CONDICIONES DE GARANTÍA:
+
+Período de cobertura
+Los trabajos de impermeabilización se mantendrán absolutamente impermeables durante 10 años a partir de la fecha de aplicación.
+
+Cobertura de defectos
+Si se detecta cualquier defecto de mano de obra o material relacionado con los trabajos de impermeabilización, SAUCEDA Construye se compromete a rectificar dichas fallas sin cargo extra por servicios, mano de obra y materiales. Esto incluye trabajos de reparación de la superficie, limpieza y pruebas de humedad, de forma completa.
+
+Decisión del cliente
+El cliente tiene derecho a autorizar reparaciones o rectificaciones. Dichas reparaciones restablecerán la zona absolutamente impermeable y seca, sin signos de humedad en interiores de la construcción.
+
+Tramitación de reclamaciones
+SAUCEDA Construye se compromete a tramitar cualquier reclamación bajo garantía de forma rápida y justa. Para reportar un problema, contáctanos al +52 477 465 4700 o a través de WhatsApp.
+
+Limitaciones de la garantía
+SAUCEDA Construye no será responsable si:
+- El trabajo es manipulado o la estructura es dañada deliberadamente.
+- El sistema de impermeabilización se daña por contratación, agrietamiento por peso adicional, rasgaduras en trabajos externos, o cualquier calamidad natural fuera de nuestro control.
+- En caso de infiltraciones por manipulación de la carpeta, SAUCEDA Construye se obliga a reparar la zona afectada con un cargo económico determinado según el daño provocado.
+
+Mantenimiento preventivo
+Para garantizar la cobertura completa de esta garantía, recomendamos realizar mantenimiento preventivo a los 6 años después de su aplicación. Consiste en la aplicación de resinas, sellado de traslapés, limpieza y destape de caídas pluviales libres de hojas y basura.
+
+Profesionalismo
+La instalación fue realizada por un aplicador previamente calificado y capacitado en técnicas de impermeabilización.
+
+Esta garantía es válida únicamente en la propiedad especificada y no es transferible.
+
+SAUCEDA Construye · Tradición con tecnología · +52 477 465 4700 · saucedamx.com`;
+
 export function TableroProductos({ productosIniciales }: TableroProductosProps) {
   const [productos, setProductos] = useState<ProductoServicio[]>(productosIniciales);
   const [busqueda, setBusqueda] = useState("");
@@ -35,7 +76,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
     setUnidad("m2");
     setCostoUnitario("");
     setPrecioUnitario("");
-    setPlantillaGarantia("");
+    setPlantillaGarantia(DEFAULT_WARRANTY_TEMPLATE);
     setErrorForm("");
     setModalAbierto(true);
   };
@@ -47,7 +88,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
     setUnidad(p.unidad);
     setCostoUnitario(String(p.costoUnitario));
     setPrecioUnitario(String(p.precioUnitario));
-    setPlantillaGarantia(p.plantillaGarantia || "");
+    setPlantillaGarantia(p.plantillaGarantia || DEFAULT_WARRANTY_TEMPLATE);
     setErrorForm("");
     setModalAbierto(true);
   };
