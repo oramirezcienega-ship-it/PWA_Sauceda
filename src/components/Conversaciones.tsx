@@ -583,9 +583,9 @@ export function Conversaciones() {
 Te compartimos los enlaces para descargar y consultar tus documentos oficiales de la obra:
 ${links}
 Agradecemos mucho tu preferencia. Te invitamos, por favor, a compartirnos tus comentarios y seguirnos en nuestras redes sociales oficiales:
-🌐 Sitio Web: https://saucedamx.com
-📘 Facebook: https://www.facebook.com/saucedaconstruye
-📸 Instagram: https://www.instagram.com/saucedaconstruye
+📘 Facebook: https://www.facebook.com/profile.php?id=61589957630232&locale=es_LA
+🎵 TikTok: https://www.tiktok.com/@saucedamxbr
+📸 Instagram: https://www.instagram.com/saucedamx_/
 
 ¡Quedamos a tus órdenes!`;
 
