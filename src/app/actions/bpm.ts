@@ -276,3 +276,47 @@ export async function activarTareasBPMPorEvento(expedienteId: string, nombreEven
     }
   }
 }
+
+/** Obtiene todos los flujos BPM registrados y sus pasos */
+export async function listarFlujosBPM() {
+  const sb = supabaseServidor();
+  const { data: flujos, error: errFlujos } = await sb
+    .from("bpm_flujos")
+    .select("*")
+    .order("tipo_negocio", { ascending: true });
+
+  if (errFlujos) {
+    console.error("Error al listar flujos BPM:", errFlujos);
+    return [];
+  }
+
+  const { data: pasos, error: errPasos } = await sb
+    .from("bpm_pasos")
+    .select("*")
+    .order("orden", { ascending: true });
+
+  if (errPasos) {
+    console.error("Error al listar pasos BPM:", errPasos);
+    return [];
+  }
+
+  // Agrupar pasos por flujo
+  return (flujos || []).map((f) => ({
+    id: f.id,
+    tipoNegocio: f.tipo_negocio,
+    activo: f.activo,
+    pasos: (pasos || [])
+      .filter((p) => p.flujo_id === f.id)
+      .map((p) => ({
+        id: p.id,
+        flujoId: p.flujo_id,
+        etapa: p.etapa,
+        orden: p.orden,
+        tituloTarea: p.titulo_tarea,
+        descripcion: p.descripcion,
+        rolResponsable: p.rol_responsable,
+        diasVencimiento: p.dias_vencimiento,
+        condicionActivacion: p.condicion_activacion
+      }))
+  }));
+}

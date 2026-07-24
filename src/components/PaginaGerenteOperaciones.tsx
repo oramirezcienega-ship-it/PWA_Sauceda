@@ -13,11 +13,13 @@ import {
   type AlertaOperacion,
   type OptimizacionBacklog,
 } from "@/app/actions/gerente";
+import { listarFlujosBPM } from "@/app/actions/bpm";
 
 export default function PaginaGerenteOperaciones() {
-  const [pestana, setPestana] = useState<"alertas" | "backlog">("alertas");
+  const [pestana, setPestana] = useState<"alertas" | "backlog" | "procesos">("alertas");
   const [alertas, setAlertas] = useState<AlertaOperacion[]>([]);
   const [backlog, setBacklog] = useState<OptimizacionBacklog[]>([]);
+  const [flujosBpm, setFlujosBpm] = useState<any[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [exitoMsg, setExitoMsg] = useState<string>("");
@@ -33,12 +35,14 @@ export default function PaginaGerenteOperaciones() {
     setCargando(true);
     setErrorMsg("");
     try {
-      const [resAlertas, resBacklog] = await Promise.all([
+      const [resAlertas, resBacklog, resFlujos] = await Promise.all([
         obtenerAlertasOperaciones(),
         obtenerOptimizacionesBacklog(),
+        listarFlujosBPM(),
       ]);
       setAlertas(resAlertas);
       setBacklog(resBacklog);
+      setFlujosBpm(resFlujos);
     } catch (err: any) {
       console.error("Error al cargar datos del Gerente de Operaciones:", err);
       setErrorMsg(err.message || "No se pudieron obtener los datos de operaciones.");
@@ -266,6 +270,16 @@ export default function PaginaGerenteOperaciones() {
               }`}
             >
               <span>🛠️</span> Backlog de Optimizaciones ({backlog.length})
+            </button>
+            <button
+              onClick={() => setPestana("procesos")}
+              className={`pb-3 px-2 text-sm font-bold transition border-b-2 flex items-center gap-2 ${
+                pestana === "procesos"
+                  ? "border-emerald-400 text-emerald-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <span>📋</span> Procesos por Producto ({flujosBpm.length})
             </button>
           </div>
 
@@ -537,6 +551,68 @@ export default function PaginaGerenteOperaciones() {
                             </button>
                           )}
                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Seccion 3: Procesos por Producto (BPM) */}
+          {pestana === "procesos" && (
+            <div className="space-y-6">
+              {cargando ? (
+                <div className="p-12 text-center text-slate-400">
+                  <span className="animate-spin text-2xl inline-block mb-2">⏳</span>
+                  <p className="text-xs">Cargando flujos de procesos...</p>
+                </div>
+              ) : flujosBpm.length === 0 ? (
+                <div className="p-12 text-center bg-slate-800/30 border border-slate-700/40 rounded-2xl">
+                  <span className="text-3xl">📋</span>
+                  <h3 className="text-base font-bold text-slate-200 mt-2">Sin Procesos Configurados</h3>
+                  <p className="text-xs text-slate-400 mt-1">No se encontraron flujos de trabajo en la base de datos.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {flujosBpm.map((flujo) => (
+                    <div key={flujo.id} className="bg-slate-800/60 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                        <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <span>📁</span> {flujo.tipoNegocio}
+                        </h3>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          Activo ⚡
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 relative pl-4 before:content-[''] before:absolute before:left-[21px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-700">
+                        {flujo.pasos.map((paso: any) => (
+                          <div key={paso.id} className="relative flex items-start gap-4">
+                            {/* Orden Circle */}
+                            <div className="z-10 flex items-center justify-center h-5 w-5 rounded-full bg-indigo-500 border-2 border-slate-800 text-[9px] font-black text-white shrink-0 mt-0.5">
+                              {paso.orden}
+                            </div>
+
+                            <div className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl flex-1 space-y-2">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <h4 className="text-sm font-bold text-slate-200">{paso.tituloTarea}</h4>
+                                <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                  {paso.rolResponsable}
+                                </span>
+                              </div>
+                              {paso.descripcion && (
+                                <p className="text-xs text-slate-400 leading-relaxed">{paso.descripcion}</p>
+                              )}
+                              <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+                                <span>⏳ Límite: {paso.diasVencimiento} días</span>
+                                {paso.condicionActivacion !== "inmediato" && (
+                                  <span className="text-amber-500/80">🔒 Espera a: "{paso.condicionActivacion}"</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
