@@ -169,7 +169,7 @@ function resolverParametros(
 }
 
 /** Renderiza el texto del mensaje, soportando reproductores de audio para audios de WhatsApp */
-function renderizarContenidoMensaje(texto: string) {
+function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp[] = []) {
   if (texto) {
     if (texto.startsWith("[audio:")) {
       const match = texto.match(/^\[audio:([^\]]+)\]\s*(.*)$/);
@@ -294,6 +294,58 @@ function renderizarContenidoMensaje(texto: string) {
             </a>
           </div>
         );
+      }
+    }
+
+    // Renderizar plantilla de WhatsApp con variables
+    if (texto.startsWith("[plantilla:") || texto.startsWith("[Plantilla:")) {
+      const match = texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*(.*)$/);
+      if (match) {
+        const nombrePlantilla = match[1].trim();
+        const paramsString = match[2] ? match[2].trim() : "";
+        const params = paramsString ? paramsString.split(/\s*\|\s*/) : [];
+        
+        const plantillaObj = plantillas.find(
+          (p) => p.nombre.toLowerCase() === nombrePlantilla.toLowerCase()
+        );
+        
+        if (plantillaObj && plantillaObj.cuerpo) {
+          let textoRenderizado = plantillaObj.cuerpo;
+          params.forEach((val, i) => {
+            textoRenderizado = textoRenderizado.replace(
+              new RegExp(`\\{\\{\\s*${i + 1}\\s*\\}\\}`, "g"),
+              val
+            );
+          });
+          
+          return (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-verde-profundo/60 select-none">
+                <span>📝 Plantilla: {plantillaObj.nombre}</span>
+              </div>
+              <span className="whitespace-pre-line leading-relaxed">{textoRenderizado}</span>
+            </div>
+          );
+        } else {
+          return (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-carbon/40 select-none">
+                <span>📝 Plantilla: {nombrePlantilla}</span>
+              </div>
+              {params.length > 0 ? (
+                <div className="space-y-0.5 text-xs">
+                  {params.map((val, i) => (
+                    <p key={i} className="text-carbon/80 leading-normal">
+                      <span className="font-mono font-bold text-[9px] text-carbon/40">{"{{"}{i + 1}{"}}"}</span> {val}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-carbon/40 italic">(sin variables)</span>
+              )}
+            </div>
+          );
+        }
       }
     }
   }
@@ -1350,7 +1402,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           : "bg-white border border-carbon/5 text-carbon"
                       }`}
                     >
-                      {renderizarContenidoMensaje(m.texto)}
+                      {renderizarContenidoMensaje(m.texto, plantillas)}
                       <span
                         className={`mt-1 block text-right text-[10px] ${
                           m.texto.startsWith("[sticker:")
@@ -1405,17 +1457,32 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                             <select
                               value={plantillaSel}
                               onChange={(e) => {
-                                setPlantillaSel(e.target.value);
-                                setParams([]);
+                                const selectedName = e.target.value;
+                                setPlantillaSel(selectedName);
+                                const p = plantillas.find((x) => x.nombre === selectedName);
+                                if (p && p.parametros > 0) {
+                                  const newParams = Array(p.parametros).fill("");
+                                  if (detalle?.nombre) {
+                                    newParams[0] = detalle.nombre.split(" ")[0];
+                                  }
+                                  setParams(newParams);
+                                } else {
+                                  setParams([]);
+                                }
                               }}
                               className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
                             >
                               <option value="">— selecciona una plantilla —</option>
-                              {plantillas.map((p) => (
-                                <option key={p.nombre} value={p.nombre}>
-                                  {p.nombre} ({p.categoria})
-                                </option>
-                              ))}
+                              {plantillas.map((p) => {
+                                const snippet = p.cuerpo
+                                  ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 50)}${p.cuerpo.length > 50 ? "..." : ""}"`
+                                  : "";
+                                return (
+                                  <option key={p.nombre} value={p.nombre}>
+                                    {p.nombre} ({p.categoria}){snippet}
+                                  </option>
+                                );
+                              })}
                             </select>
                           </div>
 

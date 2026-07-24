@@ -150,7 +150,35 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                         : "bg-[#2D4A2B] text-crema rounded-tr-none"
                     }`}
                   >
-                    {m.texto}
+                    {(() => {
+                      if (m.texto.startsWith("[plantilla:") || m.texto.startsWith("[Plantilla:")) {
+                        const match = m.texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*(.*)$/);
+                        if (match) {
+                          const nombrePlantilla = match[1].trim();
+                          const paramsString = match[2] ? match[2].trim() : "";
+                          const params = paramsString ? paramsString.split(/\s*\|\s*/) : [];
+                          return (
+                            <div className="space-y-1">
+                              <div className={`text-[9px] font-bold uppercase tracking-wider select-none ${esCliente ? "text-carbon/40" : "text-crema/60"}`}>
+                                📝 Plantilla: {nombrePlantilla}
+                              </div>
+                              {params.length > 0 ? (
+                                <div className="space-y-0.5 text-xs">
+                                  {params.map((val, i) => (
+                                    <p key={i} className={`leading-normal ${esCliente ? "text-carbon/80" : "text-crema/90"}`}>
+                                      <span className={`font-mono font-bold text-[9px] ${esCliente ? "text-carbon/40" : "text-crema/40"}`}>{"{{"}{i + 1}{"}}"}</span> {val}
+                                    </p>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className={`text-xs italic (sin variables) ${esCliente ? "text-carbon/40" : "text-crema/40"}`}></span>
+                              )}
+                            </div>
+                          );
+                        }
+                      }
+                      return m.texto;
+                    })()}
                   </div>
 
                   {/* Botones de acción en hover */}
