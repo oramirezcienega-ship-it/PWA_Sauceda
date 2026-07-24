@@ -70,40 +70,54 @@ export async function obtenerFlujoPorProducto(tipoNegocio: string) {
   };
 }
 
-/** Crea o actualiza un flujo BPM plantilla */
 export async function guardarFlujoBPM(tipoNegocio: string, pasos: Omit<BpmPaso, "id" | "flujoId">[]) {
-  const sb = supabaseServidor();
-  
-  // 1. Upsert del flujo
-  const { data: flujo, error: errFlujo } = await sb
-    .from("bpm_flujos")
-    .upsert({ tipo_negocio: tipoNegocio, activo: true }, { onConflict: "tipo_negocio" })
-    .select("id")
-    .single();
+  try {
+    const sb = supabaseServidor();
+    
+    // 1. Upsert del flujo
+    const { data: flujo, error: errFlujo } = await sb
+      .from("bpm_flujos")
+      .upsert({ tipo_negocio: tipoNegocio, activo: true }, { onConflict: "tipo_negocio" })
+      .select("id")
+      .single();
 
-  if (errFlujo) throw new Error("No se pudo guardar el flujo BPM: " + errFlujo.message);
+    if (errFlujo) {
+      console.error("Error upserting bpm_flujos:", errFlujo);
+      return { success: false, error: "No se pudo guardar el flujo BPM: " + errFlujo.message };
+    }
 
-  // 2. Eliminar pasos existentes para rehacerlos
-  await sb.from("bpm_pasos").delete().eq("flujo_id", flujo.id);
+    // 2. Eliminar pasos existentes para rehacerlos
+    const { error: errDelete } = await sb.from("bpm_pasos").delete().eq("flujo_id", flujo.id);
+    if (errDelete) {
+      console.error("Error deleting bpm_pasos:", errDelete);
+      return { success: false, error: "No se pudieron limpiar los pasos previos: " + errDelete.message };
+    }
 
-  // 3. Insertar nuevos pasos
-  if (pasos.length > 0) {
-    const pasosInsert = pasos.map((p, idx) => ({
-      flujo_id: flujo.id,
-      etapa: p.etapa,
-      orden: idx + 1,
-      titulo_tarea: p.tituloTarea,
-      descripcion: p.descripcion,
-      rol_responsable: p.rolResponsable,
-      dias_vencimiento: p.diasVencimiento,
-      condicion_activacion: p.condicionActivacion || "inmediato"
-    }));
+    // 3. Insertar nuevos pasos
+    if (pasos.length > 0) {
+      const pasosInsert = pasos.map((p, idx) => ({
+        flujo_id: flujo.id,
+        etapa: p.etapa,
+        orden: idx + 1,
+        titulo_tarea: p.tituloTarea,
+        descripcion: p.descripcion || "",
+        rol_responsable: p.rolResponsable,
+        dias_vencimiento: p.diasVencimiento,
+        condicion_activacion: p.condicionActivacion || "inmediato"
+      }));
 
-    const { error: errPasos } = await sb.from("bpm_pasos").insert(pasosInsert);
-    if (errPasos) throw new Error("No se pudieron guardar los pasos del flujo: " + errPasos.message);
+      const { error: errPasos } = await sb.from("bpm_pasos").insert(pasosInsert);
+      if (errPasos) {
+        console.error("Error inserting bpm_pasos:", errPasos);
+        return { success: false, error: "No se pudieron guardar los pasos del flujo: " + errPasos.message };
+      }
+    }
+
+    return { success: true, id: flujo.id };
+  } catch (err: any) {
+    console.error("Excepción inesperada en guardarFlujoBPM:", err);
+    return { success: false, error: err.message || "Excepción inesperada en el servidor" };
   }
-
-  return flujo.id;
 }
 
 /** Obtiene todas las tareas BPM de un expediente específico */

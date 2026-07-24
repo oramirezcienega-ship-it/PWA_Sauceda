@@ -87,12 +87,16 @@ export default function PaginaGerenteOperaciones() {
     setErrorMsg("");
     setExitoMsg("");
     try {
-      await guardarFlujoBPM(tipoNegocioEdit, pasosEdit);
-      setExitoMsg("Flujo de trabajo guardado exitosamente.");
-      setEditandoFlujo(null);
-      await cargarDatos();
+      const res = await guardarFlujoBPM(tipoNegocioEdit, pasosEdit);
+      if (res && !res.success) {
+        setErrorMsg("Error al guardar el flujo: " + res.error);
+      } else {
+        setExitoMsg("Flujo de trabajo guardado exitosamente.");
+        setEditandoFlujo(null);
+        await cargarDatos();
+      }
     } catch (err: any) {
-      setErrorMsg("Error al guardar el flujo: " + err.message);
+      setErrorMsg("Error inesperado al guardar el flujo: " + err.message);
     } finally {
       setGuardandoFlujo(false);
     }
