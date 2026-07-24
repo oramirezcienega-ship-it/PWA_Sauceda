@@ -13,7 +13,7 @@ import {
   type AlertaOperacion,
   type OptimizacionBacklog,
 } from "@/app/actions/gerente";
-import { listarFlujosBPM } from "@/app/actions/bpm";
+import { listarFlujosBPM, guardarFlujoBPM } from "@/app/actions/bpm";
 
 export default function PaginaGerenteOperaciones() {
   const [pestana, setPestana] = useState<"alertas" | "backlog" | "procesos">("alertas");
@@ -25,11 +25,78 @@ export default function PaginaGerenteOperaciones() {
   const [exitoMsg, setExitoMsg] = useState<string>("");
   const [isPending, startTransition] = useTransition();
 
+  // Estados para el editor BPM
+  const [editandoFlujo, setEditandoFlujo] = useState<string | null>(null); // 'nuevo' o flujo_id
+  const [tipoNegocioEdit, setTipoNegocioEdit] = useState("");
+  const [pasosEdit, setPasosEdit] = useState<any[]>([]);
+  const [guardandoFlujo, setGuardandoFlujo] = useState(false);
+
   // Filtros
   const [filtroAlertaEstatus, setFiltroAlertaEstatus] = useState<string>("todos");
   const [filtroAlertaPrioridad, setFiltroAlertaPrioridad] = useState<string>("todos");
   const [filtroBacklogEstatus, setFiltroBacklogEstatus] = useState<string>("todos");
   const [modalCodigo, setModalCodigo] = useState<OptimizacionBacklog | null>(null);
+
+  // Helpers para manipulación de pasos BPM
+  const handleAgregarPaso = () => {
+    setPasosEdit((prev) => [
+      ...prev,
+      {
+        etapa: "visita",
+        tituloTarea: "",
+        descripcion: "",
+        rolResponsable: "asesor",
+        diasVencimiento: 3,
+        condicionActivacion: "inmediato"
+      }
+    ]);
+  };
+
+  const handleMoverPaso = (index: number, direccion: number) => {
+    const nuevosPasos = [...pasosEdit];
+    const temp = nuevosPasos[index];
+    nuevosPasos[index] = nuevosPasos[index + direccion];
+    nuevosPasos[index + direccion] = temp;
+    setPasosEdit(nuevosPasos);
+  };
+
+  const handleEliminarPaso = (index: number) => {
+    setPasosEdit((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleActualizarPaso = (index: number, campo: string, valor: any) => {
+    setPasosEdit((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [campo]: valor } : p))
+    );
+  };
+
+  const handleEditarFlujoClick = (flujo: any) => {
+    setEditandoFlujo(flujo.id);
+    setTipoNegocioEdit(flujo.tipoNegocio);
+    setPasosEdit(flujo.pasos);
+  };
+
+  const handleNuevoFlujoClick = () => {
+    setEditandoFlujo("nuevo");
+    setTipoNegocioEdit("");
+    setPasosEdit([]);
+  };
+
+  const handleGuardarFlujo = async () => {
+    setGuardandoFlujo(true);
+    setErrorMsg("");
+    setExitoMsg("");
+    try {
+      await guardarFlujoBPM(tipoNegocioEdit, pasosEdit);
+      setExitoMsg("Flujo de trabajo guardado exitosamente.");
+      setEditandoFlujo(null);
+      await cargarDatos();
+    } catch (err: any) {
+      setErrorMsg("Error al guardar el flujo: " + err.message);
+    } finally {
+      setGuardandoFlujo(false);
+    }
+  };
 
   const cargarDatos = async () => {
     setCargando(true);
@@ -562,60 +629,281 @@ export default function PaginaGerenteOperaciones() {
           {/* Seccion 3: Procesos por Producto (BPM) */}
           {pestana === "procesos" && (
             <div className="space-y-6">
-              {cargando ? (
-                <div className="p-12 text-center text-slate-400">
-                  <span className="animate-spin text-2xl inline-block mb-2">⏳</span>
-                  <p className="text-xs">Cargando flujos de procesos...</p>
-                </div>
-              ) : flujosBpm.length === 0 ? (
-                <div className="p-12 text-center bg-slate-800/30 border border-slate-700/40 rounded-2xl">
-                  <span className="text-3xl">📋</span>
-                  <h3 className="text-base font-bold text-slate-200 mt-2">Sin Procesos Configurados</h3>
-                  <p className="text-xs text-slate-400 mt-1">No se encontraron flujos de trabajo en la base de datos.</p>
+              {editandoFlujo !== null ? (
+                /* VISTA EDITOR DE FLUJO */
+                <div className="bg-slate-800/80 border border-slate-700/70 p-6 rounded-2xl shadow-xl space-y-6">
+                  <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <span>⚙️</span> {editandoFlujo === "nuevo" ? "Crear Nuevo Proceso" : "Editar Proceso"}
+                    </h3>
+                    <button
+                      onClick={() => setEditandoFlujo(null)}
+                      className="px-3.5 py-1.5 bg-slate-750 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition border border-slate-600/55"
+                    >
+                      ✕ Cancelar
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Servicio / Tipo de Negocio:
+                      </label>
+                      <select
+                        value={tipoNegocioEdit}
+                        disabled={editandoFlujo !== "nuevo"}
+                        onChange={(e) => setTipoNegocioEdit(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl p-3 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      >
+                        <option value="">Selecciona un producto...</option>
+                        <option value="traspaso_compra">Traspaso / Compra</option>
+                        <option value="promocion_venta">Promoción de Venta</option>
+                        <option value="solo_tramite">Solo Trámite</option>
+                        <option value="construccion-remodelacion">Remodelación</option>
+                        <option value="construccion-impermeabilizacion">Impermeabilización</option>
+                        <option value="construccion">Construcción / Obra (General)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-4 pt-4">
+                      <div className="flex items-center justify-between border-t border-slate-700/60 pt-4">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pasos del Flujo:</span>
+                        <button
+                          type="button"
+                          onClick={handleAgregarPaso}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1"
+                        >
+                          ➕ Agregar Paso
+                        </button>
+                      </div>
+
+                      {pasosEdit.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic text-center py-4">No hay pasos creados en este flujo. Agrega uno nuevo arriba.</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {pasosEdit.map((paso, idx) => (
+                            <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl space-y-3 relative">
+                              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                                <span className="text-xs font-bold text-indigo-400">Paso #{idx + 1}</span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoverPaso(idx, -1)}
+                                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded text-xs disabled:opacity-30"
+                                    title="Subir"
+                                  >
+                                    ⬆️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === pasosEdit.length - 1}
+                                    onClick={() => handleMoverPaso(idx, 1)}
+                                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded text-xs disabled:opacity-30"
+                                    title="Bajar"
+                                  >
+                                    ⬇️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEliminarPaso(idx)}
+                                    className="p-1 hover:bg-rose-950/40 text-rose-400 rounded text-xs border border-rose-500/20 hover:border-rose-500/40 transition px-2"
+                                    title="Eliminar paso"
+                                  >
+                                    🗑️ Eliminar
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Título de la Tarea:</label>
+                                  <input
+                                    type="text"
+                                    value={paso.tituloTarea}
+                                    onChange={(e) => handleActualizarPaso(idx, "tituloTarea", e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:border-indigo-500"
+                                    placeholder="Ej: Subir presupuesto técnico"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Etapa del CRM Asociada:</label>
+                                  <select
+                                    value={paso.etapa}
+                                    onChange={(e) => handleActualizarPaso(idx, "etapa", e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="captacion">Captación</option>
+                                    <option value="analisis">Análisis y Validación</option>
+                                    <option value="documentacion">Integración de Expediente</option>
+                                    <option value="visita">Visita Técnica</option>
+                                    <option value="cotizacion">Cotización en preparación</option>
+                                    <option value="propuesta-aceptada">Propuesta Aceptada</option>
+                                    <option value="firma">Firma de Contrato</option>
+                                    <option value="pago">Trámite de Pago</option>
+                                    <option value="entregado">Entregado</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Rol Responsable:</label>
+                                  <select
+                                    value={paso.rolResponsable}
+                                    onChange={(e) => handleActualizarPaso(idx, "rolResponsable", e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="asesor">Asesor</option>
+                                    <option value="operaciones">Operaciones</option>
+                                    <option value="tecnico">Técnico</option>
+                                    <option value="admin">Administrador</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Días Límite:</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={paso.diasVencimiento}
+                                    onChange={(e) => handleActualizarPaso(idx, "diasVencimiento", parseInt(e.target.value, 10) || 3)}
+                                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:border-indigo-500"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Desencadenante de Activación:</label>
+                                  <select
+                                    value={paso.condicionActivacion}
+                                    onChange={(e) => handleActualizarPaso(idx, "condicionActivacion", e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="inmediato">Inmediato (Al entrar a la etapa)</option>
+                                    <option value="visita_tecnica_concluida">Al concluir reporte de visita técnica</option>
+                                    <option value="cotizacion_conceptos_guardada">Al guardar conceptos de cotización</option>
+                                    {pasosEdit.slice(0, idx).map((prev: any, prevIdx: number) => (
+                                      <option key={prevIdx} value={prev.tituloTarea}>
+                                        Al completar Paso #{prevIdx + 1}: "{prev.tituloTarea}"
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Descripción de la Tarea:</label>
+                                <textarea
+                                  value={paso.descripcion || ""}
+                                  onChange={(e) => handleActualizarPaso(idx, "descripcion", e.target.value)}
+                                  rows={2}
+                                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg p-2 focus:outline-none focus:border-indigo-500"
+                                  placeholder="Describe brevemente de qué trata esta tarea operativa..."
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-6 border-t border-slate-700/60">
+                      <button
+                        type="button"
+                        onClick={() => setEditandoFlujo(null)}
+                        className="px-4 py-2.5 bg-slate-750 hover:bg-slate-700 border border-slate-600/50 text-slate-300 rounded-xl text-xs font-bold transition"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={guardandoFlujo || !tipoNegocioEdit || pasosEdit.length === 0}
+                        onClick={handleGuardarFlujo}
+                        className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition"
+                      >
+                        {guardandoFlujo ? "Guardando..." : "💾 Guardar Flujo de Trabajo"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {flujosBpm.map((flujo) => (
-                    <div key={flujo.id} className="bg-slate-800/60 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-700 pb-3">
-                        <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                          <span>📁</span> {flujo.tipoNegocio}
-                        </h3>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          Activo ⚡
-                        </span>
-                      </div>
+                /* VISTA LISTADO DE FLUJOS */
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Flujos BPM Registrados</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Define los pasos operacionales automáticos para cada tipo de servicio.</p>
+                    </div>
+                    <button
+                      onClick={handleNuevoFlujoClick}
+                      className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2"
+                    >
+                      ➕ Crear Nuevo Proceso
+                    </button>
+                  </div>
 
-                      <div className="space-y-4 relative pl-4 before:content-[''] before:absolute before:left-[21px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-700">
-                        {flujo.pasos.map((paso: any) => (
-                          <div key={paso.id} className="relative flex items-start gap-4">
-                            {/* Orden Circle */}
-                            <div className="z-10 flex items-center justify-center h-5 w-5 rounded-full bg-indigo-500 border-2 border-slate-800 text-[9px] font-black text-white shrink-0 mt-0.5">
-                              {paso.orden}
-                            </div>
-
-                            <div className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl flex-1 space-y-2">
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <h4 className="text-sm font-bold text-slate-200">{paso.tituloTarea}</h4>
-                                <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                                  {paso.rolResponsable}
-                                </span>
-                              </div>
-                              {paso.descripcion && (
-                                <p className="text-xs text-slate-400 leading-relaxed">{paso.descripcion}</p>
-                              )}
-                              <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
-                                <span>⏳ Límite: {paso.diasVencimiento} días</span>
-                                {paso.condicionActivacion !== "inmediato" && (
-                                  <span className="text-amber-500/80">🔒 Espera a: "{paso.condicionActivacion}"</span>
-                                )}
-                              </div>
+                  {cargando ? (
+                    <div className="p-12 text-center text-slate-400">
+                      <span className="animate-spin text-2xl inline-block mb-2">⏳</span>
+                      <p className="text-xs">Cargando flujos de procesos...</p>
+                    </div>
+                  ) : flujosBpm.length === 0 ? (
+                    <div className="p-12 text-center bg-slate-800/30 border border-slate-700/40 rounded-2xl">
+                      <span className="text-3xl">📋</span>
+                      <h3 className="text-base font-bold text-slate-200 mt-2">Sin Procesos Configurados</h3>
+                      <p className="text-xs text-slate-400 mt-1">No se encontraron flujos de trabajo en la base de datos.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {flujosBpm.map((flujo) => (
+                        <div key={flujo.id} className="bg-slate-800/60 border border-slate-700/60 p-6 rounded-2xl shadow-xl space-y-4">
+                          <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                            <h3 className="text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                              <span>📁</span> {flujo.tipoNegocio}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleEditarFlujoClick(flujo)}
+                                className="text-xs font-bold px-3 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 transition"
+                              >
+                                ✏️ Editar
+                              </button>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                Activo ⚡
+                              </span>
                             </div>
                           </div>
-                        ))}
-                      </div>
+
+                          <div className="space-y-4 relative pl-4 before:content-[''] before:absolute before:left-[21px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-700">
+                            {flujo.pasos.map((paso: any) => (
+                              <div key={paso.id} className="relative flex items-start gap-4">
+                                {/* Orden Circle */}
+                                <div className="z-10 flex items-center justify-center h-5 w-5 rounded-full bg-indigo-500 border-2 border-slate-800 text-[9px] font-black text-white shrink-0 mt-0.5">
+                                  {paso.orden}
+                                </div>
+
+                                <div className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl flex-1 space-y-2">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <h4 className="text-sm font-bold text-slate-200">{paso.tituloTarea}</h4>
+                                    <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                      {paso.rolResponsable}
+                                    </span>
+                                  </div>
+                                  {paso.descripcion && (
+                                    <p className="text-xs text-slate-400 leading-relaxed">{paso.descripcion}</p>
+                                  )}
+                                  <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+                                    <span>⏳ Límite: {paso.diasVencimiento} días</span>
+                                    {paso.condicionActivacion !== "inmediato" && (
+                                      <span className="text-amber-500/80">🔒 Espera a: "{paso.condicionActivacion}"</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
