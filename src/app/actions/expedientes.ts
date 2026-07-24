@@ -307,6 +307,12 @@ export async function crearExpediente(
     void notificarAsignacionOperarioACliente(sb, id, datos.prospectoId || null, datos.operadorId);
   }
 
+  // Instanciar flujo de trabajo BPM si existe plantilla para este tipo de negocio
+  if (datos.tipoNegocio) {
+    const { instanciarFlujoEnExpediente } = await import("@/app/actions/bpm");
+    void instanciarFlujoEnExpediente(id, datos.tipoNegocio);
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 

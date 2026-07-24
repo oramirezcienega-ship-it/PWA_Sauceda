@@ -17,6 +17,7 @@ import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
+import { WidgetBpmTareas } from "./WidgetBpmTareas";
 import { obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 import { LinkCitaWidget } from "./LinkCitaWidget";
 import { programarInstalacionExpediente, programarLlamadaExpediente } from "@/app/actions/agenda";
@@ -724,6 +725,12 @@ export function DetalleExpediente({ id }: { id: string }) {
               )}
             </Bloque>
           )}
+
+          {/* Checklist de Flujo de Trabajo Operativo (BPM) */}
+          <WidgetBpmTareas 
+            expedienteId={expediente.id} 
+            tipoNegocio={expediente.tipoNegocio} 
+          />
 
           {/* Módulo de Promoción Venta & Portal del Cliente */}
           {(expediente.tipoNegocio === "promocion_venta" || expediente.sessionTokenClient) && (
