@@ -36,7 +36,7 @@ export function WidgetSeguimientoExpedientes() {
     });
   }, [expedientes, busqueda, filtroAccion]);
 
-  // Configuración de las columnas principales
+  // Configuración de las categorías/servicios
   const columnasConfig = [
     { key: "Traspaso / Compra Directa", label: "Traspaso / Compra", icon: "💰" },
     { key: "Promoción de Venta", label: "Promoción de Venta", icon: "📢" },
@@ -45,7 +45,7 @@ export function WidgetSeguimientoExpedientes() {
   ];
 
   // Algoritmo de ordenación: Citas (Inspecciones/Instalaciones) primero > Tareas del Asesor después > Sin tareas al final.
-  // Dentro del mismo peso, se ordena por fecha de acción ascendente (más urgentes arriba/a la izquierda).
+  // Dentro del mismo peso, se ordena por fecha de acción ascendente (más urgentes arriba).
   const ordenarExpedientes = (lista: ExpedienteSeguimiento[]) => {
     return [...lista].sort((a, b) => {
       const pesoA = a.proximaAccionTipo === "cita" ? 2 : (a.proximaAccionTipo === "tarea" ? 1 : 0);
@@ -96,11 +96,9 @@ export function WidgetSeguimientoExpedientes() {
       if (agrupados["Otros"] && agrupados["Otros"].length > 0) {
         return [...activas, { key: "Otros", label: "Otros Servicios", icon: "📁" }];
       }
-      // Si no hay ninguna fila activa pero no hay búsqueda, mostrar todas por defecto
       return activas.length > 0 ? activas : columnasConfig;
     }
     
-    // Si se seleccionó una en específico
     const seleccionada = columnasConfig.find((col) => col.key === filtroTipo);
     if (seleccionada) return [seleccionada];
     if (filtroTipo === "Otros") return [{ key: "Otros", label: "Otros Servicios", icon: "📁" }];
@@ -115,7 +113,7 @@ export function WidgetSeguimientoExpedientes() {
             📋 Monitoreo & Seguimiento de Expedientes
           </h2>
           <p className="text-xs text-carbon/50">
-            Visualización y segmentación 100% horizontal priorizando citas y tareas críticas
+            Seguimiento ordenado por filas verticales con priorización de citas y tareas críticas arriba
           </p>
         </div>
         <div className="text-xs text-carbon/40 font-mono">
@@ -140,7 +138,7 @@ export function WidgetSeguimientoExpedientes() {
                   : "bg-slate-50 border-carbon/10 hover:bg-slate-100 text-carbon/70"
               }`}
             >
-              📁 Todos los Servicios
+              📂 Todos los Servicios
             </button>
             {columnasConfig.map((col) => (
               <button
@@ -194,7 +192,7 @@ export function WidgetSeguimientoExpedientes() {
           No se encontraron expedientes con los criterios seleccionados.
         </div>
       ) : (
-        /* Renderizado Horizontal por Filas y Desplazamiento de Tarjetas */
+        /* Renderizado Vertical en Filas aprovechando todo el ancho */
         <div className="space-y-6">
           {columnasAMostrar.map((col) => {
             const lista = agrupados[col.key] || [];
@@ -207,7 +205,7 @@ export function WidgetSeguimientoExpedientes() {
             return (
               <div 
                 key={col.key} 
-                className="space-y-2 border-b border-carbon/5 pb-4 last:border-0"
+                className="space-y-3 border-b border-carbon/5 pb-5 last:border-0"
               >
                 {/* Cabecera del Servicio */}
                 <div className="flex items-center justify-between">
@@ -217,15 +215,15 @@ export function WidgetSeguimientoExpedientes() {
                       {col.label}
                     </h3>
                   </div>
-                  <span className="font-mono text-[10px] font-bold text-carbon/50 bg-slate-100 border border-carbon/10 px-2 py-0.5 rounded-full">
+                  <span className="font-mono text-[10px] font-bold text-carbon/50 bg-slate-100 border border-carbon/10 px-2.5 py-0.5 rounded-full">
                     {lista.length} expedientes
                   </span>
                 </div>
 
-                {/* Carrusel/Desplazador Horizontal de Expedientes */}
-                <div className="flex flex-row gap-3 overflow-x-auto pb-3 pt-1 pr-1 scrollbar-sutil">
+                {/* Lista Vertical de Expedientes en Filas de Ancho Completo */}
+                <div className="flex flex-col gap-2 pt-1">
                   {lista.length === 0 ? (
-                    <div className="w-full text-center py-6 text-xs text-carbon/40 italic bg-slate-50 rounded-xl border border-dashed border-carbon/10">
+                    <div className="text-center py-6 text-xs text-carbon/40 italic bg-slate-50 rounded-xl border border-dashed border-carbon/10">
                       No hay expedientes activos en este servicio.
                     </div>
                   ) : (
@@ -236,57 +234,69 @@ export function WidgetSeguimientoExpedientes() {
                       return (
                         <div 
                           key={e.id} 
-                          className={`w-[290px] sm:w-[330px] flex-shrink-0 rounded-xl border p-3.5 flex flex-col justify-between gap-3 bg-white shadow-xs transition-all hover:shadow-md hover:border-sauce/30 ${
+                          className={`rounded-xl border p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white shadow-xs transition-all hover:shadow-md hover:border-sauce/30 ${
                             isCita 
-                              ? "border-emerald-200 bg-emerald-50/[0.04]" 
+                              ? "border-emerald-200 bg-emerald-50/[0.03]" 
                               : isTarea 
-                                ? "border-amber-200 bg-amber-50/[0.04]" 
+                                ? "border-amber-200 bg-amber-50/[0.03]" 
                                 : "border-carbon/10"
                           }`}
                         >
-                          <div>
-                            <div className="flex justify-between items-start gap-1 flex-wrap">
+                          {/* Nombre del cliente, ID y fraccionamiento */}
+                          <div className="flex-1 min-w-[240px] space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-[10px] font-bold text-carbon/40 bg-slate-100 border px-1.5 py-0.5 rounded">
+                                {e.id}
+                              </span>
                               <Link 
                                 href={`/expediente/${e.id}`}
-                                className="font-titular font-bold text-xs text-carbon hover:underline hover:text-sauce line-clamp-1"
-                                title={e.clienteNombre}
+                                className="font-titular font-bold text-sm text-carbon hover:underline hover:text-sauce"
                               >
                                 {e.clienteNombre}
                               </Link>
-                              <span className="font-mono text-[9px] text-carbon/30">{e.id}</span>
                             </div>
-                            
-                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                              <span className="inline-block rounded-full bg-slate-100 px-1.5 py-0.5 text-[8px] font-bold text-carbon/60 max-w-[130px] truncate" title={e.fraccionamiento}>
-                                📍 {e.fraccionamiento}
-                              </span>
-                              <span className="inline-block rounded-full bg-sauce/15 px-1.5 py-0.5 text-[8px] font-bold text-sauce uppercase">
-                                {e.etapa}
-                              </span>
+                            <div className="text-xs text-carbon/50 flex items-center gap-2 flex-wrap">
+                              <span>📍 {e.fraccionamiento}</span>
+                              <span>•</span>
+                              <span>Ingreso: {new Date(e.fechaCreacion).toLocaleDateString()}</span>
                             </div>
                           </div>
 
-                          {/* Caja de Próxima Acción */}
-                          <div className={`p-2.5 rounded-lg border text-[11px] leading-relaxed ${
-                            isCita
-                              ? "bg-emerald-50 border-emerald-200/50 text-emerald-900"
-                              : isTarea
-                                ? "bg-amber-50 border-amber-200/50 text-amber-900"
-                                : "bg-slate-50 border-carbon/5 text-carbon/60"
-                          }`}>
-                            <div className="text-[8px] uppercase tracking-wider font-bold text-carbon/40 mb-0.5">
-                              Próxima Acción / Pendiente
-                            </div>
-                            <div className="font-bold">
-                              {e.proximaAccion}
+                          {/* Etapa actual */}
+                          <div className="flex-shrink-0 flex items-center">
+                            <span className="inline-block rounded-full bg-sauce/10 text-sauce px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+                              {e.etapa}
+                            </span>
+                          </div>
+
+                          {/* Próximo Pendiente / Acción */}
+                          <div className="flex-1 min-w-[280px]">
+                            <div className={`p-2.5 rounded-lg border text-xs flex items-start gap-2.5 ${
+                              isCita
+                                ? "bg-emerald-50 border-emerald-200/50 text-emerald-900"
+                                : isTarea
+                                  ? "bg-amber-50 border-amber-200/50 text-amber-900"
+                                  : "bg-slate-50 border-carbon/5 text-carbon/60"
+                            }`}>
+                              <span className="text-base select-none mt-0.5">
+                                {isCita ? "📅" : isTarea ? "⚡" : "💬"}
+                              </span>
+                              <div>
+                                <div className="text-[8px] uppercase tracking-wider font-bold text-carbon/40">
+                                  Próxima Acción / Pendiente
+                                </div>
+                                <div className="font-semibold leading-tight">
+                                  {e.proximaAccion}
+                                </div>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex justify-between items-center text-[8px] text-carbon/40 pt-2 border-t border-carbon/5">
-                            <span>Ingreso: {new Date(e.fechaCreacion).toLocaleDateString()}</span>
+                          {/* Botón de Enlace al Detalle */}
+                          <div className="flex-shrink-0 flex items-center justify-end">
                             <Link
                               href={`/expediente/${e.id}`}
-                              className="font-bold text-sauce hover:underline uppercase"
+                              className="rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border px-3 py-1.5 text-xs font-semibold transition"
                             >
                               Ver Expediente →
                             </Link>
