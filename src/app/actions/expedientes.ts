@@ -1016,18 +1016,26 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   const expedientesFilas = exps ?? [];
   const result: ExpedienteSeguimiento[] = [];
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
   const expIds = expedientesFilas.map(e => e.id);
 
-  // Obtener citas futuras
+  // Obtener citas futuras (por expediente_id o por prospecto_id)
   let citasFuturas: any[] = [];
   if (expIds.length > 0) {
-    const { data: citas } = await sb
+    const prospectoIds = expedientesFilas.map(e => e.prospecto_id).filter(Boolean);
+    let queryCitas = sb
       .from("agenda_citas")
       .select("*")
-      .in("expediente_id", expIds)
       .gte("fecha", hoy)
-      .neq("estado", "cancelada")
+      .neq("estado", "cancelada");
+
+    if (prospectoIds.length > 0) {
+      queryCitas = queryCitas.or(`expediente_id.in.(${expIds.join(",")}),prospecto_id.in.(${prospectoIds.join(",")})`);
+    } else {
+      queryCitas = queryCitas.in("expediente_id", expIds);
+    }
+
+    const { data: citas } = await queryCitas
       .order("fecha", { ascending: true })
       .order("hora_inicio", { ascending: true });
     citasFuturas = citas || [];
@@ -1087,7 +1095,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   };
 
   for (const e of expedientesFilas) {
-    const cita = citasFuturas.find(c => c.expediente_id === e.id);
+    const cita = citasFuturas.find(c => c.expediente_id === e.id || (e.prospecto_id && c.prospecto_id === e.prospecto_id));
     const bpmTarea = bpmTareasPendientes.find(t => t.expediente_id === e.id);
     const tarea = tareasPendientes.find(t => t.enrollment?.expediente_id === e.id);
 
