@@ -38,9 +38,11 @@ export function WidgetSeguimientoExpedientes() {
 
   // Configuración de las categorías/servicios
   const columnasConfig = [
-    { key: "Traspaso / Compra Directa", label: "Traspaso / Compra", icon: "💰" },
+    { key: "Traspaso / Compra", label: "Traspaso / Compra", icon: "💰" },
     { key: "Promoción de Venta", label: "Promoción de Venta", icon: "📢" },
     { key: "Solo Trámite", label: "Solo Trámite", icon: "📄" },
+    { key: "Remodelación", label: "Remodelación", icon: "🔨" },
+    { key: "Impermeabilización", label: "Impermeabilización", icon: "💧" },
     { key: "Construcción / Obra", label: "Construcción / Obra", icon: "🏗️" },
   ];
 
@@ -66,9 +68,11 @@ export function WidgetSeguimientoExpedientes() {
   // Agrupar expedientes por su tipo de negocio, ordenando las listas individuales
   const agrupados = useMemo(() => {
     const mapa: Record<string, ExpedienteSeguimiento[]> = {
-      "Traspaso / Compra Directa": [],
+      "Traspaso / Compra": [],
       "Promoción de Venta": [],
       "Solo Trámite": [],
+      "Remodelación": [],
+      "Impermeabilización": [],
       "Construcción / Obra": [],
       "Otros": []
     };

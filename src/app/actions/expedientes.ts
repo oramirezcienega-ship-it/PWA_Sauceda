@@ -307,6 +307,12 @@ export async function crearExpediente(
     void notificarAsignacionOperarioACliente(sb, id, datos.prospectoId || null, datos.operadorId);
   }
 
+  // Instanciar flujo de trabajo BPM si existe plantilla para este tipo de negocio
+  if (datos.tipoNegocio) {
+    const { instanciarFlujoEnExpediente } = await import("@/app/actions/bpm");
+    void instanciarFlujoEnExpediente(id, datos.tipoNegocio);
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 
@@ -1036,10 +1042,15 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   }
 
   const tipoNegocioLabels: Record<string, string> = {
-    "compra": "Traspaso / Compra Directa",
+    "traspaso_compra": "Traspaso / Compra",
+    "compra": "Traspaso / Compra",
+    "promocion_venta": "Promoción de Venta",
     "venta": "Promoción de Venta",
+    "solo_tramite": "Solo Trámite",
     "tramite": "Solo Trámite",
     "construccion": "Construcción / Obra",
+    "construccion-remodelacion": "Remodelación",
+    "construccion-impermeabilizacion": "Impermeabilización",
   };
 
   const etapaLabels: Record<string, string> = {

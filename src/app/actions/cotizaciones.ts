@@ -443,6 +443,18 @@ export async function guardarReporteVisita(
 
   await sincronizarEtapaExpediente(sb, cotizacionId);
 
+  // Trigger BPM event: visita_tecnica_concluida
+  const { data: cotExp } = await sb
+    .from("cotizaciones")
+    .select("expediente_id")
+    .eq("id", cotizacionId)
+    .maybeSingle();
+
+  if (cotExp?.expediente_id) {
+    const { activarTareasBPMPorEvento } = await import("@/app/actions/bpm");
+    await activarTareasBPMPorEvento(cotExp.expediente_id, "visita_tecnica_concluida");
+  }
+
   await registrarActividad(sb, {
     prospectoId: cot.prospecto_id,
     tipo: "construccion",
@@ -910,6 +922,11 @@ export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) 
       case "archivada":
         nuevaEtapa = "perdido";
         break;
+    }
+
+    if (cot.estatus === "pendiente_aprobacion") {
+      const { activarTareasBPMPorEvento } = await import("@/app/actions/bpm");
+      await activarTareasBPMPorEvento(cot.expediente_id, "cotizacion_conceptos_guardada");
     }
 
     if (nuevaEtapa) {
