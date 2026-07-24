@@ -162,6 +162,13 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
 
   if (count && count > 0) return; // ya inicializado
 
+  // 1.5. Obtener los datos del expediente para ver quién es el asesor_id y el operador_id
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("asesor_id, operador_id")
+    .eq("id", expedienteId)
+    .maybeSingle();
+
   // 2. Obtener la plantilla de flujo
   const datosFlujo = await obtenerFlujoPorProducto(tipoNegocio);
   if (!datosFlujo || datosFlujo.pasos.length === 0) return;
@@ -174,6 +181,14 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
     // Si tiene condición especial (como esperar reporte técnico), inicia en "esperando_condicion"
     const estadoInicial = p.condicion_activacion === "inmediato" ? "pendiente" : "esperando_condicion";
 
+    // Asignación automática de responsable basado en rol
+    let responsableId = null;
+    if (p.rol_responsable === "asesor") {
+      responsableId = exp?.asesor_id || null;
+    } else if (p.rol_responsable === "operaciones") {
+      responsableId = exp?.operador_id || null;
+    }
+
     return {
       expediente_id: expedienteId,
       paso_id: p.id,
@@ -181,7 +196,8 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
       descripcion: p.descripcion,
       estado: estadoInicial,
       dias_vencimiento: p.dias_vencimiento,
-      agendada_para: agendadaPara
+      agendada_para: agendadaPara,
+      responsable_id: responsableId
     };
   });
 
@@ -195,6 +211,42 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
       titulo: "🚀 Flujo de Trabajo BPM inicializado",
       detalle: `Se cargó la plantilla para ${tipoNegocio} con ${tareasInsert.length} pasos.`
     });
+  }
+}
+
+/** Sincroniza los responsables de las tareas pendientes de un expediente tras cambiar el asesor u operador */
+export async function sincronizarAsignadosBpm(
+  expedienteId: string,
+  asesorId: string | null,
+  operadorId: string | null
+) {
+  const sb = supabaseServidor();
+
+  // 1. Obtener todas las tareas pendientes del expediente junto con su rol_responsable
+  const { data: tareas, error } = await sb
+    .from("bpm_expediente_tareas")
+    .select("id, paso:paso_id(rol_responsable)")
+    .eq("expediente_id", expedienteId)
+    .in("estado", ["pendiente", "esperando_condicion"]);
+
+  if (error || !tareas) return;
+
+  for (const t of tareas) {
+    const rol = (t.paso as any)?.rol_responsable;
+    let nuevoResponsableId = undefined;
+
+    if (rol === "asesor") {
+      nuevoResponsableId = asesorId;
+    } else if (rol === "operaciones") {
+      nuevoResponsableId = operadorId;
+    }
+
+    if (nuevoResponsableId !== undefined) {
+      await sb
+        .from("bpm_expediente_tareas")
+        .update({ responsable_id: nuevoResponsableId })
+        .eq("id", t.id);
+    }
   }
 }
 

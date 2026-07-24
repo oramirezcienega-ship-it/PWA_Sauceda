@@ -225,11 +225,16 @@ export function AutomatizacionBuilder({
               className={`${SELECT} w-full`}
             >
               <option value="">— elige plantilla aprobada —</option>
-              {aprobadas.map((p) => (
-                <option key={`${p.nombre}-${p.idioma}`} value={p.nombre}>
-                  {p.nombre} ({p.idioma})
-                </option>
-              ))}
+              {aprobadas.map((p) => {
+                const snippet = p.cuerpo
+                  ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 50)}${p.cuerpo.length > 50 ? "..." : ""}"`
+                  : "";
+                return (
+                  <option key={`${p.nombre}-${p.idioma}`} value={p.nombre}>
+                    {p.nombre} ({p.idioma}){snippet}
+                  </option>
+                );
+              })}
             </select>
 
             {errorPlantillas && (

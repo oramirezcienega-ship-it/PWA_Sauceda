@@ -172,7 +172,7 @@ export async function resumenAsesor(
   const colId = rol === "asesor" ? ("asesor_id" as const) : ("operador_id" as const);
   const sb = supabaseServidor();
 
-  // 1. Obtener todas las tareas del asesor
+  // 1. Obtener todas las tareas del asesor (secuencias de marketing)
   const { data: tasks, error: eTasks } = await sb
     .from("asesor_tasks")
     .select(`
@@ -192,9 +192,37 @@ export async function resumenAsesor(
 
   if (eTasks) throw new Error(eTasks.message);
 
-  const totalTareas = tasks?.length ?? 0;
-  const tareasPendientes = tasks?.filter((t) => t.status === "pendiente").length ?? 0;
-  const tareasCompletadas = tasks?.filter((t) => t.status === "completada").length ?? 0;
+  // 1b. Obtener todas las tareas de BPM asignadas al usuario actual
+  const { data: bpmTasks, error: eBpmTasks } = await sb
+    .from("bpm_expediente_tareas")
+    .select(`
+      id,
+      titulo,
+      descripcion,
+      estado,
+      agendada_para,
+      expediente:expediente_id(
+        id,
+        cliente,
+        primer_apellido,
+        segundo_apellido,
+        telefono,
+        fraccionamiento,
+        situacion,
+        notas
+      )
+    `)
+    .eq("responsable_id", usuario.id);
+
+  if (eBpmTasks) throw new Error(eBpmTasks.message);
+
+  const totalBpmTareas = bpmTasks?.length ?? 0;
+  const bpmTareasPendientes = bpmTasks?.filter((t) => t.estado === "pendiente").length ?? 0;
+  const bpmTareasCompletadas = bpmTasks?.filter((t) => t.estado === "completada").length ?? 0;
+
+  const totalTareas = (tasks?.length ?? 0) + totalBpmTareas;
+  const tareasPendientes = (tasks?.filter((t) => t.status === "pendiente").length ?? 0) + bpmTareasPendientes;
+  const tareasCompletadas = (tasks?.filter((t) => t.status === "completada").length ?? 0) + bpmTareasCompletadas;
 
   // 2. Obtener el nombre del asesor para buscar conversaciones de WhatsApp asignadas
   const userProfile = await obtenerUsuarioActual();
@@ -218,6 +246,12 @@ export async function resumenAsesor(
       if (enr.expediente_id) {
         expedienteIds.add(enr.expediente_id);
       }
+    }
+  });
+
+  bpmTasks?.forEach((t) => {
+    if (t.expediente?.id) {
+      expedienteIds.add(t.expediente.id);
     }
   });
 
@@ -414,14 +448,14 @@ export async function resumenAsesor(
   const totalLeads = leadsAsignados.length;
   const tasaConversion = totalLeads ? Math.round((cerrados / totalLeads) * 100) : 0;
 
-  // 7. Filtrar las tareas pendientes con contexto y detalles de contacto para mostrarlas en una lista
+  // 7. Filtrar las tareas de secuencias pendientes con contexto y detalles de contacto para mostrarlas en una lista
   const tareasPendientesListaRaw = tasks?.filter((t) => t.status === "pendiente") || [];
   
   // Para las tareas pendientes, obtener detalles de expediente si aplica
   const pendExpIds = tareasPendientesListaRaw
     .map((t) => (t.enrollment as any)?.expediente_id)
     .filter(Boolean) as string[];
-
+ 
   let pendExpMap = new Map<string, any>();
   if (pendExpIds.length > 0) {
     const { data: pExps } = await sb
@@ -430,14 +464,14 @@ export async function resumenAsesor(
       .in("id", pendExpIds);
     pendExpMap = new Map((pExps || []).map((e) => [e.id, e]));
   }
-
-  const tareasPendientesLista = tareasPendientesListaRaw.map((t) => {
+ 
+  const sequenceTareasPendientes = tareasPendientesListaRaw.map((t) => {
     const enr = t.enrollment as any;
     const exp = enr?.expediente_id ? pendExpMap.get(enr.expediente_id) : null;
     const contexto = exp
       ? `Fraccionamiento: ${exp.fraccionamiento || ""}. Situación: ${exp.situacion || ""}. Notas: ${exp.notas || ""}`
       : "Lead sin expediente enlazado.";
-
+ 
     return {
       id: t.id,
       tipo: t.tipo || "seguimiento",
@@ -448,6 +482,33 @@ export async function resumenAsesor(
     };
   });
 
+  // Mapear las tareas de BPM pendientes para agregarlas a la lista del dashboard
+  const bpmTareasPendientesLista = (bpmTasks?.filter((t) => t.estado === "pendiente") || []).map((t) => {
+    const exp = t.expediente as any;
+    const contexto = exp
+      ? `BPM - Fraccionamiento: ${exp.fraccionamiento || ""}. Situación: ${exp.situacion || ""}. Notas: ${exp.notas || ""}`
+      : "Tarea BPM sin expediente enlazado.";
+
+    const leadNombre = exp
+      ? [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean).join(" ")
+      : "Sin nombre";
+
+    return {
+      id: t.id,
+      tipo: "BPM",
+      agendadaPara: t.agendada_para,
+      contexto: `${t.descripcion ? `${t.descripcion}. ` : ""}${contexto}`,
+      leadNombre,
+      leadTelefono: exp?.telefono || ""
+    };
+  });
+
+  // Combinar ambas fuentes de tareas pendientes
+  const tareasPendientesLista = [
+    ...sequenceTareasPendientes,
+    ...bpmTareasPendientesLista
+  ];
+ 
   return {
     totalLeads,
     totalTareas,

@@ -422,6 +422,12 @@ export async function actualizarExpediente(
     void notificarAsignacionOperarioACliente(sb, id, datos.prospectoId || null, datos.operadorId);
   }
 
+  // Sincronizar asignados de BPM si cambió asesor u operador
+  if (cambios.includes("asesor_id") || cambios.includes("operador_id")) {
+    const { sincronizarAsignadosBpm } = await import("@/app/actions/bpm");
+    void sincronizarAsignadosBpm(id, datos.asesorId ?? null, datos.operadorId ?? null);
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 
@@ -1027,7 +1033,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     citasFuturas = citas || [];
   }
 
-  // Obtener tareas pendientes
+  // Obtener tareas de asesor_tasks pendientes
   let tareasPendientes: any[] = [];
   if (expIds.length > 0) {
     const { data: tareas } = await sb
@@ -1039,6 +1045,18 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
       .eq("status", "pendiente")
       .order("agendada_para", { ascending: true });
     tareasPendientes = (tareas || []).filter(t => t.enrollment?.expediente_id && expIds.includes(t.enrollment.expediente_id));
+  }
+
+  // Obtener tareas de BPM pendientes
+  let bpmTareasPendientes: any[] = [];
+  if (expIds.length > 0) {
+    const { data: bpmTareas } = await sb
+      .from("bpm_expediente_tareas")
+      .select("*")
+      .in("expediente_id", expIds)
+      .eq("estado", "pendiente")
+      .order("agendada_para", { ascending: true });
+    bpmTareasPendientes = bpmTareas || [];
   }
 
   const tipoNegocioLabels: Record<string, string> = {
@@ -1070,6 +1088,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
 
   for (const e of expedientesFilas) {
     const cita = citasFuturas.find(c => c.expediente_id === e.id);
+    const bpmTarea = bpmTareasPendientes.find(t => t.expediente_id === e.id);
     const tarea = tareasPendientes.find(t => t.enrollment?.expediente_id === e.id);
 
     let proximaAccion = "💬 Seguimiento ordinario (Sin tareas agendadas)";
@@ -1081,8 +1100,12 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
       proximaAccion = `${tipoLabel}: ${cita.fecha} de ${cita.hora_inicio.slice(0, 5)} a ${cita.hora_fin.slice(0, 5)} hrs`;
       proximaAccionFecha = `${cita.fecha}T${cita.hora_inicio}`;
       proximaAccionTipo = "cita";
+    } else if (bpmTarea) {
+      proximaAccion = `⚡ BPM: ${bpmTarea.titulo}`;
+      proximaAccionFecha = bpmTarea.agendada_para;
+      proximaAccionTipo = "tarea";
     } else if (tarea) {
-      proximaAccion = `⚡ Tarea: ${tarea.tipo} - "${tarea.notas || 'Llamar al cliente'}"`;
+      proximaAccion = `⚡ Tarea: ${tarea.tipo} - "${tarea.notes || tarea.notas || 'Llamar al cliente'}"`;
       proximaAccionFecha = tarea.agendada_para;
       proximaAccionTipo = "tarea";
     }
