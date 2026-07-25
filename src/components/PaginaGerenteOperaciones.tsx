@@ -663,9 +663,10 @@ export default function PaginaGerenteOperaciones() {
                         <option value="traspaso_compra">Traspaso / Compra</option>
                         <option value="promocion_venta">Promoción de Venta</option>
                         <option value="solo_tramite">Solo Trámite</option>
-                        <option value="construccion-remodelacion">Remodelación</option>
-                        <option value="construccion-impermeabilizacion">Impermeabilización</option>
-                        <option value="construccion">Construcción / Obra (General)</option>
+                        <option value="construccion">Sauceda Construye (General)</option>
+                        <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
+                        <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
+                        <option value="otro">Otro</option>
                       </select>
                     </div>
 

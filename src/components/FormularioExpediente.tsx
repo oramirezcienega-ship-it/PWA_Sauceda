@@ -250,7 +250,8 @@ export function FormularioExpediente({
             <option value="promocion_venta">Promoción de venta</option>
             <option value="solo_tramite">Solo trámite</option>
             <option value="construccion">Sauceda Construye (General)</option>
-            <option value="construccion-impermeabilizacion">Construcción-Impermeabilización</option>
+            <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
+            <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
             <option value="otro">Otro</option>
           </select>
         </Campo>

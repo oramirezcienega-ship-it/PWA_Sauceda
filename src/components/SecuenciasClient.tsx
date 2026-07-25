@@ -78,7 +78,7 @@ export function SecuenciasClient() {
 
   // Estado para el Monitoreo en Tiempo Real (Analytics)
   const [filtroEstadoMonitoreo, setFiltroEstadoMonitoreo] = useState<"todos" | "activo" | "respondio" | "otros">("todos");
-  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion-impermeabilizacion">("todos");
+  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "otro">("todos");
   const [busquedaLeadMonitoreo, setBusquedaLeadMonitoreo] = useState("");
 
   const enrollmentsFiltrados = useMemo(() => {
@@ -747,10 +747,12 @@ export function SecuenciasClient() {
                     <option value="sin_contactar">Sin contactar</option>
                     <option value="sin_respuesta">Sin respuesta</option>
                     <option value="rojo">Semáforo Rojo</option>
-                    <option value="construccion-impermeabilizacion">Construcción: Impermeabilización</option>
                     <option value="traspaso_compra">Bienes Raíces: Compra Directa</option>
                     <option value="promocion_venta">Bienes Raíces: Promoción Venta</option>
                     <option value="solo_tramite">Bienes Raíces: Solo Trámite</option>
+                    <option value="construccion">Sauceda Construye (General)</option>
+                    <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
+                    <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
@@ -1148,10 +1150,13 @@ export function SecuenciasClient() {
                       className="rounded border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#2D4A2B] bg-white text-slate-700 font-semibold"
                     >
                       <option value="todos">Todos los Negocios</option>
-                      <option value="traspaso_compra">Compra Directa (Traspaso)</option>
-                      <option value="promocion_venta">Promoción de Viviendas</option>
-                      <option value="solo_tramite">Armado de Expediente</option>
-                      <option value="construccion-impermeabilizacion">Impermeabilización (Construcción)</option>
+                      <option value="traspaso_compra">Traspaso / Compra</option>
+                      <option value="promocion_venta">Promoción de Venta</option>
+                      <option value="solo_tramite">Solo Trámite</option>
+                      <option value="construccion">Sauceda Construye (General)</option>
+                      <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
+                      <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
+                      <option value="otro">Otro</option>
                     </select>
                     
                     <div className="flex rounded border border-slate-200 p-0.5 bg-slate-50 shrink-0 text-xs">

@@ -1074,9 +1074,9 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "venta": "Promoción de Venta",
     "solo_tramite": "Solo Trámite",
     "tramite": "Solo Trámite",
-    "construccion": "Construcción / Obra",
-    "construccion-remodelacion": "Remodelación",
-    "construccion-impermeabilizacion": "Impermeabilización",
+    "construccion": "Sauceda Construye (General)",
+    "construccion-remodelacion": "Sauceda Construye (Remodelación)",
+    "construccion-impermeabilizacion": "Sauceda Construye (Impermeabilización)",
   };
 
   const etapaLabels: Record<string, string> = {
@@ -1104,7 +1104,10 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     let proximaAccionTipo: "cita" | "tarea" | "ninguno" = "ninguno";
 
     if (cita) {
-      const tipoLabel = cita.tipo_cita === "inspeccion" ? "🔍 Inspección" : (cita.tipo_cita === "instalacion" ? "🛠️ Instalación" : "📅 Cita");
+      const tipoLabel = 
+        cita.tipo_cita === "inspeccion" ? "🔍 Inspección" : 
+        cita.tipo_cita === "instalacion" ? "🛠️ Instalación" : 
+        cita.tipo_cita === "llamada" ? "📞 Llamada" : "📅 Cita";
       proximaAccion = `${tipoLabel}: ${cita.fecha} de ${cita.hora_inicio.slice(0, 5)} a ${cita.hora_fin.slice(0, 5)} hrs`;
       proximaAccionFecha = `${cita.fecha}T${cita.hora_inicio}`;
       proximaAccionTipo = "cita";
