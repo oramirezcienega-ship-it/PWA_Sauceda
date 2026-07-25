@@ -150,7 +150,7 @@ export function VisualizadorCotizacionCliente({
     <div className="max-w-4xl mx-auto px-4 py-8 font-cuerpo text-carbon">
       
       {/* Encabezado Logo */}
-      <div className="text-center mb-8">
+      <div className="text-center mb-8 print:hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.svg" alt="SAUCEDA" className="mx-auto h-16 w-16 mb-2" />
         <h1 className="font-display text-2xl font-bold tracking-tight text-verde-profundo">SAUCEDA</h1>
@@ -182,14 +182,14 @@ export function VisualizadorCotizacionCliente({
         <div className="bg-white rounded-3xl border border-carbon/10 shadow-xl overflow-hidden">
           
           {/* Banner Principal */}
-          <div className="bg-gradient-to-r from-verde-profundo to-sauce p-8 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-gradient-to-r from-verde-profundo to-sauce p-8 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:bg-none print:text-carbon print:p-6 print:border-b print:border-carbon/10">
             <div>
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="font-mono text-xs bg-crema/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-crema">Propuesta Técnica Comercial</span>
+              <div className="flex items-center gap-2 mb-2 flex-wrap print:mb-1">
+                <span className="font-mono text-xs bg-crema/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-crema print:text-sauce print:bg-transparent print:px-0">Propuesta Técnica Comercial</span>
                 <span className="font-mono text-sm font-bold text-dorado">{cotizacion.id}</span>
               </div>
-              <h2 className="font-titular text-2xl font-bold text-crema">Cotización de {getServicioLabel(cotizacion.servicioTipo)}</h2>
-              <p className="text-xs text-crema/80 mt-1">Preparada especialmente para: <span className="font-semibold">{cotizacion.prospectoNombre}</span></p>
+              <h2 className="font-titular text-2xl font-bold text-crema print:text-verde-profundo">Cotización de {getServicioLabel(cotizacion.servicioTipo)}</h2>
+              <p className="text-xs text-crema/80 mt-1 print:text-carbon/60">Preparada especialmente para: <span className="font-semibold">{cotizacion.prospectoNombre}</span></p>
             </div>
             
             <button
@@ -198,6 +198,14 @@ export function VisualizadorCotizacionCliente({
             >
               🖨️ Guardar PDF / Imprimir
             </button>
+
+            {/* Logo exclusivo para impresión a la derecha */}
+            <div className="hidden print:flex flex-col items-center self-center shrink-0 ml-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="SAUCEDA" className="h-10 w-10" />
+              <div className="font-display text-[10px] font-bold tracking-tight text-verde-profundo leading-none mt-1">SAUCEDA</div>
+              <div className="font-mono text-[6px] tracking-[0.15em] text-dorado uppercase leading-none mt-0.5">Construye</div>
+            </div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-8">
