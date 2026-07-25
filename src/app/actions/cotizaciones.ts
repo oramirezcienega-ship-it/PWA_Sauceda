@@ -16,12 +16,19 @@ function siguienteId(ids: string[]): string {
 
 // Mapeos de base de datos a modelos de TypeScript
 function aCotizacion(fila: any): Cotizacion {
+  const pros = fila.prospectos;
+  const nombreCompleto = pros
+    ? [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ")
+    : "";
+
   return {
     id: fila.id,
     prospectoId: fila.prospecto_id,
     expedienteId: fila.expediente_id,
-    prospectoNombre: fila.prospectos?.nombre || "",
-    prospectoTelefono: fila.prospectos?.telefono || "",
+    prospectoNombre: nombreCompleto || pros?.nombre || "",
+    prospectoTelefono: pros?.telefono || "",
+    prospectoCorreo: pros?.correo || null,
+    prospectoDireccion: pros?.direccion || null,
     servicioTipo: fila.servicio_tipo,
     estatus: fila.estatus,
     requiereVisita: fila.requiere_visita,
@@ -225,7 +232,7 @@ export async function obtenerCotizacionPorToken(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -281,6 +288,8 @@ export async function obtenerCotizacionPorToken(
       prospectoId: cot.prospectoId,
       prospectoNombre: cot.prospectoNombre,
       prospectoTelefono: cot.prospectoTelefono,
+      prospectoCorreo: cot.prospectoCorreo,
+      prospectoDireccion: cot.prospectoDireccion,
       servicioTipo: cot.servicioTipo,
       estatus: cot.estatus,
       requiereVisita: cot.requiereVisita,
