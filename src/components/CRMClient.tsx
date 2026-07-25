@@ -1678,10 +1678,13 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-[#5C7A52]"
           >
             <option value="todos">Negocio: Todos</option>
-            <option value="construccion-impermeabilizacion">Impermeabilización</option>
-            <option value="traspaso_compra">Compra Directa</option>
+            <option value="traspaso_compra">Traspaso / Compra</option>
             <option value="promocion_venta">Promoción Venta</option>
             <option value="solo_tramite">Solo Trámite</option>
+            <option value="construccion">Sauceda Construye (General)</option>
+            <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
+            <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
+            <option value="otro">Otro</option>
           </select>
 
           <select

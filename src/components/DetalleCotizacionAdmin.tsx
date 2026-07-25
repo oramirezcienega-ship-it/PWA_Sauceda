@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -120,6 +120,7 @@ export function DetalleCotizacionAdmin({
 
   // --- State para Presupuesto ---
   const [catalogoProductos, setCatalogoProductos] = useState<any[]>([]);
+  const [margenGlobal, setMargenGlobal] = useState<string>("20");
   const [conceptosEditables, setConceptosEditables] = useState<
     { descripcion: string; cantidad: number; unidad: string; costoUnitario: number; precioUnitario: number; descuento: number }[]
   >(
@@ -399,6 +400,23 @@ export function DetalleCotizacionAdmin({
     }
   };
 
+  // Memos para Totales del Presupuesto
+  const totalCostoInterno = useMemo(() => {
+    return conceptosEditables.reduce((acc, c) => acc + (c.cantidad * c.costoUnitario), 0);
+  }, [conceptosEditables]);
+
+  const totalPrecioVenta = useMemo(() => {
+    return conceptosEditables.reduce((acc, c) => {
+      const desc = c.descuento || 0;
+      return acc + (c.cantidad * c.precioUnitario * (1 - desc / 100));
+    }, 0);
+  }, [conceptosEditables]);
+
+  const margenTotalPresupuesto = useMemo(() => {
+    if (!totalPrecioVenta) return 0;
+    return Math.round(((totalPrecioVenta - totalCostoInterno) / totalPrecioVenta) * 100);
+  }, [totalCostoInterno, totalPrecioVenta]);
+
   // --- Acciones de Presupuesto ---
   const agregarFilaConcepto = () => {
     setConceptosEditables((prev) => [
@@ -415,9 +433,60 @@ export function DetalleCotizacionAdmin({
     setConceptosEditables((prev) =>
       prev.map((c, i) => {
         if (i === index) {
-          return { ...c, [campo]: valor };
+          const updated = { ...c, [campo]: valor };
+          if (campo === "margen") {
+            const m = Math.min(99, Math.max(-1000, Number(valor)));
+            updated.precioUnitario = Number((updated.costoUnitario / (1 - m / 100)).toFixed(2));
+          }
+          return updated;
         }
         return c;
+      })
+    );
+  };
+
+  const moverFilaConcepto = (index: number, direccion: "arriba" | "abajo") => {
+    setConceptosEditables((prev) => {
+      const list = [...prev];
+      const targetIdx = direccion === "arriba" ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= list.length) return prev;
+      const temp = list[index];
+      list[index] = list[targetIdx];
+      list[targetIdx] = temp;
+      return list;
+    });
+  };
+
+  const ordenarConceptos = (criterio: "importe" | "costo" | "precio", direccion: "asc" | "desc") => {
+    setConceptosEditables((prev) => {
+      const list = [...prev];
+      list.sort((a, b) => {
+        let valA = 0;
+        let valB = 0;
+        if (criterio === "importe") {
+          const descA = a.descuento || 0;
+          const descB = b.descuento || 0;
+          valA = a.cantidad * a.precioUnitario * (1 - descA / 100);
+          valB = b.cantidad * b.precioUnitario * (1 - descB / 100);
+        } else if (criterio === "costo") {
+          valA = a.costoUnitario;
+          valB = b.costoUnitario;
+        } else if (criterio === "precio") {
+          valA = a.precioUnitario;
+          valB = b.precioUnitario;
+        }
+        return direccion === "asc" ? valA - valB : valB - valA;
+      });
+      return list;
+    });
+  };
+
+  const aplicarMargenGlobal = (m: number) => {
+    if (m >= 100) return;
+    setConceptosEditables((prev) =>
+      prev.map((c) => {
+        const nuevoPrecio = Number((c.costoUnitario / (1 - m / 100)).toFixed(2));
+        return { ...c, precioUnitario: nuevoPrecio };
       })
     );
   };
@@ -1342,111 +1411,249 @@ export function DetalleCotizacionAdmin({
                     No hay conceptos en el presupuesto. Carga uno del catálogo o haz clic en "+ Agregar Concepto Libre" para comenzar.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs min-w-[750px]">
-                      <thead>
-                        <tr className="border-b border-carbon/10 text-carbon/40 font-semibold uppercase tracking-wider">
-                          <th className="pb-2 w-[35%]">Descripción del Concepto</th>
-                          <th className="pb-2 text-center w-[8%]">Cant.</th>
-                          <th className="pb-2 text-center w-[8%]">Unidad</th>
-                          {(!esOperaciones || esAdmin) && <th className="pb-2 text-right w-[11%]">Costo Int. Unit.</th>}
-                          <th className="pb-2 text-right w-[11%]">Precio Unit.</th>
-                          <th className="pb-2 text-center w-[10%]">Desc. %</th>
-                          <th className="pb-2 text-right w-[12%]">Importe</th>
-                          <th className="pb-2 text-center w-[5%]"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-carbon/5 font-cuerpo">
-                        {conceptosEditables.map((c, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="py-2.5">
-                              <input
-                                type="text"
-                                value={c.descripcion}
-                                onChange={(e) => actualizarFilaConcepto(idx, "descripcion", e.target.value)}
-                                placeholder="Ej. Impermeabilización Fester 5 años..."
-                                className="w-full rounded border border-carbon/15 px-2 py-1 focus:border-sauce focus:outline-none"
-                              />
-                            </td>
-                            <td className="py-2.5 text-center">
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={c.cantidad}
-                                onChange={(e) => actualizarFilaConcepto(idx, "cantidad", Number(e.target.value))}
-                                className="w-16 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
-                              />
-                            </td>
-                            <td className="py-2.5 text-center">
-                              <select
-                                value={c.unidad}
-                                onChange={(e) => actualizarFilaConcepto(idx, "unidad", e.target.value)}
-                                className="rounded border border-carbon/15 px-1 py-1 focus:border-sauce focus:outline-none"
-                              >
-                                <option value="m2">m²</option>
-                                <option value="ml">ml</option>
-                                <option value="pza">pza</option>
-                                <option value="lote">lote</option>
-                                <option value="m3">m³</option>
-                                <option value="servicio">servicio</option>
-                              </select>
-                            </td>
-                            {(!esOperaciones || esAdmin) && (
+                  <div className="space-y-4">
+                    {/* Barra de herramientas: Margen Global y Ordenación */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-crema/20 rounded-xl border border-carbon/10 text-xs">
+                      {/* Margen Global (Solo para quienes ven costos) */}
+                      {(!esOperaciones || esAdmin) ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-carbon/70">Margen Global:</span>
+                          <div className="flex items-center">
+                            <input
+                              type="number"
+                              value={margenGlobal}
+                              onChange={(e) => setMargenGlobal(e.target.value)}
+                              className="w-12 rounded border border-carbon/15 px-1.5 py-1 text-center focus:border-sauce focus:outline-none bg-white font-mono"
+                              placeholder="20"
+                            />
+                            <span className="text-carbon/50 ml-1 mr-2">%</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const m = parseFloat(margenGlobal);
+                              if (!isNaN(m) && m < 100) {
+                                aplicarMargenGlobal(m);
+                              }
+                            }}
+                            className="rounded bg-sauce/15 text-sauce hover:bg-sauce hover:text-white px-2.5 py-1 font-semibold transition"
+                          >
+                            ⚡ Aplicar a Todo
+                          </button>
+                        </div>
+                      ) : (
+                        <div></div>
+                      )}
+
+                      {/* Ordenación (Para todos) */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-carbon/70 mr-1">Ordenar:</span>
+                        <button
+                          type="button"
+                          onClick={() => ordenarConceptos("importe", "desc")}
+                          className="rounded bg-white border border-carbon/10 hover:border-sauce px-2.5 py-1 font-medium transition text-carbon/70 hover:text-sauce hover:bg-slate-50"
+                          title="Ordenar por importe de mayor a menor"
+                        >
+                          💰 Importe (Mayor)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ordenarConceptos("importe", "asc")}
+                          className="rounded bg-white border border-carbon/10 hover:border-sauce px-2.5 py-1 font-medium transition text-carbon/70 hover:text-sauce hover:bg-slate-50"
+                          title="Ordenar por importe de menor a mayor"
+                        >
+                          💰 Importe (Menor)
+                        </button>
+                        {(!esOperaciones || esAdmin) && (
+                          <button
+                            type="button"
+                            onClick={() => ordenarConceptos("costo", "desc")}
+                            className="rounded bg-white border border-carbon/10 hover:border-sauce px-2.5 py-1 font-medium transition text-carbon/70 hover:text-sauce hover:bg-slate-50"
+                            title="Ordenar por costo unitario de mayor a menor"
+                          >
+                            🛠️ Costo (Mayor)
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => ordenarConceptos("precio", "desc")}
+                          className="rounded bg-white border border-carbon/10 hover:border-sauce px-2.5 py-1 font-medium transition text-carbon/70 hover:text-sauce hover:bg-slate-50"
+                          title="Ordenar por precio unitario de mayor a menor"
+                        >
+                          🏷️ Precio (Mayor)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs min-w-[750px]">
+                        <thead>
+                          <tr className="border-b border-carbon/10 text-carbon/40 font-semibold uppercase tracking-wider">
+                            <th className="pb-2 w-[30%]">Descripción del Concepto</th>
+                            <th className="pb-2 text-center w-[6%]">Cant.</th>
+                            <th className="pb-2 text-center w-[7%]">Unidad</th>
+                            {(!esOperaciones || esAdmin) && <th className="pb-2 text-right w-[10%]">Costo Int. Unit.</th>}
+                            {(!esOperaciones || esAdmin) && <th className="pb-2 text-center w-[8%]">Margen</th>}
+                            <th className="pb-2 text-right w-[10%]">Precio Unit.</th>
+                            <th className="pb-2 text-center w-[8%]">Desc. %</th>
+                            <th className="pb-2 text-right w-[11%]">Importe</th>
+                            <th className="pb-2 text-center w-[10%]"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-carbon/5 font-cuerpo">
+                          {conceptosEditables.map((c, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50">
+                              <td className="py-2.5">
+                                <input
+                                  type="text"
+                                  value={c.descripcion}
+                                  onChange={(e) => actualizarFilaConcepto(idx, "descripcion", e.target.value)}
+                                  placeholder="Ej. Impermeabilización Fester 5 años..."
+                                  className="w-full rounded border border-carbon/15 px-2 py-1 focus:border-sauce focus:outline-none"
+                                />
+                              </td>
+                              <td className="py-2.5 text-center">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={c.cantidad}
+                                  onChange={(e) => actualizarFilaConcepto(idx, "cantidad", Number(e.target.value))}
+                                  className="w-16 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
+                                />
+                              </td>
+                              <td className="py-2.5 text-center">
+                                <select
+                                  value={c.unidad}
+                                  onChange={(e) => actualizarFilaConcepto(idx, "unidad", e.target.value)}
+                                  className="rounded border border-carbon/15 px-1 py-1 focus:border-sauce focus:outline-none"
+                                >
+                                  <option value="m2">m²</option>
+                                  <option value="ml">ml</option>
+                                  <option value="pza">pza</option>
+                                  <option value="lote">lote</option>
+                                  <option value="m3">m³</option>
+                                  <option value="servicio">servicio</option>
+                                </select>
+                              </td>
+                              {(!esOperaciones || esAdmin) && (
+                                <td className="py-2.5 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="text-carbon/40">$</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={c.costoUnitario}
+                                      onChange={(e) => actualizarFilaConcepto(idx, "costoUnitario", Number(e.target.value))}
+                                      className="w-20 rounded border border-carbon/15 px-1 py-1 text-right focus:border-sauce focus:outline-none"
+                                    />
+                                  </div>
+                                </td>
+                              )}
+                              {(!esOperaciones || esAdmin) && (
+                                <td className="py-2.5 text-center">
+                                  <div className="flex items-center justify-center gap-0.5">
+                                    <input
+                                      type="number"
+                                      step="1"
+                                      value={c.precioUnitario ? Math.round(((c.precioUnitario - c.costoUnitario) / c.precioUnitario) * 100) : 0}
+                                      onChange={(e) => actualizarFilaConcepto(idx, "margen", Number(e.target.value))}
+                                      className="w-12 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none font-mono"
+                                    />
+                                    <span className="text-carbon/40">%</span>
+                                  </div>
+                                </td>
+                              )}
                               <td className="py-2.5 text-right">
                                 <div className="flex items-center justify-end gap-1">
-                                  <span className="text-carbon/40">$</span>
+                                    <span className="text-carbon/40">$</span>
                                   <input
                                     type="number"
                                     step="0.01"
-                                    value={c.costoUnitario}
-                                    onChange={(e) => actualizarFilaConcepto(idx, "costoUnitario", Number(e.target.value))}
+                                    value={c.precioUnitario}
+                                    onChange={(e) => actualizarFilaConcepto(idx, "precioUnitario", Number(e.target.value))}
                                     className="w-20 rounded border border-carbon/15 px-1 py-1 text-right focus:border-sauce focus:outline-none"
                                   />
                                 </div>
                               </td>
+                              <td className="py-2.5 text-center">
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={c.descuento || 0}
+                                    onChange={(e) => actualizarFilaConcepto(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value))))}
+                                    className="w-12 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
+                                  />
+                                  <span className="text-carbon/40">%</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 text-right font-mono font-semibold text-carbon/80">
+                                {formatMoneda(c.cantidad * c.precioUnitario * (1 - (c.descuento || 0) / 100))}
+                              </td>
+                              <td className="py-2.5 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moverFilaConcepto(idx, "arriba")}
+                                    className="text-carbon/40 hover:text-sauce hover:scale-110 disabled:opacity-30 disabled:hover:text-carbon/40 transition text-sm p-0.5"
+                                    title="Subir"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === conceptosEditables.length - 1}
+                                    onClick={() => moverFilaConcepto(idx, "abajo")}
+                                    className="text-carbon/40 hover:text-sauce hover:scale-110 disabled:opacity-30 disabled:hover:text-carbon/40 transition text-sm p-0.5"
+                                    title="Bajar"
+                                  >
+                                    ▼
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => eliminarFilaConcepto(idx)}
+                                    className="text-rojo hover:text-rose-800 hover:scale-110 transition text-sm p-1 ml-1"
+                                    title="Eliminar concepto"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-carbon/15 font-semibold text-carbon/80 bg-slate-50/80">
+                            <td className="py-3 px-2 font-bold" colSpan={3}>
+                              Total Presupuesto
+                            </td>
+                            {(!esOperaciones || esAdmin) && (
+                              <td className="py-3 px-2 text-right font-mono text-xs text-carbon/60">
+                                {formatMoneda(totalCostoInterno)}
+                              </td>
                             )}
-                            <td className="py-2.5 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                  <span className="text-carbon/40">$</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={c.precioUnitario}
-                                  onChange={(e) => actualizarFilaConcepto(idx, "precioUnitario", Number(e.target.value))}
-                                  className="w-20 rounded border border-carbon/15 px-1 py-1 text-right focus:border-sauce focus:outline-none"
-                                />
-                              </div>
+                            {(!esOperaciones || esAdmin) && (
+                              <td className="py-3 px-2 text-center text-xs">
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                  margenTotalPresupuesto >= 20 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                }`}>
+                                  {margenTotalPresupuesto}% marg.
+                                </span>
+                              </td>
+                            )}
+                            <td className="py-3 px-2 text-right" colSpan={3}>
+                              <span className="font-mono text-sm text-verde-profundo font-bold">
+                                {formatMoneda(totalPrecioVenta)}
+                              </span>
                             </td>
-                            <td className="py-2.5 text-center">
-                              <div className="flex items-center justify-center gap-0.5">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="1"
-                                  value={c.descuento || 0}
-                                  onChange={(e) => actualizarFilaConcepto(idx, "descuento", Math.min(100, Math.max(0, Number(e.target.value))))}
-                                  className="w-12 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
-                                />
-                                <span className="text-carbon/40">%</span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 text-right font-mono font-semibold text-carbon/80">
-                              {formatMoneda(c.cantidad * c.precioUnitario * (1 - (c.descuento || 0) / 100))}
-                            </td>
-                            <td className="py-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => eliminarFilaConcepto(idx)}
-                                className="text-rojo hover:text-rose-800 text-sm p-1"
-                              >
-                                ✕
-                              </button>
-                            </td>
+                            <td></td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
                 )}
 

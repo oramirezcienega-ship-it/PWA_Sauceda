@@ -202,12 +202,71 @@ export function VisualizadorCotizacionCliente({
 
           <div className="p-6 sm:p-8 space-y-8">
             
-            {/* 1. Reporte de Inspección */}
+            {/* 1. Desglose de Conceptos */}
+            <div className="space-y-4">
+              {/* Desglose de inversión */}
+              <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
+                Desglose e Importe de la Inversión
+              </h3>
+              <div className="overflow-x-auto rounded-xl border border-carbon/5">
+                {(() => {
+                  const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
+                  return (
+                    <table className="w-full border-collapse text-left text-xs min-w-[550px]">
+                      <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
+                        <tr>
+                          <th className="px-4 py-3">Descripción del Concepto / Insumo</th>
+                          <th className="px-4 py-3 text-center">Cantidad</th>
+                          <th className="px-4 py-3 text-center">Unidad</th>
+                          <th className="px-4 py-3 text-right font-mono">P. Unitario</th>
+                          {tieneDescuento && <th className="px-4 py-3 text-center">Desc..</th>}
+                          <th className="px-4 py-3 text-right">Importe</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-carbon/5">
+                        {conceptos.map((c) => (
+                          <tr key={c.id} className="hover:bg-slate-50/20">
+                            <td className="px-4 py-3 font-medium">{c.descripcion}</td>
+                            <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
+                            <td className="px-4 py-3 text-center">{c.unidad}</td>
+                            <td className="px-4 py-3 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
+                            {tieneDescuento && (
+                              <td className="px-4 py-3 text-center text-rose-600 font-semibold font-mono">
+                                {c.descuento ? `-${c.descuento}%` : "—"}
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
+
+              {/* Total Callout */}
+              <div className="bg-slate-50 p-6 rounded-2xl border border-carbon/5 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                  <div className="text-sm font-bold text-carbon/80">Presupuesto Cerrado Llave en Mano</div>
+                  <div className="text-xs text-carbon/40 mt-0.5">Incluye materiales de alta calidad, mano de obra y supervisión técnica. Precios más IVA.</div>
+                </div>
+                <div className="text-center sm:text-right">
+                  <div className="text-xs text-carbon/40 uppercase font-semibold">Total de Inversión (Antes de IVA)</div>
+                  <div className="font-mono text-3xl font-extrabold text-verde-profundo mt-1">
+                    {formatMoneda(cotizacion.precioFinal)}
+                  </div>
+                  <div className="text-[10px] text-carbon/40 font-bold block mt-0.5">+ IVA (Antes de Impuestos)</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Reporte de Inspección */}
             {reporteVisita && (
               <div className="space-y-4">
                 <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
                   <span className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">1</span>
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">2</span>
                     Levantamiento y Diagnóstico Técnico
                   </span>
                   <a
@@ -283,65 +342,6 @@ export function VisualizadorCotizacionCliente({
                 )}
               </div>
             )}
-
-            {/* 2. Desglose de Conceptos */}
-            <div className="space-y-4">
-              {/* Desglose de inversión */}
-              <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">2</span>
-                Desglose e Importe de la Inversión
-              </h3>
-              <div className="overflow-x-auto rounded-xl border border-carbon/5">
-                {(() => {
-                  const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
-                  return (
-                    <table className="w-full border-collapse text-left text-xs min-w-[550px]">
-                      <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
-                        <tr>
-                          <th className="px-4 py-3">Descripción del Concepto / Insumo</th>
-                          <th className="px-4 py-3 text-center">Cantidad</th>
-                          <th className="px-4 py-3 text-center">Unidad</th>
-                          <th className="px-4 py-3 text-right font-mono">P. Unitario</th>
-                          {tieneDescuento && <th className="px-4 py-3 text-center">Desc.</th>}
-                          <th className="px-4 py-3 text-right">Importe</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-carbon/5">
-                        {conceptos.map((c) => (
-                          <tr key={c.id} className="hover:bg-slate-50/20">
-                            <td className="px-4 py-3 font-medium">{c.descripcion}</td>
-                            <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
-                            <td className="px-4 py-3 text-center">{c.unidad}</td>
-                            <td className="px-4 py-3 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
-                            {tieneDescuento && (
-                              <td className="px-4 py-3 text-center text-rose-600 font-semibold font-mono">
-                                {c.descuento ? `-${c.descuento}%` : "—"}
-                              </td>
-                            )}
-                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  );
-                })()}
-              </div>
-
-              {/* Total Callout */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-carbon/5 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div>
-                  <div className="text-sm font-bold text-carbon/80">Presupuesto Cerrado Llave en Mano</div>
-                  <div className="text-xs text-carbon/40 mt-0.5">Incluye materiales de alta calidad, mano de obra y supervisión técnica. Precios más IVA.</div>
-                </div>
-                <div className="text-center sm:text-right">
-                  <div className="text-xs text-carbon/40 uppercase font-semibold">Total de Inversión (Antes de IVA)</div>
-                  <div className="font-mono text-3xl font-extrabold text-verde-profundo mt-1">
-                    {formatMoneda(cotizacion.precioFinal)}
-                  </div>
-                  <div className="text-[10px] text-carbon/40 font-bold block mt-0.5">+ IVA (Antes de Impuestos)</div>
-                </div>
-              </div>
-            </div>
 
             {/* Nota Técnica Específica de Impermeabilización */}
             {cotizacion.servicioTipo === "impermeabilizacion" && (

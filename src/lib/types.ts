@@ -51,11 +51,11 @@ export function labelTipoNegocio(tipo: string): string {
     case "solo_tramite":
       return "Solo Trámite";
     case "construccion":
-      return "Sauceda Construye";
+      return "Sauceda Construye (General)";
     case "construccion-impermeabilizacion":
-      return "Construcción-Impermeabilización";
+      return "Sauceda Construye (Impermeabilización)";
     case "construccion-remodelacion":
-      return "Construcción-Remodelación";
+      return "Sauceda Construye (Remodelación)";
     case "otro":
       return "Otro";
     default:
