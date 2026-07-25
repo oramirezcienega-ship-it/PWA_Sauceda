@@ -263,7 +263,7 @@ export function VisualizadorCotizacionCliente({
 
             {/* 2. Reporte de Inspección */}
             {reporteVisita && (
-              <div className="space-y-4">
+              <div className="space-y-4 print-break-before">
                 <h3 className="font-titular text-lg font-bold text-verde-profundo border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
                   <span className="flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">2</span>
@@ -388,79 +388,82 @@ export function VisualizadorCotizacionCliente({
               </div>
             )}
 
-            {/* 3. Condiciones de Servicio */}
-            <div className="space-y-3">
-              <h3 className="font-titular text-sm font-bold text-verde-profundo uppercase tracking-wider">Condiciones Comerciales y Garantía</h3>
-              <ul className="list-disc pl-4 text-xs text-carbon/60 space-y-1">
-                <li><span className="font-semibold text-carbon/75">Precios:</span> Todos los precios expresados son más IVA (16% de Impuesto al Valor Agregado).</li>
-                <li><span className="font-semibold text-carbon/75">Vigencia:</span> Esta cotización cuenta con una vigencia de 15 días a partir de su envío.</li>
-                <li><span className="font-semibold text-carbon/75">Forma de pago:</span> {cotizacion.condicionesPago}</li>
-                <li><span className="font-semibold text-carbon/75">Garantía:</span> {cotizacion.garantia}</li>
-              </ul>
-            </div>
+            {/* 3. Condiciones de Servicio & Firma */}
+            <div className="print-break-before space-y-8">
+              {/* 3. Condiciones de Servicio */}
+              <div className="space-y-3 print-break-inside-avoid">
+                <h3 className="font-titular text-sm font-bold text-verde-profundo uppercase tracking-wider">Condiciones Comerciales y Garantía</h3>
+                <ul className="list-disc pl-4 text-xs text-carbon/60 space-y-1">
+                  <li><span className="font-semibold text-carbon/75">Precios:</span> Todos los precios expresados son más IVA (16% de Impuesto al Valor Agregado).</li>
+                  <li><span className="font-semibold text-carbon/75">Vigencia:</span> Esta cotización cuenta con una vigencia de 15 días a partir de su envío.</li>
+                  <li><span className="font-semibold text-carbon/75">Forma de pago:</span> {cotizacion.condicionesPago}</li>
+                  <li><span className="font-semibold text-carbon/75">Garantía:</span> {cotizacion.garantia}</li>
+                </ul>
+              </div>
 
-            {/* 4. Firma y Autorización */}
-            <div className="border-t pt-6 space-y-4">
-              <h3 className="font-titular text-lg font-bold text-verde-profundo flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">3</span>
-                Firma y Autorización de Orden de Trabajo
-              </h3>
-              
-              <form onSubmit={handleAutorizar} className="space-y-4 max-w-lg">
-                {errorFirma && (
-                  <div className="p-3 text-xs bg-rose-50 border border-rojo/30 rounded-lg text-rojo">
-                    {errorFirma}
-                  </div>
-                )}
+              {/* 4. Firma y Autorización */}
+              <div className="border-t pt-6 space-y-4 print-break-inside-avoid">
+                <h3 className="font-titular text-lg font-bold text-verde-profundo flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">3</span>
+                  Firma y Autorización de Orden de Trabajo
+                </h3>
+                
+                <form onSubmit={handleAutorizar} className="space-y-4 max-w-lg">
+                  {errorFirma && (
+                    <div className="p-3 text-xs bg-rose-50 border border-rojo/30 rounded-lg text-rojo">
+                      {errorFirma}
+                    </div>
+                  )}
 
-                <div>
-                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Nombre Completo del Cliente Autorizador</label>
-                  <input
-                    type="text"
-                    required
-                    value={nombreFirma}
-                    onChange={(e) => setNombreFirma(e.target.value)}
-                    placeholder="Escribe tu nombre completo"
-                    className="w-full rounded-lg border border-carbon/20 px-3 py-2.5 text-sm focus:border-sauce focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Firma Digital (Dibuja en el recuadro)</label>
-                  <div className="border border-carbon/20 rounded-xl overflow-hidden bg-slate-50 relative">
-                    <canvas
-                      ref={canvasRef}
-                      width={400}
-                      height={150}
-                      onMouseDown={empezarDibujo}
-                      onMouseMove={dibujar}
-                      onMouseUp={terminarDibujo}
-                      onMouseLeave={terminarDibujo}
-                      onTouchStart={empezarDibujo}
-                      onTouchMove={dibujar}
-                      onTouchEnd={terminarDibujo}
-                      className="w-full h-[150px] touch-none cursor-crosshair bg-white"
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Nombre Completo del Cliente Autorizador</label>
+                    <input
+                      type="text"
+                      required
+                      value={nombreFirma}
+                      onChange={(e) => setNombreFirma(e.target.value)}
+                      placeholder="Escribe tu nombre completo"
+                      className="w-full rounded-lg border border-carbon/20 px-3 py-2.5 text-sm focus:border-sauce focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Firma Digital (Dibuja en el recuadro)</label>
+                    <div className="border border-carbon/20 rounded-xl overflow-hidden bg-slate-50 relative">
+                      <canvas
+                        ref={canvasRef}
+                        width={400}
+                        height={150}
+                        onMouseDown={empezarDibujo}
+                        onMouseMove={dibujar}
+                        onMouseUp={terminarDibujo}
+                        onMouseLeave={terminarDibujo}
+                        onTouchStart={empezarDibujo}
+                        onTouchMove={dibujar}
+                        onTouchEnd={terminarDibujo}
+                        className="w-full h-[150px] touch-none cursor-crosshair bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={limpiarCanvas}
+                        className="absolute bottom-2 right-2 text-[10px] bg-slate-200 hover:bg-slate-300 text-carbon/60 px-2.5 py-1 rounded font-semibold transition"
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
                     <button
-                      type="button"
-                      onClick={limpiarCanvas}
-                      className="absolute bottom-2 right-2 text-[10px] bg-slate-200 hover:bg-slate-300 text-carbon/60 px-2.5 py-1 rounded font-semibold transition"
+                      type="submit"
+                      disabled={cargando}
+                      className="w-full rounded-xl bg-verde-profundo text-crema py-3 font-semibold hover:bg-verde-profundo/90 transition shadow-md disabled:opacity-50 text-sm"
                     >
-                      Limpiar
+                      {cargando ? "Autorizando Propuesta..." : "Autorizar e Iniciar Proyecto"}
                     </button>
                   </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={cargando}
-                    className="w-full rounded-xl bg-verde-profundo text-crema py-3 font-semibold hover:bg-verde-profundo/90 transition shadow-md disabled:opacity-50 text-sm"
-                  >
-                    {cargando ? "Autorizando Propuesta..." : "Autorizar e Iniciar Proyecto"}
-                  </button>
-                </div>
-              </form>
+                </form>
+              </div>
             </div>
 
           </div>
@@ -478,7 +481,15 @@ export function VisualizadorCotizacionCliente({
             background-color: white !important;
             color: black !important;
           }
-          .print\\:hidden, button, form, nav, footer, .border-green-200 {
+          .print-break-before {
+            break-before: page !important;
+            page-break-before: always !important;
+          }
+          .print-break-inside-avoid {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .print\:hidden, button, form, nav, footer, .border-green-200 {
             display: none !important;
           }
           .bg-white, .bg-slate-50 {
