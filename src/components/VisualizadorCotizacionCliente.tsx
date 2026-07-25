@@ -210,6 +210,39 @@ export function VisualizadorCotizacionCliente({
 
           <div className="p-6 sm:p-8 space-y-8">
             
+            {/* Datos del Cliente */}
+            <div className="bg-slate-50 p-5 rounded-2xl border border-carbon/5 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs print-break-inside-avoid shadow-sm/5">
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Datos del Cliente</div>
+                <div className="text-base font-extrabold text-verde-profundo font-titular leading-tight">{cotizacion.prospectoNombre}</div>
+                <div className="flex items-center gap-1.5 text-carbon/70">
+                  <span className="font-semibold text-carbon/50">Número de Cliente:</span>
+                  <span className="font-mono bg-slate-200/60 px-2 py-0.5 rounded text-[10px] font-bold text-carbon/80">{cotizacion.prospectoId}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Contacto y Ubicación</div>
+                <div className="space-y-1 text-carbon/70">
+                  <div className="flex items-start gap-1.5">
+                    <span className="font-semibold text-carbon/50 w-16">Teléfono:</span>
+                    <span>{cotizacion.prospectoTelefono || "—"}</span>
+                  </div>
+                  {cotizacion.prospectoCorreo && (
+                    <div className="flex items-start gap-1.5">
+                      <span className="font-semibold text-carbon/50 w-16">Correo:</span>
+                      <span className="break-all">{cotizacion.prospectoCorreo}</span>
+                    </div>
+                  )}
+                  {cotizacion.prospectoDireccion && (
+                    <div className="flex items-start gap-1.5">
+                      <span className="font-semibold text-carbon/50 w-16">Dirección:</span>
+                      <span className="leading-relaxed">{cotizacion.prospectoDireccion}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* 1. Desglose de Conceptos */}
             <div className="space-y-4">
               {/* Desglose de inversión */}

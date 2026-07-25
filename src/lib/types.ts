@@ -563,6 +563,8 @@ export interface Cotizacion {
   expedienteId?: string | null;
   prospectoNombre?: string;
   prospectoTelefono?: string;
+  prospectoCorreo?: string | null;
+  prospectoDireccion?: string | null;
   servicioTipo: ServicioConstruccionTipo;
   estatus: CotizacionEstatus;
   requiereVisita: boolean;
