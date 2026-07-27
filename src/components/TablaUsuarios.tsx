@@ -362,7 +362,6 @@ export function TablaUsuarios({
         nombre: agenteConmutador.nombre,
         rol: agenteConmutador.rol,
         activo: agenteConmutador.activo,
-        telefono: agenteConmutador.telefono,
         telefono_desvio: telDesvio.trim(),
         disponible_llamadas: dispLlamadas,
         horarios_guardia: horariosGuardia,

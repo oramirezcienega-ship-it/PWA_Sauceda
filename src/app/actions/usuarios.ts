@@ -153,7 +153,7 @@ export async function actualizarUsuario(
     nombre: string;
     rol: "admin" | "asesor" | "operaciones";
     activo: boolean;
-    telefono: string;
+    telefono?: string;
     telefono_desvio?: string;
     disponible_llamadas?: boolean;
     horario_inicio?: string;
@@ -162,7 +162,7 @@ export async function actualizarUsuario(
   },
 ): Promise<void> {
   await requireAdministrador();
-  
+
   // Evitar auto-bloqueo o pérdida de rol administrador
   const uActual = await usuarioActual();
   if (uActual && uActual.id === id) {
@@ -176,10 +176,16 @@ export async function actualizarUsuario(
 
   const sb = supabaseServidor();
 
-  // Filtrar undefined para evitar errores de serialización de Supabase
+  // Columnas que realmente existen en la tabla perfiles
+  const columnasPerfiles = new Set([
+    "nombre", "rol", "activo",
+    "telefono_desvio", "disponible_llamadas",
+    "horario_inicio", "horario_fin", "horarios_guardia",
+  ]);
+
   const updateData: Record<string, any> = {};
   for (const key in datos) {
-    if ((datos as any)[key] !== undefined) {
+    if ((datos as any)[key] !== undefined && columnasPerfiles.has(key)) {
       updateData[key] = (datos as any)[key];
     }
   }
@@ -188,7 +194,7 @@ export async function actualizarUsuario(
     .from("perfiles")
     .update(updateData)
     .eq("id", id);
-    
+
   if (error) throw new Error(error.message);
 }
 
