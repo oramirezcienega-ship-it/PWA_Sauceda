@@ -67,9 +67,12 @@ export async function POST(request: Request) {
         callerIdAttr = ` callerId="${toE164}"`;
       }
 
-      const callbackUrl = `/api/conmutador/webhook-evento?parentCallSid=${callSid}`;
+      // Usar URL absoluta para el action del Dial — Twilio la requiere para callbacks de grabación
+      const baseUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+      const callbackUrl = `${baseUrl}/api/conmutador/webhook-evento?parentCallSid=${callSid}`;
 
       // TwiML con bienvenida profesional y dial directo al celular del asesor (usando número de Sauceda como Caller ID)
+      // El "action" redirige al VoiceBot si el asesor no contesta (ver webhook-evento/route.ts)
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces, soluciones integrales de bienes raíces. Le informamos que, para su seguridad, sus datos personales están protegidos de acuerdo con nuestro aviso de privacidad, lo invitamos a conocer nuestro aviso de privacidad en saucedamx.com. Para brindarle la mejor atención, transferiremos su llamada de inmediato con un asesor. Agradecemos su preferencia y su valiosa espera.</Say>

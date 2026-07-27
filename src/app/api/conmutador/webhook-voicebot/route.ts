@@ -39,31 +39,32 @@ export async function POST(request: Request) {
     // 2. Si es una petición de destino de transferencia (transfer-destination-request)
     if (messageType === "transfer-destination-request" || messageType === "transfer-destination") {
       const callObj = body.message?.call || body.call || {};
-      const twilioCallSid = 
-        callObj.twilioCallSid || 
-        body.message?.call?.twilioCallSid || 
-        callObj.id || 
-        body.message?.call?.id || 
-        body.twilioCallSid || 
-        body.callSid || 
+      const twilioCallSid =
+        callObj.twilioCallSid ||
+        body.message?.call?.twilioCallSid ||
+        callObj.id ||
+        body.message?.call?.id ||
+        body.twilioCallSid ||
+        body.callSid ||
         "";
 
       const agente = await obtenerAgenteDisponible();
-      
-      let numeroDestino = "524774654700"; 
-      let nombreDestino = "Oficina Principal (Sauceda)";
-      
-      if (agente && agente.telefono_desvio) {
-        numeroDestino = agente.telefono_desvio;
-        nombreDestino = agente.nombre;
+
+      if (!agente || !agente.telefono_desvio) {
+        // No hay asesor disponible — retornar 503 para que Vapi cierre la llamada graciosamente
+        console.log("[Vapi Webhook Transfer] No hay agentes disponibles. Respondiendo 503 para cierre gracioso.");
+        return NextResponse.json(
+          { error: "No hay asesores disponibles en este momento." },
+          { status: 503 }
+        );
       }
-      
-      const telCanon = normalizarTelefono(numeroDestino);
+
+      const telCanon = normalizarTelefono(agente.telefono_desvio);
       const telE164 = telCanon.startsWith("+") ? telCanon : `+${telCanon}`;
 
-      console.log(`[Vapi Webhook Transfer] Desviando llamada a: ${telE164} (${nombreDestino}) con TwilioCallSid: ${twilioCallSid}`);
+      console.log(`[Vapi Webhook Transfer] Desviando llamada a: ${telE164} (${agente.nombre}) con TwilioCallSid: ${twilioCallSid}`);
 
-      if (twilioCallSid && agente?.id) {
+      if (twilioCallSid && agente.id) {
         await actualizarLlamada(twilioCallSid, {
           estado: "transferring",
           agenteId: agente.id,

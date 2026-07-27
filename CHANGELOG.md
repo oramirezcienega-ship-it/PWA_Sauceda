@@ -3,6 +3,11 @@
 Versionado: inicia en **1.001** y sube **+0.001** por cada versión publicada.
 Formato: `versión — resumen breve — dd/mm/aa`.
 
+## 1.054 — Corrección de flujo de llamadas del conmutador — 27/07/26
+- **Fallback al VoiceBot cuando el asesor no contesta**: si el cliente llama y el asesor de guardia no contesta, ahora se redirige al VoiceBot (Sofía) en lugar de colgar al cliente sin aviso.
+- **Eliminación del bucle infinito en transferencias**: el número de fallback `524774654700` (el propio número Twilio) se reemplaza por una respuesta 503 que permite a Vapi cerrar la llamada graciosamente cuando no hay asesores disponibles.
+- **URL absoluta en TwiML**: el callback `action` del `<Dial>` ahora usa URL absoluta (`SITE_URL`) para mayor compatibilidad con el callback de grabación de Twilio.
+
 ## 1.053 — Extracción y auto-guardado de datos por IA — 05/06/26
 - Ajuste del bot de IA para responder en formato JSON estructurado que incluye la respuesta al cliente y los datos detectados.
 - Extracción y auto-guardado en tiempo real en la base de datos (tabla `expedientes`) de: fraccionamiento, valor estimado, saldo de deuda y estado físico de la casa.
