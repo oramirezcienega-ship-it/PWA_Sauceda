@@ -756,93 +756,91 @@ export function DetalleExpediente({ id }: { id: string }) {
           />
 
           {/* Módulo de Cotizaciones y Propuesta Comercial (Sauceda Construye) */}
-          {expediente.tipoNegocio === "construccion-impermeabilizacion" && (
-            <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
-                    📋 Cotizaciones y Propuestas
-                  </h3>
-                  <p className="text-xs text-carbon/50">
-                    Propuestas comerciales y visitas técnicas asociadas
-                  </p>
-                </div>
+          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
+                  📋 Cotizaciones y Propuestas
+                </h3>
+                <p className="text-xs text-carbon/50">
+                  Propuestas comerciales y visitas técnicas asociadas
+                </p>
+              </div>
+              <Link
+                href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
+                className="rounded-lg bg-sauce/10 border border-sauce/20 hover:bg-sauce hover:text-white transition px-3 py-1.5 text-xs font-semibold text-sauce flex items-center gap-1 font-titular"
+              >
+                + Nueva Cotización
+              </Link>
+            </div>
+
+            {cotizaciones.length === 0 ? (
+              <div className="py-6 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
+                <p className="text-xs text-carbon/40 mb-2">No hay cotizaciones para este expediente.</p>
                 <Link
                   href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
-                  className="rounded-lg bg-sauce/10 border border-sauce/20 hover:bg-sauce hover:text-white transition px-3 py-1.5 text-xs font-semibold text-sauce flex items-center gap-1"
+                  className="inline-flex items-center gap-1 text-xs text-sauce hover:underline font-semibold"
                 >
-                  + Nueva Cotización
+                  Crear primera cotización →
                 </Link>
               </div>
-
-              {cotizaciones.length === 0 ? (
-                <div className="py-6 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
-                  <p className="text-xs text-carbon/40 mb-2">No hay cotizaciones para este expediente.</p>
-                  <Link
-                    href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
-                    className="inline-flex items-center gap-1 text-xs text-sauce hover:underline font-semibold"
-                  >
-                    Crear primera cotización →
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cotizaciones.map((c) => (
-                    <div key={c.id} className="p-3.5 rounded-xl border border-carbon/10 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col xs:flex-row xs:items-center justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Link href={`/construccion/${c.id}`} className="font-mono font-bold text-sauce hover:underline">
-                            {c.id}
-                          </Link>
-                          <span className="text-xs font-semibold text-carbon/60">
-                            {c.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
-                             c.servicioTipo === "pintura" ? "Pintura" :
-                             c.servicioTipo === "losa" ? "Losa" :
-                             c.servicioTipo === "remodelacion" ? "Remodelación" : "Otro"}
-                          </span>
-                        </div>
-                        <p className="text-xs text-carbon/40 mt-0.5">
-                          Actualizada: {new Date(c.updatedAt).toLocaleDateString("es-MX")}
-                        </p>
+            ) : (
+              <div className="space-y-3">
+                {cotizaciones.map((c) => (
+                  <div key={c.id} className="p-3.5 rounded-xl border border-carbon/10 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col xs:flex-row xs:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/construccion/${c.id}`} className="font-mono font-bold text-sauce hover:underline">
+                          {c.id}
+                        </Link>
+                        <span className="text-xs font-semibold text-carbon/60">
+                          {c.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
+                           c.servicioTipo === "pintura" ? "Pintura" :
+                           c.servicioTipo === "losa" ? "Construcción de Losa" :
+                           c.servicioTipo === "remodelacion" ? "Remodelación" : "Otro Servicio"}
+                        </span>
                       </div>
+                      <p className="text-xs text-carbon/40 mt-0.5">
+                        Creada: {new Date(c.createdAt).toLocaleDateString("es-MX")}
+                      </p>
+                    </div>
 
-                      <div className="flex items-center justify-between xs:justify-end gap-3 flex-wrap">
-                        <div className="text-right">
-                          <span className="block text-xs font-bold text-verde-profundo font-mono">
-                            {c.precioFinal > 0 ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(c.precioFinal) : "—"}
-                          </span>
-                          <span className="text-[10px] text-carbon/40 uppercase tracking-wide">Precio Venta</span>
-                        </div>
-                        
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                            c.estatus === "aceptada" ? "bg-green-100 text-green-700" :
-                            c.estatus === "rechazada" ? "bg-red-100 text-red-700" :
-                            c.estatus === "esperando_visita" ? "bg-amber-100 text-amber-700" :
-                            "bg-slate-100 text-slate-700"
-                          }`}>
-                            {c.estatus.replace("_", " ")}
-                          </span>
+                    <div className="flex items-center justify-between xs:justify-end gap-3 flex-wrap">
+                      <div className="text-right font-mono">
+                        <span className="block text-xs font-bold text-verde-profundo">
+                          {c.precioFinal > 0 ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(c.precioFinal) : "—"}
+                        </span>
+                        <span className="text-[10px] text-carbon/40 uppercase tracking-wide">Precio Venta</span>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          c.estatus === "aceptada" ? "bg-green-100 text-green-700" :
+                          c.estatus === "rechazada" ? "bg-red-100 text-red-700" :
+                          c.estatus === "esperando_visita" ? "bg-amber-100 text-amber-700" :
+                          "bg-slate-100 text-slate-700"
+                        }`}>
+                          {c.estatus.replace("_", " ")}
+                        </span>
 
-                          {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
-                            <a
-                              href={`/cotizacion/${c.token}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
-                              title="Ver vista pública del cliente"
-                            >
-                              🔗 Portal Cliente
-                            </a>
-                          )}
-                        </div>
+                        {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
+                          <a
+                            href={`/cotizacion/${c.token}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
+                            title="Ver vista pública del cliente"
+                          >
+                            🔗 Portal Cliente
+                          </a>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Módulo de Programación de Llamada Telefónica */}
           <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">

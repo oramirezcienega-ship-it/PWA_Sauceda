@@ -890,9 +890,31 @@ export async function obtenerCotizacionesDeExpediente(
     .eq("expediente_id", expedienteId)
     .order("created_at", { ascending: false });
 
+}
+
+/** 11.b. Listar Cotizaciones de un Prospecto */
+export async function obtenerCotizacionesDeProspecto(
+  prospectoId: string
+): Promise<Cotizacion[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data, error } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos(nombre, telefono),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .eq("prospecto_id", prospectoId)
+    .order("created_at", { ascending: false });
+
   if (error) throw new Error(error.message);
   return (data ?? []).map(aCotizacion);
 }
+
 
 /** Helper para sincronizar automáticamente la etapa del expediente según el estatus de la cotización. */
 export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) {

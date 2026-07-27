@@ -180,24 +180,24 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
 
   const resumenes: ConversacionResumen[] = [];
   porTel.forEach((arr, telefono) => {
-    const ultimo = arr[0];
-    // Quién atiende = el último mensaje que tenga agente (de cualquier dirección)
-    const ultimoConAgente = arr.find((f) => f.agente);
-    const ultimoInbound = arr.find((f) => f.direccion === "in");
+    const conExp = arr.find((f) => f.expediente_id);
+    const conPros = arr.find((f) => f.prospecto_id);
+    const expId = conExp?.expediente_id ?? null;
+    const prosId = conPros?.prospecto_id ?? null;
 
     const asesorNombre =
-      (ultimo.expediente_id && nombresAsesor.get(ultimo.expediente_id)) ||
-      (ultimo.prospecto_id && nombresAsesorPros.get(ultimo.prospecto_id));
+      (expId && nombresAsesor.get(expId)) ||
+      (prosId && nombresAsesorPros.get(prosId));
 
     const atiendeFinal = asesorNombre || ultimoConAgente?.agente || "";
 
     resumenes.push({
       telefono,
-      expedienteId: ultimo.expediente_id,
-      prospectoId: ultimo.prospecto_id,
+      expedienteId: expId,
+      prospectoId: prosId,
       nombre:
-        (ultimo.expediente_id && nombres.get(ultimo.expediente_id)) ||
-        (ultimo.prospecto_id && nombresPros.get(ultimo.prospecto_id)) ||
+        (expId && nombres.get(expId)) ||
+        (prosId && nombresPros.get(prosId)) ||
         telefono,
       ultimoTexto: ultimo.texto,
       ultimaFecha: ultimo.created_at,
@@ -457,17 +457,60 @@ async function idsDeTelefono(
   sb: ReturnType<typeof supabaseServidor>,
   telefono: string,
 ): Promise<{ expedienteId: string | null; prospectoId: string | null }> {
+  // 1. Intentar obtener el último mensaje que tenga algún ID asociado para este teléfono
   const { data } = await sb
     .from("mensajes_whatsapp")
     .select("expediente_id, prospecto_id")
     .in("telefono", variantesId(telefono))
+    .or("expediente_id.not.is.null,prospecto_id.not.is.null")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const d = data as { expediente_id: string | null; prospecto_id: string | null } | null;
+
+  let expId = (data as any)?.expediente_id ?? null;
+  let prosId = (data as any)?.prospecto_id ?? null;
+
+  // 2. Fallback: Buscar directamente en las tablas principales de la base de datos
+  if (!expId || !prosId) {
+    const v = variantesId(telefono);
+    if (!prosId) {
+      const { data: pros } = await sb
+        .from("prospectos")
+        .select("id")
+        .in("telefono", v)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (pros && pros.length > 0) {
+        prosId = pros[0].id;
+      }
+    }
+    if (!expId) {
+      if (prosId) {
+        const { data: exps } = await sb
+          .from("expedientes")
+          .select("id")
+          .eq("prospecto_id", prosId)
+          .limit(1);
+        if (exps && exps.length > 0) {
+          expId = exps[0].id;
+        }
+      }
+      if (!expId) {
+        const { data: exps } = await sb
+          .from("expedientes")
+          .select("id")
+          .in("telefono", v)
+          .limit(1);
+        if (exps && exps.length > 0) {
+          expId = exps[0].id;
+        }
+      }
+    }
+  }
+
   return {
-    expedienteId: d?.expediente_id ?? null,
-    prospectoId: d?.prospecto_id ?? null,
+    expedienteId: expId,
+    prospectoId: prosId,
   };
 }
 
