@@ -566,9 +566,7 @@ async function main() {
     let pasoAlcanzado = expInfo.ultimo_paso_alcanzado || "lead_entro";
     if (datosExtraidos.paso_flujo === "paso_1") pasoAlcanzado = "respondio_paso1";
     else if (datosExtraidos.paso_flujo === "paso_2") pasoAlcanzado = "vio_precios";
-    else if (datosExtraidos.paso_flujo === "paso_3") pasoAlcanzado = "eligio_paquete";
-    else if (datosExtraidos.paso_flujo === "paso_4") pasoAlcanzado = "recibio_link";
-    else if (datosExtraidos.paso_flujo === "paso_5") pasoAlcanzado = "agendo_inspeccion";
+    else if (datosExtraidos.paso_flujo === "paso_3") pasoAlcanzado = "agendo_inspeccion";
     updates.ultimo_paso_alcanzado = pasoAlcanzado;
   }
 

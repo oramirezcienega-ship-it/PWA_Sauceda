@@ -208,10 +208,10 @@ export function VisualizadorCotizacionCliente({
             </div>
           </div>
 
-          <div className="p-6 sm:p-8 space-y-8">
+          <div className="p-6 sm:p-8 space-y-8 print:p-4 print:space-y-4">
             
             {/* Datos del Cliente */}
-            <div className="bg-slate-50 p-5 rounded-2xl border border-carbon/5 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs print-break-inside-avoid shadow-sm/5">
+            <div className="bg-slate-50 p-5 rounded-2xl border border-carbon/5 grid grid-cols-1 md:grid-cols-2 print-grid-2 gap-6 text-xs print-break-inside-avoid shadow-sm/5 print:p-4 print:gap-4 print:my-0">
               <div className="space-y-2">
                 <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Datos del Cliente</div>
                 <div className="text-base font-extrabold text-verde-profundo font-titular leading-tight">{cotizacion.prospectoNombre}</div>
@@ -254,30 +254,30 @@ export function VisualizadorCotizacionCliente({
                 {(() => {
                   const tieneDescuento = conceptos.some((c) => (c.descuento || 0) > 0);
                   return (
-                    <table className="w-full border-collapse text-left text-xs min-w-[550px]">
+                    <table className="w-full border-collapse text-left text-xs min-w-[550px] print:text-[10px]">
                       <thead className="bg-slate-50 border-b font-semibold text-carbon/50">
                         <tr>
-                          <th className="px-4 py-3">Descripción del Concepto / Insumo</th>
-                          <th className="px-4 py-3 text-center">Cantidad</th>
-                          <th className="px-4 py-3 text-center">Unidad</th>
-                          <th className="px-4 py-3 text-right font-mono">P. Unitario</th>
-                          {tieneDescuento && <th className="px-4 py-3 text-center">Desc..</th>}
-                          <th className="px-4 py-3 text-right">Importe</th>
+                          <th className="px-4 py-3 print:px-2 print:py-1.5">Descripción del Concepto / Insumo</th>
+                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Cantidad</th>
+                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Unidad</th>
+                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono">P. Unitario</th>
+                          {tieneDescuento && <th className="px-4 py-3 print:px-2 print:py-1.5 text-center">Desc..</th>}
+                          <th className="px-4 py-3 print:px-2 print:py-1.5 text-right">Importe</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-carbon/5">
                         {conceptos.map((c) => (
                           <tr key={c.id} className="hover:bg-slate-50/20">
-                            <td className="px-4 py-3 font-medium">{c.descripcion}</td>
+                            <td className="px-4 py-3 print:px-2 print:py-1.5 font-medium">{c.descripcion}</td>
                             <td className="px-4 py-3 text-center font-mono">{c.cantidad}</td>
                             <td className="px-4 py-3 text-center">{c.unidad}</td>
-                            <td className="px-4 py-3 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
+                            <td className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono">{formatMoneda(c.precioUnitario)}</td>
                             {tieneDescuento && (
-                              <td className="px-4 py-3 text-center text-rose-600 font-semibold font-mono">
+                              <td className="px-4 py-3 print:px-2 print:py-1.5 text-center text-rose-600 font-semibold font-mono">
                                 {c.descuento ? `-${c.descuento}%` : "—"}
                               </td>
                             )}
-                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
+                            <td className="px-4 py-3 print:px-2 print:py-1.5 text-right font-mono font-semibold">{formatMoneda(c.importe)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -287,7 +287,7 @@ export function VisualizadorCotizacionCliente({
               </div>
 
               {/* Total Callout */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-carbon/5 flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="bg-slate-50 p-6 rounded-2xl border border-carbon/5 flex flex-col sm:flex-row justify-between items-center gap-4 print:p-4 print:gap-2">
                 <div>
                   <div className="text-sm font-bold text-carbon/80">Presupuesto Cerrado Llave en Mano</div>
                   <div className="text-xs text-carbon/40 mt-0.5">Incluye materiales de alta calidad, mano de obra y supervisión técnica. Precios más IVA.</div>
@@ -529,6 +529,10 @@ export function VisualizadorCotizacionCliente({
           .print-break-inside-avoid {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          .print-grid-2 {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
           .print\:hidden, button, form, nav, footer, .border-green-200 {
             display: none !important;

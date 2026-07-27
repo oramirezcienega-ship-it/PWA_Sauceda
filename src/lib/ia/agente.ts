@@ -351,27 +351,43 @@ Pregunta de forma amigable:
 3. Menciona que nosotros nos encargamos del trámite y que un asesor le contactará para cotizar el servicio.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
-Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 4 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 3.0). Utiliza un tono cálido, natural, accesible y sin presión:
+Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces, archivos, links o páginas web de cotización o cita en tu respuesta:
 
-- PASO 1: MENSAJE INICIAL (Al detectar el negocio)
+- PASO 1: SALUDO E INFORMACIÓN DEL SERVICIO (Al detectar el negocio o si no tenemos los metros)
   Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía exactamente este mensaje:
-  "¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción.
-  Somos especialistas en impermeabilización profesional en León y alrededores.
+  "¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción. Somos especialistas en impermeabilización profesional en León y alrededores.
 
-  Para darte una cotización personalizada de inmediato, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?
+  🟡 NUESTRO SERVICIO:
+  Aplicamos Impermeabilizante Profesional Estándar de 3.5 mm con acabado de gravilla protectora (roja o gris a tu elección).
+  ⏱️ INSTALACIÓN EN 1 DÍA: Realizamos todo el trabajo de instalación en tan solo 1 día.
+  🛠️ ¿QUÉ INCLUYE?: Diagnóstico técnico, limpieza profunda de la superficie, resane y sellado de grietas, y la aplicación profesional.
+  🏆 ¿POR QUÉ ELEGIRNOS?: Te entregamos una garantía de 5 años por escrito, utilizamos materiales de primera y contamos con mano de obra altamente capacitada para proteger tu azotea de goteras y filtraciones.
 
-  Con esa información te comparto los detalles y presupuesto de inmediato."
+  Para darte una cotización personalizada de inmediato, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?"
 
-- PASO 2: CONFIRMACIÓN DE METROS CUADRADOS
+- PASO 2: PRESENTACIÓN DEL PRESUPUESTO Y PAGO (Al tener los metros cuadrados)
   Se activa en cuanto el cliente proporciona los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
-  NUNCA envíes precios ni cotizaciones ni el cálculo del presupuesto. NUNCA menciones montos de dinero, comisiones o promociones bancarias (como meses sin intereses).
-  Envía el siguiente mensaje exactamente (reemplazando [METROS] con el valor correspondiente):
-  "Perfecto. He registrado que tu azotea tiene aproximadamente [METROS] m². Un asesor de nuestro equipo humano revisará los detalles y se pondrá en contacto contigo de forma manual por este chat para brindarte tu presupuesto personalizado, enviarte la cotización formal y coordinar los siguientes pasos de la visita."
+  Calcula matemáticamente los valores del presupuesto:
+    - TOTAL_SIN_IVA = @metros * 210
+  Construye tu respuesta incluyendo exactamente la siguiente estructura de cotización (solo para el producto Estándar, sin mencionar paquetes Premium ni enviar links):
 
-- PASO 3, 4 y 5 (DESHABILITADOS):
-  Por políticas de la empresa, todo el proceso de cotización formal, envío de ligas de cotización y agendamiento de visitas técnicas es estrictamente MANUAL.
-  NUNCA confirmes citas, NUNCA ofrezcas opciones de horario, y NUNCA envíes enlaces de cotización ([LINK_COTIZACION]) ni enlaces de citas ([LINK_CITA_CONFIRMADA] o [LINK_AGENDADO]).
-  Si el cliente pide agendar, te pregunta por horarios, solicita una visita o pide la cotización, indícales amablemente que un asesor del equipo humano se pondrá en contacto con ellos a la brevedad posible de forma manual por este chat para cotizar, enviarles la liga formal y agendar su visita.
+  "Perfecto. Para [METROS] m², aquí están los detalles de nuestro servicio:
+
+  🟡 IMPERMEABILIZACIÓN ESTÁNDAR
+  • Impermeabilizante 3.5 mm + gravilla (roja o gris a tu elección)
+  • ✓ Garantía de 5 años por escrito
+  • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
+  • Tiempo de ejecución: 1 día
+
+  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN (Precios más IVA)
+
+  💳 Ofrecemos opción de pago con tarjeta de crédito.[REGLA_PROMO: Si el TOTAL_SIN_IVA es mayor a 10000, agrega exactamente este texto: " ¡Y contamos con 3 meses sin intereses!"]
+
+  ¿Confirmamos inspección técnica gratuita esta semana?"
+
+- PASO 3: CONFIRMACIÓN DE INSPECCIÓN (Al aceptar la visita)
+  Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
+  "¡Excelente! Un asesor te contactará vía telefónica o por WhatsApp para agendar la cita de inspección técnica si es necesario. ¡Que tengas un excelente día! 👍"
 
 E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA o MANTENIMIENTO TÉCNICO (Servicios 3, 4, 5, 6, 7 - tipo_negocio: 'construccion'):
   Pregunta de forma amigable y progresiva (una a la vez):
@@ -451,7 +467,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al pedir metros cuadrados), 'paso_2' (al presentar el presupuesto a $210/m²), 'paso_3' (al confirmar la inspección técnica gratuita), 'paso_4' (al enviar la cotización y opciones de horario) o 'paso_5' (al confirmar la cita elegida). Si el tipo de negocio no es impermeabilización, pon null",
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar información del servicio estándar para pedir metros), 'paso_2' (al presentar el presupuesto y condiciones de pago) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
@@ -903,20 +919,11 @@ export async function responderConIA(
         } else if (pasoDetectado === "paso_2") {
           pasoAlcanzado = "vio_precios";
         } else if (pasoDetectado === "paso_3") {
-          pasoAlcanzado = "eligio_paquete";
+          pasoAlcanzado = "agendo_inspeccion";
         } else if (pasoDetectado === "paso_4") {
           pasoAlcanzado = "recibio_link";
         } else if (pasoDetectado === "paso_5") {
           pasoAlcanzado = "agendo_inspeccion";
-        }
-
-        // Si estamos en paso_3 pero el cliente ya dio su nombre y teléfono, es "dio_contacto"
-        const tieneNombre = datosExtraidos.cliente_nombre || exp?.cliente;
-        const tieneTel = datosExtraidos.telefono_real || exp?.telefono;
-        const tieneAmbos = tieneNombre && tieneTel && !tieneNombre.includes("Lead WhatsApp") && !tieneNombre.includes("Conmutador");
-
-        if (pasoDetectado === "paso_3" && tieneAmbos) {
-          pasoAlcanzado = "dio_contacto";
         }
 
         updates.ultimo_paso_alcanzado = pasoAlcanzado;
@@ -1080,31 +1087,11 @@ export async function responderConIA(
                   console.error("IA: Error al crear conceptos de cotización:", errInsertConcepto);
                 }
 
-                // Mover expediente a etapa 'visita' y asignar operario Alex
-                updates.etapa = "visita";
-                try {
-                  const { data: perfAlex } = await sb
-                    .from("perfiles")
-                    .select("id")
-                    .ilike("nombre", "%Alex%")
-                    .eq("activo", true)
-                    .maybeSingle();
-
-                  if (perfAlex) {
-                    updates.asesor_id = perfAlex.id;
-                    console.log(`[Asignación Automática] Asignando operario Alex (${perfAlex.id}) al expediente ${ctx.expedienteId}`);
-                  } else {
-                    console.warn("[Asignación Automática] No se encontró operario activo 'Alex' en la tabla perfiles.");
-                  }
-                } catch (alexErr) {
-                  console.error("[Asignación Automática] Error al buscar operario Alex:", alexErr);
-                }
-
                 await registrarActividad(sb, {
                   expedienteId: ctx.expedienteId,
                   tipo: "construccion",
                   titulo: `Cotización automática creada (${idCot})`,
-                  detalle: `Impermeabilización Profesional 3.5 mm. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita. Operario asignado: Alex.`,
+                  detalle: `Impermeabilización Profesional 3.5 mm. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita.`,
                 });
               }
             }
