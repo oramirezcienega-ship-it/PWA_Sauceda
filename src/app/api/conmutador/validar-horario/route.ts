@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces, soluciones integrales inmobiliarios y de construcción. Le informamos que, para su seguridad, sus datos personales están protegidos de acuerdo con nuestro aviso de privacidad, lo invitamos a conocer nuestro aviso de privacidad en saucedamx.com. Para brindarle la mejor atención, transferiremos su llamada de inmediato con un asesor. Agradecemos su preferencia y su valiosa espera.</Say>
-  <Dial${callerIdAttr} record="record-from-answer" action="${callbackUrl}" recordingStatusCallback="${callbackUrl}">${telE164}</Dial>
+  <Dial${callerIdAttr} timeout="15" record="record-from-answer" action="${callbackUrl}" recordingStatusCallback="${callbackUrl}">${telE164}</Dial>
 </Response>`;
     } else {
       console.log("[Twilio Direct Dial] No hay agentes de guardia disponibles. Desviando a Voice Bot (Sofía) en Vapi.");
