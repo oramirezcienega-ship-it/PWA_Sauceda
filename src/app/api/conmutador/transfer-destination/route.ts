@@ -32,24 +32,28 @@ export async function POST(request: Request) {
       "";
 
     const agente = await obtenerAgenteDisponible();
-    
-    // Si no hay agente de guardia activo, usamos el número principal de Sauceda
-    let numeroDestino = "524774654700"; 
-    let nombreDestino = "Oficina Principal (Sauceda)";
-    
-    if (agente && agente.telefono_desvio) {
-      numeroDestino = agente.telefono_desvio;
-      nombreDestino = agente.nombre;
+
+    if (!agente || !agente.telefono_desvio) {
+      // Si no hay agente disponible, no se puede transferir.
+      // Retornar 503 para que Vapi maneje el fin de la llamada graciosamente.
+      console.log("[Vapi Transfer] No hay agentes disponibles para transferencia.");
+      return NextResponse.json(
+        { error: "No hay asesores disponibles en este momento." },
+        { status: 503 }
+      );
     }
-    
+
+    const numeroDestino = agente.telefono_desvio;
+    const nombreDestino = agente.nombre;
+
     // Normalizar a formato E.164 (+52XXXXXXXXXX)
     const telCanon = normalizarTelefono(numeroDestino);
     const telE164 = telCanon.startsWith("+") ? telCanon : `+${telCanon}`;
 
     console.log(`[Vapi Transfer] Desviando llamada a: ${telE164} (${nombreDestino}) con TwilioCallSid: ${twilioCallSid}`);
 
-    // Si tenemos el SID de la llamada y un agente, asociamos el agente y actualizamos el estado
-    if (twilioCallSid && agente?.id) {
+    // Asociar el agente a la llamada en la base de datos
+    if (twilioCallSid && agente.id) {
       await actualizarLlamada(twilioCallSid, {
         estado: "transferring",
         agenteId: agente.id,
