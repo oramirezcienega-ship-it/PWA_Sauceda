@@ -7,6 +7,7 @@ import { Encabezado } from "@/components/Encabezado";
 import { FormularioExpediente } from "@/components/FormularioExpediente";
 import { useExpedientes } from "@/context/expedientes-context";
 import { listarProspectosMin } from "@/app/actions/prospectos";
+import { actualizarExpedienteSeguro } from "@/app/actions/expedientes";
 
 /**
  * Edición de un expediente existente: /expediente/[id]/editar
@@ -17,7 +18,7 @@ export default function PaginaEditar({
   params: { id: string };
 }) {
   const router = useRouter();
-  const { obtenerExpediente, actualizarExpediente, cargado } = useExpedientes();
+  const { obtenerExpediente, cargado, recargar } = useExpedientes();
   const expediente = obtenerExpediente(params.id);
   const [prospectos, setProspectos] = useState<
     { id: string; nombre: string }[]
@@ -76,7 +77,12 @@ export default function PaginaEditar({
             textoBoton="Guardar cambios"
             onCancelar={() => router.push(`/expediente/${id}`)}
             onGuardar={async (nuevos) => {
-              await actualizarExpediente(id, nuevos);
+              const res = await actualizarExpedienteSeguro(id, nuevos);
+              if (!res.ok) {
+                throw new Error(res.error);
+              }
+              // Refrescar el contexto con los datos actualizados
+              await recargar();
               router.push(`/expediente/${id}`);
             }}
           />

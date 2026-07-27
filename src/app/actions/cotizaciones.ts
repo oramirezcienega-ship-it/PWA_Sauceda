@@ -103,12 +103,24 @@ export async function crearCotizacion(datos: {
 
   const estatus: CotizacionEstatus = datos.requiereVisita ? "esperando_visita" : "calculando_costo";
 
+  let resolvedExpedienteId = datos.expedienteId || null;
+  if (!resolvedExpedienteId && datos.prospectoId) {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("id")
+      .eq("prospecto_id", datos.prospectoId)
+      .maybeSingle();
+    if (exp?.id) {
+      resolvedExpedienteId = exp.id;
+    }
+  }
+
   const { data, error } = await sb
     .from("cotizaciones")
     .insert({
       id,
       prospecto_id: datos.prospectoId,
-      expediente_id: datos.expedienteId || null,
+      expediente_id: resolvedExpedienteId,
       servicio_tipo: datos.servicioTipo,
       estatus,
       requiere_visita: datos.requiereVisita,
@@ -128,9 +140,9 @@ export async function crearCotizacion(datos: {
     detalle: `Servicio: ${datos.servicioTipo}. Estatus inicial: ${estatus}.`
   });
 
-  if (datos.expedienteId) {
+  if (resolvedExpedienteId) {
     await registrarActividad(sb, {
-      expedienteId: datos.expedienteId,
+      expedienteId: resolvedExpedienteId,
       tipo: "construccion",
       titulo: `Cotización vinculada (${id})`,
       detalle: `Servicio: ${datos.servicioTipo}. Estatus inicial: ${estatus}.`
@@ -143,7 +155,7 @@ export async function crearCotizacion(datos: {
         etapa: datos.requiereVisita ? "visita" : "cotizacion",
         ultimo_movimiento: new Date().toISOString().split("T")[0]
       })
-      .eq("id", datos.expedienteId);
+      .eq("id", resolvedExpedienteId);
   }
 
   return aCotizacion(data);
@@ -878,6 +890,26 @@ export async function obtenerCotizacionesDeExpediente(
   await requireAdmin();
   const sb = supabaseServidor();
 
+  // 1. Obtener prospecto_id del expediente
+  const { data: exp } = await sb
+    .from("expedientes")
+    .select("prospecto_id")
+    .eq("id", expedienteId)
+    .maybeSingle();
+
+  const prospectoId = exp?.prospecto_id;
+
+  // 2. Si hay un prospecto_id, buscar cotizaciones de ese prospecto que tengan expediente_id nulo
+  // y actualizarlas para asociarlas con este expediente. Esto asegura enlace permanente.
+  if (prospectoId) {
+    await sb
+      .from("cotizaciones")
+      .update({ expediente_id: expedienteId })
+      .eq("prospecto_id", prospectoId)
+      .is("expediente_id", null);
+  }
+
+  // 3. Consultar todas las cotizaciones de este expediente
   const { data, error } = await sb
     .from("cotizaciones")
     .select(`
