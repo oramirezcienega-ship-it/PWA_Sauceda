@@ -67,9 +67,9 @@ export function FormularioProspecto({
         segundoApellido: datos.segundoApellido.trim(),
         valorCampana: Number(datos.valorCampana) || 0,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al guardar el prospecto:", err);
-      setError("No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+      setError(err?.message || "No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
       setEnviando(false);
     }
   }
