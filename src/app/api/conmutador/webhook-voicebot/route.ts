@@ -16,22 +16,40 @@ export async function POST(request: Request) {
       const agente = await obtenerAgenteDisponible();
       const sofiaId = "14da6807-3c45-4d75-94a0-d7bfc04c97e3";
 
+      // Overrides comunes: forzar español en voz y transcripción
+      const spanishOverrides = {
+        transcriber: {
+          provider: "deepgram",
+          model: "nova-2",
+          language: "es",
+        },
+        voice: {
+          provider: "aws",
+          voiceId: "Mia",
+        },
+      };
+
       if (agente) {
         console.log(`[Vapi Assistant Request] Agente disponible: ${agente.nombre}. Configurando transferencia inmediata.`);
-        
+
         return NextResponse.json({
           assistantId: sofiaId,
           assistantOverrides: {
+            ...spanishOverrides,
             firstMessage: `Hola, bienvenido a Sauceda Bienes Raíces. Te estoy transfiriendo de inmediato con nuestro asesor de guardia, ${agente.nombre}. Por favor no cuelgues.`,
             model: {
-              systemPrompt: `You are Sofía, a virtual assistant for Sauceda Bienes Raíces. An agent is available right now. Your ONLY task is to speak the first message and IMMEDIATELY call your transfer tool 'transferir_a_asesor' to transfer the customer. Do not ask any questions or wait for their reply. Just execute the transfer tool 'transferir_a_asesor' immediately.`
+              systemPrompt: `Eres Sofía, asistente virtual de Sauceda Bienes Raíces. Hay un asesor disponible ahora mismo. Tu ÚNICA tarea es decir el primer mensaje y de inmediato llamar a la herramienta 'transferir_a_asesor' para transferir al cliente. No hagas preguntas ni esperes respuesta. Solo ejecuta la herramienta 'transferir_a_asesor' inmediatamente.`
             }
           }
         });
       } else {
-        console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía por defecto.");
+        console.log("[Vapi Assistant Request] No hay agentes disponibles. Usando perfilado de Sofía en español.");
         return NextResponse.json({
-          assistantId: sofiaId
+          assistantId: sofiaId,
+          assistantOverrides: {
+            ...spanishOverrides,
+            firstMessage: "Hola, bienvenido a Sauceda Bienes Raíces. Soy Sofía, tu asistente virtual. ¿En qué puedo ayudarte hoy?",
+          }
         });
       }
     }
