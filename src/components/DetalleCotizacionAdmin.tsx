@@ -645,7 +645,7 @@ export function DetalleCotizacionAdmin({
       setEnviandoAPI(true);
       setMensajeAprobacion({ tipo: "", texto: "" });
       
-      const textoMensaje = `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos, descargar la cotización en PDF y autorizarla en línea por sistema: ${enlaceCliente}`;
+      const textoMensaje = `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos y autorizarla en línea por sistema: ${enlaceCliente}`;
 
       const { responderConversacion } = await import("@/app/actions/conversaciones");
       const res = await responderConversacion(cotizacion.prospectoTelefono, textoMensaje);
@@ -1943,7 +1943,7 @@ export function DetalleCotizacionAdmin({
                         {/* Compartir por WhatsApp Web */}
                         <a
                           href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
-                            `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos, descargar la cotización en PDF y autorizarla en línea por sistema: ${enlaceCliente}`
+                            `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos y autorizarla en línea por sistema: ${enlaceCliente}`
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"
