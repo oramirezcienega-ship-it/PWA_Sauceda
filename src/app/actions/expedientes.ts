@@ -1140,3 +1140,19 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   return result;
 }
 
+/**
+ * Versión segura de actualizarExpediente para uso desde el cliente.
+ * Captura el error internamente y lo devuelve como `{ ok: false, error: string }`
+ * para que el mensaje real llegue al cliente sin ser sanitizado por Next.js en producción.
+ */
+export async function actualizarExpedienteSeguro(
+  id: string,
+  datos: DatosExpediente,
+): Promise<{ ok: true; expediente: Expediente } | { ok: false; error: string }> {
+  try {
+    const expediente = await actualizarExpediente(id, datos);
+    return { ok: true, expediente };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "Error desconocido al guardar." };
+  }
+}
