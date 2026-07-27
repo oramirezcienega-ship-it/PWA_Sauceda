@@ -59,9 +59,16 @@ export async function POST(request: Request) {
         agenteId: agente.id,
       });
 
-      // Normalizar el número receptor (Twilio de Sauceda) para usarlo como Caller ID
+      // Caller ID para el dial al agente. Configurable vía TWILIO_CALLER_ID
+      // (debe ser un número propio o verificado en Twilio); si no está definido,
+      // se usa el número de Twilio que recibió la llamada.
       let callerIdAttr = "";
-      if (to) {
+      const callerIdConfigurado = process.env.TWILIO_CALLER_ID || "";
+      if (callerIdConfigurado) {
+        const cidCanon = normalizarTelefono(callerIdConfigurado);
+        const cidE164 = cidCanon.startsWith("+") ? cidCanon : `+${cidCanon}`;
+        callerIdAttr = ` callerId="${cidE164}"`;
+      } else if (to) {
         const toCanon = normalizarTelefono(to);
         const toE164 = toCanon.startsWith("+") ? toCanon : `+${toCanon}`;
         callerIdAttr = ` callerId="${toE164}"`;
