@@ -890,6 +890,8 @@ export async function obtenerCotizacionesDeExpediente(
     .eq("expediente_id", expedienteId)
     .order("created_at", { ascending: false });
 
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(aCotizacion);
 }
 
 /** 11.b. Listar Cotizaciones de un Prospecto */
