@@ -168,18 +168,21 @@ export async function obtenerAgenteDisponible(): Promise<{ id: string; nombre: s
     return null;
   }
 
-  // Lógica de Priorización:
-  // 1. Filtrar asesores de guardia y balancear uniformemente (aleatorio) entre ellos
-  // 2. Si no hay asesores de guardia, delegar en administradores de guardia (balanceados uniformemente)
+  // Priorización: asesores → operaciones → admin
   let poolSeleccion = agentesEnHorario.filter((a) => a.rol === "asesor");
 
   if (poolSeleccion.length === 0) {
-    console.log("[obtenerAgenteDisponible] No hay asesores de guardia disponibles en este momento. Evaluando administradores.");
+    console.log("[obtenerAgenteDisponible] No hay asesores disponibles. Evaluando operaciones.");
+    poolSeleccion = agentesEnHorario.filter((a) => a.rol === "operaciones");
+  }
+
+  if (poolSeleccion.length === 0) {
+    console.log("[obtenerAgenteDisponible] No hay operaciones disponibles. Evaluando administradores.");
     poolSeleccion = agentesEnHorario.filter((a) => a.rol === "admin");
   }
 
   if (poolSeleccion.length === 0) {
-    console.log("[obtenerAgenteDisponible] No se encontraron asesores ni administradores en el pool de selección.");
+    console.log("[obtenerAgenteDisponible] No se encontraron agentes en el pool de selección.");
     return null;
   }
 
