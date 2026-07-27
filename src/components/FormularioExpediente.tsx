@@ -98,9 +98,9 @@ export function FormularioExpediente({
         habitada: (datos.habitada || "").trim(),
       });
       // Si todo salió bien la página normalmente redirige; si no, liberamos.
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al guardar el expediente:", err);
-      setError("No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
+      setError(err?.message || "No se pudo guardar. Revisa la conexión e inténtalo de nuevo.");
       setEnviando(false);
     }
   }
