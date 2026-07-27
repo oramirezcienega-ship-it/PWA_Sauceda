@@ -80,12 +80,13 @@ export async function POST(request: Request) {
 </Response>`;
     } else {
       console.log("[Twilio Direct Dial] No hay agentes de guardia disponibles. Desviando a Voice Bot (Sofía) en Vapi.");
-      
+
       const vapiSipUri = process.env.VAPI_SIP_URI || "sip:sauceda@sip.vapi.ai";
-      
-      // TwiML para desviar al SIP de Vapi
+
+      // TwiML: saludo primero, luego Vapi
       xmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say language="es-MX" voice="Polly.Mia-Neural">Gracias por llamar a Sauceda Bienes Raíces, soluciones integrales de bienes raíces. Le informamos que, para su seguridad, sus datos personales están protegidos de acuerdo con nuestro aviso de privacidad, lo invitamos a conocer nuestro aviso de privacidad en saucedamx.com. En este momento nuestros asesores no están disponibles, por lo que le atenderá nuestro asistente virtual.</Say>
   <Dial>
     <Sip>${vapiSipUri}</Sip>
   </Dial>
