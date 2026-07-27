@@ -185,6 +185,14 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
     const expId = conExp?.expediente_id ?? null;
     const prosId = conPros?.prospecto_id ?? null;
 
+    // Ordenar mensajes por fecha para obtener el último y el último inbound
+    const ordenados = [...arr].sort((a, b) =>
+      b.created_at.localeCompare(a.created_at),
+    );
+    const ultimo = ordenados[0];
+    const ultimoInbound = ordenados.find((f) => f.direccion === "in") ?? null;
+    const ultimoConAgente = ordenados.find((f) => f.agente) ?? null;
+
     const asesorNombre =
       (expId && nombresAsesor.get(expId)) ||
       (prosId && nombresAsesorPros.get(prosId));
