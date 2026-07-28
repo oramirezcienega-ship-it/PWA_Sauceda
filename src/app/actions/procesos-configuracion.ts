@@ -14,70 +14,93 @@ import type {
 /** Listar todos los procesos maestros registrados. */
 export async function listarProcesosMaestros(): Promise<ProcesoMaestro[]> {
   const sb = supabaseServidor();
-  const { data, error } = await sb
+  const { data: procesosData, error: errProc } = await sb
     .from("procesos_maestros")
-    .select("*, etapas:etapas_configuracion(*)")
+    .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error al listar procesos maestros:", error.message);
+  if (errProc || !procesosData) {
+    console.error("Error al listar procesos maestros:", errProc?.message);
     return [];
   }
 
-  return (data || []).map((p: any) => ({
-    id: p.id,
-    nombre: p.nombre,
-    descripcion: p.descripcion || "",
-    tipoNegocio: p.tipo_negocio,
-    activo: p.activo ?? true,
-    createdAt: p.created_at,
-    updatedAt: p.updated_at,
-    etapas: (p.etapas || [])
-      .map((e: any) => ({
-        id: e.id,
-        procesoId: e.proceso_id,
-        claveEtapa: e.clave_etapa,
-        nombre: e.nombre,
-        orden: e.orden,
-        slaDias: e.sla_dias,
-        camposRequeridos: e.campos_requeridos || [],
-        validaciones: e.validaciones_json || [],
-        createdAt: e.created_at,
-      }))
-      .sort((a: any, b: any) => a.orden - b.orden),
-  }));
+  const pIds = procesosData.map((p) => p.id);
+  let etapasData: any[] = [];
+  if (pIds.length > 0) {
+    const { data: eData } = await sb
+      .from("etapas_configuracion")
+      .select("*")
+      .in("proceso_id", pIds)
+      .order("orden", { ascending: true });
+    etapasData = eData || [];
+  }
+
+  return procesosData.map((p: any) => {
+    const misEtapas = etapasData.filter((e) => e.proceso_id === p.id);
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      descripcion: p.descripcion || "",
+      tipoNegocio: p.tipo_negocio,
+      activo: p.activo ?? true,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+      etapas: misEtapas
+        .map((e: any) => ({
+          id: e.id,
+          procesoId: e.proceso_id,
+          claveEtapa: e.clave_etapa,
+          nombre: e.nombre,
+          orden: e.orden,
+          slaDias: e.sla_dias,
+          camposRequeridos: e.campos_requeridos || [],
+          validaciones: e.validaciones_json || [],
+          createdAt: e.created_at,
+        }))
+        .sort((a, b) => a.orden - b.orden),
+    };
+  });
 }
 
 /** Obtener la estructura completa de un proceso maestro por ID. */
 export async function obtenerProcesoCompleto(procesoId: string): Promise<ProcesoMaestro | null> {
   const sb = supabaseServidor();
-  const { data, error } = await sb
+  const { data: proc, error: errProc } = await sb
     .from("procesos_maestros")
-    .select(
-      `
-      *,
-      etapas:etapas_configuracion(*),
-      escalaciones:escalaciones_configuracion(*),
-      automatizaciones:automatizaciones_configuracion(*)
-    `
-    )
+    .select("*")
     .eq("id", procesoId)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    console.error("Error al obtener proceso completo:", error?.message);
+  if (errProc || !proc) {
+    console.error("Error al obtener proceso completo:", errProc?.message);
     return null;
   }
 
+  const { data: eData } = await sb
+    .from("etapas_configuracion")
+    .select("*")
+    .eq("proceso_id", procesoId)
+    .order("orden", { ascending: true });
+
+  const { data: escData } = await sb
+    .from("escalaciones_configuracion")
+    .select("*")
+    .eq("proceso_id", procesoId);
+
+  const { data: autData } = await sb
+    .from("automatizaciones_configuracion")
+    .select("*")
+    .eq("proceso_id", procesoId);
+
   return {
-    id: data.id,
-    nombre: data.nombre,
-    descripcion: data.descripcion || "",
-    tipoNegocio: data.tipo_negocio,
-    activo: data.activo ?? true,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    etapas: (data.etapas || [])
+    id: proc.id,
+    nombre: proc.nombre,
+    descripcion: proc.descripcion || "",
+    tipoNegocio: proc.tipo_negocio,
+    activo: proc.activo ?? true,
+    createdAt: proc.created_at,
+    updatedAt: proc.updated_at,
+    etapas: (eData || [])
       .map((e: any) => ({
         id: e.id,
         procesoId: e.proceso_id,
@@ -89,8 +112,8 @@ export async function obtenerProcesoCompleto(procesoId: string): Promise<Proceso
         validaciones: e.validaciones_json || [],
         createdAt: e.created_at,
       }))
-      .sort((a: any, b: any) => a.orden - b.orden),
-    escalaciones: (data.escalaciones || []).map((esc: any) => ({
+      .sort((a, b) => a.orden - b.orden),
+    escalaciones: (escData || []).map((esc: any) => ({
       id: esc.id,
       procesoId: esc.proceso_id,
       etapaId: esc.etapa_id,
@@ -101,7 +124,7 @@ export async function obtenerProcesoCompleto(procesoId: string): Promise<Proceso
       activo: esc.activo ?? true,
       createdAt: esc.created_at,
     })),
-    automatizaciones: (data.automatizaciones || []).map((aut: any) => ({
+    automatizaciones: (autData || []).map((aut: any) => ({
       id: aut.id,
       procesoId: aut.proceso_id,
       etapaId: aut.etapa_id,
