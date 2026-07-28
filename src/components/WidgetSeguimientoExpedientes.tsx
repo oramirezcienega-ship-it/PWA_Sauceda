@@ -10,6 +10,11 @@ export function WidgetSeguimientoExpedientes() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroAccion, setFiltroAccion] = useState("todos");
   const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroEtapa, setFiltroEtapa] = useState("todos");
+  const [filtroProspectoEstatus, setFiltroProspectoEstatus] = useState("todos");
+  const [filtroFecha, setFiltroFecha] = useState("todos");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
 
   useEffect(() => {
     obtenerExpedientesSeguimiento()
@@ -18,10 +23,71 @@ export function WidgetSeguimientoExpedientes() {
       .finally(() => setCargando(false));
   }, []);
 
+  // Etapas y Estatus disponibles dinámicamente
+  const etapasDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    expedientes.forEach((e) => {
+      if (e.etapa) set.add(e.etapa);
+    });
+    return Array.from(set).sort();
+  }, [expedientes]);
+
+  const prospectoEstatusDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    expedientes.forEach((e) => {
+      if (e.prospectoEstatus) set.add(e.prospectoEstatus);
+    });
+    return Array.from(set).sort();
+  }, [expedientes]);
+
+  const hayFiltrosActivos = useMemo(() => {
+    return (
+      busqueda !== "" ||
+      filtroAccion !== "todos" ||
+      filtroTipo !== "todos" ||
+      filtroEtapa !== "todos" ||
+      filtroProspectoEstatus !== "todos" ||
+      filtroFecha !== "todos" ||
+      fechaDesde !== "" ||
+      fechaHasta !== ""
+    );
+  }, [
+    busqueda,
+    filtroAccion,
+    filtroTipo,
+    filtroEtapa,
+    filtroProspectoEstatus,
+    filtroFecha,
+    fechaDesde,
+    fechaHasta,
+  ]);
+
+  const limpiarTodosLosFiltros = () => {
+    setBusqueda("");
+    setFiltroAccion("todos");
+    setFiltroTipo("todos");
+    setFiltroEtapa("todos");
+    setFiltroProspectoEstatus("todos");
+    setFiltroFecha("todos");
+    setFechaDesde("");
+    setFechaHasta("");
+  };
+
   // Filtrar expedientes primero
   const expedientesFiltrados = useMemo(() => {
+    const hoyStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+
+    const hace7dias = new Date();
+    hace7dias.setDate(hace7dias.getDate() - 7);
+    const hace7diasStr = hace7dias.toISOString().slice(0, 10);
+
+    const proxima7dias = new Date();
+    proxima7dias.setDate(proxima7dias.getDate() + 7);
+    const proxima7diasStr = proxima7dias.toISOString().slice(0, 10);
+
     return expedientes.filter((e) => {
       const coincideBusqueda = 
+        !busqueda ||
         e.id.toLowerCase().includes(busqueda.toLowerCase()) ||
         e.clienteNombre.toLowerCase().includes(busqueda.toLowerCase()) ||
         e.fraccionamiento.toLowerCase().includes(busqueda.toLowerCase());
@@ -32,17 +98,57 @@ export function WidgetSeguimientoExpedientes() {
         (filtroAccion === "tarea" && e.proximaAccionTipo === "tarea") ||
         (filtroAccion === "sin_tareas" && e.proximaAccionTipo === "ninguno");
 
-      return coincideBusqueda && coincideAccion;
-    });
-  }, [expedientes, busqueda, filtroAccion]);
+      const coincideEtapa =
+        filtroEtapa === "todos" ||
+        e.etapa.toLowerCase() === filtroEtapa.toLowerCase();
 
-  // Configuración de las categorías/servicios
+      const coincideProspectoEstatus =
+        filtroProspectoEstatus === "todos" ||
+        (e.prospectoEstatus && e.prospectoEstatus.toLowerCase() === filtroProspectoEstatus.toLowerCase());
+
+      let coincideFecha = true;
+      const fechaCreacionShort = e.fechaCreacion ? e.fechaCreacion.slice(0, 10) : "";
+      const fechaProximaShort = e.proximaAccionFecha ? e.proximaAccionFecha.slice(0, 10) : "";
+
+      if (filtroFecha === "hoy") {
+        coincideFecha = fechaCreacionShort === hoyStr || fechaProximaShort === hoyStr;
+      } else if (filtroFecha === "ultimos_7_dias") {
+        coincideFecha = fechaCreacionShort >= hace7diasStr;
+      } else if (filtroFecha === "proxima_hoy") {
+        coincideFecha = !!fechaProximaShort && fechaProximaShort <= hoyStr;
+      } else if (filtroFecha === "proxima_7_dias") {
+        coincideFecha = !!fechaProximaShort && fechaProximaShort >= hoyStr && fechaProximaShort <= proxima7diasStr;
+      } else if (filtroFecha === "rango") {
+        if (fechaDesde && fechaCreacionShort < fechaDesde) coincideFecha = false;
+        if (fechaHasta && fechaCreacionShort > fechaHasta) coincideFecha = false;
+      }
+
+      return (
+        coincideBusqueda &&
+        coincideAccion &&
+        coincideEtapa &&
+        coincideProspectoEstatus &&
+        coincideFecha
+      );
+    });
+  }, [
+    expedientes,
+    busqueda,
+    filtroAccion,
+    filtroEtapa,
+    filtroProspectoEstatus,
+    filtroFecha,
+    fechaDesde,
+    fechaHasta,
+  ]);
+
+  // Configuración de las categorías/servicios (Impermeabilización 1º, Remodelación 2º)
   const columnasConfig = [
+    { key: "Impermeabilización", label: "Impermeabilización", icon: "💧" },
+    { key: "Remodelación", label: "Remodelación", icon: "🔨" },
     { key: "Traspaso / Compra", label: "Traspaso / Compra", icon: "💰" },
     { key: "Promoción de Venta", label: "Promoción de Venta", icon: "📢" },
     { key: "Solo Trámite", label: "Solo Trámite", icon: "📄" },
-    { key: "Remodelación", label: "Remodelación", icon: "🔨" },
-    { key: "Impermeabilización", label: "Impermeabilización", icon: "💧" },
     { key: "Construcción / Obra", label: "Construcción / Obra", icon: "🏗️" },
   ];
 
@@ -65,21 +171,35 @@ export function WidgetSeguimientoExpedientes() {
     });
   };
 
+  // Normalizar tipo de negocio para soportar cualquier variación de slug o texto
+  const normalizarTipo = (tipo?: string | null): string => {
+    if (!tipo) return "Otros";
+    const t = tipo.trim().toLowerCase();
+    if (t.includes("impermeabiliz")) return "Impermeabilización";
+    if (t.includes("remodelac")) return "Remodelación";
+    if (t.includes("traspaso") || t === "compra") return "Traspaso / Compra";
+    if (t.includes("promocion") || t === "venta") return "Promoción de Venta";
+    if (t.includes("tramite") || t.includes("trámite")) return "Solo Trámite";
+    if (t.includes("construcc") || t.includes("obra")) return "Construcción / Obra";
+    return tipo;
+  };
+
   // Agrupar expedientes por su tipo de negocio, ordenando las listas individuales
   const agrupados = useMemo(() => {
     const mapa: Record<string, ExpedienteSeguimiento[]> = {
+      "Impermeabilización": [],
+      "Remodelación": [],
       "Traspaso / Compra": [],
       "Promoción de Venta": [],
       "Solo Trámite": [],
-      "Remodelación": [],
-      "Impermeabilización": [],
       "Construcción / Obra": [],
       "Otros": []
     };
 
     expedientesFiltrados.forEach((e) => {
-      if (mapa[e.tipoNegocio] !== undefined) {
-        mapa[e.tipoNegocio].push(e);
+      const tipoNorm = normalizarTipo(e.tipoNegocio);
+      if (mapa[tipoNorm] !== undefined) {
+        mapa[tipoNorm].push(e);
       } else {
         mapa["Otros"].push(e);
       }
@@ -162,9 +282,9 @@ export function WidgetSeguimientoExpedientes() {
           </div>
         </div>
 
-        {/* Fila 2: Búsqueda y Pendientes */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[200px] max-w-sm">
+        {/* Fila 2: Búsqueda, Estatus de Expediente, Estatus de Prospecto, Pendientes y Fecha */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex-1 min-w-[180px] max-w-xs">
             <input
               type="text"
               placeholder="Buscar por cliente, ID o zona..."
@@ -174,16 +294,90 @@ export function WidgetSeguimientoExpedientes() {
             />
           </div>
 
+          {/* Filtro por Estatus/Etapa del Expediente */}
+          <select
+            value={filtroEtapa}
+            onChange={(e) => setFiltroEtapa(e.target.value)}
+            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+          >
+            <option value="todos">📋 Estatus Expediente: Todos</option>
+            {etapasDisponibles.map((et) => (
+              <option key={et} value={et}>
+                Etapa: {et}
+              </option>
+            ))}
+          </select>
+
+          {/* Filtro por Estatus del Prospecto */}
+          <select
+            value={filtroProspectoEstatus}
+            onChange={(e) => setFiltroProspectoEstatus(e.target.value)}
+            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+          >
+            <option value="todos">👤 Estatus Prospecto: Todos</option>
+            {prospectoEstatusDisponibles.map((p) => (
+              <option key={p} value={p}>
+                Prospecto: {p}
+              </option>
+            ))}
+          </select>
+
+          {/* Filtro por Pendientes / Acciones */}
           <select
             value={filtroAccion}
             onChange={(e) => setFiltroAccion(e.target.value)}
             className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
           >
-            <option value="todos">Todos los pendientes</option>
+            <option value="todos">⚡ Todos los pendientes</option>
             <option value="urgente">Solo Citas / Inspecciones / Instalaciones</option>
             <option value="tarea">Solo Tareas de Asesor</option>
             <option value="sin_tareas">Sin pendientes agendados</option>
           </select>
+
+          {/* Filtro por Fecha */}
+          <select
+            value={filtroFecha}
+            onChange={(e) => setFiltroFecha(e.target.value)}
+            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+          >
+            <option value="todos">📅 Filtro Fecha: Cualquier fecha</option>
+            <option value="hoy">Creado o Acción Hoy</option>
+            <option value="ultimos_7_dias">Creado en últimos 7 días</option>
+            <option value="proxima_hoy">Próxima Acción Hoy / Vencida</option>
+            <option value="proxima_7_dias">Próxima Acción en siguientes 7 días</option>
+            <option value="rango">Rango de fechas de creación...</option>
+          </select>
+
+          {filtroFecha === "rango" && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                className="rounded-lg border border-carbon/20 px-2 py-1 text-xs bg-white"
+                placeholder="Desde"
+              />
+              <span className="text-xs text-carbon/40">-</span>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                className="rounded-lg border border-carbon/20 px-2 py-1 text-xs bg-white"
+                placeholder="Hasta"
+              />
+            </div>
+          )}
+
+          {hayFiltrosActivos && (
+            <button
+              type="button"
+              onClick={limpiarTodosLosFiltros}
+              className="rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 text-xs font-semibold transition flex items-center gap-1"
+            >
+              <span>✕</span>
+              <span>Limpiar Filtros</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -266,11 +460,16 @@ export function WidgetSeguimientoExpedientes() {
                             </div>
                           </div>
 
-                          {/* Etapa actual */}
-                          <div className="flex-shrink-0 flex items-center">
-                            <span className="inline-block rounded-full bg-sauce/10 text-sauce px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+                          {/* Etapa actual del expediente y estatus del prospecto */}
+                          <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                            <span className="inline-block rounded-full bg-sauce/10 text-sauce px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                               {e.etapa}
                             </span>
+                            {e.prospectoEstatus && (
+                              <span className="inline-block rounded-full bg-slate-100 text-carbon/70 px-2 py-0.5 text-[9px] font-medium border border-carbon/10">
+                                👤 Prospecto: {e.prospectoEstatus}
+                              </span>
+                            )}
                           </div>
 
                           {/* Próximo Pendiente / Acción */}

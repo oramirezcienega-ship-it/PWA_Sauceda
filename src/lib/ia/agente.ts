@@ -524,7 +524,7 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
   }
 
   const instruccionesFlujo = (exp && exp.tipo_negocio === "construccion-impermeabilizacion" && exp.ultimo_paso_flujo)
-    ? `\n\nESTADO DE CONVERSIÓN CRÍTICO:\nEl último paso del flujo de impermeabilización que ya ejecutaste con este cliente es "${exp.ultimo_paso_flujo}". Está ESTRICTAMENTE PROHIBIDO repetir preguntas, enviar mensajes o solicitar información de este paso o de pasos anteriores. Debes avanzar de inmediato al siguiente paso del flujo (por ejemplo, si el último paso ejecutado fue paso_3 y el cliente ya dio su nombre y teléfono, debes continuar ejecutando el paso_4 y enviarle sus links de agendamiento y cotización).`
+    ? `\n\nESTADO DE CONVERSIÓN CRÍTICO:\nEl último paso del flujo de impermeabilización que ya ejecutaste con este cliente es "${exp.ultimo_paso_flujo}". Está ESTRICTAMENTE PROHIBIDO repetir preguntas, enviar mensajes o solicitar información de este paso o de pasos anteriores. Debes avanzar de inmediato al siguiente paso del flujo (por ejemplo, si el último paso ejecutado fue paso_3 y el cliente ya dio su nombre y teléfono, debes confirmar que un asesor del equipo humano le contactará a la brevedad por este chat para coordinar la cita).`
     : "";
 
   const finalPrompt = [base, extra && `\nIndicaciones adicionales del negocio:\n${extra}`, instruccionesFlujo, contexto]
