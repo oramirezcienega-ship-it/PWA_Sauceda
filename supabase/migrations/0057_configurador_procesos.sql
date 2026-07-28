@@ -101,7 +101,7 @@ VALUES
   ('a1b2c3d4-0000-0000-0000-000000000001', 'firmado', 'Firma y Cierre', 6, 7, '[]'::jsonb)
 ON CONFLICT (proceso_id, clave_etapa) DO NOTHING;
 
--- Seed Inicial: Proceso Maestro de Impermeabilización (Sauceda Construye - 7 Etapas)
+-- Seed Inicial: Proceso Maestro de Impermeabilización (Sauceda Construye - 7 Etapas Totalmente Configurado)
 INSERT INTO public.procesos_maestros (id, nombre, descripcion, tipo_negocio, activo)
 VALUES (
   'a1b2c3d4-0000-0000-0000-000000000002',
@@ -109,16 +109,119 @@ VALUES (
   'Flujo completo de 7 etapas: inspección técnica, cotización, anticipo, obra, cobro y carta de garantía',
   'impermeabilizacion',
   true
-) ON CONFLICT (tipo_negocio) DO NOTHING;
+) ON CONFLICT (tipo_negocio) DO UPDATE 
+SET nombre = EXCLUDED.nombre, 
+    descripcion = EXCLUDED.descripcion;
 
--- Seed 7 Etapas de Impermeabilización con SLAs y Campos Obligatorios
-INSERT INTO public.etapas_configuracion (proceso_id, clave_etapa, nombre, orden, sla_dias, campos_requeridos)
+-- Seed 7 Etapas de Impermeabilización con SLAs, Campos Obligatorios y Reglas de Validación IF/THEN
+INSERT INTO public.etapas_configuracion (proceso_id, clave_etapa, nombre, orden, sla_dias, campos_requeridos, validaciones_json)
 VALUES 
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'nuevo-lead', '1. Prospecto Recibido', 1, 2, '["telefono"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'inspeccion', '2. Visita & Inspección Técnica', 2, 3, '["telefono", "direccion_propiedad"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'cotizacion', '3. Presupuesto & Cotización', 3, 3, '["telefono", "direccion_propiedad"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'anticipo', '4. Aceptación & Anticipo', 4, 3, '["telefono", "direccion_propiedad"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'obra', '5. Ejecución de Obra / Aplicación', 5, 7, '["direccion_propiedad"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'cobro', '6. Liquidación / Cobro Final', 6, 3, '[]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'garantia', '7. Firma de Garantía & Cierre', 7, 3, '[]'::jsonb)
-ON CONFLICT (proceso_id, clave_etapa) DO NOTHING;
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'nuevo-lead', 
+    '1. Prospecto Recibido', 
+    1, 
+    2, 
+    '["telefono"]'::jsonb,
+    '[{"id":"r1","campo":"telefono","operador":"esta_vacio","valor":"","mensajeError":"Se requiere registrar el número de teléfono del prospecto"}]'::jsonb
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'inspeccion', 
+    '2. Visita & Inspección Técnica', 
+    2, 
+    3, 
+    '["telefono", "direccion_propiedad"]'::jsonb,
+    '[{"id":"r2","campo":"direccion_propiedad","operador":"esta_vacio","valor":"","mensajeError":"Debe registrar la dirección del inmueble antes de agendar la visita técnica"}]'::jsonb
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'cotizacion', 
+    '3. Presupuesto & Cotización', 
+    3, 
+    3, 
+    '["telefono", "direccion_propiedad"]'::jsonb,
+    '[{"id":"r3","campo":"valorEstimado","operador":"menor_que","valor":"1","mensajeError":"Debe cotizar un presupuesto estimado mayor a $0 pesos"}]'::jsonb
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'anticipo', 
+    '4. Aceptación & Anticipo', 
+    4, 
+    3, 
+    '["telefono", "direccion_propiedad"]'::jsonb,
+    '[]'::jsonb
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'obra', 
+    '5. Ejecución de Obra / Aplicación', 
+    5, 
+    7, 
+    '["direccion_propiedad"]'::jsonb,
+    '[]'::jsonb
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'cobro', 
+    '6. Liquidación / Cobro Final', 
+    6, 
+    3, 
+    '[]'::jsonb,
+    '[]'::jsonb
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002', 
+    'garantia', 
+    '7. Firma de Garantía & Cierre', 
+    7, 
+    3, 
+    '[]'::jsonb,
+    '[]'::jsonb
+  )
+ON CONFLICT (proceso_id, clave_etapa) DO UPDATE 
+SET nombre = EXCLUDED.nombre, 
+    orden = EXCLUDED.orden, 
+    sla_dias = EXCLUDED.sla_dias, 
+    campos_requeridos = EXCLUDED.campos_requeridos,
+    validaciones_json = EXCLUDED.validaciones_json;
+
+-- Seed Escalaciones Automáticas para Impermeabilización
+INSERT INTO public.escalaciones_configuracion (proceso_id, nombre_regla, condicion_json, accion_tipo, parametros_json, activo)
+VALUES 
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002',
+    'Alerta por SLA Vencido en Inspección Técnica',
+    '{"dias_excedidos": 1, "etapa": "inspeccion"}'::jsonb,
+    'notificar_gerente',
+    '{"mensaje": "Inspección técnica demorada por más de 3 días"}'::jsonb,
+    true
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002',
+    'Alerta de Demora en Ejecución de Obra',
+    '{"dias_excedidos": 2, "etapa": "obra"}'::jsonb,
+    'notificar_gerente',
+    '{"mensaje": "Obra de impermeabilización con retraso operacional"}'::jsonb,
+    true
+  )
+ON CONFLICT DO NOTHING;
+
+-- Seed Automatizaciones / Webhooks n8n para Impermeabilización
+INSERT INTO public.automatizaciones_configuracion (proceso_id, evento_tipo, webhook_url_n8n, payload_template_json, activo)
+VALUES 
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002',
+    'al_entrar_etapa',
+    'https://n8n.saucedabienesraices.com/webhook/impermeabilizacion-etapa',
+    '{"servicio": "impermeabilizacion", "notificar_cliente": true}'::jsonb,
+    true
+  ),
+  (
+    'a1b2c3d4-0000-0000-0000-000000000002',
+    'al_detectar_pago',
+    'https://n8n.saucedabienesraices.com/webhook/impermeabilizacion-pago',
+    '{"generar_remision": true}'::jsonb,
+    true
+  )
+ON CONFLICT DO NOTHING;
