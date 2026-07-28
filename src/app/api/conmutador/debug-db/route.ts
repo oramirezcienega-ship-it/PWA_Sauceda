@@ -54,7 +54,11 @@ export async function GET() {
     const diaSemanaRaw = formDia.format(d).toLowerCase();
     const horaLocal = obtenerHoraLocalMX();
 
+    const url = process.env.SUPABASE_URL || "";
+    const dbDomain = url ? new URL(url).hostname : "no-configurado";
+
     return NextResponse.json({
+      dbDomain,
       horaLocal,
       diaSemanaRaw,
       perfiles,
