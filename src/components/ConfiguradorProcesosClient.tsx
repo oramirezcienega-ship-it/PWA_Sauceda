@@ -19,48 +19,94 @@ import type {
   AutomatizacionConfiguracion,
 } from "@/lib/types";
 
-export const MODULOS_CAMPOS = [
-  {
-    nombre: "📁 Módulo Expediente e Inmueble",
-    color: "bg-indigo-50 border-indigo-200 text-indigo-900",
-    badge: "Expediente",
-    campos: [
-      { clave: "direccionPropiedad", etiqueta: "Dirección de la Propiedad" },
-      { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
-      { clave: "nss", etiqueta: "Número de Seguro Social (NSS)" },
-      { clave: "curp", etiqueta: "CURP" },
-      { clave: "tipoCredito", etiqueta: "Tipo de Crédito" },
-      { clave: "valorEstimado", etiqueta: "Valor Estimado ($)" },
-      { clave: "saldoDeuda", etiqueta: "Saldo de Deuda ($)" },
-      { clave: "sinPagos", etiqueta: "Sin Pagos (Estatus)" },
-      { clave: "estadoFisico", etiqueta: "Estado Físico del Inmueble" },
-      { clave: "habitada", etiqueta: "Propiedad Habitada" },
-    ],
-  },
-  {
-    nombre: "👤 Módulo Prospecto / Cliente",
-    color: "bg-emerald-50 border-emerald-200 text-emerald-900",
-    badge: "Prospecto",
-    campos: [
-      { clave: "telefono", etiqueta: "Teléfono de Contacto" },
-      { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
-      { clave: "calificacion", etiqueta: "Calificación (Caliente, Templado, Frío)" },
-      { clave: "origen", etiqueta: "Origen del Prospecto" },
-    ],
-  },
-  {
-    nombre: "💰 Módulo Cotización y Pagos",
-    color: "bg-amber-50 border-amber-200 text-amber-900",
-    badge: "Cotización",
-    campos: [
-      { clave: "montoCotizado", etiqueta: "Monto Cotizado ($)" },
-      { clave: "anticipoRecibido", etiqueta: "Anticipo Registrado ($)" },
-      { clave: "remisionFolio", etiqueta: "Folio de Remisión / Factura" },
-    ],
-  },
-];
+export function obtenerModulosPorTipoNegocio(tipoNegocio: string) {
+  const esImpermeabilizacion =
+    tipoNegocio === "impermeabilizacion" || tipoNegocio === "construccion-impermeabilizacion";
 
-const TODOS_CAMPOS = MODULOS_CAMPOS.flatMap((m) => m.campos);
+  if (esImpermeabilizacion) {
+    return [
+      {
+        nombre: "📐 Módulo Inspección & Azotea",
+        color: "bg-blue-50 border-blue-200 text-blue-900",
+        badge: "Inspección",
+        campos: [
+          { clave: "direccionPropiedad", etiqueta: "Dirección del Inmueble" },
+          { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
+          { clave: "estadoFisico", etiqueta: "Estado Físico de Azotea / Losa" },
+          { clave: "m2Superficie", etiqueta: "Metros Cuadrados (m²)" },
+        ],
+      },
+      {
+        nombre: "👤 Módulo Contacto del Cliente",
+        color: "bg-emerald-50 border-emerald-200 text-emerald-900",
+        badge: "Cliente",
+        campos: [
+          { clave: "telefono", etiqueta: "Teléfono de Contacto" },
+          { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
+          { clave: "calificacion", etiqueta: "Calificación Comercial" },
+        ],
+      },
+      {
+        nombre: "💰 Módulo Presupuesto & Cotización",
+        color: "bg-amber-50 border-amber-200 text-amber-900",
+        badge: "Presupuesto",
+        campos: [
+          { clave: "valorEstimado", etiqueta: "Monto de Cotización ($)" },
+          { clave: "vigenciaGarantia", etiqueta: "Años de Garantía (3, 5, 10 años)" },
+        ],
+      },
+      {
+        nombre: "🔨 Módulo Ejecución de Obra & Cobro",
+        color: "bg-indigo-50 border-indigo-200 text-indigo-900",
+        badge: "Obra & Cobro",
+        campos: [
+          { clave: "anticipoRecibido", etiqueta: "Anticipo Registrado ($)" },
+          { clave: "saldoDeuda", etiqueta: "Saldo Pendiente por Cobrar ($)" },
+          { clave: "remisionFolio", etiqueta: "Folio de Remisión / Factura" },
+        ],
+      },
+    ];
+  }
+
+  // Por defecto: Traspaso / Compra de Casas o Bienes Raíces
+  return [
+    {
+      nombre: "🏠 Módulo Inmueble & Propiedad",
+      color: "bg-indigo-50 border-indigo-200 text-indigo-900",
+      badge: "Inmueble",
+      campos: [
+        { clave: "direccionPropiedad", etiqueta: "Dirección de la Propiedad" },
+        { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
+        { clave: "valorEstimado", etiqueta: "Valor Estimado / Avalúo ($)" },
+        { clave: "habitada", etiqueta: "Propiedad Habitada (Sí/No)" },
+        { clave: "estadoFisico", etiqueta: "Estado Físico del Inmueble" },
+      ],
+    },
+    {
+      nombre: "📄 Módulo Crédito & Gestoría Legal",
+      color: "bg-purple-50 border-purple-200 text-purple-900",
+      badge: "Gestoría",
+      campos: [
+        { clave: "nss", etiqueta: "Número de Seguro Social (NSS)" },
+        { clave: "curp", etiqueta: "CURP del Habiente" },
+        { clave: "tipoCredito", etiqueta: "Tipo de Crédito (Infonavit/Bancario)" },
+        { clave: "saldoDeuda", etiqueta: "Saldo de Deuda Hipotecaria ($)" },
+        { clave: "sinPagos", etiqueta: "Estatus de Adeudo / Retraso" },
+      ],
+    },
+    {
+      nombre: "👤 Módulo Prospecto / Contacto",
+      color: "bg-emerald-50 border-emerald-200 text-emerald-900",
+      badge: "Contacto",
+      campos: [
+        { clave: "telefono", etiqueta: "Teléfono de Contacto" },
+        { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
+        { clave: "calificacion", etiqueta: "Calificación Prospecto" },
+        { clave: "origen", etiqueta: "Origen del Prospecto" },
+      ],
+    },
+  ];
+}
 
 interface Props {
   procesosIniciales?: ProcesoMaestro[];
@@ -516,46 +562,51 @@ export function ConfiguradorProcesosClient({
                       </div>
                     </div>
 
-                    {/* Campos Obligatorios para avanzar organizados por Módulo */}
-                    <div className="space-y-3">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60">
-                        📌 Campos Obligatorios por Módulo de Información:
-                      </label>
+                    {/* Campos Obligatorios para avanzar organizados por Módulo del Proceso */}
+                    {(() => {
+                      const modulosCampos = obtenerModulosPorTipoNegocio(procesoSel?.tipoNegocio || "");
+                      return (
+                        <div className="space-y-3">
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60">
+                            📌 Campos Obligatorios por Módulo ({procesoSel?.nombre}):
+                          </label>
 
-                      <div className="space-y-2.5">
-                        {MODULOS_CAMPOS.map((mod) => (
-                          <div key={mod.nombre} className={`p-3 rounded-xl border ${mod.color}`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-[11px] font-bold uppercase tracking-wider">
-                                {mod.nombre}
-                              </span>
-                              <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white/60">
-                                {mod.badge}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {mod.campos.map((c) => {
-                                const seleccionado = (etapa.camposRequeridos || []).includes(c.clave);
-                                return (
-                                  <button
-                                    key={c.clave}
-                                    type="button"
-                                    onClick={() => handleToggleCampoRequerido(idx, c.clave)}
-                                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition border ${
-                                      seleccionado
-                                        ? "bg-verde-profundo text-white border-verde-profundo shadow-2xs"
-                                        : "bg-white text-carbon/80 border-carbon/20 hover:bg-slate-50"
-                                    }`}
-                                  >
-                                    {c.etiqueta} {seleccionado && "✓"}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                          <div className="space-y-2.5">
+                            {modulosCampos.map((mod) => (
+                              <div key={mod.nombre} className={`p-3 rounded-xl border ${mod.color}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[11px] font-bold uppercase tracking-wider">
+                                    {mod.nombre}
+                                  </span>
+                                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white/60">
+                                    {mod.badge}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {mod.campos.map((c) => {
+                                    const seleccionado = (etapa.camposRequeridos || []).includes(c.clave);
+                                    return (
+                                      <button
+                                        key={c.clave}
+                                        type="button"
+                                        onClick={() => handleToggleCampoRequerido(idx, c.clave)}
+                                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition border ${
+                                          seleccionado
+                                            ? "bg-verde-profundo text-white border-verde-profundo shadow-2xs"
+                                            : "bg-white text-carbon/80 border-carbon/20 hover:bg-slate-50"
+                                        }`}
+                                      >
+                                        {c.etiqueta} {seleccionado && "✓"}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Constructor Visual de Reglas IF/THEN */}
                     <div className="space-y-2 pt-2 border-t border-carbon/5">
@@ -589,7 +640,7 @@ export function ConfiguradorProcesosClient({
                                 }}
                                 className="rounded border border-carbon/20 bg-white px-2 py-1 outline-none font-semibold"
                               >
-                                {MODULOS_CAMPOS.map((mod) => (
+                                {obtenerModulosPorTipoNegocio(procesoSel?.tipoNegocio || "").map((mod) => (
                                   <optgroup key={mod.nombre} label={mod.nombre}>
                                     {mod.campos.map((c) => (
                                       <option key={c.clave} value={c.clave}>
