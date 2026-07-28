@@ -1,18 +1,18 @@
 -- Migration 0058: Preconfiguración del Flujo Operativo BPM de Impermeabilización
 -- ============================================================
 
--- 1. Crear o Asegurar Flujo BPM para 'construccion-impermeabilizacion' e 'impermeabilizacion'
+-- 1. Eliminar duplicado viejo si existiera
+DELETE FROM public.bpm_flujos WHERE tipo_negocio = 'impermeabilizacion';
+
+-- 2. Crear o Asegurar Flujo BPM Canónico para 'construccion-impermeabilizacion'
 INSERT INTO public.bpm_flujos (id, tipo_negocio, activo)
-VALUES 
-  ('b1b2c3d4-0000-0000-0000-000000000001', 'construccion-impermeabilizacion', true),
-  ('b1b2c3d4-0000-0000-0000-000000000002', 'impermeabilizacion', true)
+VALUES ('b1b2c3d4-0000-0000-0000-000000000001', 'construccion-impermeabilizacion', true)
 ON CONFLICT (tipo_negocio) DO UPDATE SET activo = true;
 
--- 2. Limpiar pasos previos para re-insertar el flujo operativo maestro
-DELETE FROM public.bpm_pasos 
-WHERE flujo_id IN ('b1b2c3d4-0000-0000-0000-000000000001', 'b1b2c3d4-0000-0000-0000-000000000002');
+-- 3. Limpiar pasos previos
+DELETE FROM public.bpm_pasos WHERE flujo_id = 'b1b2c3d4-0000-0000-0000-000000000001';
 
--- 3. Insertar Tareas del Flujo Operativo de Impermeabilización (construccion-impermeabilizacion)
+-- 4. Insertar las 12 Tareas del Flujo Operativo Canónico 'construccion-impermeabilizacion'
 INSERT INTO public.bpm_pasos (flujo_id, etapa, orden, titulo_tarea, descripcion, rol_responsable, dias_vencimiento, condicion_activacion)
 VALUES
   -- Etapa 1: Prospecto / Captación
@@ -149,16 +149,3 @@ VALUES
     'inmediato'
   );
 
--- Duplicar los mismos pasos para la clave simple 'impermeabilizacion'
-INSERT INTO public.bpm_pasos (flujo_id, etapa, orden, titulo_tarea, descripcion, rol_responsable, dias_vencimiento, condicion_activacion)
-SELECT 
-  'b1b2c3d4-0000-0000-0000-000000000002',
-  etapa,
-  orden,
-  titulo_tarea,
-  descripcion,
-  rol_responsable,
-  dias_vencimiento,
-  condicion_activacion
-FROM public.bpm_pasos
-WHERE flujo_id = 'b1b2c3d4-0000-0000-0000-000000000001';
