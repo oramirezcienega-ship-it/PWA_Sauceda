@@ -428,6 +428,7 @@ export function TablaUsuarios({
       disponible_llamadas: actualizado.disponible_llamadas,
       horario_inicio: actualizado.horario_inicio,
       horario_fin: actualizado.horario_fin,
+      horarios_guardia: actualizado.horarios_guardia,
     });
 
     // Actualizar estado si la llamada al servidor no falló
