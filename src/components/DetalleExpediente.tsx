@@ -404,8 +404,9 @@ export function DetalleExpediente({ id }: { id: string }) {
           }}
         />
 
-        {/* Avance por etapas */}
-        <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
+        {/* Avance por etapas (Solo visible para Traspaso / Compra de casa) */}
+        {(!expediente.tipoNegocio || expediente.tipoNegocio === "traspaso_compra" || (expediente.tipoNegocio as string) === "compra" || (expediente.tipoNegocio as string) === "traspaso") && (
+          <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
             {/* Vista Desktop (Completa) */}
             <div className="hidden md:block">
               <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
@@ -521,6 +522,7 @@ export function DetalleExpediente({ id }: { id: string }) {
               )}
             </div>
           </div>
+        )}
 
           {/* Ficha Premium de Información de la Propiedad (Estilo Expediente/Lead) */}
           <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm">
