@@ -10,7 +10,7 @@ import { formatoFecha } from "@/lib/formato";
 
 interface WidgetBpmTareasProps {
   expedienteId: string;
-  tipoNegocio: string;
+  tipoNegocio?: string | null;
 }
 
 export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasProps) {
@@ -53,7 +53,7 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
   async function handleInicializar() {
     setCargando(true);
     try {
-      await instanciarFlujoEnExpediente(expedienteId, tipoNegocio);
+      await instanciarFlujoEnExpediente(expedienteId, tipoNegocio || "");
       await cargarTareas();
     } catch (err) {
       console.error("Error al inicializar el flujo:", err);

@@ -250,8 +250,9 @@ export async function resumenAsesor(
   });
 
   bpmTasks?.forEach((t) => {
-    if (t.expediente?.id) {
-      expedienteIds.add(t.expediente.id);
+    const exp = Array.isArray(t.expediente) ? t.expediente[0] : (t.expediente as any);
+    if (exp?.id) {
+      expedienteIds.add(exp.id);
     }
   });
 

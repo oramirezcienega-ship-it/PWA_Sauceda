@@ -796,7 +796,7 @@ export async function programarCitaManual(data: {
         expedienteId: data.expedienteId,
         tipo: "construccion",
         titulo: `📅 ${tipoLabel} Programada`,
-        detalle: `Programada para el ${data.fecha} de ${data.horaInicio} a ${data.horaFin}. Técnico/Asesor: ${data.perfilId}. ${data.notes || data.notas ? `Notas: ${data.notas || ""}` : ""}`,
+        detalle: `Programada para el ${data.fecha} de ${data.horaInicio} a ${data.horaFin}. Técnico/Asesor: ${data.perfilId}. ${data.notas ? `Notas: ${data.notas}` : ""}`,
       });
     } else if (data.prospectoId) {
       const tipoLabel = data.tipoCita === "inspeccion" ? "Inspección Técnica" : (data.tipoCita === "instalacion" ? "Instalación Profesional" : data.tipoCita);
