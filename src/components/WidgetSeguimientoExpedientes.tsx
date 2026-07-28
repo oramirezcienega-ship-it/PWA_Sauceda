@@ -65,6 +65,19 @@ export function WidgetSeguimientoExpedientes() {
     });
   };
 
+  // Normalizar tipo de negocio para soportar cualquier variación de slug o texto
+  const normalizarTipo = (tipo?: string | null): string => {
+    if (!tipo) return "Otros";
+    const t = tipo.trim().toLowerCase();
+    if (t.includes("impermeabiliz")) return "Impermeabilización";
+    if (t.includes("remodelac")) return "Remodelación";
+    if (t.includes("traspaso") || t === "compra") return "Traspaso / Compra";
+    if (t.includes("promocion") || t === "venta") return "Promoción de Venta";
+    if (t.includes("tramite") || t.includes("trámite")) return "Solo Trámite";
+    if (t.includes("construcc") || t.includes("obra")) return "Construcción / Obra";
+    return tipo;
+  };
+
   // Agrupar expedientes por su tipo de negocio, ordenando las listas individuales
   const agrupados = useMemo(() => {
     const mapa: Record<string, ExpedienteSeguimiento[]> = {
@@ -78,8 +91,9 @@ export function WidgetSeguimientoExpedientes() {
     };
 
     expedientesFiltrados.forEach((e) => {
-      if (mapa[e.tipoNegocio] !== undefined) {
-        mapa[e.tipoNegocio].push(e);
+      const tipoNorm = normalizarTipo(e.tipoNegocio);
+      if (mapa[tipoNorm] !== undefined) {
+        mapa[tipoNorm].push(e);
       } else {
         mapa["Otros"].push(e);
       }

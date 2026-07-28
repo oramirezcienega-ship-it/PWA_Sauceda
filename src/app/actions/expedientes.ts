@@ -1080,8 +1080,13 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "solo_tramite": "Solo Trámite",
     "tramite": "Solo Trámite",
     "construccion": "Construcción / Obra",
+    "obra": "Construcción / Obra",
     "construccion-remodelacion": "Remodelación",
+    "construccion_remodelacion": "Remodelación",
+    "remodelacion": "Remodelación",
     "construccion-impermeabilizacion": "Impermeabilización",
+    "construccion_impermeabilizacion": "Impermeabilización",
+    "impermeabilizacion": "Impermeabilización",
   };
 
   const etapaLabels: Record<string, string> = {
