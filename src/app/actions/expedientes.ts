@@ -1010,7 +1010,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus, etapa)");
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
