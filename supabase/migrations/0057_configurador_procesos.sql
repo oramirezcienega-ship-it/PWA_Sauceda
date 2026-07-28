@@ -101,23 +101,24 @@ VALUES
   ('a1b2c3d4-0000-0000-0000-000000000001', 'firmado', 'Firma y Cierre', 6, 7, '[]'::jsonb)
 ON CONFLICT (proceso_id, clave_etapa) DO NOTHING;
 
--- Seed Inicial: Proceso Maestro de Impermeabilización (Sauceda Construye)
+-- Seed Inicial: Proceso Maestro de Impermeabilización (Sauceda Construye - 7 Etapas)
 INSERT INTO public.procesos_maestros (id, nombre, descripcion, tipo_negocio, activo)
 VALUES (
   'a1b2c3d4-0000-0000-0000-000000000002',
   'Sauceda Construye - Impermeabilización',
-  'Proceso de inspección técnica, cotización, obra y garantía de impermeabilización',
+  'Flujo completo de 7 etapas: inspección técnica, cotización, anticipo, obra, cobro y carta de garantía',
   'impermeabilizacion',
   true
 ) ON CONFLICT (tipo_negocio) DO NOTHING;
 
--- Seed Etapas de Impermeabilización
+-- Seed 7 Etapas de Impermeabilización con SLAs y Campos Obligatorios
 INSERT INTO public.etapas_configuracion (proceso_id, clave_etapa, nombre, orden, sla_dias, campos_requeridos)
 VALUES 
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'nuevo-lead', 'Prospecto Recibido', 1, 2, '["telefono"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'inspeccion', 'Inspección Técnica Azotea', 2, 5, '["direccion_propiedad"]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'cotizacion', 'Presupuesto y Cotización', 3, 3, '[]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'anticipo', 'Anticipo Detectado', 4, 3, '[]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'obra', 'Ejecución de Obra / Aplicación', 5, 7, '[]'::jsonb),
-  ('a1b2c3d4-0000-0000-0000-000000000002', 'garantia', 'Firma de Garantía y Cierre', 6, 3, '[]'::jsonb)
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'nuevo-lead', '1. Prospecto Recibido', 1, 2, '["telefono"]'::jsonb),
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'inspeccion', '2. Visita & Inspección Técnica', 2, 3, '["telefono", "direccion_propiedad"]'::jsonb),
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'cotizacion', '3. Presupuesto & Cotización', 3, 3, '["telefono", "direccion_propiedad"]'::jsonb),
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'anticipo', '4. Aceptación & Anticipo', 4, 3, '["telefono", "direccion_propiedad"]'::jsonb),
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'obra', '5. Ejecución de Obra / Aplicación', 5, 7, '["direccion_propiedad"]'::jsonb),
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'cobro', '6. Liquidación / Cobro Final', 6, 3, '[]'::jsonb),
+  ('a1b2c3d4-0000-0000-0000-000000000002', 'garantia', '7. Firma de Garantía & Cierre', 7, 3, '[]'::jsonb)
 ON CONFLICT (proceso_id, clave_etapa) DO NOTHING;
