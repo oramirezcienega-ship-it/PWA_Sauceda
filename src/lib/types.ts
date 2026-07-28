@@ -212,6 +212,10 @@ export interface Expediente {
   fechaConfirmacion?: string | null;
   /** Calificación / prioridad del expediente (caliente, templado, frio, descalificado). */
   calificacion?: CalificacionProspecto;
+  /** Correo del prospecto enlazado (vía join). */
+  prospectoCorreo?: string | null;
+  /** Dirección del prospecto enlazado (vía join). */
+  prospectoDireccion?: string | null;
 }
 
 /**

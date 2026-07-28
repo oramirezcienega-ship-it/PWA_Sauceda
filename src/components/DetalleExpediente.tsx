@@ -369,6 +369,90 @@ export function DetalleExpediente({ id }: { id: string }) {
 
       {/* Columna única centrada para un diseño premium y ordenado */}
       <div className="mt-6 space-y-6">
+        {/* Widget Principal de Datos de Contacto del Cliente */}
+        <div className="rounded-xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-carbon/5 pb-2.5">
+            <h3 className="font-titular text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
+              🎴 Datos de Contacto del Cliente
+            </h3>
+            <span className="text-[10px] text-carbon/40 font-mono">Información de comunicación y ubicación</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Teléfono */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📞 Teléfono</span>
+                <span className="font-mono text-xs sm:text-sm font-bold text-carbon block mt-0.5 select-all truncate">
+                  {expediente.telefono || "Sin teléfono registrado"}
+                </span>
+              </div>
+              {expediente.telefono && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <BotonLlamar telefono={expediente.telefono} prospectoId={expediente.prospectoId} />
+                  <a
+                    href={`https://wa.me/${expediente.telefono.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-700 transition shadow-2xs"
+                  >
+                    <span>💬 WhatsApp</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Correo Electrónico */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">✉️ Correo Electrónico</span>
+                <span className="font-mono text-xs sm:text-sm font-medium text-carbon block mt-0.5 select-all truncate" title={expediente.prospectoCorreo || "Sin correo registrado"}>
+                  {expediente.prospectoCorreo || "Sin correo registrado"}
+                </span>
+              </div>
+              {expediente.prospectoCorreo ? (
+                <a
+                  href={`mailto:${expediente.prospectoCorreo}`}
+                  className="self-start inline-flex items-center gap-1 text-[10px] font-bold text-sauce hover:underline pt-1"
+                >
+                  <span>Enviar correo →</span>
+                </a>
+              ) : (
+                <span className="text-[10px] text-carbon/40 italic">No proporcionado</span>
+              )}
+            </div>
+
+            {/* Dirección Completa / Propiedad */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📍 Dirección Completa</span>
+                <span className="text-xs font-medium text-carbon/80 block mt-0.5 line-clamp-2" title={expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}>
+                  {expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}
+                </span>
+              </div>
+              {expediente.linkGoogleMaps ? (
+                <a
+                  href={expediente.linkGoogleMaps}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="self-start inline-flex items-center gap-1 text-[10px] font-bold text-sauce hover:underline pt-1"
+                >
+                  <span>🗺️ Ver en Google Maps →</span>
+                </a>
+              ) : (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(expediente.direccionPropiedad || `${expediente.fraccionamiento}, León, Gto.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="self-start inline-flex items-center gap-1 text-[10px] font-bold text-sauce hover:underline pt-1"
+                >
+                  <span>🗺️ Buscar en mapa →</span>
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Enlaces de agendamiento de citas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <LinkCitaWidget

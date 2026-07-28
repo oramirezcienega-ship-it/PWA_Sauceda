@@ -49,7 +49,7 @@ export async function listarExpedientes(): Promise<Expediente[]> {
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)");
+    .select("*, prospectos(origen, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
@@ -257,7 +257,7 @@ export async function crearExpediente(
   const { data, error } = await sb
     .from("expedientes")
     .insert({ id, ...aFila(datos), prospecto_id: datos.prospectoId || null, ultimo_movimiento: hoyISO() })
-    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
+    .select("*, prospectos(origen, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
 
@@ -360,7 +360,7 @@ export async function actualizarExpediente(
     .from("expedientes")
     .update({ ...nuevos, ultimo_movimiento: hoyISO() })
     .eq("id", id)
-    .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
+    .select("*, prospectos(origen, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
 
   if (error) {
