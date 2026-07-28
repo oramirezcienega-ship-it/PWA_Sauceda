@@ -12,7 +12,9 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
 import { OperadorSelector } from "./OperadorSelector";
-import { labelTipoNegocio, type Cotizacion } from "@/lib/types";
+import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto } from "@/lib/types";
+import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
+import { cambiarCalificacionExpediente } from "@/app/actions/expedientes";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
@@ -274,11 +276,26 @@ export function DetalleExpediente({ id }: { id: string }) {
           )}
         </p>
 
-        {/* Estatus y Tipo de Negocio responsivos */}
+        {/* Calificación / Prioridad y Tipo de Negocio responsivos */}
         <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2">
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[10px] uppercase font-bold text-carbon/40">Etapa:</span>
-            <EtapaBadge etapa={expediente.etapa} tipoNegocio={expediente.tipoNegocio} />
+            <span className="text-[10px] uppercase font-bold text-carbon/40">Calificación:</span>
+            <CalificacionProspectoBadge calificacion={expediente.calificacion || "frio"} />
+            <select
+              value={expediente.calificacion || "frio"}
+              onChange={async (e) => {
+                const nueva = e.target.value as CalificacionProspecto;
+                await cambiarCalificacionExpediente(expediente.id, nueva);
+                await recargar();
+              }}
+              className="text-[10px] rounded border border-carbon/20 px-1.5 py-0.5 bg-white font-medium focus:outline-none focus:border-sauce text-carbon/70 cursor-pointer shadow-2xs"
+              title="Cambiar calificación"
+            >
+              <option value="caliente">🔥 Caliente</option>
+              <option value="templado">⚡ Templado</option>
+              <option value="frio">❄️ Frío</option>
+              <option value="descalificado">🚫 Descalificado</option>
+            </select>
           </div>
           
           <div className="flex items-center gap-1.5 text-xs">
