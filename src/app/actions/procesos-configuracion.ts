@@ -42,6 +42,7 @@ export async function listarProcesosMaestros(): Promise<ProcesoMaestro[]> {
       nombre: p.nombre,
       descripcion: p.descripcion || "",
       tipoNegocio: p.tipo_negocio,
+      entidadTarget: p.entidad_target || "expediente",
       activo: p.activo ?? true,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
@@ -97,6 +98,7 @@ export async function obtenerProcesoCompleto(procesoId: string): Promise<Proceso
     nombre: proc.nombre,
     descripcion: proc.descripcion || "",
     tipoNegocio: proc.tipo_negocio,
+    entidadTarget: proc.entidad_target || "expediente",
     activo: proc.activo ?? true,
     createdAt: proc.created_at,
     updatedAt: proc.updated_at,
@@ -142,6 +144,7 @@ export async function crearProceso(datos: {
   nombre: string;
   descripcion?: string;
   tipoNegocio: string;
+  entidadTarget?: "expediente" | "prospecto";
 }): Promise<ProcesoMaestro> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -152,6 +155,7 @@ export async function crearProceso(datos: {
       nombre: datos.nombre,
       descripcion: datos.descripcion || "",
       tipo_negocio: datos.tipoNegocio,
+      entidad_target: datos.entidadTarget || "expediente",
       activo: true,
     })
     .select()
@@ -183,7 +187,8 @@ export async function crearProceso(datos: {
 export async function duplicarProceso(
   procesoId: string,
   nuevoNombre: string,
-  nuevoTipoNegocio: string
+  nuevoTipoNegocio: string,
+  entidadTarget?: "expediente" | "prospecto"
 ): Promise<ProcesoMaestro> {
   await requireAdministrador();
   const original = await obtenerProcesoCompleto(procesoId);
@@ -197,6 +202,7 @@ export async function duplicarProceso(
       nombre: nuevoNombre,
       descripcion: `Copia de ${original.nombre}. ${original.descripcion}`,
       tipo_negocio: nuevoTipoNegocio,
+      entidad_target: entidadTarget || original.entidadTarget || "expediente",
       activo: true,
     })
     .select()
@@ -224,7 +230,12 @@ export async function duplicarProceso(
 /** Actualizar metadatos de un proceso maestro. */
 export async function actualizarProceso(
   procesoId: string,
-  datos: { nombre?: string; descripcion?: string; activo?: boolean }
+  datos: {
+    nombre?: string;
+    descripcion?: string;
+    entidadTarget?: "expediente" | "prospecto";
+    activo?: boolean;
+  }
 ): Promise<void> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -232,6 +243,7 @@ export async function actualizarProceso(
   const updateObj: Record<string, any> = { updated_at: new Date().toISOString() };
   if (datos.nombre !== undefined) updateObj.nombre = datos.nombre;
   if (datos.descripcion !== undefined) updateObj.descripcion = datos.descripcion;
+  if (datos.entidadTarget !== undefined) updateObj.entidad_target = datos.entidadTarget;
   if (datos.activo !== undefined) updateObj.activo = datos.activo;
 
   const { error } = await sb.from("procesos_maestros").update(updateObj).eq("id", procesoId);

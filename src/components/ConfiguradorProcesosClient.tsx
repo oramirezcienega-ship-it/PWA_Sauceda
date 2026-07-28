@@ -101,11 +101,13 @@ export function ConfiguradorProcesosClient({
   const [mostrarModalNuevo, setMostrarModalNuevo] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoTipoNegocio, setNuevoTipoNegocio] = useState("");
+  const [nuevoEntidadTarget, setNuevoEntidadTarget] = useState<"expediente" | "prospecto">("expediente");
   const [nuevoDescripcion, setNuevoDescripcion] = useState("");
 
   const [mostrarModalDuplicar, setMostrarModalDuplicar] = useState(false);
   const [duplicarNombre, setDuplicarNombre] = useState("");
   const [duplicarTipo, setDuplicarTipo] = useState("");
+  const [duplicarEntidadTarget, setDuplicarEntidadTarget] = useState<"expediente" | "prospecto">("expediente");
 
   // Modificación en vivo de Etapas
   const [etapasEditables, setEtapasEditables] = useState<EtapaConfiguracion[]>(
@@ -183,6 +185,7 @@ export function ConfiguradorProcesosClient({
         nombre: nuevoNombre,
         descripcion: nuevoDescripcion,
         tipoNegocio: nuevoTipoNegocio.toLowerCase().replace(/\s+/g, "_"),
+        entidadTarget: nuevoEntidadTarget,
       });
       setMostrarModalNuevo(false);
       setNuevoNombre("");
@@ -190,7 +193,7 @@ export function ConfiguradorProcesosClient({
       setNuevoDescripcion("");
       await cargarLista();
       await seleccionarProceso(nProc.id);
-      setMensaje({ tipo: "ok", texto: "¡Proceso maestro creado exitosamente!" });
+      setMensaje({ tipo: "ok", texto: `¡Proceso de entidad "${nuevoEntidadTarget === 'expediente' ? '📁 Expediente' : '👤 Prospecto'}" creado exitosamente!` });
     } catch (err: any) {
       setMensaje({ tipo: "error", texto: err.message });
     } finally {
@@ -202,7 +205,12 @@ export function ConfiguradorProcesosClient({
     if (!procesoSel || !duplicarNombre || !duplicarTipo) return;
     setGuardando(true);
     try {
-      const nProc = await duplicarProceso(procesoSel.id, duplicarNombre, duplicarTipo.toLowerCase().replace(/\s+/g, "_"));
+      const nProc = await duplicarProceso(
+        procesoSel.id,
+        duplicarNombre,
+        duplicarTipo.toLowerCase().replace(/\s+/g, "_"),
+        duplicarEntidadTarget
+      );
       setMostrarModalDuplicar(false);
       setDuplicarNombre("");
       setDuplicarTipo("");
@@ -981,6 +989,18 @@ export function ConfiguradorProcesosClient({
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-carbon/70 mb-1">Entidad Target del Proceso *</label>
+              <select
+                value={nuevoEntidadTarget}
+                onChange={(e) => setNuevoEntidadTarget(e.target.value as any)}
+                className="w-full rounded-lg border border-carbon/20 p-2 text-xs font-bold text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="expediente">📁 Entidad EXPEDIENTE (Proyecto / Casa / Obra / Traspaso)</option>
+                <option value="prospecto">👤 Entidad PROSPECTO (Lead / Contacto Comercial)</option>
+              </select>
+            </div>
+
+            <div>
               <label className="block text-xs font-bold text-carbon/70 mb-1">Descripción</label>
               <textarea
                 rows={2}
@@ -1036,6 +1056,18 @@ export function ConfiguradorProcesosClient({
                 onChange={(e) => setDuplicarTipo(e.target.value)}
                 className="w-full rounded-lg border border-carbon/20 p-2 text-xs outline-none focus:border-sauce font-mono"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-carbon/70 mb-1">Entidad Target del Proceso *</label>
+              <select
+                value={duplicarEntidadTarget}
+                onChange={(e) => setDuplicarEntidadTarget(e.target.value as any)}
+                className="w-full rounded-lg border border-carbon/20 p-2 text-xs font-bold text-verde-profundo outline-none focus:border-sauce"
+              >
+                <option value="expediente">📁 Entidad EXPEDIENTE (Proyecto / Casa / Obra / Traspaso)</option>
+                <option value="prospecto">👤 Entidad PROSPECTO (Lead / Contacto Comercial)</option>
+              </select>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

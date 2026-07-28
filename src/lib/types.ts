@@ -707,6 +707,7 @@ export interface ProcesoMaestro {
   nombre: string;
   descripcion: string;
   tipoNegocio: string;
+  entidadTarget?: 'expediente' | 'prospecto';
   activo: boolean;
   etapas?: EtapaConfiguracion[];
   escalaciones?: EscalacionConfiguracion[];
