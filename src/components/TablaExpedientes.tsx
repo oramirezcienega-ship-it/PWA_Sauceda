@@ -11,6 +11,7 @@ import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 import { BotonLlamar } from "./BotonLlamar";
+import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
@@ -477,7 +478,8 @@ export function TablaExpedientes({
                     </div>
                   </div>
                 </div>
-                <div>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  <CalificacionProspectoBadge calificacion={exp.calificacion || "frio"} />
                   {exp.origenProspecto ? (
                     <span className="inline-flex items-center rounded-full border border-cielo/30 bg-cielo/10 px-2 py-0.5 text-[10px] font-semibold text-cielo">
                       {ORIGEN_POR_ID[exp.origenProspecto]}

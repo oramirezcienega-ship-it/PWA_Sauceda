@@ -10,7 +10,7 @@ import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { validarAgendaOperador } from "@/app/actions/agenda";
-import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
+import type { DatosExpediente, EtapaId, Expediente, CalificacionProspecto } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
 function aEntero(s: string | undefined): number {
@@ -999,6 +999,7 @@ export interface ExpedienteSeguimiento {
   tareaAsesorId?: string | null;
   asesorId?: string | null;
   telefono: string;
+  calificacion?: CalificacionProspecto;
 }
 
 /** Obtiene los expedientes activos de la operación organizados para seguimiento con su próximo pendiente/acción */
@@ -1010,7 +1011,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus)");
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus, calificacion)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
@@ -1157,7 +1158,8 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
       tareaBpmId: bpmTarea ? bpmTarea.id : null,
       tareaAsesorId: tarea ? tarea.id : null,
       asesorId: e.asesor_id || null,
-      telefono: e.telefono || ""
+      telefono: e.telefono || "",
+      calificacion: (e.calificacion || prospectoData?.calificacion || "frio") as CalificacionProspecto,
     });
   }
 
@@ -1178,5 +1180,38 @@ export async function actualizarExpedienteSeguro(
     return { ok: true, expediente };
   } catch (err: any) {
     return { ok: false, error: err?.message ?? "Error desconocido al guardar." };
+  }
+}
+
+/** Cambia la calificación / prioridad de un expediente y sincroniza con su prospecto enlazado */
+export async function cambiarCalificacionExpediente(
+  expedienteId: string,
+  calificacion: CalificacionProspecto,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const usuario = await usuarioActual();
+    if (!usuario) return { ok: false, error: "No autorizado." };
+
+    const sb = supabaseServidor();
+    const { data: exp, error } = await sb
+      .from("expedientes")
+      .update({ calificacion })
+      .eq("id", expedienteId)
+      .select("prospecto_id")
+      .single();
+
+    if (error) return { ok: false, error: error.message };
+
+    // Sincronización explícita con el prospecto si existe
+    if (exp?.prospecto_id) {
+      await sb
+        .from("prospectos")
+        .update({ calificacion })
+        .eq("id", exp.prospecto_id);
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al cambiar la calificación." };
   }
 }

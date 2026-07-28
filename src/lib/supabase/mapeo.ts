@@ -65,6 +65,7 @@ export interface FilaExpediente {
   session_token_client?: string | null;
   status_proceso?: string | null;
   fecha_confirmacion?: string | null;
+  calificacion?: CalificacionProspecto;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -111,6 +112,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     sessionTokenClient: fila.session_token_client ?? null,
     statusProceso: fila.status_proceso ?? null,
     fechaConfirmacion: fila.fecha_confirmacion ?? null,
+    calificacion: fila.calificacion ?? "frio",
   };
 }
 
@@ -142,6 +144,7 @@ export function aFila(datos: DatosExpediente) {
     habitada: datos.habitada ?? null,
     asesor_id: datos.asesorId ?? null,
     operador_id: datos.operadorId ?? null,
+    calificacion: datos.calificacion || "frio",
   };
 }
 

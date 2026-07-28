@@ -210,6 +210,8 @@ export interface Expediente {
   statusProceso?: string | null;
   /** Fecha de confirmación por el cliente. */
   fechaConfirmacion?: string | null;
+  /** Calificación / prioridad del expediente (caliente, templado, frio, descalificado). */
+  calificacion?: CalificacionProspecto;
 }
 
 /**

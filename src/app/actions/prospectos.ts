@@ -378,6 +378,12 @@ export async function cambiarCalificacionMasivo(
     .update({ calificacion })
     .in("id", ids);
   if (error) throw new Error(error.message);
+
+  // Sincronización explícita con expedientes enlazados
+  await sb
+    .from("expedientes")
+    .update({ calificacion })
+    .in("prospecto_id", ids);
 }
 
 /** Asigna un asesor a varios prospectos a la vez (acción masiva). */
