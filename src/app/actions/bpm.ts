@@ -386,3 +386,103 @@ export async function listarFlujosBPM() {
       }))
   }));
 }
+
+export interface ConcluirTareaParams {
+  expedienteId?: string | null;
+  prospectoId?: string | null;
+  tareaId?: string | null; // bpm_expediente_tareas ID
+  taskAsesorId?: string | null; // asesor_tasks ID
+  citaId?: string | null; // agenda_citas ID
+  resultadoNotas: string;
+  reprogramarSiguiente: boolean;
+  diasSiguiente?: number;
+  fechaSiguiente?: string | null;
+  tituloSiguiente?: string;
+  responsableId?: string | null;
+}
+
+/**
+ * Concluye la tarea/cita de seguimiento actual y (opcionalmente) programa en automático 
+ * la siguiente llamada o acción de seguimiento en el BPM con responsable y reglas de fecha.
+ */
+export async function concluirTareaYProgramarSiguiente(params: ConcluirTareaParams) {
+  const sb = supabaseServidor();
+  const hoyIso = new Date().toISOString();
+
+  // 1. Marcar la tarea o cita actual como completada
+  if (params.tareaId) {
+    await sb
+      .from("bpm_expediente_tareas")
+      .update({ estado: "completada", completada_en: hoyIso })
+      .eq("id", params.tareaId);
+  }
+
+  if (params.taskAsesorId) {
+    await sb
+      .from("asesor_tasks")
+      .update({ status: "completada", completada_en: hoyIso })
+      .eq("id", params.taskAsesorId);
+  }
+
+  if (params.citaId) {
+    await sb
+      .from("agenda_citas")
+      .update({ estado: "completada", notas: params.resultadoNotas })
+      .eq("id", params.citaId);
+  }
+
+  // 2. Registrar en la bitácora de actividades
+  const textoActividad = params.resultadoNotas?.trim() 
+    ? `✅ Actividad/Seguimiento concluido: "${params.resultadoNotas.trim()}"`
+    : `✅ Actividad/Seguimiento marcado como concluido.`;
+
+  await registrarActividad(sb, {
+    expedienteId: params.expedienteId || null,
+    prospectoId: params.prospectoId || null,
+    tipo: "tarea",
+    titulo: "Seguimiento Concluido",
+    detalle: textoActividad
+  });
+
+  // 3. Si se solicita reprogramar / agendar automáticamente la siguiente llamada en el BPM
+  if (params.reprogramarSiguiente && (params.expedienteId || params.prospectoId)) {
+    let fechaFinal = params.fechaSiguiente;
+    if (!fechaFinal && params.diasSiguiente) {
+      const d = new Date();
+      d.setDate(d.getDate() + Number(params.diasSiguiente));
+      fechaFinal = d.toISOString().slice(0, 10);
+    }
+    if (!fechaFinal) {
+      const d = new Date();
+      d.setDate(d.getDate() + 2); // Por defecto en 2 días
+      fechaFinal = d.toISOString().slice(0, 10);
+    }
+
+    const tituloSiguiente = params.tituloSiguiente?.trim() || "📞 Llamada de seguimiento";
+
+    if (params.expedienteId) {
+      await sb.from("bpm_expediente_tareas").insert({
+        expediente_id: params.expedienteId,
+        titulo: tituloSiguiente,
+        descripcion: `Llamada de seguimiento programada. Retro previa: ${params.resultadoNotas || "Sin notas"}`,
+        estado: "pendiente",
+        responsable_id: params.responsableId || null,
+        agendada_para: `${fechaFinal}T10:00:00`
+      });
+    }
+
+    await registrarActividad(sb, {
+      expedienteId: params.expedienteId || null,
+      prospectoId: params.prospectoId || null,
+      tipo: "sistema",
+      titulo: `⚡ Siguiente llamada agendada para el ${fechaFinal}`,
+      detalle: `Título: "${tituloSiguiente}". Responsable: ${params.responsableId ? "Asignado" : "Sin asignar"}.`
+    });
+  }
+
+  revalidatePath("/expediente/[id]");
+  revalidatePath("/prospectos/[id]");
+  revalidatePath("/");
+
+  return { ok: true, mensaje: "Seguimiento concluido y reprogramado exitosamente." };
+}

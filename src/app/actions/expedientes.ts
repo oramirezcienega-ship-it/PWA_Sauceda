@@ -984,6 +984,7 @@ export async function guardarProveedorIA(proveedor: string): Promise<boolean> {
 
 export interface ExpedienteSeguimiento {
   id: string;
+  prospectoId?: string | null;
   clienteNombre: string;
   fraccionamiento: string;
   tipoNegocio: string;
@@ -993,6 +994,10 @@ export interface ExpedienteSeguimiento {
   proximaAccion: string;
   proximaAccionFecha: string | null;
   proximaAccionTipo: "cita" | "tarea" | "ninguno";
+  citaId?: string | null;
+  tareaBpmId?: string | null;
+  tareaAsesorId?: string | null;
+  asesorId?: string | null;
   telefono: string;
 }
 
@@ -1005,7 +1010,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus, etapa)");
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
@@ -1138,6 +1143,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
 
     result.push({
       id: e.id,
+      prospectoId: e.prospecto_id || null,
       clienteNombre: nombreCompleto,
       fraccionamiento: e.fraccionamiento || "No especificado",
       tipoNegocio: tipoNegocioLabels[e.tipo_negocio] || e.tipo_negocio || "Otro",
@@ -1147,6 +1153,10 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
       proximaAccion,
       proximaAccionFecha,
       proximaAccionTipo,
+      citaId: cita ? cita.id : null,
+      tareaBpmId: bpmTarea ? bpmTarea.id : null,
+      tareaAsesorId: tarea ? tarea.id : null,
+      asesorId: e.asesor_id || null,
       telefono: e.telefono || ""
     });
   }

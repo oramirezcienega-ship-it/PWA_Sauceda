@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { obtenerExpedientesSeguimiento, type ExpedienteSeguimiento } from "@/app/actions/expedientes";
+import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
 
 export function WidgetSeguimientoExpedientes() {
   const [expedientes, setExpedientes] = useState<ExpedienteSeguimiento[]>([]);
@@ -15,6 +16,48 @@ export function WidgetSeguimientoExpedientes() {
   const [filtroFecha, setFiltroFecha] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+
+  // Estado del Modal de Conclusión de Tarea
+  const [expedienteAConcluir, setExpedienteAConcluir] = useState<ExpedienteSeguimiento | null>(null);
+  const [retroNotas, setRetroNotas] = useState("");
+  const [reprogramarSiguiente, setReprogramarSiguiente] = useState(true);
+  const [diasSiguiente, setDiasSiguiente] = useState<number>(2);
+  const [fechaSiguiente, setFechaSiguiente] = useState("");
+  const [tituloSiguiente, setTituloSiguiente] = useState("📞 Llamada de seguimiento");
+  const [guardandoConclusion, setGuardandoConclusion] = useState(false);
+
+  const handleGuardarConclusion = async () => {
+    if (!expedienteAConcluir) return;
+    setGuardandoConclusion(true);
+    try {
+      await concluirTareaYProgramarSiguiente({
+        expedienteId: expedienteAConcluir.id,
+        prospectoId: expedienteAConcluir.prospectoId,
+        tareaId: expedienteAConcluir.tareaBpmId,
+        taskAsesorId: expedienteAConcluir.tareaAsesorId,
+        citaId: expedienteAConcluir.citaId,
+        resultadoNotas: retroNotas,
+        reprogramarSiguiente,
+        diasSiguiente,
+        fechaSiguiente: fechaSiguiente || null,
+        tituloSiguiente,
+        responsableId: expedienteAConcluir.asesorId || null
+      });
+
+      // Recargar expedientes
+      const datosActualizados = await obtenerExpedientesSeguimiento();
+      setExpedientes(datosActualizados);
+
+      // Cerrar modal
+      setExpedienteAConcluir(null);
+      setRetroNotas("");
+    } catch (err) {
+      console.error("Error al concluir tarea:", err);
+      alert("Ocurrió un error al concluir la tarea.");
+    } finally {
+      setGuardandoConclusion(false);
+    }
+  };
 
   useEffect(() => {
     obtenerExpedientesSeguimiento()
@@ -495,8 +538,25 @@ export function WidgetSeguimientoExpedientes() {
                             </div>
                           </div>
 
-                          {/* Botón de Enlace al Detalle */}
-                          <div className="flex-shrink-0 flex items-center justify-end">
+                          {/* Botones de Acción */}
+                          <div className="flex-shrink-0 flex items-center gap-2 justify-end">
+                            {(e.proximaAccionTipo === "cita" || e.proximaAccionTipo === "tarea") && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpedienteAConcluir(e);
+                                  setRetroNotas("");
+                                  setReprogramarSiguiente(true);
+                                  setDiasSiguiente(2);
+                                  setFechaSiguiente("");
+                                  setTituloSiguiente("📞 Llamada de seguimiento");
+                                }}
+                                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>✓</span>
+                                <span>Concluir / Retro</span>
+                              </button>
+                            )}
                             <Link
                               href={`/expediente/${e.id}`}
                               className="rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border px-3 py-1.5 text-xs font-semibold transition"
@@ -512,6 +572,126 @@ export function WidgetSeguimientoExpedientes() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal de Conclusión / Retro de Seguimiento */}
+      {expedienteAConcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-md w-full space-y-4 animate-in fade-in zoom-in duration-150 border border-carbon/10">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="font-titular text-base font-bold text-verde-profundo flex items-center gap-1.5">
+                  ✅ Concluir & Retro de Seguimiento
+                </h3>
+                <p className="text-xs text-carbon/50">
+                  {expedienteAConcluir.clienteNombre} ({expedienteAConcluir.id})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpedienteAConcluir(null)}
+                className="text-carbon/40 hover:text-carbon text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-carbon/10 text-xs">
+                <span className="font-bold text-carbon/60 uppercase text-[9px] block">Acción Pendiente Actual:</span>
+                <span className="font-semibold text-carbon">{expedienteAConcluir.proximaAccion}</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-carbon/70 mb-1">
+                  Retro / Avance de la llamada o seguimiento:
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ej. Se llamó a la clienta Susana, le pareció bien la cotización pero pide llamada en 3 días para confirmar con su esposo..."
+                  value={retroNotas}
+                  onChange={(e) => setRetroNotas(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 p-2.5 text-xs bg-white focus:outline-none focus:border-sauce"
+                />
+              </div>
+
+              <div className="border-t pt-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-carbon/80 select-none">
+                  <input
+                    type="checkbox"
+                    checked={reprogramarSiguiente}
+                    onChange={(e) => setReprogramarSiguiente(e.target.checked)}
+                    className="rounded border-carbon/30 text-sauce focus:ring-sauce"
+                  />
+                  <span>⚡ Programar automáticamente siguiente llamada en BPM</span>
+                </label>
+
+                {reprogramarSiguiente && (
+                  <div className="pl-6 space-y-2 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-bold text-carbon/50 uppercase">Título del siguiente seguimiento:</label>
+                      <input
+                        type="text"
+                        value={tituloSiguiente}
+                        onChange={(e) => setTituloSiguiente(e.target.value)}
+                        className="w-full rounded-md border border-carbon/20 px-2.5 py-1 text-xs"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-carbon/50 uppercase">Plazo / Regla de Fecha:</label>
+                        <select
+                          value={diasSiguiente}
+                          onChange={(e) => {
+                            setDiasSiguiente(Number(e.target.value));
+                            setFechaSiguiente("");
+                          }}
+                          className="w-full rounded-md border border-carbon/20 p-1 text-xs"
+                        >
+                          <option value={1}>En 1 día (Mañana)</option>
+                          <option value={2}>En 2 días</option>
+                          <option value={3}>En 3 días</option>
+                          <option value={5}>En 5 días</option>
+                          <option value={7}>En 1 semana (7 días)</option>
+                          <option value={14}>En 2 semanas</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-carbon/50 uppercase">O Fecha específica:</label>
+                        <input
+                          type="date"
+                          value={fechaSiguiente}
+                          onChange={(e) => setFechaSiguiente(e.target.value)}
+                          className="w-full rounded-md border border-carbon/20 p-1 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t pt-3">
+              <button
+                type="button"
+                onClick={() => setExpedienteAConcluir(null)}
+                className="rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/70 px-3 py-1.5 text-xs font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={guardandoConclusion}
+                onClick={handleGuardarConclusion}
+                className="rounded-lg bg-verde-profundo hover:bg-verde-profundo/90 text-white px-4 py-1.5 text-xs font-semibold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {guardandoConclusion ? "Guardando..." : "💾 Guardar y Concluir"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
