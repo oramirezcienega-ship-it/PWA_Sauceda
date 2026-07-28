@@ -41,8 +41,8 @@ export function WidgetSeguimientoExpedientes() {
     { key: "Traspaso / Compra", label: "Traspaso / Compra", icon: "💰" },
     { key: "Promoción de Venta", label: "Promoción de Venta", icon: "📢" },
     { key: "Solo Trámite", label: "Solo Trámite", icon: "📄" },
-    { key: "Remodelación", label: "Remodelación", icon: "🔨" },
     { key: "Impermeabilización", label: "Impermeabilización", icon: "💧" },
+    { key: "Remodelación", label: "Remodelación", icon: "🔨" },
     { key: "Construcción / Obra", label: "Construcción / Obra", icon: "🏗️" },
   ];
 
@@ -71,8 +71,8 @@ export function WidgetSeguimientoExpedientes() {
       "Traspaso / Compra": [],
       "Promoción de Venta": [],
       "Solo Trámite": [],
-      "Remodelación": [],
       "Impermeabilización": [],
+      "Remodelación": [],
       "Construcción / Obra": [],
       "Otros": []
     };

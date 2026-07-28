@@ -1079,9 +1079,9 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "venta": "Promoción de Venta",
     "solo_tramite": "Solo Trámite",
     "tramite": "Solo Trámite",
-    "construccion": "Sauceda Construye (General)",
-    "construccion-remodelacion": "Sauceda Construye (Remodelación)",
-    "construccion-impermeabilizacion": "Sauceda Construye (Impermeabilización)",
+    "construccion": "Construcción / Obra",
+    "construccion-remodelacion": "Remodelación",
+    "construccion-impermeabilizacion": "Impermeabilización",
   };
 
   const etapaLabels: Record<string, string> = {
