@@ -35,10 +35,18 @@ const CAMPOS_DISPONIBLES = [
   { clave: "calificacion", etiqueta: "Calificación (Caliente, Templado, Frío)" },
 ];
 
-export function ConfiguradorProcesosClient() {
-  const [procesos, setProcesos] = useState<ProcesoMaestro[]>([]);
-  const [procesoSel, setProcesoSel] = useState<ProcesoMaestro | null>(null);
-  const [cargando, setCargando] = useState(true);
+interface Props {
+  procesosIniciales?: ProcesoMaestro[];
+  procesoInicialCompleto?: ProcesoMaestro | null;
+}
+
+export function ConfiguradorProcesosClient({
+  procesosIniciales = [],
+  procesoInicialCompleto = null,
+}: Props) {
+  const [procesos, setProcesos] = useState<ProcesoMaestro[]>(procesosIniciales);
+  const [procesoSel, setProcesoSel] = useState<ProcesoMaestro | null>(procesoInicialCompleto);
+  const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [tabActiva, setTabActiva] = useState<"etapas" | "escalaciones" | "webhooks" | "simulador">("etapas");
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
@@ -54,12 +62,22 @@ export function ConfiguradorProcesosClient() {
   const [duplicarTipo, setDuplicarTipo] = useState("");
 
   // Modificación en vivo de Etapas
-  const [etapasEditables, setEtapasEditables] = useState<EtapaConfiguracion[]>([]);
-  const [escalacionesEditables, setEscalacionesEditables] = useState<EscalacionConfiguracion[]>([]);
-  const [automatizacionesEditables, setAutomatizacionesEditables] = useState<AutomatizacionConfiguracion[]>([]);
+  const [etapasEditables, setEtapasEditables] = useState<EtapaConfiguracion[]>(
+    procesoInicialCompleto?.etapas || []
+  );
+  const [escalacionesEditables, setEscalacionesEditables] = useState<EscalacionConfiguracion[]>(
+    procesoInicialCompleto?.escalaciones || []
+  );
+  const [automatizacionesEditables, setAutomatizacionesEditables] = useState<AutomatizacionConfiguracion[]>(
+    procesoInicialCompleto?.automatizaciones || []
+  );
 
   // Simulador
-  const [simEtapa, setSimEtapa] = useState("");
+  const [simEtapa, setSimEtapa] = useState(
+    procesoInicialCompleto?.etapas && procesoInicialCompleto.etapas.length > 0
+      ? procesoInicialCompleto.etapas[0].claveEtapa
+      : ""
+  );
   const [simDatos, setSimDatos] = useState<Record<string, any>>({
     telefono: "4771234567",
     valorEstimado: 850000,
@@ -73,8 +91,10 @@ export function ConfiguradorProcesosClient() {
     try {
       const lista = await listarProcesosMaestros();
       setProcesos(lista);
-      if (lista.length > 0 && (!procesoSel || !lista.find((p) => p.id === procesoSel.id))) {
-        await seleccionarProceso(lista[0].id);
+      const imp = lista.find((p) => p.tipoNegocio === "impermeabilizacion");
+      const defaultProc = imp || lista[0];
+      if (defaultProc && (!procesoSel || !lista.find((p) => p.id === procesoSel.id))) {
+        await seleccionarProceso(defaultProc.id);
       }
     } catch (err: any) {
       setMensaje({ tipo: "error", texto: `Error al cargar procesos: ${err.message}` });
@@ -104,7 +124,9 @@ export function ConfiguradorProcesosClient() {
   }
 
   useEffect(() => {
-    void cargarLista();
+    if (procesosIniciales.length === 0) {
+      void cargarLista();
+    }
   }, []);
 
   async function handleCrearProceso() {
