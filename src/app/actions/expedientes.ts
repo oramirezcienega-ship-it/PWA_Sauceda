@@ -355,27 +355,13 @@ export async function actualizarExpediente(
     nuevos.asesor_id = null;
     datos.asesorId = null;
   }
-  // LOG DIAGNÓSTICO: ver qué valor llega al servidor
-  console.error(`[DEBUG actualizarExpediente] id=${id} tipo_negocio="${nuevos.tipo_negocio}" (raw tipoNegocio="${datos.tipoNegocio}")`);
-  let { data, error } = await sb
+
+  const { data, error } = await sb
     .from("expedientes")
     .update({ ...nuevos, ultimo_movimiento: hoyISO() })
     .eq("id", id)
     .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
-
-  if (error && error.message.includes("expedientes_tipo_negocio_check")) {
-    console.warn(`[actualizarExpediente] Fallback DB tipo_negocio: "${nuevos.tipo_negocio}" no permitido por constraint DB, intentando 'construccion'`);
-    nuevos.tipo_negocio = "construccion";
-    const resFallback = await sb
-      .from("expedientes")
-      .update({ ...nuevos, ultimo_movimiento: hoyISO() })
-      .eq("id", id)
-      .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
-      .single();
-    data = resFallback.data;
-    error = resFallback.error;
-  }
 
   if (error) {
     console.error(`[DEBUG actualizarExpediente] ERROR DB: ${error.message} | tipo_negocio enviado="${nuevos.tipo_negocio}"`);
