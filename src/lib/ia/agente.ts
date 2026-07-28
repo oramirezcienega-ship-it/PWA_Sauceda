@@ -1166,12 +1166,12 @@ export async function responderConIA(
                 .replace(/.*\[LINK_AGENDADO\].*\n?/g, "");
 
               // --- AUTO-AGENDAMIENTO DE INSPECCIÓN (DESHABILITADO) ---
-              const fechaConfirmada = null;
-              const horaConfirmada = null;
+              const fechaConfirmada: string | null = null;
+              const horaConfirmada: string | null = null;
 
               if (fechaConfirmada && horaConfirmada) {
                 console.log(`[Auto-Scheduling] Confirmando cita: ${fechaConfirmada} ${horaConfirmada}`);
-                const [h, min] = horaConfirmada.split(":");
+                const [h, min] = (horaConfirmada as any).split(":");
                 const hrsFin = String((parseInt(h, 10) + 1) % 24).padStart(2, "0");
                 const horaFin = `${hrsFin}:${min || "00"}:00`;
 
