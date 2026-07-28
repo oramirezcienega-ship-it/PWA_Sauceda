@@ -524,6 +524,7 @@ export async function notificarAsignacionAsesor(
 
 /**
  * Envía automáticamente al cliente el enlace con la agenda del operario técnico asignado.
+ * (DESHABILITADO: Todo agendamiento de inspección es 100% manual por el equipo humano).
  */
 export async function notificarAsignacionOperarioACliente(
   sb: any,
@@ -531,88 +532,8 @@ export async function notificarAsignacionOperarioACliente(
   prospectoId: string | null,
   operadorId: string
 ): Promise<void> {
-  try {
-    // 1. Obtener la información del operario
-    const { data: operario } = await sb
-      .from("perfiles")
-      .select("nombre")
-      .eq("id", operadorId)
-      .maybeSingle();
-
-    if (!operario) return;
-
-    // 2. Obtener la información del cliente y teléfono
-    let clienteNombre = "";
-    let clienteTelefono = "";
-    let pId = prospectoId;
-
-    if (expedienteId) {
-      const { data: exp } = await sb
-        .from("expedientes")
-        .select("cliente, primer_apellido, segundo_apellido, telefono, prospecto_id")
-        .eq("id", expedienteId)
-        .maybeSingle();
-      if (exp) {
-        clienteNombre = [exp.cliente, exp.primer_apellido, exp.segundo_apellido].filter(Boolean).join(" ");
-        clienteTelefono = exp.telefono || "";
-        if (!pId) pId = exp.prospecto_id;
-      }
-    } else if (prospectoId) {
-      const { data: pros } = await sb
-        .from("prospectos")
-        .select("nombre, primer_apellido, segundo_apellido, telefono")
-        .eq("id", prospectoId)
-        .maybeSingle();
-      if (pros) {
-        clienteNombre = [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ");
-        clienteTelefono = pros.telefono || "";
-      }
-    }
-
-    if (!clienteTelefono) {
-      console.warn("No hay teléfono para enviar la agenda del operario.");
-      return;
-    }
-
-    // 3. Generar enlace
-    const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
-    const linkAgenda = `${SITE_URL}/agenda/${operadorId}?prospecto_id=${pId || ""}&tipo=inspeccion`;
-
-    const mensaje = `Hola ${clienteNombre}. Para programar la inspección en sitio de tu propiedad, te comparto el enlace de la agenda de nuestro operario para que selecciones el día y la hora que mejor te convenga: ${linkAgenda}`;
-
-    // 4. Enviar WhatsApp
-    const r = await enviarWhatsAppTexto(clienteTelefono, mensaje);
-
-    // 5. Registrar en mensajes_whatsapp
-    const telNormalizado = (clienteTelefono || "").replace(/\D/g, "");
-    await sb.from("mensajes_whatsapp").insert({
-      telefono: telNormalizado.startsWith("52") && telNormalizado.length >= 12 ? telNormalizado : (telNormalizado.length === 10 ? "52" + telNormalizado : telNormalizado),
-      texto: mensaje,
-      direccion: "out",
-      expediente_id: expedienteId,
-      prospecto_id: pId,
-      estado: r.ok ? "enviado" : "error",
-      agente: "Sistema",
-      wa_message_id: r.messageId || null,
-    });
-
-    // 6. Registrar actividad
-    if (expedienteId) {
-      await sb.from("actividades").insert({
-        expediente_id: expedienteId,
-        tipo: "sistema",
-        descripcion: `Enlace de agenda de operario ${operario.nombre} enviado automáticamente por WhatsApp.`,
-      });
-    } else if (pId) {
-      await sb.from("actividades").insert({
-        prospecto_id: pId,
-        tipo: "sistema",
-        descripcion: `Enlace de agenda de operario ${operario.nombre} enviado automáticamente por WhatsApp.`,
-      });
-    }
-  } catch (err) {
-    console.error("Error en notificarAsignacionOperarioACliente:", err);
-  }
+  console.log(`[Notificaciones] Envío automático de liga de agendamiento deshabilitado. Operador ID: ${operadorId}, Prospecto/Expediente: ${prospectoId || expedienteId}`);
+  return;
 }
 
 /**
