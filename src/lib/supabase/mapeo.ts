@@ -135,7 +135,7 @@ export function aFila(datos: DatosExpediente) {
     direccion_propiedad: datos.direccionPropiedad ?? null,
     link_google_maps: datos.linkGoogleMaps ?? null,
     necesidad: datos.necesidad ?? null,
-    tipo_negocio: datos.tipoNegocio ?? "traspaso_compra",
+    tipo_negocio: (datos.tipoNegocio && datos.tipoNegocio.trim()) ? datos.tipoNegocio : "traspaso_compra",
     canal_id: datos.canalId || "",
     sin_pagos: datos.sinPagos ?? null,
     estado_fisico: datos.estadoFisico ?? null,
