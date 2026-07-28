@@ -19,21 +19,48 @@ import type {
   AutomatizacionConfiguracion,
 } from "@/lib/types";
 
-const CAMPOS_DISPONIBLES = [
-  { clave: "telefono", etiqueta: "Teléfono de Contacto" },
-  { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
-  { clave: "direccionPropiedad", etiqueta: "Dirección de la Propiedad" },
-  { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
-  { clave: "tipoCredito", etiqueta: "Tipo de Crédito" },
-  { clave: "valorEstimado", etiqueta: "Valor Estimado ($)" },
-  { clave: "saldoDeuda", etiqueta: "Saldo de Deuda ($)" },
-  { clave: "sinPagos", etiqueta: "Sin Pagos (Estatus)" },
-  { clave: "estadoFisico", etiqueta: "Estado Físico del Inmueble" },
-  { clave: "habitada", etiqueta: "Propiedad Habitada" },
-  { clave: "nss", etiqueta: "Número de Seguro Social (NSS)" },
-  { clave: "curp", etiqueta: "CURP" },
-  { clave: "calificacion", etiqueta: "Calificación (Caliente, Templado, Frío)" },
+export const MODULOS_CAMPOS = [
+  {
+    nombre: "📁 Módulo Expediente e Inmueble",
+    color: "bg-indigo-50 border-indigo-200 text-indigo-900",
+    badge: "Expediente",
+    campos: [
+      { clave: "direccionPropiedad", etiqueta: "Dirección de la Propiedad" },
+      { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
+      { clave: "nss", etiqueta: "Número de Seguro Social (NSS)" },
+      { clave: "curp", etiqueta: "CURP" },
+      { clave: "tipoCredito", etiqueta: "Tipo de Crédito" },
+      { clave: "valorEstimado", etiqueta: "Valor Estimado ($)" },
+      { clave: "saldoDeuda", etiqueta: "Saldo de Deuda ($)" },
+      { clave: "sinPagos", etiqueta: "Sin Pagos (Estatus)" },
+      { clave: "estadoFisico", etiqueta: "Estado Físico del Inmueble" },
+      { clave: "habitada", etiqueta: "Propiedad Habitada" },
+    ],
+  },
+  {
+    nombre: "👤 Módulo Prospecto / Cliente",
+    color: "bg-emerald-50 border-emerald-200 text-emerald-900",
+    badge: "Prospecto",
+    campos: [
+      { clave: "telefono", etiqueta: "Teléfono de Contacto" },
+      { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
+      { clave: "calificacion", etiqueta: "Calificación (Caliente, Templado, Frío)" },
+      { clave: "origen", etiqueta: "Origen del Prospecto" },
+    ],
+  },
+  {
+    nombre: "💰 Módulo Cotización y Pagos",
+    color: "bg-amber-50 border-amber-200 text-amber-900",
+    badge: "Cotización",
+    campos: [
+      { clave: "montoCotizado", etiqueta: "Monto Cotizado ($)" },
+      { clave: "anticipoRecibido", etiqueta: "Anticipo Registrado ($)" },
+      { clave: "remisionFolio", etiqueta: "Folio de Remisión / Factura" },
+    ],
+  },
 ];
+
+const TODOS_CAMPOS = MODULOS_CAMPOS.flatMap((m) => m.campos);
 
 interface Props {
   procesosIniciales?: ProcesoMaestro[];
@@ -489,29 +516,44 @@ export function ConfiguradorProcesosClient({
                       </div>
                     </div>
 
-                    {/* Campos Obligatorios para avanzar */}
-                    <div className="space-y-1.5">
+                    {/* Campos Obligatorios para avanzar organizados por Módulo */}
+                    <div className="space-y-3">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60">
-                        📌 Campos Obligatorios para Avanzar de Etapa:
+                        📌 Campos Obligatorios por Módulo de Información:
                       </label>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {CAMPOS_DISPONIBLES.map((c) => {
-                          const seleccionado = (etapa.camposRequeridos || []).includes(c.clave);
-                          return (
-                            <button
-                              key={c.clave}
-                              type="button"
-                              onClick={() => handleToggleCampoRequerido(idx, c.clave)}
-                              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition border ${
-                                seleccionado
-                                  ? "bg-verde-profundo text-white border-verde-profundo"
-                                  : "bg-slate-50 text-carbon/70 border-carbon/15 hover:bg-slate-100"
-                              }`}
-                            >
-                              {c.etiqueta} {seleccionado && "✓"}
-                            </button>
-                          );
-                        })}
+
+                      <div className="space-y-2.5">
+                        {MODULOS_CAMPOS.map((mod) => (
+                          <div key={mod.nombre} className={`p-3 rounded-xl border ${mod.color}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[11px] font-bold uppercase tracking-wider">
+                                {mod.nombre}
+                              </span>
+                              <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white/60">
+                                {mod.badge}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {mod.campos.map((c) => {
+                                const seleccionado = (etapa.camposRequeridos || []).includes(c.clave);
+                                return (
+                                  <button
+                                    key={c.clave}
+                                    type="button"
+                                    onClick={() => handleToggleCampoRequerido(idx, c.clave)}
+                                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition border ${
+                                      seleccionado
+                                        ? "bg-verde-profundo text-white border-verde-profundo shadow-2xs"
+                                        : "bg-white text-carbon/80 border-carbon/20 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    {c.etiqueta} {seleccionado && "✓"}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -545,12 +587,16 @@ export function ConfiguradorProcesosClient({
                                   lista[idx].validaciones[rIdx].campo = e.target.value;
                                   setEtapasEditables(lista);
                                 }}
-                                className="rounded border border-carbon/20 bg-white px-2 py-1 outline-none"
+                                className="rounded border border-carbon/20 bg-white px-2 py-1 outline-none font-semibold"
                               >
-                                {CAMPOS_DISPONIBLES.map((c) => (
-                                  <option key={c.clave} value={c.clave}>
-                                    {c.etiqueta}
-                                  </option>
+                                {MODULOS_CAMPOS.map((mod) => (
+                                  <optgroup key={mod.nombre} label={mod.nombre}>
+                                    {mod.campos.map((c) => (
+                                      <option key={c.clave} value={c.clave}>
+                                        [{mod.badge}] {c.etiqueta}
+                                      </option>
+                                    ))}
+                                  </optgroup>
                                 ))}
                               </select>
 
