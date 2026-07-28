@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import {
   requireAdmin,
@@ -143,6 +144,7 @@ export async function crearUsuario(datos: {
     horario_fin: "18:00:00",
   });
   if (errPerfil) return { ok: false, mensaje: errPerfil.message };
+  revalidatePath("/usuarios");
   return { ok: true };
 }
 
@@ -178,7 +180,7 @@ export async function actualizarUsuario(
 
   // Columnas que realmente existen en la tabla perfiles
   const columnasPerfiles = new Set([
-    "nombre", "rol", "activo",
+    "nombre", "rol", "activo", "telefono",
     "telefono_desvio", "disponible_llamadas",
     "horario_inicio", "horario_fin", "horarios_guardia",
   ]);
@@ -196,6 +198,7 @@ export async function actualizarUsuario(
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  revalidatePath("/usuarios");
 }
 
 /** Restablece la contraseña de un usuario usando el cliente admin de Supabase. */
@@ -221,6 +224,7 @@ export async function eliminarUsuario(id: string): Promise<void> {
   const sb = supabaseServidor();
   const { error } = await sb.auth.admin.deleteUser(id);
   if (error) throw new Error(error.message);
+  revalidatePath("/usuarios");
 }
 
 /** Obtiene una lista simplificada de asesores/usuarios activos para selects. */
