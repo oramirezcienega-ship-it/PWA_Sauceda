@@ -988,6 +988,7 @@ export interface ExpedienteSeguimiento {
   fraccionamiento: string;
   tipoNegocio: string;
   etapa: string;
+  prospectoEstatus?: string;
   fechaCreacion: string;
   proximaAccion: string;
   proximaAccionFecha: string | null;
@@ -1004,7 +1005,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre)");
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), prospecto:prospecto_id(estatus, etapa)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
@@ -1132,6 +1133,8 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     }
 
     const nombreCompleto = [e.cliente, e.primer_apellido, e.segundo_apellido].filter(Boolean).join(" ");
+    const prospectoData = e.prospecto as any;
+    const prospectoEstatusRaw = prospectoData?.estatus || prospectoData?.etapa || e.prospecto_estatus || "En seguimiento";
 
     result.push({
       id: e.id,
@@ -1139,6 +1142,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
       fraccionamiento: e.fraccionamiento || "No especificado",
       tipoNegocio: tipoNegocioLabels[e.tipo_negocio] || e.tipo_negocio || "Otro",
       etapa: etapaLabels[e.etapa] || e.etapa || "Sin etapa",
+      prospectoEstatus: prospectoEstatusRaw,
       fechaCreacion: e.created_at,
       proximaAccion,
       proximaAccionFecha,
