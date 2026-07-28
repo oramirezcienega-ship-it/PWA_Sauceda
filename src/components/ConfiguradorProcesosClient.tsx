@@ -23,86 +23,59 @@ export function obtenerModulosPorTipoNegocio(tipoNegocio: string) {
   const esImpermeabilizacion =
     tipoNegocio === "impermeabilizacion" || tipoNegocio === "construccion-impermeabilizacion";
 
-  if (esImpermeabilizacion) {
-    return [
-      {
-        nombre: "📐 Módulo Inspección & Azotea",
-        color: "bg-blue-50 border-blue-200 text-blue-900",
-        badge: "Inspección",
-        campos: [
-          { clave: "direccionPropiedad", etiqueta: "Dirección del Inmueble" },
-          { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
-          { clave: "estadoFisico", etiqueta: "Estado Físico de Azotea / Losa" },
-          { clave: "m2Superficie", etiqueta: "Metros Cuadrados (m²)" },
-        ],
-      },
-      {
-        nombre: "👤 Módulo Contacto del Cliente",
-        color: "bg-emerald-50 border-emerald-200 text-emerald-900",
-        badge: "Cliente",
-        campos: [
-          { clave: "telefono", etiqueta: "Teléfono de Contacto" },
-          { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
-          { clave: "calificacion", etiqueta: "Calificación Comercial" },
-        ],
-      },
-      {
-        nombre: "💰 Módulo Presupuesto & Cotización",
-        color: "bg-amber-50 border-amber-200 text-amber-900",
-        badge: "Presupuesto",
-        campos: [
-          { clave: "valorEstimado", etiqueta: "Monto de Cotización ($)" },
-          { clave: "vigenciaGarantia", etiqueta: "Años de Garantía (3, 5, 10 años)" },
-        ],
-      },
-      {
-        nombre: "🔨 Módulo Ejecución de Obra & Cobro",
-        color: "bg-indigo-50 border-indigo-200 text-indigo-900",
-        badge: "Obra & Cobro",
-        campos: [
-          { clave: "anticipoRecibido", etiqueta: "Anticipo Registrado ($)" },
-          { clave: "saldoDeuda", etiqueta: "Saldo Pendiente por Cobrar ($)" },
-          { clave: "remisionFolio", etiqueta: "Folio de Remisión / Factura" },
-        ],
-      },
-    ];
-  }
-
-  // Por defecto: Traspaso / Compra de Casas o Bienes Raíces
   return [
     {
-      nombre: "🏠 Módulo Inmueble & Propiedad",
-      color: "bg-indigo-50 border-indigo-200 text-indigo-900",
-      badge: "Inmueble",
-      campos: [
-        { clave: "direccionPropiedad", etiqueta: "Dirección de la Propiedad" },
-        { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
-        { clave: "valorEstimado", etiqueta: "Valor Estimado / Avalúo ($)" },
-        { clave: "habitada", etiqueta: "Propiedad Habitada (Sí/No)" },
-        { clave: "estadoFisico", etiqueta: "Estado Físico del Inmueble" },
-      ],
-    },
-    {
-      nombre: "📄 Módulo Crédito & Gestoría Legal",
-      color: "bg-purple-50 border-purple-200 text-purple-900",
-      badge: "Gestoría",
-      campos: [
-        { clave: "nss", etiqueta: "Número de Seguro Social (NSS)" },
-        { clave: "curp", etiqueta: "CURP del Habiente" },
-        { clave: "tipoCredito", etiqueta: "Tipo de Crédito (Infonavit/Bancario)" },
-        { clave: "saldoDeuda", etiqueta: "Saldo de Deuda Hipotecaria ($)" },
-        { clave: "sinPagos", etiqueta: "Estatus de Adeudo / Retraso" },
-      ],
-    },
-    {
-      nombre: "👤 Módulo Prospecto / Contacto",
-      color: "bg-emerald-50 border-emerald-200 text-emerald-900",
-      badge: "Contacto",
+      zona: "ZONA 1",
+      nombre: "👤 1. ENTIDAD PROSPECTO (Datos del Cliente / Contacto)",
+      descripcion: "Información de la persona o cliente registrada en la entidad Prospecto",
+      color: "bg-emerald-50/70 border-emerald-200 text-emerald-950",
+      badge: "Entidad Prospecto",
       campos: [
         { clave: "telefono", etiqueta: "Teléfono de Contacto" },
         { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
-        { clave: "calificacion", etiqueta: "Calificación Prospecto" },
+        { clave: "calificacion", etiqueta: "Calificación Comercial (Caliente/Templado/Frío)" },
         { clave: "origen", etiqueta: "Origen del Prospecto" },
+      ],
+    },
+    {
+      zona: "ZONA 2",
+      nombre: `📁 2. WIDGETS DEL EXPEDIENTE (${esImpermeabilizacion ? "Sauceda Construye - Impermeabilización" : "Traspaso y Compra de Casas"})`,
+      descripcion: "Información específica y exclusiva de la naturaleza de este modelo de negocio",
+      color: "bg-indigo-50/70 border-indigo-200 text-indigo-950",
+      badge: "Widgets Expediente",
+      campos: esImpermeabilizacion
+        ? [
+            { clave: "direccionPropiedad", etiqueta: "Dirección del Inmueble" },
+            { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
+            { clave: "estadoFisico", etiqueta: "Estado Físico de Azotea / Losa" },
+            { clave: "m2Superficie", etiqueta: "Metros Cuadrados de Losa (m²)" },
+          ]
+        : [
+            { clave: "direccionPropiedad", etiqueta: "Dirección de la Propiedad" },
+            { clave: "fraccionamiento", etiqueta: "Fraccionamiento / Zona" },
+            { clave: "valorEstimado", etiqueta: "Valor Estimado / Avalúo ($)" },
+            { clave: "habitada", etiqueta: "Propiedad Habitada (Sí/No)" },
+            { clave: "estadoFisico", etiqueta: "Estado Físico del Inmueble" },
+            { clave: "nss", etiqueta: "Número de Seguro Social (NSS)" },
+            { clave: "curp", etiqueta: "CURP del Habiente" },
+            { clave: "tipoCredito", etiqueta: "Tipo de Crédito (Infonavit/Bancario)" },
+            { clave: "saldoDeuda", etiqueta: "Saldo de Deuda Hipotecaria ($)" },
+            { clave: "sinPagos", etiqueta: "Estatus de Adeudo / Retraso" },
+          ],
+    },
+    {
+      zona: "ZONA 3",
+      nombre: "⚙️ 3. MÓDULOS SISTÉMICOS VINCULADOS (Operaciones & Finanzas)",
+      descripcion: "Órdenes de trabajo del equipo técnico y registros financieros vinculados al expediente",
+      color: "bg-amber-50/70 border-amber-200 text-amber-950",
+      badge: "Módulos Sistémicos",
+      campos: [
+        { clave: "montoCotizado", etiqueta: "Monto de Cotización Comercial ($)" },
+        { clave: "anticipoRecibido", etiqueta: "Anticipo Registrado ($)" },
+        { clave: "saldoPendienteCobro", etiqueta: "Saldo Pendiente por Cobrar ($)" },
+        { clave: "remisionFolio", etiqueta: "Folio de Remisión / Factura" },
+        { clave: "vigenciaGarantia", etiqueta: "Años de Garantía (3, 5, 10 años)" },
+        { clave: "tareasBpmCompletas", etiqueta: "Todas las Tareas BPM Completadas" },
       ],
     },
   ];
