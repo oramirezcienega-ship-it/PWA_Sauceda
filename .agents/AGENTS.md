@@ -1,4 +1,9 @@
-# Reglas de Comportamiento - PWA SAUCEDA
+# Reglas de Comportamiento y Protecciones - PWA SAUCEDA
+
+* **Candado de Protección Absoluta para Sofía (IA) y Scripts de Bienvenida / Captación**:
+  * **PROHIBICIÓN ESTRICTA:** Queda strictly prohibido alterar, modificar, recortar o cambiar la lógica de respuesta, scripts de bienvenida, prompts del sistema de Sofía (`src/lib/ia/agente.ts`), o reglas de clasificación de negocio (`detectarTipoNegocio`) como efecto secundario de tareas de UI, diseño, visualización de expediente o tableros del CRM.
+  * **VERIFICACIÓN DE IMPACTO OBLIGATORIA:** Ningún cambio visual en formularios, expedientes o prospectos debe alterar las columnas, variables o propiedades que Sofía utiliza para construir su contexto conversacional y atender a los clientes.
+  * **SOLICITUD DE CONFIRMACIÓN AL USUARIO:** Si una tarea requiere explícitamente modificar el comportamiento, prompts o scripts de Sofía, el asistente **DEBE DETENERSE Y PEDIR CONFIRMACIÓN EXPLÍCITA AL USUARIO PRIMERO**, explicando detalladamente el cambio y su impacto antes de tocar cualquier archivo de la IA.
 
 * **Políticas de Git y Ramas**:
   * **NUNCA** empujar (`push`) directamente a la rama `main`.
@@ -20,4 +25,3 @@
 * **Privacidad y Datos de Producción en Staging**:
   * **NUNCA** realizar sincronizaciones o copias directas de datos de producción reales hacia la base de datos de Staging sin anonimizarlos inmediatamente después.
   * Si se realiza un respaldo o sincronización desde producción, se debe ejecutar inmediatamente el script `node scripts/anonymize-staging-db.js` para enmascarar los datos de clientes (nombres, teléfonos y mensajes) y garantizar que Staging nunca almacene información real de producción desprotegida.
-
