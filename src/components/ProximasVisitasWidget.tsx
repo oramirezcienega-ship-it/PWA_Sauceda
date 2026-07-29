@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { obtenerProximasCitasEInstalaciones, type Cita } from "@/app/actions/agenda";
+import { obtenerUsuarioActual } from "@/app/actions/usuarios";
 
 interface ProximasVisitasWidgetProps {
   perfilId?: string | null;
@@ -16,16 +17,27 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
   useEffect(() => {
     let activo = true;
     setCargando(true);
-    obtenerProximasCitasEInstalaciones(perfilId)
-      .then((data) => {
+
+    async function cargar() {
+      try {
+        let pId = perfilId;
+        if (!pId) {
+          const u = await obtenerUsuarioActual();
+          if (u && u.rol !== "admin") {
+            pId = u.id;
+          }
+        }
+        const data = await obtenerProximasCitasEInstalaciones(pId);
         if (activo) {
           setCitas(data);
           setCargando(false);
         }
-      })
-      .catch(() => {
+      } catch {
         if (activo) setCargando(false);
-      });
+      }
+    }
+
+    cargar();
     return () => {
       activo = false;
     };

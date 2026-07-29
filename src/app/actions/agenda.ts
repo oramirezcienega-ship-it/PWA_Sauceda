@@ -675,10 +675,28 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     .neq("estado", "cancelada")
     .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true })
-    .limit(25);
+    .limit(50);
 
   if (perfilId) {
-    query = query.eq("perfil_id", perfilId);
+    // Buscar también si el expediente o prospecto enlazado está asignado al perfilId
+    const { data: expIds } = await sb
+      .from("expedientes")
+      .select("id")
+      .or(`asesor_id.eq.${perfilId},operador_id.eq.${perfilId}`);
+
+    const { data: prosIds } = await sb
+      .from("prospectos")
+      .select("id")
+      .or(`asesor_id.eq.${perfilId},operador_id.eq.${perfilId}`);
+
+    const idsExp = (expIds || []).map((e) => e.id);
+    const idsPros = (prosIds || []).map((p) => p.id);
+
+    let filterStr = `perfil_id.eq.${perfilId}`;
+    if (idsExp.length > 0) filterStr += `,expediente_id.in.(${idsExp.join(",")})`;
+    if (idsPros.length > 0) filterStr += `,prospecto_id.in.(${idsPros.join(",")})`;
+
+    query = query.or(filterStr);
   }
 
   const { data, error } = await query;
