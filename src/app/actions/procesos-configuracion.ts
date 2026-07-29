@@ -57,6 +57,7 @@ export async function listarProcesosMaestros(): Promise<ProcesoMaestro[]> {
           entidadTarget: e.entidad_target || "expediente",
           camposRequeridos: e.campos_requeridos || [],
           validaciones: e.validaciones_json || [],
+          tareasOperativas: e.tareas_operativas_json || [],
           createdAt: e.created_at,
         }))
         .sort((a, b) => a.orden - b.orden),
@@ -114,6 +115,7 @@ export async function obtenerProcesoCompleto(procesoId: string): Promise<Proceso
         entidadTarget: e.entidad_target || "expediente",
         camposRequeridos: e.campos_requeridos || [],
         validaciones: e.validaciones_json || [],
+        tareasOperativas: e.tareas_operativas_json || [],
         createdAt: e.created_at,
       }))
       .sort((a, b) => a.orden - b.orden),
@@ -280,6 +282,7 @@ export async function guardarEtapasProceso(
     entidad_target: e.entidadTarget || "expediente",
     campos_requeridos: e.camposRequeridos || [],
     validaciones_json: e.validaciones || [],
+    tareas_operativas_json: e.tareasOperativas || [],
   }));
 
   const { error } = await sb.from("etapas_configuracion").insert(insertData);

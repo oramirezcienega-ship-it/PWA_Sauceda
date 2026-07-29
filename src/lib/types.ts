@@ -667,6 +667,16 @@ export interface ReglaValidacion {
   mensajeError: string;
 }
 
+export interface TareaOperativaEtapa {
+  id: string;
+  titulo: string;
+  descripcion?: string;
+  rolResponsable: 'asesor' | 'operaciones' | 'tecnico' | 'admin';
+  tipoActividad?: 'llamada' | 'inspeccion' | 'instalacion' | 'reunion' | 'correo' | 'nota' | 'tarea';
+  diasVencimiento: number;
+  condicionActivacion: string;
+}
+
 export interface EtapaConfiguracion {
   id: string;
   procesoId: string;
@@ -677,6 +687,7 @@ export interface EtapaConfiguracion {
   entidadTarget?: 'expediente' | 'prospecto';
   camposRequeridos: string[];
   validaciones: ReglaValidacion[];
+  tareasOperativas?: TareaOperativaEtapa[];
   createdAt?: string;
 }
 
@@ -686,7 +697,7 @@ export interface EscalacionConfiguracion {
   etapaId?: string | null;
   nombreRegla: string;
   condicion: Record<string, any>;
-  accionTipo: 'notificar_gerente' | 'reasignar_operador' | 'marcar_frio' | 'webhook_n8n';
+  accionTipo: 'notificar_gerente' | 'reasignar_operador' | 'marcar_frio' | 'webhook_n8n' | 'crear_tarea_bpm';
   parametros: Record<string, any>;
   activo: boolean;
   createdAt?: string;
