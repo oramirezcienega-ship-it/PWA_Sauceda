@@ -20,17 +20,21 @@ import type {
   AutomatizacionConfiguracion,
 } from "@/lib/types";
 
-export function obtenerModulosPorTipoNegocio(tipoNegocio: string) {
+export function obtenerModulosPorTipoNegocio(
+  tipoNegocio: string,
+  entidadTarget: "expediente" | "prospecto" = "expediente"
+) {
   const esImpermeabilizacion =
     tipoNegocio === "impermeabilizacion" || tipoNegocio === "construccion-impermeabilizacion";
 
-  return [
+  const todos = [
     {
       zona: "ZONA 1",
-      nombre: "👤 1. ENTIDAD PROSPECTO (Datos del Cliente / Contacto)",
+      nombre: "👤 1. ENTIDAD PROSPECTO (DATOS DEL CLIENTE / CONTACTO)",
       descripcion: "Información de la persona o cliente registrada en la entidad Prospecto",
-      color: "bg-emerald-50/70 border-emerald-200 text-emerald-950",
+      color: "bg-emerald-50/80 border-emerald-300 text-emerald-950 shadow-2xs",
       badge: "Entidad Prospecto",
+      entidad: "prospecto",
       campos: [
         { clave: "telefono", etiqueta: "Teléfono de Contacto" },
         { clave: "prospectoCorreo", etiqueta: "Correo Electrónico" },
@@ -40,10 +44,11 @@ export function obtenerModulosPorTipoNegocio(tipoNegocio: string) {
     },
     {
       zona: "ZONA 2",
-      nombre: `📁 2. WIDGETS DEL EXPEDIENTE (${esImpermeabilizacion ? "Sauceda Construye - Impermeabilización" : "Traspaso y Compra de Casas"})`,
-      descripcion: "Información específica y exclusiva de la naturaleza de este modelo de negocio",
-      color: "bg-indigo-50/70 border-indigo-200 text-indigo-950",
+      nombre: `📁 2. WIDGETS DEL EXPEDIENTE (${esImpermeabilizacion ? "SAUCEDA CONSTRUYE - IMPERMEABILIZACIÓN" : "TRASPASO Y COMPRA DE CASAS"})`,
+      descripcion: "Información específica y exclusiva del proyecto u obra de este expediente",
+      color: "bg-indigo-50/80 border-indigo-300 text-indigo-950 shadow-2xs",
       badge: "Widgets Expediente",
+      entidad: "expediente",
       campos: esImpermeabilizacion
         ? [
             { clave: "direccionPropiedad", etiqueta: "Dirección del Inmueble" },
@@ -66,10 +71,11 @@ export function obtenerModulosPorTipoNegocio(tipoNegocio: string) {
     },
     {
       zona: "ZONA 3",
-      nombre: "⚙️ 3. MÓDULOS SISTÉMICOS VINCULADOS (Operaciones & Finanzas)",
+      nombre: "⚙️ 3. MÓDULOS SISTÉMICOS VINCULADOS (OPERACIONES & FINANZAS)",
       descripcion: "Órdenes de trabajo del equipo técnico y registros financieros vinculados al expediente",
-      color: "bg-amber-50/70 border-amber-200 text-amber-950",
+      color: "bg-amber-50/80 border-amber-300 text-amber-950 shadow-2xs",
       badge: "Módulos Sistémicos",
+      entidad: "expediente",
       campos: [
         { clave: "montoCotizado", etiqueta: "Monto de Cotización Comercial ($)" },
         { clave: "anticipoRecibido", etiqueta: "Anticipo Registrado ($)" },
@@ -80,6 +86,8 @@ export function obtenerModulosPorTipoNegocio(tipoNegocio: string) {
       ],
     },
   ];
+
+  return todos.filter((m) => m.entidad === entidadTarget);
 }
 
 interface Props {
@@ -599,14 +607,23 @@ export function ConfiguradorProcesosClient({
                       </div>
                     </div>
 
-                    {/* Campos Obligatorios para avanzar organizados por Módulo del Proceso */}
+                    {/* Campos Obligatorios para avanzar organizados por Entidad Target de la Etapa */}
                     {(() => {
-                      const modulosCampos = obtenerModulosPorTipoNegocio(procesoSel?.tipoNegocio || "");
+                      const modulosCampos = obtenerModulosPorTipoNegocio(
+                        procesoSel?.tipoNegocio || "",
+                        etapa.entidadTarget || "expediente"
+                      );
+                      const esProspecto = (etapa.entidadTarget || "expediente") === "prospecto";
                       return (
                         <div className="space-y-3">
-                          <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60">
-                            📌 Campos Obligatorios por Módulo ({procesoSel?.nombre}):
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60">
+                              📌 Campos Obligatorios para Etapa {idx + 1} ({esProspecto ? "👤 Entidad Prospecto" : "📁 Entidad Expediente"}):
+                            </label>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${esProspecto ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800"}`}>
+                              {esProspecto ? "👤 Operando sobre Prospecto / Cliente" : "📁 Operando sobre Expediente / Obra"}
+                            </span>
+                          </div>
 
                           <div className="space-y-2.5">
                             {modulosCampos.map((mod) => (
@@ -615,7 +632,7 @@ export function ConfiguradorProcesosClient({
                                   <span className="text-[11px] font-bold uppercase tracking-wider">
                                     {mod.nombre}
                                   </span>
-                                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white/60">
+                                  <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-white/70">
                                     {mod.badge}
                                   </span>
                                 </div>
@@ -675,9 +692,12 @@ export function ConfiguradorProcesosClient({
                                   lista[idx].validaciones[rIdx].campo = e.target.value;
                                   setEtapasEditables(lista);
                                 }}
-                                className="rounded border border-carbon/20 bg-white px-2 py-1 outline-none font-semibold"
+                                className="rounded border border-carbon/20 bg-white px-2 py-1 outline-none font-semibold text-verde-profundo"
                               >
-                                {obtenerModulosPorTipoNegocio(procesoSel?.tipoNegocio || "").map((mod) => (
+                                {obtenerModulosPorTipoNegocio(
+                                  procesoSel?.tipoNegocio || "",
+                                  etapa.entidadTarget || "expediente"
+                                ).map((mod) => (
                                   <optgroup key={mod.nombre} label={mod.nombre}>
                                     {mod.campos.map((c) => (
                                       <option key={c.clave} value={c.clave}>
