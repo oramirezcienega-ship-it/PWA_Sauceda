@@ -834,6 +834,7 @@ export function ConfiguradorProcesosClient({
                             <option value="notificar_gerente">Notificar a Gerencia</option>
                             <option value="reasignar_operador">Reasignar a Operador</option>
                             <option value="marcar_frio">Marcar Expediente como Frío</option>
+                            <option value="crear_tarea_bpm">📌 Crear Tarea / Actividad a Responsable</option>
                             <option value="webhook_n8n">Enviar Webhook n8n</option>
                           </select>
                         </div>

@@ -686,7 +686,7 @@ export interface EscalacionConfiguracion {
   etapaId?: string | null;
   nombreRegla: string;
   condicion: Record<string, any>;
-  accionTipo: 'notificar_gerente' | 'reasignar_operador' | 'marcar_frio' | 'webhook_n8n';
+  accionTipo: 'notificar_gerente' | 'reasignar_operador' | 'marcar_frio' | 'webhook_n8n' | 'crear_tarea_bpm';
   parametros: Record<string, any>;
   activo: boolean;
   createdAt?: string;
