@@ -192,8 +192,15 @@ export async function resumenAsesor(
 
   if (eTasks) throw new Error(eTasks.message);
 
-  // 1b. Obtener todas las tareas de BPM asignadas al usuario actual
-  const { data: bpmTasks, error: eBpmTasks } = await sb
+  // 1b. Obtener todas las tareas de BPM asignadas al usuario actual o a los expedientes donde es responsable
+  const { data: userExps } = await sb
+    .from("expedientes")
+    .select("id")
+    .or(`asesor_id.eq.${usuario.id},operador_id.eq.${usuario.id}`);
+
+  const myExpIds = (userExps || []).map((e) => e.id);
+
+  let bpmQuery = sb
     .from("bpm_expediente_tareas")
     .select(`
       id,
@@ -201,6 +208,8 @@ export async function resumenAsesor(
       descripcion,
       estado,
       agendada_para,
+      expediente_id,
+      responsable_id,
       expediente:expediente_id(
         id,
         cliente,
@@ -211,8 +220,15 @@ export async function resumenAsesor(
         situacion,
         notas
       )
-    `)
-    .eq("responsable_id", usuario.id);
+    `);
+
+  if (myExpIds.length > 0) {
+    bpmQuery = bpmQuery.or(`responsable_id.eq.${usuario.id},expediente_id.in.(${myExpIds.join(",")})`);
+  } else {
+    bpmQuery = bpmQuery.eq("responsable_id", usuario.id);
+  }
+
+  const { data: bpmTasks, error: eBpmTasks } = await bpmQuery;
 
   if (eBpmTasks) throw new Error(eBpmTasks.message);
 
