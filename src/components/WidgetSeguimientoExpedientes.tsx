@@ -308,33 +308,34 @@ export function WidgetSeguimientoExpedientes() {
       </div>
 
       {/* Filtros Superiores */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Fila 1: Filtro por Servicio / Tipo de Negocio (Pills Horizontales) */}
         <div className="space-y-1.5">
-          <label className="block text-[10px] font-bold text-carbon/40 uppercase tracking-wider">
+          <label className="block text-[10px] font-bold text-carbon/50 uppercase tracking-wider">
             Filtrar por Servicio / Tipo de Negocio
           </label>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 items-center">
             <button
               type="button"
               onClick={() => setFiltroTipo("todos")}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold border transition ${
+              className={`h-8 px-3.5 rounded-full text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
                 filtroTipo === "todos"
-                  ? "bg-verde-profundo text-white border-verde-profundo shadow-sm"
-                  : "bg-slate-50 border-carbon/10 hover:bg-slate-100 text-carbon/70"
+                  ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+                  : "bg-slate-100/80 border-slate-200 hover:bg-slate-200 text-carbon/70"
               }`}
             >
-              📂 Todos los Servicios
+              <span>📂</span>
+              <span>Todos los Servicios</span>
             </button>
             {columnasConfig.map((col) => (
               <button
                 key={col.key}
                 type="button"
                 onClick={() => setFiltroTipo(col.key)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold border transition flex items-center gap-1.5 ${
+                className={`h-8 px-3.5 rounded-full text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
                   filtroTipo === col.key
-                    ? "bg-verde-profundo text-white border-verde-profundo shadow-sm"
-                    : "bg-slate-50 border-carbon/10 hover:bg-slate-100 text-carbon/70"
+                    ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+                    : "bg-slate-100/80 border-slate-200 hover:bg-slate-200 text-carbon/70"
                 }`}
               >
                 <span>{col.icon}</span>
@@ -345,14 +346,14 @@ export function WidgetSeguimientoExpedientes() {
         </div>
 
         {/* Fila 2: Búsqueda, Estatus de Expediente, Estatus de Prospecto, Pendientes y Fecha */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex-1 min-w-[180px] max-w-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex-1 min-w-[200px] max-w-xs">
             <input
               type="text"
               placeholder="Buscar por cliente, ID o zona..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce"
+              className="w-full h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce focus:ring-1 focus:ring-sauce/30 shadow-2xs"
             />
           </div>
 
@@ -360,7 +361,7 @@ export function WidgetSeguimientoExpedientes() {
           <select
             value={filtroEtapa}
             onChange={(e) => setFiltroEtapa(e.target.value)}
-            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
           >
             <option value="todos">📋 Estatus Expediente: Todos</option>
             {etapasDisponibles.map((et) => (
@@ -374,7 +375,7 @@ export function WidgetSeguimientoExpedientes() {
           <select
             value={filtroProspectoEstatus}
             onChange={(e) => setFiltroProspectoEstatus(e.target.value)}
-            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
           >
             <option value="todos">👤 Estatus Prospecto: Todos</option>
             {prospectoEstatusDisponibles.map((p) => (
@@ -388,7 +389,7 @@ export function WidgetSeguimientoExpedientes() {
           <select
             value={filtroCalificacion}
             onChange={(e) => setFiltroCalificacion(e.target.value)}
-            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
           >
             <option value="todos">⭐ Calificación: Todas</option>
             <option value="caliente">🔥 Caliente</option>
@@ -401,7 +402,7 @@ export function WidgetSeguimientoExpedientes() {
           <select
             value={filtroAccion}
             onChange={(e) => setFiltroAccion(e.target.value)}
-            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
           >
             <option value="todos">⚡ Todos los pendientes</option>
             <option value="urgente">Solo Citas / Inspecciones / Instalaciones</option>
@@ -413,7 +414,7 @@ export function WidgetSeguimientoExpedientes() {
           <select
             value={filtroFecha}
             onChange={(e) => setFiltroFecha(e.target.value)}
-            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
           >
             <option value="todos">📅 Filtro Fecha: Cualquier fecha</option>
             <option value="hoy">Creado o Acción Hoy</option>
@@ -424,12 +425,12 @@ export function WidgetSeguimientoExpedientes() {
           </select>
 
           {filtroFecha === "rango" && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 h-9">
               <input
                 type="date"
                 value={fechaDesde}
                 onChange={(e) => setFechaDesde(e.target.value)}
-                className="rounded-lg border border-carbon/20 px-2 py-1 text-xs bg-white"
+                className="h-9 rounded-lg border border-carbon/20 px-2 text-xs bg-white"
                 placeholder="Desde"
               />
               <span className="text-xs text-carbon/40">-</span>
@@ -437,7 +438,7 @@ export function WidgetSeguimientoExpedientes() {
                 type="date"
                 value={fechaHasta}
                 onChange={(e) => setFechaHasta(e.target.value)}
-                className="rounded-lg border border-carbon/20 px-2 py-1 text-xs bg-white"
+                className="h-9 rounded-lg border border-carbon/20 px-2 text-xs bg-white"
                 placeholder="Hasta"
               />
             </div>
@@ -447,7 +448,7 @@ export function WidgetSeguimientoExpedientes() {
             <button
               type="button"
               onClick={limpiarTodosLosFiltros}
-              className="rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 text-xs font-semibold transition flex items-center gap-1"
+              className="h-9 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer shrink-0"
             >
               <span>✕</span>
               <span>Limpiar Filtros</span>
@@ -585,29 +586,41 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Botones de Acción */}
-                          <div className="flex-shrink-0 flex items-center gap-2 justify-end">
-                            {(e.proximaAccionTipo === "cita" || e.proximaAccionTipo === "tarea") && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setExpedienteAConcluir(e);
-                                  setRetroNotas("");
-                                  setReprogramarSiguiente(true);
-                                  setDiasSiguiente(2);
-                                  setFechaSiguiente("");
-                                  setTituloSiguiente("📞 Llamada de seguimiento");
-                                }}
-                                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition flex items-center gap-1 cursor-pointer"
+                          <div className="flex-shrink-0 flex items-center gap-2 justify-end w-full sm:w-auto">
+                            {e.telefono && (
+                              <a
+                                href={`https://wa.me/${e.telefono.replace(/\D/g, "")}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="h-8.5 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                                title="Abrir chat de WhatsApp"
                               >
-                                <span>✓</span>
-                                <span>Concluir / Retro</span>
-                              </button>
+                                <span>💬</span>
+                                <span className="hidden md:inline">WhatsApp</span>
+                              </a>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExpedienteAConcluir(e);
+                                setRetroNotas("");
+                                setReprogramarSiguiente(true);
+                                setDiasSiguiente(2);
+                                setFechaSiguiente("");
+                                setTituloSiguiente("📞 Llamada de seguimiento");
+                              }}
+                              className="h-8.5 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                              title="Registrar retroalimentación o concluir tarea"
+                            >
+                              <span>✅</span>
+                              <span>Concluir / Retro</span>
+                            </button>
                             <Link
                               href={`/expediente/${e.id}`}
-                              className="rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border px-3 py-1.5 text-xs font-semibold transition"
+                              className="h-8.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border border-slate-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
                             >
-                              Ver Expediente →
+                              <span>Ver Expediente</span>
+                              <span>→</span>
                             </Link>
                           </div>
                         </div>
