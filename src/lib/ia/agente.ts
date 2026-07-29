@@ -323,10 +323,10 @@ Ofrecemos soluciones integrales para la vivienda, todo en un solo lugar. Contamo
 9️⃣ **Armado de Expediente**: Gestión de trámites y armado de expediente ante INFONAVIT si ya tienes comprador/vendedor interesado.
 🔟 **Compra Directa de Casas**: Compramos tu casa de contado rápidamente, liquidamos tu adeudo (de INFONAVIT, banco, etc.) o compramos casas abandonadas (muy al final).
 
-REGLA DE SERVICIOS (Si el cliente inicia la conversación, pregunta "¿Qué servicios ofrecen?", "¿Cómo trabajan?", solicita información general o similar):
-- Da la bienvenida usando exactamente o de forma muy similar esta frase: "Te damos la bienvenida a SAUCEDA. Soluciones integrales para la vivienda, todo en un solo lugar."
-- Presenta el menú numerado completo de servicios (opciones 1️⃣ a 🔟) de forma clara, amigable y concisa.
-- Pídele al cliente que responda con el número (1 al 10) o el nombre del servicio que le interesa.
+REGLA DE SERVICIOS (Si el cliente inicia la conversación con un saludo genérico ("hola", "buenas tardes", "informes"), pregunta qué servicios ofrecemos, o si el tipo de negocio es 'otro' / no determinado):
+- Saluda de forma cálida usando exactamente o de forma muy similar esta frase: "¡Hola! Te damos la bienvenida a SAUCEDA. Soluciones integrales para la vivienda, todo en un solo lugar. ¿En qué te podemos ayudar el día de hoy?"
+- Presenta brevemente cómo podemos ayudarle (Servicios de Construcción e Impermeabilización, Remodelación, Compra Directa de Casas, Promoción o Trámites) y pídele amablemente al cliente que te indique en qué servicio o proyecto está interesado.
+- PROHIBIDO asumir de antemano que busca comprar/traspasar una casa ni enviar cuestionarios de adeudos o Infonavit si el cliente no lo especificó explícitamente.
 
 Flujos de Calificación según el interés del cliente (asocia la selección del número de servicio al tipo de negocio correspondiente en el JSON):
 
@@ -790,19 +790,25 @@ export async function responderConIA(
         return;
       }
 
-      // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion'
+      // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion' y complementamos datos de campaña
       if (exp?.prospecto_id) {
         const { data: prInfo } = await sb
           .from("prospectos")
-          .select("estatus")
+          .select("estatus, campaign_name, adset_name, ad_name, origen")
           .eq("id", exp.prospecto_id)
           .maybeSingle();
         
-        if (prInfo?.estatus === "nuevo") {
-          await sb
-            .from("prospectos")
-            .update({ estatus: "en_conversacion" })
-            .eq("id", exp.prospecto_id);
+        if (prInfo) {
+          if (!exp.campaign_name && prInfo.campaign_name) exp.campaign_name = prInfo.campaign_name;
+          if (!exp.adset_name && prInfo.adset_name) exp.adset_name = prInfo.adset_name;
+          if (!exp.ad_name && prInfo.ad_name) exp.ad_name = prInfo.ad_name;
+
+          if (prInfo.estatus === "nuevo") {
+            await sb
+              .from("prospectos")
+              .update({ estatus: "en_conversacion" })
+              .eq("id", exp.prospecto_id);
+          }
         }
       }
     }

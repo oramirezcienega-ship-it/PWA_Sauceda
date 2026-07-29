@@ -49,7 +49,7 @@ export async function listarExpedientes(): Promise<Expediente[]> {
   const sb = supabaseServidor();
   let query = sb
     .from("expedientes")
-    .select("*, prospectos(origen, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)");
+    .select("*, prospectos(origen, campaign_name, adset_name, ad_name, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);

@@ -55,7 +55,14 @@ export interface FilaExpediente {
   habitada?: string | null;
   created_at?: string;
   /** Origen del prospecto enlazado (cuando se pide vía join). */
-  prospectos?: { origen: OrigenAdquisicion; correo?: string; direccion?: string } | null;
+  prospectos?: {
+    origen?: OrigenAdquisicion | null;
+    correo?: string | null;
+    direccion?: string | null;
+    campaign_name?: string | null;
+    adset_name?: string | null;
+    ad_name?: string | null;
+  } | null;
   asesor_id?: string | null;
   operador_id?: string | null;
   asesor?: { nombre: string } | null;
@@ -87,20 +94,20 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     valorEstimado: Number(fila.valor_estimado),
     saldoDeuda: Number(fila.saldo_deuda),
     notas: fila.notas,
-    adName: fila.ad_name ?? "",
-    adsetName: fila.adset_name ?? "",
-    campaignName: fila.campaign_name ?? "",
+    adName: fila.ad_name || fila.prospectos?.ad_name || "",
+    adsetName: fila.adset_name || fila.prospectos?.adset_name || "",
+    campaignName: fila.campaign_name || fila.prospectos?.campaign_name || "",
     token: fila.token,
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
-    origenProspecto: fila.prospectos?.origen ?? null,
+    origenProspecto: fila.prospectos?.origen || (fila as any).origen || null,
     prospectoCorreo: fila.prospectos?.correo ?? null,
     prospectoDireccion: fila.prospectos?.direccion ?? null,
     tipoCredito: fila.tipo_credito ?? "",
     direccionPropiedad: fila.direccion_propiedad ?? "",
     linkGoogleMaps: fila.link_google_maps ?? "",
     necesidad: fila.necesidad ?? "",
-    tipoNegocio: fila.tipo_negocio ?? "traspaso_compra",
+    tipoNegocio: fila.tipo_negocio ?? "otro",
     canalId: fila.canal_id ?? "",
     sinPagos: fila.sin_pagos ?? "",
     estadoFisico: fila.estado_fisico ?? "",
@@ -139,7 +146,7 @@ export function aFila(datos: DatosExpediente) {
     direccion_propiedad: datos.direccionPropiedad ?? null,
     link_google_maps: datos.linkGoogleMaps ?? null,
     necesidad: datos.necesidad ?? null,
-    tipo_negocio: (datos.tipoNegocio && datos.tipoNegocio.trim()) ? datos.tipoNegocio : "traspaso_compra",
+    tipo_negocio: (datos.tipoNegocio && datos.tipoNegocio.trim()) ? datos.tipoNegocio : "otro",
     canal_id: datos.canalId || "",
     sin_pagos: datos.sinPagos ?? null,
     estado_fisico: datos.estadoFisico ?? null,
