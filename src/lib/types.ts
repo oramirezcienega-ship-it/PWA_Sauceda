@@ -672,6 +672,7 @@ export interface TareaOperativaEtapa {
   titulo: string;
   descripcion?: string;
   rolResponsable: 'asesor' | 'operaciones' | 'tecnico' | 'admin';
+  tipoActividad?: 'llamada' | 'inspeccion' | 'instalacion' | 'reunion' | 'correo' | 'nota' | 'tarea';
   diasVencimiento: number;
   condicionActivacion: string;
 }

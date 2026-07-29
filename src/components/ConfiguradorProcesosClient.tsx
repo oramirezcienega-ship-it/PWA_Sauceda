@@ -335,6 +335,7 @@ export function ConfiguradorProcesosClient({
       titulo: `Nueva Tarea #${num}`,
       descripcion: "",
       rolResponsable: "asesor",
+      tipoActividad: "llamada",
       diasVencimiento: 1,
       condicionActivacion: "inmediato",
     };
@@ -740,6 +741,27 @@ export function ConfiguradorProcesosClient({
 
                               <div className="flex flex-wrap items-center gap-3 text-[11px]">
                                 <div className="flex items-center gap-1">
+                                  <span className="font-bold text-carbon/60">Tipo Actividad:</span>
+                                  <select
+                                    value={t.tipoActividad || "tarea"}
+                                    onChange={(e) => {
+                                      const lista = [...etapasEditables];
+                                      lista[idx].tareasOperativas![tIdx].tipoActividad = e.target.value as any;
+                                      setEtapasEditables(lista);
+                                    }}
+                                    className="bg-white border border-carbon/20 rounded px-1.5 py-0.5 font-semibold text-carbon"
+                                  >
+                                    <option value="llamada">📞 Llamada de Diagnóstico</option>
+                                    <option value="inspeccion">🔍 Inspección Técnica / Levantamiento</option>
+                                    <option value="instalacion">🛠️ Orden de Trabajo / Ejecución</option>
+                                    <option value="reunion">🤝 Cita Presencial / Reunión</option>
+                                    <option value="correo">✉️ Enviar Cotización / Propuesta</option>
+                                    <option value="nota">📝 Bitácora / Tarea de Registro</option>
+                                    <option value="tarea">⚙️ Tarea Operativa Genérica</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-center gap-1">
                                   <span className="font-bold text-carbon/60">Responsable:</span>
                                   <select
                                     value={t.rolResponsable}
@@ -751,8 +773,8 @@ export function ConfiguradorProcesosClient({
                                     className="bg-white border border-carbon/20 rounded px-1.5 py-0.5 font-semibold text-carbon"
                                   >
                                     <option value="asesor">👤 Asesor Comercial</option>
-                                    <option value="tecnico">🔍 Técnico Evaluador</option>
                                     <option value="operaciones">🛠️ Operaciones / Cuadrilla</option>
+                                    <option value="tecnico">🔍 Técnico Evaluador</option>
                                     <option value="admin">⚙️ Administrador</option>
                                   </select>
                                 </div>
