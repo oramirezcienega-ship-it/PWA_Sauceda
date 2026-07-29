@@ -211,6 +211,22 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
       titulo: "🚀 Flujo de Trabajo BPM inicializado",
       detalle: `Se cargó la plantilla para ${tipoNegocio} con ${tareasInsert.length} pasos.`
     });
+
+    // Registrar actividad interactiva en bitácora/agenda para las tareas iniciales en pendiente
+    for (const t of tareasInsert.filter((x: any) => x.estado === "pendiente")) {
+      const tipoAct = t.titulo.toLowerCase().includes("contactar") || t.titulo.toLowerCase().includes("llam")
+        ? "llamada"
+        : t.titulo.toLowerCase().includes("inspeccion") || t.titulo.toLowerCase().includes("visita")
+        ? "inspeccion"
+        : "tarea";
+
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: tipoAct,
+        titulo: `📌 Tarea Operativa: ${t.titulo}`,
+        detalle: t.descripcion || "Tarea asignada por flujo BPM",
+      });
+    }
   }
 }
 
@@ -299,11 +315,17 @@ export async function actualizarEstadoTarea(
             .update({ estado: "pendiente" })
             .eq("id", t.id);
 
+          const tipoAct = t.titulo.toLowerCase().includes("inspeccion") || t.titulo.toLowerCase().includes("visita")
+            ? "inspeccion"
+            : t.titulo.toLowerCase().includes("cotiz")
+            ? "correo"
+            : "tarea";
+
           await registrarActividad(sb, {
             expedienteId: tareaActualizada.expediente_id,
-            tipo: "sistema",
-            titulo: `⚡ Tarea activada: "${t.titulo}"`,
-            detalle: `Desbloqueada tras completarse la tarea "${tareaActualizada.titulo}".`
+            tipo: tipoAct,
+            titulo: `⚡ Tarea Activada: "${t.titulo}"`,
+            detalle: `Desbloqueada automáticamente tras completarse "${tareaActualizada.titulo}". ${t.descripcion || ""}`
           });
         }
       }
