@@ -84,7 +84,7 @@ export function ActividadesConExpediente({
   const [cargando, setCargando] = useState(true);
   const [filtroEstatus, setFiltroEstatus] = useState<"todas" | "pendientes" | "completadas">("todas");
   
-  // State para agregar nueva actividad
+  const [contraido, setContraido] = useState(false);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipo, setTipo] = useState<TipoActividad>("llamada");
   const [titulo, setTitulo] = useState("");
@@ -260,8 +260,34 @@ export function ActividadesConExpediente({
           >
             {mostrarForm ? "Cancelar" : "+ Nueva Actividad"}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setContraido(!contraido)}
+            className="rounded-lg border border-carbon/20 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-carbon/70 transition flex items-center gap-1 cursor-pointer"
+            title={contraido ? "Desplegar actividades" : "Contraer actividades"}
+          >
+            <span>{contraido ? "➕ Desplegar" : "➖ Contraer"}</span>
+          </button>
         </div>
       </div>
+
+      {/* Si está contraído, mostrar resumen compacto */}
+      {contraido ? (
+        <div className="py-2.5 px-3.5 bg-slate-50/80 border border-carbon/10 rounded-xl text-xs text-carbon/70 flex items-center justify-between">
+          <span className="font-mono">
+            📌 <strong>{numPendientes}</strong> pendientes · <strong>{numCompletadas}</strong> completadas · ({items.length} en total)
+          </span>
+          <button
+            type="button"
+            onClick={() => setContraido(false)}
+            className="text-sauce font-bold hover:underline text-xs flex items-center gap-1"
+          >
+            <span>Desplegar actividades</span> <span>↓</span>
+          </button>
+        </div>
+      ) : (
+        <>
 
       {/* Formulario de Registro Rápido */}
       {mostrarForm && (
@@ -432,6 +458,8 @@ export function ActividadesConExpediente({
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );
