@@ -633,7 +633,7 @@ export function WidgetSeguimientoExpedientes() {
                       return (
                         <div 
                           key={e.id} 
-                          className={`rounded-xl border p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white shadow-xs transition-all hover:shadow-md hover:border-sauce/30 ${
+                          className={`w-full rounded-xl border p-3.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white shadow-2xs transition-all hover:shadow-md hover:border-sauce/30 overflow-hidden ${
                             isCita 
                               ? "border-emerald-200 bg-emerald-50/[0.03]" 
                               : isTarea 
@@ -642,14 +642,14 @@ export function WidgetSeguimientoExpedientes() {
                           }`}
                         >
                           {/* Nombre del cliente, ID y fraccionamiento */}
-                          <div className="flex-1 min-w-[240px] space-y-1">
+                          <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono text-[10px] font-bold text-carbon/40 bg-slate-100 border px-1.5 py-0.5 rounded">
+                              <span className="font-mono text-[10px] font-bold text-carbon/40 bg-slate-100 border px-1.5 py-0.5 rounded shrink-0">
                                 {e.id}
                               </span>
                               <Link 
                                 href={`/expediente/${e.id}`}
-                                className="font-titular font-bold text-sm text-carbon hover:underline hover:text-sauce"
+                                className="font-titular font-bold text-sm text-carbon hover:underline hover:text-sauce truncate"
                               >
                                 {e.clienteNombre}
                               </Link>
@@ -662,7 +662,7 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Etapa actual del expediente, Calificación y Estatus del prospecto */}
-                          <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                          <div className="flex-shrink-0 flex flex-col items-start xl:items-end gap-1">
                             <span className="inline-block rounded-full bg-sauce/10 text-sauce px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                               {e.etapa}
                             </span>
@@ -688,7 +688,7 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Próximo Pendiente / Acción */}
-                          <div className="flex-1 min-w-[280px]">
+                          <div className="flex-1 min-w-0 xl:max-w-md">
                             <div className={`p-2.5 rounded-lg border text-xs flex items-start gap-2.5 ${
                               isCita
                                 ? "bg-emerald-50 border-emerald-200/50 text-emerald-900"
@@ -696,14 +696,14 @@ export function WidgetSeguimientoExpedientes() {
                                   ? "bg-amber-50 border-amber-200/50 text-amber-900"
                                   : "bg-slate-50 border-carbon/5 text-carbon/60"
                             }`}>
-                              <span className="text-base select-none mt-0.5">
+                              <span className="text-base select-none mt-0.5 shrink-0">
                                 {isCita ? "📅" : isTarea ? "⚡" : "💬"}
                               </span>
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <div className="text-[8px] uppercase tracking-wider font-bold text-carbon/40">
                                   Próxima Acción / Pendiente
                                 </div>
-                                <div className="font-semibold leading-tight">
+                                <div className="font-semibold leading-tight break-words">
                                   {e.proximaAccion}
                                 </div>
                               </div>
@@ -711,17 +711,17 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Botones de Acción */}
-                          <div className="flex-shrink-0 flex items-center gap-2 justify-end w-full sm:w-auto">
+                          <div className="flex-shrink-0 flex items-center gap-1.5 justify-end w-full xl:w-auto pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
                             {e.telefono && (
                               <a
                                 href={`https://wa.me/${e.telefono.replace(/\D/g, "")}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="h-8.5 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                                className="h-8 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
                                 title="Abrir chat de WhatsApp"
                               >
                                 <span>💬</span>
-                                <span className="hidden md:inline">WhatsApp</span>
+                                <span className="hidden sm:inline">WhatsApp</span>
                               </a>
                             )}
                             <button
@@ -734,7 +734,7 @@ export function WidgetSeguimientoExpedientes() {
                                 setFechaSiguiente("");
                                 setTituloSiguiente("📞 Llamada de seguimiento");
                               }}
-                              className="h-8.5 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                              className="h-8 px-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                               title="Registrar retroalimentación o concluir tarea"
                             >
                               <span>✅</span>
@@ -742,7 +742,7 @@ export function WidgetSeguimientoExpedientes() {
                             </button>
                             <Link
                               href={`/expediente/${e.id}`}
-                              className="h-8.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border border-slate-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                              className="h-8 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border border-slate-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
                             >
                               <span>Ver Expediente</span>
                               <span>→</span>
