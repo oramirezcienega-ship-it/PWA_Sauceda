@@ -790,19 +790,25 @@ export async function responderConIA(
         return;
       }
 
-      // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion'
+      // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion' y complementamos datos de campaña
       if (exp?.prospecto_id) {
         const { data: prInfo } = await sb
           .from("prospectos")
-          .select("estatus")
+          .select("estatus, campaign_name, adset_name, ad_name, origen")
           .eq("id", exp.prospecto_id)
           .maybeSingle();
         
-        if (prInfo?.estatus === "nuevo") {
-          await sb
-            .from("prospectos")
-            .update({ estatus: "en_conversacion" })
-            .eq("id", exp.prospecto_id);
+        if (prInfo) {
+          if (!exp.campaign_name && prInfo.campaign_name) exp.campaign_name = prInfo.campaign_name;
+          if (!exp.adset_name && prInfo.adset_name) exp.adset_name = prInfo.adset_name;
+          if (!exp.ad_name && prInfo.ad_name) exp.ad_name = prInfo.ad_name;
+
+          if (prInfo.estatus === "nuevo") {
+            await sb
+              .from("prospectos")
+              .update({ estatus: "en_conversacion" })
+              .eq("id", exp.prospecto_id);
+          }
         }
       }
     }
