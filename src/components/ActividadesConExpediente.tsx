@@ -79,12 +79,13 @@ export function ActividadesConExpediente({
   prospectoId,
   asesorNombreDefault,
   operadorNombreDefault,
+  initialContraido = true,
 }: ActividadesConExpedienteProps) {
   const [items, setItems] = useState<ActividadItem[]>([]);
   const [cargando, setCargando] = useState(true);
   const [filtroEstatus, setFiltroEstatus] = useState<"todas" | "pendientes" | "completadas">("todas");
   
-  const [contraido, setContraido] = useState(false);
+  const [contraido, setContraido] = useState(initialContraido);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipo, setTipo] = useState<TipoActividad>("llamada");
   const [titulo, setTitulo] = useState("");
