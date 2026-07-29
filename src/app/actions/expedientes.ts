@@ -1039,7 +1039,8 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
       .from("agenda_citas")
       .select("*")
       .gte("fecha", hoy)
-      .neq("estado", "cancelada");
+      .neq("estado", "cancelada")
+      .neq("estado", "completada");
 
     if (prospectoIds.length > 0) {
       queryCitas = queryCitas.or(`expediente_id.in.(${expIds.join(",")}),prospecto_id.in.(${prospectoIds.join(",")})`);
