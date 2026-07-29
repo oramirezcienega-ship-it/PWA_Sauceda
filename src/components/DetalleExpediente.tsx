@@ -454,7 +454,51 @@ export function DetalleExpediente({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* 2. Widget: Actividades con el expediente */}
+        {/* 2. Origen y Atribución de Campaña Publicitaria */}
+        <div className="rounded-xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-carbon/5 pb-2.5">
+            <h3 className="font-titular text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
+              🎯 Origen y Campaña Publicitaria
+            </h3>
+            <span className="text-[10px] text-carbon/40 font-mono">Atribución de captación (Meta / TikTok / Web / Referido)</span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Canal / Origen */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📡 Canal / Origen</span>
+              <span className="font-semibold text-xs text-carbon capitalize block mt-1">
+                {expediente.origenProspecto || "Orgánico / Directo"}
+              </span>
+            </div>
+
+            {/* Campaña */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📢 Campaña</span>
+              <span className="font-mono text-xs font-bold text-verde-profundo block mt-1 truncate" title={expediente.campaignName || "Sin datos de campaña"}>
+                {expediente.campaignName || "—"}
+              </span>
+            </div>
+
+            {/* Conjunto (Adset) */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">🎯 Conjunto (Adset)</span>
+              <span className="font-mono text-xs font-medium text-carbon/80 block mt-1 truncate" title={expediente.adsetName || "Sin datos de adset"}>
+                {expediente.adsetName || "—"}
+              </span>
+            </div>
+
+            {/* Anuncio (Ad) */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">🖼️ Anuncio (Ad)</span>
+              <span className="font-mono text-xs font-medium text-carbon/80 block mt-1 truncate" title={expediente.adName || "Sin datos de ad"}>
+                {expediente.adName || "—"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Widget: Actividades con el expediente */}
         <ActividadesConExpediente
           expedienteId={expediente.id}
           prospectoId={expediente.prospectoId}
