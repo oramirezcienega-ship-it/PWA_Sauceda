@@ -290,21 +290,64 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
             </div>
 
             <div className="space-y-3 text-xs">
-              {/* Desplegable de Resultado */}
+              {/* Tarjetas Interactivas de Resultado (1-Click) */}
               <div>
-                <label className="block text-[11px] font-bold text-carbon/60 uppercase mb-1">
-                  ¿Cuál fue el resultado de la tarea / llamada?
+                <label className="block text-[11px] font-bold text-carbon/60 uppercase mb-1.5">
+                  1. ¿Cuál fue el resultado de la llamada / operación?
                 </label>
-                <select
-                  value={resultadoTipo}
-                  onChange={(e) => setResultadoTipo(e.target.value as any)}
-                  className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-semibold text-verde-profundo outline-none focus:border-sauce"
-                >
-                  <option value="agendado">🟢 Visita / Inspección Técnica Agendada</option>
-                  <option value="reintentar">🟡 No Contestó / Reagendar Llamada</option>
-                  <option value="frio">🔴 No Interesado / Número Erróneo / Descartar</option>
-                  <option value="completado">✅ Tarea Realizada con Éxito (Sin cita)</option>
-                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setResultadoTipo("agendado")}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      resultadoTipo === "agendado"
+                        ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold shadow-2xs"
+                        : "bg-white border-carbon/15 hover:bg-slate-50 text-carbon/80"
+                    }`}
+                  >
+                    <div className="text-xs">🟢 Visita Agendada</div>
+                    <div className="text-[10px] opacity-70 font-normal mt-0.5">Fija la cita y avanza el BPM</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setResultadoTipo("reintentar")}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      resultadoTipo === "reintentar"
+                        ? "bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold shadow-2xs"
+                        : "bg-white border-carbon/15 hover:bg-slate-50 text-carbon/80"
+                    }`}
+                  >
+                    <div className="text-xs">🟡 No Contestó</div>
+                    <div className="text-[10px] opacity-70 font-normal mt-0.5">Programa reintento de llamada</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setResultadoTipo("frio")}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      resultadoTipo === "frio"
+                        ? "bg-rose-50 border-rose-500 ring-2 ring-rose-500/20 text-rose-950 font-bold shadow-2xs"
+                        : "bg-white border-carbon/15 hover:bg-slate-50 text-carbon/80"
+                    }`}
+                  >
+                    <div className="text-xs">🔴 Descartar / Frío</div>
+                    <div className="text-[10px] opacity-70 font-normal mt-0.5">Sin interés o número erróneo</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setResultadoTipo("completado")}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      resultadoTipo === "completado"
+                        ? "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-950 font-bold shadow-2xs"
+                        : "bg-white border-carbon/15 hover:bg-slate-50 text-carbon/80"
+                    }`}
+                  >
+                    <div className="text-xs">✅ Finalizar Tarea</div>
+                    <div className="text-[10px] opacity-70 font-normal mt-0.5">Solo registrar observaciones</div>
+                  </button>
+                </div>
               </div>
 
               {/* Si agendó visita o reagendó llamada: Campos de Fecha y Hora */}
