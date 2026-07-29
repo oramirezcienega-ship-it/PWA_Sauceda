@@ -99,6 +99,13 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
       } else if (resultadoTipo === "frio") {
         tipoAct = "nota";
         tituloBitacora = `🔴 Cliente Descartado / Prospecto Frío`;
+        if (expedienteId) {
+          const { cambiarCalificacionExpediente } = await import("@/app/actions/expedientes");
+          await cambiarCalificacionExpediente(expedienteId, "frio");
+        } else if (prospectoId) {
+          const { cambiarCalificacionProspecto } = await import("@/app/actions/prospectos");
+          await cambiarCalificacionProspecto(prospectoId, "frio");
+        }
       }
 
       await concluirTareaYProgramarSiguiente({

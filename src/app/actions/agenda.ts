@@ -673,6 +673,7 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     .select("*, perfiles(nombre)")
     .gte("fecha", hoy)
     .neq("estado", "cancelada")
+    .neq("estado", "completada")
     .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true })
     .limit(50);
