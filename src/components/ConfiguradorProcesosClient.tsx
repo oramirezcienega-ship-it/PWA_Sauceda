@@ -6,6 +6,7 @@ import {
   obtenerProcesoCompleto,
   crearProceso,
   duplicarProceso,
+  actualizarProceso,
   guardarEtapasProceso,
   guardarEscalaciones,
   guardarAutomatizaciones,
@@ -378,36 +379,73 @@ export function ConfiguradorProcesosClient({
         </div>
       )}
 
-      {/* Selector de Proceso Maestro Activo */}
-      <div className="rounded-xl border border-carbon/10 bg-white p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1">
-          <label className="text-xs font-bold uppercase tracking-wider text-carbon/60 shrink-0">
-            Proceso Activo:
-          </label>
-          <select
-            value={procesoSel?.id || ""}
-            onChange={(e) => void seleccionarProceso(e.target.value)}
-            disabled={cargando}
-            className="w-full sm:w-auto min-w-[260px] rounded-lg border border-carbon/20 bg-slate-50 px-3 py-2 text-xs font-bold text-verde-profundo outline-none focus:border-sauce"
-          >
-            {procesos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre} ({p.tipoNegocio})
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Selector y Metadatos de la Entidad del Proceso Activo */}
+      <div className="rounded-xl border border-carbon/10 bg-white p-4 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 flex-wrap">
+            <label className="text-xs font-bold uppercase tracking-wider text-carbon/60 shrink-0">
+              Proceso Activo:
+            </label>
+            <select
+              value={procesoSel?.id || ""}
+              onChange={(e) => void seleccionarProceso(e.target.value)}
+              disabled={cargando}
+              className="w-full sm:w-auto min-w-[240px] rounded-lg border border-carbon/20 bg-slate-50 px-3 py-2 text-xs font-bold text-verde-profundo outline-none focus:border-sauce"
+            >
+              {procesos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.entidadTarget === "prospecto" ? "👤 Prospecto" : "📁 Expediente"} - {p.nombre} ({p.tipoNegocio})
+                </option>
+              ))}
+            </select>
 
-        {procesoSel && (
-          <button
-            type="button"
-            onClick={handleGuardarConfiguracion}
-            disabled={guardando}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 text-xs transition shadow-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5 justify-center"
-          >
-            {guardando ? "Guardando..." : "💾 Guardar Todos los Cambios"}
-          </button>
-        )}
+            {/* Selector INTERNO para cambiar la Entidad del Proceso activo */}
+            {procesoSel && (
+              <div className="flex items-center gap-2 bg-slate-100 border border-slate-300 px-3 py-1.5 rounded-lg shadow-2xs">
+                <span className="text-xs font-bold text-carbon/70 uppercase shrink-0">
+                  Entidad del Proceso:
+                </span>
+                <select
+                  value={procesoSel.entidadTarget || "expediente"}
+                  onChange={async (e) => {
+                    const nuevaEntidad = e.target.value as "expediente" | "prospecto";
+                    try {
+                      await actualizarProceso(procesoSel.id, { entidadTarget: nuevaEntidad });
+                      setProcesoSel({ ...procesoSel, entidadTarget: nuevaEntidad });
+                      const nLista = procesos.map((p) =>
+                        p.id === procesoSel.id ? { ...p, entidadTarget: nuevaEntidad } : p
+                      );
+                      setProcesos(nLista);
+                      setMensaje({
+                        tipo: "ok",
+                        texto: `Entidad del proceso cambiada exitosamente a: ${
+                          nuevaEntidad === "expediente" ? "📁 Entidad EXPEDIENTE" : "👤 Entidad PROSPECTO"
+                        }`,
+                      });
+                    } catch (err: any) {
+                      setMensaje({ tipo: "error", texto: `Error al cambiar entidad: ${err.message}` });
+                    }
+                  }}
+                  className="bg-white border border-carbon/20 rounded px-2 py-1 text-xs font-bold text-verde-profundo outline-none cursor-pointer hover:border-sauce"
+                >
+                  <option value="expediente">📁 Entidad EXPEDIENTE (Proyecto / Casa / Obra)</option>
+                  <option value="prospecto">👤 Entidad PROSPECTO (Lead / Contacto Comercial)</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {procesoSel && (
+            <button
+              type="button"
+              onClick={handleGuardarConfiguracion}
+              disabled={guardando}
+              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 text-xs transition shadow-xs disabled:opacity-50 cursor-pointer flex items-center gap-1.5 justify-center shrink-0"
+            >
+              {guardando ? "Guardando..." : "💾 Guardar Todos los Cambios"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Pestañas de Configuración */}
