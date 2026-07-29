@@ -152,8 +152,8 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     return "promocion_venta";
   }
 
-  // Fallback por defecto: El servicio activo principal de la empresa (Impermeabilización)
-  return "construccion-impermeabilizacion";
+  // Fallback por defecto cuando es un saludo o consulta general sin palabra clave explícita
+  return "otro";
 }
 
 /**
