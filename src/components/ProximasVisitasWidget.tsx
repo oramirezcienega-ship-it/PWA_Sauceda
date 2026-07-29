@@ -42,9 +42,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
   const totalInspecciones = citas.filter((c) => c.tipo_cita === "inspeccion").length;
   const totalLlamadas = citas.filter((c) => c.tipo_cita === "llamada").length;
 
-  if (!cargando && citas.length === 0) {
-    return null;
-  }
+
 
   return (
     <div className="mb-6 rounded-2xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-sm space-y-3.5">
@@ -102,6 +100,12 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
       {cargando ? (
         <div className="py-6 text-center text-xs text-carbon/40 animate-pulse">
           Cargando agenda de trabajo...
+        </div>
+      ) : citasFiltradas.length === 0 ? (
+        <div className="py-6 px-4 text-center border border-dashed border-carbon/15 rounded-xl bg-slate-50/50">
+          <span className="text-2xl block mb-1">✨</span>
+          <p className="text-xs font-bold text-verde-profundo">No tienes citas ni llamadas programadas pendientes.</p>
+          <p className="text-[11px] text-carbon/45 mt-0.5">Tus actividades operativas del día están al corriente.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
