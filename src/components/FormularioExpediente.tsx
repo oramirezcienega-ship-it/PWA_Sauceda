@@ -26,7 +26,7 @@ const VACIO: DatosExpediente = {
   direccionPropiedad: "",
   linkGoogleMaps: "",
   necesidad: "",
-  tipoNegocio: "traspaso_compra",
+  tipoNegocio: "construccion-impermeabilizacion",
   canalId: "",
   sinPagos: "",
   estadoFisico: "",

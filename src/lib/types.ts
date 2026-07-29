@@ -70,15 +70,19 @@ export function labelTipoNegocio(tipo: string): string {
 export function detectarTipoNegocio(mensaje: string, campaignName?: string): TipoNegocioId {
   const texto = `${mensaje} ${campaignName ?? ""}`.toLowerCase();
 
+  // 1. Remodelación
   if (
     texto.includes("remodela") ||
     texto.includes("remodelacion") ||
     texto.includes("remodelación") ||
-    texto.includes("remodelar")
+    texto.includes("remodelar") ||
+    texto.includes("acabado") ||
+    texto.includes("piso")
   ) {
     return "construccion-remodelacion";
   }
 
+  // 2. Impermeabilización
   if (
     texto.includes("impermeabili") ||
     texto.includes("gotera") ||
@@ -87,24 +91,45 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     texto.includes("filtracion") ||
     texto.includes("filtración") ||
     texto.includes("azotea") ||
+    texto.includes("techo") ||
+    texto.includes("losa") ||
     texto.includes("concreto") ||
-    texto.includes("construccion") ||
-    texto.includes("construcción") ||
     texto.includes("reparacion") ||
-    texto.includes("reparación")
+    texto.includes("reparación") ||
+    texto.includes("pintura") ||
+    texto.includes("mantenimiento")
   ) {
     return "construccion-impermeabilizacion";
   }
 
+  // 3. Construcción general
   if (
     texto.includes("construye") ||
+    texto.includes("construcción") ||
+    texto.includes("construccion") ||
     texto.includes("amplia") ||
     texto.includes("ampliación") ||
-    texto.includes("albañil")
+    texto.includes("albañil") ||
+    texto.includes("obra")
   ) {
     return "construccion";
   }
 
+  // 4. Traspaso / Compra Directa de Casa (requiere palabras clave explícitas)
+  if (
+    texto.includes("traspaso") ||
+    texto.includes("infonavit") ||
+    texto.includes("fovissste") ||
+    texto.includes("comprar casa") ||
+    texto.includes("vender casa") ||
+    texto.includes("compra de casa") ||
+    texto.includes("traspaso de casa") ||
+    texto.includes("deuda de casa")
+  ) {
+    return "traspaso_compra";
+  }
+
+  // 5. Solo Trámite
   if (
     texto.includes("tramite") ||
     texto.includes("trámite") ||
@@ -115,19 +140,20 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     return "solo_tramite";
   }
 
+  // 6. Promoción de Venta
   if (
     texto.includes("promocion") ||
     texto.includes("promoción") ||
     texto.includes("venda") ||
     texto.includes("comision") ||
     texto.includes("comisión") ||
-    texto.includes("vender") ||
     texto.includes("promover")
   ) {
     return "promocion_venta";
   }
 
-  return "traspaso_compra";
+  // Fallback por defecto: El servicio activo principal de la empresa (Impermeabilización)
+  return "construccion-impermeabilizacion";
 }
 
 /**
