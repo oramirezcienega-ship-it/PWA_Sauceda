@@ -6,6 +6,7 @@ import {
   actualizarEstadoTarea, 
   instanciarFlujoEnExpediente 
 } from "@/app/actions/bpm";
+import { crearActividadManual } from "@/app/actions/actividades";
 import { formatoFecha } from "@/lib/formato";
 
 interface WidgetBpmTareasProps {
@@ -17,6 +18,14 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
   const [tareas, setTareas] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
+
+  // Modal para captura de resultados por parte del operador
+  const [tareaSelModal, setTareaSelModal] = useState<any | null>(null);
+  const [resultadoTipo, setResultadoTipo] = useState<"agendado" | "reintentar" | "frio" | "completado">("completado");
+  const [observacionesModal, setObservacionesModal] = useState("");
+  const [fechaAgendada, setFechaAgendada] = useState(new Date().toISOString().slice(0, 10));
+  const [horaAgendada, setHoraAgendada] = useState("10:00");
+  const [guardandoModal, setGuardandoModal] = useState(false);
 
   async function cargarTareas() {
     setCargando(true);
@@ -36,17 +45,55 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
     }
   }, [expedienteId]);
 
-  async function handleCompletar(tareaId: string) {
-    if (procesandoId) return;
-    setProcesandoId(tareaId);
+  function handleAbrirModalCompletar(tarea: any) {
+    setTareaSelModal(tarea);
+    setObservacionesModal("");
+    const esLlamadaOVisita = tarea.titulo?.toLowerCase().includes("contactar") || tarea.titulo?.toLowerCase().includes("visita");
+    setResultadoTipo(esLlamadaOVisita ? "agendado" : "completado");
+  }
+
+  async function handleGuardarResultadoModal() {
+    if (!tareaSelModal) return;
+    setGuardandoModal(true);
     try {
-      await actualizarEstadoTarea(tareaId, "completada");
+      // 1. Registrar la actividad detallada capturada por el operador
+      let tipoAct = "tarea";
+      let tituloBitacora = `Tarea "${tareaSelModal.titulo}" completada`;
+
+      if (resultadoTipo === "agendado") {
+        tipoAct = "inspeccion";
+        tituloBitacora = `🟢 Cita / Visita Agendada: ${fechaAgendada} a las ${horaAgendada} hrs`;
+      } else if (resultadoTipo === "reintentar") {
+        tipoAct = "llamada";
+        tituloBitacora = `🟡 Reintento de Llamada Programado: ${fechaAgendada} a las ${horaAgendada} hrs`;
+      } else if (resultadoTipo === "frio") {
+        tipoAct = "nota";
+        tituloBitacora = `🔴 Cliente Descartado / Prospecto Frío`;
+      }
+
+      const detalleFormateado = (resultadoTipo === "agendado" || resultadoTipo === "reintentar")
+        ? `Programado para: ${fechaAgendada} a las ${horaAgendada} hrs. ${observacionesModal ? `Observaciones: ${observacionesModal}` : ''}`
+        : observacionesModal || undefined;
+
+      await crearActividadManual({
+        expedienteId,
+        tipo: tipoAct as any,
+        titulo: tituloBitacora,
+        detalle: detalleFormateado,
+      });
+
+      // 2. Si no es reintento, marcar la tarea BPM como completada
+      if (resultadoTipo !== "reintentar") {
+        await actualizarEstadoTarea(tareaSelModal.id, "completada");
+      }
+
+      setTareaSelModal(null);
       await cargarTareas();
-    } catch (err) {
-      console.error("Error al completar la tarea:", err);
-      alert("Hubo un error al actualizar la tarea.");
+    } catch (err: any) {
+      console.error("Error al guardar resultado de la tarea:", err);
+      alert("Error al registrar resultado: " + err.message);
     } finally {
-      setProcesandoId(null);
+      setGuardandoModal(false);
     }
   }
 
@@ -137,12 +184,11 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
                 ) : (
                   <button
                     disabled={procesandoId !== null}
-                    onClick={() => handleCompletar(t.id)}
-                    className="h-5 w-5 rounded border-2 border-indigo-400 hover:border-indigo-600 focus:outline-none flex items-center justify-center transition-all bg-white"
+                    onClick={() => handleAbrirModalCompletar(t)}
+                    className="h-5 w-5 rounded border-2 border-sauce hover:bg-sauce hover:text-white focus:outline-none flex items-center justify-center transition-all bg-white font-bold text-xs"
+                    title="Registrar resultado y completar tarea"
                   >
-                    {procesandoId === t.id && (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-indigo-600"></div>
-                    )}
+                    ✓
                   </button>
                 )}
               </div>
@@ -161,15 +207,26 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
                   >
                     {t.titulo}
                   </h4>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      t.responsableId
-                        ? "bg-indigo-100 text-indigo-800"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    Responsable: {t.responsableNombre || "Por asignar"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        t.responsableId
+                          ? "bg-indigo-100 text-indigo-800"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      Responsable: {t.responsableNombre || "Por asignar"}
+                    </span>
+                    {esPendiente && (
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirModalCompletar(t)}
+                        className="rounded bg-sauce hover:bg-verde-profundo text-white text-[11px] font-bold px-2 py-0.5 transition shadow-2xs"
+                      >
+                        ✓ Registrar Resultado
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {t.descripcion && (
@@ -209,6 +266,110 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
           );
         })}
       </div>
+
+      {/* Modal de Captura de Resultado de la Tarea */}
+      {tareaSelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-lg shadow-xl space-y-4 border border-carbon/10">
+            <div className="flex items-start justify-between border-b border-carbon/5 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-sauce block">
+                  Captura de Resultado Operativo
+                </span>
+                <h3 className="font-titular text-base font-bold text-verde-profundo">
+                  {tareaSelModal.titulo}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTareaSelModal(null)}
+                className="text-carbon/40 hover:text-carbon font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Desplegable de Resultado */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/60 uppercase mb-1">
+                  ¿Cuál fue el resultado de la tarea / llamada?
+                </label>
+                <select
+                  value={resultadoTipo}
+                  onChange={(e) => setResultadoTipo(e.target.value as any)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-semibold text-verde-profundo outline-none focus:border-sauce"
+                >
+                  <option value="agendado">🟢 Visita / Inspección Técnica Agendada</option>
+                  <option value="reintentar">🟡 No Contestó / Reagendar Llamada</option>
+                  <option value="frio">🔴 No Interesado / Número Erróneo / Descartar</option>
+                  <option value="completado">✅ Tarea Realizada con Éxito (Sin cita)</option>
+                </select>
+              </div>
+
+              {/* Si agendó visita o reagendó llamada: Campos de Fecha y Hora */}
+              {(resultadoTipo === "agendado" || resultadoTipo === "reintentar") && (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-sauce/5 border border-sauce/20 rounded-xl">
+                  <div>
+                    <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                      {resultadoTipo === "agendado" ? "Fecha de Visita Técnica" : "Fecha de Próxima Llamada"}
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaAgendada}
+                      onChange={(e) => setFechaAgendada(e.target.value)}
+                      className="w-full rounded border border-carbon/20 bg-white px-2 py-1 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                      Hora Programada
+                    </label>
+                    <input
+                      type="time"
+                      value={horaAgendada}
+                      onChange={(e) => setHoraAgendada(e.target.value)}
+                      className="w-full rounded border border-carbon/20 bg-white px-2 py-1 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Bitácora de Observaciones */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/60 uppercase mb-1">
+                  Bitácora u Observaciones de la Operación:
+                </label>
+                <textarea
+                  rows={3}
+                  value={observacionesModal}
+                  onChange={(e) => setObservacionesModal(e.target.value)}
+                  placeholder="Ej. Se validaron 150m2 de azotea, losa de concreto con fisuras. Cita confirmada con el cliente para presupuesto."
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2.5 text-xs text-carbon outline-none focus:border-sauce"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-carbon/5">
+              <button
+                type="button"
+                onClick={() => setTareaSelModal(null)}
+                className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs font-bold text-carbon/60 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGuardarResultadoModal}
+                disabled={guardandoModal}
+                className="rounded-lg bg-sauce hover:bg-verde-profundo text-white px-4 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                {guardandoModal ? "Guardando..." : "💾 Guardar y Finalizar Tarea"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
