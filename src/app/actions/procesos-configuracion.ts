@@ -54,6 +54,7 @@ export async function listarProcesosMaestros(): Promise<ProcesoMaestro[]> {
           nombre: e.nombre,
           orden: e.orden,
           slaDias: e.sla_dias,
+          entidadTarget: e.entidad_target || "expediente",
           camposRequeridos: e.campos_requeridos || [],
           validaciones: e.validaciones_json || [],
           createdAt: e.created_at,
@@ -110,6 +111,7 @@ export async function obtenerProcesoCompleto(procesoId: string): Promise<Proceso
         nombre: e.nombre,
         orden: e.orden,
         slaDias: e.sla_dias,
+        entidadTarget: e.entidad_target || "expediente",
         camposRequeridos: e.campos_requeridos || [],
         validaciones: e.validaciones_json || [],
         createdAt: e.created_at,
@@ -275,6 +277,7 @@ export async function guardarEtapasProceso(
     nombre: e.nombre,
     orden: idx + 1,
     sla_dias: Number(e.slaDias) || 7,
+    entidad_target: e.entidadTarget || "expediente",
     campos_requeridos: e.camposRequeridos || [],
     validaciones_json: e.validaciones || [],
   }));

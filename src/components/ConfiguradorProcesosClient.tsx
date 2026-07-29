@@ -252,6 +252,7 @@ export function ConfiguradorProcesosClient({
       nombre: `Nueva Etapa ${num}`,
       orden: num,
       slaDias: 7,
+      entidadTarget: "expediente",
       camposRequeridos: [],
       validaciones: [],
     };
@@ -531,7 +532,24 @@ export function ConfiguradorProcesosClient({
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Selector de Entidad por Etapa (Editable por cada etapa del proceso) */}
+                        <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg">
+                          <span className="text-[10px] font-bold text-indigo-900 uppercase">Entidad Etapa:</span>
+                          <select
+                            value={etapa.entidadTarget || "expediente"}
+                            onChange={(e) => {
+                              const lista = [...etapasEditables];
+                              lista[idx].entidadTarget = e.target.value as "expediente" | "prospecto";
+                              setEtapasEditables(lista);
+                            }}
+                            className="text-xs font-bold text-indigo-950 bg-white border border-indigo-300 rounded px-1.5 py-0.5 outline-none cursor-pointer hover:border-sauce"
+                          >
+                            <option value="expediente">📁 Entidad EXPEDIENTE</option>
+                            <option value="prospecto">👤 Entidad PROSPECTO</option>
+                          </select>
+                        </div>
+
                         {/* SLA en Días Editable */}
                         <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
                           <span className="text-[10px] font-bold text-amber-800 uppercase">SLA (Días):</span>

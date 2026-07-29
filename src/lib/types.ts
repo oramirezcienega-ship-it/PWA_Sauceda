@@ -674,6 +674,7 @@ export interface EtapaConfiguracion {
   nombre: string;
   orden: number;
   slaDias: number;
+  entidadTarget?: 'expediente' | 'prospecto';
   camposRequeridos: string[];
   validaciones: ReglaValidacion[];
   createdAt?: string;
