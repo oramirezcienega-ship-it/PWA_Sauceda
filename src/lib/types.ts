@@ -667,6 +667,15 @@ export interface ReglaValidacion {
   mensajeError: string;
 }
 
+export interface TareaOperativaEtapa {
+  id: string;
+  titulo: string;
+  descripcion?: string;
+  rolResponsable: 'asesor' | 'operaciones' | 'tecnico' | 'admin';
+  diasVencimiento: number;
+  condicionActivacion: string;
+}
+
 export interface EtapaConfiguracion {
   id: string;
   procesoId: string;
@@ -677,6 +686,7 @@ export interface EtapaConfiguracion {
   entidadTarget?: 'expediente' | 'prospecto';
   camposRequeridos: string[];
   validaciones: ReglaValidacion[];
+  tareasOperativas?: TareaOperativaEtapa[];
   createdAt?: string;
 }
 

@@ -18,6 +18,7 @@ import type {
   ReglaValidacion,
   EscalacionConfiguracion,
   AutomatizacionConfiguracion,
+  TareaOperativaEtapa,
 } from "@/lib/types";
 
 export function obtenerModulosPorTipoNegocio(
@@ -321,6 +322,31 @@ export function ConfiguradorProcesosClient({
     const lista = [...etapasEditables];
     const e = { ...lista[etapaIdx] };
     e.validaciones = (e.validaciones || []).filter((_, i) => i !== reglaIdx);
+    lista[etapaIdx] = e;
+    setEtapasEditables(lista);
+  }
+
+  function handleAgregarTareaEtapa(etapaIdx: number) {
+    const lista = [...etapasEditables];
+    const e = { ...lista[etapaIdx] };
+    const num = (e.tareasOperativas || []).length + 1;
+    const nTarea: TareaOperativaEtapa = {
+      id: `tarea-${Date.now()}`,
+      titulo: `Nueva Tarea #${num}`,
+      descripcion: "",
+      rolResponsable: "asesor",
+      diasVencimiento: 1,
+      condicionActivacion: "inmediato",
+    };
+    e.tareasOperativas = [...(e.tareasOperativas || []), nTarea];
+    lista[etapaIdx] = e;
+    setEtapasEditables(lista);
+  }
+
+  function handleEliminarTareaEtapa(etapaIdx: number, tareaIdx: number) {
+    const lista = [...etapasEditables];
+    const e = { ...lista[etapaIdx] };
+    e.tareasOperativas = (e.tareasOperativas || []).filter((_, i) => i !== tareaIdx);
     lista[etapaIdx] = e;
     setEtapasEditables(lista);
   }
@@ -661,6 +687,113 @@ export function ConfiguradorProcesosClient({
                         </div>
                       );
                     })()}
+
+                    {/* Tareas Operativas y Acciones Requeridas de esta Etapa */}
+                    <div className="space-y-2 pt-2 border-t border-carbon/5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60">
+                          📋 Tareas Operativas y Acciones de esta Etapa:
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleAgregarTareaEtapa(idx)}
+                          className="text-[11px] font-bold text-sauce hover:underline"
+                        >
+                          + Agregar Tarea / Acción
+                        </button>
+                      </div>
+
+                      {(etapa.tareasOperativas || []).length === 0 ? (
+                        <p className="text-[11px] text-carbon/40 italic">
+                          No hay tareas operativas parametrizadas para esta etapa.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {(etapa.tareasOperativas || []).map((t, tIdx) => (
+                            <div
+                              key={t.id || tIdx}
+                              className="p-3 rounded-xl border border-carbon/15 bg-slate-50 space-y-2 text-xs"
+                            >
+                              <div className="flex items-center gap-2 justify-between">
+                                <div className="flex items-center gap-2 flex-1">
+                                  <span className="font-bold text-sauce">#{tIdx + 1}</span>
+                                  <input
+                                    type="text"
+                                    value={t.titulo}
+                                    onChange={(e) => {
+                                      const lista = [...etapasEditables];
+                                      lista[idx].tareasOperativas![tIdx].titulo = e.target.value;
+                                      setEtapasEditables(lista);
+                                    }}
+                                    placeholder="Ej. Contactar y validar necesidades de impermeabilización"
+                                    className="font-semibold text-carbon bg-white border border-carbon/20 rounded px-2 py-1 flex-1 outline-none focus:border-sauce"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminarTareaEtapa(idx, tIdx)}
+                                  className="text-rose-600 font-bold px-1 hover:bg-rose-100 rounded"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-bold text-carbon/60">Responsable:</span>
+                                  <select
+                                    value={t.rolResponsable}
+                                    onChange={(e) => {
+                                      const lista = [...etapasEditables];
+                                      lista[idx].tareasOperativas![tIdx].rolResponsable = e.target.value as any;
+                                      setEtapasEditables(lista);
+                                    }}
+                                    className="bg-white border border-carbon/20 rounded px-1.5 py-0.5 font-semibold text-carbon"
+                                  >
+                                    <option value="asesor">👤 Asesor Comercial</option>
+                                    <option value="tecnico">🔍 Técnico Evaluador</option>
+                                    <option value="operaciones">🛠️ Operaciones / Cuadrilla</option>
+                                    <option value="admin">⚙️ Administrador</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <span className="font-bold text-carbon/60">SLA Tarea:</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={t.diasVencimiento}
+                                    onChange={(e) => {
+                                      const lista = [...etapasEditables];
+                                      lista[idx].tareasOperativas![tIdx].diasVencimiento = parseInt(e.target.value) || 1;
+                                      setEtapasEditables(lista);
+                                    }}
+                                    className="w-12 text-center bg-white border border-carbon/20 rounded px-1 py-0.5 font-bold"
+                                  />
+                                  <span>días</span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <span className="font-bold text-carbon/60">Activación:</span>
+                                  <select
+                                    value={t.condicionActivacion}
+                                    onChange={(e) => {
+                                      const lista = [...etapasEditables];
+                                      lista[idx].tareasOperativas![tIdx].condicionActivacion = e.target.value;
+                                      setEtapasEditables(lista);
+                                    }}
+                                    className="bg-white border border-carbon/20 rounded px-1.5 py-0.5 font-semibold text-carbon"
+                                  >
+                                    <option value="inmediato">⚡ Inmediato (Al entrar a la etapa)</option>
+                                    <option value="al_completar_previa">🔗 Al completar tarea previa</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Constructor Visual de Reglas IF/THEN */}
                     <div className="space-y-2 pt-2 border-t border-carbon/5">
