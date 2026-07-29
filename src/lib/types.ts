@@ -210,6 +210,12 @@ export interface Expediente {
   statusProceso?: string | null;
   /** Fecha de confirmación por el cliente. */
   fechaConfirmacion?: string | null;
+  /** Calificación / prioridad del expediente (caliente, templado, frio, descalificado). */
+  calificacion?: CalificacionProspecto;
+  /** Correo del prospecto enlazado (vía join). */
+  prospectoCorreo?: string | null;
+  /** Dirección del prospecto enlazado (vía join). */
+  prospectoDireccion?: string | null;
 }
 
 /**
@@ -650,5 +656,64 @@ export interface GarantiaDocumento {
   contenido: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Configurador de Procesos Parametrizable */
+export interface ReglaValidacion {
+  id: string;
+  campo: string;
+  operador: "es_igual" | "no_es_igual" | "mayor_que" | "menor_que" | "esta_vacio" | "no_esta_vacio";
+  valor: any;
+  mensajeError: string;
+}
+
+export interface EtapaConfiguracion {
+  id: string;
+  procesoId: string;
+  claveEtapa: string;
+  nombre: string;
+  orden: number;
+  slaDias: number;
+  entidadTarget?: 'expediente' | 'prospecto';
+  camposRequeridos: string[];
+  validaciones: ReglaValidacion[];
+  createdAt?: string;
+}
+
+export interface EscalacionConfiguracion {
+  id: string;
+  procesoId: string;
+  etapaId?: string | null;
+  nombreRegla: string;
+  condicion: Record<string, any>;
+  accionTipo: 'notificar_gerente' | 'reasignar_operador' | 'marcar_frio' | 'webhook_n8n';
+  parametros: Record<string, any>;
+  activo: boolean;
+  createdAt?: string;
+}
+
+export interface AutomatizacionConfiguracion {
+  id: string;
+  procesoId: string;
+  etapaId?: string | null;
+  eventoTipo: 'al_entrar_etapa' | 'al_salir_etapa' | 'al_vencer_sla' | 'al_detectar_pago' | 'al_cambiar_calificacion';
+  webhookUrlN8n: string;
+  payloadTemplate: Record<string, any>;
+  activo: boolean;
+  createdAt?: string;
+}
+
+export interface ProcesoMaestro {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  tipoNegocio: string;
+  entidadTarget?: 'expediente' | 'prospecto';
+  activo: boolean;
+  etapas?: EtapaConfiguracion[];
+  escalaciones?: EscalacionConfiguracion[];
+  automatizaciones?: AutomatizacionConfiguracion[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 

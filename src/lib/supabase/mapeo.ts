@@ -55,7 +55,7 @@ export interface FilaExpediente {
   habitada?: string | null;
   created_at?: string;
   /** Origen del prospecto enlazado (cuando se pide vía join). */
-  prospectos?: { origen: OrigenAdquisicion } | null;
+  prospectos?: { origen: OrigenAdquisicion; correo?: string; direccion?: string } | null;
   asesor_id?: string | null;
   operador_id?: string | null;
   asesor?: { nombre: string } | null;
@@ -65,6 +65,7 @@ export interface FilaExpediente {
   session_token_client?: string | null;
   status_proceso?: string | null;
   fecha_confirmacion?: string | null;
+  calificacion?: CalificacionProspecto;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -93,6 +94,8 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
     origenProspecto: fila.prospectos?.origen ?? null,
+    prospectoCorreo: fila.prospectos?.correo ?? null,
+    prospectoDireccion: fila.prospectos?.direccion ?? null,
     tipoCredito: fila.tipo_credito ?? "",
     direccionPropiedad: fila.direccion_propiedad ?? "",
     linkGoogleMaps: fila.link_google_maps ?? "",
@@ -111,6 +114,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     sessionTokenClient: fila.session_token_client ?? null,
     statusProceso: fila.status_proceso ?? null,
     fechaConfirmacion: fila.fecha_confirmacion ?? null,
+    calificacion: fila.calificacion ?? "frio",
   };
 }
 
@@ -142,6 +146,7 @@ export function aFila(datos: DatosExpediente) {
     habitada: datos.habitada ?? null,
     asesor_id: datos.asesorId ?? null,
     operador_id: datos.operadorId ?? null,
+    calificacion: datos.calificacion || "frio",
   };
 }
 

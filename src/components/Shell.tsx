@@ -308,6 +308,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         { href: "/usuarios", label: "Usuarios" },
         { href: "/consejo", label: "El Consejo" },
         { href: "/admin/gerente", label: "Gerente Operaciones" },
+        { href: "/admin/procesos", label: "Procesos BPM" },
       ]
     : ENLACES;
 

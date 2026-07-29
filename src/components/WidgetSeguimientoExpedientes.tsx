@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { obtenerExpedientesSeguimiento, type ExpedienteSeguimiento } from "@/app/actions/expedientes";
+import { obtenerExpedientesSeguimiento, cambiarCalificacionExpediente, type ExpedienteSeguimiento } from "@/app/actions/expedientes";
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
+import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
+import type { CalificacionProspecto } from "@/lib/types";
 
 export function WidgetSeguimientoExpedientes() {
   const [expedientes, setExpedientes] = useState<ExpedienteSeguimiento[]>([]);
@@ -13,6 +15,7 @@ export function WidgetSeguimientoExpedientes() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroEtapa, setFiltroEtapa] = useState("todos");
   const [filtroProspectoEstatus, setFiltroProspectoEstatus] = useState("todos");
+  const [filtroCalificacion, setFiltroCalificacion] = useState("todos");
   const [filtroFecha, setFiltroFecha] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
@@ -56,6 +59,16 @@ export function WidgetSeguimientoExpedientes() {
       alert("Ocurrió un error al concluir la tarea.");
     } finally {
       setGuardandoConclusion(false);
+    }
+  };
+
+  const handleCambiarCalificacion = async (expId: string, nuevaCal: CalificacionProspecto) => {
+    setExpedientes((prev) =>
+      prev.map((x) => (x.id === expId ? { ...x, calificacion: nuevaCal } : x))
+    );
+    const res = await cambiarCalificacionExpediente(expId, nuevaCal);
+    if (!res.ok) {
+      console.error("Error al actualizar calificación:", res.error);
     }
   };
 
@@ -111,6 +124,7 @@ export function WidgetSeguimientoExpedientes() {
     setFiltroTipo("todos");
     setFiltroEtapa("todos");
     setFiltroProspectoEstatus("todos");
+    setFiltroCalificacion("todos");
     setFiltroFecha("todos");
     setFechaDesde("");
     setFechaHasta("");
@@ -149,6 +163,10 @@ export function WidgetSeguimientoExpedientes() {
         filtroProspectoEstatus === "todos" ||
         (e.prospectoEstatus && e.prospectoEstatus.toLowerCase() === filtroProspectoEstatus.toLowerCase());
 
+      const coincideCalificacion =
+        filtroCalificacion === "todos" ||
+        (e.calificacion || "frio").toLowerCase() === filtroCalificacion.toLowerCase();
+
       let coincideFecha = true;
       const fechaCreacionShort = e.fechaCreacion ? e.fechaCreacion.slice(0, 10) : "";
       const fechaProximaShort = e.proximaAccionFecha ? e.proximaAccionFecha.slice(0, 10) : "";
@@ -171,6 +189,7 @@ export function WidgetSeguimientoExpedientes() {
         coincideAccion &&
         coincideEtapa &&
         coincideProspectoEstatus &&
+        coincideCalificacion &&
         coincideFecha
       );
     });
@@ -365,6 +384,19 @@ export function WidgetSeguimientoExpedientes() {
             ))}
           </select>
 
+          {/* Filtro por Calificación / Prioridad */}
+          <select
+            value={filtroCalificacion}
+            onChange={(e) => setFiltroCalificacion(e.target.value)}
+            className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70"
+          >
+            <option value="todos">⭐ Calificación: Todas</option>
+            <option value="caliente">🔥 Caliente</option>
+            <option value="templado">⚡ Templado</option>
+            <option value="frio">❄️ Frío</option>
+            <option value="descalificado">🚫 Descalificado</option>
+          </select>
+
           {/* Filtro por Pendientes / Acciones */}
           <select
             value={filtroAccion}
@@ -503,11 +535,25 @@ export function WidgetSeguimientoExpedientes() {
                             </div>
                           </div>
 
-                          {/* Etapa actual del expediente y estatus del prospecto */}
+                          {/* Etapa actual del expediente, Calificación y Estatus del prospecto */}
                           <div className="flex-shrink-0 flex flex-col items-end gap-1">
                             <span className="inline-block rounded-full bg-sauce/10 text-sauce px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                               {e.etapa}
                             </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <CalificacionProspectoBadge calificacion={e.calificacion || "frio"} />
+                              <select
+                                value={e.calificacion || "frio"}
+                                onChange={(ev) => handleCambiarCalificacion(e.id, ev.target.value as CalificacionProspecto)}
+                                className="text-[10px] rounded-md border border-carbon/20 px-1 py-0.5 bg-white font-medium focus:outline-none focus:border-sauce text-carbon/70 cursor-pointer shadow-2xs"
+                                title="Cambiar calificación"
+                              >
+                                <option value="caliente">🔥 Caliente</option>
+                                <option value="templado">⚡ Templado</option>
+                                <option value="frio">❄️ Frío</option>
+                                <option value="descalificado">🚫 Descalificado</option>
+                              </select>
+                            </div>
                             {e.prospectoEstatus && (
                               <span className="inline-block rounded-full bg-slate-100 text-carbon/70 px-2 py-0.5 text-[9px] font-medium border border-carbon/10">
                                 👤 Prospecto: {e.prospectoEstatus}

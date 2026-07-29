@@ -8,11 +8,14 @@ import { etapaAnterior, etapaSiguiente, ETAPAS_POR_ID, obtenerEtapasPorNegocio }
 import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
 import { Actividades } from "./Actividades";
+import { ActividadesConExpediente } from "./ActividadesConExpediente";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
 import { OperadorSelector } from "./OperadorSelector";
-import { labelTipoNegocio, type Cotizacion } from "@/lib/types";
+import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto } from "@/lib/types";
+import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
+import { cambiarCalificacionExpediente } from "@/app/actions/expedientes";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
@@ -274,11 +277,26 @@ export function DetalleExpediente({ id }: { id: string }) {
           )}
         </p>
 
-        {/* Estatus y Tipo de Negocio responsivos */}
+        {/* Calificación / Prioridad y Tipo de Negocio responsivos */}
         <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2">
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[10px] uppercase font-bold text-carbon/40">Etapa:</span>
-            <EtapaBadge etapa={expediente.etapa} tipoNegocio={expediente.tipoNegocio} />
+            <span className="text-[10px] uppercase font-bold text-carbon/40">Calificación:</span>
+            <CalificacionProspectoBadge calificacion={expediente.calificacion || "frio"} />
+            <select
+              value={expediente.calificacion || "frio"}
+              onChange={async (e) => {
+                const nueva = e.target.value as CalificacionProspecto;
+                await cambiarCalificacionExpediente(expediente.id, nueva);
+                await recargar();
+              }}
+              className="text-[10px] rounded border border-carbon/20 px-1.5 py-0.5 bg-white font-medium focus:outline-none focus:border-sauce text-carbon/70 cursor-pointer shadow-2xs"
+              title="Cambiar calificación"
+            >
+              <option value="caliente">🔥 Caliente</option>
+              <option value="templado">⚡ Templado</option>
+              <option value="frio">❄️ Frío</option>
+              <option value="descalificado">🚫 Descalificado</option>
+            </select>
           </div>
           
           <div className="flex items-center gap-1.5 text-xs">
@@ -352,7 +370,304 @@ export function DetalleExpediente({ id }: { id: string }) {
 
       {/* Columna única centrada para un diseño premium y ordenado */}
       <div className="mt-6 space-y-6">
-        {/* Enlaces de agendamiento de citas */}
+        {/* 1. Datos de Contacto del Cliente */}
+        <div className="rounded-xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-carbon/5 pb-2.5">
+            <h3 className="font-titular text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
+              🎴 Datos de Contacto del Cliente
+            </h3>
+            <span className="text-[10px] text-carbon/40 font-mono">Información de comunicación y ubicación</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Teléfono */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📞 Teléfono</span>
+                <span className="font-mono text-xs sm:text-sm font-bold text-carbon block mt-0.5 select-all truncate">
+                  {expediente.telefono || "Sin teléfono registrado"}
+                </span>
+              </div>
+              {expediente.telefono && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <BotonLlamar telefono={expediente.telefono} prospectoId={expediente.prospectoId} />
+                  <a
+                    href={`https://wa.me/${expediente.telefono.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-700 transition shadow-2xs"
+                  >
+                    <span>💬 WhatsApp</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Correo Electrónico */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">✉️ Correo Electrónico</span>
+                <span className="font-mono text-xs sm:text-sm font-medium text-carbon block mt-0.5 select-all truncate" title={expediente.prospectoCorreo || "Sin correo registrado"}>
+                  {expediente.prospectoCorreo || "Sin correo registrado"}
+                </span>
+              </div>
+              {expediente.prospectoCorreo ? (
+                <a
+                  href={`mailto:${expediente.prospectoCorreo}`}
+                  className="self-start inline-flex items-center gap-1 text-[10px] font-bold text-sauce hover:underline pt-1"
+                >
+                  <span>Enviar correo →</span>
+                </a>
+              ) : (
+                <span className="text-[10px] text-carbon/40 italic">No proporcionado</span>
+              )}
+            </div>
+
+            {/* Dirección Completa / Propiedad */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📍 Dirección Completa</span>
+                <span className="text-xs font-medium text-carbon/80 block mt-0.5 line-clamp-2" title={expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}>
+                  {expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}
+                </span>
+              </div>
+              {expediente.linkGoogleMaps ? (
+                <a
+                  href={expediente.linkGoogleMaps}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="self-start inline-flex items-center gap-1 text-[10px] font-bold text-sauce hover:underline pt-1"
+                >
+                  <span>🗺️ Ver en Google Maps →</span>
+                </a>
+              ) : (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(expediente.direccionPropiedad || `${expediente.fraccionamiento}, León, Gto.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="self-start inline-flex items-center gap-1 text-[10px] font-bold text-sauce hover:underline pt-1"
+                >
+                  <span>🗺️ Buscar en mapa →</span>
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Widget: Actividades con el expediente */}
+        <ActividadesConExpediente
+          expedienteId={expediente.id}
+          prospectoId={expediente.prospectoId}
+          asesorNombreDefault={expediente.asesorNombre}
+          operadorNombreDefault={expediente.operadorNombre}
+        />
+
+        {/* 3. Historial de WhatsApp */}
+        {expediente.telefono && (
+          <ConversacionHistorica telefono={expediente.telefono} />
+        )}
+
+        {/* 4. Módulo de Cotizaciones y Propuesta Comercial */}
+        <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
+                📋 Cotizaciones y Propuestas
+              </h3>
+              <p className="text-xs text-carbon/50">
+                Propuestas comerciales y visitas técnicas asociadas
+              </p>
+            </div>
+            <Link
+              href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
+              className="rounded-lg bg-sauce/10 border border-sauce/20 hover:bg-sauce hover:text-white transition px-3 py-1.5 text-xs font-semibold text-sauce flex items-center gap-1 font-titular"
+            >
+              + Nueva Cotización
+            </Link>
+          </div>
+
+          {cotizaciones.length === 0 ? (
+            <div className="py-6 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
+              <p className="text-xs text-carbon/40 mb-2">No hay cotizaciones para este expediente.</p>
+              <Link
+                href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
+                className="inline-flex items-center gap-1 text-xs text-sauce hover:underline font-semibold"
+              >
+                Crear primera cotización →
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {cotizaciones.map((c) => (
+                <div key={c.id} className="p-3.5 rounded-xl border border-carbon/10 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col xs:flex-row xs:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/construccion/${c.id}`} className="font-mono font-bold text-sauce hover:underline">
+                        {c.id}
+                      </Link>
+                      <span className="text-xs font-semibold text-carbon/60">
+                        {c.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
+                         c.servicioTipo === "pintura" ? "Pintura" :
+                         c.servicioTipo === "losa" ? "Construcción de Losa" :
+                         c.servicioTipo === "remodelacion" ? "Remodelación" : "Otro Servicio"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-carbon/40 mt-0.5">
+                      Creada: {new Date(c.createdAt).toLocaleDateString("es-MX")}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between xs:justify-end gap-3 flex-wrap">
+                    <div className="text-right font-mono">
+                      <span className="block text-xs font-bold text-verde-profundo">
+                        {c.precioFinal > 0 ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(c.precioFinal) : "—"}
+                      </span>
+                      <span className="text-[10px] text-carbon/40 uppercase tracking-wide">Precio Venta</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                        c.estatus === "aceptada" ? "bg-green-100 text-green-700" :
+                        c.estatus === "rechazada" ? "bg-red-100 text-red-700" :
+                        c.estatus === "esperando_visita" ? "bg-amber-100 text-amber-700" :
+                        "bg-slate-100 text-slate-700"
+                      }`}>
+                        {c.estatus.replace("_", " ")}
+                      </span>
+
+                      {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
+                        <a
+                          href={`/cotizacion/${c.token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
+                          title="Ver vista pública del cliente"
+                        >
+                          🔗 Portal Cliente
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 5. Historial de llamadas telefónicas y grabaciones */}
+        {expediente.telefono && (
+          <LlamadasHistoricas telefono={expediente.telefono} />
+        )}
+
+        {/* Programación de Llamada Telefónica */}
+        <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
+                📞 Programar Llamada a Realizar
+              </h3>
+              <p className="text-xs text-carbon/50">
+                Agendar llamada telefónica para que el técnico o asesor la realice
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMostrarFormLlamada(!mostrarFormLlamada)}
+              className="rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-600 hover:text-white transition px-3 py-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1 cursor-pointer"
+            >
+              {mostrarFormLlamada ? "Cancelar" : "📞 Agendar Llamada"}
+            </button>
+          </div>
+
+          {exitoLlamada && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800">
+              {exitoLlamada}
+            </div>
+          )}
+          {errorLlamada && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+              {errorLlamada}
+            </div>
+          )}
+
+          {mostrarFormLlamada && (
+            <form onSubmit={handleProgramarLlamada} className="p-4 rounded-xl border border-carbon/15 bg-slate-50 space-y-3">
+              <h4 className="text-xs font-bold text-verde-profundo uppercase tracking-wider">Programar Llamada de Seguimiento</h4>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Fecha de Llamada</label>
+                  <input
+                    type="date"
+                    required
+                    value={fechaLlamada}
+                    onChange={(e) => setFechaLlamada(e.target.value)}
+                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Hora Tentativa</label>
+                  <input
+                    type="time"
+                    required
+                    value={horaLlamada}
+                    onChange={(e) => setHoraLlamada(e.target.value)}
+                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-carbon/70 mb-1">
+                  Asignar Llamada a (Asesor o Técnico) *
+                </label>
+                <select
+                  required
+                  value={perfilLlamadaId || expediente.operadorId || expediente.asesorId || ""}
+                  onChange={(e) => setPerfilLlamadaId(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                >
+                  <option value="">-- Seleccionar Asesor o Técnico --</option>
+                  {perfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} ({p.rol === "operaciones" ? "Técnico / Operador" : p.rol === "asesor" ? "Asesor Comercial" : "Administrador"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Notas / Propósito de la Llamada</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Confirmar medidas de azotea / Acordar presupuesto..."
+                  value={notasLlamada}
+                  onChange={(e) => setNotasLlamada(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarFormLlamada(false)}
+                  className="px-3 py-1.5 rounded-lg border border-carbon/15 text-xs text-carbon/70 hover:bg-carbon/5"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoLlamada}
+                  className="px-4 py-1.5 rounded-lg bg-sauce hover:bg-verde-profundo text-white text-xs font-bold transition disabled:opacity-50"
+                >
+                  {guardandoLlamada ? "Guardando..." : "Guardar Llamada en Agenda"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* 6. Los que sigan: Agendamiento, Avance, Traspaso, BPM, Secuencias, etc. */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <LinkCitaWidget
             asesorId={expediente.asesorId ?? null}
@@ -387,8 +702,9 @@ export function DetalleExpediente({ id }: { id: string }) {
           }}
         />
 
-        {/* Avance por etapas */}
-        <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
+        {/* Avance por etapas (Solo visible para Traspaso / Compra de casa) */}
+        {(!expediente.tipoNegocio || expediente.tipoNegocio === "traspaso_compra" || (expediente.tipoNegocio as string) === "compra" || (expediente.tipoNegocio as string) === "traspaso") && (
+          <div className={`rounded-xl border border-carbon/10 bg-white shadow-sm transition-all duration-300 ${mostrarControlesTraspaso ? "p-3.5" : "px-3.5 py-2.5"}`}>
             {/* Vista Desktop (Completa) */}
             <div className="hidden md:block">
               <p className="text-xs font-medium uppercase tracking-wide text-carbon/50 mb-2">
@@ -504,199 +820,173 @@ export function DetalleExpediente({ id }: { id: string }) {
               )}
             </div>
           </div>
+        )}
 
-          {/* Ficha Premium de Información de la Propiedad (Estilo Expediente/Lead) */}
-          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm">
-            {/* Header de la Ficha */}
-            <div className="flex items-center justify-between gap-3">
-              {/* Desktop Header */}
-              <div className="hidden sm:flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-verde-profundo/10 font-titular text-lg font-bold text-verde-profundo">
-                  {expediente.cliente ? expediente.cliente.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() : "EX"}
+          {/* Ficha Premium: Expediente de Traspaso (Solo visible para Traspaso / Compra de casa) */}
+          {(!expediente.tipoNegocio || expediente.tipoNegocio === "traspaso_compra" || (expediente.tipoNegocio as string) === "compra" || (expediente.tipoNegocio as string) === "traspaso") && (
+            <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm">
+              {/* Header de la Ficha */}
+              <div className="flex items-center justify-between gap-3">
+                {/* Desktop Header */}
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-verde-profundo/10 font-titular text-lg font-bold text-verde-profundo">
+                    {expediente.cliente ? expediente.cliente.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() : "EX"}
+                  </div>
+                  <div>
+                    <h3 className="font-titular text-lg font-bold text-verde-profundo">
+                      Expediente de Traspaso
+                    </h3>
+                    <p className="text-xs text-carbon/60 font-medium">
+                      {expediente.nombreCompleto || `${expediente.cliente} ${expediente.primerApellido}`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-titular text-lg font-semibold text-carbon">
-                    {expediente.nombreCompleto || `${expediente.cliente} ${expediente.primerApellido}`}
+
+                {/* Mobile Header */}
+                <div className="block sm:hidden">
+                  <h3 className="font-titular text-sm font-bold uppercase tracking-wider text-verde-profundo">
+                    Expediente de Traspaso
                   </h3>
-                  <p className="text-xs text-carbon/60">
-                    Lead SAUCEDA Bienes Raíces
-                  </p>
                 </div>
-              </div>
 
-              {/* Mobile Header (Súper Compacto, evita duplicidad de nombre) */}
-              <div className="block sm:hidden">
-                <h3 className="font-titular text-sm font-bold uppercase tracking-wider text-verde-profundo">
-                  Negociación y Ficha
-                </h3>
-              </div>
-
-              <span className={`rounded-full px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold ${
-                expediente.etapa === "nuevo-lead" ? "bg-emerald-50 text-emerald-700" :
-                expediente.etapa === "perdido" ? "bg-rojo/10 text-rojo" :
-                "bg-sauce/10 text-sauce"
-              }`}>
-                {expediente.etapa === "nuevo-lead" ? "Nuevo" : (ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa)}
-              </span>
-            </div>
-
-            <div className="my-4 border-t border-carbon/10"></div>
-
-            {/* Listado de campos con Iconos */}
-            <div className="space-y-4 text-sm">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-1">
-                <span className="flex items-center gap-2 text-carbon/60 text-xs sm:text-sm">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  Teléfono
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold ${
+                  expediente.etapa === "nuevo-lead" ? "bg-emerald-50 text-emerald-700" :
+                  expediente.etapa === "perdido" ? "bg-rojo/10 text-rojo" :
+                  "bg-sauce/10 text-sauce"
+                }`}>
+                  {expediente.etapa === "nuevo-lead" ? "Nuevo" : (ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa)}
                 </span>
-                <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
-                  <span className="font-mono font-bold text-carbon text-sm">
-                    {expediente.telefono || "—"}
+              </div>
+
+              <div className="my-4 border-t border-carbon/10"></div>
+
+              {/* Listado de campos con Iconos (sin teléfono, ya mostrado arriba) */}
+              <div className="space-y-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-carbon/60">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Zona
                   </span>
-                  {expediente.telefono && (
-                    <div className="flex items-center gap-1.5">
-                      <BotonLlamar
-                        telefono={expediente.telefono}
-                        prospectoId={expediente.prospectoId}
-                      />
-                      <Link
-                        href={`/conversaciones?tel=${expediente.telefono}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-bold text-green-700 transition hover:bg-green-100 hover:text-green-800"
-                        title="Abrir chat de WhatsApp"
-                      >
-                        💬 WhatsApp
-                      </Link>
-                    </div>
-                  )}
+                  <span className="font-medium text-carbon text-right max-w-[200px] truncate">
+                    {expediente.fraccionamiento || "—"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-carbon/60">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    Tipo
+                  </span>
+                  <span className="font-medium text-carbon text-right max-w-[200px] truncate">
+                    {expediente.tipoCredito || "—"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-carbon/60">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Negocio
+                  </span>
+                  <span className="font-medium text-carbon text-right max-w-[200px] truncate">
+                    {expediente.tipoNegocio ? labelTipoNegocio(expediente.tipoNegocio) : "Traspaso / Compra"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-carbon/60">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Sin pagos
+                  </span>
+                  <span className="font-medium text-carbon">
+                    {expediente.sinPagos || "Sin dato"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-carbon/60">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Estado físico
+                  </span>
+                  <span className={`font-semibold ${
+                    expediente.estadoFisico && expediente.estadoFisico.toLowerCase().includes("buen")
+                      ? "text-[#0F5A47]"
+                      : "text-carbon"
+                  }`}>
+                    {expediente.estadoFisico || "Sin dato"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-carbon/60">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Habitada
+                  </span>
+                  <span className="font-medium text-carbon">
+                    {expediente.habitada || "Sin dato"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 py-1">
+                  <span className="flex items-center gap-2 text-carbon/60 text-xs sm:text-sm">
+                    <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Valor / Adeudo
+                  </span>
+                  <span className="font-mono font-bold text-carbon text-xs sm:text-sm text-left sm:text-right">
+                    {expediente.valorEstimado > 0 || expediente.saldoDeuda > 0 ? (
+                      <>
+                        {expediente.valorEstimado > 0 ? formatoPesos(expediente.valorEstimado) : "Sin dato"}
+                        {" / "}
+                        {expediente.saldoDeuda > 0 ? formatoPesos(expediente.saldoDeuda) : "Sin dato"}
+                      </>
+                    ) : (
+                      <span className="italic text-carbon/60">Sin dato</span>
+                    )}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Zona
-                </span>
-                <span className="font-medium text-carbon text-right max-w-[200px] truncate">
-                  {expediente.fraccionamiento || "—"}
-                </span>
-              </div>
+              <div className="my-4 border-t border-carbon/10"></div>
 
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              {/* Siguiente Paso */}
+              <div className="space-y-2">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-carbon/40">
+                  Siguiente Paso
+                </span>
+                <div className="flex items-start gap-2 text-sm text-carbon/85">
+                  <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#0F5A47]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Tipo
-                </span>
-                <span className="font-medium text-carbon text-right max-w-[200px] truncate">
-                  {expediente.tipoCredito || "—"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  Negocio
-                </span>
-                <span className="font-medium text-carbon text-right max-w-[200px] truncate">
-                  {expediente.tipoNegocio ? labelTipoNegocio(expediente.tipoNegocio) : "Traspaso / Compra"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <span className="font-medium text-carbon/90">
+                    {obtenerSiguientePasoDinamico(expediente.etapa)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-carbon/50 pt-0.5">
+                  <svg className="h-4 w-4 shrink-0 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  Sin pagos
-                </span>
-                <span className="font-medium text-carbon">
-                  {expediente.sinPagos || "Sin dato"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Estado físico
-                </span>
-                <span className={`font-semibold ${
-                  expediente.estadoFisico && expediente.estadoFisico.toLowerCase().includes("buen")
-                    ? "text-[#0F5A47]"
-                    : "text-carbon"
-                }`}>
-                  {expediente.estadoFisico || "Sin dato"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-carbon/60">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                  Habitada
-                </span>
-                <span className="font-medium text-carbon">
-                  {expediente.habitada || "Sin dato"}
-                </span>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 py-1">
-                <span className="flex items-center gap-2 text-carbon/60 text-xs sm:text-sm">
-                  <svg className="h-4 w-4 text-carbon/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Valor / Adeudo
-                </span>
-                <span className="font-mono font-bold text-carbon text-xs sm:text-sm text-left sm:text-right">
-                  {expediente.valorEstimado > 0 || expediente.saldoDeuda > 0 ? (
-                    <>
-                      {expediente.valorEstimado > 0 ? formatoPesos(expediente.valorEstimado) : "Sin dato"}
-                      {" / "}
-                      {expediente.saldoDeuda > 0 ? formatoPesos(expediente.saldoDeuda) : "Sin dato"}
-                    </>
-                  ) : (
-                    <span className="italic text-carbon/60">Sin dato</span>
-                  )}
-                </span>
+                  <span>
+                    Contacto recibido: {formatoFecha(expediente.createdAt || expediente.ultimoMovimiento)}
+                  </span>
+                </div>
               </div>
             </div>
-
-            <div className="my-4 border-t border-carbon/10"></div>
-
-            {/* Siguiente Paso */}
-            <div className="space-y-2">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-carbon/40">
-                Siguiente Paso
-              </span>
-              <div className="flex items-start gap-2 text-sm text-carbon/85">
-                <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#0F5A47]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="font-medium text-carbon/90">
-                  {obtenerSiguientePasoDinamico(expediente.etapa)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-carbon/50 pt-0.5">
-                <svg className="h-4 w-4 shrink-0 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>
-                  Contacto recibido: {formatoFecha(expediente.createdAt || expediente.ultimoMovimiento)}
-                </span>
-              </div>
-            </div>
-          </div>
+          )}
 
           {(expediente.campaignName ||
             expediente.adsetName ||

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ETAPAS } from "@/lib/etapas";
-import type { DatosExpediente } from "@/lib/types";
+import type { DatosExpediente, CalificacionProspecto } from "@/lib/types";
 import { listarAsesoresActivos, listarOperariosActivos } from "@/app/actions/usuarios";
 
 /** Valores por defecto para un expediente nuevo. */
@@ -12,6 +12,7 @@ const VACIO: DatosExpediente = {
   segundoApellido: "",
   fraccionamiento: "",
   etapa: "nuevo-lead",
+  calificacion: "frio",
   situacion: "",
   telefono: "",
   valorEstimado: 0,
@@ -86,6 +87,7 @@ export function FormularioExpediente({
         primerApellido: datos.primerApellido.trim(),
         segundoApellido: datos.segundoApellido.trim(),
         fraccionamiento: datos.fraccionamiento.trim(),
+        calificacion: datos.calificacion || "frio",
         valorEstimado: Number(datos.valorEstimado) || 0,
         saldoDeuda: Number(datos.saldoDeuda) || 0,
         tipoCredito: (datos.tipoCredito || "").trim(),
@@ -191,6 +193,21 @@ export function FormularioExpediente({
                 {etapa.nombre}
               </option>
             ))}
+          </select>
+        </Campo>
+
+        <Campo etiqueta="Calificación / Prioridad">
+          <select
+            value={datos.calificacion || "frio"}
+            onChange={(e) =>
+              actualizar("calificacion", e.target.value as CalificacionProspecto)
+            }
+            className={INPUT}
+          >
+            <option value="caliente">🔥 Caliente</option>
+            <option value="templado">⚡ Templado</option>
+            <option value="frio">❄️ Frío</option>
+            <option value="descalificado">🚫 Descalificado</option>
           </select>
         </Campo>
 
