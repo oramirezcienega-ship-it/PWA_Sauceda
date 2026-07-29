@@ -12,6 +12,7 @@ import {
   guardarAutomatizaciones,
   testearReglasProceso,
 } from "@/app/actions/procesos-configuracion";
+import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import type {
   ProcesoMaestro,
   EtapaConfiguracion,
@@ -181,10 +182,15 @@ export function ConfiguradorProcesosClient({
     }
   }
 
+  const [perfilesActivos, setPerfilesActivos] = useState<{ id: string; nombre: string; rol: string }[]>([]);
+
   useEffect(() => {
     if (procesosIniciales.length === 0) {
       void cargarLista();
     }
+    listarPerfilesActivos()
+      .then(setPerfilesActivos)
+      .catch((err) => console.error("Error al cargar perfiles activos:", err));
   }, []);
 
   async function handleCrearProceso() {
@@ -772,10 +778,21 @@ export function ConfiguradorProcesosClient({
                                     }}
                                     className="bg-white border border-carbon/20 rounded px-1.5 py-0.5 font-semibold text-carbon"
                                   >
-                                    <option value="asesor">👤 Asesor Comercial</option>
-                                    <option value="operaciones">🛠️ Operaciones / Cuadrilla</option>
-                                    <option value="tecnico">🔍 Técnico Evaluador</option>
-                                    <option value="admin">⚙️ Administrador</option>
+                                    <optgroup label="Roles del Sistema (Dinámico por Expediente)">
+                                      <option value="asesor">👤 Asesor Comercial (Asignado al Expediente)</option>
+                                      <option value="operaciones">🛠️ Operaciones / Cuadrilla (Asignado a la Obra)</option>
+                                      <option value="tecnico">🔍 Técnico Evaluador</option>
+                                      <option value="admin">⚙️ Administrador / Gerencia</option>
+                                    </optgroup>
+                                    {perfilesActivos.length > 0 && (
+                                      <optgroup label="Usuarios Específicos del Equipo">
+                                        {perfilesActivos.map((u) => (
+                                          <option key={u.id} value={`user:${u.id}`}>
+                                            👤 {u.nombre || u.id} ({u.rol})
+                                          </option>
+                                        ))}
+                                      </optgroup>
+                                    )}
                                   </select>
                                 </div>
 
