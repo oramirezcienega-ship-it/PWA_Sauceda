@@ -1,21 +1,137 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { obtenerExpedientesSeguimiento, cambiarCalificacionExpediente, type ExpedienteSeguimiento } from "@/app/actions/expedientes";
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
 import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
 import type { CalificacionProspecto } from "@/lib/types";
 
+// Componente Desplegable de Selección Múltiple
+function MultiSelectDropdown({
+  label,
+  icon,
+  opciones,
+  seleccionados,
+  onChange,
+  badgeCount,
+}: {
+  label: string;
+  icon?: string;
+  opciones: { value: string; label: string }[];
+  seleccionados: string[];
+  onChange: (val: string[]) => void;
+  badgeCount?: string;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOpcion = (val: string) => {
+    if (seleccionados.includes(val)) {
+      onChange(seleccionados.filter((v) => v !== val));
+    } else {
+      onChange([...seleccionados, val]);
+    }
+  };
+
+  const seleccionarTodos = () => {
+    onChange(opciones.map((o) => o.value));
+  };
+
+  const limpiar = () => {
+    onChange([]);
+  };
+
+  const count = seleccionados.length;
+  const esTodos = count === opciones.length || count === 0;
+
+  return (
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setAbierto(!abierto)}
+        className={`h-9 px-3 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+          !esTodos && count > 0
+            ? "bg-verde-profundo/10 text-verde-profundo border-verde-profundo/40 shadow-2xs"
+            : "bg-white border-carbon/20 text-carbon/70 hover:bg-slate-50"
+        }`}
+      >
+        <span>{icon}</span>
+        <span>{label}</span>
+        <span
+          className={`ml-1 rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+            !esTodos && count > 0 ? "bg-verde-profundo text-white" : "bg-slate-200 text-carbon/70"
+          }`}
+        >
+          {badgeCount || (esTodos ? "Todos" : count)}
+        </span>
+        <span className="text-[10px] text-carbon/40 ml-0.5">▼</span>
+      </button>
+
+      {abierto && (
+        <div className="absolute left-0 sm:right-0 sm:left-auto mt-1.5 w-60 rounded-xl bg-white border border-carbon/15 shadow-xl z-50 p-2 text-xs animate-in fade-in zoom-in duration-100 space-y-1">
+          <div className="flex items-center justify-between border-b pb-1.5 px-1 font-bold text-carbon/60 text-[10px] uppercase">
+            <span>{label}</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={seleccionarTodos} className="text-sauce hover:underline cursor-pointer">
+                Todos
+              </button>
+              <span>•</span>
+              <button type="button" onClick={limpiar} className="text-red-500 hover:underline cursor-pointer">
+                Ninguno
+              </button>
+            </div>
+          </div>
+          <div className="max-h-52 overflow-y-auto space-y-0.5 pt-1">
+            {opciones.map((opc) => {
+              const checked = seleccionados.includes(opc.value);
+              return (
+                <label
+                  key={opc.value}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition select-none ${
+                    checked ? "bg-emerald-50 text-emerald-900 font-semibold" : "hover:bg-slate-50 text-carbon/80"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleOpcion(opc.value)}
+                    className="rounded border-carbon/30 text-verde-profundo focus:ring-verde-profundo h-3.5 w-3.5"
+                  />
+                  <span className="truncate">{opc.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WidgetSeguimientoExpedientes() {
   const [expedientes, setExpedientes] = useState<ExpedienteSeguimiento[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
-  const [filtroAccion, setFiltroAccion] = useState("todos");
   const [filtroTipo, setFiltroTipo] = useState("todos");
-  const [filtroEtapa, setFiltroEtapa] = useState("todos");
-  const [filtroProspectoEstatus, setFiltroProspectoEstatus] = useState("todos");
-  const [filtroCalificacion, setFiltroCalificacion] = useState("todos");
+
+  // Filtros Multi-Selección
+  // Por defecto, EXCLUIR descalificados: ["caliente", "templado", "frio"]
+  const [filtrosCalificacion, setFiltrosCalificacion] = useState<string[]>(["caliente", "templado", "frio"]);
+  const [filtrosEtapa, setFiltrosEtapa] = useState<string[]>([]);
+  const [filtrosProspectoEstatus, setFiltrosProspectoEstatus] = useState<string[]>([]);
+  const [filtrosAccion, setFiltrosAccion] = useState<string[]>([]);
+
   const [filtroFecha, setFiltroFecha] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
@@ -97,22 +213,30 @@ export function WidgetSeguimientoExpedientes() {
   }, [expedientes]);
 
   const hayFiltrosActivos = useMemo(() => {
+    const calificacionEsDefault =
+      filtrosCalificacion.length === 3 &&
+      filtrosCalificacion.includes("caliente") &&
+      filtrosCalificacion.includes("templado") &&
+      filtrosCalificacion.includes("frio");
+
     return (
       busqueda !== "" ||
-      filtroAccion !== "todos" ||
       filtroTipo !== "todos" ||
-      filtroEtapa !== "todos" ||
-      filtroProspectoEstatus !== "todos" ||
+      filtrosEtapa.length > 0 ||
+      filtrosProspectoEstatus.length > 0 ||
+      !calificacionEsDefault ||
+      filtrosAccion.length > 0 ||
       filtroFecha !== "todos" ||
       fechaDesde !== "" ||
       fechaHasta !== ""
     );
   }, [
     busqueda,
-    filtroAccion,
     filtroTipo,
-    filtroEtapa,
-    filtroProspectoEstatus,
+    filtrosEtapa,
+    filtrosProspectoEstatus,
+    filtrosCalificacion,
+    filtrosAccion,
     filtroFecha,
     fechaDesde,
     fechaHasta,
@@ -120,11 +244,11 @@ export function WidgetSeguimientoExpedientes() {
 
   const limpiarTodosLosFiltros = () => {
     setBusqueda("");
-    setFiltroAccion("todos");
     setFiltroTipo("todos");
-    setFiltroEtapa("todos");
-    setFiltroProspectoEstatus("todos");
-    setFiltroCalificacion("todos");
+    setFiltrosEtapa([]);
+    setFiltrosProspectoEstatus([]);
+    setFiltrosCalificacion(["caliente", "templado", "frio"]);
+    setFiltrosAccion([]);
     setFiltroFecha("todos");
     setFechaDesde("");
     setFechaHasta("");
@@ -149,23 +273,23 @@ export function WidgetSeguimientoExpedientes() {
         e.clienteNombre.toLowerCase().includes(busqueda.toLowerCase()) ||
         e.fraccionamiento.toLowerCase().includes(busqueda.toLowerCase());
 
-      const coincideAccion = 
-        filtroAccion === "todos" ||
-        (filtroAccion === "urgente" && e.proximaAccionTipo === "cita") ||
-        (filtroAccion === "tarea" && e.proximaAccionTipo === "tarea") ||
-        (filtroAccion === "sin_tareas" && e.proximaAccionTipo === "ninguno");
+      const coincideAccion =
+        filtrosAccion.length === 0 ||
+        (filtrosAccion.includes("urgente") && e.proximaAccionTipo === "cita") ||
+        (filtrosAccion.includes("tarea") && e.proximaAccionTipo === "tarea") ||
+        (filtrosAccion.includes("sin_tareas") && e.proximaAccionTipo === "ninguno");
 
       const coincideEtapa =
-        filtroEtapa === "todos" ||
-        e.etapa.toLowerCase() === filtroEtapa.toLowerCase();
+        filtrosEtapa.length === 0 ||
+        filtrosEtapa.some((et) => et.toLowerCase() === e.etapa.toLowerCase());
 
       const coincideProspectoEstatus =
-        filtroProspectoEstatus === "todos" ||
-        (e.prospectoEstatus && e.prospectoEstatus.toLowerCase() === filtroProspectoEstatus.toLowerCase());
+        filtrosProspectoEstatus.length === 0 ||
+        (e.prospectoEstatus && filtrosProspectoEstatus.some((p) => p.toLowerCase() === e.prospectoEstatus.toLowerCase()));
 
       const coincideCalificacion =
-        filtroCalificacion === "todos" ||
-        (e.calificacion || "frio").toLowerCase() === filtroCalificacion.toLowerCase();
+        filtrosCalificacion.length === 0 ||
+        filtrosCalificacion.includes((e.calificacion || "frio").toLowerCase());
 
       let coincideFecha = true;
       const fechaCreacionShort = e.fechaCreacion ? e.fechaCreacion.slice(0, 10) : "";
@@ -196,9 +320,10 @@ export function WidgetSeguimientoExpedientes() {
   }, [
     expedientes,
     busqueda,
-    filtroAccion,
-    filtroEtapa,
-    filtroProspectoEstatus,
+    filtrosAccion,
+    filtrosEtapa,
+    filtrosProspectoEstatus,
+    filtrosCalificacion,
     filtroFecha,
     fechaDesde,
     fechaHasta,
@@ -357,58 +482,58 @@ export function WidgetSeguimientoExpedientes() {
             />
           </div>
 
-          {/* Filtro por Estatus/Etapa del Expediente */}
-          <select
-            value={filtroEtapa}
-            onChange={(e) => setFiltroEtapa(e.target.value)}
-            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
-          >
-            <option value="todos">📋 Estatus Expediente: Todos</option>
-            {etapasDisponibles.map((et) => (
-              <option key={et} value={et}>
-                Etapa: {et}
-              </option>
-            ))}
-          </select>
+          {/* Filtro por Calificación (Multi-select, excluye descalificados por defecto) */}
+          <MultiSelectDropdown
+            label="Calificación"
+            icon="⭐"
+            badgeCount={
+              filtrosCalificacion.length === 3 &&
+              filtrosCalificacion.includes("caliente") &&
+              filtrosCalificacion.includes("templado") &&
+              filtrosCalificacion.includes("frio")
+                ? "Activos (3)"
+                : undefined
+            }
+            opciones={[
+              { value: "caliente", label: "🔥 Caliente" },
+              { value: "templado", label: "⚡ Templado" },
+              { value: "frio", label: "❄️ Frío" },
+              { value: "descalificado", label: "🚫 Descalificado" },
+            ]}
+            seleccionados={filtrosCalificacion}
+            onChange={setFiltrosCalificacion}
+          />
 
-          {/* Filtro por Estatus del Prospecto */}
-          <select
-            value={filtroProspectoEstatus}
-            onChange={(e) => setFiltroProspectoEstatus(e.target.value)}
-            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
-          >
-            <option value="todos">👤 Estatus Prospecto: Todos</option>
-            {prospectoEstatusDisponibles.map((p) => (
-              <option key={p} value={p}>
-                Prospecto: {p}
-              </option>
-            ))}
-          </select>
+          {/* Filtro por Estatus/Etapa del Expediente (Multi-select) */}
+          <MultiSelectDropdown
+            label="Etapa Expediente"
+            icon="📋"
+            opciones={etapasDisponibles.map((et) => ({ value: et, label: `Etapa: ${et}` }))}
+            seleccionados={filtrosEtapa}
+            onChange={setFiltrosEtapa}
+          />
 
-          {/* Filtro por Calificación / Prioridad */}
-          <select
-            value={filtroCalificacion}
-            onChange={(e) => setFiltroCalificacion(e.target.value)}
-            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
-          >
-            <option value="todos">⭐ Calificación: Todas</option>
-            <option value="caliente">🔥 Caliente</option>
-            <option value="templado">⚡ Templado</option>
-            <option value="frio">❄️ Frío</option>
-            <option value="descalificado">🚫 Descalificado</option>
-          </select>
+          {/* Filtro por Estatus del Prospecto (Multi-select) */}
+          <MultiSelectDropdown
+            label="Estatus Prospecto"
+            icon="👤"
+            opciones={prospectoEstatusDisponibles.map((p) => ({ value: p, label: `Prospecto: ${p}` }))}
+            seleccionados={filtrosProspectoEstatus}
+            onChange={setFiltrosProspectoEstatus}
+          />
 
-          {/* Filtro por Pendientes / Acciones */}
-          <select
-            value={filtroAccion}
-            onChange={(e) => setFiltroAccion(e.target.value)}
-            className="h-9 rounded-lg border border-carbon/20 px-3 text-xs bg-white focus:outline-none focus:border-sauce font-semibold text-carbon/70 shadow-2xs cursor-pointer"
-          >
-            <option value="todos">⚡ Todos los pendientes</option>
-            <option value="urgente">Solo Citas / Inspecciones / Instalaciones</option>
-            <option value="tarea">Solo Tareas de Asesor</option>
-            <option value="sin_tareas">Sin pendientes agendados</option>
-          </select>
+          {/* Filtro por Pendientes / Acciones (Multi-select) */}
+          <MultiSelectDropdown
+            label="Pendientes"
+            icon="⚡"
+            opciones={[
+              { value: "urgente", label: "📅 Citas / Inspecciones" },
+              { value: "tarea", label: "⚡ Tareas de Asesor" },
+              { value: "sin_tareas", label: "💬 Sin pendientes agendados" },
+            ]}
+            seleccionados={filtrosAccion}
+            onChange={setFiltrosAccion}
+          />
 
           {/* Filtro por Fecha */}
           <select
@@ -508,7 +633,7 @@ export function WidgetSeguimientoExpedientes() {
                       return (
                         <div 
                           key={e.id} 
-                          className={`rounded-xl border p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white shadow-xs transition-all hover:shadow-md hover:border-sauce/30 ${
+                          className={`w-full rounded-xl border p-3.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white shadow-2xs transition-all hover:shadow-md hover:border-sauce/30 overflow-hidden ${
                             isCita 
                               ? "border-emerald-200 bg-emerald-50/[0.03]" 
                               : isTarea 
@@ -517,14 +642,14 @@ export function WidgetSeguimientoExpedientes() {
                           }`}
                         >
                           {/* Nombre del cliente, ID y fraccionamiento */}
-                          <div className="flex-1 min-w-[240px] space-y-1">
+                          <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono text-[10px] font-bold text-carbon/40 bg-slate-100 border px-1.5 py-0.5 rounded">
+                              <span className="font-mono text-[10px] font-bold text-carbon/40 bg-slate-100 border px-1.5 py-0.5 rounded shrink-0">
                                 {e.id}
                               </span>
                               <Link 
                                 href={`/expediente/${e.id}`}
-                                className="font-titular font-bold text-sm text-carbon hover:underline hover:text-sauce"
+                                className="font-titular font-bold text-sm text-carbon hover:underline hover:text-sauce truncate"
                               >
                                 {e.clienteNombre}
                               </Link>
@@ -537,7 +662,7 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Etapa actual del expediente, Calificación y Estatus del prospecto */}
-                          <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                          <div className="flex-shrink-0 flex flex-col items-start xl:items-end gap-1">
                             <span className="inline-block rounded-full bg-sauce/10 text-sauce px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                               {e.etapa}
                             </span>
@@ -563,7 +688,7 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Próximo Pendiente / Acción */}
-                          <div className="flex-1 min-w-[280px]">
+                          <div className="flex-1 min-w-0 xl:max-w-md">
                             <div className={`p-2.5 rounded-lg border text-xs flex items-start gap-2.5 ${
                               isCita
                                 ? "bg-emerald-50 border-emerald-200/50 text-emerald-900"
@@ -571,14 +696,14 @@ export function WidgetSeguimientoExpedientes() {
                                   ? "bg-amber-50 border-amber-200/50 text-amber-900"
                                   : "bg-slate-50 border-carbon/5 text-carbon/60"
                             }`}>
-                              <span className="text-base select-none mt-0.5">
+                              <span className="text-base select-none mt-0.5 shrink-0">
                                 {isCita ? "📅" : isTarea ? "⚡" : "💬"}
                               </span>
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <div className="text-[8px] uppercase tracking-wider font-bold text-carbon/40">
                                   Próxima Acción / Pendiente
                                 </div>
-                                <div className="font-semibold leading-tight">
+                                <div className="font-semibold leading-tight break-words">
                                   {e.proximaAccion}
                                 </div>
                               </div>
@@ -586,17 +711,17 @@ export function WidgetSeguimientoExpedientes() {
                           </div>
 
                           {/* Botones de Acción */}
-                          <div className="flex-shrink-0 flex items-center gap-2 justify-end w-full sm:w-auto">
+                          <div className="flex-shrink-0 flex items-center gap-1.5 justify-end w-full xl:w-auto pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
                             {e.telefono && (
                               <a
                                 href={`https://wa.me/${e.telefono.replace(/\D/g, "")}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="h-8.5 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                                className="h-8 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
                                 title="Abrir chat de WhatsApp"
                               >
                                 <span>💬</span>
-                                <span className="hidden md:inline">WhatsApp</span>
+                                <span className="hidden sm:inline">WhatsApp</span>
                               </a>
                             )}
                             <button
@@ -609,7 +734,7 @@ export function WidgetSeguimientoExpedientes() {
                                 setFechaSiguiente("");
                                 setTituloSiguiente("📞 Llamada de seguimiento");
                               }}
-                              className="h-8.5 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                              className="h-8 px-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                               title="Registrar retroalimentación o concluir tarea"
                             >
                               <span>✅</span>
@@ -617,7 +742,7 @@ export function WidgetSeguimientoExpedientes() {
                             </button>
                             <Link
                               href={`/expediente/${e.id}`}
-                              className="h-8.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border border-slate-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
+                              className="h-8 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 border border-slate-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"
                             >
                               <span>Ver Expediente</span>
                               <span>→</span>
