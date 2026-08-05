@@ -301,6 +301,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const enlaces = esAdmin
     ? [
         ...ENLACES,
+        { href: "/admin/publicaciones", label: "Publicaciones IA" },
         { href: "/secuencias", label: "Secuencias" },
         { href: "/dashboard/llamadas", label: "Llamadas" },
         { href: "/reportes", label: "Reportes" },
