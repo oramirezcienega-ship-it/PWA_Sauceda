@@ -275,7 +275,7 @@ Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
           ],
-          temperature: 0.8
+          temperature: 1
         })
       });
 
