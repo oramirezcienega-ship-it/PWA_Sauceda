@@ -70,42 +70,43 @@ export default function PaginaPublicaciones() {
   }, [filtroEstado, filtroPlataforma]);
 
   const handleAprobar = async (id: string) => {
-    try {
-      await cambiarEstadoPublicacion(id, "aprobado");
+    const res = await cambiarEstadoPublicacion(id, "aprobado");
+    if (res.success) {
       alert("¡Publicación aprobada y enviada a n8n!");
       await cargarDatos();
-    } catch (err) {
-      alert("Error al aprobar publicación");
+    } else {
+      alert("Error al aprobar publicación: " + res.error);
     }
   };
 
   const handleRechazar = async (id: string, notas?: string) => {
     const notasPrompt = notas || prompt("Ingresa el motivo del rechazo u observaciones:") || "";
     if (notasPrompt === null) return;
-    try {
-      await cambiarEstadoPublicacion(id, "rechazado", notasPrompt);
+    
+    const res = await cambiarEstadoPublicacion(id, "rechazado", notasPrompt);
+    if (res.success) {
       await cargarDatos();
-    } catch (err) {
-      alert("Error al rechazar publicación");
+    } else {
+      alert("Error al rechazar publicación: " + res.error);
     }
   };
 
   const handlePublicar = async (id: string) => {
-    try {
-      await cambiarEstadoPublicacion(id, "publicado");
+    const res = await cambiarEstadoPublicacion(id, "publicado");
+    if (res.success) {
       alert("¡Publicación marcada como publicada e informada a n8n!");
       await cargarDatos();
-    } catch (err) {
-      alert("Error al marcar como publicado");
+    } else {
+      alert("Error al marcar como publicado: " + res.error);
     }
   };
 
   const handleReconsiderar = async (id: string) => {
-    try {
-      await cambiarEstadoPublicacion(id, "pendiente_revision");
+    const res = await cambiarEstadoPublicacion(id, "pendiente_revision");
+    if (res.success) {
       await cargarDatos();
-    } catch (err) {
-      alert("Error al volver a pendiente");
+    } else {
+      alert("Error al volver a revisión: " + res.error);
     }
   };
 
@@ -117,12 +118,12 @@ export default function PaginaPublicaciones() {
   const triggerGeneracionIA = () => {
     setMensajeCarga("Conectando con el Agente de Marketing IA...");
     startTransition(async () => {
-      try {
-        await generarPublicacionesAutomaticas(cantidadIA, fechaIA);
+      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA);
+      if (res.success) {
         setMostrarModalIA(false);
         await cargarDatos();
-      } catch (err: any) {
-        alert("Ocurrió un error en la generación automática: " + err.message);
+      } else {
+        alert("Ocurrió un error en la generación automática:\n\n" + res.error);
       }
     });
   };
@@ -131,12 +132,12 @@ export default function PaginaPublicaciones() {
     e.preventDefault();
     if (!pubEditando) return;
 
-    try {
-      await guardarPublicacion(pubEditando);
+    const res = await guardarPublicacion(pubEditando);
+    if (res.success) {
       setPubEditando(null);
       await cargarDatos();
-    } catch (err: any) {
-      alert("Error al guardar cambios: " + err.message);
+    } else {
+      alert("Error al guardar cambios: " + res.error);
     }
   };
 
@@ -595,8 +596,8 @@ export default function PaginaPublicaciones() {
                     <label className="text-xs font-bold text-red-800 block mb-1">Feedback de Rechazo</label>
                     <input
                       type="text"
-                      value={pubEditando.notas_revision || ""}
-                      onChange={(e) => setPubEditando({ ...pubEditando, notas_revision: e.target.value })}
+                      value={pubEditando.notes_revision || ""}
+                      onChange={(e) => setPubEditando({ ...pubEditando, notes_revision: e.target.value })}
                       className="w-full bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
                     />
                   </div>

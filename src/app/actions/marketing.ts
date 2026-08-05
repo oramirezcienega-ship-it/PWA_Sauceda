@@ -18,6 +18,12 @@ export interface PublicacionProgramada {
   updated_at?: string;
 }
 
+export interface ActionResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 /**
  * Obtiene todas las publicaciones de la base de datos con filtros opcionales.
  */
@@ -96,15 +102,15 @@ async function dispararWebhookN8N(pub: PublicacionProgramada, accion: "aprobar" 
 }
 
 /**
- * Guarda (crea o edita) una publicación en la base de datos.
+ * Guarda (crea o edita) una publicación en la base de datos de forma segura.
  */
 export async function guardarPublicacion(
   pub: PublicacionProgramada
-): Promise<PublicacionProgramada> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
-
+): Promise<ActionResult<PublicacionProgramada>> {
   try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
     const payload = {
       titulo: pub.titulo,
       contenido: pub.contenido,
@@ -149,25 +155,25 @@ export async function guardarPublicacion(
       dispararWebhookN8N(result, "publicar");
     }
 
-    return result;
+    return { success: true, data: result };
   } catch (err: any) {
     console.error("Error en guardarPublicacion:", err);
-    throw new Error(`No se pudo guardar la publicación: ${err.message}`);
+    return { success: false, error: err.message || String(err) };
   }
 }
 
 /**
- * Cambia el estado de una publicación y registra notas de revisión si existen.
+ * Cambia el estado de una publicación y registra notas de revisión de forma segura.
  */
 export async function cambiarEstadoPublicacion(
   id: string,
   estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado",
   notas_revision?: string
-): Promise<PublicacionProgramada> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
-
+): Promise<ActionResult<PublicacionProgramada>> {
   try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
       .update({
@@ -189,31 +195,29 @@ export async function cambiarEstadoPublicacion(
       dispararWebhookN8N(result, "publicar");
     }
 
-    return result;
+    return { success: true, data: result };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacion:", err);
-    throw new Error(`No se pudo actualizar el estado: ${err.message}`);
+    return { success: false, error: err.message || String(err) };
   }
 }
 
 /**
- * Invoca a la IA (Claude o Kimi según configuración) para generar propuestas de publicaciones.
+ * Invoca a la IA (Claude o Kimi según configuración) para generar propuestas de publicaciones de forma segura.
  */
 export async function generarPublicacionesAutomaticas(
   cantidad: number = 3,
   fechaInicio?: string
-): Promise<PublicacionProgramada[]> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
+): Promise<ActionResult<PublicacionProgramada[]>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
 
-  // 1. Detectar proveedor de IA configurado en el entorno
-  const proveedor = process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic");
-  
-  let rawText = "";
-
-  const fechaBaseStr = fechaInicio || new Date().toISOString().split("T")[0];
-  
-  const systemPrompt = `Eres un redactor creativo y estratega de marketing de contenidos experto para SAUCEDA (Bienes Raíces y Construcción), con sede en León, Guanajuato, México.
+    const proveedor = process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic");
+    let rawText = "";
+    const fechaBaseStr = fechaInicio || new Date().toISOString().split("T")[0];
+    
+    const systemPrompt = `Eres un redactor creativo y estratega de marketing de contenidos experto para SAUCEDA (Bienes Raíces y Construcción), con sede en León, Guanajuato, México.
 Tu objetivo es generar propuestas de publicaciones de alta conversión para redes sociales (Facebook, Instagram, TikTok y campañas de WhatsApp).
 
 INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
@@ -247,85 +251,82 @@ Formato esperado:
   }
 ]`;
 
-  const prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
+    const prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
 Alterna entre temas de Bienes Raíces (Traspasos, Compra Directa) e Impermeabilización/Remodelación de Construcción. 
 Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
 
-  if (proveedor === "kimi") {
-    const apiKey = process.env.KIMI_API_KEY;
-    if (!apiKey) throw new Error("Falta KIMI_API_KEY en las variables de entorno.");
-    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
-    const model = process.env.KIMI_MODEL || "kimi-k3";
+    if (proveedor === "kimi") {
+      const apiKey = process.env.KIMI_API_KEY;
+      if (!apiKey) throw new Error("Falta la API Key de Kimi (KIMI_API_KEY) en las variables de entorno.");
+      const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
+      const model = process.env.KIMI_MODEL || "kimi-k3";
 
-    console.log(`Llamando a Kimi (${model}) para generar ${cantidad} publicaciones...`);
+      console.log(`Llamando a Kimi (${model}) para generar ${cantidad} publicaciones...`);
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "authorization": `Bearer ${apiKey}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.8
-      })
-    });
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.8
+        })
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Kimi API respondió error ${response.status}: ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Kimi API respondió error ${response.status}: ${errorText}`);
+      }
+
+      const json = await response.json();
+      rawText = (json.choices?.[0]?.message?.content || "").trim();
+
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
+      }
+      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+
+      console.log(`Llamando a Claude (${model}) para generar ${cantidad} publicaciones...`);
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: model,
+          max_tokens: 4000,
+          messages: [{
+            role: "user",
+            content: prompt
+          }],
+          system: systemPrompt
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Anthropic respondió error ${response.status}: ${errorText}`);
+      }
+
+      const resultJson = await response.json();
+      rawText = (resultJson.content ?? [])
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text ?? "")
+        .join("")
+        .trim();
     }
 
-    const json = await response.json();
-    rawText = (json.choices?.[0]?.message?.content || "").trim();
-
-  } else {
-    // Proveedor Anthropic (Claude)
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
-    }
-    const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
-
-    console.log(`Llamando a Claude (${model}) para generar ${cantidad} publicaciones...`);
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 4000,
-        messages: [{
-          role: "user",
-          content: prompt
-        }],
-        system: systemPrompt
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anthropic respondió error ${response.status}: ${errorText}`);
-    }
-
-    const resultJson = await response.json();
-    rawText = (resultJson.content ?? [])
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text ?? "")
-      .join("")
-      .trim();
-  }
-
-  // Parsear y guardar en Supabase
-  try {
     let jsonLimpio = rawText;
     if (jsonLimpio.startsWith("```")) {
       jsonLimpio = jsonLimpio.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -377,9 +378,9 @@ Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
       publicacionesCreadas.push(data as PublicacionProgramada);
     }
 
-    return publicacionesCreadas;
+    return { success: true, data: publicacionesCreadas };
   } catch (err: any) {
-    console.error("Error al procesar/insertar propuestas de IA:", err);
-    throw new Error(`Error en la generación automática: ${err.message}`);
+    console.error("Error en generarPublicacionesAutomaticas:", err);
+    return { success: false, error: err.message || String(err) };
   }
 }
