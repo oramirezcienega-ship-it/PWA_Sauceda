@@ -207,7 +207,8 @@ export async function cambiarEstadoPublicacion(
  */
 export async function generarPublicacionesAutomaticas(
   cantidad: number = 3,
-  fechaInicio?: string
+  fechaInicio?: string,
+  tema: string = "todos"
 ): Promise<ActionResult<PublicacionProgramada[]>> {
   try {
     await requireAdministrador();
@@ -251,9 +252,16 @@ Formato esperado:
   }
 ]`;
 
-    const prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
-Alterna entre temas de Bienes Raíces (Traspasos, Compra Directa) e Impermeabilización/Remodelación de Construcción. 
+    let prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
 Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
+
+    if (tema && tema !== "todos") {
+      prompt += `\n\nENFOQUE OBLIGATORIO DE TEMA:
+Todas las publicaciones generadas deben centrarse estrictamente en la siguiente campaña o tema de negocio: "${tema}".
+Adapta este mismo tema a las diferentes plataformas y formatos de forma inteligente para que actúen como una campaña unificada. Por ejemplo, en Facebook haz un post informativo sobre "${tema}", en Instagram un Reel interactivo enfocado en "${tema}" y en TikTok un video dinámico con gancho sobre "${tema}".`;
+    } else {
+      prompt += `\nAlterna entre temas de Bienes Raíces (Traspasos, Compra Directa) e Impermeabilización/Remodelación de Construcción de forma variada en cada publicación.`;
+    }
 
     if (proveedor === "kimi") {
       const apiKey = process.env.KIMI_API_KEY;

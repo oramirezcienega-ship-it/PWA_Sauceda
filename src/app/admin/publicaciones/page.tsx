@@ -25,6 +25,8 @@ export default function PaginaPublicaciones() {
   };
   const [fechaIA, setFechaIA] = useState(obtenerManana());
 
+  const [temaIA, setTemaIA] = useState<string>("todos");
+
   const [isPending, startTransition] = useTransition();
   const [cargandoLista, setCargandoLista] = useState(true);
   const [mensajeCarga, setMensajeCarga] = useState("Generando contenido...");
@@ -118,7 +120,7 @@ export default function PaginaPublicaciones() {
   const triggerGeneracionIA = () => {
     setMensajeCarga("Conectando con el Agente de Marketing IA...");
     startTransition(async () => {
-      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA);
+      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA, temaIA);
       if (res.success) {
         setMostrarModalIA(false);
         await cargarDatos();
@@ -453,6 +455,22 @@ export default function PaginaPublicaciones() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Tema / Campaña de Enfoque</label>
+                <select
+                  value={temaIA}
+                  onChange={(e) => setTemaIA(e.target.value)}
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+                >
+                  <option value="todos">🔀 Variado (Todos los pilares mezclados)</option>
+                  <option value="Traspasos de viviendas con crédito INFONAVIT">🏠 Traspaso INFONAVIT (Explicación y Venta)</option>
+                  <option value="Compra rápida de casas de contado con adeudos o vandalizadas">💰 Compra de Casas de Contado (Problemas Legales/Deudas)</option>
+                  <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">☔ Impermeabilización Profesional (Sauceda Construye)</option>
+                  <option value="Remodelaciones y ampliaciones de viviendas en León Gto">🏗️ Remodelación y Ampliación de Hogares</option>
+                  <option value="Gestión y armado de expediente INFONAVIT para trato directo">📂 Armado de Expediente INFONAVIT (Solo Trámite)</option>
+                </select>
               </div>
 
               <div>
