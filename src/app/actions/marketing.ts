@@ -237,7 +237,7 @@ INSTRUCCIONES DE FORMATO Y ESTILO:
 - Tono: Profesional, empático, cálido y confiable. Estilo mexicano local.
 - Usa saltos de línea e incluye llamadas a la acción claras (WhatsApp 477 465 4700).
 - Si la publicación es en formato REEL o VIDEO (por ejemplo, para TikTok o Instagram), es OBLIGATORIO que incluyas un guion estructurado paso a paso en el campo 'guion_video' (con tomas y diálogos).
-- En el campo 'sugerencia_visual' detalla la imagen o diseño visual necesario (para Canva o generadores de imágenes).
+- En el campo 'sugerencia_visual' detalla EXCLUSIVAMENTE una escena FOTOGRÁFICA fotorrealista limpia (para generadores de imágenes como Midjourney, Flux o DALL-E). Describe únicamente elementos arquitectónicos, fachadas, interiores de viviendas en León Gto, luz de atardecer o escenas de estilo de vida familiar. NUNCA pidas incluir texto escrito, infografías, letras, números, viñetas o esquemas dentro de la imagen, ya que la imagen debe ser una fotografía publicitaria pura.
 
 RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
 Formato esperado:
