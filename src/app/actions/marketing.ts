@@ -11,6 +11,7 @@ export interface PublicacionProgramada {
   tipo_formato: "imagen" | "carrusel" | "video" | "reel";
   sugerencia_visual?: string;
   guion_video?: string;
+  url_imagen?: string;
   fecha_programacion: string;
   estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado";
   notas_revision?: string;
