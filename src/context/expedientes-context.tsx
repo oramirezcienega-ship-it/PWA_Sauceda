@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { DatosExpediente, EtapaId, Expediente } from "@/lib/types";
+import type { DatosExpediente, EtapaId, Expediente, CalificacionProspecto } from "@/lib/types";
 import * as acciones from "@/app/actions/expedientes";
 
 /**
@@ -31,6 +31,14 @@ interface ExpedientesContextValue {
   moverEtapa: (id: string, etapa: EtapaId) => Promise<void>;
   /** Cambia la etapa de varios expedientes a la vez. */
   moverEtapaMasivo: (ids: string[], etapa: EtapaId) => Promise<void>;
+  /** Asigna un asesor a varios expedientes a la vez. */
+  asignarAsesorMasivo: (ids: string[], asesorId: string | null, asesorNombre?: string | null) => Promise<void>;
+  /** Asigna un operador/técnico a varios expedientes a la vez. */
+  asignarOperadorMasivo: (ids: string[], operadorId: string | null, operadorNombre?: string | null) => Promise<void>;
+  /** Cambia el origen a varios expedientes a la vez. */
+  cambiarOrigenMasivo: (ids: string[], origen: string) => Promise<void>;
+  /** Cambia la calificación a varios expedientes a la vez. */
+  cambiarCalificacionMasivo: (ids: string[], calificacion: CalificacionProspecto) => Promise<void>;
   /** Elimina varios expedientes a la vez. */
   eliminarMasivo: (ids: string[]) => Promise<void>;
   /** Crea un expediente nuevo y devuelve su id generado. */
@@ -149,6 +157,88 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
     [recargar],
   );
 
+  const asignarAsesorMasivo = useCallback(
+    async (ids: string[], asesorId: string | null, asesorNombre?: string | null) => {
+      if (ids.length === 0) return;
+      const hoy = new Date().toISOString().slice(0, 10);
+      setExpedientes((prev) =>
+        prev.map((exp) =>
+          ids.includes(exp.id)
+            ? { ...exp, asesorId, asesorNombre: asesorNombre ?? null, ultimoMovimiento: hoy }
+            : exp,
+        ),
+      );
+      try {
+        await acciones.asignarAsesorExpedientesMasivo(ids, asesorId);
+      } catch (err) {
+        console.error("Error al asignar asesor (masivo):", err);
+        await recargar();
+      }
+    },
+    [recargar],
+  );
+
+  const asignarOperadorMasivo = useCallback(
+    async (ids: string[], operadorId: string | null, operadorNombre?: string | null) => {
+      if (ids.length === 0) return;
+      const hoy = new Date().toISOString().slice(0, 10);
+      setExpedientes((prev) =>
+        prev.map((exp) =>
+          ids.includes(exp.id)
+            ? { ...exp, operadorId, operadorNombre: operadorNombre ?? null, ultimoMovimiento: hoy }
+            : exp,
+        ),
+      );
+      try {
+        await acciones.asignarOperadorExpedientesMasivo(ids, operadorId);
+      } catch (err) {
+        console.error("Error al asignar operador (masivo):", err);
+        await recargar();
+      }
+    },
+    [recargar],
+  );
+
+  const cambiarOrigenMasivo = useCallback(
+    async (ids: string[], origen: string) => {
+      if (ids.length === 0) return;
+      setExpedientes((prev) =>
+        prev.map((exp) =>
+          ids.includes(exp.id)
+            ? { ...exp, origenProspecto: origen as any }
+            : exp,
+        ),
+      );
+      try {
+        await acciones.cambiarOrigenExpedientesMasivo(ids, origen);
+      } catch (err) {
+        console.error("Error al cambiar origen (masivo):", err);
+        await recargar();
+      }
+    },
+    [recargar],
+  );
+
+  const cambiarCalificacionMasivo = useCallback(
+    async (ids: string[], calificacion: CalificacionProspecto) => {
+      if (ids.length === 0) return;
+      setExpedientes((prev) =>
+        prev.map((exp) =>
+          ids.includes(exp.id)
+            ? { ...exp, calificacion }
+            : exp,
+        ),
+      );
+      try {
+        await acciones.cambiarCalificacionExpedientesMasivo(ids, calificacion);
+      } catch (err) {
+        console.error("Error al cambiar calificación (masivo):", err);
+        await recargar();
+      }
+    },
+    [recargar],
+  );
+
   const eliminarMasivo = useCallback(
     async (ids: string[]) => {
       if (ids.length === 0) return;
@@ -195,6 +285,10 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       recargar,
       moverEtapa,
       moverEtapaMasivo,
+      asignarAsesorMasivo,
+      asignarOperadorMasivo,
+      cambiarOrigenMasivo,
+      cambiarCalificacionMasivo,
       eliminarMasivo,
       crearExpediente,
       actualizarExpediente,
@@ -208,6 +302,10 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       recargar,
       moverEtapa,
       moverEtapaMasivo,
+      asignarAsesorMasivo,
+      asignarOperadorMasivo,
+      cambiarOrigenMasivo,
+      cambiarCalificacionMasivo,
       eliminarMasivo,
       crearExpediente,
       actualizarExpediente,

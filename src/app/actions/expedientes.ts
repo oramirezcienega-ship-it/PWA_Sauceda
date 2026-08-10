@@ -618,6 +618,200 @@ export async function moverEtapaMasivo(
   }
 }
 
+/** Asigna un asesor a varios expedientes a la vez (acción masiva). */
+export async function asignarAsesorExpedientesMasivo(
+  ids: string[],
+  asesorId: string | null,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+
+  // 1. Obtener prospecto_id de los expedientes seleccionados
+  const { data: exps } = await sb
+    .from("expedientes")
+    .select("id, prospecto_id")
+    .in("id", ids);
+
+  // 2. Actualizar expedientes
+  const { error: errExp } = await sb
+    .from("expedientes")
+    .update({
+      asesor_id: asesorId,
+      ultimo_movimiento: hoyISO(),
+    })
+    .in("id", ids);
+  if (errExp) throw new Error(errExp.message);
+
+  // 3. Actualizar prospectos enlazados
+  if (exps && exps.length > 0) {
+    const propIds = Array.from(new Set(exps.map((e) => e.prospecto_id).filter(Boolean))) as string[];
+    if (propIds.length > 0) {
+      await sb
+        .from("prospectos")
+        .update({ asesor_id: asesorId })
+        .in("id", propIds);
+    }
+  }
+
+  // 4. Notificar a los asesores si aplica
+  if (asesorId && exps) {
+    const { notificarAsignacionAsesor } = await import("@/lib/notificaciones-sistema");
+    for (const e of exps) {
+      void notificarAsignacionAsesor(e.id, asesorId).catch((err) =>
+        console.warn(`No se pudo notificar asignación de asesor para ${e.id}:`, err.message),
+      );
+    }
+  }
+
+  // 5. Bitácora
+  for (const id of ids) {
+    await registrarActividad(sb, {
+      expedienteId: id,
+      tipo: "nota",
+      titulo: asesorId ? "Asesor reasignado en masa" : "Asesor retirado en masa",
+    }).catch(() => {});
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+}
+
+/** Asigna un operador/técnico a varios expedientes a la vez (acción masiva). */
+export async function asignarOperadorExpedientesMasivo(
+  ids: string[],
+  operadorId: string | null,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+
+  if (operadorId) {
+    const agendaValida = await validarAgendaOperador(operadorId);
+    if (!agendaValida) {
+      throw new Error("El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.");
+    }
+  }
+
+  // 1. Obtener prospecto_id de los expedientes seleccionados
+  const { data: exps } = await sb
+    .from("expedientes")
+    .select("id, prospecto_id")
+    .in("id", ids);
+
+  // 2. Actualizar expedientes
+  const { error: errExp } = await sb
+    .from("expedientes")
+    .update({
+      operador_id: operadorId,
+      ultimo_movimiento: hoyISO(),
+    })
+    .in("id", ids);
+  if (errExp) throw new Error(errExp.message);
+
+  // 3. Actualizar prospectos enlazados
+  if (exps && exps.length > 0) {
+    const propIds = Array.from(new Set(exps.map((e) => e.prospecto_id).filter(Boolean))) as string[];
+    if (propIds.length > 0) {
+      await sb
+        .from("prospectos")
+        .update({ operador_id: operadorId })
+        .in("id", propIds);
+    }
+  }
+
+  // 4. Bitácora
+  for (const id of ids) {
+    await registrarActividad(sb, {
+      expedienteId: id,
+      tipo: "nota",
+      titulo: operadorId ? "Operador reasignado en masa" : "Operador retirado en masa",
+    }).catch(() => {});
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+}
+
+/** Cambia la calificación de varios expedientes a la vez (acción masiva). */
+export async function cambiarCalificacionExpedientesMasivo(
+  ids: string[],
+  calificacion: CalificacionProspecto,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+
+  const { data: exps } = await sb
+    .from("expedientes")
+    .select("id, prospecto_id")
+    .in("id", ids);
+
+  const { error: errExp } = await sb
+    .from("expedientes")
+    .update({ calificacion })
+    .in("id", ids);
+  if (errExp) throw new Error(errExp.message);
+
+  if (exps && exps.length > 0) {
+    const propIds = Array.from(new Set(exps.map((e) => e.prospecto_id).filter(Boolean))) as string[];
+    if (propIds.length > 0) {
+      await sb
+        .from("prospectos")
+        .update({ calificacion })
+        .in("id", propIds);
+    }
+  }
+
+  for (const id of ids) {
+    await registrarActividad(sb, {
+      expedienteId: id,
+      tipo: "nota",
+      titulo: `Calificación actualizada a ${calificacion} en masa`,
+    }).catch(() => {});
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+}
+
+/** Cambia el origen de los prospectos enlazados a varios expedientes (acción masiva). */
+export async function cambiarOrigenExpedientesMasivo(
+  ids: string[],
+  origen: string,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const sb = supabaseServidor();
+
+  const { data: exps } = await sb
+    .from("expedientes")
+    .select("id, prospecto_id")
+    .in("id", ids);
+
+  if (exps && exps.length > 0) {
+    const propIds = Array.from(new Set(exps.map((e) => e.prospecto_id).filter(Boolean))) as string[];
+    if (propIds.length > 0) {
+      const { error } = await sb
+        .from("prospectos")
+        .update({ origen })
+        .in("id", propIds);
+      if (error) throw new Error(error.message);
+    }
+  }
+
+  for (const id of ids) {
+    await registrarActividad(sb, {
+      expedienteId: id,
+      tipo: "nota",
+      titulo: `Origen de adquisición actualizado a ${origen} en masa`,
+    }).catch(() => {});
+  }
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/");
+}
+
 /** Marca o desmarca un expediente como No Viable. */
 export async function marcarExpedienteNoViable(id: string, noViable: boolean): Promise<void> {
   await requireAdmin();

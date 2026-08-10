@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useExpedientes } from "@/context/expedientes-context";
 import { TODAS_LAS_ETAPAS, TODAS_LAS_ETAPAS_POR_ID, obtenerEtapasPorNegocio } from "@/lib/etapas";
-import { ORIGEN_POR_ID } from "@/lib/origenes";
-import { type EtapaId, type Expediente, labelTipoNegocio } from "@/lib/types";
+import { ORIGEN_POR_ID, ORIGENES } from "@/lib/origenes";
+import { type EtapaId, type Expediente, type OrigenAdquisicion, type CalificacionProspecto, labelTipoNegocio } from "@/lib/types";
 import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { useOrden } from "@/hooks/useOrden";
 import { ThOrden } from "./ThOrden";
 import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
+import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { BotonLlamar } from "./BotonLlamar";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 
@@ -48,7 +49,15 @@ export function TablaExpedientes({
 }: {
   expedientes: Expediente[];
 }) {
-  const { moverEtapa, moverEtapaMasivo, eliminarMasivo } = useExpedientes();
+  const {
+    moverEtapa,
+    moverEtapaMasivo,
+    asignarAsesorMasivo,
+    asignarOperadorMasivo,
+    cambiarOrigenMasivo,
+    cambiarCalificacionMasivo,
+    eliminarMasivo,
+  } = useExpedientes();
   const orden = useOrden(expedientes, COMPARADORES, "fecha", "desc");
 
   // Selección múltiple (por id). Se limpia cuando cambia el set de filas.
@@ -56,11 +65,15 @@ export function TablaExpedientes({
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
   const [secuencias, setSecuencias] = useState<any[]>([]);
+  const [perfiles, setPerfiles] = useState<{ id: string; nombre: string; rol: string }[]>([]);
 
   useEffect(() => {
     listarSecuencias()
       .then((lista) => setSecuencias(lista.filter((s) => s.status === "activa")))
       .catch(() => {});
+    listarPerfilesActivos()
+      .then(setPerfiles)
+      .catch((err) => console.error("Error al cargar perfiles:", err));
   }, []);
 
   const idsVisibles = orden.ordenados.map((e) => e.id);
@@ -99,6 +112,46 @@ export function TablaExpedientes({
     setTrabajando(true);
     try {
       await moverEtapaMasivo(ids, etapa);
+      setSel(new Set());
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function asignarAsesorSeleccion(asesorId: string | null, nombre?: string | null) {
+    setTrabajando(true);
+    try {
+      await asignarAsesorMasivo(ids, asesorId, nombre);
+      setSel(new Set());
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function asignarOperadorSeleccion(operadorId: string | null, nombre?: string | null) {
+    setTrabajando(true);
+    try {
+      await asignarOperadorMasivo(ids, operadorId, nombre);
+      setSel(new Set());
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function cambiarOrigenSeleccion(origen: OrigenAdquisicion) {
+    setTrabajando(true);
+    try {
+      await cambiarOrigenMasivo(ids, origen);
+      setSel(new Set());
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function cambiarCalificacionSeleccion(calificacion: CalificacionProspecto) {
+    setTrabajando(true);
+    try {
+      await cambiarCalificacionMasivo(ids, calificacion);
       setSel(new Set());
     } finally {
       setTrabajando(false);
@@ -152,6 +205,7 @@ export function TablaExpedientes({
             {ids.length} seleccionado{ids.length === 1 ? "" : "s"}
           </span>
 
+          {/* Cambiar etapa */}
           <label className="flex items-center gap-1.5 text-carbon/70">
             Cambiar etapa:
             <select
@@ -169,6 +223,107 @@ export function TablaExpedientes({
               {TODAS_LAS_ETAPAS.map((etapa) => (
                 <option key={etapa.id} value={etapa.id}>
                   {etapa.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* Asignar Asesor */}
+          <label className="flex items-center gap-1.5 text-carbon/70">
+            Asesor:
+            <select
+              defaultValue=""
+              disabled={trabajando}
+              onChange={(e) => {
+                if (e.target.value) {
+                  const val = e.target.value === "desasignar" ? null : e.target.value;
+                  const perfil = perfiles.find((p) => p.id === val);
+                  void asignarAsesorSeleccion(val, perfil?.nombre ?? null);
+                  e.target.value = "";
+                }
+              }}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+            >
+              <option value="">— asesor —</option>
+              <option value="desasignar">Sin asignar / Quitar</option>
+              {perfiles
+                .filter((p) => p.rol === "asesor" || p.rol === "admin")
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          {/* Asignar Operador */}
+          <label className="flex items-center gap-1.5 text-carbon/70">
+            Operador:
+            <select
+              defaultValue=""
+              disabled={trabajando}
+              onChange={(e) => {
+                if (e.target.value) {
+                  const val = e.target.value === "desasignar" ? null : e.target.value;
+                  const perfil = perfiles.find((p) => p.id === val);
+                  void asignarOperadorSeleccion(val, perfil?.nombre ?? null);
+                  e.target.value = "";
+                }
+              }}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+            >
+              <option value="">— operador —</option>
+              <option value="desasignar">Sin asignar / Quitar</option>
+              {perfiles
+                .filter((p) => p.rol === "operaciones")
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          {/* Cambiar Calificación */}
+          <label className="flex items-center gap-1.5 text-carbon/70">
+            Calificación:
+            <select
+              defaultValue=""
+              disabled={trabajando}
+              onChange={(e) => {
+                if (e.target.value) {
+                  void cambiarCalificacionSeleccion(e.target.value as CalificacionProspecto);
+                  e.target.value = "";
+                }
+              }}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+            >
+              <option value="">— calif —</option>
+              <option value="caliente">Caliente 🔥</option>
+              <option value="templado">Templado ⚡</option>
+              <option value="frio">Frío ❄️</option>
+              <option value="descalificado">Descalificado ❌</option>
+            </select>
+          </label>
+
+          {/* Cambiar Origen */}
+          <label className="flex items-center gap-1.5 text-carbon/70">
+            Origen:
+            <select
+              defaultValue=""
+              disabled={trabajando}
+              onChange={(e) => {
+                if (e.target.value) {
+                  void cambiarOrigenSeleccion(e.target.value as OrigenAdquisicion);
+                  e.target.value = "";
+                }
+              }}
+              className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
+            >
+              <option value="">— origen —</option>
+              {ORIGENES.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.nombre}
                 </option>
               ))}
             </select>
