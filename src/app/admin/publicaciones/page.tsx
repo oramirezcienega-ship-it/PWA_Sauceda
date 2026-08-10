@@ -387,6 +387,22 @@ export default function PaginaPublicaciones() {
                       </div>
                     )}
 
+                    {((pub.leads_generados !== undefined && pub.leads_generados > 0) || (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
+                      <div className="text-xs bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-emerald-800 block mb-1">📊 Rendimiento de Campaña (API Sincronizado):</span>
+                          <div className="flex flex-wrap gap-3 text-carbon/80 font-mono text-[11px]">
+                            <span>💵 Inversión: <strong>${pub.inversion_ads || 0} MXN</strong></span>
+                            <span>👥 Prospectos: <strong>{pub.leads_generados || 0}</strong></span>
+                            <span>🎯 CPL: <strong>${pub.cpl || 0} MXN</strong></span>
+                          </div>
+                        </div>
+                        <div className="bg-emerald-600 text-white font-bold px-2.5 py-1 rounded-lg text-[10px]">
+                          ⭐ Score: {pub.roi_score || 0}/100
+                        </div>
+                      </div>
+                    )}
+
                     {pub.estado === "rechazado" && pub.notas_revision && (
                       <div className="text-xs bg-red-500/5 border border-red-500/10 rounded-xl p-3">
                         <span className="font-bold text-red-800 block mb-1">❌ Observaciones de Rechazo:</span>

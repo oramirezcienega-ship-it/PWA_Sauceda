@@ -12,6 +12,13 @@ export interface PublicacionProgramada {
   sugerencia_visual?: string;
   guion_video?: string;
   url_imagen?: string;
+  inversion_ads?: number;
+  impresiones?: number;
+  clics?: number;
+  leads_generados?: number;
+  cpl?: number;
+  roi_score?: number;
+  meta_ad_id?: string;
   fecha_programacion: string;
   estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado";
   notas_revision?: string;
@@ -288,6 +295,21 @@ Formato esperado:
 
     let prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
 Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
+
+    // Consultar memoria de publicaciones ganadoras históricas (Top ROI / CPL)
+    const { data: ganadores } = await sb
+      .from("publicaciones_programadas")
+      .select("titulo, contenido, sugerencia_visual, cpl, leads_generados, roi_score")
+      .eq("estado", "publicado")
+      .gt("leads_generados", 0)
+      .order("cpl", { ascending: true })
+      .limit(3);
+
+    if (ganadores && ganadores.length > 0) {
+      prompt += "\n\nMEMORIA DE APRENDIZAJE ACUMULADO (PUBLICACIONES CON MAYOR RENDIMIENTO FINANCIERO Y CONVERSIÓN EN LEÓN GTO):\n" +
+        ganadores.map((g, i) => `#${i + 1} Título: "${g.titulo}" | Prospectos Reales: ${g.leads_generados} | CPL: $${g.cpl} MXN | Fotografía Sugerida: ${g.sugerencia_visual}`).join("\n") +
+        "\nUsa esta experiencia acumulada para formular las nuevas propuestas replicando los enfoques de mayor retorno de inversión.";
+    }
 
     if (tema && tema !== "todos") {
       prompt += `\n\nENFOQUE OBLIGATORIO DE TEMA:
