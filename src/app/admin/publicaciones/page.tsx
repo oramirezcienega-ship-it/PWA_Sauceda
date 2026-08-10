@@ -321,6 +321,7 @@ export default function PaginaPublicaciones() {
                         <img
                           src={pub.url_imagen}
                           alt={pub.titulo}
+                          referrerPolicy="no-referrer"
                           className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                         <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
