@@ -14,6 +14,7 @@ export default function PaginaNuevoUsuario() {
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [rol, setRol] = useState<"admin" | "asesor" | "operaciones">("asesor");
+  const [notificarWhatsapp, setNotificarWhatsapp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -25,7 +26,7 @@ export default function PaginaNuevoUsuario() {
     }
     setError(null);
     setGuardando(true);
-    const res = await crearUsuario({ email, password, nombre, rol, telefono });
+    const res = await crearUsuario({ email, password, nombre, rol, telefono, notificar_whatsapp_nuevo_lead: notificarWhatsapp });
     if (!res.ok) {
       setError(res.mensaje ?? "No se pudo crear el usuario.");
       setGuardando(false);
@@ -99,7 +100,11 @@ export default function PaginaNuevoUsuario() {
           <Campo etiqueta="Rol">
             <select
               value={rol}
-              onChange={(e) => setRol(e.target.value as "admin" | "asesor" | "operaciones")}
+              onChange={(e) => {
+                const nuevoRol = e.target.value as "admin" | "asesor" | "operaciones";
+                setRol(nuevoRol);
+                if (nuevoRol === "admin") setNotificarWhatsapp(true);
+              }}
               className={INPUT}
             >
               <option value="asesor">Asesor (opera, sin gestión de usuarios)</option>
@@ -107,6 +112,18 @@ export default function PaginaNuevoUsuario() {
               <option value="admin">Administrador (acceso total)</option>
             </select>
           </Campo>
+
+          <div className="pt-1">
+            <label className="flex items-center gap-2 text-xs font-medium text-carbon/80 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notificarWhatsapp}
+                onChange={(e) => setNotificarWhatsapp(e.target.checked)}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>📱 Recibir notificaciones por WhatsApp al registrar un nuevo expediente</span>
+            </label>
+          </div>
 
           <div className="flex gap-3 pt-2">
             <button

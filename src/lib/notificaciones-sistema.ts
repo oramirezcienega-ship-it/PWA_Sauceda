@@ -65,7 +65,7 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     // 2. Obtener perfiles de usuarios activos
     const { data: perfiles, error: errPerf } = await sb
       .from("perfiles")
-      .select("id, nombre, rol, activo, telefono")
+      .select("id, nombre, rol, activo, telefono, notificar_whatsapp_nuevo_lead")
       .eq("activo", true);
 
     if (errPerf || !perfiles || perfiles.length === 0) {
@@ -230,9 +230,9 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       }
 
       const promesasWa = perfiles.map(async (p) => {
-        // Restringir notificaciones automáticas de nuevos leads únicamente a Oscar / rol admin
-        const esOscarOAdmin = p.nombre === "Oscar" || p.rol === "admin";
-        if (!esOscarOAdmin) return;
+        // Notificar si el usuario tiene habilitada la preferencia en su perfil (o admins por defecto)
+        const debeNotificar = (p as any).notificar_whatsapp_nuevo_lead ?? (p.rol === "admin" || (p.nombre ?? "").toLowerCase().includes("oscar"));
+        if (!debeNotificar) return;
 
         if (!p.telefono || !p.telefono.trim()) {
           console.warn(`El asesor/admin ${p.nombre} no tiene teléfono configurado para notificaciones de WhatsApp.`);
