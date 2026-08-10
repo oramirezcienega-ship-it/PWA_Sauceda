@@ -204,6 +204,39 @@ export async function cambiarEstadoPublicacion(
 }
 
 /**
+ * Limpia la URL de la imagen previa y vuelve a disparar n8n para regenerar el creativo con IA.
+ */
+export async function regenerarCreativoPublicacion(
+  id: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        url_imagen: null,
+        estado: "aprobado",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const result = data as PublicacionProgramada;
+    dispararWebhookN8N(result, "aprobar");
+
+    return { success: true, data: result };
+  } catch (err: any) {
+    console.error("Error en regenerarCreativoPublicacion:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
  * Invoca a la IA (Claude o Kimi según configuración) para generar propuestas de publicaciones de forma segura.
  */
 export async function generarPublicacionesAutomaticas(
@@ -238,7 +271,7 @@ INSTRUCCIONES DE FORMATO Y ESTILO:
 - Tono: Profesional, empático, cálido y confiable. Estilo mexicano local.
 - Usa saltos de línea e incluye llamadas a la acción claras (WhatsApp 477 465 4700).
 - Si la publicación es en formato REEL o VIDEO (por ejemplo, para TikTok o Instagram), es OBLIGATORIO que incluyas un guion estructurado paso a paso en el campo 'guion_video' (con tomas y diálogos).
-- En el campo 'sugerencia_visual' detalla EXCLUSIVAMENTE una escena FOTOGRÁFICA fotorrealista limpia (para generadores de imágenes como Midjourney, Flux o DALL-E). Describe únicamente elementos arquitectónicos, fachadas, interiores de viviendas en León Gto, luz de atardecer o escenas de estilo de vida familiar. NUNCA pidas incluir texto escrito, infografías, letras, números, viñetas o esquemas dentro de la imagen, ya que la imagen debe ser una fotografía publicitaria pura.
+- En el campo 'sugerencia_visual' detalla EXCLUSIVAMENTE una escena FOTOGRÁFICA fotorrealista limpia (para generadores de imágenes como Midjourney, Flux o DALL-E) incorporando la PALETA CORPORATIVA INSTITUCIONAL DE SAUCEDA: Azul Marino (#0A192F / #002855), acentos en Dorado elegante (#D4AF37) y Blanco puro. Describe únicamente fachadas, acabados arquitectónicos o escenas de estilo de vida familiar en León Gto con iluminación cálida. NUNCA pidas incluir texto escrito, infografías, letras, números, viñetas o esquemas dentro de la imagen, ya que la imagen debe ser una fotografía publicitaria pura.
 
 RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
 Formato esperado:

@@ -7,6 +7,7 @@ import {
   guardarPublicacion,
   cambiarEstadoPublicacion,
   generarPublicacionesAutomaticas,
+  regenerarCreativoPublicacion,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
@@ -110,6 +111,18 @@ export default function PaginaPublicaciones() {
     } else {
       alert("Error al volver a revisión: " + res.error);
     }
+  };
+
+  const handleRegenerarCreativo = async (id: string) => {
+    setMensajeCarga("Solicitando un nuevo creativo fotorrealista a n8n...");
+    startTransition(async () => {
+      const res = await regenerarCreativoPublicacion(id);
+      if (res.success) {
+        await cargarDatos();
+      } else {
+        alert("Error al solicitar regeneración de creativo: " + res.error);
+      }
+    });
   };
 
   const handleCopiarTexto = (texto: string) => {
@@ -327,14 +340,24 @@ export default function PaginaPublicaciones() {
                         <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
                           <span>🎨</span> Creativo Generado por IA (Flux)
                         </div>
-                        <a
-                          href={pub.url_imagen}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1"
-                        >
-                          🔍 Ver en HD
-                        </a>
+                        <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            type="button"
+                            onClick={() => handleRegenerarCreativo(pub.id!)}
+                            className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                            title="Generar otra variante de imagen"
+                          >
+                            🔄 Regenerar Foto
+                          </button>
+                          <a
+                            href={pub.url_imagen}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
+                          >
+                            🔍 Ver en HD
+                          </a>
+                        </div>
                       </div>
                     )}
 
