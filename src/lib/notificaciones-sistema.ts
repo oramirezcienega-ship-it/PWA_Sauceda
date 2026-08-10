@@ -39,7 +39,7 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     const cliente = d.cliente || "Nuevo Lead";
     const origen = d.prospectos?.origen || "sitio-web";
     const situacion = d.situacion || "Solicitud de cotización entrante.";
-    const CRM_URL = process.env.SITE_URL || "https://app.saucedamx.com";
+    const CRM_URL = process.env.SITE_URL || "https://crm.saucedamx.com";
 
     // Formatear datos más ricos para WhatsApp
     const telefonoCliente = d.telefono ? d.telefono.trim() : "";
@@ -65,11 +65,11 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     // 2. Obtener perfiles de usuarios activos
     const { data: perfiles, error: errPerf } = await sb
       .from("perfiles")
-      .select("id, nombre, rol, activo, telefono, notificar_whatsapp_nuevo_lead")
+      .select("*")
       .eq("activo", true);
 
     if (errPerf || !perfiles || perfiles.length === 0) {
-      console.warn("No hay perfiles activos para notificar.");
+      console.warn("No hay perfiles activos para notificar:", errPerf?.message);
       return;
     }
 
@@ -355,7 +355,7 @@ export async function notificarAsignacionAsesor(
     const cliente = `${d.cliente || "Prospecto"}`;
     const origen = d.prospectos?.origen || "CRM";
     const situacion = d.situacion || "Asignación de expediente.";
-    const CRM_URL = process.env.SITE_URL || "https://app.saucedamx.com";
+    const CRM_URL = process.env.SITE_URL || "https://crm.saucedamx.com";
 
     const telefonoCliente = d.telefono ? d.telefono.trim() : "";
     const tipoCredito = d.tipo_credito || "";
@@ -606,7 +606,7 @@ export async function notificarCitaAgendadaAsesor(
       .maybeSingle();
 
     if (asesor && asesor.activo && asesor.telefono && asesor.telefono.trim()) {
-      const mensajeWA = `📅 *Cita Programada*\n\nHola ${asesor.nombre},\n\nEl cliente *${clienteNombre}* ha seleccionado fecha para su *${tipoCitaTexto}*:\n• Con: ${operarioNombre}\n• Fecha: ${fechaLegible}\n• Hora: ${cita.hora_inicio.slice(0, 5)}hs\n\nVer prospecto: ${process.env.SITE_URL || "https://app.saucedamx.com"}/prospectos/${cita.prospecto_id}`;
+      const mensajeWA = `📅 *Cita Programada*\n\nHola ${asesor.nombre},\n\nEl cliente *${clienteNombre}* ha seleccionado fecha para su *${tipoCitaTexto}*:\n• Con: ${operarioNombre}\n• Fecha: ${fechaLegible}\n• Hora: ${cita.hora_inicio.slice(0, 5)}hs\n\nVer prospecto: ${process.env.SITE_URL || "https://crm.saucedamx.com"}/prospectos/${cita.prospecto_id}`;
       await enviarWhatsAppTexto(asesor.telefono, mensajeWA);
     }
   } catch (err) {

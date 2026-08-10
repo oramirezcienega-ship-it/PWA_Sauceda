@@ -545,7 +545,7 @@ export async function asegurarPortalCliente(
     });
   }
 
-  const siteUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+  const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
   const urlPortal = `${siteUrl}/expediente-cliente/${expedienteId}?token=${token}`;
 
   if (exp.telefono) {
@@ -860,7 +860,7 @@ export async function enviarEnlacePortalWhatsApp(
     return { ok: false, mensaje: "El expediente no tiene teléfono." };
   }
 
-  const base = process.env.SITE_URL || "https://app.saucedamx.com";
+  const base = process.env.SITE_URL || "https://crm.saucedamx.com";
   const url = `${base}/seguimiento/${d.token}`;
   const nombre = (d.cliente ?? "").split(" ")[0] || "";
   const texto =

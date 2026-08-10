@@ -12,7 +12,7 @@ import { MARCA } from "@/lib/marca";
  * interrumpe la creación del expediente.
  */
 
-const SITE_URL = process.env.SITE_URL || "https://app.saucedamx.com";
+const SITE_URL = process.env.SITE_URL || "https://crm.saucedamx.com";
 
 /** Texto base del mensaje de bienvenida (admite parámetros del cliente). */
 function textoBienvenida(): string {

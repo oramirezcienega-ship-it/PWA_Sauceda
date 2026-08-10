@@ -181,7 +181,7 @@ export async function notificarMensajeWhatsApp(
     nombre_completo: nombreCompleto,
     fraccionamiento: d.fraccionamiento ?? "",
   };
-  const base = process.env.SITE_URL || "https://app.saucedamx.com";
+  const base = process.env.SITE_URL || "https://crm.saucedamx.com";
   const url = `${base}/seguimiento/${d.token}`;
   const cuerpo = `${aplicarParametros(texto, params)}\n\nVer en tu portal: ${url}`;
 
