@@ -258,7 +258,7 @@ export async function iniciarLlamadaConmutador(
     }
     queryParams.append("agenteId", user.id);
 
-    const baseUrl = process.env.SITE_URL || "https://app.saucedamx.com";
+    const baseUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
     const twimlUrl = `${baseUrl}/api/conmutador/outbound-twiml?${queryParams.toString()}`;
 
     const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");

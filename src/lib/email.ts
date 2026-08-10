@@ -9,7 +9,7 @@ import { MARCA } from "@/lib/marca";
  * operación principal (el mensaje/formulario ya quedó en el portal).
  */
 
-const SITE_URL = process.env.SITE_URL || "https://app.saucedamx.com";
+const SITE_URL = process.env.SITE_URL || "https://crm.saucedamx.com";
 
 function clienteResend(): Resend | null {
   const key = process.env.RESEND_API_KEY;
