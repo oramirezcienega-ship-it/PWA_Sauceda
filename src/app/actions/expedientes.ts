@@ -295,6 +295,10 @@ export async function crearExpediente(
     prospectoId: datos.prospectoId,
   });
 
+  // Notificar al equipo sobre el nuevo lead
+  const { notificarNuevoLead } = await import("@/lib/notificaciones-sistema");
+  void notificarNuevoLead(id);
+
   // Notificar al asesor si fue asignado de inicio
   if (datos.asesorId) {
     const { notificarAsignacionAsesor } = await import("@/lib/notificaciones-sistema");
