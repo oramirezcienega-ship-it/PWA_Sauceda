@@ -25,6 +25,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
   const [telefono, setTelefono] = useState(u.telefono);
   const [rol, setRol] = useState(u.rol);
   const [activo, setActivo] = useState(u.activo);
+  const [notificarWhatsapp, setNotificarWhatsapp] = useState(u.notificar_whatsapp_nuevo_lead ?? (u.rol === "admin"));
   const [password, setPassword] = useState("");
 
   // Sincronizar el estado local cuando cambien los datos del prop (ej. desde el modal)
@@ -33,7 +34,8 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
     setTelefono(u.telefono);
     setRol(u.rol);
     setActivo(u.activo);
-  }, [u.nombre, u.telefono, u.rol, u.activo]);
+    setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? (u.rol === "admin"));
+  }, [u.nombre, u.telefono, u.rol, u.activo, u.notificar_whatsapp_nuevo_lead]);
 
   async function handleGuardar() {
     if (!nombre.trim()) return;
@@ -52,6 +54,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
         telefono: telefono.trim(),
         rol,
         activo,
+        notificar_whatsapp_nuevo_lead: notificarWhatsapp,
       });
       setEditando(false);
     } catch (err) {
@@ -67,6 +70,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
     setTelefono(u.telefono);
     setRol(u.rol);
     setActivo(u.activo);
+    setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? (u.rol === "admin"));
     setPassword("");
     setEditando(false);
   }
@@ -179,6 +183,19 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
           </div>
         </div>
 
+        {/* Notificaciones WhatsApp por Lead */}
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-sauce/15 bg-sauce/5 p-2.5">
+          <label className="flex items-center gap-2.5 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={notificarWhatsapp}
+              onChange={(e) => setNotificarWhatsapp(e.target.checked)}
+              className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+            />
+            <span>📱 Recibir notificaciones automáticas por WhatsApp al registrar un nuevo expediente / lead</span>
+          </label>
+        </div>
+
         <div className="my-4 border-t border-carbon/5" />
 
         {/* Acciones en Edición */}
@@ -269,7 +286,7 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
         </div>
       </div>
 
-      {/* 4. Badges (Rol y Estado) */}
+      {/* 4. Badges (Rol, Estado y Notificaciones) */}
       <div className="col-span-1 md:col-span-2 flex flex-row md:flex-col gap-1.5 items-center md:items-start min-w-0">
         {u.rol === "admin" && (
           <span className="inline-flex items-center rounded-full border border-dorado/20 bg-dorado/15 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-800">
@@ -293,6 +310,15 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
         ) : (
           <span className="inline-flex items-center rounded-full border border-carbon/15 bg-carbon/10 px-2.5 py-0.5 text-[10px] font-semibold text-carbon/50">
             ⚪ Inactivo
+          </span>
+        )}
+        {u.notificar_whatsapp_nuevo_lead ? (
+          <span className="inline-flex items-center rounded-full border border-sauce/30 bg-sauce/10 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo" title="Recibe notificaciones por WhatsApp de nuevos leads">
+            📱 Notif. WhatsApp
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full border border-carbon/10 bg-carbon/5 px-2.5 py-0.5 text-[10px] font-semibold text-carbon/40" title="Sin notificaciones por WhatsApp de nuevos leads">
+            📵 Sin Notif. WA
           </span>
         )}
       </div>

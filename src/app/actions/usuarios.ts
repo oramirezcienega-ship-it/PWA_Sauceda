@@ -28,6 +28,7 @@ export interface UsuarioApp {
   horario_inicio?: string;
   horario_fin?: string;
   horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
+  notificar_whatsapp_nuevo_lead?: boolean;
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
@@ -86,6 +87,7 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
         horario_inicio?: string;
         horario_fin?: string;
         horarios_guardia?: any;
+        notificar_whatsapp_nuevo_lead?: boolean;
       },
     ]),
   );
@@ -110,18 +112,20 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
         viernes: [{ inicio: "09:00:00", fin: "18:00:00" }],
         sabado: [],
         domingo: []
-      }
+      },
+      notificar_whatsapp_nuevo_lead: p?.notificar_whatsapp_nuevo_lead ?? (p?.rol === "admin" || (p?.nombre ?? "").toLowerCase().includes("oscar")),
     };
   });
 }
 
-/** Crea un usuario nuevo (correo + contraseña + nombre + rol + teléfono). */
+/** Crea un usuario nuevo (correo + contraseña + nombre + rol + teléfono + notificaciones). */
 export async function crearUsuario(datos: {
   email: string;
   password: string;
   nombre: string;
   rol: "admin" | "asesor" | "operaciones";
   telefono: string;
+  notificar_whatsapp_nuevo_lead?: boolean;
 }): Promise<{ ok: boolean; mensaje?: string }> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -142,25 +146,27 @@ export async function crearUsuario(datos: {
     disponible_llamadas: false,
     horario_inicio: "09:00:00",
     horario_fin: "18:00:00",
+    notificar_whatsapp_nuevo_lead: datos.notificar_whatsapp_nuevo_lead ?? (datos.rol === "admin"),
   });
   if (errPerfil) return { ok: false, mensaje: errPerfil.message };
   revalidatePath("/usuarios");
   return { ok: true };
 }
 
-/** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono, etc.). */
+/** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono, notificaciones, etc.). */
 export async function actualizarUsuario(
   id: string,
   datos: {
-    nombre: string;
-    rol: "admin" | "asesor" | "operaciones";
-    activo: boolean;
+    nombre?: string;
+    rol?: "admin" | "asesor" | "operaciones";
+    activo?: boolean;
     telefono?: string;
     telefono_desvio?: string;
     disponible_llamadas?: boolean;
     horario_inicio?: string;
     horario_fin?: string;
     horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
+    notificar_whatsapp_nuevo_lead?: boolean;
   },
 ): Promise<void> {
   await requireAdministrador();
@@ -171,7 +177,7 @@ export async function actualizarUsuario(
     if (datos.activo === false) {
       throw new Error("No puedes desactivar tu propio usuario administrador.");
     }
-    if (datos.rol !== "admin") {
+    if (datos.rol !== undefined && datos.rol !== "admin") {
       throw new Error("No puedes cambiar tu propio rol de administrador.");
     }
   }
@@ -183,6 +189,7 @@ export async function actualizarUsuario(
     "nombre", "rol", "activo", "telefono",
     "telefono_desvio", "disponible_llamadas",
     "horario_inicio", "horario_fin", "horarios_guardia",
+    "notificar_whatsapp_nuevo_lead",
   ]);
 
   const updateData: Record<string, any> = {};
