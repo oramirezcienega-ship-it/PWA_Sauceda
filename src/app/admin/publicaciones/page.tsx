@@ -8,6 +8,9 @@ import {
   cambiarEstadoPublicacion,
   generarPublicacionesAutomaticas,
   regenerarCreativoPublicacion,
+  eliminarPublicacion,
+  eliminarPublicacionesMasivo,
+  cambiarEstadoPublicacionesMasivo,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
@@ -17,6 +20,7 @@ export default function PaginaPublicaciones() {
   const [filtroFormato, setFiltroFormato] = useState<string>("todos");
   const [filtroTemaFiltro, setFiltroTemaFiltro] = useState<string>("todos");
   const [filtroFecha, setFiltroFecha] = useState<string>("todos");
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
@@ -165,6 +169,83 @@ export default function PaginaPublicaciones() {
         await cargarDatos();
       } else {
         alert("Error al solicitar regeneración de creativo: " + res.error);
+      }
+    });
+  };
+
+  const handleToggleSeleccion = (id: string) => {
+    setSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSeleccionarTodos = () => {
+    if (seleccionados.length === publicacionesFiltradas.length && publicacionesFiltradas.length > 0) {
+      setSeleccionados([]);
+    } else {
+      setSeleccionados(publicacionesFiltradas.map(p => p.id!).filter(Boolean));
+    }
+  };
+
+  const handleEliminarIndividual = async (id: string) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar esta publicación permanentemente?")) return;
+    setMensajeCarga("Eliminando publicación...");
+    startTransition(async () => {
+      const res = await eliminarPublicacion(id);
+      if (res.success) {
+        setSeleccionados(prev => prev.filter(item => item !== id));
+        await cargarDatos();
+      } else {
+        alert("Error al eliminar la publicación: " + res.error);
+      }
+    });
+  };
+
+  const handleEliminarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente las ${seleccionados.length} publicaciones seleccionadas?`)) return;
+    
+    setMensajeCarga(`Eliminando ${seleccionados.length} publicaciones...`);
+    startTransition(async () => {
+      const res = await eliminarPublicacionesMasivo(seleccionados);
+      if (res.success) {
+        setSeleccionados([]);
+        await cargarDatos();
+      } else {
+        alert("Error en la eliminación masiva: " + res.error);
+      }
+    });
+  };
+
+  const handleAprobarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    if (!confirm(`¿Aprobar y enviar a n8n las ${seleccionados.length} publicaciones seleccionadas?`)) return;
+    
+    setMensajeCarga(`Aprobando ${seleccionados.length} publicaciones y enviando a n8n...`);
+    startTransition(async () => {
+      const res = await cambiarEstadoPublicacionesMasivo(seleccionados, "aprobado");
+      if (res.success) {
+        setSeleccionados([]);
+        await cargarDatos();
+        alert("¡Publicaciones aprobadas y enviadas a n8n con éxito!");
+      } else {
+        alert("Error al aprobar publicaciones: " + res.error);
+      }
+    });
+  };
+
+  const handleRechazarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    const motivo = prompt(`Motivo de rechazo masivo para las ${seleccionados.length} publicaciones:`) || "Rechazo masivo";
+    
+    setMensajeCarga(`Rechazando ${seleccionados.length} publicaciones...`);
+    startTransition(async () => {
+      const res = await cambiarEstadoPublicacionesMasivo(seleccionados, "rechazado");
+      if (res.success) {
+        setSeleccionados([]);
+        await cargarDatos();
+      } else {
+        alert("Error al rechazar publicaciones: " + res.error);
       }
     });
   };
@@ -343,10 +424,61 @@ export default function PaginaPublicaciones() {
             </div>
           </div>
 
-          <div className="text-xs text-carbon/50 font-medium">
-            Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicacionesFiltradas.length}</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-xs text-carbon/50 font-medium">
+              Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicacionesFiltradas.length}</span>
+            </div>
+            {publicacionesFiltradas.length > 0 && (
+              <label className="flex items-center gap-2 text-xs font-bold text-verde-profundo bg-verde-profundo/5 hover:bg-verde-profundo/10 px-3 py-1.5 rounded-lg border border-verde-profundo/20 cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={seleccionados.length === publicacionesFiltradas.length && publicacionesFiltradas.length > 0}
+                  onChange={handleToggleSeleccionarTodos}
+                  className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                />
+                <span>Seleccionar todas ({seleccionados.length}/{publicacionesFiltradas.length})</span>
+              </label>
+            )}
           </div>
         </div>
+
+        {/* Barra de Acciones Masivas Flotante cuando hay elementos seleccionados */}
+        {seleccionados.length > 0 && (
+          <div className="mb-6 bg-verde-profundo text-crema p-4 rounded-2xl shadow-lg border border-dorado/40 flex flex-wrap items-center justify-between gap-4 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <span className="bg-dorado text-verde-profundo font-bold text-xs px-2.5 py-1 rounded-md">
+                {seleccionados.length} Seleccionadas
+              </span>
+              <span className="text-sm font-semibold">Acciones masivas disponibles:</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleAprobarMasivo}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>✓</span> Aprobar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={handleRechazarMasivo}
+                className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>✕</span> Rechazar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={handleEliminarMasivo}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🗑️</span> Eliminar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={() => setSeleccionados([])}
+                className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {cargandoLista ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white border border-dorado/20 rounded-2xl">
@@ -365,10 +497,12 @@ export default function PaginaPublicaciones() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {publicacionesFiltradas.map((pub) => {
               const guionActivo = guionesExpandidos[pub.id!] || false;
+              const estaSeleccionado = seleccionados.includes(pub.id!);
               return (
                 <div
                   key={pub.id}
                   className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col shadow-xs ${
+                    estaSeleccionado ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-md" :
                     pub.estado === "pendiente_revision" ? "border-dorado/30 hover:border-dorado/60 hover:shadow-md" :
                     pub.estado === "aprobado" ? "border-emerald-500/30 hover:border-emerald-500/60" :
                     pub.estado === "rechazado" ? "border-red-500/20 opacity-90" : "border-carbon/10 bg-gray-50/50"
@@ -376,6 +510,13 @@ export default function PaginaPublicaciones() {
                 >
                   <div className="px-6 py-4 border-b border-carbon/5 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={estaSeleccionado}
+                        onChange={() => handleToggleSeleccion(pub.id!)}
+                        className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                        title="Seleccionar para acciones masivas"
+                      />
                       {getPlataformaBadge(pub.plataforma)}
                       <span className="text-xs bg-carbon/5 text-carbon/70 font-semibold px-2 py-0.5 rounded-md">
                         {getFormatoIcon(pub.tipo_formato)}
@@ -514,6 +655,14 @@ export default function PaginaPublicaciones() {
                   </div>
 
                   <div className="px-6 py-4 bg-gray-50/50 border-t border-carbon/5 flex flex-wrap gap-2 justify-end items-center rounded-b-2xl">
+                    <button
+                      onClick={() => handleEliminarIndividual(pub.id!)}
+                      className="bg-white hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 font-semibold text-xs px-3 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                      title="Eliminar esta publicación permanentemente"
+                    >
+                      🗑️ Eliminar
+                    </button>
+
                     <button
                       onClick={() => setPubEditando(pub)}
                       className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/80 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"

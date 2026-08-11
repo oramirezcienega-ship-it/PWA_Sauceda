@@ -248,6 +248,93 @@ export async function regenerarCreativoPublicacion(
 }
 
 /**
+ * Elimina una publicación por su ID.
+ */
+export async function eliminarPublicacion(
+  id: string
+): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { error } = await sb
+      .from("publicaciones_programadas")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error en eliminarPublicacion:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Elimina un lote de publicaciones masivamente por sus IDs.
+ */
+export async function eliminarPublicacionesMasivo(
+  ids: string[]
+): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    if (!ids || ids.length === 0) return { success: true, data: true };
+    const sb = supabaseServidor();
+
+    const { error } = await sb
+      .from("publicaciones_programadas")
+      .delete()
+      .in("id", ids);
+
+    if (error) throw error;
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error en eliminarPublicacionesMasivo:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Cambia el estado de un lote de publicaciones masivamente.
+ */
+export async function cambiarEstadoPublicacionesMasivo(
+  ids: string[],
+  estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado"
+): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    if (!ids || ids.length === 0) return { success: true, data: true };
+    const sb = supabaseServidor();
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        estado,
+        updated_at: new Date().toISOString()
+      })
+      .in("id", ids)
+      .select();
+
+    if (error) throw error;
+
+    // Si se aprueban, disparar webhooks n8n para cada una
+    if (estado === "aprobado" && data) {
+      for (const pub of data as PublicacionProgramada[]) {
+        dispararWebhookN8N(pub, "aprobar");
+      }
+    }
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error en cambiarEstadoPublicacionesMasivo:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+
+/**
  * Invoca a la IA (Claude o Kimi según configuración) para generar propuestas de publicaciones de forma segura.
  */
 export async function generarPublicacionesAutomaticas(
