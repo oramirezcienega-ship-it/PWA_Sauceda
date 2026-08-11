@@ -331,25 +331,35 @@ export default function PaginaPublicaciones() {
 
                     {pub.url_imagen && pub.url_imagen.length > 5 && (() => {
                       const mediaUrl = pub.url_imagen.startsWith("http") ? pub.url_imagen : `https://${pub.url_imagen}`;
+                      const esVideo = Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i));
                       return (
-                        <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group">
-                          <img
-                            src={mediaUrl}
-                            alt={pub.titulo}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
+                        <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group bg-black">
+                          {esVideo ? (
+                            <video
+                              src={mediaUrl}
+                              controls
+                              preload="metadata"
+                              className="w-full h-64 object-contain mx-auto"
+                            />
+                          ) : (
+                            <img
+                              src={mediaUrl}
+                              alt={pub.titulo}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          )}
                           <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
-                            <span>🎨</span> Creativo Generado por IA (Flux)
+                            <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : "Creativo Generado por IA (Flux)"}
                           </div>
                           <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                             <button
                               type="button"
                               onClick={() => handleRegenerarCreativo(pub.id!)}
                               className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                              title="Generar otra variante de imagen"
+                              title="Generar otra variante de imagen/video"
                             >
-                              🔄 Regenerar Foto
+                              🔄 Regenerar
                             </button>
                             <a
                               href={mediaUrl}
