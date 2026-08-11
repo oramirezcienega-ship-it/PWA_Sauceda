@@ -14,6 +14,9 @@ export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
+  const [filtroFormato, setFiltroFormato] = useState<string>("todos");
+  const [filtroTemaFiltro, setFiltroTemaFiltro] = useState<string>("todos");
+  const [filtroFecha, setFiltroFecha] = useState<string>("todos");
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
@@ -59,6 +62,7 @@ export default function PaginaPublicaciones() {
       const datos = await obtenerPublicaciones({
         estado: filtroEstado,
         plataforma: filtroPlataforma,
+        tipo_formato: filtroFormato,
       });
       setPublicaciones(datos);
     } catch (err) {
@@ -70,7 +74,47 @@ export default function PaginaPublicaciones() {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtroEstado, filtroPlataforma]);
+  }, [filtroEstado, filtroPlataforma, filtroFormato]);
+
+  const publicacionesFiltradas = publicaciones.filter((pub) => {
+    // Filtro por Tema / Campaña
+    if (filtroTemaFiltro !== "todos") {
+      const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
+      if (filtroTemaFiltro === "traspasos" && !textoBuscado.includes("traspaso") && !textoBuscado.includes("infonavit")) return false;
+      if (filtroTemaFiltro === "impermeabilizacion" && !textoBuscado.includes("impermeabiliz")) return false;
+      if (filtroTemaFiltro === "compra_directa" && !textoBuscado.includes("compra") && !textoBuscado.includes("contado") && !textoBuscado.includes("deuda")) return false;
+      if (filtroTemaFiltro === "remodelacion" && !textoBuscado.includes("remodela") && !textoBuscado.includes("construc")) return false;
+      if (filtroTemaFiltro === "gestion" && !textoBuscado.includes("gesti") && !textoBuscado.includes("legal") && !textoBuscado.includes("asesor")) return false;
+    }
+
+    // Filtro por Fecha
+    if (filtroFecha !== "todos" && pub.fecha_programacion) {
+      const fechaPub = pub.fecha_programacion.split("T")[0];
+      const hoyObj = new Date();
+      const hoyStr = hoyObj.toISOString().split("T")[0];
+      
+      if (filtroFecha === "hoy" && fechaPub !== hoyStr) return false;
+      if (filtroFecha === "manana") {
+        const mananaObj = new Date();
+        mananaObj.setDate(mananaObj.getDate() + 1);
+        const mananaStr = mananaObj.toISOString().split("T")[0];
+        if (fechaPub !== mananaStr) return false;
+      }
+      if (filtroFecha === "esta_semana") {
+        const hoy = new Date();
+        const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
+        const finSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6));
+        const pubDate = new Date(fechaPub);
+        if (pubDate < inicioSemana || pubDate > finSemana) return false;
+      }
+      if (filtroFecha === "este_mes") {
+        const mesActual = new Date().toISOString().slice(0, 7);
+        if (!fechaPub.startsWith(mesActual)) return false;
+      }
+    }
+
+    return true;
+  });
 
   const handleAprobar = async (id: string) => {
     const res = await cambiarEstadoPublicacion(id, "aprobado");
@@ -252,10 +296,55 @@ export default function PaginaPublicaciones() {
                 <option value="whatsapp">WhatsApp</option>
               </select>
             </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Formato</label>
+              <select
+                value={filtroFormato}
+                onChange={(e) => setFiltroFormato(e.target.value)}
+                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+              >
+                <option value="todos">🎨 Todos los Formatos</option>
+                <option value="imagen">🖼️ Imagen Estática</option>
+                <option value="carrusel">🖼️ Carrusel</option>
+                <option value="video">🎥 Video</option>
+                <option value="reel">📱 Reel / TikTok</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Campaña / Tema</label>
+              <select
+                value={filtroTemaFiltro}
+                onChange={(e) => setFiltroTemaFiltro(e.target.value)}
+                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+              >
+                <option value="todos">🎯 Todos los Temas</option>
+                <option value="traspasos">🏠 Traspasos INFONAVIT</option>
+                <option value="impermeabilizacion">🌧️ Impermeabilización</option>
+                <option value="compra_directa">💵 Compra Directa de Casas</option>
+                <option value="remodelacion">🏗️ Remodelaciones</option>
+                <option value="gestion">⚖️ Asesoría / Gestión Legal</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Fecha</label>
+              <select
+                value={filtroFecha}
+                onChange={(e) => setFiltroFecha(e.target.value)}
+                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+              >
+                <option value="todos">📅 Todas las Fechas</option>
+                <option value="hoy">📌 Programadas para Hoy</option>
+                <option value="manana">📌 Programadas para Mañana</option>
+                <option value="esta_semana">📆 Esta Semana</option>
+                <option value="este_mes">🗓️ Este Mes</option>
+              </select>
+            </div>
           </div>
 
           <div className="text-xs text-carbon/50 font-medium">
-            Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicaciones.length}</span>
+            Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicacionesFiltradas.length}</span>
           </div>
         </div>
 
@@ -264,17 +353,17 @@ export default function PaginaPublicaciones() {
             <div className="w-10 h-10 border-4 border-dorado/20 border-t-verde-profundo rounded-full animate-spin"></div>
             <p className="mt-4 text-sm text-carbon/60 font-semibold">Cargando la agenda de contenidos...</p>
           </div>
-        ) : publicaciones.length === 0 ? (
+        ) : publicacionesFiltradas.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white border border-dorado/20 rounded-2xl px-6 text-center">
-            <span className="text-5xl">📅</span>
-            <h3 className="mt-4 text-lg font-bold text-verde-profundo">No hay publicaciones programadas</h3>
+            <span className="text-5xl">🔍</span>
+            <h3 className="mt-4 text-lg font-bold text-verde-profundo">No hay publicaciones con estos filtros</h3>
             <p className="mt-2 text-sm text-carbon/60 max-w-md">
-              No encontramos publicaciones. Genera propuestas haciendo clic en &quot;Generar Publicaciones con IA&quot;.
+              Prueba cambiando o limpiando los filtros seleccionados para ver más publicaciones.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {publicaciones.map((pub) => {
+            {publicacionesFiltradas.map((pub) => {
               const guionActivo = guionesExpandidos[pub.id!] || false;
               return (
                 <div

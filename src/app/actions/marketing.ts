@@ -38,6 +38,7 @@ export interface ActionResult<T> {
 export async function obtenerPublicaciones(filtros?: {
   estado?: string;
   plataforma?: string;
+  tipo_formato?: string;
   fechaInicio?: string;
   fechaFin?: string;
 }): Promise<PublicacionProgramada[]> {
@@ -52,6 +53,9 @@ export async function obtenerPublicaciones(filtros?: {
     }
     if (filtros?.plataforma && filtros.plataforma !== "todos") {
       query = query.eq("plataforma", filtros.plataforma);
+    }
+    if (filtros?.tipo_formato && filtros.tipo_formato !== "todos") {
+      query = query.eq("tipo_formato", filtros.tipo_formato);
     }
     if (filtros?.fechaInicio) {
       query = query.gte("fecha_programacion", filtros.fechaInicio);
