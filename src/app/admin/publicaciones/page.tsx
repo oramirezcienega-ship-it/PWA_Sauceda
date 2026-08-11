@@ -329,37 +329,40 @@ export default function PaginaPublicaciones() {
                       </div>
                     </div>
 
-                    {pub.url_imagen && (
-                      <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group">
-                        <img
-                          src={pub.url_imagen}
-                          alt={pub.titulo}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
-                          <span>🎨</span> Creativo Generado por IA (Flux)
+                    {pub.url_imagen && (() => {
+                      const mediaUrl = pub.url_imagen.startsWith("http") ? pub.url_imagen : `https://${pub.url_imagen}`;
+                      return (
+                        <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group">
+                          <img
+                            src={mediaUrl}
+                            alt={pub.titulo}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
+                            <span>🎨</span> Creativo Generado por IA (Flux)
+                          </div>
+                          <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerarCreativo(pub.id!)}
+                              className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Generar otra variante de imagen"
+                            >
+                              🔄 Regenerar Foto
+                            </button>
+                            <a
+                              href={mediaUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
+                            >
+                              🔍 Ver en HD
+                            </a>
+                          </div>
                         </div>
-                        <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                          <button
-                            type="button"
-                            onClick={() => handleRegenerarCreativo(pub.id!)}
-                            className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                            title="Generar otra variante de imagen"
-                          >
-                            🔄 Regenerar Foto
-                          </button>
-                          <a
-                            href={pub.url_imagen}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
-                          >
-                            🔍 Ver en HD
-                          </a>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {pub.guion_video && (
                       <div className="border border-carbon/10 rounded-xl overflow-hidden">
