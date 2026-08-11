@@ -329,7 +329,7 @@ export default function PaginaPublicaciones() {
                       </div>
                     </div>
 
-                    {pub.url_imagen && (() => {
+                    {pub.url_imagen && pub.url_imagen.length > 5 && (() => {
                       const mediaUrl = pub.url_imagen.startsWith("http") ? pub.url_imagen : `https://${pub.url_imagen}`;
                       return (
                         <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group">
