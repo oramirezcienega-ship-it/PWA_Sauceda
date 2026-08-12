@@ -561,20 +561,42 @@ export async function subirFotoVisita(formData: FormData): Promise<{ ok: boolean
     const path = `visita-${Date.now()}-${archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const buffer = Buffer.from(await archivo.arrayBuffer());
 
-    const { data: uploadData, error: uploadError } = await sb.storage
+    let { data: uploadData, error: uploadError } = await sb.storage
       .from("documentos-ventas")
       .upload(path, buffer, {
         contentType: archivo.type || "image/jpeg",
         upsert: false,
       });
 
-    if (uploadError) return { ok: false, error: uploadError.message };
+    if (uploadError && (uploadError.message.toLowerCase().includes("not found") || uploadError.message.toLowerCase().includes("bucket"))) {
+      try {
+        await sb.storage.createBucket("documentos-ventas", { public: true });
+        const retry = await sb.storage
+          .from("documentos-ventas")
+          .upload(path, buffer, {
+            contentType: archivo.type || "image/jpeg",
+            upsert: false,
+          });
+        uploadData = retry.data;
+        uploadError = retry.error;
+      } catch (e) {
+        console.warn("No se pudo crear automáticamente el bucket documentos-ventas:", e);
+      }
+    }
 
-    const { data: urlData } = sb.storage
-      .from("documentos-ventas")
-      .getPublicUrl(uploadData.path);
+    if (!uploadError && uploadData) {
+      const { data: urlData } = sb.storage
+        .from("documentos-ventas")
+        .getPublicUrl(uploadData.path);
 
-    return { ok: true, url: urlData.publicUrl };
+      return { ok: true, url: urlData.publicUrl };
+    }
+
+    // Fallback resguardado: si falla el storage de Supabase, retornar base64 Data URL para no bloquear al usuario
+    console.warn("Advertencia: Falló el storage de Supabase (" + uploadError?.message + "), utilizando fallback Base64.");
+    const base64 = buffer.toString("base64");
+    const dataUrl = `data:${archivo.type || "image/jpeg"};base64,${base64}`;
+    return { ok: true, url: dataUrl };
   } catch (err) {
     console.error("Error en subirFotoVisita:", err);
     return { ok: false, error: err instanceof Error ? err.message : "Error desconocido al subir foto" };

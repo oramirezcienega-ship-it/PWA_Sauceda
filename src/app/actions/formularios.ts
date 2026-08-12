@@ -251,9 +251,22 @@ export async function subirArchivoFormulario(
   const ext = (file.name.split(".").pop() || "dat").toLowerCase();
   const ruta = `${token}/${crypto.randomUUID()}.${ext}`;
 
-  const { error } = await sb.storage
+  let { error } = await sb.storage
     .from("formularios")
     .upload(ruta, file, { contentType: file.type, upsert: false });
+
+  if (error && (error.message.toLowerCase().includes("not found") || error.message.toLowerCase().includes("bucket"))) {
+    try {
+      await sb.storage.createBucket("formularios", { public: false });
+      const retry = await sb.storage
+        .from("formularios")
+        .upload(ruta, file, { contentType: file.type, upsert: false });
+      error = retry.error;
+    } catch (e) {
+      console.warn("No se pudo crear el bucket formularios automáticamente:", e);
+    }
+  }
+
   if (error) throw new Error(error.message);
   return ruta;
 }

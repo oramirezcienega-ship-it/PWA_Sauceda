@@ -397,3 +397,12 @@ create table if not exists public.optimizaciones_backlog (
 create index if not exists optimizaciones_backlog_estatus_idx
   on public.optimizaciones_backlog (estatus, prioridad, created_at desc);
 
+-- Buckets de Storage
+insert into storage.buckets (id, name, public)
+values 
+  ('documentos-ventas', 'documentos-ventas', true),
+  ('expedientes-fotos', 'expedientes-fotos', true),
+  ('formularios', 'formularios', false)
+on conflict (id) do update set public = excluded.public;
+
+

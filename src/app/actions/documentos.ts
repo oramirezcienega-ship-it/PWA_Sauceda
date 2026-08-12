@@ -76,14 +76,30 @@ export async function subirDocumento(formData: FormData): Promise<{ ok: boolean;
 
   const buffer = Buffer.from(await archivo.arrayBuffer());
 
-  const { data: uploadData, error: uploadError } = await sb.storage
+  let { data: uploadData, error: uploadError } = await sb.storage
     .from("documentos-ventas")
     .upload(path, buffer, {
       contentType: archivo.type || "application/octet-stream",
       upsert: false,
     });
 
-  if (uploadError) return { ok: false, error: uploadError.message };
+  if (uploadError && (uploadError.message.toLowerCase().includes("not found") || uploadError.message.toLowerCase().includes("bucket"))) {
+    try {
+      await sb.storage.createBucket("documentos-ventas", { public: true });
+      const retry = await sb.storage
+        .from("documentos-ventas")
+        .upload(path, buffer, {
+          contentType: archivo.type || "application/octet-stream",
+          upsert: false,
+        });
+      uploadData = retry.data;
+      uploadError = retry.error;
+    } catch (e) {
+      console.warn("No se pudo crear el bucket documentos-ventas automáticamente:", e);
+    }
+  }
+
+  if (uploadError || !uploadData) return { ok: false, error: uploadError?.message || "Error al subir documento." };
 
   const { data: urlData } = sb.storage
     .from("documentos-ventas")

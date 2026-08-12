@@ -1,13 +1,34 @@
 const { createClient } = require("@supabase/supabase-js");
+const fs = require("fs");
+const path = require("path");
+
+function cargarEnv() {
+  const envPath = path.join(process.cwd(), ".env.local");
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, "utf8");
+    envContent.split("\n").forEach((line) => {
+      const match = line.match(/^\s*([^#=]+)\s*=\s*(.*)\s*$/);
+      if (match) {
+        const key = match[1].trim();
+        let value = match[2].trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        process.env[key] = value;
+      }
+    });
+  }
+}
 
 async function main() {
+  cargarEnv();
   console.log("Env keys available:", Object.keys(process.env).filter(k => k.includes("SUPABASE") || k.includes("NEXT_PUBLIC")));
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   console.log("Using key length:", key ? key.length : 0);
 
   if (!url || !key) {
-    console.error("Error: Missing SUPABASE_URL or key. URL length:", url ? url.length : 0, "Key length:", key ? key.length : 0);
+    console.error("Error: Missing SUPABASE_URL or key.");
     process.exit(1);
   }
 
@@ -22,6 +43,7 @@ async function main() {
 
     const requiredBuckets = [
       { name: "documentos-ventas", public: true },
+      { name: "expedientes-fotos", public: true },
       { name: "formularios", public: false }
     ];
 
