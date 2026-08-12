@@ -24,7 +24,7 @@ export default function PaginaPublicaciones() {
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
-  const [cantidadIA, setCantidadIA] = useState(3);
+  const [cantidadIA, setCantidadIA] = useState(1);
   
   const obtenerManana = () => {
     const hoy = new Date();
@@ -753,8 +753,8 @@ export default function PaginaPublicaciones() {
             <div className="p-6 flex flex-col gap-4">
               <div>
                 <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Cantidad de Publicaciones</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[2, 3, 5].map((num) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 5].map((num) => (
                     <button
                       key={num}
                       type="button"
@@ -763,7 +763,7 @@ export default function PaginaPublicaciones() {
                         cantidadIA === num ? "bg-verde-profundo text-crema border-verde-profundo" : "bg-crema/10 text-carbon border-dorado/30 hover:bg-crema/20"
                       }`}
                     >
-                      {num} posts
+                      {num} {num === 1 ? "post" : "posts"}
                     </button>
                   ))}
                 </div>
