@@ -7,12 +7,20 @@ import {
   guardarPublicacion,
   cambiarEstadoPublicacion,
   generarPublicacionesAutomaticas,
+  regenerarCreativoPublicacion,
+  eliminarPublicacion,
+  eliminarPublicacionesMasivo,
+  cambiarEstadoPublicacionesMasivo,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
+  const [filtroFormato, setFiltroFormato] = useState<string>("todos");
+  const [filtroTemaFiltro, setFiltroTemaFiltro] = useState<string>("todos");
+  const [filtroFecha, setFiltroFecha] = useState<string>("todos");
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
@@ -58,6 +66,7 @@ export default function PaginaPublicaciones() {
       const datos = await obtenerPublicaciones({
         estado: filtroEstado,
         plataforma: filtroPlataforma,
+        tipo_formato: filtroFormato,
       });
       setPublicaciones(datos);
     } catch (err) {
@@ -69,7 +78,47 @@ export default function PaginaPublicaciones() {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtroEstado, filtroPlataforma]);
+  }, [filtroEstado, filtroPlataforma, filtroFormato]);
+
+  const publicacionesFiltradas = publicaciones.filter((pub) => {
+    // Filtro por Tema / Campaña
+    if (filtroTemaFiltro !== "todos") {
+      const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
+      if (filtroTemaFiltro === "traspasos" && !textoBuscado.includes("traspaso") && !textoBuscado.includes("infonavit")) return false;
+      if (filtroTemaFiltro === "impermeabilizacion" && !textoBuscado.includes("impermeabiliz")) return false;
+      if (filtroTemaFiltro === "compra_directa" && !textoBuscado.includes("compra") && !textoBuscado.includes("contado") && !textoBuscado.includes("deuda")) return false;
+      if (filtroTemaFiltro === "remodelacion" && !textoBuscado.includes("remodela") && !textoBuscado.includes("construc")) return false;
+      if (filtroTemaFiltro === "gestion" && !textoBuscado.includes("gesti") && !textoBuscado.includes("legal") && !textoBuscado.includes("asesor")) return false;
+    }
+
+    // Filtro por Fecha
+    if (filtroFecha !== "todos" && pub.fecha_programacion) {
+      const fechaPub = pub.fecha_programacion.split("T")[0];
+      const hoyObj = new Date();
+      const hoyStr = hoyObj.toISOString().split("T")[0];
+      
+      if (filtroFecha === "hoy" && fechaPub !== hoyStr) return false;
+      if (filtroFecha === "manana") {
+        const mananaObj = new Date();
+        mananaObj.setDate(mananaObj.getDate() + 1);
+        const mananaStr = mananaObj.toISOString().split("T")[0];
+        if (fechaPub !== mananaStr) return false;
+      }
+      if (filtroFecha === "esta_semana") {
+        const hoy = new Date();
+        const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
+        const finSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6));
+        const pubDate = new Date(fechaPub);
+        if (pubDate < inicioSemana || pubDate > finSemana) return false;
+      }
+      if (filtroFecha === "este_mes") {
+        const mesActual = new Date().toISOString().slice(0, 7);
+        if (!fechaPub.startsWith(mesActual)) return false;
+      }
+    }
+
+    return true;
+  });
 
   const handleAprobar = async (id: string) => {
     const res = await cambiarEstadoPublicacion(id, "aprobado");
@@ -110,6 +159,95 @@ export default function PaginaPublicaciones() {
     } else {
       alert("Error al volver a revisión: " + res.error);
     }
+  };
+
+  const handleRegenerarCreativo = async (id: string) => {
+    setMensajeCarga("Solicitando un nuevo creativo fotorrealista a n8n...");
+    startTransition(async () => {
+      const res = await regenerarCreativoPublicacion(id);
+      if (res.success) {
+        await cargarDatos();
+      } else {
+        alert("Error al solicitar regeneración de creativo: " + res.error);
+      }
+    });
+  };
+
+  const handleToggleSeleccion = (id: string) => {
+    setSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSeleccionarTodos = () => {
+    if (seleccionados.length === publicacionesFiltradas.length && publicacionesFiltradas.length > 0) {
+      setSeleccionados([]);
+    } else {
+      setSeleccionados(publicacionesFiltradas.map(p => p.id!).filter(Boolean));
+    }
+  };
+
+  const handleEliminarIndividual = async (id: string) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar esta publicación permanentemente?")) return;
+    setMensajeCarga("Eliminando publicación...");
+    startTransition(async () => {
+      const res = await eliminarPublicacion(id);
+      if (res.success) {
+        setSeleccionados(prev => prev.filter(item => item !== id));
+        await cargarDatos();
+      } else {
+        alert("Error al eliminar la publicación: " + res.error);
+      }
+    });
+  };
+
+  const handleEliminarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente las ${seleccionados.length} publicaciones seleccionadas?`)) return;
+    
+    setMensajeCarga(`Eliminando ${seleccionados.length} publicaciones...`);
+    startTransition(async () => {
+      const res = await eliminarPublicacionesMasivo(seleccionados);
+      if (res.success) {
+        setSeleccionados([]);
+        await cargarDatos();
+      } else {
+        alert("Error en la eliminación masiva: " + res.error);
+      }
+    });
+  };
+
+  const handleAprobarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    if (!confirm(`¿Aprobar y enviar a n8n las ${seleccionados.length} publicaciones seleccionadas?`)) return;
+    
+    setMensajeCarga(`Aprobando ${seleccionados.length} publicaciones y enviando a n8n...`);
+    startTransition(async () => {
+      const res = await cambiarEstadoPublicacionesMasivo(seleccionados, "aprobado");
+      if (res.success) {
+        setSeleccionados([]);
+        await cargarDatos();
+        alert("¡Publicaciones aprobadas y enviadas a n8n con éxito!");
+      } else {
+        alert("Error al aprobar publicaciones: " + res.error);
+      }
+    });
+  };
+
+  const handleRechazarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    const motivo = prompt(`Motivo de rechazo masivo para las ${seleccionados.length} publicaciones:`) || "Rechazo masivo";
+    
+    setMensajeCarga(`Rechazando ${seleccionados.length} publicaciones...`);
+    startTransition(async () => {
+      const res = await cambiarEstadoPublicacionesMasivo(seleccionados, "rechazado");
+      if (res.success) {
+        setSeleccionados([]);
+        await cargarDatos();
+      } else {
+        alert("Error al rechazar publicaciones: " + res.error);
+      }
+    });
   };
 
   const handleCopiarTexto = (texto: string) => {
@@ -239,34 +377,132 @@ export default function PaginaPublicaciones() {
                 <option value="whatsapp">WhatsApp</option>
               </select>
             </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Formato</label>
+              <select
+                value={filtroFormato}
+                onChange={(e) => setFiltroFormato(e.target.value)}
+                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+              >
+                <option value="todos">🎨 Todos los Formatos</option>
+                <option value="imagen">🖼️ Imagen Estática</option>
+                <option value="carrusel">🖼️ Carrusel</option>
+                <option value="video">🎥 Video</option>
+                <option value="reel">📱 Reel / TikTok</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Campaña / Tema</label>
+              <select
+                value={filtroTemaFiltro}
+                onChange={(e) => setFiltroTemaFiltro(e.target.value)}
+                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+              >
+                <option value="todos">🎯 Todos los Temas</option>
+                <option value="traspasos">🏠 Traspasos INFONAVIT</option>
+                <option value="impermeabilizacion">🌧️ Impermeabilización</option>
+                <option value="compra_directa">💵 Compra Directa de Casas</option>
+                <option value="remodelacion">🏗️ Remodelaciones</option>
+                <option value="gestion">⚖️ Asesoría / Gestión Legal</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Fecha</label>
+              <select
+                value={filtroFecha}
+                onChange={(e) => setFiltroFecha(e.target.value)}
+                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
+              >
+                <option value="todos">📅 Todas las Fechas</option>
+                <option value="hoy">📌 Programadas para Hoy</option>
+                <option value="manana">📌 Programadas para Mañana</option>
+                <option value="esta_semana">📆 Esta Semana</option>
+                <option value="este_mes">🗓️ Este Mes</option>
+              </select>
+            </div>
           </div>
 
-          <div className="text-xs text-carbon/50 font-medium">
-            Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicaciones.length}</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-xs text-carbon/50 font-medium">
+              Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicacionesFiltradas.length}</span>
+            </div>
+            {publicacionesFiltradas.length > 0 && (
+              <label className="flex items-center gap-2 text-xs font-bold text-verde-profundo bg-verde-profundo/5 hover:bg-verde-profundo/10 px-3 py-1.5 rounded-lg border border-verde-profundo/20 cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={seleccionados.length === publicacionesFiltradas.length && publicacionesFiltradas.length > 0}
+                  onChange={handleToggleSeleccionarTodos}
+                  className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                />
+                <span>Seleccionar todas ({seleccionados.length}/{publicacionesFiltradas.length})</span>
+              </label>
+            )}
           </div>
         </div>
+
+        {/* Barra de Acciones Masivas Flotante cuando hay elementos seleccionados */}
+        {seleccionados.length > 0 && (
+          <div className="mb-6 bg-verde-profundo text-crema p-4 rounded-2xl shadow-lg border border-dorado/40 flex flex-wrap items-center justify-between gap-4 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3">
+              <span className="bg-dorado text-verde-profundo font-bold text-xs px-2.5 py-1 rounded-md">
+                {seleccionados.length} Seleccionadas
+              </span>
+              <span className="text-sm font-semibold">Acciones masivas disponibles:</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleAprobarMasivo}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>✓</span> Aprobar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={handleRechazarMasivo}
+                className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>✕</span> Rechazar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={handleEliminarMasivo}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🗑️</span> Eliminar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={() => setSeleccionados([])}
+                className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {cargandoLista ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white border border-dorado/20 rounded-2xl">
             <div className="w-10 h-10 border-4 border-dorado/20 border-t-verde-profundo rounded-full animate-spin"></div>
             <p className="mt-4 text-sm text-carbon/60 font-semibold">Cargando la agenda de contenidos...</p>
           </div>
-        ) : publicaciones.length === 0 ? (
+        ) : publicacionesFiltradas.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white border border-dorado/20 rounded-2xl px-6 text-center">
-            <span className="text-5xl">📅</span>
-            <h3 className="mt-4 text-lg font-bold text-verde-profundo">No hay publicaciones programadas</h3>
+            <span className="text-5xl">🔍</span>
+            <h3 className="mt-4 text-lg font-bold text-verde-profundo">No hay publicaciones con estos filtros</h3>
             <p className="mt-2 text-sm text-carbon/60 max-w-md">
-              No encontramos publicaciones. Genera propuestas haciendo clic en &quot;Generar Publicaciones con IA&quot;.
+              Prueba cambiando o limpiando los filtros seleccionados para ver más publicaciones.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {publicaciones.map((pub) => {
+            {publicacionesFiltradas.map((pub) => {
               const guionActivo = guionesExpandidos[pub.id!] || false;
+              const estaSeleccionado = seleccionados.includes(pub.id!);
               return (
                 <div
                   key={pub.id}
                   className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col shadow-xs ${
+                    estaSeleccionado ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-md" :
                     pub.estado === "pendiente_revision" ? "border-dorado/30 hover:border-dorado/60 hover:shadow-md" :
                     pub.estado === "aprobado" ? "border-emerald-500/30 hover:border-emerald-500/60" :
                     pub.estado === "rechazado" ? "border-red-500/20 opacity-90" : "border-carbon/10 bg-gray-50/50"
@@ -274,6 +510,13 @@ export default function PaginaPublicaciones() {
                 >
                   <div className="px-6 py-4 border-b border-carbon/5 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={estaSeleccionado}
+                        onChange={() => handleToggleSeleccion(pub.id!)}
+                        className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                        title="Seleccionar para acciones masivas"
+                      />
                       {getPlataformaBadge(pub.plataforma)}
                       <span className="text-xs bg-carbon/5 text-carbon/70 font-semibold px-2 py-0.5 rounded-md">
                         {getFormatoIcon(pub.tipo_formato)}
@@ -316,26 +559,50 @@ export default function PaginaPublicaciones() {
                       </div>
                     </div>
 
-                    {pub.url_imagen && (
-                      <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group">
-                        <img
-                          src={pub.url_imagen}
-                          alt={pub.titulo}
-                          className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
-                          <span>🎨</span> Creativo Generado por IA (Flux)
+                    {pub.url_imagen && pub.url_imagen.length > 5 && (() => {
+                      const mediaUrl = pub.url_imagen.startsWith("http") ? pub.url_imagen : `https://${pub.url_imagen}`;
+                      const esVideo = Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i));
+                      return (
+                        <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group bg-black">
+                          {esVideo ? (
+                            <video
+                              src={mediaUrl}
+                              controls
+                              preload="metadata"
+                              className="w-full h-64 object-contain mx-auto"
+                            />
+                          ) : (
+                            <img
+                              src={mediaUrl}
+                              alt={pub.titulo}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          )}
+                          <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
+                            <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : "Creativo Generado por IA (Flux)"}
+                          </div>
+                          <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerarCreativo(pub.id!)}
+                              className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Generar otra variante de imagen/video"
+                            >
+                              🔄 Regenerar
+                            </button>
+                            <a
+                              href={mediaUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
+                            >
+                              🔍 Ver en HD
+                            </a>
+                          </div>
                         </div>
-                        <a
-                          href={pub.url_imagen}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1"
-                        >
-                          🔍 Ver en HD
-                        </a>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {pub.guion_video && (
                       <div className="border border-carbon/10 rounded-xl overflow-hidden">
@@ -363,6 +630,22 @@ export default function PaginaPublicaciones() {
                       </div>
                     )}
 
+                    {((pub.leads_generados !== undefined && pub.leads_generados > 0) || (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
+                      <div className="text-xs bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-emerald-800 block mb-1">📊 Rendimiento de Campaña (API Sincronizado):</span>
+                          <div className="flex flex-wrap gap-3 text-carbon/80 font-mono text-[11px]">
+                            <span>💵 Inversión: <strong>${pub.inversion_ads || 0} MXN</strong></span>
+                            <span>👥 Prospectos: <strong>{pub.leads_generados || 0}</strong></span>
+                            <span>🎯 CPL: <strong>${pub.cpl || 0} MXN</strong></span>
+                          </div>
+                        </div>
+                        <div className="bg-emerald-600 text-white font-bold px-2.5 py-1 rounded-lg text-[10px]">
+                          ⭐ Score: {pub.roi_score || 0}/100
+                        </div>
+                      </div>
+                    )}
+
                     {pub.estado === "rechazado" && pub.notas_revision && (
                       <div className="text-xs bg-red-500/5 border border-red-500/10 rounded-xl p-3">
                         <span className="font-bold text-red-800 block mb-1">❌ Observaciones de Rechazo:</span>
@@ -372,6 +655,14 @@ export default function PaginaPublicaciones() {
                   </div>
 
                   <div className="px-6 py-4 bg-gray-50/50 border-t border-carbon/5 flex flex-wrap gap-2 justify-end items-center rounded-b-2xl">
+                    <button
+                      onClick={() => handleEliminarIndividual(pub.id!)}
+                      className="bg-white hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 font-semibold text-xs px-3 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                      title="Eliminar esta publicación permanentemente"
+                    >
+                      🗑️ Eliminar
+                    </button>
+
                     <button
                       onClick={() => setPubEditando(pub)}
                       className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/80 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
@@ -635,12 +926,135 @@ export default function PaginaPublicaciones() {
                     <label className="text-xs font-bold text-red-800 block mb-1">Feedback de Rechazo</label>
                     <input
                       type="text"
-                      value={pubEditando.notes_revision || ""}
-                      onChange={(e) => setPubEditando({ ...pubEditando, notes_revision: e.target.value })}
+                      value={pubEditando.notas_revision || ""}
+                      onChange={(e) => setPubEditando({ ...pubEditando, notas_revision: e.target.value })}
                       className="w-full bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
                     />
                   </div>
                 )}
+
+                {/* Sección de Parametrización Dinámica de Anuncio Vendedor (Banner Meta Ads) */}
+                <div className="md:col-span-2 border-t border-dorado/20 pt-4 mt-2">
+                  <div className="bg-dorado/10 border border-dorado/30 rounded-2xl p-4">
+                    <h4 className="font-bold text-verde-profundo text-xs uppercase mb-3 flex items-center gap-2">
+                      <span>🎨</span> Personalizar Anuncio Vendedor (Estilo VIPROCOSA / Meta Ads)
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Título del Ad (Banner)</label>
+                        <input
+                          type="text"
+                          value={pubEditando.diseno_banner?.titulo_ad || pubEditando.titulo}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, titulo_ad: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Subtítulo / Oferta</label>
+                        <input
+                          type="text"
+                          value={pubEditando.diseno_banner?.subtitulo_ad || "Instalación en 1 día • Garantía por escrito"}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, subtitulo_ad: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Sello 1 (Texto Top / Bot)</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="text"
+                            placeholder="GARANTÍA"
+                            value={pubEditando.diseno_banner?.sellos?.[0]?.texto_top || "GARANTÍA"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{ texto_top: "GARANTÍA", texto_bottom: "10 AÑOS" }])];
+                              sellos[0] = { ...sellos[0], texto_top: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                          <input
+                            type="text"
+                            placeholder="10 AÑOS"
+                            value={pubEditando.diseno_banner?.sellos?.[0]?.texto_bottom || "10 AÑOS"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{ texto_top: "GARANTÍA", texto_bottom: "10 AÑOS" }])];
+                              sellos[0] = { ...sellos[0], texto_bottom: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Sello 2 (Texto Top / Bot)</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="text"
+                            placeholder="MARCA"
+                            value={pubEditando.diseno_banner?.sellos?.[1]?.texto_top || "MARCA"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{}, { texto_top: "MARCA", texto_bottom: "GTO" }])];
+                              sellos[1] = { ...sellos[1], texto_top: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                          <input
+                            type="text"
+                            placeholder="GTO"
+                            value={pubEditando.diseno_banner?.sellos?.[1]?.texto_bottom || "GTO"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{}, { texto_top: "MARCA", texto_bottom: "GTO" }])];
+                              sellos[1] = { ...sellos[1], texto_bottom: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Teléfono WhatsApp Contacto</label>
+                        <input
+                          type="text"
+                          value={pubEditando.diseno_banner?.telefono_contacto || "477 465 4700"}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, telefono_contacto: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Color Destacado del Ad</label>
+                        <select
+                          value={pubEditando.diseno_banner?.color_destacado || "#C53030"}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, color_destacado: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none cursor-pointer"
+                        >
+                          <option value="#C53030">🔴 Rojo Oferta Impacto (#C53030)</option>
+                          <option value="#0A192F">🔵 Azul Marino Institucional SAUCEDA (#0A192F)</option>
+                          <option value="#D4AF37">🟡 Dorado Elegante (#D4AF37)</option>
+                          <option value="#25D366">🟢 Verde WhatsApp Conversión (#25D366)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">

@@ -3,6 +3,21 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
 
+export interface SelloBanner {
+  texto_top: string;
+  texto_bottom: string;
+  color_fondo?: string;
+}
+
+export interface DisenoBannerParams {
+  titulo_ad?: string;
+  subtitulo_ad?: string;
+  sellos?: SelloBanner[];
+  cta_texto?: string;
+  telefono_contacto?: string;
+  color_destacado?: string;
+}
+
 export interface PublicacionProgramada {
   id?: string;
   titulo: string;
@@ -12,6 +27,14 @@ export interface PublicacionProgramada {
   sugerencia_visual?: string;
   guion_video?: string;
   url_imagen?: string;
+  diseno_banner?: DisenoBannerParams;
+  inversion_ads?: number;
+  impresiones?: number;
+  clics?: number;
+  leads_generados?: number;
+  cpl?: number;
+  roi_score?: number;
+  meta_ad_id?: string;
   fecha_programacion: string;
   estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado";
   notas_revision?: string;
@@ -31,6 +54,7 @@ export interface ActionResult<T> {
 export async function obtenerPublicaciones(filtros?: {
   estado?: string;
   plataforma?: string;
+  tipo_formato?: string;
   fechaInicio?: string;
   fechaFin?: string;
 }): Promise<PublicacionProgramada[]> {
@@ -45,6 +69,9 @@ export async function obtenerPublicaciones(filtros?: {
     }
     if (filtros?.plataforma && filtros.plataforma !== "todos") {
       query = query.eq("plataforma", filtros.plataforma);
+    }
+    if (filtros?.tipo_formato && filtros.tipo_formato !== "todos") {
+      query = query.eq("tipo_formato", filtros.tipo_formato);
     }
     if (filtros?.fechaInicio) {
       query = query.gte("fecha_programacion", filtros.fechaInicio);
@@ -119,6 +146,7 @@ export async function guardarPublicacion(
       tipo_formato: pub.tipo_formato,
       sugerencia_visual: pub.sugerencia_visual || "",
       guion_video: pub.guion_video || "",
+      diseno_banner: pub.diseno_banner || null,
       fecha_programacion: pub.fecha_programacion,
       estado: pub.estado,
       notas_revision: pub.notas_revision || "",
@@ -204,6 +232,126 @@ export async function cambiarEstadoPublicacion(
 }
 
 /**
+ * Limpia la URL de la imagen previa y vuelve a disparar n8n para regenerar el creativo con IA.
+ */
+export async function regenerarCreativoPublicacion(
+  id: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        url_imagen: null,
+        estado: "aprobado",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const result = data as PublicacionProgramada;
+    dispararWebhookN8N(result, "aprobar");
+
+    return { success: true, data: result };
+  } catch (err: any) {
+    console.error("Error en regenerarCreativoPublicacion:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Elimina una publicación por su ID.
+ */
+export async function eliminarPublicacion(
+  id: string
+): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { error } = await sb
+      .from("publicaciones_programadas")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error en eliminarPublicacion:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Elimina un lote de publicaciones masivamente por sus IDs.
+ */
+export async function eliminarPublicacionesMasivo(
+  ids: string[]
+): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    if (!ids || ids.length === 0) return { success: true, data: true };
+    const sb = supabaseServidor();
+
+    const { error } = await sb
+      .from("publicaciones_programadas")
+      .delete()
+      .in("id", ids);
+
+    if (error) throw error;
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error en eliminarPublicacionesMasivo:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Cambia el estado de un lote de publicaciones masivamente.
+ */
+export async function cambiarEstadoPublicacionesMasivo(
+  ids: string[],
+  estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado"
+): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    if (!ids || ids.length === 0) return { success: true, data: true };
+    const sb = supabaseServidor();
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        estado,
+        updated_at: new Date().toISOString()
+      })
+      .in("id", ids)
+      .select();
+
+    if (error) throw error;
+
+    // Si se aprueban, disparar webhooks n8n para cada una
+    if (estado === "aprobado" && data) {
+      for (const pub of data as PublicacionProgramada[]) {
+        dispararWebhookN8N(pub, "aprobar");
+      }
+    }
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error en cambiarEstadoPublicacionesMasivo:", err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+
+/**
  * Invoca a la IA (Claude o Kimi según configuración) para generar propuestas de publicaciones de forma segura.
  */
 export async function generarPublicacionesAutomaticas(
@@ -219,8 +367,18 @@ export async function generarPublicacionesAutomaticas(
     let rawText = "";
     const fechaBaseStr = fechaInicio || new Date().toISOString().split("T")[0];
     
-    const systemPrompt = `Eres un redactor creativo y estratega de marketing de contenidos experto para SAUCEDA (Bienes Raíces y Construcción), con sede en León, Guanajuato, México.
-Tu objetivo es generar propuestas de publicaciones de alta conversión para redes sociales (Facebook, Instagram, TikTok y campañas de WhatsApp).
+    const systemPrompt = `Eres el Director Creativo de Marketing Inmobiliario y de Construcción de SAUCEDA en León, Guanajuato, México.
+Tu misión principal es generar ANUNCIOS VENDEDORES DE ALTA CONVERSIÓN (Direct Response Ads) diseñados para generar prospectos calificados al WhatsApp (477 465 4700) y llamadas directas.
+
+ESTRATEGIA DE ANUNCIOS VENDEDORES (DIRECT RESPONSE MARKETING):
+1. GANCHOS DE ALTO IMPACTO (Hooks):
+   - Inicia siempre con preguntas o declaraciones de dolor directo que detengan el scroll del cliente en León, Gto.
+   - Ejemplos: "¿Tienes una casa abandonada o con deudas en León?", "¿Quieres traspasar tu casa INFONAVIT sin vueltas?", "Agosto de lluvias: ¡Protege tu hogar antes de la gotera!".
+2. ESTRUCTURA DE COPY VENDEDOR (PAS / AIDA):
+   - Problema: Identifica la frustración del cliente (deudas INFONAVIT, agiotistas, humedad en techo, burocracia).
+   - Agitación: Muestra el riesgo de no actuar (retrasos de meses, goteras que dañan muebles, pérdidas de dinero).
+   - Solución SAUCEDA: Presenta la solución inmediata con datos claros (Traspaso rápido, Pago de contado, $210/m2 impermeabilizado, Instalación en 1 día, Garantía de 5 a 10 años por escrito).
+   - Llamado a la Acción (CTA) agresivo e inconfundible al WhatsApp 477 465 4700.
 
 INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
 1. SAUCEDA Bienes Raíces:
@@ -229,32 +387,56 @@ INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
    - Gestión de armado de expediente INFONAVIT cuando ya tienen un comprador/vendedor directo.
    - Advertimos sobre el riesgo de agiotistas/prestamistas particulares.
 2. SAUCEDA Construye (Construcción):
-   - Especialistas en impermeabilización profesional en León, Gto. Costo: $210 pesos por metro cuadrado (Estándar 3.5mm con gravilla roja o gris). Instalación en 1 día y garantía de 5 años por escrito.
+   - Especialistas en impermeabilización profesional en León, Gto. Costo: $210 pesos por metro cuadrado (Estándar 3.5mm con gravilla roja o gris). Instalación en 1 día y garantía de 5 a 10 años por escrito.
    - Remodelaciones, ampliaciones (cocheras, cocinas, baños) bajo diseño arquitectónico. Visitas técnicas y presupuestos gratuitos a domicilio en León.
    - Suministro de Concreto Premezclado certificado para losas y firmes.
-   - Servicios técnicos: fontanería, electricidad, pintura premium y mantenimiento en general.
 
-INSTRUCCIONES DE FORMATO Y ESTILO:
-- Tono: Profesional, empático, cálido y confiable. Estilo mexicano local.
-- Usa saltos de línea e incluye llamadas a la acción claras (WhatsApp 477 465 4700).
-- Si la publicación es en formato REEL o VIDEO (por ejemplo, para TikTok o Instagram), es OBLIGATORIO que incluyas un guion estructurado paso a paso en el campo 'guion_video' (con tomas y diálogos).
-- En el campo 'sugerencia_visual' detalla EXCLUSIVAMENTE una escena FOTOGRÁFICA fotorrealista limpia (para generadores de imágenes como Midjourney, Flux o DALL-E). Describe únicamente elementos arquitectónicos, fachadas, interiores de viviendas en León Gto, luz de atardecer o escenas de estilo de vida familiar. NUNCA pidas incluir texto escrito, infografías, letras, números, viñetas o esquemas dentro de la imagen, ya que la imagen debe ser una fotografía publicitaria pura.
+INSTRUCCIONES VISUALES PARA GENERACIÓN EN FLUX:
+- En 'sugerencia_visual' describe escénicamente fotografías fotorrealistas publicitarias de alto impacto en León, Gto, con la paleta de colores de SAUCEDA: Azul Marino (#0A192F / #002855), acentos en Dorado elegante (#D4AF37) y Blanco puro.
+- Describe escenas realistas que transmitan VENTA E IMPACTO: parejas firmando escrituras con felicidad, entrega de llaves de casa, trabajadora aplicando impermeabilización blanca profesional en azotea con rodillo, o inspección técnica con acabado moderno. NUNCA pidas texto, letras o infografías dentro de la imagen.
 
 RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
 Formato esperado:
 [
   {
-    "titulo": "Título corto de la publicación",
+    "titulo": "Título vendedor y corto de la publicación",
     "plataforma": "facebook | instagram | tiktok | whatsapp",
     "tipo_formato": "imagen | carrusel | video | reel",
-    "contenido": "Texto/Copy completo con llamadas a la acción, hashtags y emojis.",
-    "sugerencia_visual": "Explicación descriptiva del diseño visual sugerido.",
-    "guion_video": "Si es video o reel, proporciona el guion estructurado. De lo contrario, déjalo vacío."
+    "contenido": "Texto/Copy completo con gancho, oferta, viñetas de valor, llamada a la acción al 477 465 4700 y hashtags.",
+    "sugerencia_visual": "Descripción escénica de fotografía fotorrealista de alto impacto visual.",
+    "guion_video": "Si es video o reel, proporciona el guion estructurado paso a paso con tomas y diálogos.",
+    "diseno_banner": {
+      "titulo_ad": "IMPERMEABILIZACIÓN PROFESIONAL $210/M² | TRASPASO DIRECTO INFONAVIT",
+      "subtitulo_ad": "Instalación en 1 día • Garantía 10 años por escrito • WhatsApp 477 465 4700",
+      "sellos": [
+        { "texto_top": "GARANTÍA", "texto_bottom": "10 AÑOS", "color_fondo": "#0A192F" },
+        { "texto_top": "MARCA", "texto_bottom": "GTO", "color_fondo": "#1A365D" },
+        { "texto_top": "CALIDAD", "texto_bottom": "PRO 100%", "color_fondo": "#C53030" }
+      ],
+      "cta_texto": "WhatsApp Directo:",
+      "telefono_contacto": "477 465 4700",
+      "color_destacado": "#C53030"
+    }
   }
 ]`;
 
     let prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
 Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
+
+    // Consultar memoria de publicaciones ganadoras históricas (Top ROI / CPL)
+    const { data: ganadores } = await sb
+      .from("publicaciones_programadas")
+      .select("titulo, contenido, sugerencia_visual, cpl, leads_generados, roi_score")
+      .eq("estado", "publicado")
+      .gt("leads_generados", 0)
+      .order("cpl", { ascending: true })
+      .limit(3);
+
+    if (ganadores && ganadores.length > 0) {
+      prompt += "\n\nMEMORIA DE APRENDIZAJE ACUMULADO (PUBLICACIONES CON MAYOR RENDIMIENTO FINANCIERO Y CONVERSIÓN EN LEÓN GTO):\n" +
+        ganadores.map((g, i) => `#${i + 1} Título: "${g.titulo}" | Prospectos Reales: ${g.leads_generados} | CPL: $${g.cpl} MXN | Fotografía Sugerida: ${g.sugerencia_visual}`).join("\n") +
+        "\nUsa esta experiencia acumulada para formular las nuevas propuestas replicando los enfoques de mayor retorno de inversión.";
+    }
 
     if (tema && tema !== "todos") {
       prompt += `\n\nENFOQUE OBLIGATORIO DE TEMA:
