@@ -24,7 +24,7 @@ export default function PaginaPublicaciones() {
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
-  const [cantidadIA, setCantidadIA] = useState(3);
+  const [cantidadIA, setCantidadIA] = useState(1);
   
   const obtenerManana = () => {
     const hoy = new Date();
@@ -753,8 +753,8 @@ export default function PaginaPublicaciones() {
             <div className="p-6 flex flex-col gap-4">
               <div>
                 <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Cantidad de Publicaciones</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[2, 3, 5].map((num) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 5].map((num) => (
                     <button
                       key={num}
                       type="button"
@@ -763,7 +763,7 @@ export default function PaginaPublicaciones() {
                         cantidadIA === num ? "bg-verde-profundo text-crema border-verde-profundo" : "bg-crema/10 text-carbon border-dorado/30 hover:bg-crema/20"
                       }`}
                     >
-                      {num} posts
+                      {num} {num === 1 ? "post" : "posts"}
                     </button>
                   ))}
                 </div>
@@ -1039,17 +1039,18 @@ export default function PaginaPublicaciones() {
                       <div>
                         <label className="text-[11px] font-bold text-carbon/70 block mb-1">Color Destacado del Ad</label>
                         <select
-                          value={pubEditando.diseno_banner?.color_destacado || "#C53030"}
+                          value={pubEditando.diseno_banner?.color_destacado || "#2D4A2B"}
                           onChange={(e) => setPubEditando({
                             ...pubEditando,
                             diseno_banner: { ...pubEditando.diseno_banner, color_destacado: e.target.value }
                           })}
-                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none cursor-pointer"
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none cursor-pointer font-bold"
                         >
-                          <option value="#C53030">🔴 Rojo Oferta Impacto (#C53030)</option>
-                          <option value="#0A192F">🔵 Azul Marino Institucional SAUCEDA (#0A192F)</option>
-                          <option value="#D4AF37">🟡 Dorado Elegante (#D4AF37)</option>
-                          <option value="#25D366">🟢 Verde WhatsApp Conversión (#25D366)</option>
+                          <option value="#2D4A2B">🟢 Verde Profundo SAUCEDA (#2D4A2B)</option>
+                          <option value="#5C7A52">🌿 Verde Sauce SAUCEDA (#5C7A52)</option>
+                          <option value="#C9A961">🟡 Dorado Tierra SAUCEDA (#C9A961)</option>
+                          <option value="#C44A4A">🔴 Rojo Oferta SAUCEDA (#C44A4A)</option>
+                          <option value="#5C8DAA">🔵 Azul Cielo SAUCEDA (#5C8DAA)</option>
                         </select>
                       </div>
                     </div>
