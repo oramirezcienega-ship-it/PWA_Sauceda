@@ -3,6 +3,7 @@ import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { detectarTipoNegocio } from "@/lib/types";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { 
   hoyISO, 
   siguienteId, 
@@ -63,6 +64,7 @@ async function obtenerOCrearProspectoSocial(
   }
 
   const id = await siguienteIdProspecto(sb);
+  const asesorId = await obtenerIdAsesorGerardo(sb);
   await sb.from("prospectos").insert({
     id,
     nombre: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
@@ -72,6 +74,7 @@ async function obtenerOCrearProspectoSocial(
     campaign_name: lead.campaign_name || "",
     adset_name: lead.adset_name || "",
     ad_name: lead.ad_name || "",
+    asesor_id: asesorId,
   });
   
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
@@ -148,6 +151,7 @@ async function registrarLeadSocial(
 
   // Si es un expediente completamente nuevo
   const id = await siguienteId(sb);
+  const asesorId = await obtenerIdAsesorGerardo(sb);
   const tipoNegocio = detectarTipoNegocio(
     lead.mensaje ?? "",
     [lead.campaign_name, lead.adset_name, lead.ad_name].filter(Boolean).join(" ")
@@ -171,6 +175,7 @@ async function registrarLeadSocial(
     adset_name: lead.adset_name || "",
     ad_name: lead.ad_name || "",
     tipo_negocio: tipoNegocio,
+    asesor_id: asesorId,
   });
 
   const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");

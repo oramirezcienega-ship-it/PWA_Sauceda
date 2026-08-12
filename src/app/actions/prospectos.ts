@@ -12,6 +12,7 @@ import {
 import { ORIGENES } from "@/lib/origenes";
 import { registrarActividad } from "@/lib/actividades";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import type {
   DatosProspecto,
   Expediente,
@@ -108,9 +109,15 @@ export async function crearProspecto(
   if (errLista) throw new Error(errLista.message);
   const id = siguienteId((existentes ?? []).map((r) => r.id as string));
 
+  const fila = aFilaProspecto(datos);
+  if (!fila.asesor_id) {
+    const gerardoId = await obtenerIdAsesorGerardo(sb);
+    if (gerardoId) fila.asesor_id = gerardoId;
+  }
+
   const { data, error } = await sb
     .from("prospectos")
-    .insert({ id, ...aFilaProspecto(datos) })
+    .insert({ id, ...fila })
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -286,6 +293,12 @@ export async function importarProspectos(
   });
 
   if (aInsertar.length > 0) {
+    const gerardoId = await obtenerIdAsesorGerardo(sb);
+    if (gerardoId) {
+      aInsertar.forEach((p) => {
+        if (!p.asesor_id) p.asesor_id = gerardoId;
+      });
+    }
     const { error } = await sb.from("prospectos").insert(aInsertar);
     if (error) {
       errores.push(`Error al insertar: ${error.message}`);

@@ -4,6 +4,7 @@ import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 
 export interface DatosLlamadaInicial {
   twilioCallSid: string;
@@ -352,7 +353,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
   }
 
   // Determinar el asesor a asignar: si ya tiene uno asignado en BD, lo mantenemos; si no, asignamos el que atendió/transfirió.
-  const finalAsesorId = asesorIdExistente || agenteId || null;
+  const finalAsesorId = asesorIdExistente || agenteId || (await obtenerIdAsesorGerardo(sb));
 
   // 2. Si no existe, crear el prospecto
   if (!prospectoId) {
@@ -458,6 +459,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
   if (!expedienteId) {
     token = crypto.randomUUID();
     const expId = await siguienteId(sb, "expedientes", "EXP");
+    const asesorIdExp = finalAsesorId || (await obtenerIdAsesorGerardo(sb));
     
     const { error: expErr } = await sb.from("expedientes").insert({
       id: expId,
@@ -476,7 +478,7 @@ export async function procesarReporteVoiceBot(reporte: ReporteVoiceBot): Promise
       prospecto_id: prospectoId,
       tipo_credito: reporte.datosPerfilados?.tipoCredito || null,
       necesidad: reporte.datosPerfilados?.necesidad || null,
-      asesor_id: finalAsesorId,
+      asesor_id: asesorIdExp,
     });
 
     if (expErr) {

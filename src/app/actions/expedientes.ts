@@ -10,6 +10,7 @@ import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { validarAgendaOperador } from "@/app/actions/agenda";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import type { DatosExpediente, EtapaId, Expediente, CalificacionProspecto } from "@/lib/types";
 
 /** Convierte un texto a entero ignorando símbolos ($ , .). */
@@ -196,6 +197,9 @@ async function asegurarProspectoParaExpediente(
   const max = numeros.length ? Math.max(...numeros) : 0;
   const nuevoProsId = `PRO-${String(max + 1).padStart(3, "0")}`;
 
+  const gerardoId = await obtenerIdAsesorGerardo(sb);
+  const asesorIdPros = datos.asesorId || gerardoId || null;
+
   const { error: errPros } = await sb.from("prospectos").insert({
     id: nuevoProsId,
     nombre: datos.cliente || "Cliente",
@@ -206,7 +210,7 @@ async function asegurarProspectoParaExpediente(
     direccion: datos.direccionPropiedad || "",
     origen: (datos as any).origen || "otro",
     estatus: "nuevo",
-    asesor_id: datos.asesorId || null,
+    asesor_id: asesorIdPros,
     operador_id: datos.operadorId || null,
   });
 
@@ -238,6 +242,13 @@ export async function crearExpediente(
       throw new Error(
         "El operario seleccionado no tiene horarios disponibles configurados o libres en los próximos 14 días.",
       );
+    }
+  }
+
+  if (!datos.asesorId) {
+    const gerardoId = await obtenerIdAsesorGerardo(sb);
+    if (gerardoId) {
+      datos.asesorId = gerardoId;
     }
   }
 

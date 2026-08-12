@@ -4,6 +4,7 @@ import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import crypto from "node:crypto";
 
 /**
@@ -69,6 +70,7 @@ export async function registrarLeadTikTok(lead: LeadTikTok): Promise<string> {
 
   if (!prospectoId) {
     const id = await siguienteId(sb, "prospectos", "PRO");
+    const asesorId = await obtenerIdAsesorGerardo(sb);
     await sb.from("prospectos").insert({
       id,
       nombre,
@@ -79,6 +81,7 @@ export async function registrarLeadTikTok(lead: LeadTikTok): Promise<string> {
       adset_name: lead.adset_name || "",
       ad_name: lead.ad_name || "",
       notas: "Captado desde TikTok Lead Ads.",
+      asesor_id: asesorId,
     });
     prospectoId = id;
     await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
@@ -127,6 +130,7 @@ export async function registrarLeadTikTok(lead: LeadTikTok): Promise<string> {
   // Token único para el portal
   const token = crypto.randomUUID();
   const expId = await siguienteId(sb, "expedientes", "EXP");
+  const asesorId = await obtenerIdAsesorGerardo(sb);
   await sb.from("expedientes").insert({
     id: expId,
     token,
@@ -143,6 +147,7 @@ export async function registrarLeadTikTok(lead: LeadTikTok): Promise<string> {
     campaign_name: lead.campaign_name || "TikTok Ads",
     adset_name: lead.adset_name || "",
     ad_name: lead.ad_name || "",
+    asesor_id: asesorId,
   });
 
   // Enrolar automáticamente en secuencias activas
