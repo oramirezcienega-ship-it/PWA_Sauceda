@@ -3,6 +3,21 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
 
+export interface SelloBanner {
+  texto_top: string;
+  texto_bottom: string;
+  color_fondo?: string;
+}
+
+export interface DisenoBannerParams {
+  titulo_ad?: string;
+  subtitulo_ad?: string;
+  sellos?: SelloBanner[];
+  cta_texto?: string;
+  telefono_contacto?: string;
+  color_destacado?: string;
+}
+
 export interface PublicacionProgramada {
   id?: string;
   titulo: string;
@@ -12,6 +27,7 @@ export interface PublicacionProgramada {
   sugerencia_visual?: string;
   guion_video?: string;
   url_imagen?: string;
+  diseno_banner?: DisenoBannerParams;
   inversion_ads?: number;
   impresiones?: number;
   clics?: number;
@@ -130,6 +146,7 @@ export async function guardarPublicacion(
       tipo_formato: pub.tipo_formato,
       sugerencia_visual: pub.sugerencia_visual || "",
       guion_video: pub.guion_video || "",
+      diseno_banner: pub.diseno_banner || null,
       fecha_programacion: pub.fecha_programacion,
       estado: pub.estado,
       notas_revision: pub.notas_revision || "",
@@ -387,7 +404,19 @@ Formato esperado:
     "tipo_formato": "imagen | carrusel | video | reel",
     "contenido": "Texto/Copy completo con gancho, oferta, viñetas de valor, llamada a la acción al 477 465 4700 y hashtags.",
     "sugerencia_visual": "Descripción escénica de fotografía fotorrealista de alto impacto visual.",
-    "guion_video": "Si es video o reel, proporciona el guion estructurado paso a paso con tomas y diálogos."
+    "guion_video": "Si es video o reel, proporciona el guion estructurado paso a paso con tomas y diálogos.",
+    "diseno_banner": {
+      "titulo_ad": "IMPERMEABILIZACIÓN PROFESIONAL $210/M² | TRASPASO DIRECTO INFONAVIT",
+      "subtitulo_ad": "Instalación en 1 día • Garantía 10 años por escrito • WhatsApp 477 465 4700",
+      "sellos": [
+        { "texto_top": "GARANTÍA", "texto_bottom": "10 AÑOS", "color_fondo": "#0A192F" },
+        { "texto_top": "MARCA", "texto_bottom": "GTO", "color_fondo": "#1A365D" },
+        { "texto_top": "CALIDAD", "texto_bottom": "PRO 100%", "color_fondo": "#C53030" }
+      ],
+      "cta_texto": "WhatsApp Directo:",
+      "telefono_contacto": "477 465 4700",
+      "color_destacado": "#C53030"
+    }
   }
 ]`;
 

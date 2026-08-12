@@ -926,12 +926,135 @@ export default function PaginaPublicaciones() {
                     <label className="text-xs font-bold text-red-800 block mb-1">Feedback de Rechazo</label>
                     <input
                       type="text"
-                      value={pubEditando.notes_revision || ""}
-                      onChange={(e) => setPubEditando({ ...pubEditando, notes_revision: e.target.value })}
+                      value={pubEditando.notas_revision || ""}
+                      onChange={(e) => setPubEditando({ ...pubEditando, notas_revision: e.target.value })}
                       className="w-full bg-red-50 border border-red-200 text-red-900 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
                     />
                   </div>
                 )}
+
+                {/* Sección de Parametrización Dinámica de Anuncio Vendedor (Banner Meta Ads) */}
+                <div className="md:col-span-2 border-t border-dorado/20 pt-4 mt-2">
+                  <div className="bg-dorado/10 border border-dorado/30 rounded-2xl p-4">
+                    <h4 className="font-bold text-verde-profundo text-xs uppercase mb-3 flex items-center gap-2">
+                      <span>🎨</span> Personalizar Anuncio Vendedor (Estilo VIPROCOSA / Meta Ads)
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Título del Ad (Banner)</label>
+                        <input
+                          type="text"
+                          value={pubEditando.diseno_banner?.titulo_ad || pubEditando.titulo}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, titulo_ad: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Subtítulo / Oferta</label>
+                        <input
+                          type="text"
+                          value={pubEditando.diseno_banner?.subtitulo_ad || "Instalación en 1 día • Garantía por escrito"}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, subtitulo_ad: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Sello 1 (Texto Top / Bot)</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="text"
+                            placeholder="GARANTÍA"
+                            value={pubEditando.diseno_banner?.sellos?.[0]?.texto_top || "GARANTÍA"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{ texto_top: "GARANTÍA", texto_bottom: "10 AÑOS" }])];
+                              sellos[0] = { ...sellos[0], texto_top: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                          <input
+                            type="text"
+                            placeholder="10 AÑOS"
+                            value={pubEditando.diseno_banner?.sellos?.[0]?.texto_bottom || "10 AÑOS"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{ texto_top: "GARANTÍA", texto_bottom: "10 AÑOS" }])];
+                              sellos[0] = { ...sellos[0], texto_bottom: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Sello 2 (Texto Top / Bot)</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="text"
+                            placeholder="MARCA"
+                            value={pubEditando.diseno_banner?.sellos?.[1]?.texto_top || "MARCA"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{}, { texto_top: "MARCA", texto_bottom: "GTO" }])];
+                              sellos[1] = { ...sellos[1], texto_top: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                          <input
+                            type="text"
+                            placeholder="GTO"
+                            value={pubEditando.diseno_banner?.sellos?.[1]?.texto_bottom || "GTO"}
+                            onChange={(e) => {
+                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{}, { texto_top: "MARCA", texto_bottom: "GTO" }])];
+                              sellos[1] = { ...sellos[1], texto_bottom: e.target.value };
+                              setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
+                            }}
+                            className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Teléfono WhatsApp Contacto</label>
+                        <input
+                          type="text"
+                          value={pubEditando.diseno_banner?.telefono_contacto || "477 465 4700"}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, telefono_contacto: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-carbon/70 block mb-1">Color Destacado del Ad</label>
+                        <select
+                          value={pubEditando.diseno_banner?.color_destacado || "#C53030"}
+                          onChange={(e) => setPubEditando({
+                            ...pubEditando,
+                            diseno_banner: { ...pubEditando.diseno_banner, color_destacado: e.target.value }
+                          })}
+                          className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none cursor-pointer"
+                        >
+                          <option value="#C53030">🔴 Rojo Oferta Impacto (#C53030)</option>
+                          <option value="#0A192F">🔵 Azul Marino Institucional SAUCEDA (#0A192F)</option>
+                          <option value="#D4AF37">🟡 Dorado Elegante (#D4AF37)</option>
+                          <option value="#25D366">🟢 Verde WhatsApp Conversión (#25D366)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
