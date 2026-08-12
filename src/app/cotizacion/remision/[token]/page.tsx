@@ -3,6 +3,9 @@ import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface RemisionPageProps {
   params: {
     token: string;
