@@ -1100,12 +1100,28 @@ export async function subirFotosExpediente(formData: FormData): Promise<{ ok: bo
 
     let publicUrl = "";
 
-    const { data: uploadData, error: uploadError } = await sb.storage
+    let { data: uploadData, error: uploadError } = await sb.storage
       .from("expedientes-fotos")
       .upload(path, buffer, {
         contentType: archivo.type || "image/jpeg",
         upsert: true,
       });
+
+    if (uploadError && (uploadError.message.toLowerCase().includes("not found") || uploadError.message.toLowerCase().includes("bucket"))) {
+      try {
+        await sb.storage.createBucket("expedientes-fotos", { public: true });
+        const retry = await sb.storage
+          .from("expedientes-fotos")
+          .upload(path, buffer, {
+            contentType: archivo.type || "image/jpeg",
+            upsert: true,
+          });
+        uploadData = retry.data;
+        uploadError = retry.error;
+      } catch (e) {
+        console.warn("No se pudo crear el bucket expedientes-fotos automáticamente:", e);
+      }
+    }
 
     if (!uploadError && uploadData) {
       const { data: urlData } = sb.storage
