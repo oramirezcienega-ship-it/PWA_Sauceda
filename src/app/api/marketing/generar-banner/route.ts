@@ -7,23 +7,23 @@ export async function GET(req: Request) {
     const titulo = searchParams.get("titulo") || "IMPERMEABILIZACIÓN Y CONSTRUCCIÓN PROFESIONAL";
     const sub = searchParams.get("sub") || "Instalación en 1 día • Garantía por escrito";
 
-    // Sellos parametrizables dinámicos
+    // Sellos parametrizables dinámicos con colores institucionales de SAUCEDA
     const sello1Top = searchParams.get("sello1_top") || "GARANTÍA";
     const sello1Bot = searchParams.get("sello1_bot") || "10 AÑOS";
-    const sello1Color = searchParams.get("sello1_color") || "#0A192F";
+    const sello1Color = searchParams.get("sello1_color") || "#2D4A2B"; // Verde Profundo SAUCEDA
 
     const sello2Top = searchParams.get("sello2_top") || "MARCA";
     const sello2Bot = searchParams.get("sello2_bot") || "GTO";
-    const sello2Color = searchParams.get("sello2_color") || "#1A365D";
+    const sello2Color = searchParams.get("sello2_color") || "#5C7A52"; // Verde Sauce SAUCEDA
 
     const sello3Top = searchParams.get("sello3_top") || "CALIDAD";
     const sello3Bot = searchParams.get("sello3_bot") || "PRO 100%";
-    const sello3Color = searchParams.get("sello3_color") || "#C53030";
+    const sello3Color = searchParams.get("sello3_color") || "#C9A961"; // Dorado Tierra SAUCEDA
 
-    // Datos de contacto y color destacado dinámicos
+    // Datos de contacto y color destacado dinámicos (Paleta Oficial SAUCEDA)
     const ctaTexto = searchParams.get("cta_texto") || "WhatsApp Directo:";
     const telefono = searchParams.get("telefono") || "477 465 4700";
-    const colorDestacado = searchParams.get("color") || "#C53030"; // Rojo Oferta, Azul Marino o Dorado
+    const colorDestacado = searchParams.get("color") || "#2D4A2B"; // Verde Profundo por defecto
 
     // Convertir foto a Base64 server-side para evitar bloqueos CORS del navegador
     let base64Foto = fotoUrl;
@@ -43,23 +43,23 @@ export async function GET(req: Request) {
     const tituloUpper = escapeXml(titulo.toUpperCase());
     const subEsc = escapeXml(sub);
 
-    // SVG Institucional Totalmente Parametrizable y Dinámico estilo SAUCEDA / Meta Ads
+    // SVG Institucional Totalmente Parametrizable y Dinámico con Paleta Oficial SAUCEDA
     const svg = `
     <svg width="1080" height="1350" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="footerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="${colorDestacado}"/>
-          <stop offset="100%" stop-color="#0A192F"/>
+          <stop offset="100%" stop-color="#2D4A2B"/>
         </linearGradient>
 
         <linearGradient id="goldButtonGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#D4AF37"/>
-          <stop offset="100%" stop-color="#F3E5AB"/>
+          <stop offset="0%" stop-color="#C9A961"/>
+          <stop offset="100%" stop-color="#E6D5AC"/>
         </linearGradient>
 
-        <linearGradient id="headerNavy" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#0A192F"/>
-          <stop offset="100%" stop-color="#112240"/>
+        <linearGradient id="headerSauceda" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#2D4A2B"/>
+          <stop offset="100%" stop-color="#5C7A52"/>
         </linearGradient>
 
         <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
@@ -68,7 +68,7 @@ export async function GET(req: Request) {
       </defs>
 
       <!-- Fondo Estructurado -->
-      <rect width="1080" height="1350" fill="#F7FAFC" />
+      <rect width="1080" height="1350" fill="#F8FAFC" />
 
       <!-- BARRA SUPERIOR DINÁMICA (Sellos de Certificación y Logo SAUCEDA) -->
       <rect x="0" y="0" width="1080" height="160" fill="#FFFFFF" />
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
         <!-- Sello 1 Dinámico -->
         ${sello1Top ? `
         <rect x="0" y="0" width="125" height="95" rx="12" fill="${sello1Color}" filter="url(#shadow)" />
-        <text x="62.5" y="38" font-family="'Inter', sans-serif" font-size="16" font-weight="900" fill="#D4AF37" text-anchor="middle">${escapeXml(sello1Top)}</text>
+        <text x="62.5" y="38" font-family="'Inter', sans-serif" font-size="16" font-weight="900" fill="#C9A961" text-anchor="middle">${escapeXml(sello1Top)}</text>
         <text x="62.5" y="70" font-family="'Inter', sans-serif" font-size="22" font-weight="900" fill="#FFFFFF" text-anchor="middle">${escapeXml(sello1Bot)}</text>
         ` : ''}
 
@@ -86,24 +86,24 @@ export async function GET(req: Request) {
         ${sello2Top ? `
         <rect x="145" y="0" width="130" height="95" rx="12" fill="${sello2Color}" filter="url(#shadow)" />
         <text x="210" y="38" font-family="'Inter', sans-serif" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle">${escapeXml(sello2Top)}</text>
-        <text x="210" y="70" font-family="'Inter', sans-serif" font-size="24" font-weight="900" fill="#D4AF37" text-anchor="middle">${escapeXml(sello2Bot)}</text>
+        <text x="210" y="70" font-family="'Inter', sans-serif" font-size="24" font-weight="900" fill="#C9A961" text-anchor="middle">${escapeXml(sello2Bot)}</text>
         ` : ''}
 
         <!-- Sello 3 Dinámico -->
         ${sello3Top ? `
         <rect x="290" y="0" width="140" height="95" rx="12" fill="${sello3Color}" filter="url(#shadow)" />
-        <text x="360" y="38" font-family="'Inter', sans-serif" font-size="15" font-weight="800" fill="#FFFFFF" text-anchor="middle">${escapeXml(sello3Top)}</text>
-        <text x="360" y="70" font-family="'Inter', sans-serif" font-size="22" font-weight="900" fill="#F3E5AB" text-anchor="middle">${escapeXml(sello3Bot)}</text>
+        <text x="360" y="38" font-family="'Inter', sans-serif" font-size="15" font-weight="800" fill="#2D4A2B" text-anchor="middle">${escapeXml(sello3Top)}</text>
+        <text x="360" y="70" font-family="'Inter', sans-serif" font-size="22" font-weight="900" fill="#FFFFFF" text-anchor="middle">${escapeXml(sello3Bot)}</text>
         ` : ''}
       </g>
 
       <!-- Logo Oficial SAUCEDA Header (Tarjeta Derecha) -->
       <g filter="url(#shadow)" transform="translate(680, 20)">
-        <rect x="0" y="0" width="360" height="120" rx="16" fill="url(#headerNavy)" stroke="#D4AF37" stroke-width="4"/>
-        <circle cx="65" cy="60" r="42" fill="#D4AF37" />
-        <text x="65" y="76" font-family="'Inter', sans-serif" font-size="48" font-weight="900" fill="#0A192F" text-anchor="middle">S</text>
+        <rect x="0" y="0" width="360" height="120" rx="16" fill="url(#headerSauceda)" stroke="#C9A961" stroke-width="4"/>
+        <circle cx="65" cy="60" r="42" fill="#C9A961" />
+        <text x="65" y="76" font-family="'Inter', sans-serif" font-size="48" font-weight="900" fill="#2D4A2B" text-anchor="middle">S</text>
         <text x="130" y="70" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="#FFFFFF" letter-spacing="3">SAUCEDA</text>
-        <text x="130" y="98" font-family="'Inter', sans-serif" font-size="13" font-weight="800" fill="#D4AF37" letter-spacing="2">BIENES RAÍCES Y CONSTRUCCIÓN</text>
+        <text x="130" y="98" font-family="'Inter', sans-serif" font-size="13" font-weight="800" fill="#C9A961" letter-spacing="2">BIENES RAÍCES Y CONSTRUCCIÓN</text>
       </g>
 
       <!-- FOTO CENTRAL FOTORREALISTA DE FLUX -->
@@ -114,20 +114,20 @@ export async function GET(req: Request) {
 
       <!-- CALLOUT SUPERPUESTO DINÁMICO (Título y Subtítulo de Anuncio) -->
       <g filter="url(#shadow)" transform="translate(50, 890)">
-        <rect x="0" y="0" width="980" height="155" rx="20" fill="#FFFFFF" stroke="#0A192F" stroke-width="4" />
+        <rect x="0" y="0" width="980" height="155" rx="20" fill="#FFFFFF" stroke="#2D4A2B" stroke-width="4" />
         
         <text x="40" y="55" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="${colorDestacado}">
           ${tituloUpper.substring(0, 42)}
         </text>
-        <text x="40" y="105" font-family="'Inter', sans-serif" font-size="26" font-weight="800" fill="#0A192F">
+        <text x="40" y="105" font-family="'Inter', sans-serif" font-size="26" font-weight="800" fill="#0F172A">
           ${subEsc}
         </text>
 
-        <!-- Sello de Oferta Dinámico -->
+        <!-- Sello de Oferta Dinámico SAUCEDA -->
         <g transform="translate(740, 20)">
           <circle cx="100" cy="55" r="55" fill="${colorDestacado}" />
           <text x="100" y="45" font-family="'Inter', sans-serif" font-size="18" font-weight="900" fill="#FFFFFF" text-anchor="middle">COTIZA</text>
-          <text x="100" y="75" font-family="'Inter', sans-serif" font-size="24" font-weight="900" fill="#F3E5AB" text-anchor="middle">GRATIS</text>
+          <text x="100" y="75" font-family="'Inter', sans-serif" font-size="24" font-weight="900" fill="#C9A961" text-anchor="middle">GRATIS</text>
         </g>
       </g>
 
@@ -144,14 +144,14 @@ export async function GET(req: Request) {
           <text x="120" y="92" font-family="'Inter', sans-serif" font-size="38" font-weight="900" fill="#FFFFFF">${escapeXml(telefono)}</text>
         </g>
 
-        <!-- Botón de Atención/Sitio Web -->
+        <!-- Botón de Atención/Sitio Web Dorado SAUCEDA -->
         <g transform="translate(550, 45)">
           <rect x="0" y="0" width="480" height="120" rx="60" fill="url(#goldButtonGrad)" filter="url(#shadow)" />
-          <text x="240" y="52" font-family="'Inter', sans-serif" font-size="20" font-weight="800" fill="#0A192F" text-anchor="middle">Atención Inmediata:</text>
-          <text x="240" y="92" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="#0A192F" text-anchor="middle">SAUCEDA.com</text>
+          <text x="240" y="52" font-family="'Inter', sans-serif" font-size="20" font-weight="800" fill="#2D4A2B" text-anchor="middle">Atención Inmediata:</text>
+          <text x="240" y="92" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="#2D4A2B" text-anchor="middle">SAUCEDA.com</text>
         </g>
 
-        <text x="540" y="235" font-family="'Inter', sans-serif" font-size="22" font-weight="800" fill="#F3E5AB" text-anchor="middle" letter-spacing="2">
+        <text x="540" y="235" font-family="'Inter', sans-serif" font-size="22" font-weight="800" fill="#C9A961" text-anchor="middle" letter-spacing="2">
           📍 LEÓN, GUANAJUATO • TRASPASOS INFONAVIT • IMPERMEABILIZACIÓN • COMPRA DE CASAS
         </text>
       </g>

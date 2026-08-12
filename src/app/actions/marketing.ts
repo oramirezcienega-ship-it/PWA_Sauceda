@@ -392,7 +392,7 @@ INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
    - Suministro de Concreto Premezclado certificado para losas y firmes.
 
 INSTRUCCIONES VISUALES PARA GENERACIÓN EN FLUX:
-- En 'sugerencia_visual' describe escénicamente fotografías fotorrealistas publicitarias de alto impacto en León, Gto, con la paleta de colores de SAUCEDA: Azul Marino (#0A192F / #002855), acentos en Dorado elegante (#D4AF37) y Blanco puro.
+- En 'sugerencia_visual' describe escénicamente fotografías fotorrealistas publicitarias de alto impacto en León, Gto, incorporando sutilmente elementos arquitectónicos y la PALETA DE MARCA OFICIAL DE SAUCEDA: Verde Profundo (#2D4A2B), Verde Sauce (#5C7A52), acentos en Dorado Tierra (#C9A961) y Blanco puro.
 - Describe escenas realistas que transmitan VENTA E IMPACTO: parejas firmando escrituras con felicidad, entrega de llaves de casa, trabajadora aplicando impermeabilización blanca profesional en azotea con rodillo, o inspección técnica con acabado moderno. NUNCA pidas texto, letras o infografías dentro de la imagen.
 
 RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
@@ -409,13 +409,13 @@ Formato esperado:
       "titulo_ad": "IMPERMEABILIZACIÓN PROFESIONAL $210/M² | TRASPASO DIRECTO INFONAVIT",
       "subtitulo_ad": "Instalación en 1 día • Garantía 10 años por escrito • WhatsApp 477 465 4700",
       "sellos": [
-        { "texto_top": "GARANTÍA", "texto_bottom": "10 AÑOS", "color_fondo": "#0A192F" },
-        { "texto_top": "MARCA", "texto_bottom": "GTO", "color_fondo": "#1A365D" },
-        { "texto_top": "CALIDAD", "texto_bottom": "PRO 100%", "color_fondo": "#C53030" }
+        { "texto_top": "GARANTÍA", "texto_bottom": "10 AÑOS", "color_fondo": "#2D4A2B" },
+        { "texto_top": "MARCA", "texto_bottom": "GTO", "color_fondo": "#5C7A52" },
+        { "texto_top": "CALIDAD", "texto_bottom": "PRO 100%", "color_fondo": "#C9A961" }
       ],
       "cta_texto": "WhatsApp Directo:",
       "telefono_contacto": "477 465 4700",
-      "color_destacado": "#C53030"
+      "color_destacado": "#2D4A2B"
     }
   }
 ]`;
