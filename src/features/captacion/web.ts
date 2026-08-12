@@ -4,6 +4,7 @@ import { enviarBienvenida } from "@/lib/bienvenida";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -72,6 +73,7 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   }
   if (!prospectoId) {
     const id = await siguienteId(sb, "prospectos", "PRO");
+    const asesorId = await obtenerIdAsesorGerardo(sb);
     await sb.from("prospectos").insert({
       id,
       nombre,
@@ -80,6 +82,7 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
       telefono,
       correo,
       origen: "sitio-web",
+      asesor_id: asesorId,
     });
     prospectoId = id;
     // Automatizaciones: prospecto nuevo captado por el sitio web.
@@ -112,6 +115,7 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   // Token único y seguro para el enlace privado del cliente (/seguimiento/[token]).
   const token = crypto.randomUUID();
   const expId = await siguienteId(sb, "expedientes", "EXP");
+  const asesorId = await obtenerIdAsesorGerardo(sb);
   await sb.from("expedientes").insert({
     id: expId,
     token,
@@ -129,6 +133,7 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
     notas: "Lead entrante desde el sitio web (sección Cotizar).",
     ultimo_movimiento: hoyISO(),
     prospecto_id: prospectoId,
+    asesor_id: asesorId,
     tipo_credito: lead.tipoCredito || null,
     direccion_propiedad: lead.direccionPropiedad || null,
     link_google_maps: lead.linkGoogleMaps || null,
