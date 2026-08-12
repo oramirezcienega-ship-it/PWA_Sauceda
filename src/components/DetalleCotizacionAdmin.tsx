@@ -559,6 +559,7 @@ export function DetalleCotizacionAdmin({
             createdAt: new Date().toISOString()
           };
         }));
+        router.refresh();
       }
     } catch (err) {
       setMensajeConceptos({ tipo: "error", texto: err instanceof Error ? err.message : "Error al guardar conceptos" });
@@ -574,6 +575,7 @@ export function DetalleCotizacionAdmin({
       const res = await guardarCondicionesCotizacion(cotizacion.id, condicionesPago.trim(), garantia.trim());
       setCotizacion(res);
       setMensajeCondiciones({ tipo: "ok", texto: "Condiciones de servicio y garantía guardadas con éxito." });
+      router.refresh();
     } catch (err) {
       setMensajeCondiciones({ tipo: "error", texto: err instanceof Error ? err.message : "Error al guardar condiciones" });
     } finally {

@@ -620,7 +620,7 @@ export async function guardarConceptosCotizacion(
 
   const { data: cot, error: errCot } = await sb
     .from("cotizaciones")
-    .select("prospecto_id")
+    .select("prospecto_id, token, expediente_id")
     .eq("id", cotizacionId)
     .single();
 
@@ -677,6 +677,34 @@ export async function guardarConceptosCotizacion(
 
   if (errUpd) throw new Error(errUpd.message);
 
+  // Sincronizar remisión/factura existente si fue creada previamente
+  const { data: remExistente } = await sb
+    .from("remisiones_facturas")
+    .select("id, servicios_extra, folio, expediente_id")
+    .eq("cotizacion_id", cotizacionId)
+    .maybeSingle();
+
+  if (remExistente) {
+    const serviciosExtra = Number(remExistente.servicios_extra || 0);
+    const nuevoMontoTotal = totalPrecio + serviciosExtra;
+    await sb
+      .from("remisiones_facturas")
+      .update({
+        monto_subtotal: totalPrecio,
+        monto_total: nuevoMontoTotal,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", remExistente.id);
+
+    if (remExistente.expediente_id) {
+      await sb
+        .from("transacciones_financieras")
+        .update({ monto: nuevoMontoTotal })
+        .eq("expediente_id", remExistente.expediente_id)
+        .ilike("concepto", `%${remExistente.folio}%`);
+    }
+  }
+
   await sincronizarEtapaExpediente(sb, cotizacionId);
 
   await registrarActividad(sb, {
@@ -685,6 +713,8 @@ export async function guardarConceptosCotizacion(
     titulo: `Presupuesto calculado para cotización (${cotizacionId})`,
     detalle: `Costo interno: $${totalCosto.toFixed(2)}, Venta: $${totalPrecio.toFixed(2)}. Firmas reseteadas.`
   });
+
+  await revalidarRutasCotizacion(sb, cotizacionId, cot.token);
 
   return { ok: true, costoEstimado: totalCosto, precioFinal: totalPrecio };
 }
@@ -1039,6 +1069,44 @@ export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) 
   }
 }
 
+/** Helper para revalidar la caché de las páginas de cotización, remisión, garantía y expediente */
+export async function revalidarRutasCotizacion(sb: any, cotizacionId: string, tokenOptional?: string) {
+  try {
+    const { revalidatePath } = await import("next/cache");
+    let token = tokenOptional;
+    let expedienteId: string | null = null;
+    let prospectoId: string | null = null;
+
+    if (!token) {
+      const { data: cot } = await sb
+        .from("cotizaciones")
+        .select("token, expediente_id, prospecto_id")
+        .eq("id", cotizacionId)
+        .maybeSingle();
+
+      if (cot) {
+        token = cot.token;
+        expedienteId = cot.expediente_id;
+        prospectoId = cot.prospecto_id;
+      }
+    }
+
+    if (token) {
+      revalidatePath(`/cotizacion/${token}`);
+      revalidatePath(`/cotizacion/remision/${token}`);
+      revalidatePath(`/cotizacion/garantia/${token}`);
+      revalidatePath(`/reporte-visita/${token}`);
+    }
+    revalidatePath(`/construccion/${cotizacionId}`);
+    if (expedienteId) revalidatePath(`/expediente/${expedienteId}`);
+    if (prospectoId) revalidatePath(`/prospectos/${prospectoId}`);
+    revalidatePath("/construccion");
+    revalidatePath("/");
+  } catch (err) {
+    console.warn("No se pudo revalidar la caché de rutas de cotización:", err);
+  }
+}
+
 /** 12. Guardar Condiciones Comerciales y Garantía */
 export async function guardarCondicionesCotizacion(
   id: string,
@@ -1066,6 +1134,7 @@ export async function guardarCondicionesCotizacion(
     .single();
 
   if (error) throw new Error(error.message);
+  await revalidarRutasCotizacion(sb, id, data.token);
   return aCotizacion(data);
 }
 
@@ -1202,6 +1271,7 @@ export async function crearRemisionFactura(
     });
   }
 
+  await revalidarRutasCotizacion(sb, cotizacionId, cot.token);
   return { ok: true, id: doc.id };
 }
 
@@ -1355,6 +1425,7 @@ export async function editarRemisionFactura(
     if (errIns) console.error("Error al re-registrar transacciones financieras:", errIns.message);
   }
 
+  await revalidarRutasCotizacion(sb, rem.cotizacion_id);
   return { ok: true };
 }
 
@@ -1538,6 +1609,7 @@ export async function guardarGarantiaDocumento(
       .eq("id", existente.id);
 
     if (error) throw new Error(error.message);
+    await revalidarRutasCotizacion(sb, cotizacionId);
     return { ok: true, id: existente.id };
   } else {
     const { data: nueva, error } = await sb
@@ -1552,6 +1624,7 @@ export async function guardarGarantiaDocumento(
       .single();
 
     if (error) throw new Error(error.message);
+    await revalidarRutasCotizacion(sb, cotizacionId);
     return { ok: true, id: nueva.id };
   }
 }
@@ -1658,6 +1731,24 @@ export async function obtenerRemisionPorToken(
 
   if (errConcs) throw new Error(errConcs.message);
 
+  const conceptosLista = (concs ?? []).map((c) => ({
+    id: c.id,
+    cotizacionId: c.cotizacion_id,
+    descripcion: c.descripcion,
+    unidad: c.unidad,
+    cantidad: Number(c.cantidad || 0),
+    costoUnitario: Number(c.costo_unitario || 0),
+    precioUnitario: Number(c.precio_unitario || 0),
+    descuento: Number(c.descuento || 0),
+    importe: Number(c.importe || 0),
+    createdAt: c.created_at
+  }));
+
+  const subtotalConceptos = conceptosLista.reduce((sum, c) => sum + c.importe, 0);
+  const montoSubtotalCalculado = subtotalConceptos > 0 ? subtotalConceptos : (Number(cot.precio_final || 0) || Number(rem.monto_subtotal || 0));
+  const serviciosExtra = Number(rem.servicios_extra || 0);
+  const montoTotalCalculado = montoSubtotalCalculado + serviciosExtra;
+
   return {
     cotizacion: {
       id: cot.id,
@@ -1690,26 +1781,15 @@ export async function obtenerRemisionPorToken(
       fecha: rem.fecha,
       tipoCambio: Number(rem.tipo_cambio || 1.0),
       datosDocumento: rem.datos_documento || {},
-      serviciosExtra: Number(rem.servicios_extra || 0),
+      serviciosExtra,
       costoFinanciero: Number(rem.costo_financiero || 0),
       otrosGastos: Number(rem.otros_gastos || 0),
-      montoSubtotal: Number(rem.monto_subtotal || 0),
-      montoTotal: Number(rem.monto_total || 0),
+      montoSubtotal: montoSubtotalCalculado,
+      montoTotal: montoTotalCalculado,
       createdAt: rem.created_at,
       updatedAt: rem.updated_at
     },
-    conceptos: (concs ?? []).map((c) => ({
-      id: c.id,
-      cotizacionId: c.cotizacion_id,
-      descripcion: c.descripcion,
-      unidad: c.unidad,
-      cantidad: Number(c.cantidad || 0),
-      costoUnitario: Number(c.costo_unitario || 0),
-      precioUnitario: Number(c.precio_unitario || 0),
-      descuento: Number(c.descuento || 0),
-      importe: Number(c.importe || 0),
-      createdAt: c.created_at
-    }))
+    conceptos: conceptosLista
   };
 }
 
