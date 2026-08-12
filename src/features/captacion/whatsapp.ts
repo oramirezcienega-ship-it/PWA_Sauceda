@@ -6,6 +6,7 @@ import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { detectarTipoNegocio } from "@/lib/types";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 
 /** Dispara asíncronamente el procesamiento de respuesta de la IA en segundo plano */
 export async function triggerResponderBackground(
@@ -227,6 +228,7 @@ async function obtenerOCrearProspecto(
   }
 
   const id = await siguienteIdProspecto(sb);
+  const asesorId = await obtenerIdAsesorGerardo(sb);
   await sb.from("prospectos").insert({
     id,
     nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
@@ -235,6 +237,7 @@ async function obtenerOCrearProspecto(
     campaign_name,
     adset_name,
     ad_name,
+    asesor_id: asesorId,
   });
   // Automatizaciones: prospecto nuevo captado por WhatsApp.
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
@@ -463,6 +466,7 @@ export async function registrarLeadWhatsApp(
   }
 
   const id = await siguienteId(sb);
+  const asesorId = await obtenerIdAsesorGerardo(sb);
   const tipoNegocio = detectarTipoNegocio(
     lead.mensaje ?? "",
     [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
@@ -485,6 +489,7 @@ export async function registrarLeadWhatsApp(
     adset_name,
     ad_name,
     tipo_negocio: tipoNegocio,
+    asesor_id: asesorId,
   });
 
   const { sincronizarEstatusProspecto } = await import("@/lib/prospectos-status");
