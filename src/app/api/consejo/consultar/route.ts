@@ -4,11 +4,120 @@ import { supabaseServidor } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Realiza llamadas a la IA respetando IA_PROVEEDOR (Kimi, Anthropic, Ollama).
+ */
+async function llamarIA({
+  systemPrompt,
+  userPrompt,
+  maxTokens = 1200,
+}: {
+  systemPrompt: string;
+  userPrompt: string;
+  maxTokens?: number;
+}): Promise<string> {
+  const proveedor = (
+    process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic")
+  ).toLowerCase();
+
+  if (proveedor === "kimi" && process.env.KIMI_API_KEY) {
+    const apiKey = process.env.KIMI_API_KEY;
+    const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
+    const model = process.env.KIMI_MODEL || "kimi-k3";
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Kimi API (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    return (data.choices?.[0]?.message?.content || "").trim();
+  } else if (proveedor === "ollama" && process.env.OLLAMA_URL) {
+    const url = process.env.OLLAMA_URL;
+    const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        stream: false,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Ollama (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    return (data.choices?.[0]?.message?.content || data.message?.content || "").trim();
+  } else {
+    // Anthropic / Claude
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error("Falta API Key de IA (ANTHROPIC_API_KEY / KIMI_API_KEY) en las variables de entorno.");
+    }
+
+    let model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+    if (model.includes("claude-sonnet-4-6") || model.includes("claude-haiku-4-5")) {
+      model = "claude-3-5-sonnet-20241022";
+    }
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Anthropic (${res.status}): ${text}`);
+    }
+
+    const data = await res.json();
+    return (data.content?.[0]?.text || "").trim();
+  }
+}
+
 export async function POST(req: Request) {
   try {
     // 1. Validar autenticación y rol de administrador en el servidor
     const sbSesion = supabaseSesion();
-    const { data: { user }, error: authError } = await sbSesion.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await sbSesion.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
@@ -44,17 +153,7 @@ export async function POST(req: Request) {
 
     const projectContext = proyecto.context || "";
 
-    // 4. Configurar llamadas a la API de Anthropic (Claude)
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno." },
-        { status: 500 }
-      );
-    }
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
-
-    // 5. Crear stream de respuesta (NDJSON)
+    // 4. Crear stream de respuesta (NDJSON)
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -78,7 +177,6 @@ export async function POST(req: Request) {
           const promesasAsesores = activeAdvisors.map(async (advisor) => {
             sendChunk({ type: "advisor_start", name: advisor.name });
 
-            // El contexto del proyecto se inyecta en el system prompt
             const systemPrompt = `Contexto del Proyecto:
 ${projectContext}
 
@@ -88,37 +186,14 @@ ${advisor.prompt}
 Instrucción importante: Responde en español de forma directa, analítica, profesional y estructurada según tu área de especialidad. Evita saludos generales y ve al grano con pros, contras, riesgos y recomendaciones específicas para la alternativa.`;
 
             try {
-              const res = await fetch("https://api.anthropic.com/v1/messages", {
-                method: "POST",
-                headers: {
-                  "x-api-key": apiKey,
-                  "anthropic-version": "2023-06-01",
-                  "content-type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: model,
-                  max_tokens: 1000,
-                  system: systemPrompt,
-                  messages: [
-                    {
-                      role: "user",
-                      content: `Pregunta o hipótesis a evaluar: "${question}"`,
-                    },
-                  ],
-                }),
+              const textResponse = await llamarIA({
+                systemPrompt,
+                userPrompt: `Pregunta o hipótesis a evaluar: "${question}"`,
+                maxTokens: 1000,
               });
-
-              if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Anthropic error: ${res.status} - ${text}`);
-              }
-
-              const data = await res.json();
-              const textResponse = data.content?.[0]?.text || "Sin respuesta.";
 
               opinions[advisor.name] = textResponse;
 
-              // Emitir opinión en cuanto se genera para el streaming visual
               sendChunk({
                 type: "advisor_done",
                 name: advisor.name,
@@ -160,33 +235,11 @@ Genera el veredicto final consolidado. Sé claro y concluyente. Explica los pros
 
           let verdict = "";
           try {
-            const res = await fetch("https://api.anthropic.com/v1/messages", {
-              method: "POST",
-              headers: {
-                "x-api-key": apiKey,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                model: model,
-                max_tokens: 1500,
-                system: systemPresident,
-                messages: [
-                  {
-                    role: "user",
-                    content: promptPresident,
-                  },
-                ],
-              }),
+            verdict = await llamarIA({
+              systemPrompt: systemPresident,
+              userPrompt: promptPresident,
+              maxTokens: 1500,
             });
-
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error(`Anthropic error (President): ${res.status} - ${text}`);
-            }
-
-            const data = await res.json();
-            verdict = data.content?.[0]?.text || "No se pudo generar el veredicto.";
 
             sendChunk({
               type: "verdict",
@@ -228,6 +281,9 @@ Genera el veredicto final consolidado. Sé claro y concluyente. Explica los pros
             sendChunk({
               type: "done",
               alternativeId: alternativa.id,
+              alternative: alternativa,
+              opinions: opinions,
+              verdict: verdict,
             });
           }
         } catch (err) {
@@ -246,7 +302,7 @@ Genera el veredicto final consolidado. Sé claro y concluyente. Explica los pros
       headers: {
         "Content-Type": "application/x-ndjson",
         "Cache-Control": "no-cache, no-transform",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
       },
     });
   } catch (err) {
@@ -257,3 +313,4 @@ Genera el veredicto final consolidado. Sé claro y concluyente. Explica los pros
     );
   }
 }
+

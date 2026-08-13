@@ -239,7 +239,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       ultimaFecha: ultimo.created_at,
       ventanaAbierta: ventanaAbierta(arr),
       ultimoInboundFecha: ultimoInbound?.created_at ?? null,
-      finalizado: (ultimo.finalizado ?? false) || !ventanaAbierta(arr),
+      finalizado: ultimo.finalizado ?? false,
       atiende: atiendeFinal,
       ultimaDireccion: ultimo.direccion,
     });
@@ -481,7 +481,7 @@ export async function obtenerConversacion(
     ventanaAbierta: ventanaAbierta(filas),
     mensajes,
     ultimoInboundFecha: ultimoInbound?.created_at ?? null,
-    finalizado: (ultimo?.finalizado ?? false) || !ventanaAbierta(filas),
+    finalizado: ultimo?.finalizado ?? false,
     nombreExpediente: nombreExpediente || undefined,
     nombreProspecto: nombreProspecto || undefined,
     atiende: atiendeFinal,

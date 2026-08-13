@@ -36,6 +36,7 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
   const [filtroFraccionamiento, setFiltroFraccionamiento] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [ordenFecha, setOrdenFecha] = useState<"desc" | "asc">("desc"); // 'desc' (más recientes primero) por defecto
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const router = useRouter();
 
@@ -94,8 +95,9 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
     if (filtroFraccionamiento !== "todos") count++;
     if (fechaDesde) count++;
     if (fechaHasta) count++;
+    if (ordenFecha !== "desc") count++;
     return count;
-  }, [busqueda, filtroEstatus, filtroCalificacion, filtroFraccionamiento, fechaDesde, fechaHasta]);
+  }, [busqueda, filtroEstatus, filtroCalificacion, filtroFraccionamiento, fechaDesde, fechaHasta, ordenFecha]);
 
   // Obtener fraccionamientos únicos para el dropdown
   const fraccionamientos = useMemo(() => {
@@ -105,9 +107,9 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
     return Array.from(new Set(lista)).sort();
   }, [leadsIniciales]);
 
-  // Filtrado de leads
+  // Filtrado y ordenamiento de leads
   const leadsFiltrados = useMemo(() => {
-    return leadsIniciales.filter((l) => {
+    const filtrados = leadsIniciales.filter((l) => {
       // 1. Filtro por búsqueda de texto (Nombre o Teléfono)
       if (busqueda) {
         const query = busqueda.toLowerCase();
@@ -154,7 +156,14 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
 
       return true;
     });
-  }, [leadsIniciales, busqueda, filtroEstatus, filtroCalificacion, filtroFraccionamiento, fechaDesde, fechaHasta]);
+
+    // Ordenar por fecha (desc por defecto: los más recientes arriba)
+    return filtrados.sort((a, b) => {
+      const timeA = new Date(a.fechaCreacion || a.fechaAsignacion || 0).getTime();
+      const timeB = new Date(b.fechaCreacion || b.fechaAsignacion || 0).getTime();
+      return ordenFecha === "desc" ? timeB - timeA : timeA - timeB;
+    });
+  }, [leadsIniciales, busqueda, filtroEstatus, filtroCalificacion, filtroFraccionamiento, fechaDesde, fechaHasta, ordenFecha]);
 
   const tieneFiltrosActivos =
     busqueda !== "" ||
@@ -162,7 +171,8 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
     filtroCalificacion !== "todos" ||
     filtroFraccionamiento !== "todos" ||
     fechaDesde !== "" ||
-    fechaHasta !== "";
+    fechaHasta !== "" ||
+    ordenFecha !== "desc";
 
   const limpiarFiltros = () => {
     setBusqueda("");
@@ -171,6 +181,7 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
     setFiltroFraccionamiento("todos");
     setFechaDesde("");
     setFechaHasta("");
+    setOrdenFecha("desc");
   };
 
   return (
@@ -206,7 +217,7 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
       {/* Barra de Filtros (Colapsable) */}
       {mostrarFiltros && (
         <div className="rounded-xl border border-carbon/10 bg-carbon/[0.02] p-4 transition-all duration-300">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7">
             {/* Búsqueda */}
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Buscar</label>
@@ -217,6 +228,19 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
                 onChange={(e) => setBusqueda(e.target.value)}
                 className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs text-carbon placeholder-carbon/40 focus:border-sauce focus:outline-none"
               />
+            </div>
+
+            {/* Orden por Fecha */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-carbon/50">Orden por Fecha</label>
+              <select
+                value={ordenFecha}
+                onChange={(e) => setOrdenFecha(e.target.value as "desc" | "asc")}
+                className="rounded-lg border border-carbon/20 bg-white px-2.5 py-1.5 text-xs text-carbon font-semibold text-verde-profundo focus:border-sauce focus:outline-none"
+              >
+                <option value="desc">Más recientes primero (▼)</option>
+                <option value="asc">Más antiguos primero (▲)</option>
+              </select>
             </div>
 
             {/* Estatus */}
@@ -307,7 +331,18 @@ export function ListadoLeadsDashboard({ leadsIniciales }: ListadoLeadsDashboardP
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="border-b border-carbon/10 text-xs font-semibold uppercase tracking-wider text-carbon/40">
-                <th className="pb-3">Nombre / Contacto</th>
+                <th
+                  className="pb-3 cursor-pointer hover:text-sauce select-none group"
+                  onClick={() => setOrdenFecha((prev) => (prev === "desc" ? "asc" : "desc"))}
+                  title="Haz clic para cambiar el orden por fecha"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Nombre / Contacto</span>
+                    <span className="text-[10px] font-bold text-sauce bg-sauce/10 px-1.5 py-0.5 rounded">
+                      {ordenFecha === "desc" ? "▼ Más recientes" : "▲ Más antiguos"}
+                    </span>
+                  </div>
+                </th>
                 <th className="pb-3">Detalle Expediente</th>
                 <th className="pb-3">Tipo de Negocio</th>
                 <th className="pb-3">Calificación</th>
