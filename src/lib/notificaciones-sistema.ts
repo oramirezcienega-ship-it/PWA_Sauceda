@@ -1,6 +1,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { notificarAgenteEmail } from "@/lib/email";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, listarPlantillasAprobadas } from "@/lib/whatsapp";
+import { labelTipoNegocio } from "@/lib/types";
 
 /**
  * Despachador central de notificaciones para eventos del sistema.
@@ -14,7 +15,7 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
     // 1. Obtener la información del expediente y su prospecto asociado
     const { data: exp, error: errExp } = await sb
       .from("expedientes")
-      .select("id, cliente, telefono, valor_estimado, saldo_deuda, tipo_credito, fraccionamiento, situacion, prospecto_id, prospectos(origen, correo)")
+      .select("id, cliente, telefono, valor_estimado, saldo_deuda, tipo_credito, fraccionamiento, situacion, prospecto_id, tipo_negocio, campaign_name, adset_name, ad_name, prospectos(origen, correo, campaign_name, adset_name, ad_name)")
       .eq("id", expedienteId)
       .maybeSingle();
 
@@ -33,7 +34,17 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
       fraccionamiento?: string | null;
       situacion: string;
       prospecto_id: string | null;
-      prospectos?: { origen: string; correo: string } | null;
+      tipo_negocio?: string | null;
+      campaign_name?: string | null;
+      adset_name?: string | null;
+      ad_name?: string | null;
+      prospectos?: { 
+        origen: string; 
+        correo: string;
+        campaign_name?: string | null;
+        adset_name?: string | null;
+        ad_name?: string | null;
+      } | null;
     };
 
     const cliente = d.cliente || "Nuevo Lead";
@@ -190,6 +201,20 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
           valorEst > 0 ? `$${valorEst.toLocaleString()}` : "No especificado",
           saldoDeu > 0 ? `$${saldoDeu.toLocaleString()}` : "No especificada",
           situacion.slice(0, 200).replace(/[\r\n\t]/g, " ")
+        ];
+      } else if (bodyParamCount === 6) {
+        const campana = d.campaign_name || d.prospectos?.campaign_name || "No especificada";
+        const adset = d.adset_name || d.prospectos?.adset_name || "No especificado";
+        const ad = d.ad_name || d.prospectos?.ad_name || "No especificado";
+        const negocio = labelTipoNegocio(d.tipo_negocio || "");
+
+        parametrosCuerpo = [
+          cliente,
+          telefonoCliente || "No registrado",
+          negocio || "Otro",
+          campana.slice(0, 100).replace(/[\r\n\t]/g, " "),
+          adset.slice(0, 100).replace(/[\r\n\t]/g, " "),
+          ad.slice(0, 100).replace(/[\r\n\t]/g, " ")
         ];
       } else {
         if (tieneBotonDinamico) {
