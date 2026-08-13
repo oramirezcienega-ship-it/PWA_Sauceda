@@ -81,6 +81,28 @@ function nombreDe(e: {
     .join(" ");
 }
 
+/**
+ * Mapa id → dueño (asesor_id u operador_id) de una tabla, consultando por
+ * lotes pequeños para no exceder el largo máximo de la URL de PostgREST.
+ */
+async function duenosPorIds(
+  sb: ReturnType<typeof supabaseServidor>,
+  tabla: "expedientes" | "prospectos",
+  ids: string[],
+  colId: "asesor_id" | "operador_id",
+): Promise<Map<string, string | null>> {
+  const mapa = new Map<string, string | null>();
+  const LOTE = 100;
+  for (let i = 0; i < ids.length; i += LOTE) {
+    const lote = ids.slice(i, i + LOTE);
+    const { data } = await sb.from(tabla).select(`id, ${colId}`).in("id", lote);
+    ((data as any[]) ?? []).forEach((r) =>
+      mapa.set(r.id as string, (r[colId] as string | null) ?? null),
+    );
+  }
+  return mapa;
+}
+
 /** Lista las conversaciones (una por teléfono, con su último mensaje). */
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   await requireAdmin();
@@ -89,41 +111,47 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
-  let query = sb.from("mensajes_whatsapp").select("*");
-
-  if (rol === "asesor" || rol === "operaciones") {
-    const colId = rol === "asesor" ? "asesor_id" : "operador_id";
-
-    // Incluir expedientes asignados al usuario O sin asignar (null)
-    const { data: exps } = await sb
-      .from("expedientes")
-      .select("id")
-      .or(`${colId}.eq.${usuario.id},${colId}.is.null`);
-    const expIds = (exps ?? []).map((e) => e.id);
-
-    // Incluir prospectos asignados al usuario O sin asignar (null)
-    const { data: pros } = await sb
-      .from("prospectos")
-      .select("id")
-      .or(`${colId}.eq.${usuario.id},${colId}.is.null`);
-    const prosIds = (pros ?? []).map((p) => p.id);
-
-    const orFilters: string[] = ["expediente_id.is.null", "prospecto_id.is.null"];
-    if (expIds.length > 0) {
-      orFilters.push(`expediente_id.in.(${expIds.join(",")})`);
-    }
-    if (prosIds.length > 0) {
-      orFilters.push(`prospecto_id.in.(${prosIds.join(",")})`);
-    }
-
-    query = query.or(orFilters.join(","));
-  }
-
-  const { data, error } = await query
+  const { data, error } = await sb
+    .from("mensajes_whatsapp")
+    .select("*")
     .order("created_at", { ascending: false })
     .limit(1000);
   if (error) throw new Error(error.message);
-  const filas = (data as FilaMsg[]) ?? [];
+  let filas = (data as FilaMsg[]) ?? [];
+
+  // Filtrado por rol EN MEMORIA. Antes se construía un `.or()` con miles de
+  // UUIDs incrustados en la URL de PostgREST; al crecer los prospectos
+  // asignados, la URL excedía el límite, la consulta fallaba y los asesores
+  // veían la bandeja vacía.
+  if (rol === "asesor" || rol === "operaciones") {
+    const colId = rol === "asesor" ? ("asesor_id" as const) : ("operador_id" as const);
+
+    const idsExp = Array.from(
+      new Set(filas.map((f) => f.expediente_id).filter(Boolean) as string[]),
+    );
+    const idsPros = Array.from(
+      new Set(filas.map((f) => f.prospecto_id).filter(Boolean) as string[]),
+    );
+
+    const duenosExp = await duenosPorIds(sb, "expedientes", idsExp, colId);
+    const duenosPros = await duenosPorIds(sb, "prospectos", idsPros, colId);
+
+    // Mismo criterio que antes: visible si el expediente o el prospecto está
+    // sin enlazar, sin asignar (null) o asignado al usuario actual.
+    filas = filas.filter((f) => {
+      const duenoExp = f.expediente_id ? duenosExp.get(f.expediente_id) : undefined;
+      const expOk =
+        !f.expediente_id ||
+        (duenosExp.has(f.expediente_id) &&
+          (duenoExp == null || duenoExp === usuario.id));
+      const duenoPros = f.prospecto_id ? duenosPros.get(f.prospecto_id) : undefined;
+      const prosOk =
+        !f.prospecto_id ||
+        (duenosPros.has(f.prospecto_id) &&
+          (duenoPros == null || duenoPros === usuario.id));
+      return expOk || prosOk;
+    });
+  }
 
   // Agrupa por los últimos 10 dígitos del teléfono (o canal social) para asociar in/out unívocamente.
   const porTel = new Map<string, FilaMsg[]>();
