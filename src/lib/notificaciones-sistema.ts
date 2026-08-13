@@ -124,7 +124,7 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
 
     // 5. Notificaciones por WhatsApp (vía Meta Cloud API con Plantilla)
     try {
-      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead_v2";
+      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead_v3";
       const plantillaIdioma = process.env.WHATSAPP_TEMPLATE_AGENTE_LANG || "es";
 
       // Intentar obtener info de la plantilla en Meta para mapear parámetros correctamente
@@ -379,7 +379,7 @@ export async function notificarAsignacionAsesor(
 
     // 3. Notificación de WhatsApp
     try {
-      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead_v2";
+      const plantillaNombre = process.env.WHATSAPP_TEMPLATE_AGENTE_NOTIF || "notificacion_nuevo_lead_v3";
       const plantillaIdioma = process.env.WHATSAPP_TEMPLATE_AGENTE_LANG || "es";
 
       let bodyParamCount = 3;
