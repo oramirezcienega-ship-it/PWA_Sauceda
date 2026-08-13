@@ -448,6 +448,13 @@ export async function resumenAsesor(
     };
   });
 
+  // Ordenar leads asignados por fecha de creación/asignación descendente (los más recientes primero)
+  leadsAsignados.sort((a, b) => {
+    const timeA = new Date(a.fechaCreacion || a.fechaAsignacion || 0).getTime();
+    const timeB = new Date(b.fechaCreacion || b.fechaAsignacion || 0).getTime();
+    return timeB - timeA;
+  });
+
   // 6. Consultar los expedientes asociados a las tareas para ver cuántos están cerrados (conversión)
   let cerrados = 0;
   const expIdsArray = Array.from(expedienteIds);

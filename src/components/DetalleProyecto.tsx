@@ -11,6 +11,7 @@ import {
   eliminarProyecto,
   guardarAsesores,
   actualizarAlternativa,
+  obtenerAlternativas,
 } from "@/app/actions/consejo";
 
 interface DetalleProyectoProps {
@@ -51,7 +52,7 @@ export function DetalleProyecto({
   const [streaming, setStreaming] = useState(false);
   const [streamError, setStreamError] = useState("");
   const [streamStatus, setStreamStatus] = useState("");
-  
+
   // Detalle de streaming en vivo
   const [streamingAdvisors, setStreamingAdvisors] = useState<
     Record<string, { status: "esperando" | "analizando" | "completado" | "error"; opinion: string }>
@@ -196,6 +197,10 @@ export function DetalleProyecto({
     setStreamingAdvisors(initAdvisors);
     setStreamingVerdict({ status: "esperando", verdict: "" });
 
+    // Acumuladores locales para evitar cierres obsoletos (stale closures) en React
+    const opinionesAcumuladas: Record<string, string> = {};
+    let veredictoAcumulado = "";
+
     try {
       const response = await fetch("/api/consejo/consultar", {
         method: "POST",
@@ -240,6 +245,9 @@ export function DetalleProyecto({
                 [data.name]: { ...prev[data.name], status: "analizando" },
               }));
             } else if (data.type === "advisor_done") {
+              if (data.opinion) {
+                opinionesAcumuladas[data.name] = data.opinion;
+              }
               setStreamingAdvisors((prev) => ({
                 ...prev,
                 [data.name]: {
@@ -250,6 +258,9 @@ export function DetalleProyecto({
             } else if (data.type === "president_start") {
               setStreamingVerdict((prev) => ({ ...prev, status: "analizando" }));
             } else if (data.type === "verdict") {
+              if (data.verdict) {
+                veredictoAcumulado = data.verdict;
+              }
               setStreamingVerdict({
                 status: data.error ? "error" : "completado",
                 verdict: data.verdict,
@@ -259,28 +270,36 @@ export function DetalleProyecto({
             } else if (data.type === "done") {
               // Completado con éxito!
               setStreamStatus("¡Consulta finalizada y guardada!");
-              // Recargar la lista de alternativas desde la base de datos
-              const res = await fetch(`/api/consejo/consultar?reload=${proyecto.id}`).catch(() => null);
-              
-              // Agregar temporalmente la alternativa localmente para feedback inmediato
-              const nuevaAlt: AlternativaConsejo = {
+
+              const opinionesFinales = data.opinions || opinionesAcumuladas;
+              const veredictoFinal = data.verdict || veredictoAcumulado;
+
+              const nuevaAlt: AlternativaConsejo = data.alternative || {
                 id: data.alternativeId,
                 project_id: proyecto.id,
                 question: preguntaConsulta.trim(),
-                opinions: Object.keys(streamingAdvisors).reduce((acc, name) => {
-                  acc[name] = streamingAdvisors[name]?.opinion || "";
-                  return acc;
-                }, {} as Record<string, string>),
-                verdict: streamingVerdict.verdict,
+                opinions: opinionesFinales,
+                verdict: veredictoFinal,
                 admin_notes: "",
                 status: "Pendiente revisión",
                 created_at: new Date().toISOString(),
               };
 
-              setAlternativas((prev) => [nuevaAlt, ...prev]);
+              // Intentar recargar directo desde Supabase mediante Server Action
+              try {
+                const altsActualizadas = await obtenerAlternativas(proyecto.id);
+                if (altsActualizadas && altsActualizadas.length > 0) {
+                  setAlternativas(altsActualizadas);
+                } else {
+                  setAlternativas((prev) => [nuevaAlt, ...prev]);
+                }
+              } catch (e) {
+                setAlternativas((prev) => [nuevaAlt, ...prev]);
+              }
+
               // Expandir la nueva alternativa
               setAlternativasAbiertas((prev) => ({ ...prev, [nuevaAlt.id]: true }));
-              
+
               // Cerrar modal tras un breve retraso
               setTimeout(() => {
                 setModalConsulta(false);
