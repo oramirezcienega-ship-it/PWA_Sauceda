@@ -78,7 +78,7 @@ export function SecuenciasClient() {
 
   // Estado para el Monitoreo en Tiempo Real (Analytics)
   const [filtroEstadoMonitoreo, setFiltroEstadoMonitoreo] = useState<"todos" | "activo" | "respondio" | "otros">("todos");
-  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "otro">("todos");
+  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "construccion-piso-estampado" | "otro">("todos");
   const [busquedaLeadMonitoreo, setBusquedaLeadMonitoreo] = useState("");
 
   const enrollmentsFiltrados = useMemo(() => {
@@ -753,6 +753,7 @@ export function SecuenciasClient() {
                     <option value="construccion">Sauceda Construye (General)</option>
                     <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
                     <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
+                    <option value="construccion-piso-estampado">Sauceda Construye (Piso Estampado)</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
@@ -1156,6 +1157,7 @@ export function SecuenciasClient() {
                       <option value="construccion">Sauceda Construye (General)</option>
                       <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
                       <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
+                      <option value="construccion-piso-estampado">Sauceda Construye (Piso Estampado)</option>
                       <option value="otro">Otro</option>
                     </select>
                     
