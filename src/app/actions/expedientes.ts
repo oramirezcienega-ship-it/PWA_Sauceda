@@ -1304,6 +1304,9 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "construccion-impermeabilizacion": "Impermeabilización",
     "construccion_impermeabilizacion": "Impermeabilización",
     "impermeabilizacion": "Impermeabilización",
+    "construccion-piso-estampado": "Piso Estampado",
+    "construccion_piso_estampado": "Piso Estampado",
+    "piso_estampado": "Piso Estampado",
   };
 
   const etapaLabels: Record<string, string> = {

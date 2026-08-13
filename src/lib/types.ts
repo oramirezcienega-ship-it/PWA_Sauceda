@@ -40,6 +40,7 @@ export type TipoNegocioId =
   | "construccion"
   | "construccion-impermeabilizacion"
   | "construccion-remodelacion"
+  | "construccion-piso-estampado"
   | "otro";
 
 export function labelTipoNegocio(tipo: string): string {
@@ -56,6 +57,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Impermeabilización)";
     case "construccion-remodelacion":
       return "Sauceda Construye (Remodelación)";
+    case "construccion-piso-estampado":
+      return "Sauceda Construye (Piso Estampado)";
     case "otro":
       return "Otro";
     default:
@@ -70,7 +73,16 @@ export function labelTipoNegocio(tipo: string): string {
 export function detectarTipoNegocio(mensaje: string, campaignName?: string): TipoNegocioId {
   const texto = `${mensaje} ${campaignName ?? ""}`.toLowerCase();
 
-  // 1. Remodelación
+  // 1. Piso Estampado / Concreto Estampado (Alta prioridad por Adset/Campaña/Mensaje)
+  if (
+    texto.includes("concreto estampado") ||
+    texto.includes("piso estampado") ||
+    texto.includes("estampado")
+  ) {
+    return "construccion-piso-estampado";
+  }
+
+  // 2. Remodelación
   if (
     texto.includes("remodela") ||
     texto.includes("remodelacion") ||

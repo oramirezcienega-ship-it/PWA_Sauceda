@@ -666,6 +666,7 @@ export default function PaginaGerenteOperaciones() {
                         <option value="construccion">Sauceda Construye (General)</option>
                         <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
                         <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
+                        <option value="construccion-piso-estampado">Sauceda Construye (Piso Estampado)</option>
                         <option value="otro">Otro</option>
                       </select>
                     </div>
