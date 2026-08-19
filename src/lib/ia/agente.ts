@@ -26,6 +26,8 @@ const MAX_HISTORIAL = 20;
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
+  const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+  if (esStaging) return true;
   return Boolean(process.env.ANTHROPIC_API_KEY) || Boolean(process.env.KIMI_API_KEY) || process.env.IA_PROVEEDOR === "ollama";
 }
 
@@ -42,18 +44,24 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
   }
 
   let proveedor = process.env.IA_PROVEEDOR || "anthropic";
-  try {
-    const sb = supabaseServidor();
-    const { data } = await sb
-      .from("configuracion_agente")
-      .select("valor")
-      .eq("clave", "ia_proveedor")
-      .maybeSingle();
-    if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
-      proveedor = data.valor.trim();
+  const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+
+  if (esStaging) {
+    proveedor = "ollama";
+  } else {
+    try {
+      const sb = supabaseServidor();
+      const { data } = await sb
+        .from("configuracion_agente")
+        .select("valor")
+        .eq("clave", "ia_proveedor")
+        .maybeSingle();
+      if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
+        proveedor = data.valor.trim();
+      }
+    } catch (err) {
+      console.error("Error al obtener proveedor en diagnosticoIA:", err);
     }
-  } catch (err) {
-    console.error("Error al obtener proveedor en diagnosticoIA:", err);
   }
 
   if (proveedor === "kimi") {
@@ -410,8 +418,12 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
   3. ¿En qué colonia o zona de León estás ubicado?
   4. Menciona de forma cálida que en SAUCEDA Construcción contamos con una amplia variedad de moldes, texturas y colores con acabado estético de alta durabilidad y resistencia, y que un asesor de nuestro equipo le contactará a la brevedad por este chat para coordinar una visita técnica en su domicilio con muestrarios y darle un presupuesto exacto sin compromiso.
 
-REGLA DE CALCULADORA DE IMPERMEABILIZACIÓN:
-  Si el cliente tiene dudas sobre las dimensiones de su azotea, no conoce sus metros cuadrados, o prefiere estimar el costo él mismo ingresando el largo y ancho de su propiedad, compártele amablemente el enlace a nuestra calculadora interactiva: https://saucedamx.com/calculadora
+REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
+  Si el cliente no conoce las medidas de su azotea, no tiene las dimensiones exactas, o menciona que no puede obtenerlas (por ejemplo, porque no vive en el domicilio o tiene la casa rentada), bajo NINGUNA circunstancia debes sugerirle que mida él mismo, ni pedirle largo y ancho, ni compartirle enlaces a la calculadora.
+  En su lugar, ofrécele de manera amable y directa coordinar una inspección técnica gratuita y sin compromiso para que nuestro equipo acuda al domicilio a tomar las medidas exactas. Para ello, solicita amablemente:
+  1. El nombre del prospecto (si aún no se ha registrado).
+  2. La dirección completa de la propiedad (calle, número y colonia) en León, Gto, para poder programar la visita.
+  Menciona que con estos datos, un asesor le contactará para coordinar los detalles de la visita e inspección.
 
 REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
   Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
@@ -575,8 +587,11 @@ async function generarRespuesta(
   }
 
   let proveedorOriginal = process.env.IA_PROVEEDOR || "anthropic";
+  const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
 
-  if (sb) {
+  if (esStaging) {
+    proveedorOriginal = "ollama";
+  } else if (sb) {
     try {
       const { data } = await sb
         .from("configuracion_agente")
@@ -593,7 +608,9 @@ async function generarRespuesta(
 
   // Definir la cadena de proveedores a intentar en caso de fallo
   const proveedoresAProbar = [proveedorOriginal];
-  if (proveedorOriginal === "kimi") {
+  if (esStaging) {
+    // En Staging solo usamos Ollama local, sin fallback a Claude
+  } else if (proveedorOriginal === "kimi") {
     proveedoresAProbar.push("anthropic"); // Fallback a Claude
   } else if (proveedorOriginal === "ollama") {
     proveedoresAProbar.push("anthropic"); // Fallback a Claude
