@@ -128,6 +128,46 @@ export async function crearProspecto(
   });
   // Dispara automatizaciones del evento "nuevo prospecto".
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
+
+  // Enviar evento identify a RudderStack en segundo plano
+  (async () => {
+    try {
+      const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+      const rudderUrl = esStaging 
+        ? "http://192.168.100.253:51700/v1/identify" 
+        : "http://192.168.100.253:52700/v1/identify";
+        
+      const basicAuth = Buffer.from("crm_source:").toString("base64");
+      
+      await fetch(rudderUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${basicAuth}`
+        },
+        body: JSON.stringify({
+          userId: id,
+          type: "identify",
+          traits: {
+            firstname: datos.nombre || "",
+            lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
+            email: datos.correo || "",
+            phone: datos.telefono || "",
+            origen: datos.origen || ""
+          },
+          context: {
+            library: {
+              name: "http",
+              version: "1.0.0"
+            }
+          }
+        })
+      });
+    } catch (rudderErr) {
+      console.error("[RudderStack] Error al enviar evento identify:", rudderErr);
+    }
+  })();
+
   return aProspecto(data as FilaProspecto);
 }
 

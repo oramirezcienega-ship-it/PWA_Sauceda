@@ -26,6 +26,8 @@ const MAX_HISTORIAL = 20;
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
+  const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+  if (esStaging) return true;
   return Boolean(process.env.ANTHROPIC_API_KEY) || Boolean(process.env.KIMI_API_KEY) || process.env.IA_PROVEEDOR === "ollama";
 }
 
@@ -42,18 +44,24 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
   }
 
   let proveedor = process.env.IA_PROVEEDOR || "anthropic";
-  try {
-    const sb = supabaseServidor();
-    const { data } = await sb
-      .from("configuracion_agente")
-      .select("valor")
-      .eq("clave", "ia_proveedor")
-      .maybeSingle();
-    if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
-      proveedor = data.valor.trim();
+  const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+
+  if (esStaging) {
+    proveedor = "ollama";
+  } else {
+    try {
+      const sb = supabaseServidor();
+      const { data } = await sb
+        .from("configuracion_agente")
+        .select("valor")
+        .eq("clave", "ia_proveedor")
+        .maybeSingle();
+      if (data?.valor && ["anthropic", "kimi", "ollama"].includes(data.valor.trim())) {
+        proveedor = data.valor.trim();
+      }
+    } catch (err) {
+      console.error("Error al obtener proveedor en diagnosticoIA:", err);
     }
-  } catch (err) {
-    console.error("Error al obtener proveedor en diagnosticoIA:", err);
   }
 
   if (proveedor === "kimi") {
@@ -579,8 +587,11 @@ async function generarRespuesta(
   }
 
   let proveedorOriginal = process.env.IA_PROVEEDOR || "anthropic";
+  const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
 
-  if (sb) {
+  if (esStaging) {
+    proveedorOriginal = "ollama";
+  } else if (sb) {
     try {
       const { data } = await sb
         .from("configuracion_agente")
@@ -597,7 +608,9 @@ async function generarRespuesta(
 
   // Definir la cadena de proveedores a intentar en caso de fallo
   const proveedoresAProbar = [proveedorOriginal];
-  if (proveedorOriginal === "kimi") {
+  if (esStaging) {
+    // En Staging solo usamos Ollama local, sin fallback a Claude
+  } else if (proveedorOriginal === "kimi") {
     proveedoresAProbar.push("anthropic"); // Fallback a Claude
   } else if (proveedorOriginal === "ollama") {
     proveedoresAProbar.push("anthropic"); // Fallback a Claude
