@@ -448,6 +448,58 @@ export async function actualizarExpediente(
     void sincronizarAsignadosBpm(id, datos.asesorId ?? null, datos.operadorId ?? null);
   }
 
+  // Enviar evento identify a RudderStack en segundo plano si hay un prospecto enlazado
+  if (datos.prospectoId) {
+    const prospectoId = datos.prospectoId;
+    (async () => {
+      try {
+        // Consultar los datos actualizados del prospecto
+        const { data: pros } = await sb
+          .from("prospectos")
+          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen")
+          .eq("id", prospectoId)
+          .maybeSingle();
+
+        if (pros) {
+          const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+          const rudderUrl = esStaging 
+            ? "http://192.168.100.253:51700/v1/identify" 
+            : "http://192.168.100.253:52700/v1/identify";
+            
+          const basicAuth = Buffer.from("crm_source:").toString("base64");
+          
+          await fetch(rudderUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Basic ${basicAuth}`
+            },
+            body: JSON.stringify({
+              userId: prospectoId,
+              type: "identify",
+              traits: {
+                firstname: pros.nombre || "",
+                lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
+                email: pros.correo || "",
+                phone: pros.telefono || "",
+                origen: pros.origen || "",
+                tipo_negocio: nuevos.tipo_negocio || "otro"
+              },
+              context: {
+                library: {
+                  name: "http",
+                  version: "1.0.0"
+                }
+              }
+            })
+          });
+        }
+      } catch (rudderErr) {
+        console.error("[RudderStack] Error al enviar evento identify en actualizarExpediente:", rudderErr);
+      }
+    })();
+  }
+
   return aExpediente(data as FilaExpediente);
 }
 
@@ -511,6 +563,64 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     expedienteId: id,
     cambios: ["etapa"],
   });
+
+  // Enviar evento identify a RudderStack en segundo plano si hay un prospecto enlazado
+  if (exp?.prospecto_id) {
+    const prospectoId = exp.prospecto_id;
+    (async () => {
+      try {
+        // Consultar los datos del prospecto y del expediente
+        const { data: pros } = await sb
+          .from("prospectos")
+          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen")
+          .eq("id", prospectoId)
+          .maybeSingle();
+
+        const { data: currentExp } = await sb
+          .from("expedientes")
+          .select("tipo_negocio")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (pros) {
+          const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+          const rudderUrl = esStaging 
+            ? "http://192.168.100.253:51700/v1/identify" 
+            : "http://192.168.100.253:52700/v1/identify";
+            
+          const basicAuth = Buffer.from("crm_source:").toString("base64");
+          
+          await fetch(rudderUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Basic ${basicAuth}`
+            },
+            body: JSON.stringify({
+              userId: prospectoId,
+              type: "identify",
+              traits: {
+                firstname: pros.nombre || "",
+                lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
+                email: pros.correo || "",
+                phone: pros.telefono || "",
+                origen: pros.origen || "",
+                tipo_negocio: currentExp?.tipo_negocio || "otro"
+              },
+              context: {
+                library: {
+                  name: "http",
+                  version: "1.0.0"
+                }
+              }
+            })
+          });
+        }
+      } catch (rudderErr) {
+        console.error("[RudderStack] Error al enviar evento identify en moverEtapa:", rudderErr);
+      }
+    })();
+  }
 }
 
 /**
