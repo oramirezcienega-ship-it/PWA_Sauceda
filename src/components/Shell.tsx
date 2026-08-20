@@ -34,6 +34,7 @@ const ENLACES = [
   { href: "/prospectos", label: "Prospectos" },
   { href: "/construccion", label: "Construcción" },
   { href: "/conversaciones", label: "Conversaciones" },
+  { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
   { href: "/agenda", label: "Agenda" },
 ];
 
