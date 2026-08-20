@@ -346,11 +346,10 @@ export async function obtenerConversacion(
 
     const { data: exps } = await sb
       .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, prospecto_id, telefono, perfiles:asesor_id(nombre)");
+      .select("id, cliente, primer_apellido, segundo_apellido, prospecto_id, telefono, perfiles:asesor_id(nombre)")
+      .like("telefono", `%${digitos}`);
     
-    const exp = (exps ?? []).find(
-      (e: any) => (e.telefono || "").replace(/\D/g, "").slice(-10) === digitos
-    );
+    const exp = exps?.[0];
 
     let expId: string | null = null;
     let prosId: string | null = null;
@@ -370,10 +369,9 @@ export async function obtenerConversacion(
     if (!prosId) {
       const { data: prosList } = await sb
         .from("prospectos")
-        .select("id, nombre, primer_apellido, segundo_apellido, telefono, perfiles:asesor_id(nombre)");
-      const pros = (prosList ?? []).find(
-        (p: any) => (p.telefono || "").replace(/\D/g, "").slice(-10) === digitos
-      );
+        .select("id, nombre, primer_apellido, segundo_apellido, telefono, perfiles:asesor_id(nombre)")
+        .like("telefono", `%${digitos}`);
+      const pros = prosList?.[0];
       if (pros) {
         prosId = pros.id;
         nombreProspecto = [pros.nombre, pros.primer_apellido, pros.segundo_apellido]
