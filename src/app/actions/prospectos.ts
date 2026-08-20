@@ -12,7 +12,6 @@ import {
 import { ORIGENES } from "@/lib/origenes";
 import { registrarActividad } from "@/lib/actividades";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
-import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import type {
   DatosProspecto,
   Expediente,
@@ -109,15 +108,9 @@ export async function crearProspecto(
   if (errLista) throw new Error(errLista.message);
   const id = siguienteId((existentes ?? []).map((r) => r.id as string));
 
-  const fila = aFilaProspecto(datos);
-  if (!fila.asesor_id) {
-    const gerardoId = await obtenerIdAsesorGerardo(sb);
-    if (gerardoId) fila.asesor_id = gerardoId;
-  }
-
   const { data, error } = await sb
     .from("prospectos")
-    .insert({ id, ...fila })
+    .insert({ id, ...aFilaProspecto(datos) })
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -214,8 +207,6 @@ export async function actualizarProspecto(
     .single();
   if (error) throw new Error(error.message);
 
-  // Sincroniza los campos compartidos (nombre + teléfono + asesor + operador + dirección) hacia los
-  // expedientes enlazados a este prospecto.
   await sb
     .from("expedientes")
     .update({
@@ -231,6 +222,53 @@ export async function actualizarProspecto(
       operador_id: datos.operadorId ?? null,
     })
     .eq("prospecto_id", id);
+
+  // Enviar evento identify a RudderStack en segundo plano
+  (async () => {
+    try {
+      // Obtener el tipo de negocio del expediente enlazado (si existe)
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("tipo_negocio")
+        .eq("prospecto_id", id)
+        .maybeSingle();
+
+      const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
+      const rudderUrl = esStaging 
+        ? "http://192.168.100.253:51700/v1/identify" 
+        : "http://192.168.100.253:52700/v1/identify";
+        
+      const basicAuth = Buffer.from("crm_source:").toString("base64");
+      
+      await fetch(rudderUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${basicAuth}`
+        },
+        body: JSON.stringify({
+          userId: id,
+          type: "identify",
+          traits: {
+            firstname: datos.nombre || "",
+            lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
+            email: datos.correo || "",
+            phone: datos.telefono || "",
+            origen: datos.origen || "",
+            tipo_negocio: exp?.tipo_negocio || "otro"
+          },
+          context: {
+            library: {
+              name: "http",
+              version: "1.0.0"
+            }
+          }
+        })
+      });
+    } catch (rudderErr) {
+      console.error("[RudderStack] Error al enviar evento identify en actualizarProspecto:", rudderErr);
+    }
+  })();
 
   return aProspecto(data as FilaProspecto);
 }
@@ -333,12 +371,6 @@ export async function importarProspectos(
   });
 
   if (aInsertar.length > 0) {
-    const gerardoId = await obtenerIdAsesorGerardo(sb);
-    if (gerardoId) {
-      aInsertar.forEach((p) => {
-        if (!p.asesor_id) p.asesor_id = gerardoId;
-      });
-    }
     const { error } = await sb.from("prospectos").insert(aInsertar);
     if (error) {
       errores.push(`Error al insertar: ${error.message}`);
@@ -431,12 +463,6 @@ export async function cambiarCalificacionMasivo(
     .update({ calificacion })
     .in("id", ids);
   if (error) throw new Error(error.message);
-
-  // Sincronización explícita con expedientes enlazados
-  await sb
-    .from("expedientes")
-    .update({ calificacion })
-    .in("prospecto_id", ids);
 }
 
 /** Asigna un asesor a varios prospectos a la vez (acción masiva). */
