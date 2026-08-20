@@ -699,7 +699,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     if (sel && coincidenTelefonos(c.telefono, sel)) return true;
 
     if (filtro === "abiertas") {
-      if (!c.finalizado) {
+      if (!c.finalizado && c.ventanaAbierta) {
         if (subFiltro === "mias") {
           const nomUser = usuario?.nombre?.toLowerCase() || "";
           const emailUser = usuario?.email?.toLowerCase() || "";
@@ -716,7 +716,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       }
       return false;
     } else {
-      return c.finalizado;
+      return c.finalizado || !c.ventanaAbierta;
     }
   }).sort((a, b) => {
     // Pendientes (último mensaje entrante sin responder) siempre primero
@@ -1014,7 +1014,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   : "text-carbon/60 hover:text-carbon"
               }`}
             >
-              Abiertas ({conversaciones.filter((c) => !c.finalizado).length})
+              Abiertas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta).length})
             </button>
             <button
               type="button"
@@ -1025,7 +1025,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   : "text-carbon/60 hover:text-carbon"
               }`}
             >
-              Terminadas ({conversaciones.filter((c) => c.finalizado).length})
+              Terminadas ({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
             </button>
           </div>
 
@@ -1040,7 +1040,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Todas ({conversaciones.filter((c) => !c.finalizado).length})
+                Todas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta).length})
               </button>
               <button
                 type="button"
@@ -1052,7 +1052,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 }`}
               >
                 Mías ({conversaciones.filter((c) => {
-                  if (c.finalizado) return false;
+                  if (c.finalizado || !c.ventanaAbierta) return false;
                   const nomUser = usuario?.nombre?.toLowerCase() || "";
                   const emailUser = usuario?.email?.toLowerCase() || "";
                   const atiende = c.atiende?.toLowerCase() || "";
@@ -1068,7 +1068,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                De la IA ({conversaciones.filter((c) => !c.finalizado && c.atiende?.toLowerCase() === "ia").length})
+                De la IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
               </button>
               <button
                 type="button"
@@ -1079,7 +1079,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Nuevas ({conversaciones.filter((c) => !c.finalizado && (!c.atiende || c.atiende === "")).length})
+                Nuevas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && (!c.atiende || c.atiende === "")).length})
               </button>
             </div>
           )}
