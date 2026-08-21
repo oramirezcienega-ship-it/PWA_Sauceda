@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { actualizarUsuario, eliminarUsuario, actualizarPasswordUsuario } from "@/app/actions/usuarios";
+import {
+  actualizarUsuario,
+  eliminarUsuario,
+  actualizarPasswordUsuario,
+  establecerAsesorAsignacionAutomatica,
+} from "@/app/actions/usuarios";
 import type { UsuarioApp } from "@/app/actions/usuarios";
 import { CalendarioGuardias } from "./CalendarioGuardias";
 import { ModalAgendaUsuario } from "./ModalAgendaUsuario";
@@ -16,7 +21,14 @@ interface TarjetaUsuarioProps {
   usuarioActualId: string;
 }
 
-function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAgenda, usuarioActualId }: TarjetaUsuarioProps) {
+function TarjetaUsuario({
+  u,
+  onUpdate,
+  onDelete,
+  onConfigConmutador,
+  onConfigAgenda,
+  usuarioActualId,
+}: TarjetaUsuarioProps) {
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
@@ -25,7 +37,12 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
   const [telefono, setTelefono] = useState(u.telefono);
   const [rol, setRol] = useState(u.rol);
   const [activo, setActivo] = useState(u.activo);
-  const [notificarWhatsapp, setNotificarWhatsapp] = useState(u.notificar_whatsapp_nuevo_lead ?? (u.rol === "admin"));
+  const [notificarWhatsapp, setNotificarWhatsapp] = useState(
+    u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin"
+  );
+  const [asignacionAutomatica, setAsignacionAutomatica] = useState(
+    u.asignacion_automatica ?? false
+  );
   const [password, setPassword] = useState("");
 
   // Sincronizar el estado local cuando cambien los datos del prop (ej. desde el modal)
@@ -34,8 +51,16 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
     setTelefono(u.telefono);
     setRol(u.rol);
     setActivo(u.activo);
-    setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? (u.rol === "admin"));
-  }, [u.nombre, u.telefono, u.rol, u.activo, u.notificar_whatsapp_nuevo_lead]);
+    setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin");
+    setAsignacionAutomatica(u.asignacion_automatica ?? false);
+  }, [
+    u.nombre,
+    u.telefono,
+    u.rol,
+    u.activo,
+    u.notificar_whatsapp_nuevo_lead,
+    u.asignacion_automatica,
+  ]);
 
   async function handleGuardar() {
     if (!nombre.trim()) return;
@@ -55,11 +80,14 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
         rol,
         activo,
         notificar_whatsapp_nuevo_lead: notificarWhatsapp,
+        asignacion_automatica: asignacionAutomatica,
       });
       setEditando(false);
     } catch (err) {
       console.error("Error al actualizar usuario:", err);
-      alert(err instanceof Error ? err.message : "No se pudo actualizar el usuario.");
+      alert(
+        err instanceof Error ? err.message : "No se pudo actualizar el usuario."
+      );
     } finally {
       setGuardando(false);
     }
@@ -70,7 +98,8 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
     setTelefono(u.telefono);
     setRol(u.rol);
     setActivo(u.activo);
-    setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? (u.rol === "admin"));
+    setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin");
+    setAsignacionAutomatica(u.asignacion_automatica ?? false);
     setPassword("");
     setEditando(false);
   }
@@ -86,8 +115,13 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
             {inicialNombre}
           </div>
           <div className="min-w-0 flex-1">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">Email</span>
-            <span className="block truncate font-mono text-xs text-carbon/60" title={u.email}>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+              Email
+            </span>
+            <span
+              className="block truncate font-mono text-xs text-carbon/60"
+              title={u.email}
+            >
               {u.email}
             </span>
           </div>
@@ -128,7 +162,10 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
             <select
               value={rol}
               onChange={(e) => {
-                const nuevoRol = e.target.value as "admin" | "asesor" | "operaciones";
+                const nuevoRol = e.target.value as
+                  | "admin"
+                  | "asesor"
+                  | "operaciones";
                 if (u.id === usuarioActualId && nuevoRol !== "admin") {
                   alert("No puedes cambiar tu propio rol de administrador.");
                   return;
@@ -137,7 +174,11 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
               }}
               disabled={u.id === usuarioActualId}
               className="w-full rounded-lg border border-carbon/15 bg-white px-2 py-1.5 text-xs text-verde-profundo outline-none focus:border-sauce focus:ring-2 focus:ring-sauce/20 disabled:opacity-60 disabled:cursor-not-allowed"
-              title={u.id === usuarioActualId ? "No puedes cambiar tu propio rol" : ""}
+              title={
+                u.id === usuarioActualId
+                  ? "No puedes cambiar tu propio rol"
+                  : ""
+              }
             >
               <option value="admin">Administrador</option>
               <option value="asesor">Asesor</option>
@@ -153,7 +194,9 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
               type="button"
               onClick={() => {
                 if (u.id === usuarioActualId) {
-                  alert("No puedes desactivar tu propio usuario administrador.");
+                  alert(
+                    "No puedes desactivar tu propio usuario administrador."
+                  );
                   return;
                 }
                 setActivo(!activo);
@@ -162,15 +205,24 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
                 activo
                   ? "bg-sauce/20 text-verde-profundo border-sauce/30"
                   : "bg-carbon/10 text-carbon/50 border-carbon/10"
-              } ${u.id === usuarioActualId ? "opacity-60 cursor-not-allowed" : ""}`}
-              title={u.id === usuarioActualId ? "No puedes desactivarte a ti mismo" : ""}
+              } ${
+                u.id === usuarioActualId ? "opacity-60 cursor-not-allowed" : ""
+              }`}
+              title={
+                u.id === usuarioActualId
+                  ? "No puedes desactivarte a ti mismo"
+                  : ""
+              }
             >
               {activo ? "🟢 Activo" : "⚪ Inactivo"}
             </button>
           </div>
 
           <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40" title="Dejar en blanco para conservar la contraseña actual">
+            <label
+              className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40"
+              title="Dejar en blanco para conservar la contraseña actual"
+            >
               Restablecer Contraseña
             </label>
             <input
@@ -183,17 +235,31 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
           </div>
         </div>
 
-        {/* Notificaciones WhatsApp por Lead */}
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-sauce/15 bg-sauce/5 p-2.5">
-          <label className="flex items-center gap-2.5 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={notificarWhatsapp}
-              onChange={(e) => setNotificarWhatsapp(e.target.checked)}
-              className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
-            />
-            <span>📱 Recibir notificaciones automáticas por WhatsApp al registrar un nuevo expediente / lead</span>
-          </label>
+        {/* Notificaciones WhatsApp y Asignación Automática */}
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-sauce/15 bg-sauce/5 p-2.5">
+            <label className="flex items-center gap-2.5 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notificarWhatsapp}
+                onChange={(e) => setNotificarWhatsapp(e.target.checked)}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>📱 Recibir notificaciones automáticas por WhatsApp</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-sauce/30 bg-sauce/10 p-2.5">
+            <label className="flex items-center gap-2.5 text-xs font-bold text-verde-profundo cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={asignacionAutomatica}
+                onChange={(e) => setAsignacionAutomatica(e.target.checked)}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>⚡ Asignación automática de todos los leads nuevos</span>
+            </label>
+          </div>
         </div>
 
         <div className="my-4 border-t border-carbon/5" />
@@ -204,7 +270,9 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
           {u.id !== usuarioActualId ? (
             <BotonBorrar onConfirm={() => onDelete(u.id)} />
           ) : (
-            <div className="text-[10px] text-carbon/40 italic">Tu propio usuario administrador</div>
+            <div className="text-[10px] text-carbon/40 italic">
+              Tu propio usuario administrador
+            </div>
           )}
 
           <div className="flex items-center gap-2">
@@ -229,9 +297,15 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
     );
   }
 
-  // Renderizado en Modo Lectura (Fila Horizontal en desktop, pila en móvil con rejilla de 12 columnas)
+  // Renderizado en Modo Lectura
   return (
-    <div className="group relative w-full rounded-2xl border border-carbon/10 bg-white p-4 shadow-sm transition-all duration-300 hover:border-sauce/30 hover:shadow-md grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+    <div
+      className={`group relative w-full rounded-2xl border ${
+        u.asignacion_automatica
+          ? "border-sauce/50 ring-2 ring-sauce/20 bg-sauce/5"
+          : "border-carbon/10 bg-white"
+      } p-4 shadow-sm transition-all duration-300 hover:border-sauce/40 hover:shadow-md grid grid-cols-1 md:grid-cols-12 gap-4 items-center`}
+    >
       {/* 1. Información de Usuario (Nombre y Email) */}
       <div className="col-span-1 md:col-span-3 flex items-center gap-3 min-w-0">
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sauce/15 to-verde-profundo/10 font-titular text-base font-semibold text-verde-profundo shadow-inner">
@@ -241,7 +315,10 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
           <h3 className="truncate font-titular text-base font-semibold text-carbon">
             {u.nombre}
           </h3>
-          <p className="truncate font-mono text-xs text-carbon/40" title={u.email}>
+          <p
+            className="truncate font-mono text-xs text-carbon/40"
+            title={u.email}
+          >
             {u.email}
           </p>
         </div>
@@ -249,16 +326,30 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
 
       {/* 2. Teléfono */}
       <div className="col-span-1 md:col-span-2 flex items-center gap-2 text-sm text-carbon/70 min-w-0">
-        <svg className="h-4 w-4 flex-shrink-0 text-carbon/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+        <svg
+          className="h-4 w-4 flex-shrink-0 text-carbon/40"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+          />
         </svg>
-        <span className="font-mono text-carbon/80 truncate">{u.telefono || "Sin teléfono"}</span>
+        <span className="font-mono text-carbon/80 truncate">
+          {u.telefono || "Sin teléfono"}
+        </span>
       </div>
 
       {/* 3. Ajustes Conmutador y Agenda */}
       <div className="col-span-1 md:col-span-3 flex items-center justify-between gap-2.5 rounded-xl border border-carbon/5 bg-crema p-2.5 shadow-sm min-w-0">
         <div className="min-w-0">
-          <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">Conmutador e IVR</span>
+          <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">
+            Conmutador e IVR
+          </span>
           <span className="block truncate text-xs text-carbon/70 font-semibold text-verde-profundo">
             {u.disponible_llamadas ? `🟢 Guardia` : "⚪ Inactivo"}
           </span>
@@ -286,8 +377,16 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
         </div>
       </div>
 
-      {/* 4. Badges (Rol, Estado y Notificaciones) */}
+      {/* 4. Badges (Rol, Estado, Notificaciones y Asignación Automática) */}
       <div className="col-span-1 md:col-span-2 flex flex-row md:flex-col gap-1.5 items-center md:items-start min-w-0">
+        {u.asignacion_automatica && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-sauce/40 bg-sauce/25 px-2.5 py-0.5 text-[10px] font-bold text-verde-profundo shadow-sm"
+            title="Receptor de asignación automática de todos los leads nuevos"
+          >
+            ⚡ Leads Automáticos
+          </span>
+        )}
         {u.rol === "admin" && (
           <span className="inline-flex items-center rounded-full border border-dorado/20 bg-dorado/15 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-800">
             👑 Admin
@@ -313,11 +412,17 @@ function TarjetaUsuario({ u, onUpdate, onDelete, onConfigConmutador, onConfigAge
           </span>
         )}
         {u.notificar_whatsapp_nuevo_lead ? (
-          <span className="inline-flex items-center rounded-full border border-sauce/30 bg-sauce/10 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo" title="Recibe notificaciones por WhatsApp de nuevos leads">
+          <span
+            className="inline-flex items-center rounded-full border border-sauce/30 bg-sauce/10 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo"
+            title="Recibe notificaciones por WhatsApp de nuevos leads"
+          >
             📱 Notif. WhatsApp
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full border border-carbon/10 bg-carbon/5 px-2.5 py-0.5 text-[10px] font-semibold text-carbon/40" title="Sin notificaciones por WhatsApp de nuevos leads">
+          <span
+            className="inline-flex items-center rounded-full border border-carbon/10 bg-carbon/5 px-2.5 py-0.5 text-[10px] font-semibold text-carbon/40"
+            title="Sin notificaciones por WhatsApp de nuevos leads"
+          >
             📵 Sin Notif. WA
           </span>
         )}
@@ -357,27 +462,60 @@ export function TablaUsuarios({
 }) {
   const [usuarios, setUsuarios] = useState<UsuarioApp[]>(inicial);
   const [usuarioAgenda, setUsuarioAgenda] = useState<UsuarioApp | null>(null);
+  const [cambiandoAutoAsignacion, setCambiandoAutoAsignacion] = useState(false);
 
   // Estados para el modal de configuración del conmutador
-  const [agenteConmutador, setAgenteConmutador] = useState<UsuarioApp | null>(null);
+  const [agenteConmutador, setAgenteConmutador] = useState<UsuarioApp | null>(
+    null
+  );
   const [telDesvio, setTelDesvio] = useState("");
   const [dispLlamadas, setDispLlamadas] = useState(false);
-  const [horariosGuardia, setHorariosGuardia] = useState<Record<string, { inicio: string; fin: string }[]>>({});
+  const [horariosGuardia, setHorariosGuardia] = useState<
+    Record<string, { inicio: string; fin: string }[]>
+  >({});
   const [modalGuardando, setModalGuardando] = useState(false);
+
+  const usuarioAutoAsignado =
+    usuarios.find((u) => u.asignacion_automatica) || usuarios[0];
+
+  async function handleCambiarAsignacionAutomatica(nuevoId: string) {
+    if (!nuevoId || cambiandoAutoAsignacion) return;
+    setCambiandoAutoAsignacion(true);
+    try {
+      await establecerAsesorAsignacionAutomatica(nuevoId);
+      setUsuarios((prev) =>
+        prev.map((u) => ({
+          ...u,
+          asignacion_automatica: u.id === nuevoId,
+        }))
+      );
+    } catch (err) {
+      console.error("Error al cambiar asignación automática:", err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar la asignación automática."
+      );
+    } finally {
+      setCambiandoAutoAsignacion(false);
+    }
+  }
 
   function abrirConfigConmutador(u: UsuarioApp) {
     setAgenteConmutador(u);
     setTelDesvio(u.telefono_desvio || u.telefono || "");
     setDispLlamadas(u.disponible_llamadas || false);
-    setHorariosGuardia(u.horarios_guardia || {
-      lunes: [{ inicio: "09:00:00", fin: "18:00:00" }],
-      martes: [{ inicio: "09:00:00", fin: "18:00:00" }],
-      miercoles: [{ inicio: "09:00:00", fin: "18:00:00" }],
-      jueves: [{ inicio: "09:00:00", fin: "18:00:00" }],
-      viernes: [{ inicio: "09:00:00", fin: "18:00:00" }],
-      sabado: [],
-      domingo: []
-    });
+    setHorariosGuardia(
+      u.horarios_guardia || {
+        lunes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        martes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        miercoles: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        jueves: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        viernes: [{ inicio: "09:00:00", fin: "18:00:00" }],
+        sabado: [],
+        domingo: [],
+      }
+    );
   }
 
   async function guardarConfigConmutador() {
@@ -412,7 +550,12 @@ export function TablaUsuarios({
     }
   }
 
-  const actualizarFranja = (dia: string, index: number, campo: "inicio" | "fin", valor: string) => {
+  const actualizarFranja = (
+    dia: string,
+    index: number,
+    campo: "inicio" | "fin",
+    valor: string
+  ) => {
     let v = valor;
     if (valor && valor.split(":").length === 2) {
       v = `${valor}:00`;
@@ -455,10 +598,20 @@ export function TablaUsuarios({
       horario_inicio: actualizado.horario_inicio,
       horario_fin: actualizado.horario_fin,
       horarios_guardia: actualizado.horarios_guardia,
+      notificar_whatsapp_nuevo_lead: actualizado.notificar_whatsapp_nuevo_lead,
+      asignacion_automatica: actualizado.asignacion_automatica,
     });
 
     // Actualizar estado si la llamada al servidor no falló
-    setUsuarios((prev) => prev.map((x) => (x.id === id ? actualizado : x)));
+    setUsuarios((prev) =>
+      prev.map((x) => {
+        if (x.id === id) return actualizado;
+        if (cambios.asignacion_automatica === true) {
+          return { ...x, asignacion_automatica: false };
+        }
+        return x;
+      })
+    );
   }
 
   async function handleDeleteUsuario(id: string) {
@@ -468,9 +621,60 @@ export function TablaUsuarios({
 
   return (
     <>
+      {/* Panel Destacado: Configuración de Asignación Automática de Leads */}
+      <div className="mb-6 rounded-2xl border border-sauce/30 bg-gradient-to-r from-sauce/10 via-white to-sauce/5 p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sauce/20 text-verde-profundo text-2xl shadow-inner">
+              ⚡
+            </div>
+            <div>
+              <h2 className="font-titular text-lg font-bold text-verde-profundo">
+                Asignación Automática de Leads Nuevos
+              </h2>
+              <p className="text-xs text-carbon/70 mt-0.5">
+                Configura qué asesor o administrador recibirá automáticamente
+                todos los prospectos y solicitudes entrantes por WhatsApp, Web,
+                Conmutador, TikTok y Messenger.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-sauce/30 shadow-sm min-w-[280px]">
+            <span className="text-xs font-semibold text-carbon/60 whitespace-nowrap">
+              Asesor por defecto:
+            </span>
+            <select
+              value={usuarioAutoAsignado?.id || ""}
+              onChange={(e) =>
+                handleCambiarAsignacionAutomatica(e.target.value)
+              }
+              disabled={cambiandoAutoAsignacion}
+              className="w-full bg-transparent font-titular text-sm font-bold text-verde-profundo outline-none cursor-pointer disabled:opacity-50"
+            >
+              {usuarios
+                .filter((u) => u.activo)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nombre} (
+                    {u.rol === "admin"
+                      ? "Admin"
+                      : u.rol === "asesor"
+                      ? "Asesor"
+                      : "Operario"}
+                    )
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {usuarios.length === 0 ? (
         <div className="rounded-2xl border border-carbon/10 bg-white p-8 text-center shadow-sm">
-          <p className="text-sm text-carbon/50">No hay usuarios registrados en el equipo.</p>
+          <p className="text-sm text-carbon/50">
+            No hay usuarios registrados en el equipo.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -502,7 +706,8 @@ export function TablaUsuarios({
                   Ajustes de Conmutador
                 </h3>
                 <p className="text-xs text-carbon/50">
-                  Configura desvíos y guardia para <strong>{agenteConmutador.nombre}</strong>
+                  Configura desvíos y guardia para{" "}
+                  <strong>{agenteConmutador.nombre}</strong>
                 </p>
               </div>
               <button
@@ -528,7 +733,8 @@ export function TablaUsuarios({
                   className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30"
                 />
                 <span className="mt-1 block text-[10px] text-carbon/40">
-                  Número al que Twilio desviará las llamadas. Debe incluir lada del país.
+                  Número al que Twilio desviará las llamadas. Debe incluir lada
+                  del país.
                 </span>
               </div>
 
@@ -566,20 +772,38 @@ export function TablaUsuarios({
                     const activo = franjas.length > 0;
 
                     return (
-                      <div key={dia.key} className="rounded-lg border border-carbon/10 bg-white p-2.5 space-y-2">
+                      <div
+                        key={dia.key}
+                        className="rounded-lg border border-carbon/10 bg-white p-2.5 space-y-2"
+                      >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-verde-profundo">{dia.label}</span>
+                          <span className="text-xs font-bold text-verde-profundo">
+                            {dia.label}
+                          </span>
                           <button
                             type="button"
                             onClick={() => {
                               if (activo) {
-                                setHorariosGuardia(prev => ({ ...prev, [dia.key]: [] }));
+                                setHorariosGuardia((prev) => ({
+                                  ...prev,
+                                  [dia.key]: [],
+                                }));
                               } else {
-                                setHorariosGuardia(prev => ({ ...prev, [dia.key]: [{ inicio: "09:00:00", fin: "18:00:00" }] }));
+                                setHorariosGuardia((prev) => ({
+                                  ...prev,
+                                  [dia.key]: [
+                                    {
+                                      inicio: "09:00:00",
+                                      fin: "18:00:00",
+                                    },
+                                  ],
+                                }));
                               }
                             }}
                             className={`rounded-full px-2.5 py-0.5 text-[9px] font-bold transition ${
-                              activo ? "bg-verde-profundo text-crema" : "bg-carbon/10 text-carbon/50 border border-carbon/10"
+                              activo
+                                ? "bg-verde-profundo text-crema"
+                                : "bg-carbon/10 text-carbon/50 border border-carbon/10"
                             }`}
                           >
                             {activo ? "Activo" : "Inactivo"}
@@ -589,22 +813,43 @@ export function TablaUsuarios({
                         {activo && (
                           <div className="space-y-2 pt-1.5 border-t border-carbon/5">
                             {franjas.map((franja, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
+                              <div
+                                key={idx}
+                                className="flex items-center gap-2"
+                              >
                                 <div className="flex-1">
-                                  <span className="block text-[9px] text-carbon/40 font-semibold uppercase">De:</span>
+                                  <span className="block text-[9px] text-carbon/40 font-semibold uppercase">
+                                    De:
+                                  </span>
                                   <input
                                     type="time"
                                     value={franja.inicio.slice(0, 5)}
-                                    onChange={(e) => actualizarFranja(dia.key, idx, "inicio", e.target.value)}
+                                    onChange={(e) =>
+                                      actualizarFranja(
+                                        dia.key,
+                                        idx,
+                                        "inicio",
+                                        e.target.value
+                                      )
+                                    }
                                     className="w-full rounded border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none"
                                   />
                                 </div>
                                 <div className="flex-1">
-                                  <span className="block text-[9px] text-carbon/40 font-semibold uppercase">A:</span>
+                                  <span className="block text-[9px] text-carbon/40 font-semibold uppercase">
+                                    A:
+                                  </span>
                                   <input
                                     type="time"
                                     value={franja.fin.slice(0, 5)}
-                                    onChange={(e) => actualizarFranja(dia.key, idx, "fin", e.target.value)}
+                                    onChange={(e) =>
+                                      actualizarFranja(
+                                        dia.key,
+                                        idx,
+                                        "fin",
+                                        e.target.value
+                                      )
+                                    }
                                     className="w-full rounded border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none"
                                   />
                                 </div>
@@ -681,7 +926,9 @@ function BotonBorrar({ onConfirm }: { onConfirm: () => void }) {
   }
   return (
     <div className="inline-flex items-center gap-1.5 rounded-lg border border-rojo/10 bg-rojo/5 px-2 py-1">
-      <span className="text-[10px] font-bold text-rojo/80 uppercase">¿Borrar?</span>
+      <span className="text-[10px] font-bold text-rojo/80 uppercase">
+        ¿Borrar?
+      </span>
       <button
         type="button"
         onClick={onConfirm}
