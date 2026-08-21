@@ -405,4 +405,74 @@ values
   ('formularios', 'formularios', false)
 on conflict (id) do update set public = excluded.public;
 
+-- ===== supabase/migrations/0069_asignacion_automatica_lead.sql =====
+-- Migration 0069: Parametrizar asignación automática de nuevos leads en perfiles
 
+ALTER TABLE public.perfiles
+  ADD COLUMN IF NOT EXISTS asignacion_automatica BOOLEAN DEFAULT FALSE;
+
+DO $$
+BEGIN
+  UPDATE public.perfiles
+  SET asignacion_automatica = TRUE
+  WHERE nombre ILIKE '%gerardo%';
+
+  IF NOT EXISTS (SELECT 1 FROM public.perfiles WHERE asignacion_automatica IS TRUE) THEN
+    UPDATE public.perfiles
+    SET asignacion_automatica = TRUE
+    WHERE id = (
+      SELECT id FROM public.perfiles
+      WHERE (activo IS TRUE OR activo IS NULL)
+      ORDER BY CASE WHEN rol = 'asesor' THEN 1 WHEN rol = 'admin' THEN 2 ELSE 3 END
+      LIMIT 1
+    );
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.fn_auto_asignar_asesor_gerardo()
+RETURNS trigger AS $$
+DECLARE
+  v_asesor_id uuid;
+  v_prospecto_asesor_id uuid;
+BEGIN
+  IF NEW.asesor_id IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_TABLE_NAME = 'expedientes' AND NEW.prospecto_id IS NOT NULL THEN
+    SELECT asesor_id INTO v_prospecto_asesor_id
+    FROM public.prospectos
+    WHERE id = NEW.prospecto_id;
+
+    IF v_prospecto_asesor_id IS NOT NULL THEN
+      NEW.asesor_id := v_prospecto_asesor_id;
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  SELECT id INTO v_asesor_id
+  FROM public.perfiles
+  WHERE asignacion_automatica IS TRUE AND (activo IS TRUE OR activo IS NULL)
+  LIMIT 1;
+
+  IF v_asesor_id IS NULL THEN
+    SELECT id INTO v_asesor_id
+    FROM public.perfiles
+    WHERE nombre ILIKE '%gerardo%' AND (activo IS TRUE OR activo IS NULL)
+    LIMIT 1;
+  END IF;
+
+  IF v_asesor_id IS NULL THEN
+    SELECT id INTO v_asesor_id
+    FROM public.perfiles
+    WHERE rol = 'asesor' AND (activo IS TRUE OR activo IS NULL)
+    LIMIT 1;
+  END IF;
+
+  IF v_asesor_id IS NOT NULL THEN
+    NEW.asesor_id := v_asesor_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

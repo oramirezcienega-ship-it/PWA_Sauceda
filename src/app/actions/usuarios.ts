@@ -29,6 +29,7 @@ export interface UsuarioApp {
   horario_fin?: string;
   horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
   notificar_whatsapp_nuevo_lead?: boolean;
+  asignacion_automatica?: boolean;
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
@@ -74,6 +75,10 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
   const { data: lista, error } = await sb.auth.admin.listUsers();
   if (error) throw new Error(error.message);
   const { data: perfiles } = await sb.from("perfiles").select("*");
+  
+  // Determinar si hay al menos uno con asignacion_automatica = true
+  const tieneAsignado = (perfiles ?? []).some((p: any) => p.asignacion_automatica === true);
+
   const mapa = new Map(
     (perfiles ?? []).map((p) => [
       p.id as string,
@@ -88,11 +93,14 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
         horario_fin?: string;
         horarios_guardia?: any;
         notificar_whatsapp_nuevo_lead?: boolean;
+        asignacion_automatica?: boolean;
       },
     ]),
   );
-  return (lista?.users ?? []).map((u) => {
+
+  const usuariosResult = (lista?.users ?? []).map((u) => {
     const p = mapa.get(u.id);
+    const esGerardoFallback = !tieneAsignado && (p?.nombre ?? "").toLowerCase().includes("gerardo");
     return {
       id: u.id,
       email: u.email ?? "",
@@ -114,8 +122,19 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
         domingo: []
       },
       notificar_whatsapp_nuevo_lead: p?.notificar_whatsapp_nuevo_lead ?? (p?.rol === "admin" || (p?.nombre ?? "").toLowerCase().includes("oscar")),
+      asignacion_automatica: p?.asignacion_automatica ?? esGerardoFallback,
     };
   });
+
+  // Si aún nadie tiene asignacion_automatica activada, activar en el primer usuario activo
+  if (!usuariosResult.some(u => u.asignacion_automatica) && usuariosResult.length > 0) {
+    const primerAsesorOAdmin = usuariosResult.find(u => u.activo && (u.rol === "asesor" || u.rol === "admin")) || usuariosResult[0];
+    if (primerAsesorOAdmin) {
+      primerAsesorOAdmin.asignacion_automatica = true;
+    }
+  }
+
+  return usuariosResult;
 }
 
 /** Crea un usuario nuevo (correo + contraseña + nombre + rol + teléfono + notificaciones). */
@@ -126,6 +145,7 @@ export async function crearUsuario(datos: {
   rol: "admin" | "asesor" | "operaciones";
   telefono: string;
   notificar_whatsapp_nuevo_lead?: boolean;
+  asignacion_automatica?: boolean;
 }): Promise<{ ok: boolean; mensaje?: string }> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -137,6 +157,11 @@ export async function crearUsuario(datos: {
   if (error || !data.user) {
     return { ok: false, mensaje: error?.message ?? "No se pudo crear." };
   }
+
+  if (datos.asignacion_automatica) {
+    await sb.from("perfiles").update({ asignacion_automatica: false }).neq("id", data.user.id);
+  }
+
   const { error: errPerfil } = await sb.from("perfiles").insert({
     id: data.user.id,
     nombre: datos.nombre.trim(),
@@ -147,10 +172,32 @@ export async function crearUsuario(datos: {
     horario_inicio: "09:00:00",
     horario_fin: "18:00:00",
     notificar_whatsapp_nuevo_lead: datos.notificar_whatsapp_nuevo_lead ?? (datos.rol === "admin"),
+    asignacion_automatica: datos.asignacion_automatica ?? false,
   });
   if (errPerfil) return { ok: false, mensaje: errPerfil.message };
   revalidatePath("/usuarios");
   return { ok: true };
+}
+
+/** Establece un usuario como el receptor único de asignación automática de leads. */
+export async function establecerAsesorAsignacionAutomatica(id: string): Promise<void> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+  
+  // 1. Quitar asignación automática a todos los demás perfiles
+  await sb
+    .from("perfiles")
+    .update({ asignacion_automatica: false })
+    .neq("id", id);
+
+  // 2. Marcar al usuario seleccionado
+  const { error } = await sb
+    .from("perfiles")
+    .update({ asignacion_automatica: true })
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/usuarios");
 }
 
 /** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono, notificaciones, etc.). */
@@ -167,6 +214,7 @@ export async function actualizarUsuario(
     horario_fin?: string;
     horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
     notificar_whatsapp_nuevo_lead?: boolean;
+    asignacion_automatica?: boolean;
   },
 ): Promise<void> {
   await requireAdministrador();
@@ -184,12 +232,20 @@ export async function actualizarUsuario(
 
   const sb = supabaseServidor();
 
+  if (datos.asignacion_automatica === true) {
+    await sb
+      .from("perfiles")
+      .update({ asignacion_automatica: false })
+      .neq("id", id);
+  }
+
   // Columnas que realmente existen en la tabla perfiles
   const columnasPerfiles = new Set([
     "nombre", "rol", "activo", "telefono",
     "telefono_desvio", "disponible_llamadas",
     "horario_inicio", "horario_fin", "horarios_guardia",
     "notificar_whatsapp_nuevo_lead",
+    "asignacion_automatica",
   ]);
 
   const updateData: Record<string, any> = {};
@@ -207,6 +263,7 @@ export async function actualizarUsuario(
   if (error) throw new Error(error.message);
   revalidatePath("/usuarios");
 }
+
 
 /** Restablece la contraseña de un usuario usando el cliente admin de Supabase. */
 export async function actualizarPasswordUsuario(id: string, nuevoPassword: string): Promise<void> {
