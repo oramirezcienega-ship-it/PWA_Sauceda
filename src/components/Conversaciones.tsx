@@ -45,20 +45,21 @@ function canalDe(telefono: string): CanalMensajeria {
   return "whatsapp";
 }
 
-function CanalBadge({ telefono, size = "sm" }: { telefono: string; size?: "sm" | "xs" }) {
+function CanalBadge({ telefono, size = "sm" }: { telefono: string; size?: "sm" | "xs" | "md" }) {
   const canal = canalDe(telefono);
+  const sizeClasses = size === "xs" ? "text-[8px] px-1 py-0.5" : size === "md" ? "text-xs px-2 py-0.5" : "text-[9px] px-1.5 py-0.5";
   if (canal === "messenger") return (
-    <span title="Facebook Messenger" className={`shrink-0 rounded font-bold ${size === "xs" ? "text-[8px] px-1 py-0.5" : "text-[9px] px-1.5 py-0.5"} bg-blue-100 text-blue-700 border border-blue-200`}>
+    <span title="Facebook Messenger" className={`shrink-0 rounded font-bold ${sizeClasses} bg-blue-100 text-blue-700 border border-blue-200`}>
       Messenger
     </span>
   );
   if (canal === "instagram") return (
-    <span title="Instagram DM" className={`shrink-0 rounded font-bold ${size === "xs" ? "text-[8px] px-1 py-0.5" : "text-[9px] px-1.5 py-0.5"} bg-pink-100 text-pink-700 border border-pink-200`}>
+    <span title="Instagram DM" className={`shrink-0 rounded font-bold ${sizeClasses} bg-pink-100 text-pink-700 border border-pink-200`}>
       Instagram
     </span>
   );
   return (
-    <span title="WhatsApp" className={`shrink-0 rounded font-bold ${size === "xs" ? "text-[8px] px-1 py-0.5" : "text-[9px] px-1.5 py-0.5"} bg-green-100 text-green-700 border border-green-200`}>
+    <span title="WhatsApp" className={`shrink-0 rounded font-bold ${sizeClasses} bg-green-100 text-green-700 border border-green-200`}>
       WhatsApp
     </span>
   );
@@ -1224,15 +1225,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 </div>
 
                 {/* Fila 2: Enlaces y metadatos */}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[9px] text-carbon/50">
-                  <CanalBadge telefono={detalle.telefono} />
-                  <span>{detalle.telefono}</span>
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 py-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <CanalBadge telefono={detalle.telefono} size="md" />
+                    <span className="font-mono text-sm sm:text-base font-bold text-carbon tracking-tight">
+                      {detalle.telefono}
+                    </span>
+                  </div>
                   {detalle.expedienteId && (
                     <>
-                      <span>·</span>
+                      <span className="text-carbon/30 text-xs font-mono">·</span>
                       <a
                         href={`/expediente/${detalle.expedienteId}`}
-                        className="text-sauce hover:underline font-bold flex items-center gap-0.5"
+                        className="text-sauce hover:underline font-bold text-xs font-mono flex items-center gap-0.5"
                       >
                         📁 {detalle.expedienteId}
                       </a>
@@ -1240,10 +1245,10 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   )}
                   {detalle.prospectoId && (
                     <>
-                      <span>·</span>
+                      <span className="text-carbon/30 text-xs font-mono">·</span>
                       <a
                         href={`/prospectos/${detalle.prospectoId}`}
-                        className="text-cielo hover:underline font-bold flex items-center gap-0.5"
+                        className="text-cielo hover:underline font-bold text-xs font-mono flex items-center gap-0.5"
                       >
                         👤 {detalle.prospectoId}
                       </a>
