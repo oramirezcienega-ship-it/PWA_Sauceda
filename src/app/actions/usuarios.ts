@@ -184,19 +184,31 @@ export async function establecerAsesorAsignacionAutomatica(id: string): Promise<
   await requireAdministrador();
   const sb = supabaseServidor();
   
-  // 1. Quitar asignación automática a todos los demás perfiles
-  await sb
-    .from("perfiles")
-    .update({ asignacion_automatica: false })
-    .neq("id", id);
+  try {
+    // 1. Quitar asignación automática a todos los demás perfiles
+    await sb
+      .from("perfiles")
+      .update({ asignacion_automatica: false })
+      .neq("id", id);
 
-  // 2. Marcar al usuario seleccionado
-  const { error } = await sb
-    .from("perfiles")
-    .update({ asignacion_automatica: true })
-    .eq("id", id);
+    // 2. Marcar al usuario seleccionado
+    const { error } = await sb
+      .from("perfiles")
+      .update({ asignacion_automatica: true })
+      .eq("id", id);
 
-  if (error) throw new Error(error.message);
+    if (error) {
+      if (error.message.includes("asignacion_automatica")) {
+        throw new Error("Para usar la asignación automática, es necesario ejecutar primero la migración 0069 en la consola SQL de Supabase.");
+      }
+      throw new Error(error.message);
+    }
+  } catch (err: any) {
+    if (err?.message?.includes("asignacion_automatica")) {
+      throw new Error("Para usar la asignación automática, es necesario ejecutar primero la migración 0069 en la consola SQL de Supabase.");
+    }
+    throw err;
+  }
   revalidatePath("/usuarios");
 }
 
@@ -233,10 +245,14 @@ export async function actualizarUsuario(
   const sb = supabaseServidor();
 
   if (datos.asignacion_automatica === true) {
-    await sb
-      .from("perfiles")
-      .update({ asignacion_automatica: false })
-      .neq("id", id);
+    try {
+      await sb
+        .from("perfiles")
+        .update({ asignacion_automatica: false })
+        .neq("id", id);
+    } catch {
+      // Ignorar si la columna no existe en producción aún
+    }
   }
 
   // Columnas que realmente existen en la tabla perfiles
@@ -260,7 +276,16 @@ export async function actualizarUsuario(
     .update(updateData)
     .eq("id", id);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Si la BD de producción aún no tiene la columna asignacion_automatica, reintentar sin esa columna
+    if (error.message.includes("asignacion_automatica")) {
+      delete updateData.asignacion_automatica;
+      const { error: errRetry } = await sb.from("perfiles").update(updateData).eq("id", id);
+      if (errRetry) throw new Error(errRetry.message);
+    } else {
+      throw new Error(error.message);
+    }
+  }
   revalidatePath("/usuarios");
 }
 
