@@ -24,6 +24,7 @@ import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
 import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
+import { formatearTelefonoLegible } from "@/lib/telefono";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import type {
@@ -1154,9 +1155,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   </span>
 
                   <span className="flex w-full items-center justify-between gap-2 mt-2">
-                    <span className="flex items-center gap-1 font-mono text-[9px] text-carbon/40 min-w-0">
-                      <CanalBadge telefono={c.telefono} size="xs" />
-                      <span className="truncate">{c.telefono} · {horaCorta(c.ultimaFecha)}</span>
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <CanalBadge telefono={c.telefono} size="sm" />
+                      <span className="font-mono text-xs font-bold text-carbon truncate">
+                        {formatearTelefonoLegible(c.telefono)}
+                      </span>
+                      <span className="font-mono text-[10px] text-carbon/50 shrink-0">
+                        · {horaCorta(c.ultimaFecha)}
+                      </span>
                     </span>
                     <span className="shrink-0">
                       {c.ultimaDireccion === "out" ? (
@@ -1229,7 +1235,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   <div className="flex items-center gap-1.5">
                     <CanalBadge telefono={detalle.telefono} size="md" />
                     <span className="font-mono text-sm sm:text-base font-bold text-carbon tracking-tight">
-                      {detalle.telefono}
+                      {formatearTelefonoLegible(detalle.telefono)}
                     </span>
                   </div>
                   {detalle.expedienteId && (

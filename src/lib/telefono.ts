@@ -36,3 +36,42 @@ export function variantesTelefono(tel: string): string[] {
   ]);
   return Array.from(set).filter(Boolean);
 }
+
+/**
+ * Formatea un número telefónico de manera legible y atractiva.
+ * Ej: "4775648220" -> "477 564 8220"
+ * Ej: "524775648220" -> "+52 477 564 8220"
+ */
+export function formatearTelefonoLegible(tel: string | null | undefined): string {
+  if (!tel) return "";
+  const original = tel.trim();
+  if (original.startsWith("messenger:") || original.startsWith("instagram:")) {
+    return original.split(":")[1] || original;
+  }
+
+  const tienePlus = original.startsWith("+");
+  const digitos = original.replace(/\D/g, "");
+
+  if (digitos.length === 10) {
+    return `${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6)}`;
+  }
+
+  if (digitos.length === 12 && digitos.startsWith("52")) {
+    return `+52 ${digitos.slice(2, 5)} ${digitos.slice(5, 8)} ${digitos.slice(8)}`;
+  }
+
+  if (digitos.length === 13 && digitos.startsWith("521")) {
+    return `+52 ${digitos.slice(3, 6)} ${digitos.slice(6, 9)} ${digitos.slice(9)}`;
+  }
+
+  if (original.includes(" ") || original.includes("-")) {
+    return original;
+  }
+
+  if (tienePlus) {
+    return `+${digitos}`;
+  }
+
+  return original;
+}
+
