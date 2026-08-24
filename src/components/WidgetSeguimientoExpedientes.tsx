@@ -513,9 +513,9 @@ export function WidgetSeguimientoExpedientes() {
             onChange={setFiltrosEtapa}
           />
 
-          {/* Filtro por Estatus del Prospecto (Multi-select) */}
+          {/* Filtro por Etapa del Prospecto (Multi-select) */}
           <MultiSelectDropdown
-            label="Estatus Prospecto"
+            label="Etapa Prospecto"
             icon="👤"
             opciones={prospectoEstatusDisponibles.map((p) => ({ value: p, label: `Prospecto: ${p}` }))}
             seleccionados={filtrosProspectoEstatus}

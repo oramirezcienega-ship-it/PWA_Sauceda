@@ -445,9 +445,9 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
               {ids.length} seleccionado{ids.length === 1 ? "" : "s"}
             </span>
 
-            {/* Cambiar Estatus */}
+            {/* Cambiar Etapa del Prospecto */}
             <label className="flex items-center gap-1.5 text-carbon/70">
-              Estatus / Etapa:
+              Etapa del Prospecto:
               <select
                 defaultValue=""
                 disabled={trabajando}
@@ -459,7 +459,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 }}
                 className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
               >
-                <option value="">— cambiar estatus —</option>
+                <option value="">— cambiar etapa —</option>
                 {ESTATUS_PROSPECTO_LISTA.map((es) => (
                   <option key={es.id} value={es.id}>
                     {es.nombre}
@@ -701,7 +701,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   ["telefono", "Teléfono", "izquierda"],
                   ["ciudad", "Ciudad", "izquierda"],
                   ["origen", "Origen", "izquierda"],
-                  ["estatus", "Etapa / Estatus", "izquierda"],
+                  ["estatus", "Etapa del Prospecto", "izquierda"],
                   ["calificacion", "Calificación", "izquierda"],
                 ] as const
               ).map(([columna, label, alineado]) => (
