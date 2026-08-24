@@ -1003,8 +1003,9 @@ export default function PaginaPublicaciones() {
                             placeholder="MARCA"
                             value={pubEditando.diseno_banner?.sellos?.[1]?.texto_top || "MARCA"}
                             onChange={(e) => {
-                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{}, { texto_top: "MARCA", texto_bottom: "GTO" }])];
-                              sellos[1] = { ...sellos[1], texto_top: e.target.value };
+                              const s0 = pubEditando.diseno_banner?.sellos?.[0] || { texto_top: "", texto_bottom: "" };
+                              const s1 = pubEditando.diseno_banner?.sellos?.[1] || { texto_top: "MARCA", texto_bottom: "GTO" };
+                              const sellos = [s0, { ...s1, texto_top: e.target.value }];
                               setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
                             }}
                             className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"
@@ -1014,8 +1015,9 @@ export default function PaginaPublicaciones() {
                             placeholder="GTO"
                             value={pubEditando.diseno_banner?.sellos?.[1]?.texto_bottom || "GTO"}
                             onChange={(e) => {
-                              const sellos = [...(pubEditando.diseno_banner?.sellos || [{}, { texto_top: "MARCA", texto_bottom: "GTO" }])];
-                              sellos[1] = { ...sellos[1], texto_bottom: e.target.value };
+                              const s0 = pubEditando.diseno_banner?.sellos?.[0] || { texto_top: "", texto_bottom: "" };
+                              const s1 = pubEditando.diseno_banner?.sellos?.[1] || { texto_top: "MARCA", texto_bottom: "GTO" };
+                              const sellos = [s0, { ...s1, texto_bottom: e.target.value }];
                               setPubEditando({ ...pubEditando, diseno_banner: { ...pubEditando.diseno_banner, sellos } });
                             }}
                             className="bg-white border border-dorado/30 rounded-lg px-2 py-1 text-xs text-carbon"

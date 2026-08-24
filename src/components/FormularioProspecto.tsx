@@ -21,7 +21,7 @@ const VACIO: DatosProspecto = {
   campaignName: "",
   notas: "",
   canalId: "",
-  estatus: "nuevo",
+  estatus: "lead",
   calificacion: "frio",
 };
 
@@ -173,7 +173,7 @@ export function FormularioProspecto({
           </select>
         </Campo>
 
-        <Campo etiqueta="Estatus del Prospecto">
+        <Campo etiqueta="Etapa del Prospecto">
           <select
             value={datos.estatus}
             onChange={(e) =>

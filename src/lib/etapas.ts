@@ -11,18 +11,18 @@ import type { Etapa, EtapaId } from "./types";
 export const ETAPAS: Etapa[] = [
   {
     id: "nuevo-lead",
-    nombre: "Nuevo lead",
+    nombre: "Nuevo",
     orden: 0,
-    descripcion: "Prospecto recién captado, sin contacto aún.",
+    descripcion: "Expediente inicial calificado que entra a ventas.",
     nombreCliente: "Solicitud recibida",
     descripcionCliente:
       "Recibimos tus datos. En breve un asesor se pondrá en contacto contigo.",
   },
   {
     id: "contactado",
-    nombre: "Contactado",
+    nombre: "Contacto inicial",
     orden: 1,
-    descripcion: "Ya se estableció comunicación con el cliente.",
+    descripcion: "Ya se estableció comunicación formal con el cliente.",
     nombreCliente: "En contacto",
     descripcionCliente:
       "Ya estamos en comunicación contigo y revisando tu caso.",
@@ -61,9 +61,9 @@ export const ETAPAS: Etapa[] = [
   },
   {
     id: "cerrado",
-    nombre: "Cerrado",
+    nombre: "Cerrado ganado",
     orden: 6,
-    descripcion: "Traspaso concluido con éxito.",
+    descripcion: "Traspaso o venta concluida con éxito.",
     nombreCliente: "Concluido",
     descripcionCliente:
       "¡Tu traspaso se concluyó con éxito! Gracias por confiar en SAUCEDA.",

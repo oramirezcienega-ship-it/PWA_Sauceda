@@ -1,21 +1,25 @@
 import type { EstatusProspecto, CalificacionProspecto } from "./types";
 
 export const ESTATUS_PROSPECTO_LISTA: { id: EstatusProspecto; nombre: string }[] = [
-  { id: "nuevo", nombre: "Nuevo" },
-  { id: "en_conversacion", nombre: "En conversación" },
-  { id: "expediente_abierto", nombre: "Expediente abierto" },
-  { id: "cliente", nombre: "Cliente" },
+  { id: "lead", nombre: "Lead (Recién captado)" },
+  { id: "mql", nombre: "MQL (En conversación)" },
+  { id: "sql", nombre: "SQL (Pasa a ventas / Expediente)" },
+  { id: "cliente", nombre: "Cliente (Firmado)" },
   { id: "sin_contacto", nombre: "Sin contacto" },
   { id: "no_viable", nombre: "No viable" },
 ];
 
-export const ESTATUS_POR_ID: Record<EstatusProspecto, string> = ESTATUS_PROSPECTO_LISTA.reduce(
-  (acc, o) => {
-    acc[o.id] = o.nombre;
-    return acc;
-  },
-  {} as Record<EstatusProspecto, string>
-);
+export const ESTATUS_POR_ID: Record<EstatusProspecto, string> = {
+  lead: "Lead",
+  mql: "MQL",
+  sql: "SQL",
+  cliente: "Cliente",
+  nuevo: "Lead",
+  en_conversacion: "MQL",
+  expediente_abierto: "SQL",
+  sin_contacto: "Sin contacto",
+  no_viable: "No viable",
+};
 
 export const CALIFICACION_PROSPECTO_LISTA: { id: CalificacionProspecto; nombre: string }[] = [
   { id: "caliente", nombre: "Caliente (Alta prioridad)" },

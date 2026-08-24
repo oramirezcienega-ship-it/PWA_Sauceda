@@ -44,7 +44,7 @@ export async function listarProspectos(): Promise<Prospecto[]> {
   const sb = supabaseServidor();
   let query = sb
     .from("prospectos")
-    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre)");
+    .select("*, asesor:asesor_id(nombre), operador:operador_id(nombre), expedientes:expedientes(id, tipo_negocio, etapa)");
 
   if (rol === "asesor") {
     query = query.eq("asesor_id", usuario.id);
@@ -446,6 +446,36 @@ export async function cambiarEstatusMasivo(
   const { error } = await sb
     .from("prospectos")
     .update({ estatus })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+}
+
+/** Actualiza un campo arbitrario de varios prospectos a la vez (acción masiva). */
+export async function actualizarCampoMasivo(
+  ids: string[],
+  campo: string,
+  valor: any,
+): Promise<void> {
+  await requireAdmin();
+  if (ids.length === 0) return;
+  const camposPermitidos = [
+    "ciudad",
+    "notas",
+    "origen",
+    "estatus",
+    "calificacion",
+    "valor_campana",
+    "campaign_name",
+    "adset_name",
+    "ad_name",
+  ];
+  if (!camposPermitidos.includes(campo)) {
+    throw new Error(`El campo '${campo}' no es un campo modificable masivamente.`);
+  }
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("prospectos")
+    .update({ [campo]: valor })
     .in("id", ids);
   if (error) throw new Error(error.message);
 }

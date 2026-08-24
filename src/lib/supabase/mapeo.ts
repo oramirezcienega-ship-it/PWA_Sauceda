@@ -186,11 +186,17 @@ export interface FilaProspecto {
   operador?: { nombre: string } | null;
   perfiles?: { nombre: string } | null;
   no_viable?: boolean;
+  expedientes?: { id: string; tipo_negocio?: string | null; etapa?: string | null }[] | null;
   created_at?: string;
 }
 
 /** Fila de la BD → modelo de la app. */
 export function aProspecto(fila: FilaProspecto): Prospecto {
+  const exps = fila.expedientes || [];
+  const expActivo = exps.find((e) => e.etapa !== "cerrado" && e.etapa !== "perdido" && e.etapa !== "venta") || exps[0];
+  const tipoNegocioPrincipal = expActivo?.tipo_negocio || null;
+  const expedientesCount = exps.length;
+
   return {
     id: fila.id,
     nombre: fila.nombre,
@@ -219,6 +225,8 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     operadorId: fila.operador_id ?? null,
     operadorNombre: fila.operador?.nombre ?? null,
     noViable: fila.no_viable ?? false,
+    tipoNegocioPrincipal,
+    expedientesCount,
     createdAt: fila.created_at ?? "",
   };
 }
