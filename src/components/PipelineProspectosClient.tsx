@@ -90,6 +90,29 @@ export function PipelineProspectosClient({
     });
   }, [prospectos, busqueda, filtroCalificacion, filtroOrigen, filtroAsesor]);
 
+  // Funciones para ordenamiento descendente (de más reciente/nuevo a más antiguo)
+  function obtenerTimestampProspecto(p: Prospecto): number {
+    if (p.createdAt) {
+      const t = new Date(p.createdAt).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    const numId = parseInt(p.id.replace(/\D/g, ""), 10);
+    return isNaN(numId) ? 0 : numId;
+  }
+
+  function obtenerTimestampExpediente(exp: Expediente): number {
+    if (exp.createdAt) {
+      const t = new Date(exp.createdAt).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    if (exp.ultimoMovimiento) {
+      const t = new Date(exp.ultimoMovimiento).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    const numId = parseInt(exp.id.replace(/\D/g, ""), 10);
+    return isNaN(numId) ? 0 : numId;
+  }
+
   // Aplicar filtros a Expedientes
   const expedientesFiltrados = useMemo(() => {
     return expedientes.filter((e) => {
@@ -352,12 +375,14 @@ export function PipelineProspectosClient({
       {tipoPipeline === "prospectos" && (
         <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)]">
           {ETAPAS_PROSPECTO.map((etapa) => {
-            const prospectosEtapa = prospectosFiltrados.filter((p) => {
-              if (etapa.id === "lead") return p.estatus === "lead" || p.estatus === "nuevo";
-              if (etapa.id === "mql") return p.estatus === "mql" || p.estatus === "en_conversacion";
-              if (etapa.id === "sql") return p.estatus === "sql" || p.estatus === "expediente_abierto";
-              return p.estatus === etapa.id;
-            });
+            const prospectosEtapa = prospectosFiltrados
+              .filter((p) => {
+                if (etapa.id === "lead") return p.estatus === "lead" || p.estatus === "nuevo";
+                if (etapa.id === "mql") return p.estatus === "mql" || p.estatus === "en_conversacion";
+                if (etapa.id === "sql") return p.estatus === "sql" || p.estatus === "expediente_abierto";
+                return p.estatus === etapa.id;
+              })
+              .sort((a, b) => obtenerTimestampProspecto(b) - obtenerTimestampProspecto(a));
 
             const totalValorCampana = prospectosEtapa.reduce(
               (acc, p) => acc + (Number(p.valorCampana) || 0),
@@ -517,7 +542,9 @@ export function PipelineProspectosClient({
       {tipoPipeline === "expedientes" && (
         <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)]">
           {ETAPAS.map((etapa) => {
-            const expedientesEtapa = expedientesFiltrados.filter((exp) => exp.etapa === etapa.id);
+            const expedientesEtapa = expedientesFiltrados
+              .filter((exp) => exp.etapa === etapa.id)
+              .sort((a, b) => obtenerTimestampExpediente(b) - obtenerTimestampExpediente(a));
             const totalMonto = expedientesEtapa.reduce(
               (acc, exp) => acc + (Number(exp.valorEstimado) || 0),
               0,
