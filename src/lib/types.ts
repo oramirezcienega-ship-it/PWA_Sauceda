@@ -282,12 +282,15 @@ export type OrigenAdquisicion =
  * que se deriva de la etapa de sus expedientes.
  */
 export type EstatusProspecto =
+  | "lead"
+  | "mql"
+  | "sql"
+  | "cliente"
   | "nuevo"
   | "en_conversacion"
-  | "no_viable"
-  | "sin_contacto"
   | "expediente_abierto"
-  | "cliente";
+  | "no_viable"
+  | "sin_contacto";
 
 export type CalificacionProspecto =
   | "caliente"

@@ -14,6 +14,7 @@ interface ActividadesConExpedienteProps {
   prospectoId?: string | null;
   asesorNombreDefault?: string | null;
   operadorNombreDefault?: string | null;
+  initialContraido?: boolean;
 }
 
 export interface ActividadItem {

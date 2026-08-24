@@ -285,7 +285,7 @@ export function WidgetSeguimientoExpedientes() {
 
       const coincideProspectoEstatus =
         filtrosProspectoEstatus.length === 0 ||
-        (e.prospectoEstatus && filtrosProspectoEstatus.some((p) => p.toLowerCase() === e.prospectoEstatus.toLowerCase()));
+        (!!e.prospectoEstatus && filtrosProspectoEstatus.some((p) => p.toLowerCase() === e.prospectoEstatus?.toLowerCase()));
 
       const coincideCalificacion =
         filtrosCalificacion.length === 0 ||

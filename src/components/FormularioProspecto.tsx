@@ -21,7 +21,7 @@ const VACIO: DatosProspecto = {
   campaignName: "",
   notas: "",
   canalId: "",
-  estatus: "nuevo",
+  estatus: "lead",
   calificacion: "frio",
 };
 

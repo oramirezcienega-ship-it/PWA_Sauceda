@@ -25,6 +25,7 @@ import {
 import { ThOrden } from "./ThOrden";
 import { EstatusProspectoBadge } from "./EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
+import { ESTATUS_PROSPECTO_LISTA } from "@/lib/estatus";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   nombre: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
@@ -287,12 +288,11 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                 className="rounded-md border border-carbon/15 bg-white px-2 py-1 text-xs text-verde-profundo outline-none focus:border-sauce"
               >
                 <option value="">— estatus —</option>
-                <option value="nuevo">Nuevo</option>
-                <option value="en_conversacion">En conversación</option>
-                <option value="sin_contacto">Sin contacto</option>
-                <option value="expediente_abierto">Expediente abierto</option>
-                <option value="cliente">Cliente</option>
-                <option value="no_viable">No viable</option>
+                {ESTATUS_PROSPECTO_LISTA.map((es) => (
+                  <option key={es.id} value={es.id}>
+                    {es.nombre}
+                  </option>
+                ))}
               </select>
             </label>
 

@@ -21,11 +21,11 @@ export async function sincronizarEstatusProspecto(
     return;
   }
 
-  let nuevoEstatus: EstatusProspecto = "nuevo";
+  let nuevoEstatus: EstatusProspecto = "lead";
   let nuevaCalificacion: CalificacionProspecto = "frio";
 
   if (exps.length > 0) {
-    const tieneCerrado = exps.some((e) => e.etapa === "cerrado");
+    const tieneCerrado = exps.some((e) => e.etapa === "cerrado" || e.etapa === "venta");
     const todosPerdidos = exps.every((e) => e.etapa === "perdido");
 
     if (tieneCerrado) {
@@ -35,12 +35,12 @@ export async function sincronizarEstatusProspecto(
       nuevoEstatus = "no_viable";
       nuevaCalificacion = "descalificado";
     } else {
-      // Tiene expedientes activos/en proceso
-      nuevoEstatus = "expediente_abierto";
+      // Tiene expedientes activos/en proceso -> Pasa a ventas (SQL)
+      nuevoEstatus = "sql";
       nuevaCalificacion = "templado";
     }
   } else {
-    // Si no tiene expedientes, ver si tiene mensajes de whatsapp/sociales para marcar en_conversacion
+    // Si no tiene expedientes, ver si tiene mensajes de whatsapp/sociales para marcar MQL
     const { data: prospecto } = await sb
       .from("prospectos")
       .select("telefono, canal_id")
@@ -55,7 +55,8 @@ export async function sincronizarEstatusProspecto(
         .or(`telefono.eq.${prospecto.telefono},canal_id.eq.${prospecto.canal_id ?? ""}`);
 
       if (!errMsgs && count && count > 0) {
-        nuevoEstatus = "en_conversacion";
+        nuevoEstatus = "mql";
+        nuevaCalificacion = "templado";
       }
     }
   }

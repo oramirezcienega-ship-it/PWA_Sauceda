@@ -103,8 +103,8 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
           const { cambiarCalificacionExpediente } = await import("@/app/actions/expedientes");
           await cambiarCalificacionExpediente(expedienteId, "frio");
         } else if (prospectoId) {
-          const { cambiarCalificacionProspecto } = await import("@/app/actions/prospectos");
-          await cambiarCalificacionProspecto(prospectoId, "frio");
+          const { cambiarCalificacionMasivo } = await import("@/app/actions/prospectos");
+          await cambiarCalificacionMasivo([prospectoId], "frio");
         }
       }
 
