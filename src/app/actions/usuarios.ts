@@ -180,16 +180,20 @@ export async function crearUsuario(datos: {
 }
 
 /** Establece un usuario como el receptor único de asignación automática de leads. */
-export async function establecerAsesorAsignacionAutomatica(id: string): Promise<void> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
-  
+export async function establecerAsesorAsignacionAutomatica(id: string): Promise<{ ok: boolean; mensaje?: string }> {
   try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+    
     // 1. Quitar asignación automática a todos los demás perfiles
-    await sb
-      .from("perfiles")
-      .update({ asignacion_automatica: false })
-      .neq("id", id);
+    try {
+      await sb
+        .from("perfiles")
+        .update({ asignacion_automatica: false })
+        .neq("id", id);
+    } catch {
+      // Ignorar si la columna no existe aún en la base de datos
+    }
 
     // 2. Marcar al usuario seleccionado
     const { error } = await sb
@@ -199,17 +203,18 @@ export async function establecerAsesorAsignacionAutomatica(id: string): Promise<
 
     if (error) {
       if (error.message.includes("asignacion_automatica")) {
-        throw new Error("Para usar la asignación automática, es necesario ejecutar primero la migración 0069 en la consola SQL de Supabase.");
+        return {
+          ok: false,
+          mensaje: "Para usar la asignación automática, es necesario ejecutar primero la migración 0069 en la consola SQL de Supabase.",
+        };
       }
-      throw new Error(error.message);
+      return { ok: false, mensaje: error.message };
     }
+    revalidatePath("/usuarios");
+    return { ok: true };
   } catch (err: any) {
-    if (err?.message?.includes("asignacion_automatica")) {
-      throw new Error("Para usar la asignación automática, es necesario ejecutar primero la migración 0069 en la consola SQL de Supabase.");
-    }
-    throw err;
+    return { ok: false, mensaje: err?.message || "Error al establecer asignación automática." };
   }
-  revalidatePath("/usuarios");
 }
 
 /** Actualiza el perfil de un usuario (nombre, rol, activo, teléfono, notificaciones, etc.). */
@@ -228,92 +233,118 @@ export async function actualizarUsuario(
     notificar_whatsapp_nuevo_lead?: boolean;
     asignacion_automatica?: boolean;
   },
-): Promise<void> {
-  await requireAdministrador();
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdministrador();
 
-  // Evitar auto-bloqueo o pérdida de rol administrador
-  const uActual = await usuarioActual();
-  if (uActual && uActual.id === id) {
-    if (datos.activo === false) {
-      throw new Error("No puedes desactivar tu propio usuario administrador.");
+    // Evitar auto-bloqueo o pérdida de rol administrador
+    const uActual = await usuarioActual();
+    if (uActual && uActual.id === id) {
+      if (datos.activo === false) {
+        return { ok: false, mensaje: "No puedes desactivar tu propio usuario administrador." };
+      }
+      if (datos.rol !== undefined && datos.rol !== "admin") {
+        return { ok: false, mensaje: "No puedes cambiar tu propio rol de administrador." };
+      }
     }
-    if (datos.rol !== undefined && datos.rol !== "admin") {
-      throw new Error("No puedes cambiar tu propio rol de administrador.");
+
+    const sb = supabaseServidor();
+
+    if (datos.asignacion_automatica === true) {
+      try {
+        await sb
+          .from("perfiles")
+          .update({ asignacion_automatica: false })
+          .neq("id", id);
+      } catch {
+        // Ignorar si la columna no existe en producción aún
+      }
     }
+
+    // Columnas que pueden enviarse a la tabla perfiles
+    const columnasPerfiles = new Set([
+      "nombre", "rol", "activo", "telefono",
+      "telefono_desvio", "disponible_llamadas",
+      "horario_inicio", "horario_fin", "horarios_guardia",
+      "notificar_whatsapp_nuevo_lead",
+      "asignacion_automatica",
+    ]);
+
+    const updateData: Record<string, any> = {};
+    for (const key in datos) {
+      if ((datos as any)[key] !== undefined && columnasPerfiles.has(key)) {
+        updateData[key] = (datos as any)[key];
+      }
+    }
+
+    let { error } = await sb
+      .from("perfiles")
+      .update(updateData)
+      .eq("id", id);
+
+    if (error) {
+      // Si la BD de producción no tiene columnas opcionales recien agregadas, eliminarlas y reintentar
+      let reintentar = false;
+      if (error.message.includes("notificar_whatsapp_nuevo_lead")) {
+        delete updateData.notificar_whatsapp_nuevo_lead;
+        reintentar = true;
+      }
+      if (error.message.includes("asignacion_automatica")) {
+        delete updateData.asignacion_automatica;
+        reintentar = true;
+      }
+
+      if (reintentar) {
+        const { error: errRetry } = await sb.from("perfiles").update(updateData).eq("id", id);
+        if (errRetry) {
+          return { ok: false, mensaje: errRetry.message };
+        }
+      } else {
+        return { ok: false, mensaje: error.message };
+      }
+    }
+    revalidatePath("/usuarios");
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al actualizar usuario:", err);
+    return { ok: false, mensaje: err?.message || "Ocurrió un error inesperado al actualizar el usuario." };
   }
-
-  const sb = supabaseServidor();
-
-  if (datos.asignacion_automatica === true) {
-    try {
-      await sb
-        .from("perfiles")
-        .update({ asignacion_automatica: false })
-        .neq("id", id);
-    } catch {
-      // Ignorar si la columna no existe en producción aún
-    }
-  }
-
-  // Columnas que realmente existen en la tabla perfiles
-  const columnasPerfiles = new Set([
-    "nombre", "rol", "activo", "telefono",
-    "telefono_desvio", "disponible_llamadas",
-    "horario_inicio", "horario_fin", "horarios_guardia",
-    "notificar_whatsapp_nuevo_lead",
-    "asignacion_automatica",
-  ]);
-
-  const updateData: Record<string, any> = {};
-  for (const key in datos) {
-    if ((datos as any)[key] !== undefined && columnasPerfiles.has(key)) {
-      updateData[key] = (datos as any)[key];
-    }
-  }
-
-  const { error } = await sb
-    .from("perfiles")
-    .update(updateData)
-    .eq("id", id);
-
-  if (error) {
-    // Si la BD de producción aún no tiene la columna asignacion_automatica, reintentar sin esa columna
-    if (error.message.includes("asignacion_automatica")) {
-      delete updateData.asignacion_automatica;
-      const { error: errRetry } = await sb.from("perfiles").update(updateData).eq("id", id);
-      if (errRetry) throw new Error(errRetry.message);
-    } else {
-      throw new Error(error.message);
-    }
-  }
-  revalidatePath("/usuarios");
 }
 
-
 /** Restablece la contraseña de un usuario usando el cliente admin de Supabase. */
-export async function actualizarPasswordUsuario(id: string, nuevoPassword: string): Promise<void> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
-  const { error } = await sb.auth.admin.updateUserById(id, {
-    password: nuevoPassword,
-  });
-  if (error) throw new Error(error.message);
+export async function actualizarPasswordUsuario(id: string, nuevoPassword: string): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+    const { error } = await sb.auth.admin.updateUserById(id, {
+      password: nuevoPassword,
+    });
+    if (error) return { ok: false, mensaje: error.message };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, mensaje: err?.message || "Error al actualizar la contraseña." };
+  }
 }
 
 /** Elimina un usuario (auth + perfil en cascada). */
-export async function eliminarUsuario(id: string): Promise<void> {
-  await requireAdministrador();
+export async function eliminarUsuario(id: string): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdministrador();
 
-  // Evitar auto-eliminación
-  const uActual = await usuarioActual();
-  if (uActual && uActual.id === id) {
-    throw new Error("No puedes eliminar tu propio usuario administrador.");
+    // Evitar auto-eliminación
+    const uActual = await usuarioActual();
+    if (uActual && uActual.id === id) {
+      return { ok: false, mensaje: "No puedes eliminar tu propio usuario administrador." };
+    }
+
+    const sb = supabaseServidor();
+    const { error } = await sb.auth.admin.deleteUser(id);
+    if (error) return { ok: false, mensaje: error.message };
+    revalidatePath("/usuarios");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, mensaje: err?.message || "Error al eliminar el usuario." };
   }
-
-  const sb = supabaseServidor();
-  const { error } = await sb.auth.admin.deleteUser(id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/usuarios");
 }
 
 /** Obtiene una lista simplificada de asesores/usuarios activos para selects. */
