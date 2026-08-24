@@ -13,7 +13,7 @@ import type {
 } from "@/lib/types";
 import { labelTipoNegocio } from "@/lib/types";
 import { ESTATUS_PROSPECTO_LISTA } from "@/lib/estatus";
-import { TODAS_LAS_ETAPAS, PROBABILIDAD_POR_ETAPA } from "@/lib/etapas";
+import { ETAPAS, PROBABILIDAD_POR_ETAPA } from "@/lib/etapas";
 import { ORIGENES, ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
@@ -210,7 +210,7 @@ export function PipelineProspectosClient({
             📊 Pipeline Comercial
           </h1>
           <p className="text-xs text-carbon/60">
-            Conmuta entre el embudo de **Prospectos** y el flujo operativo de **Expedientes**. Arrastra las tarjetas para avanzar de etapa.
+            Conmuta entre el embudo de <strong className="text-verde-profundo font-semibold">Prospectos</strong> y el flujo operativo de <strong className="text-verde-profundo font-semibold">Expedientes</strong>. Arrastra las tarjetas para avanzar de etapa.
           </p>
         </div>
 
@@ -516,7 +516,7 @@ export function PipelineProspectosClient({
       {/* ========================================================================= */}
       {tipoPipeline === "expedientes" && (
         <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)]">
-          {TODAS_LAS_ETAPAS.map((etapa) => {
+          {ETAPAS.map((etapa) => {
             const expedientesEtapa = expedientesFiltrados.filter((exp) => exp.etapa === etapa.id);
             const totalMonto = expedientesEtapa.reduce(
               (acc, exp) => acc + (Number(exp.valorEstimado) || 0),
@@ -586,6 +586,7 @@ export function PipelineProspectosClient({
                       : null;
 
                     const siendoArrastrado = arrastrandoId === exp.id;
+                    const etiquetaTipo = exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "Traspaso";
 
                     return (
                       <div
@@ -599,32 +600,36 @@ export function PipelineProspectosClient({
                             : "border-carbon/10 hover:-translate-y-0.5 hover:border-sauce/50 hover:shadow-md"
                         }`}
                       >
-                        {/* Drag Handle & Name */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-1.5">
-                            <span className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5" title="Arrastrar para mover">
+                        {/* Drag Handle & Name & Badge */}
+                        <div className="flex items-start justify-between gap-1.5">
+                          <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                            <span className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5 shrink-0" title="Arrastrar para mover">
                               ⋮⋮
                             </span>
-                            <div>
+                            <div className="min-w-0 flex-1">
                               <Link
                                 href={`/expediente/${exp.id}`}
-                                className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block"
+                                className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block truncate"
+                                title={exp.nombreCompleto}
                               >
                                 {exp.nombreCompleto}
                               </Link>
-                              <span className="font-mono text-[10px] text-carbon/40">
+                              <span className="font-mono text-[10px] text-carbon/40 block">
                                 {exp.id}
                               </span>
                             </div>
                           </div>
 
-                          <span className="shrink-0 rounded-md bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo">
-                            {exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "Traspaso / Compra"}
+                          <span
+                            className="shrink-0 max-w-[110px] truncate rounded-md bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo"
+                            title={etiquetaTipo}
+                          >
+                            {etiquetaTipo}
                           </span>
                         </div>
 
                         {/* Fraccionamiento */}
-                        <div className="mt-2 text-xs text-carbon/70">
+                        <div className="mt-2 text-xs text-carbon/70 truncate" title={exp.fraccionamiento || "Sin fraccionamiento"}>
                           📍 {exp.fraccionamiento || "Sin fraccionamiento"}
                         </div>
 
@@ -640,19 +645,19 @@ export function PipelineProspectosClient({
                         <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">
                           {exp.asesorNombre ? (
                             <span
-                              className="inline-flex items-center gap-1.5 text-carbon/70 font-medium"
+                              className="inline-flex items-center gap-1.5 text-carbon/70 font-medium min-w-0"
                               title={`Asesor: ${exp.asesorNombre}`}
                             >
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-verde-profundo text-[9px] font-bold text-crema">
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-verde-profundo text-[9px] font-bold text-crema">
                                 {inicialesAsesor}
                               </span>
-                              <span className="truncate max-w-[100px]">{exp.asesorNombre}</span>
+                              <span className="truncate max-w-[90px]">{exp.asesorNombre}</span>
                             </span>
                           ) : (
                             <span className="text-[10px] italic text-carbon/30">Sin asesor</span>
                           )}
 
-                          <span className="text-carbon/40 text-[10px] font-mono">
+                          <span className="text-carbon/40 text-[10px] font-mono shrink-0">
                             {exp.ultimoMovimiento ? `⏱️ ${exp.ultimoMovimiento}` : ""}
                           </span>
                         </div>
