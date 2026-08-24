@@ -24,6 +24,7 @@ interface Perfil {
   id: string;
   nombre: string;
   rol: string;
+  activo?: boolean;
 }
 
 interface PipelineProspectosClientProps {
@@ -337,7 +338,7 @@ export function PipelineProspectosClient({
             <option value="todos">Todos los Asesores</option>
             <option value="sin_asignar">Sin Asesor Asignado</option>
             {perfiles
-              .filter((p) => p.rol === "asesor")
+              .filter((p) => p.activo !== false)
               .map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre}
