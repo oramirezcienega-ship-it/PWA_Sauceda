@@ -14,7 +14,7 @@ import { ModalAgendaUsuario } from "./ModalAgendaUsuario";
 /** Tarjeta individual de usuario en formato fila (horizontal). */
 interface TarjetaUsuarioProps {
   u: UsuarioApp;
-  onUpdate: (id: string, cambios: Partial<UsuarioApp>) => Promise<void>;
+  onUpdate: (id: string, cambios: Partial<UsuarioApp>) => Promise<{ ok: boolean; mensaje?: string }>;
   onDelete: (id: string) => Promise<void>;
   onConfigConmutador: (u: UsuarioApp) => void;
   onConfigAgenda: (u: UsuarioApp) => void;
@@ -71,10 +71,15 @@ function TarjetaUsuario({
     setGuardando(true);
     try {
       if (password.trim() !== "") {
-        await actualizarPasswordUsuario(u.id, password.trim());
+        const resPass = await actualizarPasswordUsuario(u.id, password.trim());
+        if (!resPass.ok) {
+          alert(resPass.mensaje || "No se pudo actualizar la contraseña.");
+          setGuardando(false);
+          return;
+        }
         setPassword("");
       }
-      await onUpdate(u.id, {
+      const resUpd = await onUpdate(u.id, {
         nombre: nombre.trim(),
         telefono: telefono.trim(),
         rol,
@@ -82,6 +87,10 @@ function TarjetaUsuario({
         notificar_whatsapp_nuevo_lead: notificarWhatsapp,
         asignacion_automatica: asignacionAutomatica,
       });
+      if (resUpd && !resUpd.ok) {
+        alert(resUpd.mensaje || "No se pudo actualizar el usuario.");
+        return;
+      }
       setEditando(false);
     } catch (err) {
       console.error("Error al actualizar usuario:", err);
@@ -482,13 +491,17 @@ export function TablaUsuarios({
     if (!nuevoId || cambiandoAutoAsignacion) return;
     setCambiandoAutoAsignacion(true);
     try {
-      await establecerAsesorAsignacionAutomatica(nuevoId);
-      setUsuarios((prev) =>
-        prev.map((u) => ({
-          ...u,
-          asignacion_automatica: u.id === nuevoId,
-        }))
-      );
+      const res = await establecerAsesorAsignacionAutomatica(nuevoId);
+      if (res.ok) {
+        setUsuarios((prev) =>
+          prev.map((u) => ({
+            ...u,
+            asignacion_automatica: u.id === nuevoId,
+          }))
+        );
+      } else {
+        alert(res.mensaje || "No se pudo actualizar la asignación automática.");
+      }
     } catch (err) {
       console.error("Error al cambiar asignación automática:", err);
       alert(
@@ -522,7 +535,7 @@ export function TablaUsuarios({
     if (!agenteConmutador) return;
     setModalGuardando(true);
     try {
-      await actualizarUsuario(agenteConmutador.id, {
+      const res = await actualizarUsuario(agenteConmutador.id, {
         nombre: agenteConmutador.nombre,
         rol: agenteConmutador.rol,
         activo: agenteConmutador.activo,
@@ -530,19 +543,23 @@ export function TablaUsuarios({
         disponible_llamadas: dispLlamadas,
         horarios_guardia: horariosGuardia,
       });
-      setUsuarios((prev) =>
-        prev.map((x) =>
-          x.id === agenteConmutador.id
-            ? {
-                ...x,
-                telefono_desvio: telDesvio.trim(),
-                disponible_llamadas: dispLlamadas,
-                horarios_guardia: horariosGuardia,
-              }
-            : x
-        )
-      );
-      setAgenteConmutador(null);
+      if (res.ok) {
+        setUsuarios((prev) =>
+          prev.map((x) =>
+            x.id === agenteConmutador.id
+              ? {
+                  ...x,
+                  telefono_desvio: telDesvio.trim(),
+                  disponible_llamadas: dispLlamadas,
+                  horarios_guardia: horariosGuardia,
+                }
+              : x
+          )
+        );
+        setAgenteConmutador(null);
+      } else {
+        alert(res.mensaje || "No se pudo guardar la configuración de conmutador.");
+      }
     } catch (err) {
       console.error("Error al guardar configuración de conmutador:", err);
     } finally {
@@ -582,13 +599,13 @@ export function TablaUsuarios({
     });
   };
 
-  async function handleUpdateUsuario(id: string, cambios: Partial<UsuarioApp>) {
+  async function handleUpdateUsuario(id: string, cambios: Partial<UsuarioApp>): Promise<{ ok: boolean; mensaje?: string }> {
     const u = usuarios.find((x) => x.id === id);
-    if (!u) return;
+    if (!u) return { ok: false, mensaje: "Usuario no encontrado" };
     const actualizado = { ...u, ...cambios };
 
     // Ejecutar server action
-    await actualizarUsuario(id, {
+    const res = await actualizarUsuario(id, {
       nombre: actualizado.nombre,
       rol: actualizado.rol,
       activo: actualizado.activo,
@@ -602,21 +619,27 @@ export function TablaUsuarios({
       asignacion_automatica: actualizado.asignacion_automatica,
     });
 
-    // Actualizar estado si la llamada al servidor no falló
-    setUsuarios((prev) =>
-      prev.map((x) => {
-        if (x.id === id) return actualizado;
-        if (cambios.asignacion_automatica === true) {
-          return { ...x, asignacion_automatica: false };
-        }
-        return x;
-      })
-    );
+    if (res.ok) {
+      setUsuarios((prev) =>
+        prev.map((x) => {
+          if (x.id === id) return actualizado;
+          if (cambios.asignacion_automatica === true) {
+            return { ...x, asignacion_automatica: false };
+          }
+          return x;
+        })
+      );
+    }
+    return res;
   }
 
   async function handleDeleteUsuario(id: string) {
-    await eliminarUsuario(id);
-    setUsuarios((prev) => prev.filter((x) => x.id !== id));
+    const res = await eliminarUsuario(id);
+    if (res.ok) {
+      setUsuarios((prev) => prev.filter((x) => x.id !== id));
+    } else {
+      alert(res.mensaje || "No se pudo eliminar el usuario.");
+    }
   }
 
   return (
