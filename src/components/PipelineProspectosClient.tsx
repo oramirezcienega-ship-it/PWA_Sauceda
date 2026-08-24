@@ -24,6 +24,7 @@ interface Perfil {
   id: string;
   nombre: string;
   rol: string;
+  activo?: boolean;
 }
 
 interface PipelineProspectosClientProps {
@@ -40,7 +41,7 @@ export function PipelineProspectosClient({
   const router = useRouter();
 
   // Selector de Modo: Pipeline por Prospectos vs Pipeline por Expedientes
-  const [tipoPipeline, setTipoPipeline] = useState<"prospectos" | "expedientes">("prospectos");
+  const [tipoPipeline, setTipoPipeline] = useState<"prospectos" | "expedientes">("expedientes");
 
   // Estados locales para actualización optimista
   const [prospectos, setProspectos] = useState<Prospecto[]>(prospectosIniciales);
@@ -337,7 +338,7 @@ export function PipelineProspectosClient({
             <option value="todos">Todos los Asesores</option>
             <option value="sin_asignar">Sin Asesor Asignado</option>
             {perfiles
-              .filter((p) => p.rol === "asesor")
+              .filter((p) => p.activo !== false)
               .map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre}

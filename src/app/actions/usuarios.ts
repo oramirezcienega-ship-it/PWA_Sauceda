@@ -475,7 +475,7 @@ export async function listarPerfilesActivos(): Promise<{ id: string; nombre: str
   const { data, error } = await sb
     .from("perfiles")
     .select("id, nombre, rol")
-    .eq("activo", true)
+    .neq("activo", false)
     .order("nombre", { ascending: true });
   if (error) throw new Error(error.message);
   return data ?? [];
