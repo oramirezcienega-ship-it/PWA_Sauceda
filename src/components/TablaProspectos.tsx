@@ -702,7 +702,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   ["nombre", "Prospecto", "izquierda"],
                   ["asesor", "Asesor", "izquierda"],
                   ["tipoNegocio", "Tipo de negocio", "izquierda"],
-                  ["expedientesCount", "Expedientes", "centro"],
+                  ["expedientesCount", "Expedientes", "izquierda"],
                   ["telefono", "Teléfono", "izquierda"],
                   ["ciudad", "Ciudad", "izquierda"],
                   ["origen", "Origen", "izquierda"],
