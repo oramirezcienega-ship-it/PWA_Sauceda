@@ -12,6 +12,7 @@ import {
 import { ORIGENES } from "@/lib/origenes";
 import { registrarActividad } from "@/lib/actividades";
 import { dispararEvento } from "@/lib/automatizaciones/motor";
+import { sincronizarEtapaExpediente } from "@/lib/prospectos-status";
 import type {
   DatosProspecto,
   Expediente,
@@ -222,6 +223,10 @@ export async function actualizarProspecto(
       operador_id: datos.operadorId ?? null,
     })
     .eq("prospecto_id", id);
+
+  if (datos.estatus) {
+    await sincronizarEtapaExpediente(sb, [id], datos.estatus);
+  }
 
   // Enviar evento identify a RudderStack en segundo plano
   (async () => {
@@ -448,6 +453,8 @@ export async function cambiarEstatusMasivo(
     .update({ estatus })
     .in("id", ids);
   if (error) throw new Error(error.message);
+
+  await sincronizarEtapaExpediente(sb, ids, estatus);
 }
 
 /** Actualiza un campo arbitrario de varios prospectos a la vez (acción masiva). */
@@ -478,6 +485,10 @@ export async function actualizarCampoMasivo(
     .update({ [campo]: valor })
     .in("id", ids);
   if (error) throw new Error(error.message);
+
+  if (campo === "estatus") {
+    await sincronizarEtapaExpediente(sb, ids, valor as EstatusProspecto);
+  }
 }
 
 /** Cambia la calificación de varios prospectos a la vez (acción masiva). */

@@ -73,6 +73,43 @@ export async function sincronizarEstatusProspecto(
 }
 
 /**
+ * Sincroniza la etapa de los expedientes enlazados a un prospecto
+ * según la etapa del prospecto (matriz comercial).
+ */
+export async function sincronizarEtapaExpediente(
+  sb: SupabaseClient,
+  prospectoIds: string[],
+  nuevoEstatus: EstatusProspecto,
+): Promise<void> {
+  if (!prospectoIds || prospectoIds.length === 0) return;
+
+  const hoyISO = new Date().toISOString().slice(0, 10);
+
+  if (nuevoEstatus === "lead" || nuevoEstatus === "mql" || nuevoEstatus === "nuevo") {
+    await sb
+      .from("expedientes")
+      .update({ etapa: "nuevo-lead", ultimo_movimiento: hoyISO })
+      .in("prospecto_id", prospectoIds);
+  } else if (nuevoEstatus === "cliente") {
+    await sb
+      .from("expedientes")
+      .update({ etapa: "cerrado", ultimo_movimiento: hoyISO })
+      .in("prospecto_id", prospectoIds);
+  } else if (nuevoEstatus === "no_viable") {
+    await sb
+      .from("expedientes")
+      .update({ etapa: "perdido", asesor_id: null, ultimo_movimiento: hoyISO })
+      .in("prospecto_id", prospectoIds);
+  } else if (nuevoEstatus === "sql" || nuevoEstatus === "expediente_abierto") {
+    await sb
+      .from("expedientes")
+      .update({ etapa: "nuevo-lead", ultimo_movimiento: hoyISO })
+      .in("prospecto_id", prospectoIds)
+      .in("etapa", ["cerrado", "perdido"]);
+  }
+}
+
+/**
  * Helper para clasificar la prioridad de atención de prospectos inactivos.
  */
 export function clasificarPrioridadLead(dias: number, tieneTelefono: boolean): "alta" | "media" | "baja" {
