@@ -32,6 +32,7 @@ const ENLACES = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/", label: "Expedientes" },
   { href: "/prospectos", label: "Prospectos" },
+  { href: "/prospectos/pipeline", label: "Pipeline" },
   { href: "/construccion", label: "Construcción" },
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
