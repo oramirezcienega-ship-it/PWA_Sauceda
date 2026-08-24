@@ -79,6 +79,23 @@ export const ETAPAS: Etapa[] = [
   },
 ];
 
+/** Probabilidad estimada de cierre por etapa para el cálculo del valor ponderado (estilo HubSpot). */
+export const PROBABILIDAD_POR_ETAPA: Record<EtapaId, number> = {
+  "nuevo-lead": 0.1,
+  "contactado": 0.2,
+  "valuacion": 0.4,
+  "oferta": 0.6,
+  "documentos": 0.8,
+  "notaria": 0.9,
+  "cerrado": 1.0,
+  "perdido": 0.0,
+  "interes": 0.1,
+  "cotizacion": 0.3,
+  "visita": 0.5,
+  "propuesta-aceptada": 0.8,
+  "venta": 1.0,
+};
+
 export const ETAPAS_CONSTRUCCION: Etapa[] = [
   {
     id: "interes",

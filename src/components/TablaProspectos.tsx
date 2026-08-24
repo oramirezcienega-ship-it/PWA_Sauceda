@@ -28,6 +28,7 @@ import { ThOrden } from "./ThOrden";
 import { EstatusProspectoBadge } from "./EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 import { ESTATUS_PROSPECTO_LISTA } from "@/lib/estatus";
+import { TableroProspectosKanban } from "./TableroProspectosKanban";
 
 const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   nombre: (a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, "es"),
@@ -47,6 +48,9 @@ const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
 /** Tabla de prospectos con columnas ordenables, filtros por etapa y acciones masivas completas. */
 export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
   const router = useRouter();
+
+  // Vista: Lista vs Tablero Kanban (estilo HubSpot)
+  const [vista, setVista] = useState<"lista" | "tablero">("lista");
 
   // Estados de filtrado
   const [busqueda, setBusqueda] = useState("");
@@ -382,6 +386,32 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
               ))}
           </select>
 
+          {/* Selector de Vista Lista vs Tablero Kanban (estilo HubSpot) */}
+          <div className="inline-flex shrink-0 rounded-lg border border-carbon/15 bg-white p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setVista("lista")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                vista === "lista"
+                  ? "bg-verde-profundo text-crema shadow-xs"
+                  : "text-carbon/60 hover:text-verde-profundo"
+              }`}
+            >
+              ≡ Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setVista("tablero")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                vista === "tablero"
+                  ? "bg-verde-profundo text-crema shadow-xs"
+                  : "text-carbon/60 hover:text-verde-profundo"
+              }`}
+            >
+              ⊞ Tablero
+            </button>
+          </div>
+
           {(busqueda || filtroEstatus !== "todos" || filtroCalificacion !== "todos" || filtroOrigen !== "todos" || filtroAsesor !== "todos") && (
             <button
               type="button"
@@ -682,197 +712,207 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
         </div>
       )}
 
-      {/* 📌 TABLA PRINCIPAL DE PROSPECTOS */}
-      <div className="hidden md:block max-h-[calc(100vh-250px)] overflow-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil shadow-xs">
-        <table className="w-full min-w-[950px] border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
-            <tr className="border-b border-carbon/10 bg-crema/90 text-left">
-              <th className="w-10 px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  checked={todosMarcados}
-                  onChange={alternarTodos}
-                  aria-label="Seleccionar todos"
-                  className="cursor-pointer"
-                />
-              </th>
-              {(
-                [
-                  ["fecha", "Registro", "izquierda"],
-                  ["nombre", "Prospecto", "izquierda"],
-                  ["asesor", "Asesor", "izquierda"],
-                  ["tipoNegocio", "Tipo de negocio", "izquierda"],
-                  ["expedientesCount", "Expedientes", "izquierda"],
-                  ["telefono", "Teléfono", "izquierda"],
-                  ["ciudad", "Ciudad", "izquierda"],
-                  ["origen", "Origen", "izquierda"],
-                  ["estatus", "Etapa del Prospecto", "izquierda"],
-                  ["calificacion", "Calificación", "izquierda"],
-                ] as const
-              ).map(([columna, label, alineado]) => (
-                <ThOrden
-                  key={columna}
-                  columna={columna}
-                  claveActiva={orden.clave}
-                  dir={orden.dir}
-                  onOrdenar={orden.ordenarPor}
-                  alineado={alineado}
-                >
-                  {label}
-                </ThOrden>
-              ))}
-              <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-carbon/70 text-left">
-                Secuencia
-              </th>
-              <ThOrden
-                columna="valorCampana"
-                claveActiva={orden.clave}
-                dir={orden.dir}
-                onOrdenar={orden.ordenarPor}
-                alineado="derecha"
-              >
-                Valor campaña
-              </ThOrden>
-            </tr>
-          </thead>
-          <tbody>
-            {orden.ordenados.length === 0 ? (
-              <tr>
-                <td colSpan={12} className="p-8 text-center text-sm text-carbon/40">
-                  No se encontraron prospectos con los filtros seleccionados.
-                </td>
-              </tr>
-            ) : (
-              orden.ordenados.map((p) => (
-                <tr
-                  key={p.id}
-                  className={`border-b border-carbon/5 transition hover:bg-crema/40 ${
-                    sel.has(p.id) ? "bg-sauce/5" : ""
-                  }`}
-                >
-                  <td className="px-3 py-2.5">
+      {/* 📌 VISTA KANBAN O TABLA PRINCIPAL DE PROSPECTOS */}
+      {vista === "tablero" ? (
+        <TableroProspectosKanban
+          prospectos={prospectosFiltrados}
+          onEstatusCambiado={() => router.refresh()}
+        />
+      ) : (
+        <>
+          {/* TABLA PRINCIPAL DE PROSPECTOS */}
+          <div className="hidden md:block max-h-[calc(100vh-250px)] overflow-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil shadow-xs">
+            <table className="w-full min-w-[950px] border-collapse text-sm">
+              <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+                <tr className="border-b border-carbon/10 bg-crema/90 text-left">
+                  <th className="w-10 px-3 py-2.5">
                     <input
                       type="checkbox"
-                      checked={sel.has(p.id)}
-                      onChange={() => alternar(p.id)}
-                      aria-label={`Seleccionar ${p.nombreCompleto}`}
+                      checked={todosMarcados}
+                      onChange={alternarTodos}
+                      aria-label="Seleccionar todos"
                       className="cursor-pointer"
                     />
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-carbon/70 whitespace-nowrap">
-                    {p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "—"}
-                  </td>
-                  <td className="px-3 py-2.5">
+                  </th>
+                  {(
+                    [
+                      ["fecha", "Registro", "izquierda"],
+                      ["nombre", "Prospecto", "izquierda"],
+                      ["asesor", "Asesor", "izquierda"],
+                      ["tipoNegocio", "Tipo de negocio", "izquierda"],
+                      ["expedientesCount", "Expedientes", "izquierda"],
+                      ["telefono", "Teléfono", "izquierda"],
+                      ["ciudad", "Ciudad", "izquierda"],
+                      ["origen", "Origen", "izquierda"],
+                      ["estatus", "Etapa del Prospecto", "izquierda"],
+                      ["calificacion", "Calificación", "izquierda"],
+                    ] as const
+                  ).map(([columna, label, alineado]) => (
+                    <ThOrden
+                      key={columna}
+                      columna={columna}
+                      claveActiva={orden.clave}
+                      dir={orden.dir}
+                      onOrdenar={orden.ordenarPor}
+                      alineado={alineado}
+                    >
+                      {label}
+                    </ThOrden>
+                  ))}
+                  <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-carbon/70 text-left">
+                    Secuencia
+                  </th>
+                  <ThOrden
+                    columna="valorCampana"
+                    claveActiva={orden.clave}
+                    dir={orden.dir}
+                    onOrdenar={orden.ordenarPor}
+                    alineado="derecha"
+                  >
+                    Valor campaña
+                  </ThOrden>
+                </tr>
+              </thead>
+              <tbody>
+                {orden.ordenados.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="p-8 text-center text-sm text-carbon/40">
+                      No se encontraron prospectos con los filtros seleccionados.
+                    </td>
+                  </tr>
+                ) : (
+                  orden.ordenados.map((p) => (
+                    <tr
+                      key={p.id}
+                      className={`border-b border-carbon/5 transition hover:bg-crema/40 ${
+                        sel.has(p.id) ? "bg-sauce/5" : ""
+                      }`}
+                    >
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={sel.has(p.id)}
+                          onChange={() => alternar(p.id)}
+                          aria-label={`Seleccionar ${p.nombreCompleto}`}
+                          className="cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-carbon/70 whitespace-nowrap">
+                        {p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-MX") : "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Link
+                          href={`/prospectos/${p.id}`}
+                          className="font-titular font-medium text-verde-profundo hover:text-sauce"
+                        >
+                          {p.nombreCompleto}
+                        </Link>
+                        <span className="ml-2 font-mono text-[10px] text-carbon/40">
+                          {p.id}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-carbon/70">
+                        {p.asesorNombre || (
+                          <span className="text-xs text-carbon/30 italic">Sin asignar</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-carbon/80">
+                        {p.tipoNegocioPrincipal ? (
+                          <span className="inline-flex items-center rounded-md border border-sauce/20 bg-sauce/5 px-2 py-0.5 font-medium text-verde-profundo">
+                            {labelTipoNegocio(p.tipoNegocioPrincipal)}
+                          </span>
+                        ) : (
+                          <span className="text-carbon/30 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {p.expedientesCount && p.expedientesCount > 0 ? (
+                          <span className="inline-flex items-center rounded-full bg-verde-profundo/10 px-2 py-0.5 text-xs font-semibold text-verde-profundo">
+                            📁 {p.expedientesCount}
+                          </span>
+                        ) : (
+                          <span className="text-carbon/30 text-xs font-mono">0</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
+                        {p.telefono || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-carbon/70">
+                        {p.ciudad || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        <span className="inline-flex items-center rounded-full border border-carbon/15 bg-white px-2 py-0.5 font-medium text-carbon/80">
+                          {ORIGEN_POR_ID[p.origen] || p.origen}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <EstatusProspectoBadge estatus={p.estatus} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <CalificacionProspectoBadge calificacion={p.calificacion} />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {enrollments.some(
+                          (en) => en.prospecto_id === p.id || en.phone === p.telefono,
+                        ) ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Secuencia activa
+                          </span>
+                        ) : (
+                          <span className="text-carbon/30 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-xs text-carbon/70">
+                        {p.valorCampana ? formatoPesos(p.valorCampana) : "—"}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 📱 VISTA MÓVIL (TARJETAS) */}
+          <div className="space-y-2 md:hidden">
+            {orden.ordenados.map((p) => (
+              <div
+                key={p.id}
+                className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-xs space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
                     <Link
                       href={`/prospectos/${p.id}`}
-                      className="font-titular font-medium text-verde-profundo hover:text-sauce"
+                      className="font-titular font-semibold text-verde-profundo"
                     >
                       {p.nombreCompleto}
                     </Link>
-                    <span className="ml-2 font-mono text-[10px] text-carbon/40">
-                      {p.id}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-carbon/70">
-                    {p.asesorNombre || (
-                      <span className="text-xs text-carbon/30 italic">Sin asignar</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-carbon/80">
-                    {p.tipoNegocioPrincipal ? (
-                      <span className="inline-flex items-center rounded-md border border-sauce/20 bg-sauce/5 px-2 py-0.5 font-medium text-verde-profundo">
-                        {labelTipoNegocio(p.tipoNegocioPrincipal)}
-                      </span>
-                    ) : (
-                      <span className="text-carbon/30 italic">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    {p.expedientesCount && p.expedientesCount > 0 ? (
-                      <span className="inline-flex items-center rounded-full bg-verde-profundo/10 px-2 py-0.5 text-xs font-semibold text-verde-profundo">
-                        📁 {p.expedientesCount}
-                      </span>
-                    ) : (
-                      <span className="text-carbon/30 text-xs font-mono">0</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
-                    {p.telefono || "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-carbon/70">
-                    {p.ciudad || "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">
-                    <span className="inline-flex items-center rounded-full border border-carbon/15 bg-white px-2 py-0.5 font-medium text-carbon/80">
-                      {ORIGEN_POR_ID[p.origen] || p.origen}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <EstatusProspectoBadge estatus={p.estatus} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <CalificacionProspectoBadge calificacion={p.calificacion} />
-                  </td>
-                  <td className="px-3 py-2.5 text-xs">
-                    {enrollments.some(
-                      (en) => en.prospecto_id === p.id || en.phone === p.telefono,
-                    ) ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Secuencia activa
-                      </span>
-                    ) : (
-                      <span className="text-carbon/30 italic">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-xs text-carbon/70">
+                    <div className="text-[11px] text-carbon/50 font-mono">{p.id}</div>
+                  </div>
+                  <EstatusProspectoBadge estatus={p.estatus} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-carbon/70 pt-1 border-t border-carbon/5">
+                  <div>📞 {p.telefono || "Sin tel"}</div>
+                  <div>📍 {p.ciudad || "Sin ciudad"}</div>
+                  <div>👤 Asesor: {p.asesorNombre || "Sin asignar"}</div>
+                  <div>🌱 Origen: {ORIGEN_POR_ID[p.origen] || p.origen}</div>
+                  <div>💼 Negocio: {p.tipoNegocioPrincipal ? labelTipoNegocio(p.tipoNegocioPrincipal) : "—"}</div>
+                  <div>📁 Expedientes: {p.expedientesCount ?? 0}</div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <CalificacionProspectoBadge calificacion={p.calificacion} />
+                  <span className="font-mono text-xs text-carbon/60">
                     {p.valorCampana ? formatoPesos(p.valorCampana) : "$0"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 📱 VISTA MÓVIL (TARJETAS) */}
-      <div className="space-y-2 md:hidden">
-        {orden.ordenados.map((p) => (
-          <div
-            key={p.id}
-            className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-xs space-y-2"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <Link
-                  href={`/prospectos/${p.id}`}
-                  className="font-titular font-semibold text-verde-profundo"
-                >
-                  {p.nombreCompleto}
-                </Link>
-                <div className="text-[11px] text-carbon/50 font-mono">{p.id}</div>
+                  </span>
+                </div>
               </div>
-              <EstatusProspectoBadge estatus={p.estatus} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs text-carbon/70 pt-1 border-t border-carbon/5">
-              <div>📞 {p.telefono || "Sin tel"}</div>
-              <div>📍 {p.ciudad || "Sin ciudad"}</div>
-              <div>👤 Asesor: {p.asesorNombre || "Sin asignar"}</div>
-              <div>🌱 Origen: {ORIGEN_POR_ID[p.origen] || p.origen}</div>
-              <div>💼 Negocio: {p.tipoNegocioPrincipal ? labelTipoNegocio(p.tipoNegocioPrincipal) : "—"}</div>
-              <div>📁 Expedientes: {p.expedientesCount ?? 0}</div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <CalificacionProspectoBadge calificacion={p.calificacion} />
-              <span className="font-mono text-xs text-carbon/60">
-                {p.valorCampana ? formatoPesos(p.valorCampana) : "$0"}
-              </span>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
       {/* 🛠️ MODAL DE CAMBIO MASIVO DE CAMPO (CIUDAD / NOTAS) */}
       {modalCampoMasivo && (
