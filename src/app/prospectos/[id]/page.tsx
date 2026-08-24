@@ -8,6 +8,7 @@ import { obtenerCotizacionesDeProspecto } from "@/app/actions/cotizaciones";
 import { ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
 import { EstatusProspectoBadge } from "@/components/EstatusProspectoBadge";
+import { labelTipoNegocio } from "@/lib/types";
 import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
 import { AsesorSelector } from "@/components/AsesorSelector";
 import { BotonLlamar } from "@/components/BotonLlamar";
@@ -71,9 +72,20 @@ export default async function PaginaProspecto({
               </span>
             </div>
           </div>
-          <span className="font-mono text-xs font-bold bg-indigo-500/30 border border-indigo-400/40 text-indigo-100 px-3 py-1 rounded-full shadow-2xs">
-            {prospecto.id}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-xs font-bold bg-indigo-500/30 border border-indigo-400/40 text-indigo-100 px-3 py-1 rounded-full shadow-2xs">
+              {prospecto.id}
+            </span>
+            {expedientes.map((exp) => (
+              <Link
+                key={exp.id}
+                href={`/expediente/${exp.id}`}
+                className="inline-flex items-center gap-1.5 font-mono text-xs font-bold bg-amber-400/25 border border-amber-300/50 text-amber-200 hover:bg-amber-400/40 px-3 py-1 rounded-full transition shadow-xs"
+              >
+                📁 {exp.id} →
+              </Link>
+            ))}
+          </div>
         </div>
 
         <Link
@@ -82,6 +94,35 @@ export default async function PaginaProspecto({
         >
           ← Volver a prospectos
         </Link>
+
+        {/* Acceso Directo Destacado a Expediente(s) */}
+        {expedientes.length > 0 && (
+          <div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-50/60 p-3 space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-amber-900/70 flex items-center gap-1.5">
+              <span>📁 Expediente{expedientes.length === 1 ? "" : "s"} Relacionado{expedientes.length === 1 ? "" : "s"} ({expedientes.length})</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {expedientes.map((exp) => (
+                <Link
+                  key={exp.id}
+                  href={`/expediente/${exp.id}`}
+                  className="inline-flex items-center justify-between gap-3 rounded-lg border border-amber-300/60 bg-white px-3.5 py-2 text-xs font-medium text-verde-profundo shadow-xs transition hover:border-sauce hover:shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-sauce">{exp.id}</span>
+                    <span className="text-carbon/60">• {exp.fraccionamiento || "Por definir"}</span>
+                    {exp.tipoNegocio && (
+                      <span className="rounded bg-carbon/5 px-1.5 py-0.5 text-[10px] text-carbon/70 font-sans">
+                        {labelTipoNegocio(exp.tipoNegocio)}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-semibold text-sauce hover:underline">Ver Expediente →</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Cabecera */}
         <div className="mt-4 flex items-start justify-between gap-3">
