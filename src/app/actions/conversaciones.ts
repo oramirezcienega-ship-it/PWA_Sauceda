@@ -103,6 +103,22 @@ async function duenosPorIds(
   return mapa;
 }
 
+async function duenosPorTelefonos(
+  sb: ReturnType<typeof supabaseServidor>,
+  tabla: "expedientes" | "prospectos",
+  telefonos: string[],
+  colId: "asesor_id" | "operador_id",
+): Promise<Map<string, string | null>> {
+  const mapa = new Map<string, string | null>();
+  if (telefonos.length === 0) return mapa;
+  const { data } = await sb.from(tabla).select(`telefono, ${colId}`).not("telefono", "is", null);
+  ((data as any[]) ?? []).forEach((r) => {
+    const dig = (r.telefono || "").replace(/\D/g, "").slice(-10);
+    if (dig) mapa.set(dig, (r[colId] as string | null) ?? null);
+  });
+  return mapa;
+}
+
 /** Lista las conversaciones (una por teléfono, con su último mensaje). */
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   await requireAdmin();
@@ -119,10 +135,8 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   if (error) throw new Error(error.message);
   let filas = (data as FilaMsg[]) ?? [];
 
-  // Filtrado por rol EN MEMORIA. Antes se construía un `.or()` con miles de
-  // UUIDs incrustados en la URL de PostgREST; al crecer los prospectos
-  // asignados, la URL excedía el límite, la consulta fallaba y los asesores
-  // veían la bandeja vacía.
+  // Filtrado por rol: Asesores y operarios SOLO ven sus conversaciones explícitamente asignadas.
+  // Solo el administrador (admin) ve todas las conversaciones, incluidas las no asignadas y las de Sofía.
   if (rol === "asesor" || rol === "operaciones") {
     const colId = rol === "asesor" ? ("asesor_id" as const) : ("operador_id" as const);
 
@@ -136,20 +150,30 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
     const duenosExp = await duenosPorIds(sb, "expedientes", idsExp, colId);
     const duenosPros = await duenosPorIds(sb, "prospectos", idsPros, colId);
 
-    // Mismo criterio que antes: visible si el expediente o el prospecto está
-    // sin enlazar, sin asignar (null) o asignado al usuario actual.
+    const telefonos10 = Array.from(
+      new Set(
+        filas
+          .map((f) => (f.telefono || "").replace(/\D/g, "").slice(-10))
+          .filter((t) => t.length === 10),
+      ),
+    );
+    const duenosTelExp = await duenosPorTelefonos(sb, "expedientes", telefonos10, colId);
+    const duenosTelPros = await duenosPorTelefonos(sb, "prospectos", telefonos10, colId);
+
     filas = filas.filter((f) => {
       const duenoExp = f.expediente_id ? duenosExp.get(f.expediente_id) : undefined;
-      const expOk =
-        !f.expediente_id ||
-        (duenosExp.has(f.expediente_id) &&
-          (duenoExp == null || duenoExp === usuario.id));
+      if (duenoExp === usuario.id) return true;
+
       const duenoPros = f.prospecto_id ? duenosPros.get(f.prospecto_id) : undefined;
-      const prosOk =
-        !f.prospecto_id ||
-        (duenosPros.has(f.prospecto_id) &&
-          (duenoPros == null || duenoPros === usuario.id));
-      return expOk || prosOk;
+      if (duenoPros === usuario.id) return true;
+
+      const digitos = (f.telefono || "").replace(/\D/g, "").slice(-10);
+      if (digitos) {
+        if (duenosTelExp.get(digitos) === usuario.id) return true;
+        if (duenosTelPros.get(digitos) === usuario.id) return true;
+      }
+
+      return false;
     });
   }
 
