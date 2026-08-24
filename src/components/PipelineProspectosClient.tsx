@@ -40,7 +40,7 @@ export function PipelineProspectosClient({
   const router = useRouter();
 
   // Selector de Modo: Pipeline por Prospectos vs Pipeline por Expedientes
-  const [tipoPipeline, setTipoPipeline] = useState<"prospectos" | "expedientes">("prospectos");
+  const [tipoPipeline, setTipoPipeline] = useState<"prospectos" | "expedientes">("expedientes");
 
   // Estados locales para actualización optimista
   const [prospectos, setProspectos] = useState<Prospecto[]>(prospectosIniciales);
