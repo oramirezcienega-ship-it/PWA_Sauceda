@@ -28,25 +28,17 @@ export const ETAPAS: Etapa[] = [
       "Ya estamos en comunicación contigo y revisando tu caso.",
   },
   {
-    id: "valuacion",
-    nombre: "Valuación",
-    orden: 2,
-    descripcion: "Se está valuando el inmueble y revisando el saldo.",
-    nombreCliente: "Valuación",
-    descripcionCliente: "Estamos evaluando tu propiedad y revisando tu saldo.",
-  },
-  {
     id: "oferta",
-    nombre: "Oferta",
-    orden: 3,
-    descripcion: "Se presentó una oferta de traspaso al cliente.",
-    nombreCliente: "Propuesta",
-    descripcionCliente: "Te presentamos una propuesta para tu traspaso.",
+    nombre: "Propuesta enviada",
+    orden: 2,
+    descripcion: "Se presentó una propuesta o cotización formal al cliente.",
+    nombreCliente: "Propuesta enviada",
+    descripcionCliente: "Te presentamos una propuesta para tu trámite.",
   },
   {
     id: "documentos",
     nombre: "Documentos",
-    orden: 4,
+    orden: 3,
     descripcion: "Recopilación y validación de la documentación.",
     nombreCliente: "Documentación",
     descripcionCliente: "Estamos reuniendo y validando tus documentos.",
@@ -54,7 +46,7 @@ export const ETAPAS: Etapa[] = [
   {
     id: "notaria",
     nombre: "Notaría",
-    orden: 5,
+    orden: 4,
     descripcion: "Trámite en proceso ante notaría.",
     nombreCliente: "Notaría",
     descripcionCliente: "Tu trámite está en proceso ante notaría.",
@@ -62,7 +54,7 @@ export const ETAPAS: Etapa[] = [
   {
     id: "cerrado",
     nombre: "Cerrado ganado",
-    orden: 6,
+    orden: 5,
     descripcion: "Traspaso o venta concluida con éxito.",
     nombreCliente: "Concluido",
     descripcionCliente:
@@ -71,13 +63,30 @@ export const ETAPAS: Etapa[] = [
   {
     id: "perdido",
     nombre: "Perdido",
-    orden: 7,
+    orden: 6,
     descripcion: "Lead o traspaso que no prosperó.",
     nombreCliente: "En pausa",
     descripcionCliente:
       "Por ahora tu trámite no continúa. Si tienes dudas, contáctanos con gusto.",
   },
 ];
+
+/** Probabilidad estimada de cierre por etapa para el cálculo del valor ponderado (estilo HubSpot). */
+export const PROBABILIDAD_POR_ETAPA: Record<EtapaId, number> = {
+  "nuevo-lead": 0.1,
+  "contactado": 0.2,
+  "valuacion": 0.4,
+  "oferta": 0.6,
+  "documentos": 0.8,
+  "notaria": 0.9,
+  "cerrado": 1.0,
+  "perdido": 0.0,
+  "interes": 0.1,
+  "cotizacion": 0.3,
+  "visita": 0.5,
+  "propuesta-aceptada": 0.8,
+  "venta": 1.0,
+};
 
 export const ETAPAS_CONSTRUCCION: Etapa[] = [
   {
@@ -142,7 +151,16 @@ export const ETAPAS_POR_ID: Record<EtapaId, Etapa> = ETAPAS.reduce(
     acc[etapa.id] = etapa;
     return acc;
   },
-  {} as Record<EtapaId, Etapa>,
+  {
+    valuacion: {
+      id: "valuacion" as EtapaId,
+      nombre: "Propuesta enviada",
+      orden: 2,
+      descripcion: "Propuesta enviada al cliente.",
+      nombreCliente: "Propuesta enviada",
+      descripcionCliente: "Te presentamos una propuesta para tu trámite.",
+    },
+  } as Record<EtapaId, Etapa>,
 );
 
 export const ETAPAS_CONSTRUCCION_POR_ID: Record<string, Etapa> = ETAPAS_CONSTRUCCION.reduce(
