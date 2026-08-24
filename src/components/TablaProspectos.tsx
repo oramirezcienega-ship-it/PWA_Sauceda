@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ORIGENES, ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
 import type { OrigenAdquisicion, Prospecto, EstatusProspecto, CalificacionProspecto } from "@/lib/types";
+import { labelTipoNegocio } from "@/lib/types";
 import {
   cambiarOrigenMasivo,
   eliminarProspectosMasivo,
@@ -39,6 +40,8 @@ const COMPARADORES: Record<string, (a: Prospecto, b: Prospecto) => number> = {
   estatus: (a, b) => a.estatus.localeCompare(b.estatus, "es"),
   calificacion: (a, b) => a.calificacion.localeCompare(b.calificacion, "es"),
   asesor: (a, b) => (a.asesorNombre ?? "").localeCompare(b.asesorNombre ?? "", "es"),
+  tipoNegocio: (a, b) => (labelTipoNegocio(a.tipoNegocioPrincipal ?? "")).localeCompare(labelTipoNegocio(b.tipoNegocioPrincipal ?? ""), "es"),
+  expedientesCount: (a, b) => (a.expedientesCount ?? 0) - (b.expedientesCount ?? 0),
 };
 
 /** Tabla de prospectos con columnas ordenables, filtros por etapa y acciones masivas completas. */
@@ -698,6 +701,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   ["fecha", "Registro", "izquierda"],
                   ["nombre", "Prospecto", "izquierda"],
                   ["asesor", "Asesor", "izquierda"],
+                  ["tipoNegocio", "Tipo de negocio", "izquierda"],
+                  ["expedientesCount", "Expedientes", "centro"],
                   ["telefono", "Teléfono", "izquierda"],
                   ["ciudad", "Ciudad", "izquierda"],
                   ["origen", "Origen", "izquierda"],
@@ -733,7 +738,7 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
           <tbody>
             {orden.ordenados.length === 0 ? (
               <tr>
-                <td colSpan={10} className="p-8 text-center text-sm text-carbon/40">
+                <td colSpan={12} className="p-8 text-center text-sm text-carbon/40">
                   No se encontraron prospectos con los filtros seleccionados.
                 </td>
               </tr>
@@ -771,6 +776,24 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
                   <td className="px-3 py-2.5 text-carbon/70">
                     {p.asesorNombre || (
                       <span className="text-xs text-carbon/30 italic">Sin asignar</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-carbon/80">
+                    {p.tipoNegocioPrincipal ? (
+                      <span className="inline-flex items-center rounded-md border border-sauce/20 bg-sauce/5 px-2 py-0.5 font-medium text-verde-profundo">
+                        {labelTipoNegocio(p.tipoNegocioPrincipal)}
+                      </span>
+                    ) : (
+                      <span className="text-carbon/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    {p.expedientesCount && p.expedientesCount > 0 ? (
+                      <span className="inline-flex items-center rounded-full bg-verde-profundo/10 px-2 py-0.5 text-xs font-semibold text-verde-profundo">
+                        📁 {p.expedientesCount}
+                      </span>
+                    ) : (
+                      <span className="text-carbon/30 text-xs font-mono">0</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 font-mono text-xs text-carbon/70">
@@ -837,6 +860,8 @@ export function TablaProspectos({ prospectos }: { prospectos: Prospecto[] }) {
               <div>📍 {p.ciudad || "Sin ciudad"}</div>
               <div>👤 Asesor: {p.asesorNombre || "Sin asignar"}</div>
               <div>🌱 Origen: {ORIGEN_POR_ID[p.origen] || p.origen}</div>
+              <div>💼 Negocio: {p.tipoNegocioPrincipal ? labelTipoNegocio(p.tipoNegocioPrincipal) : "—"}</div>
+              <div>📁 Expedientes: {p.expedientesCount ?? 0}</div>
             </div>
 
             <div className="flex items-center justify-between pt-1">
