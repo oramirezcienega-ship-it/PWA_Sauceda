@@ -36,25 +36,9 @@ export const ETAPAS: Etapa[] = [
     descripcionCliente: "Te presentamos una propuesta para tu trámite.",
   },
   {
-    id: "documentos",
-    nombre: "Documentos",
-    orden: 3,
-    descripcion: "Recopilación y validación de la documentación.",
-    nombreCliente: "Documentación",
-    descripcionCliente: "Estamos reuniendo y validando tus documentos.",
-  },
-  {
-    id: "notaria",
-    nombre: "Notaría",
-    orden: 4,
-    descripcion: "Trámite en proceso ante notaría.",
-    nombreCliente: "Notaría",
-    descripcionCliente: "Tu trámite está en proceso ante notaría.",
-  },
-  {
     id: "cerrado",
     nombre: "Cerrado ganado",
-    orden: 5,
+    orden: 3,
     descripcion: "Traspaso o venta concluida con éxito.",
     nombreCliente: "Concluido",
     descripcionCliente:
@@ -63,7 +47,7 @@ export const ETAPAS: Etapa[] = [
   {
     id: "perdido",
     nombre: "Perdido",
-    orden: 6,
+    orden: 4,
     descripcion: "Lead o traspaso que no prosperó.",
     nombreCliente: "En pausa",
     descripcionCliente:
@@ -159,6 +143,22 @@ export const ETAPAS_POR_ID: Record<EtapaId, Etapa> = ETAPAS.reduce(
       descripcion: "Propuesta enviada al cliente.",
       nombreCliente: "Propuesta enviada",
       descripcionCliente: "Te presentamos una propuesta para tu trámite.",
+    },
+    documentos: {
+      id: "documentos" as EtapaId,
+      nombre: "Propuesta enviada",
+      orden: 2,
+      descripcion: "Documentación y propuesta.",
+      nombreCliente: "Documentación",
+      descripcionCliente: "Reuniendo documentos.",
+    },
+    notaria: {
+      id: "notaria" as EtapaId,
+      nombre: "Propuesta enviada",
+      orden: 2,
+      descripcion: "Trámite ante notaría.",
+      nombreCliente: "Notaría",
+      descripcionCliente: "Trámite en notaría.",
     },
   } as Record<EtapaId, Etapa>,
 );
