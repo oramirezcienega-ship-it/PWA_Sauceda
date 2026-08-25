@@ -23,9 +23,23 @@ export function TarjetaExpediente({ expediente }: { expediente: Expediente }) {
     >
       {/* Folio e ID */}
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-titular text-sm font-bold leading-snug text-verde-profundo group-hover:text-sauce transition-colors">
-          {expediente.nombreCompleto}
-        </h3>
+        <div>
+          <h3 className="font-titular text-sm font-bold leading-snug text-verde-profundo group-hover:text-sauce transition-colors">
+            {expediente.nombreCompleto}
+          </h3>
+          {expediente.telefono ? (
+            <a
+              href={`tel:${expediente.telefono}`}
+              onClick={(e) => e.stopPropagation()}
+              className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors"
+              title={`Llamar a ${expediente.nombreCompleto} (${expediente.telefono})`}
+            >
+              <span>📞 {expediente.telefono}</span>
+            </a>
+          ) : (
+            <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">📞 Sin teléfono</span>
+          )}
+        </div>
         <span className="shrink-0 font-mono text-[10px] font-medium text-carbon/40 bg-carbon/5 px-1.5 py-0.5 rounded">
           {expediente.id}
         </span>

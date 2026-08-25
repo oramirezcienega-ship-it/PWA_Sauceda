@@ -26,9 +26,9 @@ export function TableroProspectosKanban({
     { id: "lead", nombre: "Lead" },
     { id: "mql", nombre: "MQL" },
     { id: "sql", nombre: "SQL" },
-    { id: "cliente", nombre: "Cliente" },
+    { id: "cliente", nombre: "Cerrado ganado" },
     { id: "sin_contacto", nombre: "Sin contacto" },
-    { id: "no_viable", nombre: "No viable" },
+    { id: "no_viable", nombre: "Cerrado perdido" },
   ];
 
   async function moverProspectoEtapa(prospectoId: string, nuevoEstatus: EstatusProspecto) {
@@ -100,12 +100,29 @@ export function TableroProspectosKanban({
                   >
                     {/* Nombre y ID */}
                     <div className="flex items-start justify-between gap-2">
-                      <Link
-                        href={`/prospectos/${p.id}`}
-                        className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors"
-                      >
-                        {p.nombreCompleto}
-                      </Link>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/prospectos/${p.id}`}
+                          className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block truncate"
+                          title={p.nombreCompleto}
+                        >
+                          {p.nombreCompleto}
+                        </Link>
+                        {p.telefono ? (
+                          <a
+                            href={`tel:${p.telefono}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors block truncate"
+                            title={`Llamar a ${p.nombreCompleto} (${p.telefono})`}
+                          >
+                            <span>📞 {p.telefono}</span>
+                          </a>
+                        ) : (
+                          <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">
+                            📞 Sin teléfono
+                          </span>
+                        )}
+                      </div>
                       <span className="shrink-0 font-mono text-[10px] text-carbon/40 bg-carbon/5 px-1.5 py-0.5 rounded">
                         {p.id}
                       </span>
@@ -119,11 +136,12 @@ export function TableroProspectosKanban({
                       <CalificacionProspectoBadge calificacion={p.calificacion} />
                     </div>
 
-                    {/* Teléfono y Ciudad */}
-                    <div className="mt-2 text-xs text-carbon/70 space-y-0.5 font-mono">
-                      {p.telefono && <div>📞 {p.telefono}</div>}
-                      {p.ciudad && <div>📍 {p.ciudad}</div>}
-                    </div>
+                    {/* Ciudad */}
+                    {p.ciudad && (
+                      <div className="mt-2 text-xs text-carbon/70 font-mono">
+                        📍 {p.ciudad}
+                      </div>
+                    )}
 
                     {/* Pie de Tarjeta: Asesor y Menú de Mover Etapa */}
                     <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">

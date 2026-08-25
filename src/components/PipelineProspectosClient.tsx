@@ -63,9 +63,9 @@ export function PipelineProspectosClient({
     { id: "lead", nombre: "Lead", descripcion: "Captado recientemente" },
     { id: "mql", nombre: "MQL", descripcion: "En conversación" },
     { id: "sql", nombre: "SQL", descripcion: "Calificado / Expediente" },
-    { id: "cliente", nombre: "Cliente", descripcion: "Firmado / Ganado" },
+    { id: "cliente", nombre: "Cerrado ganado", descripcion: "Cliente firmado / Ganado" },
     { id: "sin_contacto", nombre: "Sin contacto", descripcion: "Pendiente comunicación" },
-    { id: "no_viable", nombre: "No viable", descripcion: "Descartado" },
+    { id: "no_viable", nombre: "Cerrado perdido", descripcion: "Descartado / No viable" },
   ];
 
   // Aplicar filtros a Prospectos
@@ -374,7 +374,7 @@ export function PipelineProspectosClient({
       {/* 1. PIPELINE DE PROSPECTOS */}
       {/* ========================================================================= */}
       {tipoPipeline === "prospectos" && (
-        <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)]">
+        <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)] w-full">
           {ETAPAS_PROSPECTO.map((etapa) => {
             const prospectosEtapa = prospectosFiltrados
               .filter((p) => {
@@ -391,6 +391,8 @@ export function PipelineProspectosClient({
             );
 
             const estaHover = columnaDestinoHover === etapa.id;
+            const esGanado = etapa.id === "cliente";
+            const esPerdido = etapa.id === "no_viable";
 
             return (
               <section
@@ -398,9 +400,13 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropProspecto(e, etapa.id)}
-                className={`flex w-80 shrink-0 flex-col rounded-2xl border p-3.5 transition-all duration-200 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3.5 transition-all duration-200 ${
                   estaHover
                     ? "border-sauce bg-sauce/10 shadow-lg ring-2 ring-sauce/30 scale-[1.01]"
+                    : esGanado
+                    ? "border-emerald-200 bg-emerald-50/40 shadow-sm"
+                    : esPerdido
+                    ? "border-rose-200 bg-rose-50/40 shadow-sm"
                     : "border-carbon/10 bg-white/80 shadow-sm"
                 }`}
               >
@@ -408,12 +414,30 @@ export function PipelineProspectosClient({
                 <div className="mb-3 border-b border-carbon/10 pb-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="font-titular text-sm font-bold uppercase tracking-wider text-verde-profundo">
+                      <h2
+                        className={`font-titular text-sm font-bold uppercase tracking-wider ${
+                          esGanado
+                            ? "text-emerald-800"
+                            : esPerdido
+                            ? "text-rose-800"
+                            : "text-verde-profundo"
+                        }`}
+                      >
+                        {esGanado && "🏆 "}
+                        {esPerdido && "❌ "}
                         {etapa.nombre}
                       </h2>
                       <p className="text-[10px] text-carbon/50">{etapa.descripcion}</p>
                     </div>
-                    <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-verde-profundo/10 px-2 font-mono text-xs font-bold text-verde-profundo">
+                    <span
+                      className={`flex h-6 min-w-6 items-center justify-center rounded-full px-2 font-mono text-xs font-bold ${
+                        esGanado
+                          ? "bg-emerald-200/60 text-emerald-800"
+                          : esPerdido
+                          ? "bg-rose-200/60 text-rose-800"
+                          : "bg-verde-profundo/10 text-verde-profundo"
+                      }`}
+                    >
                       {prospectosEtapa.length}
                     </span>
                   </div>
@@ -464,18 +488,36 @@ export function PipelineProspectosClient({
                       >
                         {/* Drag Handle & Name */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-1.5">
-                            <span className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5" title="Arrastrar para mover">
+                          <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                            <span
+                              className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5 shrink-0"
+                              title="Arrastrar para mover"
+                            >
                               ⋮⋮
                             </span>
-                            <div>
+                            <div className="min-w-0 flex-1">
                               <Link
                                 href={`/prospectos/${p.id}`}
-                                className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block"
+                                className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block truncate"
+                                title={p.nombreCompleto}
                               >
                                 {p.nombreCompleto}
                               </Link>
-                              <span className="font-mono text-[10px] text-carbon/40">
+                              {p.telefono ? (
+                                <a
+                                  href={`tel:${p.telefono}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors block truncate"
+                                  title={`Llamar a ${p.nombreCompleto} (${p.telefono})`}
+                                >
+                                  <span>📞 {p.telefono}</span>
+                                </a>
+                              ) : (
+                                <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">
+                                  📞 Sin teléfono
+                                </span>
+                              )}
+                              <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
                                 {p.id}
                               </span>
                             </div>
@@ -495,12 +537,6 @@ export function PipelineProspectosClient({
                             </span>
                           )}
                         </div>
-
-                        {p.telefono && (
-                          <div className="mt-1 text-xs text-carbon/70 font-mono">
-                            📞 {p.telefono}
-                          </div>
-                        )}
 
                         {/* Pie de Tarjeta */}
                         <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">
@@ -541,7 +577,7 @@ export function PipelineProspectosClient({
       {/* 2. PIPELINE DE EXPEDIENTES */}
       {/* ========================================================================= */}
       {tipoPipeline === "expedientes" && (
-        <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)]">
+        <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)] w-full">
           {ETAPAS.map((etapa) => {
             const expedientesEtapa = expedientesFiltrados
               .filter((exp) => exp.etapa === etapa.id)
@@ -554,6 +590,8 @@ export function PipelineProspectosClient({
             const montoPonderado = totalMonto * prob;
 
             const estaHover = columnaDestinoHover === etapa.id;
+            const esGanado = etapa.id === "cerrado";
+            const esPerdido = etapa.id === "perdido";
 
             return (
               <section
@@ -561,9 +599,13 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropExpediente(e, etapa.id)}
-                className={`flex w-80 shrink-0 flex-col rounded-2xl border p-3.5 transition-all duration-200 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3.5 transition-all duration-200 ${
                   estaHover
                     ? "border-sauce bg-sauce/10 shadow-lg ring-2 ring-sauce/30 scale-[1.01]"
+                    : esGanado
+                    ? "border-emerald-200 bg-emerald-50/40 shadow-sm"
+                    : esPerdido
+                    ? "border-rose-200 bg-rose-50/40 shadow-sm"
                     : "border-carbon/10 bg-white/80 shadow-sm"
                 }`}
               >
@@ -571,12 +613,30 @@ export function PipelineProspectosClient({
                 <div className="mb-3 border-b border-carbon/10 pb-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="font-titular text-sm font-bold uppercase tracking-wider text-verde-profundo">
+                      <h2
+                        className={`font-titular text-sm font-bold uppercase tracking-wider ${
+                          esGanado
+                            ? "text-emerald-800"
+                            : esPerdido
+                            ? "text-rose-800"
+                            : "text-verde-profundo"
+                        }`}
+                      >
+                        {esGanado && "🏆 "}
+                        {esPerdido && "❌ "}
                         {etapa.nombre}
                       </h2>
                       <p className="text-[10px] text-carbon/50">{etapa.descripcion}</p>
                     </div>
-                    <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-verde-profundo/10 px-2 font-mono text-xs font-bold text-verde-profundo">
+                    <span
+                      className={`flex h-6 min-w-6 items-center justify-center rounded-full px-2 font-mono text-xs font-bold ${
+                        esGanado
+                          ? "bg-emerald-200/60 text-emerald-800"
+                          : esPerdido
+                          ? "bg-rose-200/60 text-rose-800"
+                          : "bg-verde-profundo/10 text-verde-profundo"
+                      }`}
+                    >
                       {expedientesEtapa.length}
                     </span>
                   </div>
@@ -631,7 +691,10 @@ export function PipelineProspectosClient({
                         {/* Drag Handle & Name & Badge */}
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-start gap-1.5 min-w-0 flex-1">
-                            <span className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5 shrink-0" title="Arrastrar para mover">
+                            <span
+                              className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5 shrink-0"
+                              title="Arrastrar para mover"
+                            >
                               ⋮⋮
                             </span>
                             <div className="min-w-0 flex-1">
@@ -642,7 +705,21 @@ export function PipelineProspectosClient({
                               >
                                 {exp.nombreCompleto}
                               </Link>
-                              <span className="font-mono text-[10px] text-carbon/40 block">
+                              {exp.telefono ? (
+                                <a
+                                  href={`tel:${exp.telefono}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors block truncate"
+                                  title={`Llamar a ${exp.nombreCompleto} (${exp.telefono})`}
+                                >
+                                  <span>📞 {exp.telefono}</span>
+                                </a>
+                              ) : (
+                                <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">
+                                  📞 Sin teléfono
+                                </span>
+                              )}
+                              <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
                                 {exp.id}
                               </span>
                             </div>
@@ -657,7 +734,10 @@ export function PipelineProspectosClient({
                         </div>
 
                         {/* Fraccionamiento */}
-                        <div className="mt-2 text-xs text-carbon/70 truncate" title={exp.fraccionamiento || "Sin fraccionamiento"}>
+                        <div
+                          className="mt-2 text-xs text-carbon/70 truncate"
+                          title={exp.fraccionamiento || "Sin fraccionamiento"}
+                        >
                           📍 {exp.fraccionamiento || "Sin fraccionamiento"}
                         </div>
 
@@ -696,7 +776,8 @@ export function PipelineProspectosClient({
 
                 {/* Pie de Columna */}
                 <div className="mt-3 border-t border-carbon/10 pt-2 text-center text-[10px] text-carbon/50 font-mono">
-                  Total ({expedientesEtapa.length}): <span className="font-bold text-carbon/80">{formatoPesos(totalMonto)}</span>
+                  Total ({expedientesEtapa.length}):{" "}
+                  <span className="font-bold text-carbon/80">{formatoPesos(totalMonto)}</span>
                 </div>
               </section>
             );

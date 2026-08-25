@@ -46,7 +46,7 @@ export const ETAPAS: Etapa[] = [
   },
   {
     id: "perdido",
-    nombre: "Perdido",
+    nombre: "Cerrado perdido",
     orden: 4,
     descripcion: "Lead o traspaso que no prosperó.",
     nombreCliente: "En pausa",
