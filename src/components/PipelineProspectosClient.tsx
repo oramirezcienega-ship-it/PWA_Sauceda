@@ -542,8 +542,8 @@ export function PipelineProspectosClient({
                           )}
                         </div>
 
-                        {/* Fila de Valor y Acción */}
-                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                        {/* Fila de Valor y Botones de Acción */}
+                        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
                           <div>
                             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">Valor</span>
                             <span className="font-mono text-xs font-extrabold text-slate-900">
@@ -551,21 +551,34 @@ export function PipelineProspectosClient({
                             </span>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAbrirModalInspeccion({
-                                prospectoId: p.id,
-                                clienteNombre: p.nombreCompleto,
-                                clienteTelefono: p.telefono,
-                                perfilId: p.asesorId,
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
-                          >
-                            🔍 Inspección
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {p.telefono && (
+                              <Link
+                                href={`/conversaciones?tel=${encodeURIComponent(p.telefono)}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-600/30 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 px-2 py-1 text-[10px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                                title={`Abrir chat con ${p.nombreCompleto}`}
+                              >
+                                💬 Chat
+                              </Link>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAbrirModalInspeccion({
+                                  prospectoId: p.id,
+                                  clienteNombre: p.nombreCompleto,
+                                  clienteTelefono: p.telefono,
+                                  perfilId: p.asesorId,
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 text-[10px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                            >
+                              🔍 Inspección
+                            </button>
+                          </div>
                         </div>
 
                         {/* Pie de Tarjeta: Asesor Avatar */}
@@ -767,8 +780,8 @@ export function PipelineProspectosClient({
                           )}
                         </div>
 
-                        {/* Fila de Monto y Botón de Acción */}
-                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                        {/* Fila de Monto y Botones de Acción */}
+                        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
                           <div>
                             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">Monto</span>
                             <span className="font-mono text-xs font-extrabold text-slate-900">
@@ -776,21 +789,34 @@ export function PipelineProspectosClient({
                             </span>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAbrirModalInspeccion({
-                                expedienteId: exp.id,
-                                clienteNombre: exp.nombreCompleto,
-                                clienteTelefono: exp.telefono,
-                                perfilId: exp.asesorId || exp.operadorId,
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
-                          >
-                            🔍 Inspección
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {exp.telefono && (
+                              <Link
+                                href={`/conversaciones?tel=${encodeURIComponent(exp.telefono)}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-600/30 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 px-2 py-1 text-[10px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                                title={`Abrir chat con ${exp.nombreCompleto}`}
+                              >
+                                💬 Chat
+                              </Link>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAbrirModalInspeccion({
+                                  expedienteId: exp.id,
+                                  clienteNombre: exp.nombreCompleto,
+                                  clienteTelefono: exp.telefono,
+                                  perfilId: exp.asesorId || exp.operadorId,
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 text-[10px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                            >
+                              🔍 Inspección
+                            </button>
+                          </div>
                         </div>
 
                         {/* Pie de Tarjeta: Asesor Avatar + Fecha */}
