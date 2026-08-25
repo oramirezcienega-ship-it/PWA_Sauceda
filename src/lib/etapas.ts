@@ -28,9 +28,18 @@ export const ETAPAS: Etapa[] = [
       "Ya estamos en comunicación contigo y revisando tu caso.",
   },
   {
+    id: "visita",
+    nombre: "Inspección Programada",
+    orden: 2,
+    descripcion: "Inspección técnica en sitio agendada o en proceso de visita.",
+    nombreCliente: "Inspección Programada",
+    descripcionCliente:
+      "Tu visita e inspección técnica en sitio han sido agendadas.",
+  },
+  {
     id: "oferta",
     nombre: "Propuesta enviada",
-    orden: 2,
+    orden: 3,
     descripcion: "Se presentó una propuesta o cotización formal al cliente.",
     nombreCliente: "Propuesta enviada",
     descripcionCliente: "Te presentamos una propuesta para tu trámite.",
@@ -38,7 +47,7 @@ export const ETAPAS: Etapa[] = [
   {
     id: "cerrado",
     nombre: "Cerrado ganado",
-    orden: 3,
+    orden: 4,
     descripcion: "Traspaso o venta concluida con éxito.",
     nombreCliente: "Concluido",
     descripcionCliente:
@@ -47,7 +56,7 @@ export const ETAPAS: Etapa[] = [
   {
     id: "perdido",
     nombre: "Cerrado perdido",
-    orden: 4,
+    orden: 5,
     descripcion: "Lead o traspaso que no prosperó.",
     nombreCliente: "En pausa",
     descripcionCliente:
