@@ -116,15 +116,25 @@ export function VistaExpedientes() {
 
   if (error) {
     return (
-      <p className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
-        {error}
-      </p>
+      <div className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo flex items-center justify-between">
+        <span>{error}</span>
+        <button
+          type="button"
+          onClick={() => void recargar()}
+          className="rounded bg-rojo px-3 py-1 text-xs text-crema hover:opacity-90"
+        >
+          Reintentar
+        </button>
+      </div>
     );
   }
 
   if (!cargado) {
     return (
-      <p className="px-1 py-8 text-sm text-carbon/50">Cargando expedientes…</p>
+      <div className="flex items-center gap-3 px-1 py-8 text-sm text-carbon/60">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-sauce border-t-transparent"></div>
+        <span>Cargando negocios…</span>
+      </div>
     );
   }
 
