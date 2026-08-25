@@ -1833,3 +1833,133 @@ export async function obtenerUltimosDocumentosDeProspecto(
   };
 }
 
+/** 21. Duplicar Cotización
+ * Crea una copia exacta de una cotización existente (incluyendo todos sus conceptos),
+ * generando un nuevo folio correlativo (COT-XXX) para el prospecto especificado
+ * (o para el mismo prospecto de la cotización original si no se proporciona uno nuevo).
+ */
+export async function duplicarCotizacion(
+  cotizacionId: string,
+  nuevoProspectoId?: string | null
+): Promise<Cotizacion> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  // 1. Obtener la cotización original
+  const { data: original, error: errOrig } = await sb
+    .from("cotizaciones")
+    .select("*")
+    .eq("id", cotizacionId)
+    .maybeSingle();
+
+  if (errOrig) throw new Error(errOrig.message);
+  if (!original) throw new Error("La cotización original no existe.");
+
+  // 2. Obtener los conceptos de la cotización original
+  const { data: conceptosOriginales, error: errCon } = await sb
+    .from("cotizacion_conceptos")
+    .select("*")
+    .eq("cotizacion_id", cotizacionId)
+    .order("created_at", { ascending: true });
+
+  if (errCon) throw new Error(errCon.message);
+
+  // 3. Generar el nuevo folio correlativo
+  const { data: existentes, error: errLista } = await sb
+    .from("cotizaciones")
+    .select("id");
+  if (errLista) throw new Error(errLista.message);
+  const nuevoId = siguienteId((existentes ?? []).map((r) => r.id as string));
+
+  // 4. Determinar prospecto y expediente destino
+  const targetProspectoId = nuevoProspectoId || original.prospecto_id;
+  let resolvedExpedienteId = original.expediente_id || null;
+
+  if (nuevoProspectoId && nuevoProspectoId !== original.prospecto_id) {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("id")
+      .eq("prospecto_id", nuevoProspectoId)
+      .maybeSingle();
+    resolvedExpedienteId = exp?.id || null;
+  }
+
+  // 5. Insertar nueva cotización
+  const nuevoToken = crypto.randomUUID();
+  const notasClonadas = `[Duplicada de ${cotizacionId}] ${original.notas_internas || ""}`.trim();
+
+  const { data: nuevaCotFila, error: errIns } = await sb
+    .from("cotizaciones")
+    .insert({
+      id: nuevoId,
+      prospecto_id: targetProspectoId,
+      expediente_id: resolvedExpedienteId,
+      servicio_tipo: original.servicio_tipo,
+      estatus: "calculando_costo",
+      requiere_visita: original.requiere_visita || false,
+      fecha_visita: null,
+      inspector_id: null,
+      costo_estimado: Number(original.costo_estimado || 0),
+      precio_final: Number(original.precio_final || 0),
+      aprobado_comercial: false,
+      aprobado_comercial_by: null,
+      aprobado_operativo: false,
+      aprobado_operativo_by: null,
+      token: nuevoToken,
+      notas_internas: notasClonadas,
+      condiciones_pago: original.condiciones_pago || 'Anticipo del 50% para compra de materiales y programación de inicio; 50% al término a entera satisfacción.',
+      garantia: original.garantia || 'Todos los trabajos cuentan con garantía técnica contra vicios ocultos de acuerdo al servicio contratado.',
+    })
+    .select(`
+      *,
+      prospectos(nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .single();
+
+  if (errIns) throw new Error(errIns.message);
+
+  // 6. Duplicar los conceptos
+  if (conceptosOriginales && conceptosOriginales.length > 0) {
+    const nuevosConceptos = conceptosOriginales.map((c: any) => ({
+      cotizacion_id: nuevoId,
+      descripcion: c.descripcion,
+      cantidad: Number(c.cantidad || 0),
+      unidad: c.unidad || "m2",
+      costo_unitario: Number(c.costo_unitario || 0),
+      precio_unitario: Number(c.precio_unitario || 0),
+      descuento: Number(c.descuento || 0),
+      importe: Number(c.importe || 0),
+    }));
+
+    const { error: errInsCon } = await sb
+      .from("cotizacion_conceptos")
+      .insert(nuevosConceptos);
+
+    if (errInsCon) {
+      console.error("Error al copiar conceptos de cotización duplicada:", errInsCon);
+    }
+  }
+
+  // 7. Registrar actividad en la bitácora
+  await registrarActividad(sb, {
+    prospectoId: targetProspectoId,
+    tipo: "construccion",
+    titulo: `Cotización duplicada (${nuevoId})`,
+    detalle: `Se generó el folio ${nuevoId} como duplicado de la cotización ${cotizacionId}.`,
+  });
+
+  if (resolvedExpedienteId) {
+    await registrarActividad(sb, {
+      expedienteId: resolvedExpedienteId,
+      tipo: "construccion",
+      titulo: `Cotización duplicada vinculada (${nuevoId})`,
+      detalle: `Se vinculó el nuevo folio ${nuevoId} duplicado de ${cotizacionId}.`,
+    });
+  }
+
+  return aCotizacion(nuevaCotFila);
+}
+
