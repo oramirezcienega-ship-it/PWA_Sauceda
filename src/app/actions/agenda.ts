@@ -10,6 +10,7 @@ export interface Cita {
   prospecto_id?: string | null;
   expediente_id?: string | null;
   fraccionamiento?: string | null;
+  direccion?: string | null;
   cliente_nombre: string;
   cliente_telefono: string;
   cliente_email?: string;
@@ -670,7 +671,7 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
 
   let query = sb
     .from("agenda_citas")
-    .select("*, perfiles(nombre)")
+    .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, fraccionamiento, ciudad)")
     .gte("fecha", hoy)
     .neq("estado", "cancelada")
     .neq("estado", "completada")
@@ -705,10 +706,23 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     console.error("Error al obtener próximas visitas e instalaciones:", error);
     return [];
   }
-  return (data || []).map((row: any) => ({
-    ...row,
-    perfil_nombre: row.perfiles?.nombre || null,
-  })) as Cita[];
+  return (data || []).map((row: any) => {
+    const dirExp = row.expedientes?.direccion_propiedad;
+    const dirPros = row.prospectos?.direccion;
+    const fracExp = row.expedientes?.fraccionamiento;
+    const fracPros = row.prospectos?.fraccionamiento;
+    const ciudadPros = row.prospectos?.ciudad;
+
+    const fraccionamiento = row.fraccionamiento || fracExp || fracPros || (ciudadPros ? `León (${ciudadPros})` : null);
+    const direccion = dirExp || dirPros || (fraccionamiento ? `Col. ${fraccionamiento}` : null);
+
+    return {
+      ...row,
+      perfil_nombre: row.perfiles?.nombre || null,
+      fraccionamiento,
+      direccion,
+    };
+  }) as Cita[];
 }
 
 /**
