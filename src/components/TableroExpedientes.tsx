@@ -58,7 +58,7 @@ export function TableroExpedientes({
             <div className="flex flex-1 flex-col gap-3 min-h-[160px]">
               {enEtapa.length === 0 && (
                 <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-carbon/15 bg-white/40 p-4 text-center text-xs text-carbon/40">
-                  Sin expedientes en esta etapa
+                  Sin negocios en esta etapa
                 </div>
               )}
 

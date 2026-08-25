@@ -232,11 +232,11 @@ export function VistaExpedientes() {
         </span>{" "}
         {filtrando ? (
           <>
-            de {expedientes.length} expediente
+            de {expedientes.length} negocio
             {expedientes.length === 1 ? "" : "s"}
           </>
         ) : (
-          <>expediente{filtrados.length === 1 ? "" : "s"}</>
+          <>negocio{filtrados.length === 1 ? "" : "s"}</>
         )}
         {etapasSel.length === 0 && (
           <span className="text-carbon/40"> · Perdido oculto</span>
