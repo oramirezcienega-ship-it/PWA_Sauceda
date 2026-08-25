@@ -340,8 +340,8 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                     : "border-carbon/10 bg-slate-50 hover:bg-white"
                 }`}
               >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border ${
                         esInstalacion
@@ -355,31 +355,43 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                     >
                       {esInstalacion ? "🛠️ Instalación" : esInspeccion ? "🔍 Inspección Técnica" : esLlamada ? "📞 Llamada Programada" : "🛍️ Venta / Cita"}
                     </span>
-                    <span className="text-xs font-mono font-bold text-carbon/70">
-                      🕒 {c.hora_inicio.slice(0, 5)} - {c.hora_fin.slice(0, 5)}
+                  </div>
+
+                  {/* Nombre del cliente */}
+                  <p className="font-bold text-base text-carbon leading-snug truncate">{c.cliente_nombre}</p>
+
+                  {/* FECHA Y HORA DESTACADAS (Grandes como el nombre) */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-white/90 border border-carbon/10 p-2.5 shadow-xs">
+                    <span className="font-bold text-sm text-verde-profundo flex items-center gap-1">
+                      <span>📅</span> {formatearFechaSegura(c.fecha)}
+                    </span>
+                    <span className="font-mono font-bold text-sm text-sauce flex items-center gap-1">
+                      <span>🕒</span> {c.hora_inicio.slice(0, 5)} - {c.hora_fin.slice(0, 5)} hrs
                     </span>
                   </div>
 
-                  <p className="font-bold text-sm text-carbon leading-snug truncate">{c.cliente_nombre}</p>
-                  
+                  {/* UBICACIÓN CON PIN DEBAJO DE LA FECHA */}
+                  <div className="rounded-xl bg-emerald-50/80 border border-emerald-200/80 p-2.5 text-xs text-emerald-950 flex items-start gap-2 shadow-xs">
+                    <span className="text-base leading-none shrink-0 mt-0.5">📍</span>
+                    <div className="space-y-0.5">
+                      <span className="font-bold block text-[10px] uppercase tracking-wider text-emerald-800">Ubicación de la inspección / trabajo:</span>
+                      <span className="font-bold text-xs text-carbon block leading-snug">
+                        {c.direccion || c.fraccionamiento || "Ubicación por definir en León, Gto."}
+                      </span>
+                      {c.fraccionamiento && c.direccion && c.direccion !== c.fraccionamiento && (
+                        <span className="block text-[11px] font-medium text-carbon/60">Fraccionamiento/Zona: {c.fraccionamiento}</span>
+                      )}
+                    </div>
+                  </div>
+
                   {c.perfil_nombre && (
-                    <p className="text-[11px] font-semibold text-sauce flex items-center gap-1 mt-0.5">
-                      <span>👤</span> Responsable: <span className="font-bold">{c.perfil_nombre}</span>
+                    <p className="text-xs font-semibold text-carbon/70 flex items-center gap-1">
+                      <span>👤</span> Responsable: <span className="font-bold text-sauce">{c.perfil_nombre}</span>
                     </p>
                   )}
-
-                  {c.fraccionamiento && (
-                    <p className="text-xs font-semibold text-verde-profundo flex items-center gap-1 mt-0.5">
-                      <span>📍</span> {c.fraccionamiento}
-                    </p>
-                  )}
-
-                  <p className="text-[11px] text-carbon/50 mt-1">
-                    📅 {formatearFechaSegura(c.fecha)}
-                  </p>
 
                   {c.notas && (
-                    <p className="text-[11px] text-carbon/60 bg-white/80 p-1.5 rounded-md italic mt-1.5 border border-carbon/5 line-clamp-2">
+                    <p className="text-xs text-carbon/70 bg-white/90 p-2 rounded-lg italic border border-carbon/10 line-clamp-2">
                       "{c.notas}"
                     </p>
                   )}
