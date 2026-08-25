@@ -19,6 +19,7 @@ import { formatoPesos } from "@/lib/formato";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 import { cambiarEstatusMasivo } from "@/app/actions/prospectos";
 import { moverEtapa } from "@/app/actions/expedientes";
+import { programarCitaManual } from "@/app/actions/agenda";
 
 interface Perfil {
   id: string;
@@ -31,6 +32,14 @@ interface PipelineProspectosClientProps {
   prospectosIniciales: Prospecto[];
   expedientesIniciales?: Expediente[];
   perfiles: Perfil[];
+}
+
+interface ModalInspeccionData {
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  clienteNombre: string;
+  clienteTelefono: string;
+  perfilId?: string | null;
 }
 
 export function PipelineProspectosClient({
@@ -57,6 +66,69 @@ export function PipelineProspectosClient({
   const [arrastrandoId, setArrastrandoId] = useState<string | null>(null);
   const [columnaDestinoHover, setColumnaDestinoHover] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  // Estado para Modal de Programación de Inspección Técnica
+  const [modalInspeccion, setModalInspeccion] = useState<ModalInspeccionData | null>(null);
+  const [inspeccionPerfilId, setInspeccionPerfilId] = useState<string>("");
+  const [inspeccionFecha, setInspeccionFecha] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [inspeccionHoraInicio, setInspeccionHoraInicio] = useState<string>("10:00");
+  const [inspeccionHoraFin, setInspeccionHoraFin] = useState<string>("11:00");
+  const [inspeccionNotas, setInspeccionNotas] = useState<string>("");
+  const [inspeccionNotificarWsp, setInspeccionNotificarWsp] = useState<boolean>(true);
+  const [guardandoInspeccion, setGuardandoInspeccion] = useState<boolean>(false);
+
+  function handleAbrirModalInspeccion(data: ModalInspeccionData) {
+    setModalInspeccion(data);
+    setInspeccionPerfilId(data.perfilId || (perfiles[0]?.id ?? ""));
+    setInspeccionFecha(new Date().toISOString().slice(0, 10));
+    setInspeccionHoraInicio("10:00");
+    setInspeccionHoraFin("11:00");
+    setInspeccionNotas("Inspección técnica en sitio programada desde el tablero comercial.");
+    setInspeccionNotificarWsp(true);
+  }
+
+  async function handleGuardarInspeccion() {
+    if (!modalInspeccion) return;
+    if (!inspeccionFecha || !inspeccionHoraInicio || !inspeccionHoraFin) {
+      alert("Por favor selecciona la fecha y franja horaria.");
+      return;
+    }
+    if (!inspeccionPerfilId) {
+      alert("Por favor selecciona al responsable de la inspección.");
+      return;
+    }
+
+    setGuardandoInspeccion(true);
+    try {
+      const res = await programarCitaManual({
+        prospectoId: modalInspeccion.prospectoId,
+        expedienteId: modalInspeccion.expedienteId,
+        perfilId: inspeccionPerfilId,
+        clienteNombre: modalInspeccion.clienteNombre,
+        clienteTelefono: modalInspeccion.clienteTelefono || "",
+        tipoCita: "inspeccion",
+        fecha: inspeccionFecha,
+        horaInicio: inspeccionHoraInicio,
+        horaFin: inspeccionHoraFin,
+        notas: inspeccionNotas,
+        notificarCliente: inspeccionNotificarWsp,
+      });
+
+      if (!res.ok) {
+        alert("Error al agendar inspección: " + res.error);
+        return;
+      }
+
+      alert(`¡Inspección técnica agendada con éxito para ${modalInspeccion.clienteNombre}!`);
+      setModalInspeccion(null);
+      router.refresh();
+    } catch (err: any) {
+      console.error("Error al agendar inspección:", err);
+      alert("Error al agendar inspección: " + err.message);
+    } finally {
+      setGuardandoInspeccion(false);
+    }
+  }
 
   // Etapas para Prospectos
   const ETAPAS_PROSPECTO: { id: EstatusProspecto; nombre: string; descripcion: string }[] = [
@@ -101,16 +173,12 @@ export function PipelineProspectosClient({
     return isNaN(numId) ? 0 : numId;
   }
 
-  function obtenerTimestampExpediente(exp: Expediente): number {
-    if (exp.createdAt) {
-      const t = new Date(exp.createdAt).getTime();
+  function obtenerTimestampExpediente(e: Expediente): number {
+    if (e.ultimoMovimiento) {
+      const t = new Date(e.ultimoMovimiento).getTime();
       if (!isNaN(t) && t > 0) return t;
     }
-    if (exp.ultimoMovimiento) {
-      const t = new Date(exp.ultimoMovimiento).getTime();
-      if (!isNaN(t) && t > 0) return t;
-    }
-    const numId = parseInt(exp.id.replace(/\D/g, ""), 10);
+    const numId = parseInt(e.id.replace(/\D/g, ""), 10);
     return isNaN(numId) ? 0 : numId;
   }
 
@@ -121,9 +189,10 @@ export function PipelineProspectosClient({
         const q = busqueda.toLowerCase().trim();
         const coincide =
           e.nombreCompleto.toLowerCase().includes(q) ||
+          e.telefono.toLowerCase().includes(q) ||
           e.fraccionamiento.toLowerCase().includes(q) ||
           e.id.toLowerCase().includes(q) ||
-          e.telefono.toLowerCase().includes(q);
+          e.situacion.toLowerCase().includes(q);
         if (!coincide) return false;
       }
       if (filtroAsesor !== "todos") {
@@ -134,8 +203,8 @@ export function PipelineProspectosClient({
     });
   }, [expedientes, busqueda, filtroAsesor]);
 
-  // Handlers de Drag and Drop
-  function handleDragStart(e: DragEvent<HTMLElement>, id: string) {
+  // Handlers para Drag and Drop de Prospectos
+  function handleDragStart(e: DragEvent<HTMLDivElement>, id: string) {
     e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
     setArrastrandoId(id);
@@ -146,227 +215,167 @@ export function PipelineProspectosClient({
     setColumnaDestinoHover(null);
   }
 
-  function handleDragOver(e: DragEvent<HTMLElement>, etapaId: string) {
+  function handleDragOver(e: DragEvent<HTMLElement>, columnaId: string) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (columnaDestinoHover !== etapaId) {
-      setColumnaDestinoHover(etapaId);
+    if (columnaDestinoHover !== columnaId) {
+      setColumnaDestinoHover(columnaId);
     }
   }
 
-  function handleDragLeave(e: DragEvent<HTMLElement>, etapaId: string) {
+  function handleDragLeave(e: DragEvent<HTMLElement>, columnaId: string) {
     e.preventDefault();
-    if (columnaDestinoHover === etapaId) {
+    if (columnaDestinoHover === columnaId) {
       setColumnaDestinoHover(null);
     }
   }
 
-  // Drop para Prospectos
   async function handleDropProspecto(e: DragEvent<HTMLElement>, nuevaEtapa: EstatusProspecto) {
     e.preventDefault();
     setColumnaDestinoHover(null);
+    const prospectoId = e.dataTransfer.getData("text/plain");
+    if (!prospectoId) return;
 
-    const targetId = e.dataTransfer.getData("text/plain") || arrastrandoId;
-    if (!targetId) return;
+    const pActual = prospectos.find((p) => p.id === prospectoId);
+    if (!pActual || pActual.estatus === nuevaEtapa) return;
 
-    const obj = prospectos.find((p) => p.id === targetId);
-    if (!obj || obj.estatus === nuevaEtapa) {
-      setArrastrandoId(null);
-      return;
-    }
-
-    const previo = prospectos;
+    // Actualización Optimista
     setProspectos((prev) =>
-      prev.map((p) => (p.id === targetId ? { ...p, estatus: nuevaEtapa } : p)),
+      prev.map((p) => (p.id === prospectoId ? { ...p, estatus: nuevaEtapa } : p)),
     );
-    setArrastrandoId(null);
 
+    setGuardando(true);
     try {
-      setGuardando(true);
-      await cambiarEstatusMasivo([targetId], nuevaEtapa);
-      router.refresh();
+      await cambiarEstatusMasivo([prospectoId], nuevaEtapa);
     } catch (err) {
-      console.error("Error al actualizar la etapa del prospecto:", err);
-      setProspectos(previo);
+      console.error("Error al actualizar estatus de prospecto:", err);
+      setProspectos(prospectosIniciales);
+      alert("No se pudo actualizar la etapa del prospecto.");
     } finally {
       setGuardando(false);
+      setArrastrandoId(null);
     }
   }
 
-  // Drop para Expedientes
   async function handleDropExpediente(e: DragEvent<HTMLElement>, nuevaEtapa: EtapaId) {
     e.preventDefault();
     setColumnaDestinoHover(null);
+    const expedienteId = e.dataTransfer.getData("text/plain");
+    if (!expedienteId) return;
 
-    const targetId = e.dataTransfer.getData("text/plain") || arrastrandoId;
-    if (!targetId) return;
+    const eActual = expedientes.find((exp) => exp.id === expedienteId);
+    if (!eActual || eActual.etapa === nuevaEtapa) return;
 
-    const obj = expedientes.find((exp) => exp.id === targetId);
-    if (!obj || obj.etapa === nuevaEtapa) {
-      setArrastrandoId(null);
-      return;
-    }
-
-    const previo = expedientes;
+    // Actualización Optimista
     setExpedientes((prev) =>
-      prev.map((exp) => (exp.id === targetId ? { ...exp, etapa: nuevaEtapa } : exp)),
+      prev.map((exp) => (exp.id === expedienteId ? { ...exp, etapa: nuevaEtapa } : exp)),
     );
-    setArrastrandoId(null);
 
+    setGuardando(true);
     try {
-      setGuardando(true);
-      await moverEtapa(targetId, nuevaEtapa);
-      router.refresh();
+      await moverEtapa(expedienteId, nuevaEtapa);
     } catch (err) {
-      console.error("Error al mover la etapa del expediente:", err);
-      setExpedientes(previo);
+      console.error("Error al mover etapa del expediente:", err);
+      setExpedientes(expedientesIniciales);
+      alert("No se pudo mover la etapa del expediente.");
     } finally {
       setGuardando(false);
+      setArrastrandoId(null);
     }
   }
 
   return (
     <div className="space-y-4">
-      {/* Selector de Modo de Pipeline: Prospectos vs Expedientes */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white p-4 rounded-2xl border border-carbon/10 shadow-xs">
-        <div>
-          <h1 className="font-titular text-2xl font-bold text-verde-profundo flex items-center gap-2">
-            📊 Pipeline Comercial
-          </h1>
-          <p className="text-xs text-carbon/60">
-            Conmuta entre el embudo de <strong className="text-verde-profundo font-semibold">Prospectos</strong> y el flujo operativo de <strong className="text-verde-profundo font-semibold">Expedientes</strong>. Arrastra las tarjetas para avanzar de etapa.
-          </p>
-        </div>
-
-        {/* Píldoras conmutadoras del Pipeline */}
-        <div className="inline-flex shrink-0 rounded-xl border border-carbon/15 bg-crema/40 p-1 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setTipoPipeline("prospectos")}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-              tipoPipeline === "prospectos"
-                ? "bg-verde-profundo text-crema shadow-xs scale-102"
-                : "text-carbon/70 hover:text-verde-profundo"
-            }`}
-          >
-            👤 Pipeline de Prospectos
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-mono">
-              {prospectosFiltrados.length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTipoPipeline("expedientes")}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-              tipoPipeline === "expedientes"
-                ? "bg-verde-profundo text-crema shadow-xs scale-102"
-                : "text-carbon/70 hover:text-verde-profundo"
-            }`}
-          >
-            📁 Pipeline de Expedientes
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-mono">
-              {expedientesFiltrados.length}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Control de Búsqueda y Filtros */}
-      <div className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-xs space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Buscador */}
-          <div className="relative flex-1 min-w-[220px]">
-            <input
-              type="text"
-              placeholder={
+      {/* Barra de Filtros y Selector de Vista */}
+      <div className="rounded-2xl border border-carbon/10 bg-white p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Selector de tipo de Pipeline */}
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setTipoPipeline("expedientes")}
+              className={`rounded-lg px-3 py-1.5 transition ${
+                tipoPipeline === "expedientes"
+                  ? "bg-sauce text-white shadow-xs font-bold"
+                  : "text-carbon/60 hover:text-carbon"
+              }`}
+            >
+              📁 Embudo de Expedientes ({expedientesFiltrados.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoPipeline("prospectos")}
+              className={`rounded-lg px-3 py-1.5 transition ${
                 tipoPipeline === "prospectos"
-                  ? "🔍 Buscar por nombre, teléfono, ciudad..."
-                  : "🔍 Buscar por cliente, fraccionamiento, folio..."
-              }
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full rounded-lg border border-carbon/15 bg-crema/30 px-3 py-1.5 text-xs text-carbon outline-none focus:border-sauce focus:bg-white transition"
-            />
-            {busqueda && (
-              <button
-                type="button"
-                onClick={() => setBusqueda("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon"
-              >
-                ✕
-              </button>
-            )}
+                  ? "bg-sauce text-white shadow-xs font-bold"
+                  : "text-carbon/60 hover:text-carbon"
+              }`}
+            >
+              👥 Embudo de Leads ({prospectosFiltrados.length})
+            </button>
           </div>
 
-          {/* Filtro Calificación (Solo Prospectos) */}
+          {/* Indicador de guardado optimista */}
+          {guardando && (
+            <div className="flex items-center gap-1.5 text-xs text-sauce font-semibold animate-pulse">
+              <span className="h-2 w-2 rounded-full bg-sauce"></span>
+              Guardando cambios...
+            </div>
+          )}
+        </div>
+
+        {/* Filtros rápidos */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          <input
+            type="text"
+            placeholder="🔍 Buscar por nombre, teléfono, ID..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="rounded-lg border border-carbon/20 bg-white p-2 text-carbon outline-none focus:border-sauce"
+          />
+
           {tipoPipeline === "prospectos" && (
-            <select
-              value={filtroCalificacion}
-              onChange={(e) => setFiltroCalificacion(e.target.value)}
-              className="rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
-            >
-              <option value="todos">Todas las Calificaciones</option>
-              <option value="caliente">🔥 Caliente</option>
-              <option value="templado">⚡ Templado</option>
-              <option value="frio">❄️ Frío</option>
-              <option value="descalificado">❌ Descalificado</option>
-            </select>
+            <>
+              <select
+                value={filtroCalificacion}
+                onChange={(e) => setFiltroCalificacion(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white p-2 text-carbon outline-none focus:border-sauce"
+              >
+                <option value="todos">🔥 Calificación: Todas</option>
+                <option value="caliente">🔥 Caliente</option>
+                <option value="templado">🟡 Templado</option>
+                <option value="frio">❄️ Frío</option>
+                <option value="descalificado">🚫 Descalificado</option>
+              </select>
+
+              <select
+                value={filtroOrigen}
+                onChange={(e) => setFiltroOrigen(e.target.value)}
+                className="rounded-lg border border-carbon/20 bg-white p-2 text-carbon outline-none focus:border-sauce"
+              >
+                <option value="todos">🌱 Origen: Todos</option>
+                {ORIGENES.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </>
           )}
 
-          {/* Filtro Origen (Solo Prospectos) */}
-          {tipoPipeline === "prospectos" && (
-            <select
-              value={filtroOrigen}
-              onChange={(e) => setFiltroOrigen(e.target.value)}
-              className="rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
-            >
-              <option value="todos">Todos los Orígenes</option>
-              {ORIGENES.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nombre}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Filtro Asesor */}
           <select
             value={filtroAsesor}
             onChange={(e) => setFiltroAsesor(e.target.value)}
-            className="rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
+            className="rounded-lg border border-carbon/20 bg-white p-2 text-carbon outline-none focus:border-sauce"
           >
-            <option value="todos">Todos los Asesores</option>
+            <option value="todos">👤 Asesor: Todos</option>
             <option value="sin_asignar">Sin Asesor Asignado</option>
-            {perfiles
-              .filter((p) => p.activo !== false)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
-                </option>
-              ))}
+            {perfiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
           </select>
-
-          {(busqueda || filtroCalificacion !== "todos" || filtroOrigen !== "todos" || filtroAsesor !== "todos") && (
-            <button
-              type="button"
-              onClick={() => {
-                setBusqueda("");
-                setFiltroCalificacion("todos");
-                setFiltroOrigen("todos");
-                setFiltroAsesor("todos");
-              }}
-              className="text-xs font-medium text-rojo hover:underline"
-            >
-              Limpiar filtros
-            </button>
-          )}
-
-          {guardando && (
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-sauce/10 border border-sauce/30 px-3 py-1 text-xs font-semibold text-verde-profundo animate-pulse">
-              <span className="h-2 w-2 rounded-full bg-sauce animate-ping" />
-              Guardando cambios...
-            </span>
-          )}
         </div>
       </div>
 
@@ -377,14 +386,8 @@ export function PipelineProspectosClient({
         <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)] w-full">
           {ETAPAS_PROSPECTO.map((etapa) => {
             const prospectosEtapa = prospectosFiltrados
-              .filter((p) => {
-                if (etapa.id === "lead") return p.estatus === "lead" || p.estatus === "nuevo";
-                if (etapa.id === "mql") return p.estatus === "mql" || p.estatus === "en_conversacion";
-                if (etapa.id === "sql") return p.estatus === "sql" || p.estatus === "expediente_abierto";
-                return p.estatus === etapa.id;
-              })
+              .filter((p) => p.estatus === etapa.id)
               .sort((a, b) => obtenerTimestampProspecto(b) - obtenerTimestampProspecto(a));
-
             const totalValorCampana = prospectosEtapa.reduce(
               (acc, p) => acc + (Number(p.valorCampana) || 0),
               0,
@@ -537,6 +540,23 @@ export function PipelineProspectosClient({
                             </span>
                           )}
                         </div>
+
+                        {/* Botón Programar Inspección Técnica */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAbrirModalInspeccion({
+                              prospectoId: p.id,
+                              clienteNombre: p.nombreCompleto,
+                              clienteTelefono: p.telefono,
+                              perfilId: p.asesorId,
+                            });
+                          }}
+                          className="w-full mt-2.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sauce/30 bg-sauce/10 hover:bg-sauce hover:text-white px-2.5 py-1 text-xs font-bold text-sauce transition shadow-2xs cursor-pointer"
+                        >
+                          🔍 Programar Inspección
+                        </button>
 
                         {/* Pie de Tarjeta */}
                         <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">
@@ -749,6 +769,23 @@ export function PipelineProspectosClient({
                           </span>
                         </div>
 
+                        {/* Botón Programar Inspección Técnica */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAbrirModalInspeccion({
+                              expedienteId: exp.id,
+                              clienteNombre: exp.nombreCompleto,
+                              clienteTelefono: exp.telefono,
+                              perfilId: exp.asesorId || exp.operadorId,
+                            });
+                          }}
+                          className="w-full mt-2.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sauce/30 bg-sauce/10 hover:bg-sauce hover:text-white px-2.5 py-1 text-xs font-bold text-sauce transition shadow-2xs cursor-pointer"
+                        >
+                          🔍 Programar Inspección
+                        </button>
+
                         {/* Pie de Tarjeta */}
                         <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">
                           {exp.asesorNombre ? (
@@ -782,6 +819,132 @@ export function PipelineProspectosClient({
               </section>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal de Configuración / Agendamiento de Inspección Técnica */}
+      {modalInspeccion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-lg shadow-xl space-y-4 border border-carbon/10 text-carbon my-8">
+            <div className="flex items-start justify-between border-b border-carbon/10 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-sauce block">
+                  🔍 Inspección Técnica en Sitio
+                </span>
+                <h3 className="font-titular text-base font-bold text-verde-profundo">
+                  Programar Inspección para {modalInspeccion.clienteNombre}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalInspeccion(null)}
+                className="text-carbon/40 hover:text-carbon font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Responsable asignado */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                  1. Técnico / Asesor Responsable:
+                </label>
+                <select
+                  value={inspeccionPerfilId}
+                  onChange={(e) => setInspeccionPerfilId(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2 text-xs font-semibold text-carbon focus:border-sauce"
+                >
+                  <option value="">-- Seleccionar Responsable --</option>
+                  {perfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} ({p.rol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Fecha y Horario */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-slate-50 border border-carbon/10 rounded-xl">
+                <div>
+                  <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                    Fecha de Visita
+                  </label>
+                  <input
+                    type="date"
+                    value={inspeccionFecha}
+                    onChange={(e) => setInspeccionFecha(e.target.value)}
+                    className="w-full rounded border border-carbon/20 bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                    Hora Inicio
+                  </label>
+                  <input
+                    type="time"
+                    value={inspeccionHoraInicio}
+                    onChange={(e) => setInspeccionHoraInicio(e.target.value)}
+                    className="w-full rounded border border-carbon/20 bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                    Hora Fin
+                  </label>
+                  <input
+                    type="time"
+                    value={inspeccionHoraFin}
+                    onChange={(e) => setInspeccionHoraFin(e.target.value)}
+                    className="w-full rounded border border-carbon/20 bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Observaciones */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                  Instrucciones / Notas para el cliente o técnico:
+                </label>
+                <textarea
+                  rows={3}
+                  value={inspeccionNotas}
+                  onChange={(e) => setInspeccionNotas(e.target.value)}
+                  placeholder="Ej. Realizar levantamiento topográfico de la losa y verificar nivelación de drenajes."
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2.5 text-xs text-carbon outline-none focus:border-sauce"
+                />
+              </div>
+
+              {/* Opción WhatsApp */}
+              <label className="flex items-center gap-2 cursor-pointer bg-green-50/70 p-2.5 rounded-xl border border-green-200 text-green-900 text-xs font-semibold">
+                <input
+                  type="checkbox"
+                  checked={inspeccionNotificarWsp}
+                  onChange={(e) => setInspeccionNotificarWsp(e.target.checked)}
+                  className="rounded text-sauce focus:ring-sauce h-4 w-4"
+                />
+                <span>Enviar confirmación automática por WhatsApp al cliente</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-carbon/10">
+              <button
+                type="button"
+                onClick={() => setModalInspeccion(null)}
+                className="rounded-lg border border-carbon/20 px-3.5 py-1.5 text-xs font-bold text-carbon/60 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGuardarInspeccion}
+                disabled={guardandoInspeccion}
+                className="rounded-lg bg-sauce hover:bg-verde-profundo text-white px-4 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                {guardandoInspeccion ? "Agendando..." : "🔍 Agendar Inspección"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
