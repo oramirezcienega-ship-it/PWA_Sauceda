@@ -388,14 +388,15 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                 <div className="space-y-2 pt-2 border-t border-carbon/5">
                   <div className="flex flex-wrap items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1.5">
-                      <a
-                        href={`https://wa.me/${c.cliente_telefono}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100"
-                      >
-                        💬 WhatsApp
-                      </a>
+                      {c.cliente_telefono && (
+                        <Link
+                          href={`/conversaciones?tel=${c.cliente_telefono}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100"
+                          title="Abrir módulo de conversaciones CRM de SAUCEDA"
+                        >
+                          💬 WhatsApp
+                        </Link>
+                      )}
 
                       {c.cliente_telefono && (
                         <a
