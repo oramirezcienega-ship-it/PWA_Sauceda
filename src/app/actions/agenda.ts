@@ -774,8 +774,16 @@ export async function programarCitaManual(data: {
   const sb = supabaseServidor();
 
   try {
-    // 1. Si es instalación y tiene expedienteId, también actualizamos el expediente
-    if (data.tipoCita === "instalacion" && data.expedienteId) {
+    // 1. Si es inspección o instalación y tiene expedienteId, actualizar la etapa del expediente
+    if (data.tipoCita === "inspeccion" && data.expedienteId) {
+      await sb
+        .from("expedientes")
+        .update({
+          etapa: "visita",
+          ultimo_movimiento: new Date().toISOString().slice(0, 10),
+        })
+        .eq("id", data.expedienteId);
+    } else if (data.tipoCita === "instalacion" && data.expedienteId) {
       const fechaISO = `${data.fecha}T${data.horaInicio}:00`;
       await sb
         .from("expedientes")
