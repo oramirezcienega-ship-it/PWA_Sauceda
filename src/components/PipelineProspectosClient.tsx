@@ -411,41 +411,42 @@ export function PipelineProspectosClient({
                     : "border-slate-200/80 bg-slate-50/50 shadow-2xs"
                 }`}
               >
-                {/* Encabezado */}
-                <div className="mb-2.5 border-b border-slate-200/80 pb-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2
-                        className={`font-titular text-xs font-bold uppercase tracking-wider ${
-                          esGanado
-                            ? "text-emerald-800"
-                            : esPerdido
-                            ? "text-rose-800"
-                            : "text-slate-900"
-                        }`}
-                      >
-                        {esGanado && "🏆 "}
-                        {esPerdido && "❌ "}
-                        {etapa.nombre}
-                      </h2>
-                      <p className="text-[10px] text-slate-500 line-clamp-1">{etapa.descripcion}</p>
-                    </div>
+                {/* Encabezado de Columna */}
+                <div className="mb-2.5 border-b border-slate-200/80 pb-2.5 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2
+                      className={`font-titular text-xs font-bold uppercase tracking-wider ${
+                        esGanado
+                          ? "text-emerald-800"
+                          : esPerdido
+                          ? "text-rose-800"
+                          : "text-slate-900"
+                      }`}
+                    >
+                      {esGanado && "🏆 "}
+                      {esPerdido && "❌ "}
+                      {etapa.nombre}
+                    </h2>
                     <span
-                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-bold ${
+                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-2 font-mono text-[11px] font-extrabold ${
                         esGanado
                           ? "bg-emerald-200 text-emerald-900"
                           : esPerdido
                           ? "bg-rose-200 text-rose-900"
-                          : "bg-slate-200 text-slate-700"
+                          : "bg-slate-200 text-slate-800"
                       }`}
                     >
                       {prospectosEtapa.length}
                     </span>
                   </div>
 
-                  <div className="mt-1.5 flex items-baseline justify-between text-[10px] font-mono">
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    {etapa.descripcion}
+                  </p>
+
+                  <div className="pt-1 flex items-center justify-between text-[11px] font-mono">
                     <span className="text-slate-400 uppercase font-bold text-[9px]">Total:</span>
-                    <span className="font-bold text-slate-800">{formatoPesos(totalValorCampana)}</span>
+                    <span className="font-bold text-slate-900">{formatoPesos(totalValorCampana)}</span>
                   </div>
                 </div>
 
@@ -629,40 +630,41 @@ export function PipelineProspectosClient({
                 }`}
               >
                 {/* Encabezado de Columna */}
-                <div className="mb-2.5 border-b border-slate-200/80 pb-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2
-                        className={`font-titular text-xs font-bold uppercase tracking-wider ${
-                          esGanado
-                            ? "text-emerald-800"
-                            : esPerdido
-                            ? "text-rose-800"
-                            : "text-slate-900"
-                        }`}
-                      >
-                        {esGanado && "🏆 "}
-                        {esPerdido && "❌ "}
-                        {etapa.nombre}
-                      </h2>
-                      <p className="text-[10px] text-slate-500 line-clamp-1">{etapa.descripcion}</p>
-                    </div>
+                <div className="mb-2.5 border-b border-slate-200/80 pb-2.5 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2
+                      className={`font-titular text-xs font-bold uppercase tracking-wider ${
+                        esGanado
+                          ? "text-emerald-800"
+                          : esPerdido
+                          ? "text-rose-800"
+                          : "text-slate-900"
+                      }`}
+                    >
+                      {esGanado && "🏆 "}
+                      {esPerdido && "❌ "}
+                      {etapa.nombre}
+                    </h2>
                     <span
-                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-bold ${
+                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-2 font-mono text-[11px] font-extrabold ${
                         esGanado
                           ? "bg-emerald-200 text-emerald-900"
                           : esPerdido
                           ? "bg-rose-200 text-rose-900"
-                          : "bg-slate-200 text-slate-700"
+                          : "bg-slate-200 text-slate-800"
                       }`}
                     >
                       {expedientesEtapa.length}
                     </span>
                   </div>
 
-                  <div className="mt-1.5 flex items-baseline justify-between text-[10px] font-mono">
-                    <span className="font-bold text-slate-800">{formatoPesos(totalMonto)}</span>
-                    <span className="text-slate-400">
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    {etapa.descripcion}
+                  </p>
+
+                  <div className="pt-1 flex items-center justify-between text-[11px] font-mono">
+                    <span className="font-bold text-slate-900">{formatoPesos(totalMonto)}</span>
+                    <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
                       Pond: {formatoPesos(montoPonderado)} ({Math.round(prob * 100)}%)
                     </span>
                   </div>
