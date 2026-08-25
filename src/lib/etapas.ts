@@ -13,7 +13,7 @@ export const ETAPAS: Etapa[] = [
     id: "nuevo-lead",
     nombre: "Nuevo",
     orden: 0,
-    descripcion: "Expediente inicial calificado que entra a ventas.",
+    descripcion: "Negocio inicial calificado que entra a ventas.",
     nombreCliente: "Solicitud recibida",
     descripcionCliente:
       "Recibimos tus datos. En breve un asesor se pondrá en contacto contigo.",

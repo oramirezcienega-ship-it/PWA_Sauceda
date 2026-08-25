@@ -30,13 +30,12 @@ import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
 
 const ENLACES = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/", label: "Expedientes" },
+  { href: "/prospectos/pipeline", label: "Negocios" },
   { href: "/prospectos", label: "Prospectos" },
-  { href: "/prospectos/pipeline", label: "Pipeline" },
-  { href: "/construccion", label: "Construcción" },
   { href: "/conversaciones", label: "Conversaciones" },
-  { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
+  { href: "/construccion", label: "Construcción" },
   { href: "/agenda", label: "Agenda" },
+  { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
 ];
 
 function esRutaPublica(path: string): boolean {

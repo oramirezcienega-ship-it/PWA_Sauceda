@@ -11,10 +11,6 @@ export const dynamic = "force-dynamic";
  * Es la vista principal del BPM (Incremento 1).
  */
 export default async function PaginaTablero() {
-  const rol = await rolUsuarioActual();
-  if (rol === "asesor" || rol === "operaciones") {
-    redirect("/dashboard");
-  }
 
   return (
     <main className="min-h-screen pb-10">
@@ -27,7 +23,7 @@ export default async function PaginaTablero() {
               Panel de operación
             </h1>
             <p className="mt-1 text-sm text-carbon/60">
-              Tablero de expedientes de traspaso INFONAVIT · León, Gto.
+              Tablero de negocios de traspaso e inmobiliarios · León, Gto.
             </p>
           </div>
           <AccionesTablero />
