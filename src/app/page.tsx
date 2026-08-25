@@ -11,10 +11,6 @@ export const dynamic = "force-dynamic";
  * Es la vista principal del BPM (Incremento 1).
  */
 export default async function PaginaTablero() {
-  const rol = await rolUsuarioActual();
-  if (rol === "asesor" || rol === "operaciones") {
-    redirect("/dashboard");
-  }
 
   return (
     <main className="min-h-screen pb-10">
