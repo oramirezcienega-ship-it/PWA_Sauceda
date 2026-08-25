@@ -671,7 +671,7 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
 
   let query = sb
     .from("agenda_citas")
-    .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, fraccionamiento, ciudad)")
+    .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, ciudad)")
     .gte("fecha", hoy)
     .neq("estado", "cancelada")
     .neq("estado", "completada")
@@ -710,10 +710,9 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     const dirExp = row.expedientes?.direccion_propiedad;
     const dirPros = row.prospectos?.direccion;
     const fracExp = row.expedientes?.fraccionamiento;
-    const fracPros = row.prospectos?.fraccionamiento;
     const ciudadPros = row.prospectos?.ciudad;
 
-    const fraccionamiento = row.fraccionamiento || fracExp || fracPros || (ciudadPros ? `León (${ciudadPros})` : null);
+    const fraccionamiento = row.fraccionamiento || fracExp || (ciudadPros ? `León (${ciudadPros})` : null);
     const direccion = dirExp || dirPros || (fraccionamiento ? `Col. ${fraccionamiento}` : null);
 
     return {
