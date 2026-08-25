@@ -27,7 +27,7 @@ export default async function PaginaTablero() {
               Panel de operación
             </h1>
             <p className="mt-1 text-sm text-carbon/60">
-              Tablero de expedientes de traspaso INFONAVIT · León, Gto.
+              Tablero de negocios de traspaso e inmobiliarios · León, Gto.
             </p>
           </div>
           <AccionesTablero />

@@ -17,7 +17,7 @@ export function AccionesTablero() {
         href="/expediente/nuevo"
         className="rounded-md bg-sauce px-4 py-2 text-sm font-medium text-crema transition hover:bg-verde-profundo"
       >
-        + Nuevo expediente
+        + Nuevo negocio
       </Link>
     </div>
   );

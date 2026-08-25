@@ -301,7 +301,7 @@ export function PipelineProspectosClient({
                   : "hover:text-slate-900"
               }`}
             >
-              📁 Embudo de Expedientes ({expedientesFiltrados.length})
+              💼 Embudo de Negocios ({expedientesFiltrados.length})
             </button>
             <button
               type="button"
@@ -696,7 +696,7 @@ export function PipelineProspectosClient({
                           : "border-slate-300/70 text-slate-400 bg-white/30"
                       }`}
                     >
-                      {estaHover ? "¡Suelta aquí!" : "Sin expedientes"}
+                      {estaHover ? "¡Suelta aquí!" : "Sin negocios"}
                     </div>
                   )}
 
