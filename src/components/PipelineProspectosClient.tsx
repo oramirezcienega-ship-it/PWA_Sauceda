@@ -225,6 +225,9 @@ export function PipelineProspectosClient({
 
   function handleDragLeave(e: DragEvent<HTMLElement>, columnaId: string) {
     e.preventDefault();
+    if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
+      return; // Si el cursor entra a una tarjeta dentro de la misma columna, no remover el hover
+    }
     if (columnaDestinoHover === columnaId) {
       setColumnaDestinoHover(null);
     }
@@ -401,9 +404,9 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropProspecto(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-all duration-200 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-colors duration-150 ${
                   estaHover
-                    ? "border-emerald-500 bg-emerald-50/60 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]"
+                    ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30"
                     : esGanado
                     ? "border-emerald-200 bg-emerald-50/30 shadow-2xs"
                     : esPerdido
@@ -482,10 +485,10 @@ export function PipelineProspectosClient({
                         draggable
                         onDragStart={(e) => handleDragStart(e, p.id)}
                         onDragEnd={handleDragEnd}
-                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-all duration-150 space-y-2 ${
+                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-colors duration-150 space-y-2 ${
                           siendoArrastrado
-                            ? "opacity-40 border-emerald-500 shadow-none scale-95"
-                            : "border-slate-200/80 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:shadow-md"
+                            ? "opacity-30 border-dashed border-emerald-500 bg-emerald-50/40 shadow-none"
+                            : "border-slate-200/80 hover:border-emerald-500/40 hover:shadow-md"
                         }`}
                       >
                         {/* Encabezado Nombre + Badge + Teléfono e ID */}
@@ -619,9 +622,9 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropExpediente(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-all duration-200 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-colors duration-150 ${
                   estaHover
-                    ? "border-emerald-500 bg-emerald-50/60 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]"
+                    ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30"
                     : esGanado
                     ? "border-emerald-200 bg-emerald-50/30 shadow-2xs"
                     : esPerdido
@@ -703,10 +706,10 @@ export function PipelineProspectosClient({
                         draggable
                         onDragStart={(e) => handleDragStart(e, exp.id)}
                         onDragEnd={handleDragEnd}
-                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-all duration-150 space-y-2 ${
+                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-colors duration-150 space-y-2 ${
                           siendoArrastrado
-                            ? "opacity-40 border-emerald-500 shadow-none scale-95"
-                            : "border-slate-200/80 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:shadow-md"
+                            ? "opacity-30 border-dashed border-emerald-500 bg-emerald-50/40 shadow-none"
+                            : "border-slate-200/80 hover:border-emerald-500/40 hover:shadow-md"
                         }`}
                       >
                         {/* Encabezado Nombre + Teléfono e ID */}
