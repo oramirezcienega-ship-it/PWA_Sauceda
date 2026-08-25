@@ -2,17 +2,43 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { obtenerProximasCitasEInstalaciones, programarCitaManual, type Cita } from "@/app/actions/agenda";
+import {
+  obtenerProximasCitasEInstalaciones,
+  programarCitaManual,
+  reagendarCitaCompleta,
+  cancelarCitaConMotivo,
+  type Cita,
+} from "@/app/actions/agenda";
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
-import { obtenerUsuarioActual } from "@/app/actions/usuarios";
+import { obtenerUsuarioActual, listarPerfilesActivos } from "@/app/actions/usuarios";
 
 interface ProximasVisitasWidgetProps {
   perfilId?: string | null;
 }
 
+interface PerfilSimple {
+  id: string;
+  nombre: string;
+  rol: string;
+}
+
+/** Formatea fechas de forma segura evitando problemas de zona horaria (UTC vs Local) */
+function formatearFechaSegura(fechaStr: string): string {
+  if (!fechaStr) return "";
+  const partes = fechaStr.slice(0, 10).split("-").map(Number);
+  if (partes.length < 3 || isNaN(partes[0])) return fechaStr;
+  const dateObj = new Date(partes[0], partes[1] - 1, partes[2]);
+  return dateObj.toLocaleDateString("es-MX", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) {
   const [citas, setCitas] = useState<Cita[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [perfiles, setPerfiles] = useState<PerfilSimple[]>([]);
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "instalacion" | "inspeccion" | "llamada">("todos");
 
   // Modal para captura de retro / resultado de la llamada o cita
@@ -22,6 +48,22 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
   const [fechaAgendada, setFechaAgendada] = useState(new Date().toISOString().slice(0, 10));
   const [horaAgendada, setHoraAgendada] = useState("10:00");
   const [guardandoModal, setGuardandoModal] = useState(false);
+
+  // Panel de Configuración de Cita (Reagendamiento)
+  const [citaReagendarModal, setCitaReagendarModal] = useState<Cita | null>(null);
+  const [reagendarPerfilId, setReagendarPerfilId] = useState("");
+  const [reagendarTipoCita, setReagendarTipoCita] = useState<"inspeccion" | "instalacion" | "llamada" | "venta" | "asesoria">("inspeccion");
+  const [reagendarFecha, setReagendarFecha] = useState("");
+  const [reagendarHoraInicio, setReagendarHoraInicio] = useState("10:00");
+  const [reagendarHoraFin, setReagendarHoraFin] = useState("11:00");
+  const [reagendarNotas, setReagendarNotas] = useState("");
+  const [reagendarNotificarWsp, setReagendarNotificarWsp] = useState(true);
+  const [guardandoReagendado, setGuardandoReagendado] = useState(false);
+
+  // Modal de Cancelación de Cita
+  const [citaCancelarModal, setCitaCancelarModal] = useState<Cita | null>(null);
+  const [motivoCancelar, setMotivoCancelar] = useState("");
+  const [guardandoCancelado, setGuardandoCancelado] = useState(false);
 
   const cargarAgenda = useCallback(async () => {
     setCargando(true);
@@ -44,6 +86,10 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
 
   useEffect(() => {
     cargarAgenda();
+    // Cargar catálogo de asesores/técnicos activos
+    listarPerfilesActivos()
+      .then((res) => setPerfiles(res))
+      .catch(() => {});
   }, [cargarAgenda]);
 
   function handleAbrirModalResultado(cita: Cita) {
@@ -60,11 +106,9 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
       const expedienteId = citaSelModal.expediente_id || null;
       const prospectoId = citaSelModal.prospecto_id || null;
 
-      let tipoAct = "tarea";
       let tituloBitacora = `Cita / Llamada "${citaSelModal.tipo_cita || 'Llamada'}" atendida`;
 
       if (resultadoTipo === "agendado") {
-        tipoAct = "inspeccion";
         tituloBitacora = `🟢 Cita / Visita Agendada: ${fechaAgendada} a las ${horaAgendada} hrs`;
 
         await programarCitaManual({
@@ -81,7 +125,6 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
           notificarCliente: true
         });
       } else if (resultadoTipo === "reintentar") {
-        tipoAct = "llamada";
         tituloBitacora = `🟡 Reintento de Llamada Programado: ${fechaAgendada} a las ${horaAgendada} hrs`;
 
         await programarCitaManual({
@@ -97,7 +140,6 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
           notas: `Reintento de llamada. ${observacionesModal}`,
         });
       } else if (resultadoTipo === "frio") {
-        tipoAct = "nota";
         tituloBitacora = `🔴 Cliente Descartado / Prospecto Frío`;
         if (expedienteId) {
           const { cambiarCalificacionExpediente } = await import("@/app/actions/expedientes");
@@ -126,6 +168,84 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
     }
   }
 
+  // Abre el Panel de Configuración de Cita (Reagendamiento)
+  function handleAbrirReagendarModal(cita: Cita) {
+    setCitaReagendarModal(cita);
+    setReagendarPerfilId(cita.perfil_id || "");
+    setReagendarTipoCita(cita.tipo_cita || "inspeccion");
+    setReagendarFecha(cita.fecha || new Date().toISOString().slice(0, 10));
+    setReagendarHoraInicio(cita.hora_inicio ? cita.hora_inicio.slice(0, 5) : "10:00");
+    setReagendarHoraFin(cita.hora_fin ? cita.hora_fin.slice(0, 5) : "11:00");
+    setReagendarNotas(cita.notas || "");
+    setReagendarNotificarWsp(true);
+  }
+
+  // Guarda el reagendamiento (Cancela cita previa y crea la nueva)
+  async function handleGuardarReagendamiento() {
+    if (!citaReagendarModal) return;
+    if (!reagendarFecha || !reagendarHoraInicio || !reagendarHoraFin) {
+      alert("Por favor indica la fecha y franja horaria.");
+      return;
+    }
+    setGuardandoReagendado(true);
+    try {
+      const res = await reagendarCitaCompleta({
+        citaAnteriorId: citaReagendarModal.id,
+        perfilId: reagendarPerfilId || citaReagendarModal.perfil_id,
+        tipoCita: reagendarTipoCita,
+        fecha: reagendarFecha,
+        horaInicio: reagendarHoraInicio,
+        horaFin: reagendarHoraFin,
+        notas: reagendarNotas,
+        notificarCliente: reagendarNotificarWsp,
+      });
+
+      if (!res.ok) {
+        alert("No se pudo reagendar: " + res.error);
+        return;
+      }
+
+      setCitaReagendarModal(null);
+      await cargarAgenda();
+    } catch (err: any) {
+      console.error("Error al reagendar cita:", err);
+      alert("Error al reagendar cita: " + err.message);
+    } finally {
+      setGuardandoReagendado(false);
+    }
+  }
+
+  // Abre el modal de cancelación
+  function handleAbrirCancelarModal(cita: Cita) {
+    setCitaCancelarModal(cita);
+    setMotivoCancelar("");
+  }
+
+  // Guarda la cancelación de cita
+  async function handleGuardarCancelacion() {
+    if (!citaCancelarModal) return;
+    setGuardandoCancelado(true);
+    try {
+      const res = await cancelarCitaConMotivo({
+        citaId: citaCancelarModal.id,
+        motivo: motivoCancelar.trim(),
+      });
+
+      if (!res.ok) {
+        alert("Error al cancelar cita: " + res.error);
+        return;
+      }
+
+      setCitaCancelarModal(null);
+      await cargarAgenda();
+    } catch (err: any) {
+      console.error("Error al cancelar cita:", err);
+      alert("Error al cancelar cita: " + err.message);
+    } finally {
+      setGuardandoCancelado(false);
+    }
+  }
+
   const citasFiltradas = citas.filter((c) => {
     if (filtroTipo === "instalacion") return c.tipo_cita === "instalacion";
     if (filtroTipo === "inspeccion") return c.tipo_cita === "inspeccion";
@@ -136,8 +256,6 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
   const totalInstalaciones = citas.filter((c) => c.tipo_cita === "instalacion").length;
   const totalInspecciones = citas.filter((c) => c.tipo_cita === "inspeccion").length;
   const totalLlamadas = citas.filter((c) => c.tipo_cita === "llamada").length;
-
-
 
   return (
     <div className="mb-6 rounded-2xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-sm space-y-3.5">
@@ -257,7 +375,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                   )}
 
                   <p className="text-[11px] text-carbon/50 mt-1">
-                    📅 {new Date(c.fecha + "T00:00:00").toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" })}
+                    📅 {formatearFechaSegura(c.fecha)}
                   </p>
 
                   {c.notas && (
@@ -267,36 +385,28 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-carbon/5">
-                  <div className="flex items-center gap-1.5">
-                    <a
-                      href={`https://wa.me/${c.cliente_telefono}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100"
-                    >
-                      💬 WhatsApp
-                    </a>
-
-                    {c.cliente_telefono && (
+                <div className="space-y-2 pt-2 border-t border-carbon/5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5">
                       <a
-                        href={`tel:${c.cliente_telefono}`}
-                        onClick={() => setTimeout(() => handleAbrirModalResultado(c), 500)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-sauce/20 bg-sauce/10 px-2 py-1 text-xs font-semibold text-sauce transition hover:bg-sauce hover:text-white"
+                        href={`https://wa.me/${c.cliente_telefono}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-100"
                       >
-                        📞 Llamar
+                        💬 WhatsApp
                       </a>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleAbrirModalResultado(c)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-sauce hover:bg-verde-profundo text-white px-2.5 py-1 text-xs font-bold transition shadow-2xs cursor-pointer"
-                    >
-                      ✓ Retro / Concluir
-                    </button>
+                      {c.cliente_telefono && (
+                        <a
+                          href={`tel:${c.cliente_telefono}`}
+                          onClick={() => setTimeout(() => handleAbrirModalResultado(c), 500)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-sauce/20 bg-sauce/10 px-2 py-1 text-xs font-semibold text-sauce transition hover:bg-sauce hover:text-white"
+                        >
+                          📞 Llamar
+                        </a>
+                      )}
+                    </div>
 
                     {c.expediente_id ? (
                       <Link
@@ -307,6 +417,37 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                       </Link>
                     ) : null}
                   </div>
+
+                  {/* Acciones directas de Gestión de Citas (Reagendar / Cancelar / Concluir) */}
+                  <div className="flex items-center justify-between gap-1.5 pt-1">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirReagendarModal(c)}
+                        title="Reagendar esta cita con nueva fecha/hora o responsable"
+                        className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 px-2 py-1 text-[11px] font-bold transition cursor-pointer"
+                      >
+                        📅 Reagendar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirCancelarModal(c)}
+                        title="Cancelar esta cita y asentar motivo"
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 px-2 py-1 text-[11px] font-bold transition cursor-pointer"
+                      >
+                        ❌ Cancelar
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAbrirModalResultado(c)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-sauce hover:bg-verde-profundo text-white px-2 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                    >
+                      ✓ Retro
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -314,7 +455,217 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
         </div>
       )}
 
-      {/* Modal de Captura de Retro / Resultado Operativo */}
+      {/* Modal 1: Panel de Configuración / Reagendamiento de Cita */}
+      {citaReagendarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-lg shadow-xl space-y-4 border border-carbon/10 text-carbon my-8">
+            <div className="flex items-start justify-between border-b border-carbon/10 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 block">
+                  ⚙️ Panel de Configuración de Cita
+                </span>
+                <h3 className="font-titular text-base font-bold text-verde-profundo">
+                  Reagendar cita para {citaReagendarModal.cliente_nombre}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCitaReagendarModal(null)}
+                className="text-carbon/40 hover:text-carbon font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-900 text-[11px]">
+                💡 Al reagendar, la cita original del <strong>{formatearFechaSegura(citaReagendarModal.fecha)}</strong> se marcará como cancelada/reagendada y se creará el nuevo registro.
+              </div>
+
+              {/* Responsable asignado */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                  1. Asesor / Técnico Responsable:
+                </label>
+                <select
+                  value={reagendarPerfilId}
+                  onChange={(e) => setReagendarPerfilId(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2 text-xs font-semibold text-carbon focus:border-sauce"
+                >
+                  <option value="">-- Seleccionar Responsable --</option>
+                  {perfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} ({p.rol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tipo de Cita */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                  2. Tipo de Cita / Actividad:
+                </label>
+                <select
+                  value={reagendarTipoCita}
+                  onChange={(e) => setReagendarTipoCita(e.target.value as any)}
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2 text-xs font-semibold text-carbon focus:border-sauce"
+                >
+                  <option value="inspeccion">🔍 Inspección Técnica en Sitio</option>
+                  <option value="instalacion">🛠️ Instalación Profesional</option>
+                  <option value="llamada">📞 Llamada Telefónica</option>
+                  <option value="venta">🛍️ Cita Comercial / Venta</option>
+                  <option value="asesoria">💬 Asesoría Técnica</option>
+                </select>
+              </div>
+
+              {/* Fecha y Franja Horaria */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-slate-50 border border-carbon/10 rounded-xl">
+                <div>
+                  <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                    Nueva Fecha
+                  </label>
+                  <input
+                    type="date"
+                    value={reagendarFecha}
+                    onChange={(e) => setReagendarFecha(e.target.value)}
+                    className="w-full rounded border border-carbon/20 bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                    Hora Inicio
+                  </label>
+                  <input
+                    type="time"
+                    value={reagendarHoraInicio}
+                    onChange={(e) => setReagendarHoraInicio(e.target.value)}
+                    className="w-full rounded border border-carbon/20 bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-carbon/60 uppercase mb-1">
+                    Hora Fin
+                  </label>
+                  <input
+                    type="time"
+                    value={reagendarHoraFin}
+                    onChange={(e) => setReagendarHoraFin(e.target.value)}
+                    className="w-full rounded border border-carbon/20 bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Observaciones */}
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                  Observaciones / Instrucciones:
+                </label>
+                <textarea
+                  rows={2}
+                  value={reagendarNotas}
+                  onChange={(e) => setReagendarNotas(e.target.value)}
+                  placeholder="Ej. El cliente solicitó posponer por viaje. Acceso por la calle lateral."
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2.5 text-xs text-carbon outline-none focus:border-sauce"
+                />
+              </div>
+
+              {/* Opción WhatsApp */}
+              <label className="flex items-center gap-2 cursor-pointer bg-green-50/70 p-2.5 rounded-xl border border-green-200 text-green-900 text-xs font-semibold">
+                <input
+                  type="checkbox"
+                  checked={reagendarNotificarWsp}
+                  onChange={(e) => setReagendarNotificarWsp(e.target.checked)}
+                  className="rounded text-sauce focus:ring-sauce h-4 w-4"
+                />
+                <span>Enviar confirmación automática por WhatsApp al cliente</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-carbon/10">
+              <button
+                type="button"
+                onClick={() => setCitaReagendarModal(null)}
+                className="rounded-lg border border-carbon/20 px-3.5 py-1.5 text-xs font-bold text-carbon/60 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGuardarReagendamiento}
+                disabled={guardandoReagendado}
+                className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                {guardandoReagendado ? "Guardando..." : "💾 Confirmar y Reagendar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Cancelación de Cita */}
+      {citaCancelarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-md shadow-xl space-y-4 border border-carbon/10 text-carbon">
+            <div className="flex items-start justify-between border-b border-carbon/10 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 block">
+                  🚫 Cancelación de Cita
+                </span>
+                <h3 className="font-titular text-base font-bold text-carbon">
+                  Cancelar cita de {citaCancelarModal.cliente_nombre}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCitaCancelarModal(null)}
+                className="text-carbon/40 hover:text-carbon font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-carbon/70">
+                La cita quedará asentada como <strong>cancelada</strong> en el historial y la bitácora del cliente.
+              </p>
+
+              <div>
+                <label className="block text-[11px] font-bold text-carbon/70 uppercase mb-1">
+                  Motivo de la Cancelación:
+                </label>
+                <textarea
+                  rows={3}
+                  value={motivoCancelar}
+                  onChange={(e) => setMotivoCancelar(e.target.value)}
+                  placeholder="Ej. El cliente ya no requiere el servicio / Cambio de opinión / Número equivocado."
+                  className="w-full rounded-lg border border-carbon/20 bg-white p-2.5 text-xs text-carbon outline-none focus:border-sauce"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-carbon/10">
+              <button
+                type="button"
+                onClick={() => setCitaCancelarModal(null)}
+                className="rounded-lg border border-carbon/20 px-3.5 py-1.5 text-xs font-bold text-carbon/60 hover:bg-slate-50 cursor-pointer"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={handleGuardarCancelacion}
+                disabled={guardandoCancelado}
+                className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-4 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                {guardandoCancelado ? "Cancelando..." : "🚫 Confirmar Cancelación"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Captura de Retro / Resultado Operativo */}
       {citaSelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-lg shadow-xl space-y-4 border border-carbon/10 text-carbon">

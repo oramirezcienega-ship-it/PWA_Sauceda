@@ -846,3 +846,173 @@ export async function programarCitaManual(data: {
     return { ok: false, error: err.message || "Error interno al programar." };
   }
 }
+
+/**
+ * Cancela una cita marcándola con estado 'cancelada' y asentando el motivo en la bitácora.
+ */
+export async function cancelarCitaConMotivo(datos: {
+  citaId: string;
+  motivo?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data: cita, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("id", datos.citaId)
+      .maybeSingle();
+
+    if (errCita || !cita) {
+      return { ok: false, error: "La cita no existe o ya fue cancelada." };
+    }
+
+    const { error: errUpdate } = await sb
+      .from("agenda_citas")
+      .update({
+        estado: "cancelada",
+        notas: datos.motivo ? `Cancelada. Motivo: ${datos.motivo}` : cita.notas,
+      })
+      .eq("id", datos.citaId);
+
+    if (errUpdate) return { ok: false, error: errUpdate.message };
+
+    const detalleBitacora = `🚫 Cita/Visita (${cita.tipo_cita || 'General'}) Cancelada. ${datos.motivo ? `Motivo: ${datos.motivo}` : ''}`.trim();
+
+    if (cita.expediente_id) {
+      const { registrarActividad } = await import("@/lib/actividades");
+      await registrarActividad(sb, {
+        expedienteId: cita.expediente_id,
+        tipo: "sistema",
+        titulo: "🚫 Cita Cancelada",
+        detalle: detalleBitacora,
+      });
+    } else if (cita.prospecto_id) {
+      await sb.from("actividades").insert({
+        prospecto_id: cita.prospecto_id,
+        tipo: "cita",
+        descripcion: detalleBitacora,
+      });
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al cancelar cita con motivo:", err);
+    return { ok: false, error: err.message || "Error al cancelar la cita." };
+  }
+}
+
+/**
+ * Reagenda una cita existente: marca la cita original como 'cancelada'
+ * y genera una nueva cita en agenda_citas con la fecha, hora y responsable indicados.
+ */
+export async function reagendarCitaCompleta(datos: {
+  citaAnteriorId: string;
+  perfilId: string;
+  tipoCita: "venta" | "asesoria" | "inspeccion" | "instalacion" | "llamada";
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  notas?: string;
+  notificarCliente?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Obtener cita anterior
+    const { data: citaPrev, error: errPrev } = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("id", datos.citaAnteriorId)
+      .maybeSingle();
+
+    if (errPrev || !citaPrev) {
+      return { ok: false, error: "La cita original no fue encontrada." };
+    }
+
+    // 2. Marcar cita previa como cancelada
+    await sb
+      .from("agenda_citas")
+      .update({
+        estado: "cancelada",
+        notas: `Reagendada a ${datos.fecha} ${datos.horaInicio}. ${citaPrev.notas || ''}`.trim(),
+      })
+      .eq("id", datos.citaAnteriorId);
+
+    // 3. Crear nueva cita
+    const { data: nuevaCita, error: errNueva } = await sb
+      .from("agenda_citas")
+      .insert({
+        perfil_id: datos.perfilId || citaPrev.perfil_id,
+        prospecto_id: citaPrev.prospecto_id ?? null,
+        expediente_id: citaPrev.expediente_id ?? null,
+        fraccionamiento: citaPrev.fraccionamiento ?? null,
+        cliente_nombre: citaPrev.cliente_nombre,
+        cliente_telefono: citaPrev.cliente_telefono,
+        cliente_email: citaPrev.cliente_email ?? null,
+        tipo_cita: datos.tipoCita,
+        fecha: datos.fecha,
+        hora_inicio: datos.horaInicio,
+        hora_fin: datos.horaFin,
+        notas: datos.notas || `Reagendada desde cita previa (${citaPrev.fecha}).`,
+        estado: "confirmada",
+      })
+      .select()
+      .single();
+
+    if (errNueva) {
+      return { ok: false, error: errNueva.message };
+    }
+
+    // 4. Si es instalación en expediente, actualizar expediente
+    if (datos.tipoCita === "instalacion" && citaPrev.expediente_id) {
+      const fechaISO = `${datos.fecha}T${datos.horaInicio}:00`;
+      await sb
+        .from("expedientes")
+        .update({
+          fecha_instalacion: fechaISO,
+          operador_id: datos.perfilId,
+        })
+        .eq("id", citaPrev.expediente_id);
+    }
+
+    // 5. Registrar en la bitácora
+    const detalleBitacora = `🔄 Cita/Visita Reagendada: Se canceló la cita previa del ${citaPrev.fecha} (${citaPrev.hora_inicio.slice(0,5)}) y se programó la nueva (${datos.tipoCita}) para el ${datos.fecha} de ${datos.horaInicio} a ${datos.horaFin}. ${datos.notas ? `Notas: ${datos.notas}` : ''}`;
+
+    if (citaPrev.expediente_id) {
+      const { registrarActividad } = await import("@/lib/actividades");
+      await registrarActividad(sb, {
+        expedienteId: citaPrev.expediente_id,
+        tipo: datos.tipoCita === "instalacion" ? "construccion" : "sistema",
+        titulo: "🔄 Cita Reagendada",
+        detalle: detalleBitacora,
+      });
+    } else if (citaPrev.prospecto_id) {
+      await sb.from("actividades").insert({
+        prospecto_id: citaPrev.prospecto_id,
+        tipo: "cita",
+        descripcion: detalleBitacora,
+      });
+    }
+
+    // 6. Notificación de WhatsApp al cliente
+    if (datos.notificarCliente && citaPrev.cliente_telefono) {
+      try {
+        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+        const tipoNombre = datos.tipoCita === "instalacion" ? "instalación profesional" : datos.tipoCita === "inspeccion" ? "inspección técnica" : "cita";
+        const msg = `¡Hola ${citaPrev.cliente_nombre.split(" ")[0]}! 🗓️ Te confirmamos que tu ${tipoNombre} con SAUCEDA ha sido *reagendada* para el día *${datos.fecha}* a las *${datos.horaInicio} hrs*.\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
+        await enviarWhatsAppTexto(citaPrev.cliente_telefono, msg);
+      } catch (errWsp) {
+        console.error("Error enviando notificación WhatsApp:", errWsp);
+      }
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al reagendar cita:", err);
+    return { ok: false, error: err.message || "Error al reagendar la cita." };
+  }
+}
+
