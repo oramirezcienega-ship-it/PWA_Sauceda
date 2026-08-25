@@ -5,10 +5,9 @@ import { formatoPesos } from "@/lib/formato";
 import Link from "next/link";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
-import { ListadoLeadsDashboard } from "@/components/ListadoLeadsDashboard";
+import { ProximasVisitasWidget } from "@/components/ProximasVisitasWidget";
 import { ResumenKpisAsesor } from "@/components/ResumenKpisAsesor";
 import { FiltrosDashboard } from "@/components/FiltrosDashboard";
-import { WidgetSeguimientoExpedientes } from "@/components/WidgetSeguimientoExpedientes";
 
 export const dynamic = "force-dynamic";
 
@@ -121,20 +120,8 @@ export default async function PaginaDashboard({
           />
 
           <div className="mt-4 sm:mt-6 space-y-4">
-            {/* Sección de Leads Asignados */}
-            <div className="rounded-xl border border-carbon/10 bg-white p-3.5 sm:p-5 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-titular text-base sm:text-lg font-semibold text-verde-profundo">
-                  Mis Leads Asignados ({r.totalLeads})
-                </h2>
-                <span className="text-[10px] sm:text-xs text-carbon/40">Listado interactivo</span>
-              </div>
-
-              <ListadoLeadsDashboard leadsIniciales={r.leadsAsignados} />
-            </div>
-
-            {/* Widget de Seguimiento y Monitoreo de Expedientes */}
-            <WidgetSeguimientoExpedientes />
+            {/* Widget de Próximas Visitas, Llamadas e Instalaciones */}
+            <ProximasVisitasWidget />
 
             {/* Sección de Tareas Pendientes */}
             <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
@@ -325,11 +312,6 @@ export default async function PaginaDashboard({
               </div>
             )}
           </div>
-        </div>
-
-        {/* Widget de Seguimiento y Monitoreo de Expedientes */}
-        <div className="mt-6">
-          <WidgetSeguimientoExpedientes />
         </div>
       </div>
     </main>
