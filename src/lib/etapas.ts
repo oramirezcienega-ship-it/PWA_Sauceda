@@ -84,9 +84,9 @@ export const PROBABILIDAD_POR_ETAPA: Record<EtapaId, number> = {
 export const ETAPAS_CONSTRUCCION: Etapa[] = [
   {
     id: "interes",
-    nombre: "Interés (Expediente)",
+    nombre: "Interés (Negocio)",
     orden: 0,
-    descripcion: "Cliente interesado, expediente inicial creado.",
+    descripcion: "Cliente interesado, negocio inicial creado.",
     nombreCliente: "Interés",
     descripcionCliente: "Hemos recibido tus datos y estamos revisando tu caso.",
   },

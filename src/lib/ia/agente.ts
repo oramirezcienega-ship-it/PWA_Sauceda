@@ -445,6 +445,9 @@ REGLA DE UBICACIÓN Y REGISTRO (CRÍTICA):
 REGLA DE TELÉFONO DE CONTACTO (CRÍTICA):
 Si notas en los "Datos del cliente" abajo que el teléfono de contacto figura como "No registrado" (es decir, el prospecto viene de redes sociales y aún no nos proporciona su número móvil real), es tu prioridad absoluta solicitarle amablemente su número de teléfono o WhatsApp durante la charla de forma fluida y natural, explicándole que es para que un asesor pueda continuar el contacto.
 
+REGLA DE CORREO ELECTRÓNICO (CRÍTICA):
+NUNCA solicites el correo electrónico al inicio del saludo ni en los primeros mensajes. Sofía debe solicitar el correo electrónico únicamente cuando el cliente demuestre un interés real en un servicio, solicite información detallada/cotización por escrito, o se esté acordando una inspección técnica. En ese momento de interés maduro, solicita amablemente su correo electrónico como dato complementario de contacto para enviarle la información o confirmación.
+
 Una vez que tengas los datos mínimos recopilados para el flujo correspondiente:
 - Comunícales con amabilidad que con esta información nuestro equipo preparará la propuesta o se pondrá en contacto para los siguientes pasos.
 - Infórmales que les daremos respuesta directamente por este chat de WhatsApp.
@@ -473,6 +476,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "saldo_deuda": "Monto adeudado como número entero sin signos de puntuación si el cliente lo mencionó en la conversación, de lo contrario null",
     "situacion_fisica": "El estado físico de la casa. Solo puede ser 'vandalizada', 'deshabitada' o 'bueno' si el cliente lo mencionó claramente, de lo contrario null",
     "telefono_real": "Número de teléfono celular de 10 dígitos (ej. 4771234567) si el cliente lo proporcionó en este mensaje o a lo largo del chat, de lo contrario null",
+    "correo": "Correo electrónico (email ej. cliente@gmail.com) si el cliente lo proporcionó en la conversación, de lo contrario null",
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
@@ -970,6 +974,17 @@ export async function responderConIA(
         const telLimpio = String((datosExtraidos as any).telefono_real).replace(/\D/g, "");
         if (telLimpio.length >= 10) {
           updates.telefono = telLimpio.slice(-10);
+        }
+      }
+      if ((datosExtraidos as any).correo) {
+        const correoLimpio = String((datosExtraidos as any).correo).trim().toLowerCase();
+        if (correoLimpio.includes("@") && correoLimpio.includes(".")) {
+          if (exp?.prospecto_id) {
+            await sb
+              .from("prospectos")
+              .update({ correo: correoLimpio })
+              .eq("id", exp.prospecto_id);
+          }
         }
       }
       if (datosExtraidos.situacion_fisica) {

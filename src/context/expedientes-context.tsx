@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import type { DatosExpediente, EtapaId, Expediente, CalificacionProspecto } from "@/lib/types";
 import * as acciones from "@/app/actions/expedientes";
 
@@ -67,15 +68,14 @@ function esRutaPublica(path: string): boolean {
 }
 
 export function ExpedientesProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [expedientes, setExpedientes] = useState<Expediente[]>([]);
   const [cargado, setCargado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const recargar = useCallback(async () => {
-    // Este provider envuelve TODA la app (está en el layout raíz). En las
-    // rutas públicas (login y portal del cliente) no hay panel que cargar,
-    // así que no pedimos nada ni redirigimos (evita un bucle en /login).
-    if (typeof window !== "undefined" && esRutaPublica(window.location.pathname)) {
+    const actualPath = pathname || (typeof window !== "undefined" ? window.location.pathname : "");
+    if (esRutaPublica(actualPath)) {
       setCargado(true);
       return;
     }
@@ -85,8 +85,6 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         setExpedientes(res.expedientes);
       } else {
-        // Sin sesión: el servidor responde "No autorizado". En vez de mostrar
-        // el panel con un error, mandamos al login (refuerza al middleware).
         if (
           /no autorizado/i.test(res.mensaje) &&
           typeof window !== "undefined"
@@ -94,27 +92,29 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
           window.location.replace("/login");
           return;
         }
-        setError(`No se pudieron cargar los expedientes. Detalle: ${res.mensaje}`);
+        setError(`No se pudieron cargar los negocios. Detalle: ${res.mensaje}`);
       }
     } catch (err) {
-      console.error("Error al cargar expedientes:", err);
+      console.error("Error al cargar negocios:", err);
       const detalle = err instanceof Error ? err.message : "error desconocido";
       if (/no autorizado/i.test(detalle) && typeof window !== "undefined") {
         window.location.replace("/login");
         return;
       }
       setError(
-        `No se pudieron cargar los expedientes. Detalle: ${detalle}`,
+        `No se pudieron cargar los negocios. Detalle: ${detalle}`,
       );
     } finally {
       setCargado(true);
     }
-  }, []);
+  }, [pathname]);
 
-  // Carga inicial desde la base de datos.
+  // Carga inicial y reactiva al cambiar de ruta en el CRM
   useEffect(() => {
-    void recargar();
-  }, [recargar]);
+    if (!esRutaPublica(pathname)) {
+      void recargar();
+    }
+  }, [pathname, recargar]);
 
   const moverEtapa = useCallback(
     async (id: string, etapa: EtapaId) => {

@@ -411,10 +411,10 @@ export function TablaExpedientes({
               {(
               [
                 ["fecha", "Registro", "izquierda"],
-                ["cliente", "Expediente", "izquierda"],
+                ["cliente", "Cliente / Negocio", "izquierda"],
                 ["asesor", "Asesor", "izquierda"],
                 ["fraccionamiento", "Fraccionamiento", "izquierda"],
-                ["tipoNegocio", "Negocio", "izquierda"],
+                ["tipoNegocio", "Tipo Negocio", "izquierda"],
                 ["origen", "Origen", "izquierda"],
                 ["telefono", "Teléfono", "izquierda"],
                 ["etapa", "Etapa", "izquierda"],
