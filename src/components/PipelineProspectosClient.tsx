@@ -19,6 +19,7 @@ import { formatoPesos } from "@/lib/formato";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 import { cambiarEstatusMasivo } from "@/app/actions/prospectos";
 import { moverEtapa } from "@/app/actions/expedientes";
+import { programarCitaManual } from "@/app/actions/agenda";
 
 interface Perfil {
   id: string;
@@ -31,6 +32,14 @@ interface PipelineProspectosClientProps {
   prospectosIniciales: Prospecto[];
   expedientesIniciales?: Expediente[];
   perfiles: Perfil[];
+}
+
+interface ModalInspeccionData {
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  clienteNombre: string;
+  clienteTelefono: string;
+  perfilId?: string | null;
 }
 
 export function PipelineProspectosClient({
@@ -57,6 +66,69 @@ export function PipelineProspectosClient({
   const [arrastrandoId, setArrastrandoId] = useState<string | null>(null);
   const [columnaDestinoHover, setColumnaDestinoHover] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  // Estado para Modal de Programación de Inspección Técnica
+  const [modalInspeccion, setModalInspeccion] = useState<ModalInspeccionData | null>(null);
+  const [inspeccionPerfilId, setInspeccionPerfilId] = useState<string>("");
+  const [inspeccionFecha, setInspeccionFecha] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [inspeccionHoraInicio, setInspeccionHoraInicio] = useState<string>("10:00");
+  const [inspeccionHoraFin, setInspeccionHoraFin] = useState<string>("11:00");
+  const [inspeccionNotas, setInspeccionNotas] = useState<string>("");
+  const [inspeccionNotificarWsp, setInspeccionNotificarWsp] = useState<boolean>(true);
+  const [guardandoInspeccion, setGuardandoInspeccion] = useState<boolean>(false);
+
+  function handleAbrirModalInspeccion(data: ModalInspeccionData) {
+    setModalInspeccion(data);
+    setInspeccionPerfilId(data.perfilId || (perfiles[0]?.id ?? ""));
+    setInspeccionFecha(new Date().toISOString().slice(0, 10));
+    setInspeccionHoraInicio("10:00");
+    setInspeccionHoraFin("11:00");
+    setInspeccionNotas("Inspección técnica en sitio programada desde el tablero comercial.");
+    setInspeccionNotificarWsp(true);
+  }
+
+  async function handleGuardarInspeccion() {
+    if (!modalInspeccion) return;
+    if (!inspeccionFecha || !inspeccionHoraInicio || !inspeccionHoraFin) {
+      alert("Por favor selecciona la fecha y franja horaria.");
+      return;
+    }
+    if (!inspeccionPerfilId) {
+      alert("Por favor selecciona al responsable de la inspección.");
+      return;
+    }
+
+    setGuardandoInspeccion(true);
+    try {
+      const res = await programarCitaManual({
+        prospectoId: modalInspeccion.prospectoId,
+        expedienteId: modalInspeccion.expedienteId,
+        perfilId: inspeccionPerfilId,
+        clienteNombre: modalInspeccion.clienteNombre,
+        clienteTelefono: modalInspeccion.clienteTelefono || "",
+        tipoCita: "inspeccion",
+        fecha: inspeccionFecha,
+        horaInicio: inspeccionHoraInicio,
+        horaFin: inspeccionHoraFin,
+        notas: inspeccionNotas,
+        notificarCliente: inspeccionNotificarWsp,
+      });
+
+      if (!res.ok) {
+        alert("Error al agendar inspección: " + res.error);
+        return;
+      }
+
+      alert(`¡Inspección técnica agendada con éxito para ${modalInspeccion.clienteNombre}!`);
+      setModalInspeccion(null);
+      router.refresh();
+    } catch (err: any) {
+      console.error("Error al agendar inspección:", err);
+      alert("Error al agendar inspección: " + err.message);
+    } finally {
+      setGuardandoInspeccion(false);
+    }
+  }
 
   // Etapas para Prospectos
   const ETAPAS_PROSPECTO: { id: EstatusProspecto; nombre: string; descripcion: string }[] = [
@@ -101,16 +173,12 @@ export function PipelineProspectosClient({
     return isNaN(numId) ? 0 : numId;
   }
 
-  function obtenerTimestampExpediente(exp: Expediente): number {
-    if (exp.createdAt) {
-      const t = new Date(exp.createdAt).getTime();
+  function obtenerTimestampExpediente(e: Expediente): number {
+    if (e.ultimoMovimiento) {
+      const t = new Date(e.ultimoMovimiento).getTime();
       if (!isNaN(t) && t > 0) return t;
     }
-    if (exp.ultimoMovimiento) {
-      const t = new Date(exp.ultimoMovimiento).getTime();
-      if (!isNaN(t) && t > 0) return t;
-    }
-    const numId = parseInt(exp.id.replace(/\D/g, ""), 10);
+    const numId = parseInt(e.id.replace(/\D/g, ""), 10);
     return isNaN(numId) ? 0 : numId;
   }
 
@@ -121,9 +189,10 @@ export function PipelineProspectosClient({
         const q = busqueda.toLowerCase().trim();
         const coincide =
           e.nombreCompleto.toLowerCase().includes(q) ||
+          e.telefono.toLowerCase().includes(q) ||
           e.fraccionamiento.toLowerCase().includes(q) ||
           e.id.toLowerCase().includes(q) ||
-          e.telefono.toLowerCase().includes(q);
+          e.situacion.toLowerCase().includes(q);
         if (!coincide) return false;
       }
       if (filtroAsesor !== "todos") {
@@ -134,8 +203,8 @@ export function PipelineProspectosClient({
     });
   }, [expedientes, busqueda, filtroAsesor]);
 
-  // Handlers de Drag and Drop
-  function handleDragStart(e: DragEvent<HTMLElement>, id: string) {
+  // Handlers para Drag and Drop
+  function handleDragStart(e: DragEvent<HTMLDivElement>, id: string) {
     e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
     setArrastrandoId(id);
@@ -146,227 +215,165 @@ export function PipelineProspectosClient({
     setColumnaDestinoHover(null);
   }
 
-  function handleDragOver(e: DragEvent<HTMLElement>, etapaId: string) {
+  function handleDragOver(e: DragEvent<HTMLElement>, columnaId: string) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (columnaDestinoHover !== etapaId) {
-      setColumnaDestinoHover(etapaId);
+    if (columnaDestinoHover !== columnaId) {
+      setColumnaDestinoHover(columnaId);
     }
   }
 
-  function handleDragLeave(e: DragEvent<HTMLElement>, etapaId: string) {
+  function handleDragLeave(e: DragEvent<HTMLElement>, columnaId: string) {
     e.preventDefault();
-    if (columnaDestinoHover === etapaId) {
+    if (columnaDestinoHover === columnaId) {
       setColumnaDestinoHover(null);
     }
   }
 
-  // Drop para Prospectos
   async function handleDropProspecto(e: DragEvent<HTMLElement>, nuevaEtapa: EstatusProspecto) {
     e.preventDefault();
     setColumnaDestinoHover(null);
+    const prospectoId = e.dataTransfer.getData("text/plain");
+    if (!prospectoId) return;
 
-    const targetId = e.dataTransfer.getData("text/plain") || arrastrandoId;
-    if (!targetId) return;
+    const pActual = prospectos.find((p) => p.id === prospectoId);
+    if (!pActual || pActual.estatus === nuevaEtapa) return;
 
-    const obj = prospectos.find((p) => p.id === targetId);
-    if (!obj || obj.estatus === nuevaEtapa) {
-      setArrastrandoId(null);
-      return;
-    }
-
-    const previo = prospectos;
     setProspectos((prev) =>
-      prev.map((p) => (p.id === targetId ? { ...p, estatus: nuevaEtapa } : p)),
+      prev.map((p) => (p.id === prospectoId ? { ...p, estatus: nuevaEtapa } : p)),
     );
-    setArrastrandoId(null);
 
+    setGuardando(true);
     try {
-      setGuardando(true);
-      await cambiarEstatusMasivo([targetId], nuevaEtapa);
-      router.refresh();
+      await cambiarEstatusMasivo([prospectoId], nuevaEtapa);
     } catch (err) {
-      console.error("Error al actualizar la etapa del prospecto:", err);
-      setProspectos(previo);
+      console.error("Error al actualizar estatus de prospecto:", err);
+      setProspectos(prospectosIniciales);
+      alert("No se pudo actualizar la etapa del prospecto.");
     } finally {
       setGuardando(false);
+      setArrastrandoId(null);
     }
   }
 
-  // Drop para Expedientes
   async function handleDropExpediente(e: DragEvent<HTMLElement>, nuevaEtapa: EtapaId) {
     e.preventDefault();
     setColumnaDestinoHover(null);
+    const expedienteId = e.dataTransfer.getData("text/plain");
+    if (!expedienteId) return;
 
-    const targetId = e.dataTransfer.getData("text/plain") || arrastrandoId;
-    if (!targetId) return;
+    const eActual = expedientes.find((exp) => exp.id === expedienteId);
+    if (!eActual || eActual.etapa === nuevaEtapa) return;
 
-    const obj = expedientes.find((exp) => exp.id === targetId);
-    if (!obj || obj.etapa === nuevaEtapa) {
-      setArrastrandoId(null);
-      return;
-    }
-
-    const previo = expedientes;
     setExpedientes((prev) =>
-      prev.map((exp) => (exp.id === targetId ? { ...exp, etapa: nuevaEtapa } : exp)),
+      prev.map((exp) => (exp.id === expedienteId ? { ...exp, etapa: nuevaEtapa } : exp)),
     );
-    setArrastrandoId(null);
 
+    setGuardando(true);
     try {
-      setGuardando(true);
-      await moverEtapa(targetId, nuevaEtapa);
-      router.refresh();
+      await moverEtapa(expedienteId, nuevaEtapa);
     } catch (err) {
-      console.error("Error al mover la etapa del expediente:", err);
-      setExpedientes(previo);
+      console.error("Error al mover etapa del expediente:", err);
+      setExpedientes(expedientesIniciales);
+      alert("No se pudo mover la etapa del expediente.");
     } finally {
       setGuardando(false);
+      setArrastrandoId(null);
     }
   }
 
   return (
     <div className="space-y-4">
-      {/* Selector de Modo de Pipeline: Prospectos vs Expedientes */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white p-4 rounded-2xl border border-carbon/10 shadow-xs">
-        <div>
-          <h1 className="font-titular text-2xl font-bold text-verde-profundo flex items-center gap-2">
-            📊 Pipeline Comercial
-          </h1>
-          <p className="text-xs text-carbon/60">
-            Conmuta entre el embudo de <strong className="text-verde-profundo font-semibold">Prospectos</strong> y el flujo operativo de <strong className="text-verde-profundo font-semibold">Expedientes</strong>. Arrastra las tarjetas para avanzar de etapa.
-          </p>
-        </div>
-
-        {/* Píldoras conmutadoras del Pipeline */}
-        <div className="inline-flex shrink-0 rounded-xl border border-carbon/15 bg-crema/40 p-1 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setTipoPipeline("prospectos")}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-              tipoPipeline === "prospectos"
-                ? "bg-verde-profundo text-crema shadow-xs scale-102"
-                : "text-carbon/70 hover:text-verde-profundo"
-            }`}
-          >
-            👤 Pipeline de Prospectos
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-mono">
-              {prospectosFiltrados.length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTipoPipeline("expedientes")}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-              tipoPipeline === "expedientes"
-                ? "bg-verde-profundo text-crema shadow-xs scale-102"
-                : "text-carbon/70 hover:text-verde-profundo"
-            }`}
-          >
-            📁 Pipeline de Expedientes
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-mono">
-              {expedientesFiltrados.length}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Control de Búsqueda y Filtros */}
-      <div className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-xs space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Buscador */}
-          <div className="relative flex-1 min-w-[220px]">
-            <input
-              type="text"
-              placeholder={
+      {/* Barra de Control de Pipeline y Filtros Reorganizada */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Selector de tipo de Pipeline con diseño de pestaña segmentada */}
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold text-slate-600 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setTipoPipeline("expedientes")}
+              className={`flex-1 sm:flex-none rounded-lg px-3.5 py-1.5 transition ${
+                tipoPipeline === "expedientes"
+                  ? "bg-white text-emerald-950 shadow-2xs font-bold"
+                  : "hover:text-slate-900"
+              }`}
+            >
+              📁 Embudo de Expedientes ({expedientesFiltrados.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoPipeline("prospectos")}
+              className={`flex-1 sm:flex-none rounded-lg px-3.5 py-1.5 transition ${
                 tipoPipeline === "prospectos"
-                  ? "🔍 Buscar por nombre, teléfono, ciudad..."
-                  : "🔍 Buscar por cliente, fraccionamiento, folio..."
-              }
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full rounded-lg border border-carbon/15 bg-crema/30 px-3 py-1.5 text-xs text-carbon outline-none focus:border-sauce focus:bg-white transition"
-            />
-            {busqueda && (
-              <button
-                type="button"
-                onClick={() => setBusqueda("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon"
-              >
-                ✕
-              </button>
-            )}
+                  ? "bg-white text-emerald-950 shadow-2xs font-bold"
+                  : "hover:text-slate-900"
+              }`}
+            >
+              👥 Embudo de Leads ({prospectosFiltrados.length})
+            </button>
           </div>
 
-          {/* Filtro Calificación (Solo Prospectos) */}
+          {/* Indicador de guardado optimista */}
+          {guardando && (
+            <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold animate-pulse">
+              <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
+              Guardando cambios...
+            </div>
+          )}
+        </div>
+
+        {/* Filtros rápidos estilizados */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+          <input
+            type="text"
+            placeholder="🔍 Buscar por nombre, teléfono, ID..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-800 outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/30"
+          />
+
           {tipoPipeline === "prospectos" && (
-            <select
-              value={filtroCalificacion}
-              onChange={(e) => setFiltroCalificacion(e.target.value)}
-              className="rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
-            >
-              <option value="todos">Todas las Calificaciones</option>
-              <option value="caliente">🔥 Caliente</option>
-              <option value="templado">⚡ Templado</option>
-              <option value="frio">❄️ Frío</option>
-              <option value="descalificado">❌ Descalificado</option>
-            </select>
+            <>
+              <select
+                value={filtroCalificacion}
+                onChange={(e) => setFiltroCalificacion(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-800 outline-none focus:border-emerald-600"
+              >
+                <option value="todos">🔥 Calificación: Todas</option>
+                <option value="caliente">🔥 Caliente</option>
+                <option value="templado">🟡 Templado</option>
+                <option value="frio">❄️ Frío</option>
+                <option value="descalificado">🚫 Descalificado</option>
+              </select>
+
+              <select
+                value={filtroOrigen}
+                onChange={(e) => setFiltroOrigen(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-800 outline-none focus:border-emerald-600"
+              >
+                <option value="todos">🌱 Origen: Todos</option>
+                {ORIGENES.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </>
           )}
 
-          {/* Filtro Origen (Solo Prospectos) */}
-          {tipoPipeline === "prospectos" && (
-            <select
-              value={filtroOrigen}
-              onChange={(e) => setFiltroOrigen(e.target.value)}
-              className="rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
-            >
-              <option value="todos">Todos los Orígenes</option>
-              {ORIGENES.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nombre}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Filtro Asesor */}
           <select
             value={filtroAsesor}
             onChange={(e) => setFiltroAsesor(e.target.value)}
-            className="rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs font-medium text-verde-profundo outline-none focus:border-sauce"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-slate-800 outline-none focus:border-emerald-600"
           >
-            <option value="todos">Todos los Asesores</option>
+            <option value="todos">👤 Asesor: Todos</option>
             <option value="sin_asignar">Sin Asesor Asignado</option>
-            {perfiles
-              .filter((p) => p.activo !== false)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
-                </option>
-              ))}
+            {perfiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
           </select>
-
-          {(busqueda || filtroCalificacion !== "todos" || filtroOrigen !== "todos" || filtroAsesor !== "todos") && (
-            <button
-              type="button"
-              onClick={() => {
-                setBusqueda("");
-                setFiltroCalificacion("todos");
-                setFiltroOrigen("todos");
-                setFiltroAsesor("todos");
-              }}
-              className="text-xs font-medium text-rojo hover:underline"
-            >
-              Limpiar filtros
-            </button>
-          )}
-
-          {guardando && (
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-sauce/10 border border-sauce/30 px-3 py-1 text-xs font-semibold text-verde-profundo animate-pulse">
-              <span className="h-2 w-2 rounded-full bg-sauce animate-ping" />
-              Guardando cambios...
-            </span>
-          )}
         </div>
       </div>
 
@@ -377,14 +384,8 @@ export function PipelineProspectosClient({
         <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)] w-full">
           {ETAPAS_PROSPECTO.map((etapa) => {
             const prospectosEtapa = prospectosFiltrados
-              .filter((p) => {
-                if (etapa.id === "lead") return p.estatus === "lead" || p.estatus === "nuevo";
-                if (etapa.id === "mql") return p.estatus === "mql" || p.estatus === "en_conversacion";
-                if (etapa.id === "sql") return p.estatus === "sql" || p.estatus === "expediente_abierto";
-                return p.estatus === etapa.id;
-              })
+              .filter((p) => p.estatus === etapa.id)
               .sort((a, b) => obtenerTimestampProspecto(b) - obtenerTimestampProspecto(a));
-
             const totalValorCampana = prospectosEtapa.reduce(
               (acc, p) => acc + (Number(p.valorCampana) || 0),
               0,
@@ -400,65 +401,65 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropProspecto(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3.5 transition-all duration-200 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-all duration-200 ${
                   estaHover
-                    ? "border-sauce bg-sauce/10 shadow-lg ring-2 ring-sauce/30 scale-[1.01]"
+                    ? "border-emerald-500 bg-emerald-50/60 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]"
                     : esGanado
-                    ? "border-emerald-200 bg-emerald-50/40 shadow-sm"
+                    ? "border-emerald-200 bg-emerald-50/30 shadow-2xs"
                     : esPerdido
-                    ? "border-rose-200 bg-rose-50/40 shadow-sm"
-                    : "border-carbon/10 bg-white/80 shadow-sm"
+                    ? "border-rose-200 bg-rose-50/30 shadow-2xs"
+                    : "border-slate-200/80 bg-slate-50/50 shadow-2xs"
                 }`}
               >
                 {/* Encabezado */}
-                <div className="mb-3 border-b border-carbon/10 pb-2.5">
+                <div className="mb-2.5 border-b border-slate-200/80 pb-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <h2
-                        className={`font-titular text-sm font-bold uppercase tracking-wider ${
+                        className={`font-titular text-xs font-bold uppercase tracking-wider ${
                           esGanado
                             ? "text-emerald-800"
                             : esPerdido
                             ? "text-rose-800"
-                            : "text-verde-profundo"
+                            : "text-slate-900"
                         }`}
                       >
                         {esGanado && "🏆 "}
                         {esPerdido && "❌ "}
                         {etapa.nombre}
                       </h2>
-                      <p className="text-[10px] text-carbon/50">{etapa.descripcion}</p>
+                      <p className="text-[10px] text-slate-500 line-clamp-1">{etapa.descripcion}</p>
                     </div>
                     <span
-                      className={`flex h-6 min-w-6 items-center justify-center rounded-full px-2 font-mono text-xs font-bold ${
+                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-bold ${
                         esGanado
-                          ? "bg-emerald-200/60 text-emerald-800"
+                          ? "bg-emerald-200 text-emerald-900"
                           : esPerdido
-                          ? "bg-rose-200/60 text-rose-800"
-                          : "bg-verde-profundo/10 text-verde-profundo"
+                          ? "bg-rose-200 text-rose-900"
+                          : "bg-slate-200 text-slate-700"
                       }`}
                     >
                       {prospectosEtapa.length}
                     </span>
                   </div>
 
-                  <div className="mt-2 flex items-baseline justify-between text-[11px] font-mono">
-                    <span className="text-carbon/50 uppercase text-[9px] font-bold">Total Campaña:</span>
-                    <span className="font-bold text-verde-profundo">{formatoPesos(totalValorCampana)}</span>
+                  <div className="mt-1.5 flex items-baseline justify-between text-[10px] font-mono">
+                    <span className="text-slate-400 uppercase font-bold text-[9px]">Total:</span>
+                    <span className="font-bold text-slate-800">{formatoPesos(totalValorCampana)}</span>
                   </div>
                 </div>
 
                 {/* Tarjetas de Prospectos */}
-                <div className="flex flex-1 flex-col gap-3 min-h-[200px]">
+                <div className="flex flex-1 flex-col gap-2.5 min-h-[200px]">
                   {prospectosEtapa.length === 0 && (
                     <div
                       className={`flex flex-1 items-center justify-center rounded-xl border border-dashed p-4 text-center text-xs transition ${
                         estaHover
-                          ? "border-sauce text-sauce font-semibold bg-white/80"
-                          : "border-carbon/15 text-carbon/40 bg-white/40"
+                          ? "border-emerald-500 text-emerald-700 font-semibold bg-white/80"
+                          : "border-slate-300/70 text-slate-400 bg-white/30"
                       }`}
                     >
-                      {estaHover ? "¡Suelta aquí para mover a esta etapa!" : "Arrastra prospectos aquí"}
+                      {estaHover ? "¡Suelta aquí!" : "Sin prospectos"}
                     </div>
                   )}
 
@@ -480,17 +481,17 @@ export function PipelineProspectosClient({
                         draggable
                         onDragStart={(e) => handleDragStart(e, p.id)}
                         onDragEnd={handleDragEnd}
-                        className={`group cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3.5 shadow-xs transition-all duration-150 ${
+                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-all duration-150 space-y-2 ${
                           siendoArrastrado
-                            ? "opacity-40 border-sauce shadow-none scale-95"
-                            : "border-carbon/10 hover:-translate-y-0.5 hover:border-sauce/50 hover:shadow-md"
+                            ? "opacity-40 border-emerald-500 shadow-none scale-95"
+                            : "border-slate-200/80 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:shadow-md"
                         }`}
                       >
-                        {/* Drag Handle & Name */}
-                        <div className="flex items-start justify-between gap-2">
+                        {/* Encabezado Nombre + Badge + Teléfono e ID */}
+                        <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-start gap-1.5 min-w-0 flex-1">
                             <span
-                              className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5 shrink-0"
+                              className="text-slate-300 group-hover:text-emerald-600 select-none font-bold text-xs pt-0.5 shrink-0"
                               title="Arrastrar para mover"
                             >
                               ⋮⋮
@@ -498,65 +499,83 @@ export function PipelineProspectosClient({
                             <div className="min-w-0 flex-1">
                               <Link
                                 href={`/prospectos/${p.id}`}
-                                className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block truncate"
+                                className="font-titular text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors block truncate leading-tight"
                                 title={p.nombreCompleto}
                               >
                                 {p.nombreCompleto}
                               </Link>
-                              {p.telefono ? (
-                                <a
-                                  href={`tel:${p.telefono}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors block truncate"
-                                  title={`Llamar a ${p.nombreCompleto} (${p.telefono})`}
-                                >
-                                  <span>📞 {p.telefono}</span>
-                                </a>
-                              ) : (
-                                <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">
-                                  📞 Sin teléfono
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {p.telefono ? (
+                                  <a
+                                    href={`tel:${p.telefono}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="font-mono text-[11px] font-semibold text-emerald-700 hover:underline inline-flex items-center gap-0.5"
+                                  >
+                                    📞 {p.telefono}
+                                  </a>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">Sin teléfono</span>
+                                )}
+                                <span className="font-mono text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
+                                  {p.id}
                                 </span>
-                              )}
-                              <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
-                                {p.id}
-                              </span>
+                              </div>
                             </div>
                           </div>
 
                           <CalificacionProspectoBadge calificacion={p.calificacion} />
                         </div>
 
-                        {/* Origen y Contacto */}
-                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex items-center rounded-full border border-carbon/15 bg-white px-2 py-0.5 text-[10px] text-carbon/70 font-medium">
+                        {/* Origen y Ciudad */}
+                        <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 font-medium">
                             🌱 {ORIGEN_POR_ID[p.origen] || p.origen}
                           </span>
                           {p.ciudad && (
-                            <span className="text-[11px] text-carbon/60">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 text-slate-600 border border-slate-200/60 px-2 py-0.5 font-medium truncate max-w-[130px]">
                               📍 {p.ciudad}
                             </span>
                           )}
                         </div>
 
-                        {/* Pie de Tarjeta */}
-                        <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">
+                        {/* Fila de Valor y Acción */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                          <div>
+                            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">Valor</span>
+                            <span className="font-mono text-xs font-extrabold text-slate-900">
+                              {p.valorCampana ? formatoPesos(p.valorCampana) : "$0"}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAbrirModalInspeccion({
+                                prospectoId: p.id,
+                                clienteNombre: p.nombreCompleto,
+                                clienteTelefono: p.telefono,
+                                perfilId: p.asesorId,
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                          >
+                            🔍 Inspección
+                          </button>
+                        </div>
+
+                        {/* Pie de Tarjeta: Asesor Avatar */}
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
                           {p.asesorNombre ? (
-                            <span
-                              className="inline-flex items-center gap-1.5 text-carbon/70 font-medium"
-                              title={`Asesor: ${p.asesorNombre}`}
-                            >
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-verde-profundo text-[9px] font-bold text-crema">
+                            <span className="inline-flex items-center gap-1 font-medium text-slate-600" title={`Asesor: ${p.asesorNombre}`}>
+                              <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-slate-800 text-[8px] font-bold text-white">
                                 {inicialesAsesor}
                               </span>
                               <span className="truncate max-w-[100px]">{p.asesorNombre}</span>
                             </span>
                           ) : (
-                            <span className="text-[10px] italic text-carbon/30">Sin asesor</span>
+                            <span className="italic text-slate-300">Sin asesor</span>
                           )}
-
-                          <span className="font-mono font-bold text-verde-profundo">
-                            {p.valorCampana ? formatoPesos(p.valorCampana) : "$0"}
-                          </span>
                         </div>
                       </div>
                     );
@@ -564,8 +583,8 @@ export function PipelineProspectosClient({
                 </div>
 
                 {/* Pie de Columna */}
-                <div className="mt-3 border-t border-carbon/10 pt-2 text-center text-[10px] text-carbon/50 font-mono">
-                  Total: <span className="font-bold text-carbon/80">{formatoPesos(totalValorCampana)}</span>
+                <div className="mt-2.5 border-t border-slate-200/80 pt-1.5 text-center text-[10px] text-slate-500 font-mono">
+                  Total: <span className="font-bold text-slate-800">{formatoPesos(totalValorCampana)}</span>
                 </div>
               </section>
             );
@@ -599,67 +618,67 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropExpediente(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3.5 transition-all duration-200 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-all duration-200 ${
                   estaHover
-                    ? "border-sauce bg-sauce/10 shadow-lg ring-2 ring-sauce/30 scale-[1.01]"
+                    ? "border-emerald-500 bg-emerald-50/60 shadow-lg ring-2 ring-emerald-500/30 scale-[1.01]"
                     : esGanado
-                    ? "border-emerald-200 bg-emerald-50/40 shadow-sm"
+                    ? "border-emerald-200 bg-emerald-50/30 shadow-2xs"
                     : esPerdido
-                    ? "border-rose-200 bg-rose-50/40 shadow-sm"
-                    : "border-carbon/10 bg-white/80 shadow-sm"
+                    ? "border-rose-200 bg-rose-50/30 shadow-2xs"
+                    : "border-slate-200/80 bg-slate-50/50 shadow-2xs"
                 }`}
               >
-                {/* Encabezado */}
-                <div className="mb-3 border-b border-carbon/10 pb-2.5">
+                {/* Encabezado de Columna */}
+                <div className="mb-2.5 border-b border-slate-200/80 pb-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <h2
-                        className={`font-titular text-sm font-bold uppercase tracking-wider ${
+                        className={`font-titular text-xs font-bold uppercase tracking-wider ${
                           esGanado
                             ? "text-emerald-800"
                             : esPerdido
                             ? "text-rose-800"
-                            : "text-verde-profundo"
+                            : "text-slate-900"
                         }`}
                       >
                         {esGanado && "🏆 "}
                         {esPerdido && "❌ "}
                         {etapa.nombre}
                       </h2>
-                      <p className="text-[10px] text-carbon/50">{etapa.descripcion}</p>
+                      <p className="text-[10px] text-slate-500 line-clamp-1">{etapa.descripcion}</p>
                     </div>
                     <span
-                      className={`flex h-6 min-w-6 items-center justify-center rounded-full px-2 font-mono text-xs font-bold ${
+                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px] font-bold ${
                         esGanado
-                          ? "bg-emerald-200/60 text-emerald-800"
+                          ? "bg-emerald-200 text-emerald-900"
                           : esPerdido
-                          ? "bg-rose-200/60 text-rose-800"
-                          : "bg-verde-profundo/10 text-verde-profundo"
+                          ? "bg-rose-200 text-rose-900"
+                          : "bg-slate-200 text-slate-700"
                       }`}
                     >
                       {expedientesEtapa.length}
                     </span>
                   </div>
 
-                  <div className="mt-2 flex items-baseline justify-between text-[11px] font-mono">
-                    <span className="font-bold text-carbon/80">{formatoPesos(totalMonto)}</span>
-                    <span className="text-[10px] text-carbon/50">
+                  <div className="mt-1.5 flex items-baseline justify-between text-[10px] font-mono">
+                    <span className="font-bold text-slate-800">{formatoPesos(totalMonto)}</span>
+                    <span className="text-slate-400">
                       Pond: {formatoPesos(montoPonderado)} ({Math.round(prob * 100)}%)
                     </span>
                   </div>
                 </div>
 
                 {/* Tarjetas de Expedientes */}
-                <div className="flex flex-1 flex-col gap-3 min-h-[200px]">
+                <div className="flex flex-1 flex-col gap-2.5 min-h-[200px]">
                   {expedientesEtapa.length === 0 && (
                     <div
                       className={`flex flex-1 items-center justify-center rounded-xl border border-dashed p-4 text-center text-xs transition ${
                         estaHover
-                          ? "border-sauce text-sauce font-semibold bg-white/80"
-                          : "border-carbon/15 text-carbon/40 bg-white/40"
+                          ? "border-emerald-500 text-emerald-700 font-semibold bg-white/80"
+                          : "border-slate-300/70 text-slate-400 bg-white/30"
                       }`}
                     >
-                      {estaHover ? "¡Suelta aquí para mover a esta etapa!" : "Sin expedientes"}
+                      {estaHover ? "¡Suelta aquí!" : "Sin expedientes"}
                     </div>
                   )}
 
@@ -674,7 +693,7 @@ export function PipelineProspectosClient({
                       : null;
 
                     const siendoArrastrado = arrastrandoId === exp.id;
-                    const etiquetaTipo = exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "Traspaso";
+                    const etiquetaTipo = exp.tipoNegocio ? labelTipoNegocio(exp.tipoNegocio) : "Traspaso / Compra";
 
                     return (
                       <div
@@ -682,17 +701,17 @@ export function PipelineProspectosClient({
                         draggable
                         onDragStart={(e) => handleDragStart(e, exp.id)}
                         onDragEnd={handleDragEnd}
-                        className={`group cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3.5 shadow-xs transition-all duration-150 ${
+                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-all duration-150 space-y-2 ${
                           siendoArrastrado
-                            ? "opacity-40 border-sauce shadow-none scale-95"
-                            : "border-carbon/10 hover:-translate-y-0.5 hover:border-sauce/50 hover:shadow-md"
+                            ? "opacity-40 border-emerald-500 shadow-none scale-95"
+                            : "border-slate-200/80 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:shadow-md"
                         }`}
                       >
-                        {/* Drag Handle & Name & Badge */}
+                        {/* Encabezado Nombre + Teléfono e ID */}
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-start gap-1.5 min-w-0 flex-1">
                             <span
-                              className="text-carbon/30 group-hover:text-sauce select-none font-bold text-xs pt-0.5 shrink-0"
+                              className="text-slate-300 group-hover:text-emerald-600 select-none font-bold text-xs pt-0.5 shrink-0"
                               title="Arrastrar para mover"
                             >
                               ⋮⋮
@@ -700,74 +719,93 @@ export function PipelineProspectosClient({
                             <div className="min-w-0 flex-1">
                               <Link
                                 href={`/expediente/${exp.id}`}
-                                className="font-titular text-sm font-bold text-verde-profundo group-hover:text-sauce transition-colors block truncate"
+                                className="font-titular text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors block truncate leading-tight"
                                 title={exp.nombreCompleto}
                               >
                                 {exp.nombreCompleto}
                               </Link>
-                              {exp.telefono ? (
-                                <a
-                                  href={`tel:${exp.telefono}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors block truncate"
-                                  title={`Llamar a ${exp.nombreCompleto} (${exp.telefono})`}
-                                >
-                                  <span>📞 {exp.telefono}</span>
-                                </a>
-                              ) : (
-                                <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">
-                                  📞 Sin teléfono
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {exp.telefono ? (
+                                  <a
+                                    href={`tel:${exp.telefono}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="font-mono text-[11px] font-semibold text-emerald-700 hover:underline inline-flex items-center gap-0.5"
+                                  >
+                                    📞 {exp.telefono}
+                                  </a>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">Sin teléfono</span>
+                                )}
+                                <span className="font-mono text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
+                                  {exp.id}
                                 </span>
-                              )}
-                              <span className="font-mono text-[10px] text-carbon/40 block mt-0.5">
-                                {exp.id}
-                              </span>
+                              </div>
                             </div>
                           </div>
+                        </div>
 
+                        {/* Tipo de Negocio y Fraccionamiento en línea compacta de badges */}
+                        <div className="flex flex-wrap items-center gap-1 text-[10px]">
                           <span
-                            className="shrink-0 max-w-[110px] truncate rounded-md bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo"
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 font-semibold"
                             title={etiquetaTipo}
                           >
-                            {etiquetaTipo}
+                            🏷️ {etiquetaTipo}
                           </span>
-                        </div>
-
-                        {/* Fraccionamiento */}
-                        <div
-                          className="mt-2 text-xs text-carbon/70 truncate"
-                          title={exp.fraccionamiento || "Sin fraccionamiento"}
-                        >
-                          📍 {exp.fraccionamiento || "Sin fraccionamiento"}
-                        </div>
-
-                        {/* Monto destacado estilo HubSpot */}
-                        <div className="mt-2 flex items-center justify-between rounded-lg bg-crema/60 px-2.5 py-1 border border-carbon/5">
-                          <span className="text-[10px] font-semibold uppercase text-carbon/50">Monto Estimado</span>
-                          <span className="font-mono text-xs font-bold text-verde-profundo">
-                            {formatoPesos(exp.valorEstimado)}
-                          </span>
-                        </div>
-
-                        {/* Pie de Tarjeta */}
-                        <div className="mt-3 flex items-center justify-between border-t border-carbon/5 pt-2 text-[11px]">
-                          {exp.asesorNombre ? (
+                          {exp.fraccionamiento && (
                             <span
-                              className="inline-flex items-center gap-1.5 text-carbon/70 font-medium min-w-0"
-                              title={`Asesor: ${exp.asesorNombre}`}
+                              className="inline-flex items-center gap-1 rounded-md bg-slate-50 text-slate-600 border border-slate-200/60 px-2 py-0.5 font-medium truncate max-w-[140px]"
+                              title={exp.fraccionamiento}
                             >
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-verde-profundo text-[9px] font-bold text-crema">
+                              📍 {exp.fraccionamiento}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Fila de Monto y Botón de Acción */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                          <div>
+                            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block">Monto</span>
+                            <span className="font-mono text-xs font-extrabold text-slate-900">
+                              {formatoPesos(exp.valorEstimado)}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAbrirModalInspeccion({
+                                expedienteId: exp.id,
+                                clienteNombre: exp.nombreCompleto,
+                                clienteTelefono: exp.telefono,
+                                perfilId: exp.asesorId || exp.operadorId,
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                          >
+                            🔍 Inspección
+                          </button>
+                        </div>
+
+                        {/* Pie de Tarjeta: Asesor Avatar + Fecha */}
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                          {exp.asesorNombre ? (
+                            <span className="inline-flex items-center gap-1 font-medium text-slate-600" title={`Asesor: ${exp.asesorNombre}`}>
+                              <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-slate-800 text-[8px] font-bold text-white">
                                 {inicialesAsesor}
                               </span>
-                              <span className="truncate max-w-[90px]">{exp.asesorNombre}</span>
+                              <span className="truncate max-w-[100px]">{exp.asesorNombre}</span>
                             </span>
                           ) : (
-                            <span className="text-[10px] italic text-carbon/30">Sin asesor</span>
+                            <span className="italic text-slate-300">Sin asesor</span>
                           )}
 
-                          <span className="text-carbon/40 text-[10px] font-mono shrink-0">
-                            {exp.ultimoMovimiento ? `⏱️ ${exp.ultimoMovimiento}` : ""}
-                          </span>
+                          {exp.ultimoMovimiento && (
+                            <span className="font-mono text-[9px] text-slate-400">
+                              ⏱️ {exp.ultimoMovimiento}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -775,13 +813,139 @@ export function PipelineProspectosClient({
                 </div>
 
                 {/* Pie de Columna */}
-                <div className="mt-3 border-t border-carbon/10 pt-2 text-center text-[10px] text-carbon/50 font-mono">
+                <div className="mt-2.5 border-t border-slate-200/80 pt-1.5 text-center text-[10px] text-slate-500 font-mono">
                   Total ({expedientesEtapa.length}):{" "}
-                  <span className="font-bold text-carbon/80">{formatoPesos(totalMonto)}</span>
+                  <span className="font-bold text-slate-800">{formatoPesos(totalMonto)}</span>
                 </div>
               </section>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal de Configuración / Agendamiento de Inspección Técnica */}
+      {modalInspeccion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 w-full max-w-lg shadow-xl space-y-4 border border-slate-200 text-slate-900 my-8">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">
+                  🔍 Inspección Técnica en Sitio
+                </span>
+                <h3 className="font-titular text-base font-bold text-slate-900">
+                  Programar Inspección para {modalInspeccion.clienteNombre}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalInspeccion(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Responsable asignado */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Técnico / Asesor Responsable:
+                </label>
+                <select
+                  value={inspeccionPerfilId}
+                  onChange={(e) => setInspeccionPerfilId(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs font-semibold text-slate-800 focus:border-emerald-600"
+                >
+                  <option value="">-- Seleccionar Responsable --</option>
+                  {perfiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} ({p.rol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Fecha y Horario */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Fecha de Visita
+                  </label>
+                  <input
+                    type="date"
+                    value={inspeccionFecha}
+                    onChange={(e) => setInspeccionFecha(e.target.value)}
+                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Hora Inicio
+                  </label>
+                  <input
+                    type="time"
+                    value={inspeccionHoraInicio}
+                    onChange={(e) => setInspeccionHoraInicio(e.target.value)}
+                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Hora Fin
+                  </label>
+                  <input
+                    type="time"
+                    value={inspeccionHoraFin}
+                    onChange={(e) => setInspeccionHoraFin(e.target.value)}
+                    className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800"
+                  />
+                </div>
+              </div>
+
+              {/* Observaciones */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Instrucciones / Notas para el cliente o técnico:
+                </label>
+                <textarea
+                  rows={3}
+                  value={inspeccionNotas}
+                  onChange={(e) => setInspeccionNotas(e.target.value)}
+                  placeholder="Ej. Realizar levantamiento topográfico de la losa y verificar nivelación de drenajes."
+                  className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-800 outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              {/* Opción WhatsApp */}
+              <label className="flex items-center gap-2 cursor-pointer bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/80 text-emerald-950 text-xs font-semibold">
+                <input
+                  type="checkbox"
+                  checked={inspeccionNotificarWsp}
+                  onChange={(e) => setInspeccionNotificarWsp(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-600 h-4 w-4"
+                />
+                <span>Enviar confirmación automática por WhatsApp al cliente</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setModalInspeccion(null)}
+                className="rounded-lg border border-slate-200 px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleGuardarInspeccion}
+                disabled={guardandoInspeccion}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold transition shadow-2xs cursor-pointer active:scale-95"
+              >
+                {guardandoInspeccion ? "Agendando..." : "🔍 Agendar Inspección"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
