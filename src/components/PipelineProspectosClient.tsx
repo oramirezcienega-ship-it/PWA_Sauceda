@@ -708,7 +708,7 @@ export function PipelineProspectosClient({
                             : "border-carbon/10 hover:-translate-y-0.5 hover:border-sauce/50 hover:shadow-md"
                         }`}
                       >
-                        {/* Drag Handle & Name & Badge */}
+                        {/* Drag Handle & Name */}
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-start gap-1.5 min-w-0 flex-1">
                             <span
@@ -744,21 +744,24 @@ export function PipelineProspectosClient({
                               </span>
                             </div>
                           </div>
-
-                          <span
-                            className="shrink-0 max-w-[110px] truncate rounded-md bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo"
-                            title={etiquetaTipo}
-                          >
-                            {etiquetaTipo}
-                          </span>
                         </div>
 
-                        {/* Fraccionamiento */}
-                        <div
-                          className="mt-2 text-xs text-carbon/70 truncate"
-                          title={exp.fraccionamiento || "Sin fraccionamiento"}
-                        >
-                          📍 {exp.fraccionamiento || "Sin fraccionamiento"}
+                        {/* Tipo de Negocio y Fraccionamiento en línea destacada */}
+                        <div className="mt-2.5 space-y-1">
+                          <div>
+                            <span
+                              className="inline-flex items-center rounded-md bg-sauce/10 border border-sauce/20 px-2 py-0.5 text-[11px] font-semibold text-verde-profundo leading-snug"
+                              title={etiquetaTipo}
+                            >
+                              🏷️ {etiquetaTipo}
+                            </span>
+                          </div>
+                          <div
+                            className="text-xs font-medium text-carbon/70 truncate"
+                            title={exp.fraccionamiento || "Sin fraccionamiento"}
+                          >
+                            📍 {exp.fraccionamiento || "Sin fraccionamiento"}
+                          </div>
                         </div>
 
                         {/* Monto destacado estilo HubSpot */}
