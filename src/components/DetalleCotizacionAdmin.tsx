@@ -18,9 +18,11 @@ import {
   obtenerGarantiaDocumento,
   guardarGarantiaDocumento,
   prepararGarantiaPorDefecto,
+  duplicarCotizacion,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
+import { listarProspectosMin } from "@/app/actions/prospectos";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -106,6 +108,48 @@ export function DetalleCotizacionAdmin({
   const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [dictandoObs, setDictandoObs] = useState(false);
   const [dictandoCond, setDictandoCond] = useState(false);
+
+  // --- State & Handlers para Duplicar Cotización ---
+  const [modalDuplicar, setModalDuplicar] = useState(false);
+  const [prospectosLista, setProspectosLista] = useState<{ id: string; nombre: string }[]>([]);
+  const [prospectoSeleccionadoId, setProspectoSeleccionadoId] = useState(cotizacionInicial.prospectoId);
+  const [duplicando, setDuplicando] = useState(false);
+  const [mensajeDuplicar, setMensajeDuplicar] = useState({ tipo: "", texto: "" });
+
+  const handleAbrirModalDuplicar = async () => {
+    setModalDuplicar(true);
+    setProspectoSeleccionadoId(cotizacion.prospectoId);
+    if (prospectosLista.length === 0) {
+      try {
+        const lista = await listarProspectosMin();
+        setProspectosLista(lista);
+      } catch (err) {
+        console.error("Error al cargar lista de prospectos:", err);
+      }
+    }
+  };
+
+  const handleEjecutarDuplicacion = async () => {
+    try {
+      setDuplicando(true);
+      setMensajeDuplicar({ tipo: "", texto: "" });
+      const nuevaCot = await duplicarCotizacion(cotizacion.id, prospectoSeleccionadoId);
+      setMensajeDuplicar({
+        tipo: "ok",
+        texto: `¡Cotización duplicada con éxito! Redirigiendo al nuevo folio ${nuevaCot.id}...`,
+      });
+      setTimeout(() => {
+        router.push(`/construccion/${nuevaCot.id}`);
+      }, 800);
+    } catch (err) {
+      setMensajeDuplicar({
+        tipo: "error",
+        texto: err instanceof Error ? err.message : "Error al duplicar la cotización",
+      });
+    } finally {
+      setDuplicando(false);
+    }
+  };
   const [rotaciones, setRotaciones] = useState<Record<string, number>>(reporteVisitaInicial?.medidas?.rotaciones || {});
 
   // --- State para Cambio de Requerimiento de Visita ---
@@ -917,13 +961,22 @@ export function DetalleCotizacionAdmin({
             <span className="font-semibold">{cotizacion.servicioTipo.toUpperCase()}</span>
           </p>
         </div>
-        <div className="bg-white/10 px-4 py-3 rounded-xl border border-white/10 text-right">
-          <div className="text-xs text-crema/70 uppercase font-semibold">Precio Final Cliente</div>
-          <div className="font-mono text-2xl font-bold text-dorado">
-            {cotizacion.precioFinal > 0 ? formatMoneda(cotizacion.precioFinal) : "$0.00"}
-          </div>
-          <div className="text-[10px] text-crema/60 mt-1 uppercase font-semibold">
-            Estatus: <span className="text-crema font-bold">{cotizacion.estatus.replace("_", " ")}</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleAbrirModalDuplicar}
+            className="rounded-xl bg-crema/15 hover:bg-crema/25 border border-crema/30 px-3.5 py-2.5 text-xs font-bold text-crema transition flex items-center gap-1.5 shadow-xs"
+            title="Duplicar esta cotización generando un nuevo folio"
+          >
+            <span>📋</span> Duplicar Cotización
+          </button>
+          <div className="bg-white/10 px-4 py-3 rounded-xl border border-white/10 text-right">
+            <div className="text-xs text-crema/70 uppercase font-semibold">Precio Final Cliente</div>
+            <div className="font-mono text-2xl font-bold text-dorado">
+              {cotizacion.precioFinal > 0 ? formatMoneda(cotizacion.precioFinal) : "$0.00"}
+            </div>
+            <div className="text-[10px] text-crema/60 mt-1 uppercase font-semibold">
+              Estatus: <span className="text-crema font-bold">{cotizacion.estatus.replace("_", " ")}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2495,6 +2548,97 @@ export function DetalleCotizacionAdmin({
         )}
 
       </div>
+
+      {/* Modal Duplicar Cotización */}
+      {modalDuplicar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-carbon/10 space-y-4 animate-in fade-in zoom-in duration-150 font-cuerpo">
+            <div className="flex items-center justify-between border-b border-carbon/10 pb-3">
+              <h3 className="font-titular text-lg font-bold text-verde-profundo flex items-center gap-2">
+                <span>📋</span> Duplicar Cotización ({cotizacion.id})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalDuplicar(false)}
+                className="text-carbon/40 hover:text-carbon text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-carbon/70 leading-relaxed">
+              Se creará una nueva cotización con un <strong>nuevo folio correlativo (COT-XXX)</strong> copiando automáticamente todos los conceptos, precios y condiciones de la cotización original <strong className="font-mono text-sauce">{cotizacion.id}</strong>.
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-carbon/80 mb-1">
+                Prospecto Destino:
+              </label>
+              {prospectosLista.length > 0 ? (
+                <select
+                  value={prospectoSeleccionadoId}
+                  onChange={(e) => setProspectoSeleccionadoId(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs font-medium focus:border-sauce focus:outline-none"
+                >
+                  {prospectosLista.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} ({p.id})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  readOnly
+                  value={`${cotizacion.prospectoNombre} (${cotizacion.prospectoId})`}
+                  className="w-full rounded-lg border border-carbon/20 bg-slate-50 px-3 py-2 text-xs font-medium text-carbon/70"
+                />
+              )}
+              <p className="text-[10px] text-carbon/50 mt-1 italic">
+                La nueva cotización quedará en estado de costeo inicial para su revisión.
+              </p>
+            </div>
+
+            {mensajeDuplicar.texto && (
+              <div
+                className={`p-3 rounded-lg text-xs font-semibold ${
+                  mensajeDuplicar.tipo === "ok"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {mensajeDuplicar.texto}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-carbon/10">
+              <button
+                type="button"
+                onClick={() => setModalDuplicar(false)}
+                disabled={duplicando}
+                className="px-4 py-2 rounded-lg border border-carbon/20 text-xs font-semibold text-carbon/70 hover:bg-slate-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEjecutarDuplicacion}
+                disabled={duplicando}
+                className="px-4 py-2 rounded-lg bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {duplicando ? (
+                  <>
+                    <span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    Duplicando y Generando Folio...
+                  </>
+                ) : (
+                  <>📋 Duplicar y Generar Folio</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

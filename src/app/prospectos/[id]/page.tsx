@@ -19,6 +19,7 @@ import { BotonNoViable } from "@/components/BotonNoViable";
 import { LinkCitaWidget } from "@/components/LinkCitaWidget";
 import { OperadorSelector } from "@/components/OperadorSelector";
 import { WidgetAgendaCitas } from "@/components/WidgetAgendaCitas";
+import { BotonDuplicarCotizacion } from "@/components/BotonDuplicarCotizacion";
 
 
 export const dynamic = "force-dynamic";
@@ -328,17 +329,24 @@ export default async function PaginaProspecto({
                         {c.estatus.replace("_", " ")}
                       </span>
 
-                      {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
-                        <a
-                          href={`/cotizacion/${c.token}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
-                          title="Ver vista pública del cliente"
-                        >
-                          🔗 Portal Cliente
-                        </a>
-                      )}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <BotonDuplicarCotizacion
+                          cotizacionId={c.id}
+                          prospectoId={prospecto.id}
+                        />
+
+                        {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
+                          <a
+                            href={`/cotizacion/${c.token}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
+                            title="Ver vista pública del cliente"
+                          >
+                            🔗 Portal
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { crearCotizacion } from "@/app/actions/cotizaciones";
+import { crearCotizacion, duplicarCotizacion } from "@/app/actions/cotizaciones";
 import type { Cotizacion, ServicioConstruccionTipo, CotizacionEstatus } from "@/lib/types";
 
 interface TableroCotizacionesProps {
@@ -40,6 +40,19 @@ export function TableroCotizaciones({
   const [notasInternas, setNotasInternas] = useState("");
   const [cargando, setCargando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
+  const [duplicandoId, setDuplicandoId] = useState<string | null>(null);
+
+  const handleDuplicarRapido = async (cotizacionId: string) => {
+    try {
+      setDuplicandoId(cotizacionId);
+      const nueva = await duplicarCotizacion(cotizacionId);
+      router.push(`/construccion/${nueva.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al duplicar la cotización");
+    } finally {
+      setDuplicandoId(null);
+    }
+  };
 
   // Cargar parámetros de URL si existen
   useEffect(() => {
@@ -272,12 +285,27 @@ export function TableroCotizaciones({
                       {c.requiereVisita ? (c.inspectorNombre || "No asignado") : "No requiere visita"}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/construccion/${c.id}`}
-                        className="rounded-md border border-sauce/20 bg-sauce/5 px-3 py-1.5 text-xs font-semibold text-sauce hover:bg-sauce hover:text-white transition"
-                      >
-                        Ver Detalle
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={duplicandoId === c.id}
+                          onClick={() => handleDuplicarRapido(c.id)}
+                          className="rounded-md border border-carbon/15 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-carbon/70 hover:bg-slate-100 hover:text-carbon transition flex items-center gap-1 disabled:opacity-50"
+                          title="Duplicar cotización generando un nuevo folio"
+                        >
+                          {duplicandoId === c.id ? (
+                            <span>⏳ Duplicando...</span>
+                          ) : (
+                            <span>📋 Duplicar</span>
+                          )}
+                        </button>
+                        <Link
+                          href={`/construccion/${c.id}`}
+                          className="rounded-md border border-sauce/20 bg-sauce/5 px-3 py-1.5 text-xs font-semibold text-sauce hover:bg-sauce hover:text-white transition"
+                        >
+                          Ver Detalle
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
