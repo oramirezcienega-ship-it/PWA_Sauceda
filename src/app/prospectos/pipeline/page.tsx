@@ -13,7 +13,7 @@ export default async function PaginaPipelineProspectos() {
 
   return (
     <main className="min-h-screen pb-10">
-      <div className="mx-auto max-w-7xl px-4 py-6">
+      <div className="mx-auto max-w-[1700px] w-full px-3 sm:px-6 py-6">
         <PipelineProspectosClient
           prospectosIniciales={prospectos}
           expedientesIniciales={expedientes}
