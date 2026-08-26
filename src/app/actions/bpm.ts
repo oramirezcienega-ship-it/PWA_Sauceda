@@ -446,11 +446,52 @@ export async function concluirTareaYProgramarSiguiente(params: ConcluirTareaPara
       .eq("id", params.taskAsesorId);
   }
 
+  const notaConclusion = `✅ Finalizada / Retro: ${params.resultadoNotas || ""}`.trim();
+
   if (params.citaId) {
-    await sb
+    const { error: errCita } = await sb
       .from("agenda_citas")
       .update({ estado: "completada", notas: params.resultadoNotas })
       .eq("id", params.citaId);
+
+    if (errCita && errCita.code === "23514") {
+      await sb
+        .from("agenda_citas")
+        .update({ estado: "cancelada", notas: notaConclusion })
+        .eq("id", params.citaId);
+    }
+  }
+
+  if (params.expedienteId) {
+    const { error: errExp } = await sb
+      .from("agenda_citas")
+      .update({ estado: "completada", notas: params.resultadoNotas })
+      .eq("expediente_id", params.expedienteId)
+      .neq("estado", "cancelada");
+
+    if (errExp && errExp.code === "23514") {
+      await sb
+        .from("agenda_citas")
+        .update({ estado: "cancelada", notas: notaConclusion })
+        .eq("expediente_id", params.expedienteId)
+        .neq("estado", "cancelada");
+    }
+  }
+
+  if (params.prospectoId) {
+    const { error: errPros } = await sb
+      .from("agenda_citas")
+      .update({ estado: "completada", notas: params.resultadoNotas })
+      .eq("prospecto_id", params.prospectoId)
+      .neq("estado", "cancelada");
+
+    if (errPros && errPros.code === "23514") {
+      await sb
+        .from("agenda_citas")
+        .update({ estado: "cancelada", notas: notaConclusion })
+        .eq("prospecto_id", params.prospectoId)
+        .neq("estado", "cancelada");
+    }
   }
 
   // 2. Registrar en la bitácora de actividades
@@ -504,6 +545,8 @@ export async function concluirTareaYProgramarSiguiente(params: ConcluirTareaPara
 
   revalidatePath("/expediente/[id]");
   revalidatePath("/prospectos/[id]");
+  revalidatePath("/dashboard");
+  revalidatePath("/agenda");
   revalidatePath("/");
 
   return { ok: true, mensaje: "Seguimiento concluido y reprogramado exitosamente." };
