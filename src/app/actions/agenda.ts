@@ -668,10 +668,11 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
   await requireAdmin();
   const sb = supabaseServidor();
 
+  // Consulta base limpia a agenda_citas (evitamos embedding de expedientes por si la BD no tiene la FK declarada)
   const getBaseQuery = () =>
     sb
       .from("agenda_citas")
-      .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, ciudad)")
+      .select("*, perfiles(nombre)")
       .neq("estado", "cancelada")
       .neq("estado", "completada")
       .order("fecha", { ascending: true })
@@ -754,11 +755,37 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     rawData = cAdmin || [];
   }
 
+  // Enriquecemos de forma defensiva las direcciones desde expedientes/prospectos si existen los IDs
+  const eIdsSet = Array.from(new Set(rawData.map((r) => r.expediente_id).filter(Boolean))) as string[];
+  const pIdsSet = Array.from(new Set(rawData.map((r) => r.prospecto_id).filter(Boolean))) as string[];
+
+  const mapExpDir = new Map<string, { direccion_propiedad?: string; fraccionamiento?: string }>();
+  const mapProsDir = new Map<string, { direccion?: string; ciudad?: string }>();
+
+  if (eIdsSet.length > 0) {
+    const { data: expsData } = await sb
+      .from("expedientes")
+      .select("id, direccion_propiedad, fraccionamiento")
+      .in("id", eIdsSet);
+    (expsData || []).forEach((e) => mapExpDir.set(e.id, e));
+  }
+
+  if (pIdsSet.length > 0) {
+    const { data: prosData } = await sb
+      .from("prospectos")
+      .select("id, direccion, ciudad")
+      .in("id", pIdsSet);
+    (prosData || []).forEach((p) => mapProsDir.set(p.id, p));
+  }
+
   return rawData.map((row: any) => {
-    const dirExp = row.expedientes?.direccion_propiedad;
-    const dirPros = row.prospectos?.direccion;
-    const fracExp = row.expedientes?.fraccionamiento;
-    const ciudadPros = row.prospectos?.ciudad;
+    const expObj = row.expediente_id ? mapExpDir.get(row.expediente_id) : null;
+    const prosObj = row.prospecto_id ? mapProsDir.get(row.prospecto_id) : null;
+
+    const dirExp = expObj?.direccion_propiedad;
+    const dirPros = prosObj?.direccion;
+    const fracExp = expObj?.fraccionamiento;
+    const ciudadPros = prosObj?.ciudad;
 
     const fraccionamiento = row.fraccionamiento || fracExp || (ciudadPros ? `León (${ciudadPros})` : null);
     const direccion = dirExp || dirPros || (fraccionamiento ? `Col. ${fraccionamiento}` : null);
