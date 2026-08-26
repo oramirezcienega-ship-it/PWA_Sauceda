@@ -357,8 +357,26 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                     </span>
                   </div>
 
-                  {/* Nombre del cliente */}
-                  <p className="font-bold text-base text-carbon leading-snug truncate">{c.cliente_nombre}</p>
+                  {/* Nombre del cliente (Clic para abrir Ficha de Negocio / Expediente / Prospecto) */}
+                  {c.expediente_id ? (
+                    <Link
+                      href={`/expediente/${c.expediente_id}`}
+                      className="font-bold text-base text-carbon hover:text-sauce hover:underline leading-snug truncate block transition-colors cursor-pointer"
+                      title="Abrir Ficha de Negocio / Expediente"
+                    >
+                      {c.cliente_nombre}
+                    </Link>
+                  ) : c.prospecto_id ? (
+                    <Link
+                      href={`/prospectos/${c.prospecto_id}`}
+                      className="font-bold text-base text-carbon hover:text-sauce hover:underline leading-snug truncate block transition-colors cursor-pointer"
+                      title="Abrir Ficha del Prospecto"
+                    >
+                      {c.cliente_nombre}
+                    </Link>
+                  ) : (
+                    <p className="font-bold text-base text-carbon leading-snug truncate">{c.cliente_nombre}</p>
+                  )}
 
                   {/* FECHA Y HORA DESTACADAS (Grandes como el nombre) */}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-white/90 border border-carbon/10 p-2.5 shadow-xs">
@@ -425,6 +443,15 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                       <Link
                         href={`/expediente/${c.expediente_id}`}
                         className="inline-flex items-center gap-0.5 text-xs font-bold text-sauce hover:underline"
+                        title="Ver Ficha de Negocio / Expediente"
+                      >
+                        Ver →
+                      </Link>
+                    ) : c.prospecto_id ? (
+                      <Link
+                        href={`/prospectos/${c.prospecto_id}`}
+                        className="inline-flex items-center gap-0.5 text-xs font-bold text-sauce hover:underline"
+                        title="Ver Ficha del Lead"
                       >
                         Ver →
                       </Link>
