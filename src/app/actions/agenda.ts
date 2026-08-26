@@ -759,6 +759,13 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     rawData = cAdmin || [];
   }
 
+  // Ordenar cronológicamente: primero las más inmediatas (hoy/más cercanas) y al final las más lejanas
+  rawData.sort((a, b) => {
+    const keyA = `${a.fecha || "9999-99-99"}T${a.hora_inicio || "00:00:00"}`;
+    const keyB = `${b.fecha || "9999-99-99"}T${b.hora_inicio || "00:00:00"}`;
+    return keyA.localeCompare(keyB);
+  });
+
   // Enriquecemos de forma defensiva las direcciones desde expedientes/prospectos si existen los IDs
   const eIdsSet = Array.from(new Set(rawData.map((r) => r.expediente_id).filter(Boolean))) as string[];
   const pIdsSet = Array.from(new Set(rawData.map((r) => r.prospecto_id).filter(Boolean))) as string[];
