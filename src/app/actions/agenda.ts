@@ -668,11 +668,15 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
   await requireAdmin();
   const sb = supabaseServidor();
 
-  // Consulta base limpia a agenda_citas (evitamos embedding de expedientes por si la BD no tiene la FK declarada)
+  // Fecha de hoy en formato ISO YYYY-MM-DD según la zona horaria de México
+  const hoyLocal = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+
+  // Consulta base limpia a agenda_citas filtrando solo pendientes/futuras desde hoy
   const getBaseQuery = () =>
     sb
       .from("agenda_citas")
       .select("*, perfiles(nombre)")
+      .gte("fecha", hoyLocal)
       .neq("estado", "cancelada")
       .neq("estado", "completada")
       .order("fecha", { ascending: true })
@@ -754,6 +758,13 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
     if (errAdmin) console.error("Error al obtener próximas citas:", errAdmin);
     rawData = cAdmin || [];
   }
+
+  // Ordenar cronológicamente: primero las más inmediatas (hoy/más cercanas) y al final las más lejanas
+  rawData.sort((a, b) => {
+    const keyA = `${a.fecha || "9999-99-99"}T${a.hora_inicio || "00:00:00"}`;
+    const keyB = `${b.fecha || "9999-99-99"}T${b.hora_inicio || "00:00:00"}`;
+    return keyA.localeCompare(keyB);
+  });
 
   // Enriquecemos de forma defensiva las direcciones desde expedientes/prospectos si existen los IDs
   const eIdsSet = Array.from(new Set(rawData.map((r) => r.expediente_id).filter(Boolean))) as string[];
