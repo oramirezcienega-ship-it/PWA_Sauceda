@@ -313,6 +313,11 @@ export default async function PaginaDashboard({
             )}
           </div>
         </div>
+
+        {/* Widget de Próximas Citas, Llamadas e Instalaciones (Global Admin) */}
+        <div className="mt-6">
+          <ProximasVisitasWidget />
+        </div>
       </div>
     </main>
   );
