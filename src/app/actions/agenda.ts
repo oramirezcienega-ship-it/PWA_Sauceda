@@ -667,45 +667,67 @@ export async function programarLlamadaExpediente(data: {
 export async function obtenerProximasCitasEInstalaciones(perfilId?: string | null): Promise<Cita[]> {
   await requireAdmin();
   const sb = supabaseServidor();
-  const hoy = new Date().toISOString().slice(0, 10);
 
-  let query = sb
-    .from("agenda_citas")
-    .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, ciudad)")
-    .neq("estado", "cancelada")
-    .neq("estado", "completada")
-    .order("fecha", { ascending: true })
-    .order("hora_inicio", { ascending: true })
-    .limit(50);
+  const getBaseQuery = () =>
+    sb
+      .from("agenda_citas")
+      .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, ciudad)")
+      .neq("estado", "cancelada")
+      .neq("estado", "completada")
+      .order("fecha", { ascending: true })
+      .order("hora_inicio", { ascending: true })
+      .limit(50);
+
+  let rawData: any[] = [];
 
   if (perfilId) {
-    // Buscar también si el expediente o prospecto enlazado está asignado al perfilId
+    const mapa = new Map<string, any>();
+
+    // 1. Citas asignadas directamente a su perfil_id
+    const { data: cDirectas, error: err1 } = await getBaseQuery().eq("perfil_id", perfilId);
+    if (err1) console.error("Error obteniendo citas directas:", err1);
+    (cDirectas || []).forEach((c) => mapa.set(c.id, c));
+
+    // 2. Citas enlazadas a sus expedientes
     const { data: expIds } = await sb
       .from("expedientes")
       .select("id")
       .or(`asesor_id.eq.${perfilId},operador_id.eq.${perfilId}`);
 
+    const idsExp = (expIds || []).map((e) => e.id);
+    if (idsExp.length > 0) {
+      for (let i = 0; i < idsExp.length; i += 50) {
+        const chunk = idsExp.slice(i, i + 50);
+        const { data: cExp, error: err2 } = await getBaseQuery().in("expediente_id", chunk);
+        if (err2) console.error("Error obteniendo citas exp:", err2);
+        (cExp || []).forEach((c) => mapa.set(c.id, c));
+      }
+    }
+
+    // 3. Citas enlazadas a sus prospectos
     const { data: prosIds } = await sb
       .from("prospectos")
       .select("id")
       .or(`asesor_id.eq.${perfilId},operador_id.eq.${perfilId}`);
 
-    const idsExp = (expIds || []).map((e) => e.id);
     const idsPros = (prosIds || []).map((p) => p.id);
+    if (idsPros.length > 0) {
+      for (let i = 0; i < idsPros.length; i += 50) {
+        const chunk = idsPros.slice(i, i + 50);
+        const { data: cPros, error: err3 } = await getBaseQuery().in("prospecto_id", chunk);
+        if (err3) console.error("Error obteniendo citas pros:", err3);
+        (cPros || []).forEach((c) => mapa.set(c.id, c));
+      }
+    }
 
-    let filterStr = `perfil_id.eq.${perfilId}`;
-    if (idsExp.length > 0) filterStr += `,expediente_id.in.(${idsExp.join(",")})`;
-    if (idsPros.length > 0) filterStr += `,prospecto_id.in.(${idsPros.join(",")})`;
-
-    query = query.or(filterStr);
+    rawData = Array.from(mapa.values());
+  } else {
+    const { data: cAdmin, error: errAdmin } = await getBaseQuery();
+    if (errAdmin) console.error("Error al obtener próximas citas:", errAdmin);
+    rawData = cAdmin || [];
   }
 
-  const { data, error } = await query;
-  if (error) {
-    console.error("Error al obtener próximas visitas e instalaciones:", error);
-    return [];
-  }
-  return (data || []).map((row: any) => {
+  return rawData.map((row: any) => {
     const dirExp = row.expedientes?.direccion_propiedad;
     const dirPros = row.prospectos?.direccion;
     const fracExp = row.expedientes?.fraccionamiento;

@@ -121,7 +121,7 @@ export default async function PaginaDashboard({
 
           <div className="mt-4 sm:mt-6 space-y-4">
             {/* Widget de Próximas Visitas, Llamadas e Instalaciones */}
-            <ProximasVisitasWidget />
+            <ProximasVisitasWidget perfilId={user?.id} />
 
             {/* Sección de Tareas Pendientes */}
             <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
