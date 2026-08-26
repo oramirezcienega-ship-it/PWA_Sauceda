@@ -672,7 +672,6 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
   let query = sb
     .from("agenda_citas")
     .select("*, perfiles(nombre), expedientes(direccion_propiedad, fraccionamiento), prospectos(direccion, ciudad)")
-    .gte("fecha", hoy)
     .neq("estado", "cancelada")
     .neq("estado", "completada")
     .order("fecha", { ascending: true })
