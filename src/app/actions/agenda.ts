@@ -668,11 +668,15 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
   await requireAdmin();
   const sb = supabaseServidor();
 
-  // Consulta base limpia a agenda_citas (evitamos embedding de expedientes por si la BD no tiene la FK declarada)
+  // Fecha de hoy en formato ISO YYYY-MM-DD según la zona horaria de México
+  const hoyLocal = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+
+  // Consulta base limpia a agenda_citas filtrando solo pendientes/futuras desde hoy
   const getBaseQuery = () =>
     sb
       .from("agenda_citas")
       .select("*, perfiles(nombre)")
+      .gte("fecha", hoyLocal)
       .neq("estado", "cancelada")
       .neq("estado", "completada")
       .order("fecha", { ascending: true })
