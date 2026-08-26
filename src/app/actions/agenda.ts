@@ -720,6 +720,33 @@ export async function obtenerProximasCitasEInstalaciones(perfilId?: string | nul
       }
     }
 
+    // 4. Citas enlazadas por teléfono de clientes asignados al asesor
+    const { data: prosTels } = await sb
+      .from("prospectos")
+      .select("telefono")
+      .or(`asesor_id.eq.${perfilId},operador_id.eq.${perfilId}`);
+
+    const { data: expTels } = await sb
+      .from("expedientes")
+      .select("telefono")
+      .or(`asesor_id.eq.${perfilId},operador_id.eq.${perfilId}`);
+
+    const listaTels = Array.from(
+      new Set([
+        ...(prosTels || []).map((p) => p.telefono).filter((t): t is string => Boolean(t && t.length > 5)),
+        ...(expTels || []).map((e) => e.telefono).filter((t): t is string => Boolean(t && t.length > 5)),
+      ])
+    );
+
+    if (listaTels.length > 0) {
+      for (let i = 0; i < listaTels.length; i += 50) {
+        const chunk = listaTels.slice(i, i + 50);
+        const { data: cTels, error: err4 } = await getBaseQuery().in("cliente_telefono", chunk);
+        if (err4) console.error("Error obteniendo citas por teléfono:", err4);
+        (cTels || []).forEach((c) => mapa.set(c.id, c));
+      }
+    }
+
     rawData = Array.from(mapa.values());
   } else {
     const { data: cAdmin, error: errAdmin } = await getBaseQuery();
