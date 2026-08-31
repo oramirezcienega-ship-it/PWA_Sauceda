@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { Encabezado } from "@/components/Encabezado";
+import { usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { WhatsAppAdminClient } from "@/components/WhatsAppAdminClient";
 
@@ -10,6 +12,11 @@ export const dynamic = "force-dynamic";
  * - Plantillas de Mensajes de Meta
  */
 export default async function PaginaWhatsApp() {
+  const usuario = await usuarioActual();
+  if (!usuario) {
+    redirect("/login");
+  }
+
   const r = await listarPlantillasWhatsApp();
 
   return (
