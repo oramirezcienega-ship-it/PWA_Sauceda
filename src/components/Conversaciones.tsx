@@ -233,24 +233,181 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
       if (match) {
         const mediaId = match[1];
         return (
-          <div className="max-w-[120px] bg-transparent">
+          <div className="relative inline-block my-1">
             <a
               href={`/api/conversaciones/media?mediaId=${mediaId}`}
               target="_blank"
               rel="noreferrer"
-              className="block hover:scale-105 transition-transform"
+              className="block group transition-transform duration-200 hover:scale-105"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/api/conversaciones/media?mediaId=${mediaId}`}
                 alt="Sticker"
-                className="h-28 w-28 object-contain"
+                className="h-28 w-28 object-contain drop-shadow-sm"
                 loading="lazy"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                  const p = (e.target as HTMLElement).parentElement;
+                  if (p && !p.querySelector(".sticker-fallback")) {
+                    const d = document.createElement("div");
+                    d.className = "sticker-fallback flex items-center gap-1.5 p-2 bg-carbon/5 rounded-lg text-xs text-carbon/60";
+                    d.innerHTML = "<span>🎭</span> <span>Sticker</span>";
+                    p.appendChild(d);
+                  }
+                }}
               />
             </a>
           </div>
         );
       }
+    }
+
+    if (texto.startsWith("[contact:")) {
+      const match = texto.match(/^\[contact:([^|\]]*)\|?([^|\]]*)\|?([^|\]]*)\]/);
+      if (match) {
+        const nombre = match[1]?.trim() || "Contacto";
+        const telefono = match[2]?.trim();
+        const email = match[3]?.trim();
+        return (
+          <div className="min-w-[220px] max-w-[280px] rounded-xl border border-carbon/15 bg-white/95 p-3 shadow-sm space-y-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-verde-profundo/10 text-verde-profundo font-bold text-base">
+                👤
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-xs text-carbon truncate">{nombre}</p>
+                {telefono && (
+                  <p className="text-[11px] font-mono text-carbon/70 truncate">{telefono}</p>
+                )}
+                {email && (
+                  <p className="text-[10px] text-carbon/50 truncate">{email}</p>
+                )}
+              </div>
+            </div>
+            {telefono && (
+              <div className="flex gap-1.5 pt-1.5 border-t border-carbon/10">
+                <a
+                  href={`tel:${telefono.replace(/\s+/g, "")}`}
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-verde-profundo/10 hover:bg-verde-profundo/20 text-verde-profundo text-[11px] font-medium transition"
+                >
+                  <span>📞 Llamar</span>
+                </a>
+                <a
+                  href={`https://wa.me/${telefono.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-verde-chile/10 hover:bg-verde-chile/20 text-verde-profundo text-[11px] font-medium transition"
+                >
+                  <span>💬 WhatsApp</span>
+                </a>
+              </div>
+            )}
+          </div>
+        );
+      }
+    }
+
+    if (texto.startsWith("[location:")) {
+      const match = texto.match(/^\[location:([^|\]]+)\|?([^|\]]*)\|?([^|\]]*)\]/);
+      if (match) {
+        const coords = match[1]?.trim();
+        const name = match[2]?.trim();
+        const address = match[3]?.trim();
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`;
+        return (
+          <div className="min-w-[220px] max-w-[280px] rounded-xl border border-carbon/15 bg-white/95 p-3 shadow-sm space-y-2.5">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600 font-bold text-base">
+                📍
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-xs text-carbon truncate">
+                  {name || "Ubicación compartida"}
+                </p>
+                {address && (
+                  <p className="text-[11px] text-carbon/70 line-clamp-2 leading-tight mt-0.5">
+                    {address}
+                  </p>
+                )}
+                {!address && !name && (
+                  <p className="text-[11px] font-mono text-carbon/60">{coords}</p>
+                )}
+              </div>
+            </div>
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-1.5 w-full py-1.5 px-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-700 text-[11px] font-medium transition"
+            >
+              <span>🗺️ Ver en Google Maps</span>
+            </a>
+          </div>
+        );
+      }
+    }
+
+    if (texto.startsWith("[opción:") || texto.startsWith("[botón:")) {
+      const match = texto.match(/^\[(opción|botón):\s*([^\]]+)\]/i);
+      if (match) {
+        const valor = match[2];
+        return (
+          <div className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-verde-profundo/10 border border-verde-profundo/20 text-verde-profundo text-xs font-medium">
+            <span>🔘</span>
+            <span>{valor}</span>
+          </div>
+        );
+      }
+    }
+
+    // Compatibilidad y estilo visual para mensajes de tipo especial previos ya guardados
+    if (texto.toLowerCase().includes("tipo contacts") || texto.toLowerCase().includes("tipo contacto")) {
+      return (
+        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs shadow-sm max-w-[260px]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/20 text-base">
+            📇
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-carbon text-[12px]">Contacto compartido</p>
+            <p className="text-[10px] text-carbon/60">Tarjeta de contacto de WhatsApp</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (texto.toLowerCase().includes("tipo location") || texto.toLowerCase().includes("tipo ubicación") || texto.toLowerCase().includes("tipo ubicacion")) {
+      return (
+        <div className="flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/10 p-2.5 text-xs shadow-sm max-w-[260px]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/20 text-base">
+            📍
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-carbon text-[12px]">Ubicación compartida</p>
+            <p className="text-[10px] text-carbon/60">Ubicación enviada por WhatsApp</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (texto.toLowerCase().includes("tipo sticker")) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-carbon/10 bg-carbon/5 p-2 text-xs text-carbon/70 max-w-[200px]">
+          <span className="text-base">🎭</span>
+          <span className="font-medium">Sticker de WhatsApp</span>
+        </div>
+      );
+    }
+
+    const matchTipoGenerico = texto.match(/^[\({]mensaje de tipo ([a-zA-Z0-9_-]+)[\)}]$/i);
+    if (matchTipoGenerico) {
+      const tipo = matchTipoGenerico[1];
+      return (
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-carbon/5 border border-carbon/10 text-carbon/60 text-xs italic">
+          <span>📎</span>
+          <span>Mensaje adjunto ({tipo})</span>
+        </div>
+      );
     }
 
     if (texto.startsWith("[video:")) {

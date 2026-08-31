@@ -2,15 +2,25 @@ import Link from "next/link";
 import { Encabezado } from "@/components/Encabezado";
 import { TablaProspectos } from "@/components/TablaProspectos";
 import { listarProspectos } from "@/app/actions/prospectos";
+import { obtenerUsuarioActual } from "@/app/actions/usuarios";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 /** Lista de prospectos (CRM). */
 export default async function PaginaProspectos() {
+  const usuario = await obtenerUsuarioActual();
+  if (!usuario) {
+    redirect("/login");
+  }
+
   let prospectos;
   try {
     prospectos = await listarProspectos();
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("No autorizado")) {
+      redirect("/login");
+    }
     return (
       <main className="min-h-screen pb-10">
         <Encabezado />

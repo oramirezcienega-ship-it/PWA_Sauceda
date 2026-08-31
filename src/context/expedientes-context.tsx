@@ -55,7 +55,8 @@ interface ExpedientesContextValue {
 const ExpedientesContext = createContext<ExpedientesContextValue | null>(null);
 
 /** Rutas públicas (sin sesión de admin): login y portal del cliente. */
-function esRutaPublica(path: string): boolean {
+function esRutaPublica(path: string | null): boolean {
+  if (!path) return false;
   return (
     path.startsWith("/login") ||
     path.startsWith("/seguimiento") ||

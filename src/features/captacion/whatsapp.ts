@@ -106,6 +106,22 @@ interface PayloadWhatsApp {
           sticker?: { id?: string };
           video?: { id?: string; caption?: string };
           document?: { id?: string; filename?: string; caption?: string };
+          contacts?: Array<{
+            name?: { formatted_name?: string; first_name?: string; last_name?: string };
+            phones?: Array<{ phone?: string; type?: string; wa_id?: string }>;
+            emails?: Array<{ email?: string; type?: string }>;
+          }>;
+          location?: {
+            latitude?: number;
+            longitude?: number;
+            name?: string;
+            address?: string;
+          };
+          interactive?: {
+            button_reply?: { id?: string; title?: string };
+            list_reply?: { id?: string; title?: string; description?: string };
+          };
+          button?: { text?: string };
           referral?: {
             source_url?: string;
             source_id?: string;
@@ -151,6 +167,20 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
             texto = `[document:${m.document.id}]${m.document.filename ? ' ' + (m.document.filename || m.document.caption || '') : ''}`;
           } else if (m.type === "audio" && m.audio?.id) {
             texto = `[audio:${m.audio.id}] (mensaje de tipo audio)`;
+          } else if (m.type === "contacts" && m.contacts?.length) {
+            const c = m.contacts[0];
+            const name = c.name?.formatted_name || [c.name?.first_name, c.name?.last_name].filter(Boolean).join(" ") || "Contacto";
+            const phone = c.phones?.[0]?.phone || "";
+            const email = c.emails?.[0]?.email || "";
+            texto = `[contact:${name}|${phone}|${email}]`;
+          } else if (m.type === "location" && m.location) {
+            const { latitude, longitude, name, address } = m.location;
+            texto = `[location:${latitude},${longitude}|${name || ''}|${address || ''}]`;
+          } else if (m.type === "interactive" && m.interactive) {
+            const btn = m.interactive.button_reply?.title || m.interactive.list_reply?.title;
+            texto = btn ? `[opción: ${btn}]` : `(mensaje interactivo)`;
+          } else if (m.type === "button" && m.button?.text) {
+            texto = `[botón: ${m.button.text}]`;
           } else {
             texto = `(mensaje de tipo ${m.type})`;
           }

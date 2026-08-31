@@ -357,7 +357,7 @@ export function PipelineProspectosClient({
                 <option value="todos">🌱 Origen: Todos</option>
                 {ORIGENES.map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.label}
+                    {o.nombre}
                   </option>
                 ))}
               </select>
