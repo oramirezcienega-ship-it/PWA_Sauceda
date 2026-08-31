@@ -40,8 +40,8 @@ export function WhatsAppCoexistenciaSignup() {
   // Formulario de PIN de Coexistencia
   const [pin, setPin] = useState("123456");
   const [tokenMeta, setTokenMeta] = useState("");
-  const [phoneId, setPhoneId] = useState("1142001562328958");
-  const [wabaId, setWabaId] = useState("1497539845446952");
+  const [phoneId, setPhoneId] = useState("1186997567823002");
+  const [wabaId, setWabaId] = useState("1022532766970452");
   const [guardandoPin, setGuardandoPin] = useState(false);
 
   // Cargar estado actual de conexión
