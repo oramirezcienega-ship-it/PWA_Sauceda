@@ -38,6 +38,79 @@ interface WhatsAppStatusData {
   };
 }
 
+/** Carga e inicializa de forma asíncrona y segura el SDK de Facebook */
+function asegurarSdkFacebook(targetAppId: string): Promise<any> {
+  if (typeof window === "undefined") return Promise.reject(new Error("Window no disponible"));
+
+  if (window.FB) {
+    try {
+      window.FB.init({
+        appId: targetAppId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: "v21.0",
+      });
+    } catch (e) {
+      console.warn("FB.init error:", e);
+    }
+    return Promise.resolve(window.FB);
+  }
+
+  return new Promise((resolve, reject) => {
+    window.fbAsyncInit = function () {
+      if (window.FB) {
+        try {
+          window.FB.init({
+            appId: targetAppId,
+            autoLogAppEvents: true,
+            xfbml: true,
+            version: "v21.0",
+          });
+        } catch (e) {
+          console.warn("FB.init error:", e);
+        }
+        resolve(window.FB);
+      } else {
+        reject(new Error("No se pudo inicializar window.FB"));
+      }
+    };
+
+    const id = "facebook-jssdk";
+    let script = document.getElementById(id) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement("script");
+      script.id = id;
+      script.src = "https://connect.facebook.net/es_LA/sdk.js";
+      script.async = true;
+      script.defer = true;
+      script.onerror = () => reject(new Error("No se pudo cargar el SDK de Facebook. Si tienes un bloqueador de anuncios (AdBlock), desactívalo temporalmente."));
+      document.head.appendChild(script);
+    } else {
+      let intentos = 0;
+      const interval = setInterval(() => {
+        intentos++;
+        if (window.FB) {
+          clearInterval(interval);
+          try {
+            window.FB.init({
+              appId: targetAppId,
+              autoLogAppEvents: true,
+              xfbml: true,
+              version: "v21.0",
+            });
+          } catch (e) {
+            console.warn("FB.init error:", e);
+          }
+          resolve(window.FB);
+        } else if (intentos > 25) {
+          clearInterval(interval);
+          reject(new Error("Tiempo de espera agotado al cargar el SDK de Facebook."));
+        }
+      }, 200);
+    }
+  });
+}
+
 export function WhatsAppCoexistenciaSignup() {
   const [sdkListo, setSdkListo] = useState(false);
   const [cargando, setCargando] = useState(false);
@@ -89,57 +162,20 @@ export function WhatsAppCoexistenciaSignup() {
     cargarEstado();
   }, [cargarEstado]);
 
-  // Cargar e inicializar el SDK de Facebook en el navegador
+  // Cargar SDK automáticamente en cuanto tengamos appId
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!appId) return;
 
-    if (window.FB && appId) {
-      try {
-        window.FB.init({
-          appId: appId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: "v21.0",
-        });
-        setSdkListo(true);
-      } catch (e) {
-        console.error("Error al inicializar FB.init:", e);
-      }
-      return;
-    }
-
-    window.fbAsyncInit = function () {
-      if (window.FB && appId) {
-        window.FB.init({
-          appId: appId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: "v21.0",
-        });
-        setSdkListo(true);
-      }
-    };
-
-    const id = "facebook-jssdk";
-    if (!document.getElementById(id)) {
-      const fjs = document.getElementsByTagName("script")[0];
-      const js = document.createElement("script");
-      js.id = id;
-      js.src = "https://connect.facebook.net/es_LA/sdk.js";
-      js.async = true;
-      js.defer = true;
-      if (fjs && fjs.parentNode) {
-        fjs.parentNode.insertBefore(js, fjs);
-      } else {
-        document.head.appendChild(js);
-      }
-    }
+    asegurarSdkFacebook(appId)
+      .then(() => setSdkListo(true))
+      .catch((err) => {
+        console.warn("Aviso SDK:", err.message);
+      });
   }, [appId]);
 
   // Escuchar mensajes de postMessage de Meta Embedded Signup
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Filtrar orígenes de Facebook
       if (!event.origin.includes("facebook.com")) return;
 
       try {
@@ -168,7 +204,7 @@ export function WhatsAppCoexistenciaSignup() {
           }
         }
       } catch {
-        // Mensaje no relevante o no JSON
+        // Mensaje no relevante
       }
     };
 
@@ -180,7 +216,7 @@ export function WhatsAppCoexistenciaSignup() {
   const guardarConfiguracion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formAppId || !formConfigId) {
-      setNotificacion({ tipo: "error", mensaje: "Por favor ingresa tanto el Meta App ID como el Config ID." });
+      setNotificacion({ tipo: "error", mensaje: "Por favor ingresa tanto el Meta App ID como el Configuration ID." });
       return;
     }
 
@@ -199,17 +235,16 @@ export function WhatsAppCoexistenciaSignup() {
       });
       const data = await res.json();
       if (data.ok) {
-        setNotificacion({ tipo: "exito", mensaje: "Credenciales guardadas exitosamente en el sistema." });
+        setNotificacion({ tipo: "exito", mensaje: "¡Credenciales guardadas con éxito! Inicializando SDK..." });
         setMostrarConfigManual(false);
         await cargarEstado();
-        if (window.FB && formAppId) {
-          window.FB.init({
-            appId: formAppId,
-            autoLogAppEvents: true,
-            xfbml: true,
-            version: "v21.0",
-          });
+
+        // Inicializar SDK de inmediato
+        try {
+          await asegurarSdkFacebook(formAppId);
           setSdkListo(true);
+        } catch (sdkErr: any) {
+          console.warn(sdkErr);
         }
       } else {
         setNotificacion({ tipo: "error", mensaje: data.error || "No se pudo guardar la configuración." });
@@ -222,14 +257,14 @@ export function WhatsAppCoexistenciaSignup() {
   };
 
   // Lanzar ventana emergente de Embedded Signup
-  const iniciarEmbeddedSignup = () => {
+  const iniciarEmbeddedSignup = async () => {
     setNotificacion(null);
 
     if (!appId) {
       setMostrarConfigManual(true);
       setNotificacion({
         tipo: "error",
-        mensaje: "Por favor ingresa tu Meta App ID y Configuration ID en el panel inferior.",
+        mensaje: "Por favor ingresa tu Meta App ID en el formulario de configuración.",
       });
       return;
     }
@@ -238,24 +273,19 @@ export function WhatsAppCoexistenciaSignup() {
       setMostrarConfigManual(true);
       setNotificacion({
         tipo: "error",
-        mensaje: "Por favor ingresa tu Configuration ID (Login Configuration) en el panel inferior.",
-      });
-      return;
-    }
-
-    if (!window.FB) {
-      setNotificacion({
-        tipo: "error",
-        mensaje: "El SDK de Facebook aún se está cargando. Por favor, espera unos segundos e intenta nuevamente.",
+        mensaje: "Por favor ingresa tu Configuration ID (Login Configuration) en el formulario de configuración.",
       });
       return;
     }
 
     setCargando(true);
-    setPasoActual("Abriendo ventana de Meta con modo Coexistencia...");
+    setPasoActual("Cargando SDK de Meta e iniciando ventana de Coexistencia...");
 
     try {
-      window.FB.login(
+      const fb = await asegurarSdkFacebook(appId);
+      setSdkListo(true);
+
+      fb.login(
         async function (response: any) {
           console.log("[FB.login Response]", response);
 
@@ -379,7 +409,7 @@ export function WhatsAppCoexistenciaSignup() {
           </div>
         </div>
 
-        {/* Formulario de Configuración Manual de IDs si faltan */}
+        {/* Formulario de Configuración Manual de IDs */}
         {mostrarConfigManual && (
           <form onSubmit={guardarConfiguracion} className="mt-5 pt-5 border-t border-carbon/10 space-y-4">
             <div className="flex items-center justify-between">
@@ -398,7 +428,7 @@ export function WhatsAppCoexistenciaSignup() {
                   type="text"
                   value={formAppId}
                   onChange={(e) => setFormAppId(e.target.value)}
-                  placeholder="Ej. 123456789012345"
+                  placeholder="Ej. 1864394571206909"
                   className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono"
                   required
                 />
