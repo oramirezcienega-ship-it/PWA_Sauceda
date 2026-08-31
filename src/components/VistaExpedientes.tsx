@@ -69,7 +69,7 @@ function calcularRango(
  * búsqueda, multi-selección de etapas y rango de fecha (último movimiento).
  */
 export function VistaExpedientes() {
-  const { expedientes, cargado, error } = useExpedientes();
+  const { expedientes, cargado, error, recargar } = useExpedientes();
   const [vista, setVista] = useState<Vista>("lista");
   const [busqueda, setBusqueda] = useState("");
   const [etapasSel, setEtapasSel] = useState<EtapaId[]>([]);

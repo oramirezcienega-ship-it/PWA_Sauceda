@@ -1,9 +1,9 @@
 import { Encabezado } from "@/components/Encabezado";
 import { DetalleCotizacionAdmin } from "@/components/DetalleCotizacionAdmin";
 import { obtenerCotizacionPorId } from "@/app/actions/cotizaciones";
-import { rolUsuarioActual } from "@/app/actions/usuarios";
+import { obtenerUsuarioActual, rolUsuarioActual } from "@/app/actions/usuarios";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,21 @@ interface PaginaDetalleProps {
 }
 
 export default async function PaginaDetalleCotizacion({ params }: PaginaDetalleProps) {
-  const rol = await rolUsuarioActual();
-  const datos = await obtenerCotizacionPorId(params.id);
+  const usuario = await obtenerUsuarioActual();
+  if (!usuario) {
+    redirect("/login");
+  }
+
+  const rol = usuario.rol;
+  let datos = null;
+  try {
+    datos = await obtenerCotizacionPorId(params.id);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("No autorizado")) {
+      redirect("/login");
+    }
+    throw err;
+  }
 
   if (!datos) {
     notFound();

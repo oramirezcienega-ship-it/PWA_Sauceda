@@ -3,10 +3,11 @@ import { TableroCotizaciones } from "@/components/TableroCotizaciones";
 import { TableroProductos } from "@/components/TableroProductos";
 import { listarCotizaciones } from "@/app/actions/cotizaciones";
 import { listarProspectos } from "@/app/actions/prospectos";
-import { listarAsesoresActivos } from "@/app/actions/usuarios";
+import { obtenerUsuarioActual, listarAsesoresActivos } from "@/app/actions/usuarios";
 import { listarProductosServicios } from "@/app/actions/productos";
 import type { Cotizacion, Prospecto, ProductoServicio } from "@/lib/types";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,11 @@ export default async function PaginaConstruccion({
 }: {
   searchParams: { tab?: string };
 }) {
+  const usuario = await obtenerUsuarioActual();
+  if (!usuario) {
+    redirect("/login");
+  }
+
   const tab = searchParams?.tab || "cotizaciones";
 
   let cotizaciones: Cotizacion[] = [];
@@ -33,6 +39,9 @@ export default async function PaginaConstruccion({
   }
 
   if (errorMsj) {
+    if (errorMsj.includes("No autorizado")) {
+      redirect("/login");
+    }
     return (
       <main className="min-h-screen pb-10">
         <Encabezado />
