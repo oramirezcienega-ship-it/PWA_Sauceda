@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Script from "next/script";
 import { Encabezado } from "@/components/Encabezado";
 import { usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
@@ -21,6 +22,12 @@ export default async function PaginaWhatsApp() {
 
   return (
     <main className="min-h-screen pb-10">
+      <Script
+        id="facebook-jssdk"
+        src="https://connect.facebook.net/es_LA/sdk.js"
+        strategy="afterInteractive"
+        crossOrigin="anonymous"
+      />
       <Encabezado />
       <div className="mx-auto max-w-4xl px-4 pt-5">
         <div className="mb-5">

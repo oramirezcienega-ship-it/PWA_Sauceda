@@ -32,6 +32,9 @@ export async function GET() {
         "whatsapp_coexistencia_activa",
         "whatsapp_last_sync",
         "whatsapp_oauth_token",
+        "meta_app_id",
+        "whatsapp_config_id",
+        "meta_app_secret",
       ]);
 
     const mapaDb = (dbConfigs || []).reduce<Record<string, string>>((acc, item) => {
@@ -44,6 +47,7 @@ export async function GET() {
     const token = mapaDb.whatsapp_oauth_token || process.env.WHATSAPP_TOKEN || "";
 
     const appId =
+      mapaDb.meta_app_id ||
       process.env.NEXT_PUBLIC_META_APP_ID ||
       process.env.META_APP_ID ||
       process.env.FACEBOOK_APP_ID ||
@@ -51,6 +55,7 @@ export async function GET() {
       "";
 
     const configId =
+      mapaDb.whatsapp_config_id ||
       process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID ||
       process.env.WHATSAPP_CONFIG_ID ||
       "";

@@ -2,13 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 
-declare global {
-  interface Window {
-    FB?: any;
-    fbAsyncInit?: () => void;
-  }
-}
-
 interface WhatsAppStatusData {
   config: {
     appIdConfigurado: boolean;
@@ -39,24 +32,17 @@ interface WhatsAppStatusData {
 }
 
 export function WhatsAppCoexistenciaSignup() {
-  const [sdkListo, setSdkListo] = useState(false);
-  const [cargando, setCargando] = useState(false);
   const [cargandoStatus, setCargandoStatus] = useState(true);
   const [estado, setEstado] = useState<WhatsAppStatusData | null>(null);
   const [notificacion, setNotificacion] = useState<{ tipo: "exito" | "error" | "info"; mensaje: string } | null>(null);
   const [pasoActual, setPasoActual] = useState<string | null>(null);
-  const [datosSesion, setDatosSesion] = useState<{ wabaId?: string; phoneNumberId?: string }>({});
 
-  const appId =
-    process.env.NEXT_PUBLIC_META_APP_ID ||
-    process.env.NEXT_PUBLIC_FACEBOOK_APP_ID ||
-    estado?.config?.appId ||
-    "";
-
-  const configId =
-    process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID ||
-    estado?.config?.configId ||
-    "";
+  // Formulario de PIN de Coexistencia
+  const [pin, setPin] = useState("123456");
+  const [tokenMeta, setTokenMeta] = useState("");
+  const [phoneId, setPhoneId] = useState("1186997567823002");
+  const [wabaId, setWabaId] = useState("1022532766970452");
+  const [guardandoPin, setGuardandoPin] = useState(false);
 
   // Cargar estado actual de conexión
   const cargarEstado = useCallback(async () => {
@@ -66,6 +52,8 @@ export function WhatsAppCoexistenciaSignup() {
       const data = await res.json();
       if (data.ok) {
         setEstado(data);
+        if (data.config.phoneId) setPhoneId(data.config.phoneId);
+        if (data.config.wabaId) setWabaId(data.config.wabaId);
       }
     } catch (err) {
       console.error("Error al cargar estado de WhatsApp:", err);
@@ -78,188 +66,65 @@ export function WhatsAppCoexistenciaSignup() {
     cargarEstado();
   }, [cargarEstado]);
 
-  // Cargar e inicializar el SDK de Facebook en el navegador
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    if (window.FB) {
-      setSdkListo(true);
+  // Registrar PIN en Meta Cloud API
+  const registrarPinCoexistencia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+      setNotificacion({ tipo: "error", mensaje: "El PIN debe ser exactamente de 6 dígitos numéricos (ej. 123456)." });
       return;
     }
 
-    window.fbAsyncInit = function () {
-      if (window.FB && appId) {
-        window.FB.init({
-          appId: appId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: "v21.0",
-        });
-        setSdkListo(true);
-      }
-    };
-
-    const id = "facebook-jssdk";
-    if (!document.getElementById(id)) {
-      const fjs = document.getElementsByTagName("script")[0];
-      const js = document.createElement("script");
-      js.id = id;
-      js.src = "https://connect.facebook.net/es_LA/sdk.js";
-      js.async = true;
-      js.defer = true;
-      if (fjs && fjs.parentNode) {
-        fjs.parentNode.insertBefore(js, fjs);
-      } else {
-        document.head.appendChild(js);
-      }
+    if (!phoneId) {
+      setNotificacion({ tipo: "error", mensaje: "Por favor ingresa tu Phone Number ID de Meta." });
+      return;
     }
-  }, [appId]);
 
-  // Escuchar mensajes de postMessage de Meta Embedded Signup
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      // Filtrar orígenes de Facebook
-      if (!event.origin.includes("facebook.com")) return;
+    if (!tokenMeta && !estado?.config?.tokenConfigurado) {
+      setNotificacion({
+        tipo: "error",
+        mensaje: "Por favor copia y pega el Token de Acceso desde developers.facebook.com > WhatsApp > Configuración de la API.",
+      });
+      return;
+    }
 
-      try {
-        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-
-        if (data.type === "WA_EMBEDDED_SIGNUP") {
-          console.log("[Meta Embedded Signup Event]", data);
-
-          if (data.event === "FINISH") {
-            const { phone_number_id, waba_id } = data.data || {};
-            setDatosSesion((prev) => ({
-              ...prev,
-              wabaId: waba_id || prev.wabaId,
-              phoneNumberId: phone_number_id || prev.phoneNumberId,
-            }));
-            setPasoActual("Flujo completado en la ventana de Meta. Procesando registro...");
-          } else if (data.event === "CANCEL") {
-            setPasoActual("Flujo cancelado por el usuario.");
-            setCargando(false);
-          } else if (data.event === "ERROR") {
-            setNotificacion({
-              tipo: "error",
-              mensaje: `Error en Meta Signup: ${data.data?.error_message || "Error desconocido"}`,
-            });
-            setCargando(false);
-          }
-        }
-      } catch {
-        // Mensaje no relevante o no JSON
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  // Lanzar ventana emergente de Embedded Signup
-  const iniciarEmbeddedSignup = () => {
+    setGuardandoPin(true);
+    setPasoActual("Registrando PIN de 6 dígitos en Meta Cloud API...");
     setNotificacion(null);
 
-    if (!appId) {
-      setNotificacion({
-        tipo: "error",
-        mensaje: "Falta configurar NEXT_PUBLIC_META_APP_ID en las variables de entorno.",
-      });
-      return;
-    }
-
-    if (!configId) {
-      setNotificacion({
-        tipo: "error",
-        mensaje: "Falta configurar NEXT_PUBLIC_WHATSAPP_CONFIG_ID (Login Configuration ID) en las variables de entorno.",
-      });
-      return;
-    }
-
-    if (!window.FB) {
-      setNotificacion({
-        tipo: "error",
-        mensaje: "El SDK de Facebook aún se está cargando. Por favor, espera unos segundos e intenta nuevamente.",
-      });
-      return;
-    }
-
-    setCargando(true);
-    setPasoActual("Abriendo ventana de Meta con modo Coexistencia...");
-
     try {
-      window.FB.login(
-        async function (response: any) {
-          console.log("[FB.login Response]", response);
+      const res = await fetch("/api/whatsapp/set-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pin,
+          token: tokenMeta || undefined,
+          phoneId: phoneId.trim(),
+          wabaId: wabaId ? wabaId.trim() : undefined,
+        }),
+      });
 
-          if (response.authResponse?.code) {
-            const code = response.authResponse.code;
-            setPasoActual("Código de autorización recibido. Intercambiando credenciales en el servidor...");
+      const data = await res.json();
 
-            try {
-              const res = await fetch("/api/whatsapp/embedded-signup", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  code,
-                  wabaId: datosSesion.wabaId,
-                  phoneNumberId: datosSesion.phoneNumberId,
-                }),
-              });
-
-              const resultado = await res.json();
-
-              if (resultado.ok) {
-                setNotificacion({
-                  tipo: "exito",
-                  mensaje:
-                    "¡WhatsApp Coexistence configurado exitosamente! El número ha sido vinculado y registrado en Cloud API manteniendo activo el acceso en la app móvil.",
-                });
-                await cargarEstado();
-              } else {
-                setNotificacion({
-                  tipo: "error",
-                  mensaje: `Error al registrar: ${resultado.error || "No se pudo completar el intercambio."}`,
-                });
-              }
-            } catch (backendErr: any) {
-              setNotificacion({
-                tipo: "error",
-                mensaje: `Error de red con el servidor: ${backendErr.message}`,
-              });
-            } finally {
-              setCargando(false);
-              setPasoActual(null);
-            }
-          } else {
-            setCargando(false);
-            setPasoActual(null);
-            if (response.status !== "connected") {
-              setNotificacion({
-                tipo: "info",
-                mensaje: "Inicio de sesión no completado o ventana cerrada.",
-              });
-            }
-          }
-        },
-        {
-          config_id: configId,
-          response_type: "code",
-          override_default_response_type: true,
-          extras: {
-            setup: {},
-            featureType: "whatsapp_coexistence",
-            sessionInfoVersion: "3",
-          },
-        }
-      );
+      if (data.ok) {
+        setNotificacion({
+          tipo: "exito",
+          mensaje: `✅ ¡PIN (${pin}) registrado exitosamente en Meta Cloud API para el Phone ID ${phoneId}! Ahora abre WhatsApp Business en tu celular, ingresa tu número y coloca este PIN (${pin}) para completar la Coexistencia.`,
+        });
+        await cargarEstado();
+      } else {
+        setNotificacion({
+          tipo: "error",
+          mensaje: `Aviso de Meta: ${data.error || "No se pudo registrar el PIN."}`,
+        });
+      }
     } catch (err: any) {
-      console.error("Error al ejecutar FB.login:", err);
-      setCargando(false);
-      setPasoActual(null);
       setNotificacion({
         tipo: "error",
-        mensaje: `Error al abrir ventana de Meta: ${err.message}`,
+        mensaje: `Error de red al registrar PIN: ${err.message}`,
       });
+    } finally {
+      setGuardandoPin(false);
+      setPasoActual(null);
     }
   };
 
@@ -267,41 +132,119 @@ export function WhatsAppCoexistenciaSignup() {
     <div className="space-y-6">
       {/* Banner Informativo sobre Coexistencia */}
       <div className="rounded-2xl border border-verde-chile/30 bg-gradient-to-br from-verde-profundo/5 via-crema/40 to-sauce/10 p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-verde-profundo/10 px-3 py-1 text-xs font-semibold text-verde-profundo">
-              <span>📱</span> Modo Coexistencia Oficial de WhatsApp
-            </div>
-            <h2 className="text-xl font-bold text-verde-profundo">
-              Vincular WhatsApp (App Móvil + Cloud API Simultáneos)
-            </h2>
-            <p className="text-xs md:text-sm text-carbon/70 max-w-2xl leading-relaxed">
-              El modo de <strong>Coexistencia</strong> permite atender clientes directamente desde la aplicación de{" "}
-              <strong>WhatsApp Business en tu teléfono móvil</strong> y, al mismo tiempo, recibir los mensajes en el{" "}
-              <strong>CRM Web / Sofía IA</strong> sin desconectar ni bloquear la cuenta.
-            </p>
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 rounded-full bg-verde-profundo/10 px-3 py-1 text-xs font-semibold text-verde-profundo">
+            <span>📱</span> Modo Coexistencia Oficial (App Móvil + Cloud API)
+          </div>
+          <h2 className="text-xl font-bold text-verde-profundo">
+            Habilitar Coexistencia para tu número de WhatsApp
+          </h2>
+          <p className="text-xs md:text-sm text-carbon/70 max-w-3xl leading-relaxed">
+            Registra el <strong>PIN de 6 dígitos</strong> en Meta Cloud API para tu identificador de teléfono. Luego abre
+            WhatsApp Business en el móvil e introduce este mismo PIN para que funcionen juntos simultáneamente.
+          </p>
+        </div>
+
+        {/* Formulario para registrar PIN en Cloud API */}
+        <form onSubmit={registrarPinCoexistencia} className="mt-6 pt-5 border-t border-carbon/10 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm text-verde-profundo flex items-center gap-2">
+              <span>🔐</span> Paso 1: Configurar credenciales y registrar PIN en Meta
+            </h3>
+            <span className="text-[11px] text-carbon/50">
+              Datos de <span className="font-mono">developers.facebook.com &gt; WhatsApp</span>
+            </span>
           </div>
 
-          <div className="shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div>
+              <label className="block font-medium text-carbon/70 mb-1">
+                PIN de 6 dígitos (*)
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                placeholder="123456"
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono font-bold text-base tracking-widest text-center"
+                required
+              />
+              <span className="text-[10px] text-carbon/50 block mt-1">
+                PIN para el celular.
+              </span>
+            </div>
+
+            <div>
+              <label className="block font-medium text-carbon/70 mb-1">
+                Phone Number ID (*)
+              </label>
+              <input
+                type="text"
+                value={phoneId}
+                onChange={(e) => setPhoneId(e.target.value)}
+                placeholder="Identificador del teléfono"
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono text-xs"
+                required
+              />
+              <span className="text-[10px] text-carbon/50 block mt-1">
+                De WhatsApp &gt; Configuración API
+              </span>
+            </div>
+
+            <div>
+              <label className="block font-medium text-carbon/70 mb-1">
+                WABA ID (Opcional)
+              </label>
+              <input
+                type="text"
+                value={wabaId}
+                onChange={(e) => setWabaId(e.target.value)}
+                placeholder="ID cuenta WhatsApp Business"
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono text-xs"
+              />
+              <span className="text-[10px] text-carbon/50 block mt-1">
+                ID de la cuenta WABA
+              </span>
+            </div>
+
+            <div>
+              <label className="block font-medium text-carbon/70 mb-1">
+                Token de Acceso (*)
+              </label>
+              <input
+                type="password"
+                value={tokenMeta}
+                onChange={(e) => setTokenMeta(e.target.value)}
+                placeholder="Pega el Token de Meta"
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono text-xs"
+              />
+              <span className="text-[10px] text-carbon/50 block mt-1">
+                Token del Sistema / Producción
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
             <button
-              onClick={iniciarEmbeddedSignup}
-              disabled={cargando}
-              className="flex items-center justify-center gap-2 rounded-xl bg-verde-profundo px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-verde-chile transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg active:scale-95"
+              type="submit"
+              disabled={guardandoPin}
+              className="flex items-center justify-center gap-2 rounded-xl bg-verde-profundo px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-verde-chile transition-all disabled:opacity-50 hover:shadow-lg active:scale-95"
             >
-              {cargando ? (
+              {guardandoPin ? (
                 <>
                   <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Procesando...</span>
+                  <span>Registrando PIN en Meta...</span>
                 </>
               ) : (
                 <>
-                  <span className="text-base">🚀</span>
-                  <span>Conectar WhatsApp con Coexistencia</span>
+                  <span>🚀</span>
+                  <span>Registrar PIN y Habilitar Coexistencia</span>
                 </>
               )}
             </button>
           </div>
-        </div>
+        </form>
 
         {pasoActual && (
           <div className="mt-4 rounded-xl bg-cielo/10 border border-cielo/30 p-3 text-xs text-cielo font-medium flex items-center gap-2">
@@ -334,7 +277,7 @@ export function WhatsAppCoexistenciaSignup() {
         <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-sm text-carbon flex items-center gap-2">
-              <span>🔍</span> Diagnóstico de Conexión
+              <span>🔍</span> Diagnóstico de Identificadores
             </h3>
             <button
               onClick={cargarEstado}
@@ -347,138 +290,50 @@ export function WhatsAppCoexistenciaSignup() {
 
           <div className="space-y-2 text-xs">
             <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
-              <span className="text-carbon/60">Meta App ID:</span>
+              <span className="text-carbon/60">Phone Number ID:</span>
               <span className="font-mono font-medium text-carbon">
-                {appId ? `${appId.slice(0, 6)}...${appId.slice(-4)}` : "❌ No configurado"}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
-              <span className="text-carbon/60">Config ID (Embedded):</span>
-              <span className="font-mono font-medium text-carbon">
-                {configId ? `${configId.slice(0, 6)}...${configId.slice(-4)}` : "❌ No configurado"}
+                {phoneId}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
               <span className="text-carbon/60">WABA ID:</span>
               <span className="font-mono font-medium text-carbon">
-                {estado?.config?.wabaId || "Sin registrar"}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
-              <span className="text-carbon/60">Phone Number ID:</span>
-              <span className="font-mono font-medium text-carbon">
-                {estado?.config?.phoneId || "Sin registrar"}
+                {wabaId}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-1.5">
-              <span className="text-carbon/60">SDK de Facebook:</span>
-              <span
-                className={`font-semibold ${
-                  sdkListo ? "text-emerald-600" : "text-amber-600"
-                }`}
-              >
-                {sdkListo ? "● Listo en navegador" : "○ Cargando SDK..."}
+              <span className="text-carbon/60">Modo de Operación:</span>
+              <span className="font-semibold text-emerald-600">
+                ● Coexistencia Cloud API + App Móvil
               </span>
             </div>
           </div>
         </div>
 
-        {/* Tarjeta de Estado del Número en Meta */}
+        {/* Tarjeta de Instrucciones para el Móvil */}
         <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm space-y-3">
           <h3 className="font-semibold text-sm text-carbon flex items-center gap-2">
-            <span>📞</span> Estado del Número en Meta Cloud API
+            <span>📲</span> Paso 2: Iniciar en el Celular
           </h3>
 
-          {cargandoStatus ? (
-            <div className="py-8 text-center text-xs text-carbon/40">Cargando estado en vivo...</div>
-          ) : estado?.meta?.enVivo && estado.meta.detalles ? (
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
-                <span className="text-carbon/60">Número Registrado:</span>
-                <span className="font-semibold font-mono text-verde-profundo text-sm">
-                  {estado.meta.detalles.display_phone_number || "No disponible"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
-                <span className="text-carbon/60">Nombre Comercial:</span>
-                <span className="font-medium text-carbon">
-                  {estado.meta.detalles.verified_name || "Sin nombre verificado"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
-                <span className="text-carbon/60">Calidad de Envío:</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                  {estado.meta.detalles.quality_rating || "GREEN (Buena)"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center py-1.5">
-                <span className="text-carbon/60">Modo Coexistencia:</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-verde-profundo/10 text-verde-profundo">
-                  ● Habilitado y Activo
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="py-6 text-center text-xs text-carbon/50 space-y-2">
-              <p>No se ha detectado un número vinculado en vivo.</p>
-              <p className="text-[11px] text-carbon/40">
-                Haz clic en el botón de arriba para iniciar el flujo de vinculación asistida.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Guía Paso a Paso para el Usuario */}
-      <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm space-y-4">
-        <h3 className="font-semibold text-sm text-carbon flex items-center gap-2">
-          <span>📋</span> Guía para Configurar el Modo Coexistencia
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div className="rounded-lg border border-carbon/10 bg-carbon/5 p-3.5 space-y-1.5">
-            <div className="font-bold text-verde-profundo flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-verde-profundo text-white inline-flex items-center justify-center text-[10px]">
-                1
-              </span>
-              <span>Preparar App Móvil</span>
-            </div>
-            <p className="text-carbon/70 leading-relaxed">
-              Descarga e instala <strong>WhatsApp Business</strong> en tu teléfono móvil con el número de la empresa
-              antes de iniciar el flujo.
+          <div className="space-y-2 text-xs text-carbon/70 leading-relaxed">
+            <p>
+              1. Una vez presionado el botón <strong>&quot;Registrar PIN&quot;</strong> arriba:
             </p>
-          </div>
-
-          <div className="rounded-lg border border-carbon/10 bg-carbon/5 p-3.5 space-y-1.5">
-            <div className="font-bold text-verde-profundo flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-verde-profundo text-white inline-flex items-center justify-center text-[10px]">
-                2
-              </span>
-              <span>Lanzar Embedded Signup</span>
-            </div>
-            <p className="text-carbon/70 leading-relaxed">
-              Haz clic en <strong>Conectar WhatsApp</strong>. Selecciona tu cuenta comercial de Meta y autoriza los
-              permisos solicitados.
+            <p>
+              2. Abre <strong>WhatsApp Business</strong> en tu teléfono móvil.
             </p>
-          </div>
-
-          <div className="rounded-lg border border-carbon/10 bg-carbon/5 p-3.5 space-y-1.5">
-            <div className="font-bold text-verde-profundo flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-verde-profundo text-white inline-flex items-center justify-center text-[10px]">
-                3
-              </span>
-              <span>Listo para Trabajar</span>
-            </div>
-            <p className="text-carbon/70 leading-relaxed">
-              El sistema completará el registro en Cloud API. Podrás responder desde el teléfono o desde este CRM
-              indistintamente.
+            <p>
+              3. Ingresa tu número de teléfono.
+            </p>
+            <p>
+              4. Cuando la app te pida el <strong>PIN de verificación en 2 pasos</strong>, escribe el mismo PIN (ej.{" "}
+              <span className="font-mono font-bold text-verde-profundo">{pin}</span>).
+            </p>
+            <p className="font-medium text-verde-profundo pt-1">
+              ✨ ¡Listo! Tu teléfono quedará activo sin desconectar el CRM ni la IA.
             </p>
           </div>
         </div>
