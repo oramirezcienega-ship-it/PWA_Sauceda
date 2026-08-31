@@ -37,7 +37,7 @@ export function WhatsAppCoexistenciaSignup() {
   const [notificacion, setNotificacion] = useState<{ tipo: "exito" | "error" | "info"; mensaje: string } | null>(null);
   const [pasoActual, setPasoActual] = useState<string | null>(null);
 
-  // Formulario de PIN de Coexistencia (para números ya registrados en Cloud API)
+  // Formulario de PIN de Coexistencia
   const [pin, setPin] = useState("123456");
   const [tokenMeta, setTokenMeta] = useState("");
   const [phoneId, setPhoneId] = useState("1142001562328958");
@@ -74,6 +74,11 @@ export function WhatsAppCoexistenciaSignup() {
       return;
     }
 
+    if (!phoneId) {
+      setNotificacion({ tipo: "error", mensaje: "Por favor ingresa tu Phone Number ID de Meta." });
+      return;
+    }
+
     if (!tokenMeta && !estado?.config?.tokenConfigurado) {
       setNotificacion({
         tipo: "error",
@@ -93,8 +98,8 @@ export function WhatsAppCoexistenciaSignup() {
         body: JSON.stringify({
           pin,
           token: tokenMeta || undefined,
-          phoneId,
-          wabaId,
+          phoneId: phoneId.trim(),
+          wabaId: wabaId ? wabaId.trim() : undefined,
         }),
       });
 
@@ -103,7 +108,7 @@ export function WhatsAppCoexistenciaSignup() {
       if (data.ok) {
         setNotificacion({
           tipo: "exito",
-          mensaje: `✅ ¡PIN (${pin}) registrado exitosamente en Meta Cloud API! Ahora abre WhatsApp Business en tu celular, ingresa tu número y coloca este PIN (${pin}) para completar la Coexistencia.`,
+          mensaje: `✅ ¡PIN (${pin}) registrado exitosamente en Meta Cloud API para el Phone ID ${phoneId}! Ahora abre WhatsApp Business en tu celular, ingresa tu número y coloca este PIN (${pin}) para completar la Coexistencia.`,
         });
         await cargarEstado();
       } else {
@@ -132,12 +137,11 @@ export function WhatsAppCoexistenciaSignup() {
             <span>📱</span> Modo Coexistencia Oficial (App Móvil + Cloud API)
           </div>
           <h2 className="text-xl font-bold text-verde-profundo">
-            Habilitar Coexistencia para tu número existente (477 465 4700)
+            Habilitar Coexistencia para tu número de WhatsApp
           </h2>
           <p className="text-xs md:text-sm text-carbon/70 max-w-3xl leading-relaxed">
-            Como tu número ya está registrado en tu cuenta de WhatsApp Cloud API, para activar el modo de{" "}
-            <strong>Coexistencia</strong> solo necesitamos registrar un <strong>PIN de 6 dígitos</strong> en Meta y
-            luego abrir WhatsApp Business en el teléfono para iniciar sesión con ese mismo PIN.
+            Registra el <strong>PIN de 6 dígitos</strong> en Meta Cloud API para tu identificador de teléfono. Luego abre
+            WhatsApp Business en el móvil e introduce este mismo PIN para que funcionen juntos simultáneamente.
           </p>
         </div>
 
@@ -145,14 +149,14 @@ export function WhatsAppCoexistenciaSignup() {
         <form onSubmit={registrarPinCoexistencia} className="mt-6 pt-5 border-t border-carbon/10 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-sm text-verde-profundo flex items-center gap-2">
-              <span>🔐</span> Paso 1: Registrar PIN de 6 dígitos en Meta Cloud API
+              <span>🔐</span> Paso 1: Configurar credenciales y registrar PIN en Meta
             </h3>
-            <span className="text-[11px] text-carbon/50 font-mono">
-              Phone ID: {phoneId}
+            <span className="text-[11px] text-carbon/50">
+              Datos de <span className="font-mono">developers.facebook.com &gt; WhatsApp</span>
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
             <div>
               <label className="block font-medium text-carbon/70 mb-1">
                 PIN de 6 dígitos (*)
@@ -167,23 +171,56 @@ export function WhatsAppCoexistenciaSignup() {
                 required
               />
               <span className="text-[10px] text-carbon/50 block mt-1">
-                Este es el PIN que pondrás en el celular.
+                PIN para el celular.
               </span>
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block font-medium text-carbon/70 mb-1">
-                Token de Acceso de Meta (*)
+                Phone Number ID (*)
+              </label>
+              <input
+                type="text"
+                value={phoneId}
+                onChange={(e) => setPhoneId(e.target.value)}
+                placeholder="Identificador del teléfono"
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono text-xs"
+                required
+              />
+              <span className="text-[10px] text-carbon/50 block mt-1">
+                De WhatsApp &gt; Configuración API
+              </span>
+            </div>
+
+            <div>
+              <label className="block font-medium text-carbon/70 mb-1">
+                WABA ID (Opcional)
+              </label>
+              <input
+                type="text"
+                value={wabaId}
+                onChange={(e) => setWabaId(e.target.value)}
+                placeholder="ID cuenta WhatsApp Business"
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono text-xs"
+              />
+              <span className="text-[10px] text-carbon/50 block mt-1">
+                ID de la cuenta WABA
+              </span>
+            </div>
+
+            <div>
+              <label className="block font-medium text-carbon/70 mb-1">
+                Token de Acceso (*)
               </label>
               <input
                 type="password"
                 value={tokenMeta}
                 onChange={(e) => setTokenMeta(e.target.value)}
-                placeholder="Pega el Token de developers.facebook.com > WhatsApp > Configuración de la API"
+                placeholder="Pega el Token de Meta"
                 className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono text-xs"
               />
               <span className="text-[10px] text-carbon/50 block mt-1">
-                Obténlo en: <strong>developers.facebook.com &gt; WhatsApp &gt; Configuración de la API</strong>
+                Token del Sistema / Producción
               </span>
             </div>
           </div>
@@ -255,14 +292,14 @@ export function WhatsAppCoexistenciaSignup() {
             <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
               <span className="text-carbon/60">Phone Number ID:</span>
               <span className="font-mono font-medium text-carbon">
-                {phoneId || "1142001562328958"}
+                {phoneId}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-1.5 border-b border-carbon/5">
               <span className="text-carbon/60">WABA ID:</span>
               <span className="font-mono font-medium text-carbon">
-                {wabaId || "1497539845446952"}
+                {wabaId}
               </span>
             </div>
 
@@ -289,7 +326,7 @@ export function WhatsAppCoexistenciaSignup() {
               2. Abre <strong>WhatsApp Business</strong> en tu teléfono móvil.
             </p>
             <p>
-              3. Ingresa tu número <strong>477 465 4700</strong>.
+              3. Ingresa tu número de teléfono.
             </p>
             <p>
               4. Cuando la app te pida el <strong>PIN de verificación en 2 pasos</strong>, escribe el mismo PIN (ej.{" "}
