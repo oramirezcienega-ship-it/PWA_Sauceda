@@ -91,14 +91,40 @@ export function WhatsAppCoexistenciaSignup() {
     cargarEstado();
   }, [cargarEstado]);
 
-  // Asegurar fb-root para Meta
+  // Escuchar mensajes de postMessage de Meta Embedded Signup
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!document.getElementById("fb-root")) {
-      const el = document.createElement("div");
-      el.id = "fb-root";
-      document.body.appendChild(el);
-    }
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.origin.includes("facebook.com")) return;
+
+      try {
+        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+
+        if (data.type === "WA_EMBEDDED_SIGNUP") {
+          console.log("[Meta Embedded Signup Event]", data);
+
+          if (data.event === "FINISH") {
+            const { phone_number_id, waba_id, current_step } = data.data || {};
+            console.log("Embedded Signup Finished:", { phone_number_id, waba_id, current_step });
+            setPasoActual("Flujo finalizado en Meta. Verificando vinculación...");
+            setMostrarIngresoCodigo(true);
+          } else if (data.event === "CANCEL") {
+            setPasoActual("Flujo cancelado por el usuario.");
+            setCargando(false);
+          } else if (data.event === "ERROR") {
+            setNotificacion({
+              tipo: "error",
+              mensaje: `Error en Meta Signup: ${data.data?.error_message || "Error desconocido"}`,
+            });
+            setCargando(false);
+          }
+        }
+      } catch {
+        // Mensaje no relevante
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   // Procesar código OAuth en el backend
@@ -181,7 +207,7 @@ export function WhatsAppCoexistenciaSignup() {
     }
   };
 
-  // Lanzar flujo de Meta OAuth oficial
+  // Lanzar flujo de Meta Embedded Signup
   const iniciarEmbeddedSignup = () => {
     setNotificacion(null);
 
@@ -209,76 +235,36 @@ export function WhatsAppCoexistenciaSignup() {
     setCargando(true);
     setPasoActual("Abriendo ventana oficial de WhatsApp Business...");
 
-    // Intentar con FB.login si el SDK está disponible en window
-    if (typeof window !== "undefined" && window.FB) {
-      try {
-        window.FB.init({
-          appId: targetAppId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: "v21.0",
-        });
-
-        window.FB.login(
-          function (response: any) {
-            console.log("[FB.login Response]", response);
-            if (response.authResponse?.code) {
-              procesarCodigoOAuth(response.authResponse.code);
-            } else {
-              setCargando(false);
-              setPasoActual(null);
-            }
-          },
-          {
-            config_id: targetConfigId,
-            response_type: "code",
-            override_default_response_type: true,
-            extras: {
-              setup: {},
-              featureType: "whatsapp_coexistence",
-              sessionInfoVersion: "3",
-            },
-          }
-        );
-        return;
-      } catch (errFB) {
-        console.warn("FB.login falló, abriendo diálogo universal:", errFB);
-      }
-    }
-
-    // Diálogo OAuth Universal de Meta (utiliza login_success.html para evitar bloqueos de dominios y adblockers)
     try {
-      const redirectUri = "https://www.facebook.com/connect/login_success.html";
+      // URL oficial de Embedded Signup de Meta
       const extras = JSON.stringify({
         setup: {},
         featureType: "whatsapp_coexistence",
         sessionInfoVersion: "3",
       });
 
-      const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
+      const url = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
         targetAppId
-      )}&redirect_uri=${encodeURIComponent(
-        redirectUri
       )}&config_id=${encodeURIComponent(
         targetConfigId
       )}&response_type=code&override_default_response_type=true&extras=${encodeURIComponent(
         extras
       )}`;
 
-      const width = 620;
-      const height = 780;
+      const width = 640;
+      const height = 800;
       const left = window.screenX + (window.outerWidth - width) / 2;
       const top = window.screenY + (window.outerHeight - height) / 2;
 
       const popup = window.open(
-        oauthUrl,
+        url,
         "MetaWhatsAppCoexistence",
         `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=1`
       );
 
       setMostrarIngresoCodigo(true);
       setPasoActual(
-        "Se abrió la ventana de Meta. Completa los pasos y, al finalizar, si la ventana no se cierra sola, copia el código que aparece en la barra de direcciones."
+        "Ventana de Meta abierta. Al completar los pasos, si la ventana no se cierra automáticamente, pega aquí el código o la URL resultante."
       );
       setCargando(false);
 
@@ -299,7 +285,7 @@ export function WhatsAppCoexistenciaSignup() {
               }
             }
           } catch {
-            // Ignorar cross-origin
+            // Ignorar restricciones cross-origin
           }
         }, 800);
       }
@@ -429,12 +415,12 @@ export function WhatsAppCoexistenciaSignup() {
           </form>
         )}
 
-        {/* Sección para pegar código OAuth si la ventana finalizó */}
+        {/* Sección para vincular código OAuth manual */}
         {mostrarIngresoCodigo && (
-          <div className="mt-5 pt-5 border-t border-carbon/10 bg-white/70 p-4 rounded-xl space-y-3">
+          <div className="mt-5 pt-5 border-t border-carbon/10 bg-white/80 p-4 rounded-xl space-y-3 shadow-inner">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold text-verde-profundo flex items-center gap-1.5">
-                <span>🔐</span> Vincular Código de Autorización de Meta
+                <span>🔐</span> Finalizar Vinculación con Código de Meta
               </h4>
               <button
                 onClick={() => setMostrarIngresoCodigo(false)}
@@ -443,10 +429,10 @@ export function WhatsAppCoexistenciaSignup() {
                 Cerrar
               </button>
             </div>
-            <p className="text-[11px] text-carbon/70">
-              Si completaste el proceso en la ventana de Meta, pega aquí la URL completa o el código que te devolvió:
+            <p className="text-[11px] text-carbon/70 leading-relaxed">
+              Si completaste el proceso en la ventana emergente de Meta, pega aquí la <strong>URL de la ventana</strong> o el <strong>código</strong> para activar la Coexistencia:
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={codigoManual}
@@ -458,7 +444,7 @@ export function WhatsAppCoexistenciaSignup() {
                   }
                   setCodigoManual(val);
                 }}
-                placeholder="Pega aquí el código o la URL resultante (ej. AQB...)"
+                placeholder="Pega aquí la URL resultante o el código (ej. AQB...)"
                 className="flex-1 rounded-lg border border-carbon/20 px-3 py-2 text-xs font-mono text-carbon focus:border-verde-profundo focus:outline-none"
               />
               <button
@@ -548,7 +534,7 @@ export function WhatsAppCoexistenciaSignup() {
             <div className="flex justify-between items-center py-1.5">
               <span className="text-carbon/60">Estado de Conexión:</span>
               <span className="font-semibold text-emerald-600">
-                ● Listo para vincular
+                ● Flujo Oficial de Meta Habilitado
               </span>
             </div>
           </div>
