@@ -236,7 +236,7 @@ export function WhatsAppCoexistenciaSignup() {
     setPasoActual("Abriendo ventana oficial de WhatsApp Business...");
 
     try {
-      // URL oficial de Embedded Signup de Meta
+      const redirectUri = "https://saucedamx.com/whatsapp";
       const extras = JSON.stringify({
         setup: {},
         featureType: "whatsapp_coexistence",
@@ -245,6 +245,8 @@ export function WhatsAppCoexistenciaSignup() {
 
       const url = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
         targetAppId
+      )}&redirect_uri=${encodeURIComponent(
+        redirectUri
       )}&config_id=${encodeURIComponent(
         targetConfigId
       )}&response_type=code&override_default_response_type=true&extras=${encodeURIComponent(
