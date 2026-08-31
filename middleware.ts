@@ -11,8 +11,12 @@ import { opcionesCookieSeguras } from "@/lib/supabase/cookies";
  * También refresca la cookie de sesión de Supabase en cada request.
  */
 export async function middleware(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const anonRaw = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const anon =
+    anonRaw && !anonRaw.includes("placeholder")
+      ? anonRaw
+      : process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   // Si falta configuración de auth, no bloqueamos (evita romper el sitio).
   if (!url || !anon) {
