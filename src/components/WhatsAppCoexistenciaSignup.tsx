@@ -47,15 +47,24 @@ export function WhatsAppCoexistenciaSignup() {
   const [pasoActual, setPasoActual] = useState<string | null>(null);
   const [datosSesion, setDatosSesion] = useState<{ wabaId?: string; phoneNumberId?: string }>({});
 
+  // Campos para configuración manual / inline
+  const [mostrarConfigManual, setMostrarConfigManual] = useState(false);
+  const [formAppId, setFormAppId] = useState("");
+  const [formConfigId, setFormConfigId] = useState("");
+  const [formAppSecret, setFormAppSecret] = useState("");
+  const [guardandoConfig, setGuardandoConfig] = useState(false);
+
   const appId =
     process.env.NEXT_PUBLIC_META_APP_ID ||
     process.env.NEXT_PUBLIC_FACEBOOK_APP_ID ||
     estado?.config?.appId ||
+    formAppId ||
     "";
 
   const configId =
     process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID ||
     estado?.config?.configId ||
+    formConfigId ||
     "";
 
   // Cargar estado actual de conexión
@@ -66,6 +75,8 @@ export function WhatsAppCoexistenciaSignup() {
       const data = await res.json();
       if (data.ok) {
         setEstado(data);
+        if (data.config.appId) setFormAppId(data.config.appId);
+        if (data.config.configId) setFormConfigId(data.config.configId);
       }
     } catch (err) {
       console.error("Error al cargar estado de WhatsApp:", err);
@@ -82,8 +93,18 @@ export function WhatsAppCoexistenciaSignup() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (window.FB) {
-      setSdkListo(true);
+    if (window.FB && appId) {
+      try {
+        window.FB.init({
+          appId: appId,
+          autoLogAppEvents: true,
+          xfbml: true,
+          version: "v21.0",
+        });
+        setSdkListo(true);
+      } catch (e) {
+        console.error("Error al inicializar FB.init:", e);
+      }
       return;
     }
 
@@ -155,22 +176,69 @@ export function WhatsAppCoexistenciaSignup() {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  // Guardar configuración manual
+  const guardarConfiguracion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formAppId || !formConfigId) {
+      setNotificacion({ tipo: "error", mensaje: "Por favor ingresa tanto el Meta App ID como el Config ID." });
+      return;
+    }
+
+    setGuardandoConfig(true);
+    setNotificacion(null);
+
+    try {
+      const res = await fetch("/api/whatsapp/embedded-signup/save-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appId: formAppId,
+          configId: formConfigId,
+          appSecret: formAppSecret || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setNotificacion({ tipo: "exito", mensaje: "Credenciales guardadas exitosamente en el sistema." });
+        setMostrarConfigManual(false);
+        await cargarEstado();
+        if (window.FB && formAppId) {
+          window.FB.init({
+            appId: formAppId,
+            autoLogAppEvents: true,
+            xfbml: true,
+            version: "v21.0",
+          });
+          setSdkListo(true);
+        }
+      } else {
+        setNotificacion({ tipo: "error", mensaje: data.error || "No se pudo guardar la configuración." });
+      }
+    } catch (err: any) {
+      setNotificacion({ tipo: "error", mensaje: err.message || "Error de red al guardar." });
+    } finally {
+      setGuardandoConfig(false);
+    }
+  };
+
   // Lanzar ventana emergente de Embedded Signup
   const iniciarEmbeddedSignup = () => {
     setNotificacion(null);
 
     if (!appId) {
+      setMostrarConfigManual(true);
       setNotificacion({
         tipo: "error",
-        mensaje: "Falta configurar NEXT_PUBLIC_META_APP_ID en las variables de entorno.",
+        mensaje: "Por favor ingresa tu Meta App ID y Configuration ID en el panel inferior.",
       });
       return;
     }
 
     if (!configId) {
+      setMostrarConfigManual(true);
       setNotificacion({
         tipo: "error",
-        mensaje: "Falta configurar NEXT_PUBLIC_WHATSAPP_CONFIG_ID (Login Configuration ID) en las variables de entorno.",
+        mensaje: "Por favor ingresa tu Configuration ID (Login Configuration) en el panel inferior.",
       });
       return;
     }
@@ -282,7 +350,15 @@ export function WhatsAppCoexistenciaSignup() {
             </p>
           </div>
 
-          <div className="shrink-0">
+          <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={() => setMostrarConfigManual((prev) => !prev)}
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-carbon/20 bg-white px-3.5 py-2.5 text-xs font-semibold text-carbon shadow-sm hover:bg-carbon/5 transition"
+            >
+              <span>⚙️</span>
+              <span>{mostrarConfigManual ? "Ocultar IDs" : "Configurar IDs"}</span>
+            </button>
+
             <button
               onClick={iniciarEmbeddedSignup}
               disabled={cargando}
@@ -302,6 +378,74 @@ export function WhatsAppCoexistenciaSignup() {
             </button>
           </div>
         </div>
+
+        {/* Formulario de Configuración Manual de IDs si faltan */}
+        {mostrarConfigManual && (
+          <form onSubmit={guardarConfiguracion} className="mt-5 pt-5 border-t border-carbon/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm text-verde-profundo flex items-center gap-2">
+                <span>🔑</span> Ingresa tus IDs de Meta Developers
+              </h3>
+              <span className="text-[11px] text-carbon/50">
+                Obtenidos en <span className="font-mono">developers.facebook.com</span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="block font-medium text-carbon/70 mb-1">Meta App ID (*)</label>
+                <input
+                  type="text"
+                  value={formAppId}
+                  onChange={(e) => setFormAppId(e.target.value)}
+                  placeholder="Ej. 123456789012345"
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-carbon/70 mb-1">Configuration ID (Login Config) (*)</label>
+                <input
+                  type="text"
+                  value={formConfigId}
+                  onChange={(e) => setFormConfigId(e.target.value)}
+                  placeholder="Ej. 987654321098765"
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-carbon/70 mb-1">App Secret (Opcional)</label>
+                <input
+                  type="password"
+                  value={formAppSecret}
+                  onChange={(e) => setFormAppSecret(e.target.value)}
+                  placeholder="Secreto de la App"
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-carbon focus:border-verde-profundo focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setMostrarConfigManual(false)}
+                className="px-3 py-1.5 rounded-lg border border-carbon/20 text-xs font-medium text-carbon/70 hover:bg-carbon/5"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={guardandoConfig}
+                className="px-4 py-1.5 rounded-lg bg-verde-profundo text-xs font-semibold text-white hover:bg-verde-chile shadow-sm disabled:opacity-50"
+              >
+                {guardandoConfig ? "Guardando..." : "Guardar Credenciales"}
+              </button>
+            </div>
+          </form>
+        )}
 
         {pasoActual && (
           <div className="mt-4 rounded-xl bg-cielo/10 border border-cielo/30 p-3 text-xs text-cielo font-medium flex items-center gap-2">
