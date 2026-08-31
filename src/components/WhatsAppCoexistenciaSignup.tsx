@@ -89,69 +89,43 @@ export function WhatsAppCoexistenciaSignup() {
     cargarEstado();
   }, [cargarEstado]);
 
-  // Cargar SDK de Facebook en segundo plano (best-effort)
+  // Inicializar SDK de Facebook
+  const inicializarFB = useCallback(() => {
+    if (typeof window === "undefined" || !window.FB || !appId) return;
+
+    try {
+      window.FB.init({
+        appId: appId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: "v21.0",
+      });
+      setSdkListo(true);
+      console.log("[FB SDK] Inicializado con éxito para App ID:", appId);
+    } catch (e) {
+      console.warn("[FB SDK] Error en init:", e);
+    }
+  }, [appId]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (window.FB && appId) {
-      try {
-        window.FB.init({
-          appId: appId,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: "v21.0",
-        });
-        setSdkListo(true);
-      } catch (e) {
-        console.warn("FB.init:", e);
-      }
-      return;
-    }
-
     window.fbAsyncInit = function () {
-      if (window.FB && appId) {
-        try {
-          window.FB.init({
-            appId: appId,
-            autoLogAppEvents: true,
-            xfbml: true,
-            version: "v21.0",
-          });
-          setSdkListo(true);
-        } catch (e) {
-          console.warn("FB.init async:", e);
-        }
-      }
+      inicializarFB();
     };
 
-    const id = "facebook-jssdk";
-    if (!document.getElementById(id)) {
-      const fjs = document.getElementsByTagName("script")[0];
-      const js = document.createElement("script");
-      js.id = id;
-      js.src = "https://connect.facebook.net/es_LA/sdk.js";
-      js.async = true;
-      js.defer = true;
-      js.onload = () => {
+    if (window.FB && appId) {
+      inicializarFB();
+    } else {
+      const interval = setInterval(() => {
         if (window.FB && appId) {
-          try {
-            window.FB.init({
-              appId: appId,
-              autoLogAppEvents: true,
-              xfbml: true,
-              version: "v21.0",
-            });
-            setSdkListo(true);
-          } catch {}
+          clearInterval(interval);
+          inicializarFB();
         }
-      };
-      if (fjs && fjs.parentNode) {
-        fjs.parentNode.insertBefore(js, fjs);
-      } else {
-        document.head.appendChild(js);
-      }
+      }, 300);
+      return () => clearInterval(interval);
     }
-  }, [appId]);
+  }, [appId, inicializarFB]);
 
   // Procesar código OAuth en el backend
   const procesarCodigoOAuth = useCallback(
@@ -199,23 +173,10 @@ export function WhatsAppCoexistenciaSignup() {
     [datosSesion, cargarEstado]
   );
 
-  // Detectar si la página fue redirigida con ?code=...
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get("code");
-    if (code) {
-      // Limpiar URL sin recargar
-      window.history.replaceState({}, document.title, window.location.pathname);
-      procesarCodigoOAuth(code);
-    }
-  }, [procesarCodigoOAuth]);
-
   // Escuchar mensajes de postMessage de Meta Embedded Signup
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (!event.origin.includes("facebook.com") && !event.origin.includes("localhost")) return;
+      if (!event.origin.includes("facebook.com")) return;
 
       try {
         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
@@ -298,7 +259,7 @@ export function WhatsAppCoexistenciaSignup() {
     }
   };
 
-  // Lanzar ventana emergente de Embedded Signup (SDK FB.login con fallback directo de Popup OAuth)
+  // Lanzar ventana oficial de Meta FB.login con modo Coexistencia
   const iniciarEmbeddedSignup = () => {
     setNotificacion(null);
 
@@ -323,105 +284,60 @@ export function WhatsAppCoexistenciaSignup() {
       return;
     }
 
+    if (!window.FB) {
+      setNotificacion({
+        tipo: "error",
+        mensaje: "El SDK de Facebook se está cargando. Si usas bloqueador de anuncios (AdBlock), desactívalo temporalmente.",
+      });
+      return;
+    }
+
     setCargando(true);
     setPasoActual("Abriendo ventana oficial de Meta con modo Coexistencia...");
 
-    // 1. Intentar con FB.login del SDK si está disponible
-    if (window.FB) {
-      try {
-        window.FB.login(
-          function (response: any) {
-            console.log("[FB.login Response]", response);
-            if (response.authResponse?.code) {
-              procesarCodigoOAuth(response.authResponse.code);
-            } else {
-              setCargando(false);
-              setPasoActual(null);
-            }
-          },
-          {
-            config_id: targetConfigId,
-            response_type: "code",
-            override_default_response_type: true,
-            extras: {
-              setup: {},
-              featureType: "whatsapp_coexistence",
-              sessionInfoVersion: "3",
-            },
-          }
-        );
-        return;
-      } catch (fbErr) {
-        console.warn("FB.login falló, usando ventana emergente directa:", fbErr);
-      }
-    }
-
-    // 2. Fallback Directo de Ventana Emergente OAuth (independiente de si el SDK está bloqueado)
     try {
-      const redirectUri = window.location.origin + "/whatsapp";
-      const extras = JSON.stringify({
-        setup: {},
-        featureType: "whatsapp_coexistence",
-        sessionInfoVersion: "3",
+      window.FB.init({
+        appId: targetAppId,
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: "v21.0",
       });
 
-      const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
-        targetAppId
-      )}&redirect_uri=${encodeURIComponent(
-        redirectUri
-      )}&config_id=${encodeURIComponent(
-        targetConfigId
-      )}&response_type=code&override_default_response_type=true&extras=${encodeURIComponent(
-        extras
-      )}`;
+      window.FB.login(
+        function (response: any) {
+          console.log("[FB.login Response]", response);
 
-      const width = 600;
-      const height = 750;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-
-      const popup = window.open(
-        oauthUrl,
-        "MetaWhatsAppCoexistence",
-        `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=1`
-      );
-
-      if (!popup) {
-        // Si el bloqueador de popups bloqueó window.open, redirigir directamente
-        window.location.assign(oauthUrl);
-        return;
-      }
-
-      // Monitorear cuando el popup termine o cambie de URL
-      const timer = setInterval(() => {
-        try {
-          if (popup.closed) {
-            clearInterval(timer);
+          if (response.authResponse?.code) {
+            procesarCodigoOAuth(response.authResponse.code);
+          } else {
             setCargando(false);
             setPasoActual(null);
-            cargarEstado();
-            return;
-          }
-
-          if (popup.location && popup.location.origin === window.location.origin) {
-            const popupParams = new URLSearchParams(popup.location.search);
-            const code = popupParams.get("code");
-            popup.close();
-            clearInterval(timer);
-            if (code) {
-              procesarCodigoOAuth(code);
+            if (response.status !== "connected") {
+              setNotificacion({
+                tipo: "info",
+                mensaje: "Ventana cerrada o proceso no completado.",
+              });
             }
           }
-        } catch {
-          // Ignorar excepciones por cross-origin de Facebook
+        },
+        {
+          config_id: targetConfigId,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: {
+            setup: {},
+            featureType: "whatsapp_coexistence",
+            sessionInfoVersion: "3",
+          },
         }
-      }, 500);
-    } catch (popupErr: any) {
+      );
+    } catch (err: any) {
+      console.error("Error al ejecutar FB.login:", err);
       setCargando(false);
       setPasoActual(null);
       setNotificacion({
         tipo: "error",
-        mensaje: `Error al abrir ventana de Meta: ${popupErr.message}`,
+        mensaje: `Error al abrir ventana de Meta: ${err.message}`,
       });
     }
   };
@@ -614,9 +530,13 @@ export function WhatsAppCoexistenciaSignup() {
             </div>
 
             <div className="flex justify-between items-center py-1.5">
-              <span className="text-carbon/60">Conexión con Meta:</span>
-              <span className="font-semibold text-emerald-600">
-                ● Modal Directo OAuth Habilitado
+              <span className="text-carbon/60">SDK de Facebook:</span>
+              <span
+                className={`font-semibold ${
+                  sdkListo ? "text-emerald-600" : "text-amber-600"
+                }`}
+              >
+                {sdkListo ? "● Listo en navegador" : "○ Cargando SDK..."}
               </span>
             </div>
           </div>
