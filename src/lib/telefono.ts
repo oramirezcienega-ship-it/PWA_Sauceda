@@ -38,9 +38,32 @@ export function variantesTelefono(tel: string): string[] {
 }
 
 /**
- * Formatea un número telefónico de manera legible y atractiva.
- * Ej: "4775648220" -> "477 564 8220"
- * Ej: "524775648220" -> "+52 477 564 8220"
+ * Devuelve únicamente los 10 dígitos locales de México (o el número limpio),
+ * ideal para el enlace href="tel:..." en celulares para que no agregue la lada "52"
+ * sin el símbolo "+" que causa fallos al marcar desde México.
+ */
+export function obtenerTelLink(tel: string | null | undefined): string {
+  if (!tel) return "";
+  const d = tel.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("52")) {
+    return d.slice(2);
+  }
+  if (d.length === 13 && d.startsWith("521")) {
+    return d.slice(3);
+  }
+  if (d.length === 10) {
+    return d;
+  }
+  if (tel.startsWith("+")) {
+    return tel.replace(/\s+/g, "");
+  }
+  return d || tel;
+}
+
+/**
+ * Formatea un número telefónico de manera legible y limpia (en formato de 10 dígitos para México).
+ * Ej: "524775802220" -> "477 580 2220"
+ * Ej: "4775802220" -> "477 580 2220"
  */
 export function formatearTelefonoLegible(tel: string | null | undefined): string {
   if (!tel) return "";
@@ -49,7 +72,6 @@ export function formatearTelefonoLegible(tel: string | null | undefined): string
     return original.split(":")[1] || original;
   }
 
-  const tienePlus = original.startsWith("+");
   const digitos = original.replace(/\D/g, "");
 
   if (digitos.length === 10) {
@@ -57,21 +79,20 @@ export function formatearTelefonoLegible(tel: string | null | undefined): string
   }
 
   if (digitos.length === 12 && digitos.startsWith("52")) {
-    return `+52 ${digitos.slice(2, 5)} ${digitos.slice(5, 8)} ${digitos.slice(8)}`;
+    const diez = digitos.slice(2);
+    return `${diez.slice(0, 3)} ${diez.slice(3, 6)} ${diez.slice(6)}`;
   }
 
   if (digitos.length === 13 && digitos.startsWith("521")) {
-    return `+52 ${digitos.slice(3, 6)} ${digitos.slice(6, 9)} ${digitos.slice(9)}`;
+    const diez = digitos.slice(3);
+    return `${diez.slice(0, 3)} ${diez.slice(3, 6)} ${diez.slice(6)}`;
   }
 
   if (original.includes(" ") || original.includes("-")) {
     return original;
   }
 
-  if (tienePlus) {
-    return `+${digitos}`;
-  }
-
   return original;
 }
+
 

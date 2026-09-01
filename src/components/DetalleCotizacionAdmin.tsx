@@ -19,10 +19,12 @@ import {
   guardarGarantiaDocumento,
   prepararGarantiaPorDefecto,
   duplicarCotizacion,
+  enviarCotizacionPorCorreo,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { listarProspectosMin } from "@/app/actions/prospectos";
+import { formatoPesos } from "@/lib/formato";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -76,6 +78,65 @@ export function DetalleCotizacionAdmin({
   const [fechaInstalacionDoc, setFechaInstalacionDoc] = useState("");
   const [procesandoRemision, setProcesandoRemision] = useState(false);
   const [mensajeRemisionForm, setMensajeRemisionForm] = useState({ tipo: "", texto: "" });
+
+  // --- State para Envío por Correo Electrónico ---
+  const [mostrarModalEmail, setMostrarModalEmail] = useState<boolean>(false);
+  const [correoEmailDestino, setCorreoEmailDestino] = useState<string>(cotizacionInicial.prospectoCorreo || "");
+  const [asuntoEmail, setAsuntoEmail] = useState<string>(`Propuesta Comercial SAUCEDA ${cotizacionInicial.id}`);
+  const [notasEmail, setNotasEmail] = useState<string>("");
+  const [enviandoEmail, setEnviandoEmail] = useState<boolean>(false);
+  const [mensajeEmailResult, setMensajeEmailResult] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [modoModalEmail, setModoModalEmail] = useState<"formulario" | "previsualizacion">("formulario");
+
+  useEffect(() => {
+    if (cotizacion.prospectoCorreo) {
+      setCorreoEmailDestino(cotizacion.prospectoCorreo);
+    }
+  }, [cotizacion.prospectoCorreo]);
+
+  const handleEnviarCorreo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!correoEmailDestino.trim()) {
+      setMensajeEmailResult({ tipo: "error", texto: "Por favor ingresa un correo electrónico válido." });
+      return;
+    }
+
+    try {
+      setEnviandoEmail(true);
+      setMensajeEmailResult(null);
+
+      const res = await enviarCotizacionPorCorreo({
+        cotizacionId: cotizacion.id,
+        correoDestino: correoEmailDestino,
+        asunto: asuntoEmail,
+        notasAdicionales: notasEmail,
+      });
+
+      if (res.ok) {
+        setMensajeEmailResult({
+          tipo: "ok",
+          texto: res.mensaje || "Cotización enviada exitosamente por correo electrónico y registrada en el historial.",
+        });
+        setCotizacion((prev) => ({ ...prev, estatus: prev.estatus === "aprobada" ? "enviada" : prev.estatus, prospectoCorreo: correoEmailDestino }));
+        setTimeout(() => {
+          setMostrarModalEmail(false);
+          setMensajeEmailResult(null);
+        }, 2500);
+      } else {
+        setMensajeEmailResult({
+          tipo: "error",
+          texto: res.error || "Ocurrió un error al enviar el correo.",
+        });
+      }
+    } catch (err) {
+      setMensajeEmailResult({
+        tipo: "error",
+        texto: err instanceof Error ? err.message : "Error al conectar con el servidor de correo.",
+      });
+    } finally {
+      setEnviandoEmail(false);
+    }
+  };
 
   useEffect(() => {
     if (cotizacion.id) {
@@ -2023,6 +2084,24 @@ export function DetalleCotizacionAdmin({
                           </svg>
                           {enviandoAPI ? "Enviando..." : "Enviar por WhatsApp (Chat CRM)"}
                         </button>
+
+                        {/* Enviar por Correo Electrónico */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMensajeEmailResult(null);
+                            if (!correoEmailDestino && cotizacion.prospectoCorreo) {
+                              setCorreoEmailDestino(cotizacion.prospectoCorreo);
+                            }
+                            setMostrarModalEmail(true);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg bg-verde-profundo text-crema px-4 py-2 text-xs font-semibold hover:bg-sauce transition shadow-sm"
+                        >
+                          <svg className="w-4 h-4 fill-none stroke-current" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          Enviar por Correo Electrónico
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2636,6 +2715,261 @@ export function DetalleCotizacionAdmin({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Envío por Correo Electrónico */}
+      {mostrarModalEmail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-carbon/10 animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="bg-verde-profundo text-crema px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-sauce/30 rounded-lg text-crema">
+                  <svg className="w-5 h-5 fill-none stroke-current" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-titular font-bold text-base text-crema">Enviar Propuesta por Correo</h3>
+                  <p className="text-[11px] text-crema/70 font-mono">Folio {cotizacion.id} · SAUCEDA</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarModalEmail(false)}
+                className="text-crema/60 hover:text-white text-xl font-bold p-1 leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Selector de Pestañas dentro del Modal */}
+            <div className="flex border-b border-carbon/10 bg-slate-50 px-6 pt-2">
+              <button
+                type="button"
+                onClick={() => setModoModalEmail("formulario")}
+                className={`px-4 py-2 text-xs font-bold border-b-2 transition ${
+                  modoModalEmail === "formulario"
+                    ? "border-verde-profundo text-verde-profundo bg-white rounded-t-lg shadow-xs"
+                    : "border-transparent text-carbon/60 hover:text-carbon"
+                }`}
+              >
+                ✍️ Configurar Envío
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoModalEmail("previsualizacion")}
+                className={`px-4 py-2 text-xs font-bold border-b-2 transition ${
+                  modoModalEmail === "previsualizacion"
+                    ? "border-verde-profundo text-verde-profundo bg-white rounded-t-lg shadow-xs"
+                    : "border-transparent text-carbon/60 hover:text-carbon"
+                }`}
+              >
+                👁️ Previsualizar Correo
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleEnviarCorreo} className="p-6 space-y-4">
+              {mensajeEmailResult && (
+                <div
+                  className={`p-3.5 rounded-xl text-xs font-medium border ${
+                    mensajeEmailResult.tipo === "ok"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-red-50 text-red-800 border-red-200"
+                  }`}
+                >
+                  {mensajeEmailResult.texto}
+                </div>
+              )}
+
+              {modoModalEmail === "previsualizacion" ? (
+                <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+                  <div className="text-[11px] text-carbon/60 bg-amber-50 border border-amber-200/60 p-2.5 rounded-xl flex items-center justify-between">
+                    <span>
+                      Enviando a: <strong>{correoEmailDestino || "(Sin correo)"}</strong>
+                    </span>
+                    <span className="font-mono text-[10px] text-amber-800 font-bold">Vista Previa Real</span>
+                  </div>
+
+                  {/* Renderizado de la plantilla simulada */}
+                  <div className="bg-slate-100 p-4 rounded-2xl border border-carbon/10 text-left">
+                    <div className="max-w-md mx-auto bg-white rounded-xl shadow-sm border border-carbon/10 overflow-hidden">
+                      {/* Banner Header */}
+                      <div className="bg-verde-profundo p-5 text-center text-crema">
+                        <h4 className="font-bold text-sm tracking-wider m-0 text-white">SAUCEDA CONSTRUCCIÓN & SERVICIOS</h4>
+                        <p className="text-[10px] text-dorado uppercase tracking-widest mt-1">Propuesta Comercial & Presupuesto</p>
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-5 space-y-3.5 text-xs text-carbon">
+                        <p className="text-carbon/90">
+                          Estimado(a) <strong>{cotizacion.prospectoNombre || "Cliente"}</strong>,
+                        </p>
+                        <p className="text-carbon/70 leading-relaxed text-[11px]">
+                          Es un gusto saludarte. Te compartimos la propuesta comercial formal para el servicio en tu inmueble (Folio <strong>{cotizacion.id}</strong>).
+                        </p>
+
+                        {notasEmail.trim() && (
+                          <div className="bg-slate-50 border-l-4 border-sauce p-3 rounded-r-lg italic text-carbon/80 text-[11px]">
+                            "{notasEmail.trim()}"
+                          </div>
+                        )}
+
+                        {/* Tarjeta Resumen */}
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-carbon/10 space-y-1 text-[11px]">
+                          <div className="flex justify-between">
+                            <span className="text-carbon/60">Folio:</span>
+                            <span className="font-bold text-verde-profundo">{cotizacion.id}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-carbon/60">Servicio:</span>
+                            <span className="font-semibold text-carbon">{cotizacion.servicioTipo}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-carbon/10 pt-1 font-bold text-xs">
+                            <span className="text-carbon/70">Monto Total:</span>
+                            <span className="text-emerald-700 font-mono">{formatoPesos(cotizacion.precioFinal || cotizacion.costoEstimado)}</span>
+                          </div>
+                        </div>
+
+                        {/* Tabla de Conceptos */}
+                        {conceptos.length > 0 && (
+                          <div className="border border-carbon/10 rounded-lg overflow-hidden text-[10px]">
+                            <table className="w-full text-left border-collapse">
+                              <thead className="bg-verde-profundo text-crema text-[9px] uppercase">
+                                <tr>
+                                  <th className="p-1.5">Concepto</th>
+                                  <th className="p-1.5 text-center">Cant</th>
+                                  <th className="p-1.5 text-right">Importe</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-carbon/10">
+                                {conceptos.map((c) => (
+                                  <tr key={c.id}>
+                                    <td className="p-1.5">{c.descripcion}</td>
+                                    <td className="p-1.5 text-center">{c.cantidad} {c.unidad}</td>
+                                    <td className="p-1.5 text-right font-semibold text-emerald-700">{formatoPesos(c.importe)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Simulación del Botón */}
+                        <div className="text-center pt-2">
+                          <span className="inline-block bg-verde-profundo text-crema px-4 py-2 rounded-lg font-bold text-[11px] shadow-xs">
+                            📋 Ver y Autorizar Propuesta en Línea
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="bg-verde-profundo p-3 text-center text-crema text-[10px]">
+                        <p className="font-bold text-crema m-0">SAUCEDA Bienes Raíces & Construcción</p>
+                        <p className="text-dorado text-[9px] mt-0.5 m-0">WhatsApp: 477 465 4700 · crm.saucedamx.com</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/80 uppercase tracking-wider mb-1">
+                      Correo Electrónico del Cliente <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        required
+                        value={correoEmailDestino}
+                        onChange={(e) => setCorreoEmailDestino(e.target.value)}
+                        placeholder="cliente@ejemplo.com"
+                        className="w-full rounded-xl border border-carbon/20 px-3.5 py-2.5 text-xs text-carbon focus:border-sauce focus:outline-none focus:ring-2 focus:ring-sauce/20"
+                      />
+                    </div>
+                    {cotizacion.prospectoCorreo ? (
+                      <p className="text-[11px] text-emerald-700 mt-1 font-medium flex items-center gap-1">
+                        ✓ Correo precargado del expediente/prospecto
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-carbon/50 mt-1 italic">
+                        Sin correo registrado. Ingresa la dirección para guardarla automáticamente en su perfil.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/80 uppercase tracking-wider mb-1">
+                      Asunto del Correo
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={asuntoEmail}
+                      onChange={(e) => setAsuntoEmail(e.target.value)}
+                      className="w-full rounded-xl border border-carbon/20 px-3.5 py-2.5 text-xs text-carbon focus:border-sauce focus:outline-none focus:ring-2 focus:ring-sauce/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-carbon/80 uppercase tracking-wider mb-1">
+                      Mensaje / Nota Personalizada <span className="text-carbon/40 font-normal lowercase">(opcional)</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={notasEmail}
+                      onChange={(e) => setNotasEmail(e.target.value)}
+                      placeholder="Ej. Te compartimos la propuesta técnica acordada en la visita..."
+                      className="w-full rounded-xl border border-carbon/20 px-3.5 py-2.5 text-xs text-carbon focus:border-sauce focus:outline-none focus:ring-2 focus:ring-sauce/20 resize-none"
+                    />
+                  </div>
+
+                  {/* Box con resumen de lo que incluye */}
+                  <div className="bg-slate-50 rounded-xl p-3.5 border border-carbon/10 space-y-1 text-xs text-carbon/70">
+                    <div className="font-semibold text-carbon">Resumen del contenido a enviar:</div>
+                    <ul className="list-disc list-inside text-[11px] space-y-0.5 text-carbon/60">
+                      <li>Plantilla oficial HTML con diseño de la marca SAUCEDA.</li>
+                      <li>Desglose de conceptos e importe total ({formatoPesos(cotizacion.precioFinal || cotizacion.costoEstimado)}).</li>
+                      <li>Enlace directo al portal interactivo para revisión y autorización en línea.</li>
+                      <li>Registro automático en la bitácora especificando el medio: <strong>Correo Electrónico</strong>.</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 border-t border-carbon/10 pt-4 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalEmail(false)}
+                  className="rounded-xl border border-carbon/20 px-4 py-2 text-xs font-semibold text-carbon/70 hover:bg-slate-100 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={enviandoEmail}
+                  className="rounded-xl bg-verde-profundo text-crema px-5 py-2 text-xs font-bold hover:bg-sauce transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {enviandoEmail ? (
+                    <>
+                      <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      ✉️ Enviar Cotización
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -13,6 +13,7 @@ import { listarSecuencias, enrolarLead } from "@/app/actions/secuencias";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { BotonLlamar } from "./BotonLlamar";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
+import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 
 /** Comparadores por columna (estables a nivel de módulo). */
 const COMPARADORES: Record<string, (a: Expediente, b: Expediente) => number> = {
@@ -664,10 +665,10 @@ export function TablaExpedientes({
                   {exp.telefono ? (
                     <div className="flex flex-col gap-1 mt-0.5">
                       <a
-                        href={`tel:${exp.telefono}`}
+                        href={`tel:${obtenerTelLink(exp.telefono)}`}
                         className="font-mono text-sauce font-semibold hover:underline block text-xs"
                       >
-                        {exp.telefono}
+                        {formatearTelefonoLegible(exp.telefono)}
                       </a>
                       <BotonLlamar telefono={exp.telefono} prospectoId={exp.prospectoId} />
                     </div>

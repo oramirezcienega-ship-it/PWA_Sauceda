@@ -3,6 +3,9 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
+import { enviarCorreo } from "@/lib/email";
+import { MARCA } from "@/lib/marca";
+import { formatoPesos } from "@/lib/formato";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 // Helper para generar el siguiente folio correlativo (COT-001)
@@ -1962,4 +1965,207 @@ export async function duplicarCotizacion(
 
   return aCotizacion(nuevaCotFila);
 }
+
+/**
+ * Envía una cotización por correo electrónico al cliente utilizando la plantilla de la marca SAUCEDA
+ * y registra la actividad en el historial especificando el medio (Correo Electrónico).
+ */
+export async function enviarCotizacionPorCorreo(datos: {
+  cotizacionId: string;
+  correoDestino: string;
+  asunto?: string;
+  notasAdicionales?: string;
+}): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const correoDestino = (datos.correoDestino || "").trim();
+  if (!correoDestino || !correoDestino.includes("@")) {
+    return { ok: false, error: "La dirección de correo electrónico ingresada no es válida." };
+  }
+
+  // 1. Obtener la cotización con datos de su prospecto
+  const { data: cotFila, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos:prospecto_id(id, nombre, primer_apellido, segundo_apellido, correo, telefono, direccion)
+    `)
+    .eq("id", datos.cotizacionId)
+    .single();
+
+  if (errCot || !cotFila) {
+    return { ok: false, error: "No se encontró la cotización especificada." };
+  }
+
+  const cotizacion = aCotizacion(cotFila);
+
+  // 2. Obtener los conceptos
+  const { data: concFilas } = await sb
+    .from("cotizacion_conceptos")
+    .select("*")
+    .eq("cotizacion_id", datos.cotizacionId)
+    .order("created_at", { ascending: true });
+
+  const conceptos: CotizacionConcepto[] = (concFilas || []).map(aCotizacionConcepto);
+
+  // 3. Preparar datos de plantilla
+  const nombreCliente = cotizacion.prospectoNombre || "Cliente";
+  const folioCot = cotizacion.id;
+  const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
+  const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
+
+  const servicioLabels: Record<string, string> = {
+    impermeabilizacion: "Impermeabilización de Azotea",
+    pintura: "Pintura & Acabados",
+    losa: "Construcción de Losa",
+    remodelacion: "Remodelación Integral",
+  };
+  const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
+
+  const montoTotal = cotizacion.precioFinal > 0 ? cotizacion.precioFinal : cotizacion.costoEstimado;
+  const montoFormateado = formatoPesos(montoTotal);
+
+  const asunto = (datos.asunto || "").trim() || `Propuesta Comercial SAUCEDA ${folioCot} - ${servicioNombre}`;
+
+  // Construir tabla HTML de conceptos
+  let tablaConceptosHTML = "";
+  if (conceptos.length > 0) {
+    const filasHTML = conceptos
+      .map(
+        (c) => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px; font-size: 13px; color: #334155;">${c.descripcion}</td>
+          <td style="padding: 10px; font-size: 13px; color: #475569; text-align: center;">${c.cantidad} ${c.unidad}</td>
+          <td style="padding: 10px; font-size: 13px; color: #059669; font-weight: bold; text-align: right;">${formatoPesos(c.importe)}</td>
+        </tr>
+      `
+      )
+      .join("");
+
+    tablaConceptosHTML = `
+      <div style="margin: 20px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background-color: #2D4A2B; color: #ffffff; text-align: left; font-size: 12px; text-transform: uppercase;">
+              <th style="padding: 10px;">Concepto / Descripción</th>
+              <th style="padding: 10px; text-align: center;">Cantidad</th>
+              <th style="padding: 10px; text-align: right;">Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasHTML}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  const notasHTML = datos.notasAdicionales?.trim()
+    ? `<div style="background-color: #f8fafc; border-left: 4px solid #5C7A52; padding: 12px 16px; margin: 20px 0; border-radius: 0 8px 8px 0; font-size: 13px; color: #334155; font-style: italic;">
+        ${datos.notasAdicionales.trim().replace(/\n/g, "<br>")}
+      </div>`
+    : "";
+
+  // 4. Armar el HTML institucional SAUCEDA
+  const htmlBody = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${asunto}</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #1a1a1a;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+    
+    <!-- Encabezado SAUCEDA -->
+    <div style="background-color: #2D4A2B; padding: 24px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: bold; letter-spacing: 1px;">SAUCEDA CONSTRUCCIÓN & SERVICIOS</h1>
+      <p style="color: #C9A961; margin: 4px 0 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px;">Propuesta Comercial & Presupuesto</p>
+    </div>
+
+    <!-- Contenido Principal -->
+    <div style="padding: 28px;">
+      <p style="font-size: 15px; margin-top: 0; color: #1e293b;">Estimado(a) <strong>${nombreCliente}</strong>,</p>
+      
+      <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+        Es un gusto saludarte. Te compartimos la propuesta comercial formal para el servicio de <strong>${servicioNombre}</strong> (Folio <strong>${folioCot}</strong>).
+      </p>
+
+      ${notasHTML}
+
+      <!-- Tarjeta Resumen -->
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <td style="color: #64748b; padding-bottom: 6px;">Folio de Cotización:</td>
+            <td style="font-weight: bold; text-align: right; color: #2D4A2B;">${folioCot}</td>
+          </tr>
+          <tr>
+            <td style="color: #64748b; padding-bottom: 6px;">Servicio Solicitado:</td>
+            <td style="font-weight: bold; text-align: right; color: #1e293b;">${servicioNombre}</td>
+          </tr>
+          <tr>
+            <td style="color: #64748b;">Monto Total Estimado:</td>
+            <td style="font-weight: bold; font-size: 16px; text-align: right; color: #059669;">${montoFormateado}</td>
+          </tr>
+        </table>
+      </div>
+
+      ${tablaConceptosHTML}
+
+      <!-- Botón de Acción -->
+      <div style="text-align: center; margin: 32px 0 24px 0;">
+        <a href="${urlPortal}" target="_blank" style="background-color: #2D4A2B; color: #ffffff; padding: 14px 28px; font-size: 14px; font-weight: bold; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 2px 5px rgba(45,74,43,0.3);">
+          📋 Ver y Autorizar Propuesta en Línea
+        </a>
+      </div>
+
+      <p style="font-size: 12px; color: #64748b; text-align: center; margin-top: 16px; line-height: 1.5;">
+        En nuestro portal interactivo podrás revisar los detalles del proyecto, solicitar modificaciones o autorizar la cotización en línea.
+      </p>
+    </div>
+
+    <!-- Pie de Página -->
+    <div style="background-color: #2D4A2B; padding: 20px; text-align: center; color: #ffffff; font-size: 12px;">
+      <p style="margin: 0 0 6px 0; font-weight: bold; color: #F5F1E8;">SAUCEDA Bienes Raíces & Construcción</p>
+      <p style="margin: 0; color: #C9A961; font-size: 11px;">WhatsApp: ${MARCA.whatsappTexto} · ${MARCA.web.replace("https://", "")}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  // 5. Enviar correo por medio de Resend
+  await enviarCorreo(correoDestino, asunto, htmlBody);
+
+  // 6. Si estaba en estatus aprobada, marcarla como enviada
+  if (cotFila.estatus === "aprobada") {
+    await sb
+      .from("cotizaciones")
+      .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+      .eq("id", datos.cotizacionId);
+  }
+
+  // 7. Si el prospecto no tenía correo asignado o era distinto, guardarlo permanentemente
+  if (cotFila.prospecto_id && (!cotFila.prospectos?.correo || cotFila.prospectos?.correo !== correoDestino)) {
+    await sb
+      .from("prospectos")
+      .update({ correo: correoDestino, updated_at: new Date().toISOString() })
+      .eq("id", cotFila.prospecto_id);
+  }
+
+  // 8. Registrar la Actividad especificando claramente que el medio fue Correo Electrónico
+  await registrarActividad(sb, {
+    prospectoId: cotFila.prospecto_id,
+    expedienteId: cotFila.expediente_id,
+    tipo: "envio_cotizacion_email",
+    titulo: `✉️ Cotización enviada por Correo Electrónico`,
+    detalle: `Se envió la propuesta comercial (Folio ${folioCot}) a la dirección ${correoDestino} por medio de Correo Electrónico. Enlace al portal: ${urlPortal}`,
+  });
+
+  return {
+    ok: true,
+    mensaje: `Cotización ${folioCot} enviada exitosamente por correo electrónico a ${correoDestino} y registrada en la bitácora.`,
+  };
+}
+
 

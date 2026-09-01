@@ -20,6 +20,7 @@ import {
   type DatosPaso,
 } from "@/app/actions/secuencias";
 import { obtenerUsuarioActual } from "@/app/actions/usuarios";
+import { obtenerTelLink } from "@/lib/telefono";
 
 // Paleta de colores SAUCEDA
 const COLORES = {
@@ -663,7 +664,7 @@ export function SecuenciasClient() {
 
                         <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200/50 pt-3">
                           <a
-                            href={`tel:${tarea.enrollment?.phone}`}
+                            href={`tel:${obtenerTelLink(tarea.enrollment?.phone)}`}
                             onClick={() => {
                               // Registrar que llamó
                               console.log("Llamando a", tarea.enrollment?.phone);

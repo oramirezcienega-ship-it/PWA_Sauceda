@@ -11,6 +11,7 @@ import {
 } from "@/app/actions/agenda";
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
 import { obtenerUsuarioActual, listarPerfilesActivos } from "@/app/actions/usuarios";
+import { obtenerTelLink } from "@/lib/telefono";
 
 interface ProximasVisitasWidgetProps {
   perfilId?: string | null;
@@ -430,7 +431,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
 
                       {c.cliente_telefono && (
                         <a
-                          href={`tel:${c.cliente_telefono}`}
+                          href={`tel:${obtenerTelLink(c.cliente_telefono)}`}
                           onClick={() => setTimeout(() => handleAbrirModalResultado(c), 500)}
                           className="inline-flex items-center gap-1 rounded-lg border border-sauce/20 bg-sauce/10 px-2 py-1 text-xs font-semibold text-sauce transition hover:bg-sauce hover:text-white"
                         >
