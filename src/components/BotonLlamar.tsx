@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { iniciarLlamadaConmutador } from "@/app/actions/llamadas";
+import { obtenerTelLink } from "@/lib/telefono";
 
 interface BotonLlamarProps {
   telefono: string;
@@ -34,7 +35,7 @@ export function BotonLlamar({ telefono, prospectoId, className = "" }: BotonLlam
   if (esMovil) {
     return (
       <a
-        href={`tel:${telefono}`}
+        href={`tel:${obtenerTelLink(telefono)}`}
         className={`inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-800 ${className}`}
         title="Llamar directo desde tu celular"
       >

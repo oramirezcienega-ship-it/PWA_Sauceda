@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { type Expediente, labelTipoNegocio } from "@/lib/types";
 import { formatoPesos } from "@/lib/formato";
+import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 
 /**
  * Tarjeta resumen de un expediente dentro del tablero.
@@ -29,12 +30,12 @@ export function TarjetaExpediente({ expediente }: { expediente: Expediente }) {
           </h3>
           {expediente.telefono ? (
             <a
-              href={`tel:${expediente.telefono}`}
+              href={`tel:${obtenerTelLink(expediente.telefono)}`}
               onClick={(e) => e.stopPropagation()}
               className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors"
-              title={`Llamar a ${expediente.nombreCompleto} (${expediente.telefono})`}
+              title={`Llamar a ${expediente.nombreCompleto}`}
             >
-              <span>📞 {expediente.telefono}</span>
+              <span>📞 {formatearTelefonoLegible(expediente.telefono)}</span>
             </a>
           ) : (
             <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">📞 Sin teléfono</span>

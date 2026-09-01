@@ -17,6 +17,7 @@ import { ETAPAS, PROBABILIDAD_POR_ETAPA } from "@/lib/etapas";
 import { ORIGENES, ORIGEN_POR_ID } from "@/lib/origenes";
 import { formatoPesos } from "@/lib/formato";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
+import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 import { cambiarEstatusMasivo } from "@/app/actions/prospectos";
 import { moverEtapa } from "@/app/actions/expedientes";
 import { programarCitaManual } from "@/app/actions/agenda";
@@ -511,11 +512,12 @@ export function PipelineProspectosClient({
                               <div className="flex items-center gap-2 mt-0.5">
                                 {p.telefono ? (
                                   <a
-                                    href={`tel:${p.telefono}`}
+                                    href={`tel:${obtenerTelLink(p.telefono)}`}
                                     onClick={(e) => e.stopPropagation()}
                                     className="font-mono text-[11px] font-semibold text-emerald-700 hover:underline inline-flex items-center gap-0.5"
+                                    title={`Llamar a ${p.nombreCompleto}`}
                                   >
-                                    📞 {p.telefono}
+                                    📞 {formatearTelefonoLegible(p.telefono)}
                                   </a>
                                 ) : (
                                   <span className="text-[10px] text-slate-400 italic">Sin teléfono</span>

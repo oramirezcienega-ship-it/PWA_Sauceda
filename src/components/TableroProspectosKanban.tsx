@@ -8,6 +8,7 @@ import { formatoPesos } from "@/lib/formato";
 import { EstatusProspectoBadge } from "./EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 import { cambiarEstatusMasivo } from "@/app/actions/prospectos";
+import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 
 interface TableroProspectosKanbanProps {
   prospectos: Prospecto[];
@@ -110,12 +111,12 @@ export function TableroProspectosKanban({
                         </Link>
                         {p.telefono ? (
                           <a
-                            href={`tel:${p.telefono}`}
+                            href={`tel:${obtenerTelLink(p.telefono)}`}
                             onClick={(e) => e.stopPropagation()}
                             className="font-mono text-xs font-bold text-verde-profundo hover:text-sauce hover:underline inline-flex items-center gap-1 mt-0.5 transition-colors block truncate"
-                            title={`Llamar a ${p.nombreCompleto} (${p.telefono})`}
+                            title={`Llamar a ${p.nombreCompleto}`}
                           >
-                            <span>📞 {p.telefono}</span>
+                            <span>📞 {formatearTelefonoLegible(p.telefono)}</span>
                           </a>
                         ) : (
                           <span className="font-mono text-[10px] text-carbon/40 italic block mt-0.5">

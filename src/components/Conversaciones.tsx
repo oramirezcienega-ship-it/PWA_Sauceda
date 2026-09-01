@@ -23,8 +23,8 @@ import {
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
+import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
-import { formatearTelefonoLegible } from "@/lib/telefono";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import type {
@@ -278,7 +278,7 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-xs text-carbon truncate">{nombre}</p>
                 {telefono && (
-                  <p className="text-[11px] font-mono text-carbon/70 truncate">{telefono}</p>
+                  <p className="text-[11px] font-mono text-carbon/70 truncate">{formatearTelefonoLegible(telefono)}</p>
                 )}
                 {email && (
                   <p className="text-[10px] text-carbon/50 truncate">{email}</p>
@@ -288,7 +288,7 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
             {telefono && (
               <div className="flex gap-1.5 pt-1.5 border-t border-carbon/10">
                 <a
-                  href={`tel:${telefono.replace(/\s+/g, "")}`}
+                  href={`tel:${obtenerTelLink(telefono)}`}
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-verde-profundo/10 hover:bg-verde-profundo/20 text-verde-profundo text-[11px] font-medium transition"
                 >
                   <span>📞 Llamar</span>
