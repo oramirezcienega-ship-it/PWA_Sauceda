@@ -978,6 +978,10 @@ export async function obtenerCotizacionesDeExpediente(
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
+
+  // Recalcular y sincronizar valor_estimado del expediente con la sumatoria de cotizaciones
+  await sincronizarValorEstimadoExpediente(sb, expedienteId, prospectoId);
+
   return (data ?? []).map(aCotizacion);
 }
 
@@ -1005,14 +1009,80 @@ export async function obtenerCotizacionesDeProspecto(
 }
 
 
-/** Helper para sincronizar automáticamente la etapa del expediente según el estatus de la cotización. */
+/**
+ * Recalcula y actualiza automáticamente el valor_estimado de un expediente / prospecto
+ * sumando los totales de las cotizaciones generadas para dicho proyecto.
+ */
+export async function sincronizarValorEstimadoExpediente(
+  sb: any,
+  expedienteId?: string | null,
+  prospectoId?: string | null
+) {
+  try {
+    if (!expedienteId && !prospectoId) return;
+
+    let query = sb.from("cotizaciones").select("id, precio_final, costo_estimado, estatus, expediente_id, prospecto_id");
+
+    if (expedienteId && prospectoId) {
+      query = query.or(`expediente_id.eq.${expedienteId},prospecto_id.eq.${prospectoId}`);
+    } else if (expedienteId) {
+      query = query.eq("expediente_id", expedienteId);
+    } else if (prospectoId) {
+      query = query.eq("prospecto_id", prospectoId);
+    }
+
+    const { data: cotizaciones, error: errCots } = await query;
+    if (errCots || !cotizaciones || cotizaciones.length === 0) return;
+
+    // Cotizaciones activas (no rechazadas/archivadas)
+    const cotizacionesValidas = cotizaciones.filter(
+      (c: any) => c.estatus !== "rechazada" && c.estatus !== "archivada"
+    );
+
+    const listaASumar = cotizacionesValidas.length > 0 ? cotizacionesValidas : cotizaciones;
+
+    const sumaTotal = listaASumar.reduce((acc: number, c: any) => {
+      const monto = Number(c.precio_final) > 0 ? Number(c.precio_final) : Number(c.costo_estimado || 0);
+      return acc + monto;
+    }, 0);
+
+    if (sumaTotal > 0) {
+      if (expedienteId) {
+        await sb
+          .from("expedientes")
+          .update({
+            valor_estimado: Math.round(sumaTotal),
+          })
+          .eq("id", expedienteId);
+      }
+
+      if (prospectoId) {
+        await sb
+          .from("prospectos")
+          .update({
+            valor_estimado: Math.round(sumaTotal),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", prospectoId);
+      }
+    }
+  } catch (err) {
+    console.error("Error en sincronizarValorEstimadoExpediente:", err);
+  }
+}
+
+/** Helper para sincronizar automáticamente la etapa y valor estimado del expediente según sus cotizaciones. */
 export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) {
   try {
     const { data: cot } = await sb
       .from("cotizaciones")
-      .select("expediente_id, estatus, requiere_visita")
+      .select("expediente_id, prospecto_id, estatus, requiere_visita")
       .eq("id", cotizacionId)
       .maybeSingle();
+
+    if (cot) {
+      await sincronizarValorEstimadoExpediente(sb, cot.expediente_id, cot.prospecto_id);
+    }
 
     if (!cot || !cot.expediente_id) return;
 
