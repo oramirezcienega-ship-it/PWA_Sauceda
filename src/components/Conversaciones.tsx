@@ -1633,6 +1633,10 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                   if (detalle?.nombre) {
                                     newParams[0] = detalle.nombre.split(" ")[0];
                                   }
+                                  if (selectedName.includes("cotizacion")) {
+                                    if (p.parametros >= 2) newParams[1] = "Servicio de Construcción";
+                                    if (p.parametros >= 3) newParams[2] = "Cotización";
+                                  }
                                   setParams(newParams);
                                 } else {
                                   setParams([]);

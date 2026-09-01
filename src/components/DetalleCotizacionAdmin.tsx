@@ -20,6 +20,7 @@ import {
   prepararGarantiaPorDefecto,
   duplicarCotizacion,
   enviarCotizacionPorCorreo,
+  enviarCotizacionPorWhatsAppAction,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
@@ -751,27 +752,28 @@ export function DetalleCotizacionAdmin({
     try {
       setEnviandoAPI(true);
       setMensajeAprobacion({ tipo: "", texto: "" });
-      
-      const textoMensaje = `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto la propuesta comercial y cotización para el servicio en tu domicilio. En el siguiente enlace puedes revisar a detalle los conceptos y autorizarla en línea por sistema: ${enlaceCliente}`;
 
-      const { responderConversacion } = await import("@/app/actions/conversaciones");
-      const res = await responderConversacion(cotizacion.prospectoTelefono, textoMensaje);
+      const res = await enviarCotizacionPorWhatsAppAction({
+        cotizacionId: cotizacion.id,
+        telefono: cotizacion.prospectoTelefono,
+      });
 
       if (res.ok) {
         setMensajeAprobacion({
           tipo: "ok",
-          texto: "Mensaje enviado con éxito y registrado en la conversación del cliente ✓",
+          texto: res.mensaje || "Cotización enviada exitosamente por WhatsApp y registrada en el historial ✓",
         });
+        setCotizacion((prev) => ({ ...prev, estatus: prev.estatus === "aprobada" ? "enviada" : prev.estatus }));
       } else {
         setMensajeAprobacion({
           tipo: "error",
-          texto: res.error || "Fallo al enviar el mensaje de WhatsApp desde el chat.",
+          texto: res.error || "Fallo al enviar la plantilla/mensaje de WhatsApp.",
         });
       }
     } catch (err) {
       setMensajeAprobacion({
         tipo: "error",
-        texto: err instanceof Error ? err.message : "Error al enviar por API.",
+        texto: err instanceof Error ? err.message : "Error al enviar por API de WhatsApp.",
       });
     } finally {
       setEnviandoAPI(false);

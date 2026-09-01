@@ -2168,4 +2168,113 @@ export async function enviarCotizacionPorCorreo(datos: {
   };
 }
 
+/**
+ * Envía una cotización por WhatsApp (usando plantilla oficial de Meta o mensaje fallback)
+ * y registra la actividad en el historial especificando el medio (WhatsApp).
+ */
+export async function enviarCotizacionPorWhatsAppAction(datos: {
+  cotizacionId: string;
+  telefono: string;
+}): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const telLimpio = (datos.telefono || "").replace(/\D/g, "");
+  if (!telLimpio || telLimpio.length < 10) {
+    return { ok: false, error: "El número telefónico del cliente no es válido." };
+  }
+
+  // 1. Obtener la cotización
+  const { data: cotFila, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos:prospecto_id(id, nombre, primer_apellido, segundo_apellido, correo, telefono, direccion)
+    `)
+    .eq("id", datos.cotizacionId)
+    .single();
+
+  if (errCot || !cotFila) {
+    return { ok: false, error: "No se encontró la cotización especificada." };
+  }
+
+  const cotizacion = aCotizacion(cotFila);
+  const primerNombre = cotizacion.prospectoNombre?.split(" ")[0] || "Cliente";
+
+  const servicioLabels: Record<string, string> = {
+    impermeabilizacion: "Impermeabilización de Azotea",
+    pintura: "Pintura & Acabados",
+    losa: "Construcción de Losa",
+    remodelacion: "Remodelación Integral",
+  };
+  const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
+
+  const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
+  const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
+
+  // 2. Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
+  const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
+  const resMeta = await enviarWhatsAppPlantilla(
+    datos.telefono,
+    "envio_cotizacion_cliente",
+    "es_MX",
+    [primerNombre, servicioNombre, cotizacion.id]
+  );
+
+  if (resMeta.ok) {
+    if (cotFila.estatus === "aprobada") {
+      await sb
+        .from("cotizaciones")
+        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+        .eq("id", datos.cotizacionId);
+    }
+
+    await registrarActividad(sb, {
+      prospectoId: cotFila.prospecto_id,
+      expedienteId: cotFila.expediente_id,
+      tipo: "envio_cotizacion_whatsapp",
+      titulo: `📲 Cotización enviada por WhatsApp (Plantilla Oficial Meta)`,
+      detalle: `Se envió la plantilla de WhatsApp (envio_cotizacion_cliente) a ${datos.telefono} para la propuesta ${cotizacion.id}. Portal: ${urlPortal}`,
+    });
+
+    return {
+      ok: true,
+      mensaje: `Plantilla oficial de WhatsApp enviada con éxito a ${datos.telefono} y registrada en el historial.`,
+    };
+  }
+
+  // 3. Fallback: Si falla por plantilla o ventana 24h, intentar envío de texto libre
+  const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+  const textoMensaje = `Hola ${primerNombre}, te compartimos la propuesta comercial y cotización para el servicio de ${servicioNombre} en tu domicilio (Folio ${cotizacion.id}). Puedes revisarla a detalle y autorizarla en el siguiente enlace: ${urlPortal}`;
+  const resTxt = await enviarWhatsAppTexto(datos.telefono, textoMensaje);
+
+  if (resTxt.ok) {
+    if (cotFila.estatus === "aprobada") {
+      await sb
+        .from("cotizaciones")
+        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+        .eq("id", datos.cotizacionId);
+    }
+
+    await registrarActividad(sb, {
+      prospectoId: cotFila.prospecto_id,
+      expedienteId: cotFila.expediente_id,
+      tipo: "envio_cotizacion_whatsapp",
+      titulo: `📲 Cotización enviada por WhatsApp`,
+      detalle: `Se envió la propuesta comercial por WhatsApp a ${datos.telefono}. Enlace al portal: ${urlPortal}`,
+    });
+
+    return {
+      ok: true,
+      mensaje: `Cotización ${cotizacion.id} enviada exitosamente por WhatsApp a ${datos.telefono}.`,
+    };
+  }
+
+  return {
+    ok: false,
+    error: resMeta.error || resTxt.error || "Meta rechazó el envío del mensaje por WhatsApp.",
+  };
+}
+
+
 
