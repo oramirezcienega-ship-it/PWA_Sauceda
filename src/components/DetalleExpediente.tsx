@@ -490,7 +490,12 @@ export function DetalleExpediente({ id }: { id: string }) {
           />
         </div>
 
-        {/* 3. Cotizaciones y Propuestas */}
+        {/* 3. Historial de conversaciones de WhatsApp */}
+        {expediente.telefono && (
+          <ConversacionHistorica telefono={expediente.telefono} />
+        )}
+
+        {/* 4. Cotizaciones y Propuestas */}
         <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
@@ -1074,11 +1079,6 @@ export function DetalleExpediente({ id }: { id: string }) {
               expedienteId: expediente.id,
             }}
           />
-
-          {/* Historial de conversaciones de WhatsApp */}
-          {expediente.telefono && (
-            <ConversacionHistorica telefono={expediente.telefono} />
-          )}
 
           {/* Historial de llamadas telefónicas y grabaciones */}
           {expediente.telefono && (
