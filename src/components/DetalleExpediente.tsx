@@ -1060,11 +1060,6 @@ export function DetalleExpediente({ id }: { id: string }) {
             </Bloque>
           )}
 
-          {/* Checklist de Flujo de Trabajo Operativo (BPM) */}
-          <WidgetBpmTareas 
-            expedienteId={expediente.id} 
-            tipoNegocio={expediente.tipoNegocio} 
-          />
 
           {/* Módulo de Promoción Venta & Portal del Cliente */}
           {(expediente.tipoNegocio === "promocion_venta" || expediente.sessionTokenClient) && (
@@ -1296,6 +1291,13 @@ export function DetalleExpediente({ id }: { id: string }) {
 
           {/* Bitácora de actividades */}
           <Actividades expedienteId={expediente.id} />
+
+          {/* Checklist de Flujo de Trabajo Operativo (BPM) — Último widget del expediente, contraído por defecto */}
+          <WidgetBpmTareas 
+            expedienteId={expediente.id} 
+            tipoNegocio={expediente.tipoNegocio} 
+            inicialContraido={true}
+          />
         </div>
       </div>
   );
