@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { obtenerConversacion, eliminarMensajeIndividual, editarMensajeIndividual } from "@/app/actions/conversaciones";
+import { obtenerTelLink } from "@/lib/telefono";
 import type { ConversacionDetalle } from "@/lib/types";
 
 export function ConversacionHistorica({ telefono }: { telefono: string }) {
@@ -118,6 +119,21 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
         </Link>
       </div>
 
+      {detalle?.posibleBloqueo && (
+        <div className="mb-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-2.5 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <span>⚠️</span>
+            <span><strong>Alerta:</strong> {detalle.motivoAlerta || "Posible bloqueo o número inactivo."}</span>
+          </div>
+          <a
+            href={obtenerTelLink(telefono)}
+            className="bg-amber-700 hover:bg-amber-800 text-white text-[10px] font-bold px-2 py-0.5 rounded transition shrink-0"
+          >
+            📞 Llamar
+          </a>
+        </div>
+      )}
+
       {mensajes.length === 0 ? (
         <div className="py-8 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
           <p className="text-sm text-carbon/40">{txtSinMensajes}</p>
@@ -212,8 +228,15 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                     hour12: false,
                   })}
                   {!esCliente && m.estado && (
-                    <span className="ml-1 text-[8px] font-sans font-semibold uppercase opacity-75">
-                      · {m.estado === "read" ? "leído" : m.estado === "delivered" ? "entregado" : "enviado"}
+                    <span
+                      className={`ml-1 text-[8px] font-sans font-semibold uppercase ${
+                        m.estado === "error"
+                          ? "text-red-700 font-bold bg-red-50 px-1 py-0.5 rounded border border-red-200 cursor-help"
+                          : "opacity-75"
+                      }`}
+                      title={m.errorDetalle || (m.estado === "error" ? "Error al enviar mensaje" : "")}
+                    >
+                      · {m.estado === "read" ? "leído" : m.estado === "delivered" ? "entregado" : m.estado === "error" ? (m.errorDetalle ? `error: ${m.errorDetalle}` : "error") : "enviado"}
                     </span>
                   )}
                 </span>

@@ -24,11 +24,34 @@ function normalizarTelefono(tel: string): string {
   return d;
 }
 
+/** Interpreta los códigos de error más frecuentes de Meta Cloud API con explicaciones claras. */
+export function interpretarErrorMeta(code?: number, message?: string): string {
+  if (code === 131047) {
+    return "Ventana de 24 h cerrada (Meta requiere enviar una plantilla aprobada)";
+  }
+  if (code === 131026) {
+    return "Mensaje no entregable (posible bloqueo, número dado de baja o sin WhatsApp)";
+  }
+  if (code === 131051) {
+    return "Destinatario no disponible para recibir mensajes (posible bloqueo o privacidad)";
+  }
+  if (code === 131048) {
+    return "El usuario reportó spam o solicitó no recibir mensajes comerciales";
+  }
+  if (code === 130429) {
+    return "Límite de envíos alcanzado en la cuenta de WhatsApp (Rate Limit de Meta)";
+  }
+  if (code === 190) {
+    return "Token de WhatsApp expirado o revocado en Meta";
+  }
+  return message || (code ? `Error de Meta (código ${code})` : "Error de entrega");
+}
+
 /** Envía un mensaje de texto por WhatsApp. Devuelve el resultado. */
 export async function enviarWhatsAppTexto(
   telefono: string,
   texto: string,
-): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   try {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -75,10 +98,11 @@ export async function enviarWhatsAppTexto(
       } catch {
         // respuesta no-JSON; se usa el genérico
       }
+      const detalleInterpretado = interpretarErrorMeta(metaCode, metaMsg);
       const detalleTxt = metaMsg
         ? `Meta: ${metaMsg}${metaCode ? ` (código ${metaCode})` : ""}`
         : `Meta respondió con error ${res.status}.`;
-      return { ok: false, error: detalleTxt };
+      return { ok: false, error: detalleTxt, errorCode: metaCode, errorDetail: detalleInterpretado };
     }
     let messageId: string | undefined;
     try {
@@ -101,7 +125,7 @@ export async function enviarWhatsAppDocumento(
   nombreArchivo: string,
   caption?: string,
   tipoMime?: string | null,
-): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   const tel = normalizarTelefono(telefono);
   if (!tel) return { ok: false, error: "Teléfono inválido." };
   const token = process.env.WHATSAPP_TOKEN;
@@ -142,7 +166,10 @@ export async function enviarWhatsAppDocumento(
 
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      return { ok: false, error: j?.error?.message ?? `Error ${res.status}` };
+      const metaCode = j?.error?.code;
+      const metaMsg = j?.error?.message;
+      const interpretado = interpretarErrorMeta(metaCode, metaMsg);
+      return { ok: false, error: metaMsg ?? `Error ${res.status}`, errorCode: metaCode, errorDetail: interpretado };
     }
 
     const j = await res.json().catch(() => ({}));
@@ -167,7 +194,7 @@ export async function enviarWhatsAppPlantilla(
   idioma: string,
   parametrosCuerpo: string[] = [],
   urlBotonParam?: string,
-): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   try {
     const token = process.env.WHATSAPP_TOKEN;
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -225,15 +252,22 @@ export async function enviarWhatsAppPlantilla(
     const bodyText = await res.text();
     if (!res.ok) {
       let errorDetalle = bodyText;
+      let metaCode: number | undefined;
+      let metaMsg = "";
       try {
         const parsed = JSON.parse(bodyText);
+        metaCode = parsed?.error?.code;
+        metaMsg = parsed?.error?.message || "";
         errorDetalle = parsed?.error ? JSON.stringify(parsed.error) : bodyText;
       } catch {
         // respuesta no-JSON
       }
+      const interpretado = interpretarErrorMeta(metaCode, metaMsg || errorDetalle);
       return {
         ok: false,
-        error: errorDetalle,
+        error: metaMsg || errorDetalle,
+        errorCode: metaCode,
+        errorDetail: interpretado,
       };
     }
     let messageId: string | undefined;

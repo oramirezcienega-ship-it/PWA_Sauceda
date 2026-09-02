@@ -1581,6 +1581,26 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 </div>
               </div>
 
+              {/* Banner de alerta si se detecta posible bloqueo o fallo recurrente */}
+              {detalle.posibleBloqueo && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-950 px-4 py-2 text-xs flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base shrink-0">⚠️</span>
+                    <div>
+                      <span className="font-bold">Alerta de Entrega:</span>{" "}
+                      <span>{detalle.motivoAlerta || "Posible bloqueo o número inactivo (mensajes no entregados por WhatsApp)."}</span>
+                    </div>
+                  </div>
+                  <a
+                    href={obtenerTelLink(detalle.telefono)}
+                    className="bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold px-2.5 py-1 rounded shadow-xs transition shrink-0 flex items-center gap-1"
+                    title="Llamar directamente al cliente por teléfono convencional"
+                  >
+                    📞 Contactar por Llamada
+                  </a>
+                </div>
+              )}
+
               {/* Mensajes */}
               <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3 bg-crema/10 scrollbar-sutil">
                 {detalle.mensajes.map((m) => (
@@ -1644,7 +1664,15 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         {m.direccion === "out" && m.agente && `${m.agente} · `}
                         {horaCorta(m.fecha)}
-                        {m.direccion === "out" && m.estado === "error" && " · error"}
+                        {m.direccion === "out" && m.estado === "error" && (
+                          <span
+                            className="inline-flex items-center gap-1 ml-1 text-[9px] font-bold text-red-200 bg-red-950/75 px-1.5 py-0.5 rounded border border-red-400/40 cursor-help"
+                            title={m.errorDetalle ? `Error de Meta: ${m.errorDetalle}` : "Error de entrega en WhatsApp"}
+                          >
+                            <span>⚠️ error:</span>
+                            <span className="truncate max-w-[130px] font-normal">{m.errorDetalle || "falló"}</span>
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>

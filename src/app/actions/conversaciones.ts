@@ -44,6 +44,8 @@ interface FilaMsg {
   agente: string;
   created_at: string;
   finalizado?: boolean;
+  error_detalle?: string | null;
+  error_codigo?: number | null;
 }
 
 /** Nombre del asesor con sesión activa (de su perfil, o su correo). */
@@ -521,6 +523,35 @@ export async function obtenerConversacion(
   const ultimoConAgente = recientes.find((f) => f.agente);
   const atiendeFinal = asesorNombre || ultimoConAgente?.agente || "";
 
+  // Detección inteligente de posible bloqueo o fallo recurrente de entrega
+  const salidasRecientes = recientes.filter((f) => f.direccion === "out");
+  const ultimasSalidasFallidas = salidasRecientes.slice(0, 3).filter((f) => f.estado === "error");
+  
+  let posibleBloqueo = false;
+  let motivoAlerta: string | null = null;
+
+  const msgConErrorBloqueo = salidasRecientes.find(
+    (f) =>
+      f.estado === "error" &&
+      (f.error_codigo === 131026 ||
+        f.error_codigo === 131051 ||
+        f.error_codigo === 131048 ||
+        (f.error_detalle && (f.error_detalle.includes("bloqueo") || f.error_detalle.includes("no entregable") || f.error_detalle.includes("no disponible"))))
+  );
+
+  if (msgConErrorBloqueo) {
+    posibleBloqueo = true;
+    motivoAlerta = msgConErrorBloqueo.error_detalle || "Destinatario no disponible (posible bloqueo o número sin WhatsApp)";
+  } else if (ultimasSalidasFallidas.length >= 2) {
+    const ultimoError = ultimasSalidasFallidas[0];
+    if (ultimoError.error_codigo === 131047) {
+      motivoAlerta = "Ventana de 24 h cerrada (se requiere enviar plantilla aprobada)";
+    } else {
+      posibleBloqueo = true;
+      motivoAlerta = ultimoError.error_detalle || "Múltiples envíos fallidos hacia este número";
+    }
+  }
+
   const mensajes: MensajeChat[] = filas.map((f) => ({
     id: f.id,
     direccion: f.direccion,
@@ -528,6 +559,8 @@ export async function obtenerConversacion(
     estado: f.estado,
     agente: f.agente ?? "",
     fecha: f.created_at,
+    errorDetalle: f.error_detalle ?? (f.estado === "error" ? "Error al enviar mensaje" : null),
+    errorCodigo: f.error_codigo ?? null,
   }));
 
   return {
@@ -543,6 +576,8 @@ export async function obtenerConversacion(
     nombreProspecto: nombreProspecto || undefined,
     atiende: atiendeFinal,
     tipoNegocio: tipoNegocio || null,
+    posibleBloqueo,
+    motivoAlerta,
   };
 }
 
@@ -686,6 +721,9 @@ export async function responderConversacion(
     r = await enviarWhatsAppTexto(telefono, texto);
   }
 
+  const errorDetalle = r.ok ? null : ((r as any).errorDetail || r.error || "Error al enviar");
+  const errorCodigo = r.ok ? null : ((r as any).errorCode || null);
+
   await sb.from("mensajes_whatsapp").insert({
     telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
     texto,
@@ -695,6 +733,8 @@ export async function responderConversacion(
     estado: r.ok ? "enviado" : "error",
     agente,
     wa_message_id: (r as any).messageId || null,
+    error_detalle: errorDetalle,
+    error_codigo: errorCodigo,
   });
 
   if (r.ok && expedienteId) {
@@ -705,7 +745,7 @@ export async function responderConversacion(
       detalle: texto,
     });
   }
-  return r.ok ? { ok: true } : { ok: false, error: r.error };
+  return r.ok ? { ok: true } : { ok: false, error: (r as any).errorDetail || r.error };
 }
 
 /** Prueba el agente de IA (configuración + ping real a Claude). Solo admin. */
@@ -754,6 +794,10 @@ export async function responderConPlantilla(
   const resumen =
     `[plantilla: ${plantilla}]` +
     (parametros && parametros.length ? ` ${parametros.join(" | ")}` : "");
+  
+  const errorDetalle = r.ok ? null : ((r as any).errorDetail || r.error || "Error al enviar plantilla");
+  const errorCodigo = r.ok ? null : ((r as any).errorCode || null);
+
   await sb.from("mensajes_whatsapp").insert({
     telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
     texto: resumen,
@@ -763,16 +807,18 @@ export async function responderConPlantilla(
     estado: r.ok ? "enviado" : "error",
     agente,
     wa_message_id: r.messageId || null,
+    error_detalle: errorDetalle,
+    error_codigo: errorCodigo,
   });
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
       expedienteId,
       tipo: "mensaje",
-      titulo: "Plantilla enviada por WhatsApp",
+      titulo: `Plantilla "${plantilla}" por WhatsApp`,
       detalle: resumen,
     });
   }
-  return r.ok ? { ok: true } : { ok: false, error: r.error };
+  return r.ok ? { ok: true } : { ok: false, error: (r as any).errorDetail || r.error };
 }
 
 /** Marca o desmarca una conversación como finalizada. */
