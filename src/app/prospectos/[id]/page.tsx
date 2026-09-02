@@ -258,6 +258,7 @@ export default async function PaginaProspecto({
             prospectoId={prospecto.id}
             clienteNombre={prospecto.nombreCompleto}
             clienteTelefono={prospecto.telefono || ""}
+            clienteEmail={prospecto.correo || null}
           />
         </div>
 

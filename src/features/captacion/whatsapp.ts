@@ -677,6 +677,17 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
           .select("telefono, expediente_id, prospecto_id")
           .maybeSingle();
 
+        // 1.1 Si la cita está vinculada por wa_message_id, actualizar su estado directamente
+        try {
+          await sb
+            .from("agenda_citas")
+            .update({ mensaje_whatsapp_estado: nuevoEstado })
+            .eq("wa_message_id", waMessageId);
+        } catch {
+          // Ignorar si la columna aún no está migrada
+        }
+
+
         // 2. Si falló y hay código de error, extraer el detalle
         let errorTxt = "";
         if (estadoMeta === "failed" && status.errors && status.errors.length > 0) {

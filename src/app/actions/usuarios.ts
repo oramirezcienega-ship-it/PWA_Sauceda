@@ -501,11 +501,11 @@ export async function reasignarOperador(
 }
 
 /** Lista todos los perfiles activos para asignación. */
-export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string }[]> {
+export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string; telefono?: string | null }[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("perfiles")
-    .select("id, nombre, rol")
+    .select("id, nombre, rol, telefono")
     .neq("activo", false)
     .order("nombre", { ascending: true });
   if (error) throw new Error(error.message);
