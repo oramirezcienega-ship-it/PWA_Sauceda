@@ -21,12 +21,17 @@ import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 import { cambiarEstatusMasivo } from "@/app/actions/prospectos";
 import { moverEtapa } from "@/app/actions/expedientes";
 import { programarCitaManual } from "@/app/actions/agenda";
+import { 
+  ModalPrevisualizarInspeccion, 
+  type DatosPrevisualizacionInspeccion 
+} from "./ModalPrevisualizarInspeccion";
 
 interface Perfil {
   id: string;
   nombre: string;
   rol: string;
   activo?: boolean;
+  telefono?: string | null;
 }
 
 interface PipelineProspectosClientProps {
@@ -78,6 +83,10 @@ export function PipelineProspectosClient({
   const [inspeccionNotificarWsp, setInspeccionNotificarWsp] = useState<boolean>(true);
   const [guardandoInspeccion, setGuardandoInspeccion] = useState<boolean>(false);
 
+  // Estado para Modal de Previsualización de Mensaje
+  const [modalPrevisualizar, setModalPrevisualizar] = useState<boolean>(false);
+  const [datosPrevisualizacion, setDatosPrevisualizacion] = useState<DatosPrevisualizacionInspeccion | null>(null);
+
   function handleAbrirModalInspeccion(data: ModalInspeccionData) {
     setModalInspeccion(data);
     setInspeccionPerfilId(data.perfilId || (perfiles[0]?.id ?? ""));
@@ -88,7 +97,7 @@ export function PipelineProspectosClient({
     setInspeccionNotificarWsp(true);
   }
 
-  async function handleGuardarInspeccion() {
+  function handleAbrirPrevisualizacion() {
     if (!modalInspeccion) return;
     if (!inspeccionFecha || !inspeccionHoraInicio || !inspeccionHoraFin) {
       alert("Por favor selecciona la fecha y franja horaria.");
@@ -99,20 +108,54 @@ export function PipelineProspectosClient({
       return;
     }
 
+    const asesorSel = perfiles.find((p) => p.id === inspeccionPerfilId);
+    const asesorNombre = asesorSel?.nombre || "Asesor Técnico";
+    const telContacto = asesorSel?.telefono || "477 465 4700";
+
+    setDatosPrevisualizacion({
+      clienteNombre: modalInspeccion.clienteNombre,
+      clienteTelefono: modalInspeccion.clienteTelefono || "",
+      clienteEmail: null,
+      fecha: inspeccionFecha,
+      horaInicio: inspeccionHoraInicio,
+      horaFin: inspeccionHoraFin,
+      perfilId: inspeccionPerfilId,
+      asesorNombre,
+      asesorTelefono: asesorSel?.telefono,
+      telefonoContacto: telContacto,
+      notas: inspeccionNotas,
+      tipoCita: "inspeccion",
+    });
+    setModalPrevisualizar(true);
+  }
+
+  async function handleConfirmarDesdeModal(opciones: {
+    mensajeWhatsApp: string;
+    enviarWhatsApp: boolean;
+    enviarEmail: boolean;
+    emailDestino: string;
+    telefonoContacto: string;
+  }) {
+    if (!datosPrevisualizacion || !modalInspeccion) return;
+
     setGuardandoInspeccion(true);
     try {
       const res = await programarCitaManual({
         prospectoId: modalInspeccion.prospectoId,
         expedienteId: modalInspeccion.expedienteId,
-        perfilId: inspeccionPerfilId,
-        clienteNombre: modalInspeccion.clienteNombre,
-        clienteTelefono: modalInspeccion.clienteTelefono || "",
+        perfilId: datosPrevisualizacion.perfilId,
+        clienteNombre: datosPrevisualizacion.clienteNombre,
+        clienteTelefono: datosPrevisualizacion.clienteTelefono,
+        clienteEmail: opciones.emailDestino || null,
         tipoCita: "inspeccion",
-        fecha: inspeccionFecha,
-        horaInicio: inspeccionHoraInicio,
-        horaFin: inspeccionHoraFin,
-        notas: inspeccionNotas,
-        notificarCliente: inspeccionNotificarWsp,
+        fecha: datosPrevisualizacion.fecha,
+        horaInicio: datosPrevisualizacion.horaInicio,
+        horaFin: datosPrevisualizacion.horaFin,
+        notas: datosPrevisualizacion.notas,
+        notificarCliente: opciones.enviarWhatsApp,
+        mensajeWhatsAppPersonalizado: opciones.mensajeWhatsApp,
+        enviarEmail: opciones.enviarEmail,
+        telefonoContacto: opciones.telefonoContacto,
       });
 
       if (!res.ok) {
@@ -121,6 +164,7 @@ export function PipelineProspectosClient({
       }
 
       alert(`¡Inspección técnica agendada con éxito para ${modalInspeccion.clienteNombre}!`);
+      setModalPrevisualizar(false);
       setModalInspeccion(null);
       router.refresh();
     } catch (err: any) {
@@ -971,15 +1015,27 @@ export function PipelineProspectosClient({
               </button>
               <button
                 type="button"
-                onClick={handleGuardarInspeccion}
+                onClick={handleAbrirPrevisualizacion}
                 disabled={guardandoInspeccion}
-                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold transition shadow-2xs cursor-pointer active:scale-95"
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold transition shadow-2xs cursor-pointer active:scale-95 flex items-center gap-1.5"
               >
-                {guardandoInspeccion ? "Agendando..." : "🔍 Agendar Inspección"}
+                <span>👁️</span>
+                <span>Previsualizar Mensaje y Agendar</span>
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Previsualización antes de Enviar */}
+      {datosPrevisualizacion && (
+        <ModalPrevisualizarInspeccion
+          abierto={modalPrevisualizar}
+          onCerrar={() => setModalPrevisualizar(false)}
+          datos={datosPrevisualizacion}
+          onConfirmar={handleConfirmarDesdeModal}
+          procesando={guardandoInspeccion}
+        />
       )}
     </div>
   );

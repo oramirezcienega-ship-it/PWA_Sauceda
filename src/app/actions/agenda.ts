@@ -21,6 +21,10 @@ export interface Cita {
   notas?: string;
   estado: "pendiente" | "confirmada" | "cancelada";
   created_at: string;
+  wa_message_id?: string | null;
+  mensaje_whatsapp_estado?: "pendiente" | "enviado" | "delivered" | "read" | "error" | null;
+  email_enviado?: boolean | null;
+  email_destinatario?: string | null;
 }
 
 export interface Bloqueo {
@@ -858,13 +862,24 @@ export async function programarCitaManual(data: {
   perfilId: string;
   clienteNombre: string;
   clienteTelefono: string;
+  clienteEmail?: string | null;
   tipoCita: "inspeccion" | "instalacion" | "llamada" | "venta" | "asesoria";
   fecha: string;
   horaInicio: string;
   horaFin: string;
   notas?: string;
   notificarCliente?: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+  mensajeWhatsAppPersonalizado?: string | null;
+  enviarEmail?: boolean;
+  telefonoContacto?: string | null;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  citaId?: string;
+  waMessageId?: string | null;
+  estadoWhatsApp?: string | null;
+  emailEnviado?: boolean;
+}> {
   await requireAdmin();
   if (!data.perfilId || !data.fecha || !data.horaInicio || !data.horaFin || !data.clienteNombre || !data.clienteTelefono) {
     return { ok: false, error: "Faltan datos obligatorios para agendar." };
@@ -873,7 +888,21 @@ export async function programarCitaManual(data: {
   const sb = supabaseServidor();
 
   try {
-    // 1. Si es inspección o instalación y tiene expedienteId, actualizar la etapa del expediente
+    // 1. Obtener datos del perfil/asesor asignado para enriquecer la notificación
+    const { data: perfil } = await sb
+      .from("perfiles")
+      .select("id, nombre, telefono, telefono_desvio")
+      .eq("id", data.perfilId)
+      .maybeSingle();
+
+    const nombreAsesor = perfil?.nombre || "Asesor Técnico";
+    const telContacto =
+      data.telefonoContacto?.trim() ||
+      perfil?.telefono ||
+      perfil?.telefono_desvio ||
+      "477 465 4700";
+
+    // 2. Si es inspección o instalación y tiene expedienteId, actualizar la etapa del expediente
     if (data.tipoCita === "inspeccion" && data.expedienteId) {
       await sb
         .from("expedientes")
@@ -893,66 +922,371 @@ export async function programarCitaManual(data: {
         .eq("id", data.expedienteId);
     }
 
-    // 2. Insertar en agenda_citas
-    const { error: errCita } = await sb
+    // 3. Insertar en agenda_citas
+    const insertPayload: any = {
+      perfil_id: data.perfilId,
+      prospecto_id: data.prospectoId ?? null,
+      expediente_id: data.expedienteId ?? null,
+      cliente_nombre: data.clienteNombre.trim(),
+      cliente_telefono: data.clienteTelefono.trim(),
+      cliente_email: data.clienteEmail?.trim() || null,
+      tipo_cita: data.tipoCita,
+      fecha: data.fecha,
+      hora_inicio: data.horaInicio,
+      hora_fin: data.horaFin,
+      notas: data.notas?.trim() || null,
+      estado: "confirmada",
+    };
+
+    const { data: citaCreada, error: errCita } = await sb
       .from("agenda_citas")
-      .insert({
-        perfil_id: data.perfilId,
-        prospecto_id: data.prospectoId ?? null,
-        expediente_id: data.expedienteId ?? null,
-        cliente_nombre: data.clienteNombre.trim(),
-        cliente_telefono: data.clienteTelefono.trim(),
-        tipo_cita: data.tipoCita,
-        fecha: data.fecha,
-        hora_inicio: data.horaInicio,
-        hora_fin: data.horaFin,
-        notas: data.notas?.trim() || null,
-        estado: "confirmada",
-      });
+      .insert(insertPayload)
+      .select("id")
+      .single();
 
     if (errCita) {
       return { ok: false, error: errCita.message };
     }
 
-    // 3. Registrar actividad en la bitácora
+    const citaId = citaCreada?.id;
+
+    // 4. Registrar actividad en la bitácora
     if (data.expedienteId) {
       const { registrarActividad } = await import("@/lib/actividades");
-      const tipoLabel = data.tipoCita === "inspeccion" ? "Inspección Técnica" : (data.tipoCita === "instalacion" ? "Instalación Profesional" : data.tipoCita);
+      const tipoLabel =
+        data.tipoCita === "inspeccion"
+          ? "Inspección Técnica"
+          : data.tipoCita === "instalacion"
+          ? "Instalación Profesional"
+          : data.tipoCita;
       await registrarActividad(sb, {
         expedienteId: data.expedienteId,
         tipo: "construccion",
         titulo: `📅 ${tipoLabel} Programada`,
-        detalle: `Programada para el ${data.fecha} de ${data.horaInicio} a ${data.horaFin}. Técnico/Asesor: ${data.perfilId}. ${data.notas ? `Notas: ${data.notas}` : ""}`,
+        detalle: `Programada para el ${data.fecha} de ${data.horaInicio} a ${data.horaFin}. Técnico/Asesor: ${nombreAsesor}. Contacto: ${telContacto}. ${data.notas ? `Notas: ${data.notas}` : ""}`,
       });
     } else if (data.prospectoId) {
-      const tipoLabel = data.tipoCita === "inspeccion" ? "Inspección Técnica" : (data.tipoCita === "instalacion" ? "Instalación Profesional" : data.tipoCita);
+      const tipoLabel =
+        data.tipoCita === "inspeccion"
+          ? "Inspección Técnica"
+          : data.tipoCita === "instalacion"
+          ? "Instalación Profesional"
+          : data.tipoCita;
       await sb.from("actividades").insert({
         prospecto_id: data.prospectoId,
         tipo: "cita",
-        descripcion: `Cita de ${tipoLabel} agendada para el ${data.fecha} a las ${data.horaInicio}.`,
+        descripcion: `Cita de ${tipoLabel} agendada para el ${data.fecha} a las ${data.horaInicio} con ${nombreAsesor}. Contacto: ${telContacto}.`,
       });
     }
 
-    // 4. Notificación por WhatsApp
-    if (data.notificarCliente && data.clienteTelefono) {
+    let waMessageId: string | null = null;
+    let estadoWhatsApp: string | null = null;
+    let emailEnviado = false;
+
+    // 5. Notificación por WhatsApp
+    if (data.notificarCliente !== false && data.clienteTelefono) {
       const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
-      let msg = "";
-      if (data.tipoCita === "inspeccion") {
-        msg = `¡Hola ${data.clienteNombre.split(" ")[0]}! 📅 Te confirmamos que tu inspección técnica gratuita en sitio con SAUCEDA ha quedado programada para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\nCualquier duda o cambio quedamos a tus órdenes. ¡Que tengas un excelente día! 💚`;
-      } else if (data.tipoCita === "instalacion") {
-        msg = `¡Hola ${data.clienteNombre.split(" ")[0]}! 🛠️ Te confirmamos que tu instalación profesional de impermeabilización con SAUCEDA ha quedado programada para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\nPor favor asegúrate de tener libre el acceso a la azotea. ¡Cualquier duda quedamos a tus órdenes! 💚`;
-      } else {
-        msg = `¡Hola ${data.clienteNombre.split(" ")[0]}! 📅 Te confirmamos que tenemos programada una cita de tipo *${data.tipoCita}* para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
+      
+      let msg = data.mensajeWhatsAppPersonalizado?.trim();
+      if (!msg) {
+        const fechaObj = new Date(`${data.fecha}T00:00:00`);
+        const fechaLegible = !isNaN(fechaObj.getTime())
+          ? fechaObj.toLocaleDateString("es-MX", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })
+          : data.fecha;
+
+        const primerNombre = data.clienteNombre.split(" ")[0] || data.clienteNombre;
+
+        if (data.tipoCita === "inspeccion") {
+          msg = `¡Hola ${primerNombre}! 📅 Te confirmamos que tu inspección técnica en sitio con SAUCEDA ha quedado programada:\n\n🗓️ *Fecha:* ${fechaLegible}\n⏰ *Horario:* ${data.horaInicio} a ${data.horaFin} hrs\n👷 *Asesor / Técnico que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto para cualquier tema:* ${telContacto}\n\nCualquier duda o cambio quedamos a tus órdenes respondiendo a este mensaje o marcando al número de contacto. ¡Que tengas un excelente día! 💚`;
+        } else if (data.tipoCita === "instalacion") {
+          msg = `¡Hola ${primerNombre}! 🛠️ Te confirmamos que tu instalación profesional de impermeabilización con SAUCEDA ha quedado programada:\n\n🗓️ *Fecha:* ${fechaLegible}\n⏰ *Horario:* ${data.horaInicio} a ${data.horaFin} hrs\n👷 *Responsable que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto:* ${telContacto}\n\nPor favor asegúrate de tener libre el acceso a la azotea. ¡Cualquier duda quedamos a tus órdenes! 💚`;
+        } else {
+          msg = `¡Hola ${primerNombre}! 📅 Te confirmamos que tenemos programada una cita de tipo *${data.tipoCita}* para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n👷 *Atiende:* ${nombreAsesor}\n📞 *Contacto:* ${telContacto}\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
+        }
       }
-      await enviarWhatsAppTexto(data.clienteTelefono, msg);
+
+      const resWsp = await enviarWhatsAppTexto(data.clienteTelefono, msg);
+      waMessageId = (resWsp as any).messageId || null;
+      estadoWhatsApp = resWsp.ok ? "enviado" : "error";
+
+      // Registrar en mensajes_whatsapp para bitácora y sincronización con webhooks
+      try {
+        const normalizar = (tel: string) => {
+          const d = (tel || "").replace(/\D/g, "");
+          if (!d) return "";
+          if (d.startsWith("521") && d.length === 13) return "52" + d.slice(3);
+          if (d.startsWith("52") && d.length >= 12) return d;
+          if (d.length === 10) return "52" + d;
+          return d;
+        };
+
+        await sb.from("mensajes_whatsapp").insert({
+          telefono: normalizar(data.clienteTelefono),
+          texto: msg,
+          direccion: "out",
+          expediente_id: data.expedienteId ?? null,
+          prospecto_id: data.prospectoId ?? null,
+          estado: resWsp.ok ? "enviado" : "error",
+          agente: "confirmacion_inspeccion",
+          wa_message_id: waMessageId,
+        });
+      } catch (e) {
+        console.warn("No se pudo insertar en mensajes_whatsapp:", e);
+      }
+
+      // Actualizar agenda_citas con el ID y estado de WhatsApp
+      if (citaId) {
+        try {
+          await sb
+            .from("agenda_citas")
+            .update({
+              wa_message_id: waMessageId,
+              mensaje_whatsapp_estado: estadoWhatsApp,
+            })
+            .eq("id", citaId);
+        } catch {
+          // Ignorar si columnas aún no migradas
+        }
+      }
     }
 
-    return { ok: true };
+    // 6. Notificación por Correo Electrónico
+    if (data.enviarEmail && data.clienteEmail && data.clienteEmail.includes("@")) {
+      try {
+        const { enviarCorreo } = await import("@/lib/email");
+        const { generarHtmlCorreoInspeccion } = await import("@/lib/email-inspeccion");
+
+        const htmlCorreo = generarHtmlCorreoInspeccion({
+          clienteNombre: data.clienteNombre,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          horaFin: data.horaFin,
+          asesorNombre: nombreAsesor,
+          telefonoContacto: telContacto,
+          notas: data.notas,
+        });
+
+        await enviarCorreo(
+          data.clienteEmail.trim(),
+          "📅 Confirmación de Inspección Técnica - SAUCEDA",
+          htmlCorreo
+        );
+        emailEnviado = true;
+
+        if (citaId) {
+          try {
+            await sb
+              .from("agenda_citas")
+              .update({
+                email_enviado: true,
+                email_destinatario: data.clienteEmail.trim(),
+              })
+              .eq("id", citaId);
+          } catch {
+            // Ignorar si columnas no existen
+          }
+        }
+      } catch (errEmail) {
+        console.error("Error al enviar correo de confirmación de inspección:", errEmail);
+      }
+    }
+
+    return {
+      ok: true,
+      citaId,
+      waMessageId,
+      estadoWhatsApp,
+      emailEnviado,
+    };
   } catch (err: any) {
     console.error("Error al programar cita manual:", err);
     return { ok: false, error: err.message || "Error interno al programar." };
   }
 }
+
+/**
+ * Consulta el estado actualizado de la confirmación enviada (WhatsApp y Correo)
+ * verificando tanto agenda_citas como el registro más reciente en mensajes_whatsapp.
+ */
+export async function obtenerEstadoNotificacionCita(citaId: string): Promise<{
+  ok: boolean;
+  estadoWhatsApp?: "pendiente" | "enviado" | "delivered" | "read" | "error" | null;
+  waMessageId?: string | null;
+  emailEnviado?: boolean;
+  emailDestinatario?: string | null;
+  error?: string;
+}> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data: cita, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("id, wa_message_id, mensaje_whatsapp_estado, email_enviado, email_destinatario, prospecto_id, expediente_id, cliente_telefono, created_at")
+      .eq("id", citaId)
+      .maybeSingle();
+
+    if (errCita || !cita) {
+      return { ok: false, error: "Cita no encontrada." };
+    }
+
+    let estadoWsp = (cita.mensaje_whatsapp_estado as any) || null;
+    let waMessageId = cita.wa_message_id || null;
+
+    // Si tenemos wa_message_id, buscar el estado más reciente en mensajes_whatsapp
+    if (waMessageId) {
+      const { data: msgWsp } = await sb
+        .from("mensajes_whatsapp")
+        .select("estado")
+        .eq("wa_message_id", waMessageId)
+        .maybeSingle();
+
+      if (msgWsp?.estado) {
+        estadoWsp = msgWsp.estado;
+      }
+    } else if (cita.cliente_telefono) {
+      // Búsqueda por teléfono y agente de confirmación
+      const { data: msgFallback } = await sb
+        .from("mensajes_whatsapp")
+        .select("wa_message_id, estado")
+        .eq("agente", "confirmacion_inspeccion")
+        .gte("created_at", new Date(new Date(cita.created_at).getTime() - 60000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (msgFallback) {
+        estadoWsp = msgFallback.estado;
+        waMessageId = msgFallback.wa_message_id;
+      }
+    }
+
+    return {
+      ok: true,
+      estadoWhatsApp: estadoWsp,
+      waMessageId,
+      emailEnviado: !!cita.email_enviado,
+      emailDestinatario: cita.email_destinatario || null,
+    };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al obtener estado." };
+  }
+}
+
+/**
+ * Reenvía la confirmación de la inspección técnica por WhatsApp y/o Correo electrónico.
+ */
+export async function reenviarNotificacionInspeccion(datos: {
+  citaId: string;
+  clienteTelefono: string;
+  clienteEmail?: string | null;
+  mensajeTexto: string;
+  enviarWsp?: boolean;
+  enviarEmail?: boolean;
+  asesorNombre?: string;
+  telefonoContacto?: string;
+}): Promise<{ ok: boolean; error?: string; estadoWhatsApp?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data: cita, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("id", datos.citaId)
+      .maybeSingle();
+
+    if (errCita || !cita) {
+      return { ok: false, error: "No se encontró la cita a reenviar." };
+    }
+
+    let estadoWsp: string | undefined = undefined;
+
+    // Reenvío por WhatsApp
+    if (datos.enviarWsp !== false && datos.clienteTelefono) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      const resWsp = await enviarWhatsAppTexto(datos.clienteTelefono, datos.mensajeTexto);
+      const waMessageId = (resWsp as any).messageId || null;
+      estadoWsp = resWsp.ok ? "enviado" : "error";
+
+      const normalizar = (tel: string) => {
+        const d = (tel || "").replace(/\D/g, "");
+        if (!d) return "";
+        if (d.startsWith("521") && d.length === 13) return "52" + d.slice(3);
+        if (d.startsWith("52") && d.length >= 12) return d;
+        if (d.length === 10) return "52" + d;
+        return d;
+      };
+
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: normalizar(datos.clienteTelefono),
+        texto: datos.mensajeTexto,
+        direccion: "out",
+        expediente_id: cita.expediente_id ?? null,
+        prospecto_id: cita.prospecto_id ?? null,
+        estado: resWsp.ok ? "enviado" : "error",
+        agente: "confirmacion_inspeccion",
+        wa_message_id: waMessageId,
+      });
+
+      try {
+        await sb
+          .from("agenda_citas")
+          .update({
+            wa_message_id: waMessageId,
+            mensaje_whatsapp_estado: estadoWsp,
+          })
+          .eq("id", datos.citaId);
+      } catch {
+        // Ignorar
+      }
+    }
+
+    // Reenvío por Correo
+    if (datos.enviarEmail && datos.clienteEmail && datos.clienteEmail.includes("@")) {
+      const { enviarCorreo } = await import("@/lib/email");
+      const { generarHtmlCorreoInspeccion } = await import("@/lib/email-inspeccion");
+
+      const htmlCorreo = generarHtmlCorreoInspeccion({
+        clienteNombre: cita.cliente_nombre,
+        fecha: cita.fecha,
+        horaInicio: cita.hora_inicio,
+        horaFin: cita.hora_fin,
+        asesorNombre: datos.asesorNombre || "Asesor Técnico",
+        telefonoContacto: datos.telefonoContacto || "477 465 4700",
+        notas: cita.notas,
+      });
+
+      await enviarCorreo(
+        datos.clienteEmail.trim(),
+        "📅 Confirmación de Inspección Técnica - SAUCEDA",
+        htmlCorreo
+      );
+
+      try {
+        await sb
+          .from("agenda_citas")
+          .update({
+            email_enviado: true,
+            email_destinatario: datos.clienteEmail.trim(),
+          })
+          .eq("id", datos.citaId);
+      } catch {
+        // Ignorar
+      }
+    }
+
+    return { ok: true, estadoWhatsApp: estadoWsp };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al reenviar notificación." };
+  }
+}
+
 
 /**
  * Cancela una cita marcándola con estado 'cancelada' y asentando el motivo en la bitácora.

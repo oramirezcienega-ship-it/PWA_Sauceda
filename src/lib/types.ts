@@ -41,6 +41,7 @@ export type TipoNegocioId =
   | "construccion-impermeabilizacion"
   | "construccion-remodelacion"
   | "construccion-piso-estampado"
+  | "construccion-mantenimiento-postventa"
   | "otro";
 
 export function labelTipoNegocio(tipo: string): string {
@@ -59,6 +60,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Remodelación)";
     case "construccion-piso-estampado":
       return "Sauceda Construye (Piso Estampado)";
+    case "construccion-mantenimiento-postventa":
+      return "Sauceda Construye (Mantenimiento Postventa)";
     case "otro":
       return "Otro";
     default:
@@ -82,7 +85,22 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     return "construccion-piso-estampado";
   }
 
-  // 2. Remodelación
+  // 2. Mantenimiento Postventa (Campaña de Facebook/Meta o palabras clave de Mantenimiento de tu Hogar / Postventa)
+  const campLower = (campaignName ?? "").toLowerCase();
+  if (
+    campLower.includes("mantenimiento") ||
+    campLower.includes("postventa") ||
+    texto.includes("postventa") ||
+    texto.includes("post-venta") ||
+    texto.includes("mantenimiento postventa") ||
+    texto.includes("mantenimiento de tu hogar") ||
+    texto.includes("mantenimiento del hogar") ||
+    texto.includes("mantenimiento preventivo")
+  ) {
+    return "construccion-mantenimiento-postventa";
+  }
+
+  // 3. Remodelación
   if (
     texto.includes("remodela") ||
     texto.includes("remodelacion") ||
@@ -94,7 +112,7 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     return "construccion-remodelacion";
   }
 
-  // 2. Impermeabilización
+  // 4. Impermeabilización
   if (
     texto.includes("impermeabili") ||
     texto.includes("gotera") ||
