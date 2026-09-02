@@ -195,15 +195,19 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   );
   const nombres = new Map<string, string>();
   const nombresAsesor = new Map<string, string>();
+  const tipoNegocioExp = new Map<string, string>();
   if (expIds.length > 0) {
     const { data: exps } = await sb
       .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
+      .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
       .in("id", expIds);
     (exps ?? []).forEach((e: any) => {
       nombres.set(e.id as string, nombreDe(e));
       if (e.perfiles?.nombre) {
         nombresAsesor.set(e.id as string, e.perfiles.nombre);
+      }
+      if (e.tipo_negocio) {
+        tipoNegocioExp.set(e.id as string, e.tipo_negocio);
       }
     });
   }
@@ -214,10 +218,11 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   );
   const nombresPros = new Map<string, string>();
   const nombresAsesorPros = new Map<string, string>();
+  const tipoNegocioPros = new Map<string, string>();
   if (prosIds.length > 0) {
     const { data: pros } = await sb
       .from("prospectos")
-      .select("id, nombre, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
+      .select("id, nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
       .in("id", prosIds);
     (pros ?? []).forEach((p: any) => {
       const nom = [p.nombre, p.primer_apellido, p.segundo_apellido]
@@ -226,6 +231,9 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       nombresPros.set(p.id as string, nom);
       if (p.perfiles?.nombre) {
         nombresAsesorPros.set(p.id as string, p.perfiles.nombre);
+      }
+      if (p.tipo_negocio) {
+        tipoNegocioPros.set(p.id as string, p.tipo_negocio);
       }
     });
   }
@@ -266,6 +274,10 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       finalizado: ultimo.finalizado ?? false,
       atiende: atiendeFinal,
       ultimaDireccion: ultimo.direccion,
+      tipoNegocio:
+        (expId && tipoNegocioExp.get(expId)) ||
+        (prosId && tipoNegocioPros.get(prosId)) ||
+        null,
     });
   });
   resumenes.sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha));
@@ -449,15 +461,19 @@ export async function obtenerConversacion(
   let nombreProspecto = "";
 
   let asesorNombre = "";
+  let tipoNegocio: string | null = null;
 
   if (expedienteId) {
     const { data: e } = await sb
       .from("expedientes")
-      .select("cliente, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
+      .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
       .eq("id", expedienteId)
       .maybeSingle();
     if (e) {
       nombreExpediente = nombreDe(e as any);
+      if ((e as any).tipo_negocio) {
+        tipoNegocio = (e as any).tipo_negocio;
+      }
       if ((e as any).perfiles?.nombre) {
         asesorNombre = (e as any).perfiles.nombre;
       }
@@ -467,16 +483,35 @@ export async function obtenerConversacion(
   if (prospectoId) {
     const { data: p } = await sb
       .from("prospectos")
-      .select("nombre, primer_apellido, segundo_apellido, perfiles:asesor_id(nombre)")
+      .select("nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
       .eq("id", prospectoId)
       .maybeSingle();
     if (p) {
       nombreProspecto = [p.nombre, p.primer_apellido, p.segundo_apellido]
         .filter(Boolean)
         .join(" ");
+      if (!tipoNegocio && (p as any).tipo_negocio) {
+        tipoNegocio = (p as any).tipo_negocio;
+      }
       if (!asesorNombre && (p as any).perfiles?.nombre) {
         asesorNombre = (p as any).perfiles.nombre;
       }
+    }
+  }
+
+  // Fallback si no hay expedienteId ni prospectoId enlazados directamente:
+  if (!tipoNegocio && telefono) {
+    const v = variantesId(telefono);
+    const { data: prosTel } = await sb
+      .from("prospectos")
+      .select("tipo_negocio")
+      .in("telefono", v)
+      .not("tipo_negocio", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (prosTel?.tipo_negocio) {
+      tipoNegocio = prosTel.tipo_negocio;
     }
   }
 
@@ -507,7 +542,46 @@ export async function obtenerConversacion(
     nombreExpediente: nombreExpediente || undefined,
     nombreProspecto: nombreProspecto || undefined,
     atiende: atiendeFinal,
+    tipoNegocio: tipoNegocio || null,
   };
+}
+
+/** Actualiza manualmente el tipo de negocio clasificado para un contacto/conversación. */
+export async function actualizarTipoNegocioConversacion(
+  telefono: string,
+  tipoNegocio: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, error: "Teléfono requerido." };
+
+  try {
+    const sb = supabaseServidor();
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+
+    if (prospectoId) {
+      await sb
+        .from("prospectos")
+        .update({ tipo_negocio: tipoNegocio })
+        .eq("id", prospectoId);
+    }
+    if (expedienteId) {
+      await sb
+        .from("expedientes")
+        .update({ tipo_negocio: tipoNegocio })
+        .eq("id", expedienteId);
+    }
+    if (!prospectoId && !expedienteId) {
+      const v = variantesId(telefono);
+      await sb
+        .from("prospectos")
+        .update({ tipo_negocio: tipoNegocio })
+        .in("telefono", v);
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al actualizar tipo de negocio de conversación:", err);
+    return { ok: false, error: err.message };
+  }
 }
 
 /** IDs de expediente/prospecto asociados al teléfono (último mensaje). */

@@ -19,6 +19,7 @@ import {
   editarMensajeIndividual,
   enviarStickerConversacion,
   enviarArchivoDirectoConversacion,
+  actualizarTipoNegocioConversacion,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
@@ -31,6 +32,7 @@ import type {
   ConversacionDetalle,
   ConversacionResumen,
 } from "@/lib/types";
+import { labelTipoNegocio } from "@/lib/types";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
@@ -533,6 +535,7 @@ export function Conversaciones() {
   const [params, setParams] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
 
   // Cargar documentos del prospecto seleccionado
   useEffect(() => {
@@ -1309,6 +1312,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         👤 {c.prospectoId}
                       </Link>
                     )}
+                    {c.tipoNegocio && (
+                      <span
+                        className="bg-amber-50 text-amber-900 border border-amber-200/80 rounded-md px-1.5 py-0.5 text-[9px] font-semibold truncate max-w-[150px]"
+                        title={`Tipo de negocio: ${labelTipoNegocio(c.tipoNegocio)}`}
+                      >
+                        🏷️ {labelTipoNegocio(c.tipoNegocio)}
+                      </span>
+                    )}
                   </span>
 
                   <span className="flex w-full items-center justify-between gap-2 mt-2">
@@ -1417,6 +1428,57 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       </a>
                     </>
                   )}
+
+                  {/* Tipo de Negocio / Servicio clasificado por Sofía */}
+                  <span className="text-carbon/30 text-xs font-mono">·</span>
+                  <div className="inline-flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs border ${
+                        detalle.tipoNegocio
+                          ? "bg-amber-50 text-amber-900 border-amber-300"
+                          : "bg-slate-100 text-carbon/50 border-carbon/15"
+                      }`}
+                      title={
+                        detalle.tipoNegocio
+                          ? `Tipo de negocio detectado por Sofía: ${detalle.tipoNegocio}`
+                          : "Sofía aún no ha clasificado el tipo de negocio"
+                      }
+                    >
+                      <span>🏷️</span>
+                      <span>{detalle.tipoNegocio ? labelTipoNegocio(detalle.tipoNegocio) : "Sin clasificar"}</span>
+                    </span>
+
+                    {/* Selector interactivo para cambiar tipo de negocio si el asesor lo requiere */}
+                    <select
+                      value={detalle.tipoNegocio ?? ""}
+                      disabled={cambiandoTipoNegocio}
+                      onChange={async (e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        setCambiandoTipoNegocio(true);
+                        const res = await actualizarTipoNegocioConversacion(detalle.telefono, val);
+                        setCambiandoTipoNegocio(false);
+                        if (!res.ok) {
+                          setAviso(res.error ?? "No se pudo actualizar el tipo de negocio.");
+                        } else {
+                          await refrescar(detalle.telefono);
+                        }
+                      }}
+                      className="bg-white border border-carbon/15 hover:border-sauce rounded px-1.5 py-0.5 text-[10px] text-carbon/70 hover:text-carbon focus:outline-none cursor-pointer"
+                      title="Cambiar tipo de negocio de esta conversación"
+                    >
+                      <option value="">Cambiar...</option>
+                      <option value="construccion-impermeabilizacion">Impermeabilización</option>
+                      <option value="construccion-piso-estampado">Piso Estampado</option>
+                      <option value="construccion-mantenimiento-postventa">Mantenimiento Postventa</option>
+                      <option value="construccion-remodelacion">Remodelación</option>
+                      <option value="construccion">Construcción General</option>
+                      <option value="traspaso_compra">Traspaso / Compra</option>
+                      <option value="promocion_venta">Promoción Venta</option>
+                      <option value="solo_tramite">Solo Trámite</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Fila 3: Asignación y Acciones combinados */}
