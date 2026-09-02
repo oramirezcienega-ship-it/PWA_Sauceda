@@ -978,6 +978,10 @@ export async function obtenerCotizacionesDeExpediente(
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
+
+  // Recalcular y sincronizar valor_estimado del expediente con la sumatoria de cotizaciones
+  await sincronizarValorEstimadoExpediente(sb, expedienteId, prospectoId);
+
   return (data ?? []).map(aCotizacion);
 }
 
@@ -1005,14 +1009,80 @@ export async function obtenerCotizacionesDeProspecto(
 }
 
 
-/** Helper para sincronizar automáticamente la etapa del expediente según el estatus de la cotización. */
+/**
+ * Recalcula y actualiza automáticamente el valor_estimado de un expediente / prospecto
+ * sumando los totales de las cotizaciones generadas para dicho proyecto.
+ */
+export async function sincronizarValorEstimadoExpediente(
+  sb: any,
+  expedienteId?: string | null,
+  prospectoId?: string | null
+) {
+  try {
+    if (!expedienteId && !prospectoId) return;
+
+    let query = sb.from("cotizaciones").select("id, precio_final, costo_estimado, estatus, expediente_id, prospecto_id");
+
+    if (expedienteId && prospectoId) {
+      query = query.or(`expediente_id.eq.${expedienteId},prospecto_id.eq.${prospectoId}`);
+    } else if (expedienteId) {
+      query = query.eq("expediente_id", expedienteId);
+    } else if (prospectoId) {
+      query = query.eq("prospecto_id", prospectoId);
+    }
+
+    const { data: cotizaciones, error: errCots } = await query;
+    if (errCots || !cotizaciones || cotizaciones.length === 0) return;
+
+    // Cotizaciones activas (no rechazadas/archivadas)
+    const cotizacionesValidas = cotizaciones.filter(
+      (c: any) => c.estatus !== "rechazada" && c.estatus !== "archivada"
+    );
+
+    const listaASumar = cotizacionesValidas.length > 0 ? cotizacionesValidas : cotizaciones;
+
+    const sumaTotal = listaASumar.reduce((acc: number, c: any) => {
+      const monto = Number(c.precio_final) > 0 ? Number(c.precio_final) : Number(c.costo_estimado || 0);
+      return acc + monto;
+    }, 0);
+
+    if (sumaTotal > 0) {
+      if (expedienteId) {
+        await sb
+          .from("expedientes")
+          .update({
+            valor_estimado: Math.round(sumaTotal),
+          })
+          .eq("id", expedienteId);
+      }
+
+      if (prospectoId) {
+        await sb
+          .from("prospectos")
+          .update({
+            valor_estimado: Math.round(sumaTotal),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", prospectoId);
+      }
+    }
+  } catch (err) {
+    console.error("Error en sincronizarValorEstimadoExpediente:", err);
+  }
+}
+
+/** Helper para sincronizar automáticamente la etapa y valor estimado del expediente según sus cotizaciones. */
 export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) {
   try {
     const { data: cot } = await sb
       .from("cotizaciones")
-      .select("expediente_id, estatus, requiere_visita")
+      .select("expediente_id, prospecto_id, estatus, requiere_visita")
       .eq("id", cotizacionId)
       .maybeSingle();
+
+    if (cot) {
+      await sincronizarValorEstimadoExpediente(sb, cot.expediente_id, cot.prospecto_id);
+    }
 
     if (!cot || !cot.expediente_id) return;
 
@@ -2167,5 +2237,114 @@ export async function enviarCotizacionPorCorreo(datos: {
     mensaje: `Cotización ${folioCot} enviada exitosamente por correo electrónico a ${correoDestino} y registrada en la bitácora.`,
   };
 }
+
+/**
+ * Envía una cotización por WhatsApp (usando plantilla oficial de Meta o mensaje fallback)
+ * y registra la actividad en el historial especificando el medio (WhatsApp).
+ */
+export async function enviarCotizacionPorWhatsAppAction(datos: {
+  cotizacionId: string;
+  telefono: string;
+}): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const telLimpio = (datos.telefono || "").replace(/\D/g, "");
+  if (!telLimpio || telLimpio.length < 10) {
+    return { ok: false, error: "El número telefónico del cliente no es válido." };
+  }
+
+  // 1. Obtener la cotización
+  const { data: cotFila, error: errCot } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos:prospecto_id(id, nombre, primer_apellido, segundo_apellido, correo, telefono, direccion)
+    `)
+    .eq("id", datos.cotizacionId)
+    .single();
+
+  if (errCot || !cotFila) {
+    return { ok: false, error: "No se encontró la cotización especificada." };
+  }
+
+  const cotizacion = aCotizacion(cotFila);
+  const primerNombre = cotizacion.prospectoNombre?.split(" ")[0] || "Cliente";
+
+  const servicioLabels: Record<string, string> = {
+    impermeabilizacion: "Impermeabilización de Azotea",
+    pintura: "Pintura & Acabados",
+    losa: "Construcción de Losa",
+    remodelacion: "Remodelación Integral",
+  };
+  const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
+
+  const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
+  const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
+
+  // 2. Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
+  const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
+  const resMeta = await enviarWhatsAppPlantilla(
+    datos.telefono,
+    "envio_cotizacion_cliente",
+    "es_MX",
+    [primerNombre, servicioNombre, cotizacion.id]
+  );
+
+  if (resMeta.ok) {
+    if (cotFila.estatus === "aprobada") {
+      await sb
+        .from("cotizaciones")
+        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+        .eq("id", datos.cotizacionId);
+    }
+
+    await registrarActividad(sb, {
+      prospectoId: cotFila.prospecto_id,
+      expedienteId: cotFila.expediente_id,
+      tipo: "envio_cotizacion_whatsapp",
+      titulo: `📲 Cotización enviada por WhatsApp (Plantilla Oficial Meta)`,
+      detalle: `Se envió la plantilla de WhatsApp (envio_cotizacion_cliente) a ${datos.telefono} para la propuesta ${cotizacion.id}. Portal: ${urlPortal}`,
+    });
+
+    return {
+      ok: true,
+      mensaje: `Plantilla oficial de WhatsApp enviada con éxito a ${datos.telefono} y registrada en el historial.`,
+    };
+  }
+
+  // 3. Fallback: Si falla por plantilla o ventana 24h, intentar envío de texto libre
+  const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+  const textoMensaje = `Hola ${primerNombre}, te compartimos la propuesta comercial y cotización para el servicio de ${servicioNombre} en tu domicilio (Folio ${cotizacion.id}). Puedes revisarla a detalle y autorizarla en el siguiente enlace: ${urlPortal}`;
+  const resTxt = await enviarWhatsAppTexto(datos.telefono, textoMensaje);
+
+  if (resTxt.ok) {
+    if (cotFila.estatus === "aprobada") {
+      await sb
+        .from("cotizaciones")
+        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+        .eq("id", datos.cotizacionId);
+    }
+
+    await registrarActividad(sb, {
+      prospectoId: cotFila.prospecto_id,
+      expedienteId: cotFila.expediente_id,
+      tipo: "envio_cotizacion_whatsapp",
+      titulo: `📲 Cotización enviada por WhatsApp`,
+      detalle: `Se envió la propuesta comercial por WhatsApp a ${datos.telefono}. Enlace al portal: ${urlPortal}`,
+    });
+
+    return {
+      ok: true,
+      mensaje: `Cotización ${cotizacion.id} enviada exitosamente por WhatsApp a ${datos.telefono}.`,
+    };
+  }
+
+  return {
+    ok: false,
+    error: resMeta.error || resTxt.error || "Meta rechazó el envío del mensaje por WhatsApp.",
+  };
+}
+
 
 

@@ -218,9 +218,12 @@ export function FormularioExpediente({
             step={1000}
             value={datos.valorEstimado || ""}
             onChange={(e) => actualizar("valorEstimado", Number(e.target.value))}
-            placeholder="980000"
+            placeholder="0"
             className={`${INPUT} font-mono`}
           />
+          <p className="text-[11px] text-emerald-700 mt-1 font-medium flex items-center gap-1">
+            ✨ Sumatoria automática de las cotizaciones del expediente
+          </p>
         </Campo>
 
         <Campo etiqueta="Saldo de deuda (MXN)">
