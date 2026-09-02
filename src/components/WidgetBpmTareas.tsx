@@ -12,11 +12,17 @@ import { formatoFecha } from "@/lib/formato";
 interface WidgetBpmTareasProps {
   expedienteId: string;
   tipoNegocio?: string | null;
+  inicialContraido?: boolean;
 }
 
-export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasProps) {
+export function WidgetBpmTareas({ 
+  expedienteId, 
+  tipoNegocio, 
+  inicialContraido = true 
+}: WidgetBpmTareasProps) {
   const [tareas, setTareas] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [contraido, setContraido] = useState(inicialContraido);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
 
   // Modal para captura de resultados por parte del operador
@@ -112,10 +118,10 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
 
   if (cargando) {
     return (
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="flex items-center justify-center space-x-2">
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
-          <span className="text-gray-500 font-medium">Cargando flujo de trabajo (BPM)...</span>
+      <div className="rounded-2xl border border-carbon/10 bg-white p-4 shadow-sm mb-6">
+        <div className="flex items-center justify-center space-x-2 py-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-sauce"></div>
+          <span className="text-carbon/60 text-xs font-medium">Cargando flujo de trabajo operativo (BPM)...</span>
         </div>
       </div>
     );
@@ -123,149 +129,217 @@ export function WidgetBpmTareas({ expedienteId, tipoNegocio }: WidgetBpmTareasPr
 
   if (tareas.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-6 mb-6 border border-gray-150">
-        <h3 className="text-lg font-bold text-gray-800 mb-2">📋 Flujo de Trabajo (BPM)</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          Este expediente no tiene tareas operativas asignadas todavía. Puedes inicializar la plantilla de flujos correspondiente para este servicio.
-        </p>
+      <div className="rounded-2xl border border-carbon/10 bg-white shadow-sm overflow-hidden mb-6 transition-all">
         <button
-          onClick={handleInicializar}
-          className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-md shadow-sm transition"
+          type="button"
+          onClick={() => setContraido(!contraido)}
+          className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-slate-50/60 transition cursor-pointer"
         >
-          🚀 Inicializar Flujo BPM
+          <div className="flex items-center gap-3">
+            <span className="text-xl">📋</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-titular text-base font-bold text-carbon">
+                  Flujo de Trabajo Operativo (BPM)
+                </h3>
+                {tipoNegocio && (
+                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-sauce/10 text-sauce rounded-full">
+                    {tipoNegocio}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-carbon/50 mt-0.5">
+                Sin tareas inicializadas aún para este expediente
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-sauce bg-sauce/10 hover:bg-sauce hover:text-white transition px-2.5 py-1 rounded-lg">
+            {contraido ? "Desplegar ▼" : "Contraer ▲"}
+          </span>
         </button>
+
+        {!contraido && (
+          <div className="p-5 border-t border-carbon/10 bg-slate-50/50 space-y-3">
+            <p className="text-xs text-carbon/60">
+              Este expediente no tiene tareas operativas asignadas todavía. Puedes inicializar la plantilla de flujos correspondiente para este servicio.
+            </p>
+            <button
+              onClick={handleInicializar}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-sauce hover:bg-verde-profundo text-white text-xs font-bold rounded-lg shadow-sm transition cursor-pointer"
+            >
+              🚀 Inicializar Flujo BPM
+            </button>
+          </div>
+        )}
       </div>
     );
   }
 
+  const completadas = tareas.filter((t) => t.estado === "completada").length;
+  const porcentaje = tareas.length > 0 ? Math.round((completadas / tareas.length) * 100) : 0;
+
   return (
-    <div className="bg-white rounded-lg shadow p-6 mb-6 border border-gray-150">
-      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
-        <div>
-          <h3 className="text-lg font-bold text-gray-800 flex items-center">
-            <span className="mr-2">📋</span> Flujo de Trabajo Operativo (BPM)
-          </h3>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Automatización de tareas operativas del expediente
-          </p>
+    <div className="rounded-2xl border border-carbon/10 bg-white shadow-sm overflow-hidden mb-6 transition-all">
+      {/* Encabezado Acordeón */}
+      <button
+        type="button"
+        onClick={() => setContraido(!contraido)}
+        className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-slate-50/60 transition cursor-pointer"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-xl">📋</span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-titular text-base font-bold text-carbon">
+                Flujo de Trabajo Operativo (BPM)
+              </h3>
+              {tipoNegocio && (
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-sauce/10 text-sauce rounded-full">
+                  {tipoNegocio}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-carbon/50 mt-0.5">
+              Automatización de tareas operativas · <strong className="text-carbon/70">{completadas} de {tareas.length}</strong> completadas ({porcentaje}%)
+            </p>
+          </div>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full">
-          {tipoNegocio}
-        </span>
-      </div>
 
-      <div className="space-y-4">
-        {tareas.map((t) => {
-          const estaCompletada = t.estado === "completada";
-          const estaBloqueada = t.estado === "esperando_condicion";
-          const esPendiente = t.estado === "pendiente";
+        <div className="flex items-center gap-3">
+          {/* Mini barra de avance */}
+          <div className="hidden sm:flex items-center gap-2">
+            <div className="w-24 bg-slate-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-sauce h-2 rounded-full transition-all duration-500"
+                style={{ width: `${porcentaje}%` }}
+              />
+            </div>
+            <span className="text-[11px] font-bold text-carbon/60">{porcentaje}%</span>
+          </div>
 
-          return (
-            <div
-              key={t.id}
-              className={`p-4 rounded-lg border transition flex items-start space-x-3 ${
-                estaCompletada
-                  ? "bg-emerald-50/40 border-emerald-100"
-                  : estaBloqueada
-                  ? "bg-gray-50/50 border-gray-200 opacity-65"
-                  : "bg-white border-indigo-100 shadow-sm"
-              }`}
-            >
-              {/* Checkbox / Icon State */}
-              <div className="pt-0.5">
-                {estaCompletada ? (
-                  <div className="h-5 w-5 bg-emerald-500 text-white rounded-full flex items-center justify-center font-bold text-xs">
-                    ✓
-                  </div>
-                ) : estaBloqueada ? (
-                  <div className="h-5 w-5 bg-gray-200 text-gray-400 rounded-full flex items-center justify-center text-xs" title="Tarea bloqueada por dependencias">
-                    🔒
-                  </div>
-                ) : (
-                  <button
-                    disabled={procesandoId !== null}
-                    onClick={() => handleAbrirModalCompletar(t)}
-                    className="h-5 w-5 rounded border-2 border-sauce hover:bg-sauce hover:text-white focus:outline-none flex items-center justify-center transition-all bg-white font-bold text-xs"
-                    title="Registrar resultado y completar tarea"
-                  >
-                    ✓
-                  </button>
-                )}
-              </div>
+          <span className="text-xs font-bold text-sauce bg-sauce/10 hover:bg-sauce hover:text-white transition px-2.5 py-1 rounded-lg">
+            {contraido ? "Desplegar ▼" : "Contraer ▲"}
+          </span>
+        </div>
+      </button>
 
-              {/* Task info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4
-                    className={`font-semibold text-sm ${
-                      estaCompletada
-                        ? "text-emerald-800 line-through"
-                        : estaBloqueada
-                        ? "text-gray-400"
-                        : "text-gray-800"
-                    }`}
-                  >
-                    {t.titulo}
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        t.responsableId
-                          ? "bg-indigo-100 text-indigo-800"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      Responsable: {t.responsableNombre || "Por asignar"}
-                    </span>
-                    {esPendiente && (
+      {/* Checklist de tareas (visible solo si no está contraído) */}
+      {!contraido && (
+        <div className="p-4 sm:p-6 border-t border-carbon/10 space-y-4 bg-slate-50/20">
+          <div className="space-y-4">
+            {tareas.map((t) => {
+              const estaCompletada = t.estado === "completada";
+              const estaBloqueada = t.estado === "esperando_condicion";
+              const esPendiente = t.estado === "pendiente";
+
+              return (
+                <div
+                  key={t.id}
+                  className={`p-4 rounded-xl border transition flex items-start space-x-3 shadow-2xs ${
+                    estaCompletada
+                      ? "bg-emerald-50/40 border-emerald-100"
+                      : estaBloqueada
+                      ? "bg-gray-50/50 border-gray-200 opacity-65"
+                      : "bg-white border-sauce/20 shadow-xs"
+                  }`}
+                >
+                  {/* Checkbox / Icon State */}
+                  <div className="pt-0.5">
+                    {estaCompletada ? (
+                      <div className="h-5 w-5 bg-emerald-500 text-white rounded-full flex items-center justify-center font-bold text-xs">
+                        ✓
+                      </div>
+                    ) : estaBloqueada ? (
+                      <div className="h-5 w-5 border border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-xs">
+                        🔒
+                      </div>
+                    ) : (
                       <button
-                        type="button"
                         onClick={() => handleAbrirModalCompletar(t)}
-                        className="rounded bg-sauce hover:bg-verde-profundo text-white text-[11px] font-bold px-2 py-0.5 transition shadow-2xs"
+                        disabled={procesandoId === t.id}
+                        className="h-5 w-5 border-2 border-sauce hover:bg-sauce/20 rounded-full transition flex items-center justify-center text-transparent hover:text-sauce text-xs font-bold cursor-pointer"
+                        title="Registrar avance de tarea"
                       >
-                        ✓ Registrar Resultado
+                        ✓
                       </button>
                     )}
                   </div>
-                </div>
 
-                {t.descripcion && (
-                  <p
-                    className={`text-xs mt-1 leading-relaxed ${
-                      estaCompletada
-                        ? "text-emerald-600/70"
-                        : estaBloqueada
-                        ? "text-gray-300"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    {t.descripcion}
-                  </p>
-                )}
+                  {/* Task info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <h4
+                        className={`font-semibold text-sm ${
+                          estaCompletada
+                            ? "text-emerald-800 line-through"
+                            : estaBloqueada
+                            ? "text-gray-400"
+                            : "text-carbon"
+                        }`}
+                      >
+                        {t.titulo}
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            t.responsableId
+                              ? "bg-slate-100 text-carbon/70"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          Responsable: {t.responsableNombre || "Por asignar"}
+                        </span>
+                        {esPendiente && (
+                          <button
+                            type="button"
+                            onClick={() => handleAbrirModalCompletar(t)}
+                            className="rounded bg-sauce hover:bg-verde-profundo text-white text-[11px] font-bold px-2 py-0.5 transition shadow-2xs cursor-pointer"
+                          >
+                            ✓ Registrar Resultado
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                {/* Expiration and metadata */}
-                <div className="flex items-center space-x-3 mt-2 text-3xs font-medium uppercase tracking-wider text-gray-400">
-                  {estaCompletada && t.completadaEn && (
-                    <span className="text-emerald-600">
-                      Completada el {formatoFecha(t.completadaEn)}
-                    </span>
-                  )}
-                  {esPendiente && t.agendadaPara && (
-                    <span className={new Date(t.agendadaPara) < new Date() ? "text-rose-500 font-bold" : "text-gray-400"}>
-                      Vence el {formatoFecha(t.agendadaPara)}
-                    </span>
-                  )}
-                  {estaBloqueada && (
-                    <span className="text-gray-400 italic">
-                      Pendiente del paso anterior
-                    </span>
-                  )}
+                    {t.descripcion && (
+                      <p
+                        className={`text-xs mt-1 leading-relaxed ${
+                          estaCompletada
+                            ? "text-emerald-600/70"
+                            : estaBloqueada
+                            ? "text-gray-300"
+                            : "text-carbon/60"
+                        }`}
+                      >
+                        {t.descripcion}
+                      </p>
+                    )}
+
+                    {/* Expiration and metadata */}
+                    <div className="flex items-center space-x-3 mt-2 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                      {estaCompletada && t.completadaEn && (
+                        <span className="text-emerald-600">
+                          Completada el {formatoFecha(t.completadaEn)}
+                        </span>
+                      )}
+                      {esPendiente && t.agendadaPara && (
+                        <span className={new Date(t.agendadaPara) < new Date() ? "text-rose-500 font-bold" : "text-gray-400"}>
+                          Vence el {formatoFecha(t.agendadaPara)}
+                        </span>
+                      )}
+                      {estaBloqueada && (
+                        <span className="text-gray-400 italic">
+                          Pendiente del paso anterior
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Modal de Captura de Resultado de la Tarea */}
       {tareaSelModal && (

@@ -236,7 +236,7 @@ export function WidgetAgendaCitas({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
-            📅 Agenda & Visitas Técnicas
+            📅 Agenda & Programaciones
           </h3>
           <p className="text-xs text-carbon/50">
             Control de visitas de inspección e instalaciones con confirmación y rastreo de lectura
