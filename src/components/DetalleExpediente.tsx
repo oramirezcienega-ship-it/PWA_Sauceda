@@ -454,64 +454,43 @@ export function DetalleExpediente({ id }: { id: string }) {
           </div>
         </div>
 
-        {/* 2. Origen y Atribución de Campaña Publicitaria */}
-        <div className="rounded-xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-carbon/5 pb-2.5">
-            <h3 className="font-titular text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
-              🎯 Origen y Campaña Publicitaria
-            </h3>
-            <span className="text-[10px] text-carbon/40 font-mono">Atribución de captación (Meta / TikTok / Web / Referido)</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {/* Canal / Origen */}
-            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
-              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📡 Canal / Origen</span>
-              <span className="font-semibold text-xs text-carbon capitalize block mt-1">
-                {expediente.origenProspecto || "Orgánico / Directo"}
-              </span>
-            </div>
-
-            {/* Campaña */}
-            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
-              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📢 Campaña</span>
-              <span className="font-mono text-xs font-bold text-verde-profundo block mt-1 truncate" title={expediente.campaignName || "Sin datos de campaña"}>
-                {expediente.campaignName || "—"}
-              </span>
-            </div>
-
-            {/* Conjunto (Adset) */}
-            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
-              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">🎯 Conjunto (Adset)</span>
-              <span className="font-mono text-xs font-medium text-carbon/80 block mt-1 truncate" title={expediente.adsetName || "Sin datos de adset"}>
-                {expediente.adsetName || "—"}
-              </span>
-            </div>
-
-            {/* Anuncio (Ad) */}
-            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
-              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">🖼️ Anuncio (Ad)</span>
-              <span className="font-mono text-xs font-medium text-carbon/80 block mt-1 truncate" title={expediente.adName || "Sin datos de ad"}>
-                {expediente.adName || "—"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Widget: Actividades con el expediente */}
-        <ActividadesConExpediente
-          expedienteId={expediente.id}
+        {/* 2. Agenda & Programaciones */}
+        <WidgetAgendaCitas
           prospectoId={expediente.prospectoId}
-          asesorNombreDefault={expediente.asesorNombre}
-          operadorNombreDefault={expediente.operadorNombre}
+          expedienteId={expediente.id}
+          clienteNombre={expediente.nombreCompleto || expediente.cliente}
+          clienteTelefono={expediente.telefono || ""}
+          clienteEmail={expediente.prospectoCorreo || null}
+          onRefresh={async () => {
+            await recargar();
+          }}
         />
 
-        {/* 3. Historial de WhatsApp */}
-        {expediente.telefono && (
-          <ConversacionHistorica telefono={expediente.telefono} />
-        )}
+        {/* Enlaces de Agendamiento Directo */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <LinkCitaWidget
+            asesorId={expediente.asesorId ?? null}
+            asesorNombre={expediente.asesorNombre ?? null}
+            prospectoId={expediente.prospectoId || ""}
+            prospectoNombre={expediente.cliente}
+            prospectoTelefono={expediente.telefono ?? null}
+            siteUrl={siteUrl}
+          />
 
-        {/* 4. Módulo de Cotizaciones y Propuesta Comercial */}
+          <LinkCitaWidget
+            asesorId={expediente.operadorId ?? null}
+            asesorNombre={expediente.operadorNombre ?? null}
+            prospectoId={expediente.prospectoId || ""}
+            prospectoNombre={expediente.cliente}
+            prospectoTelefono={expediente.telefono ?? null}
+            siteUrl={siteUrl}
+            titulo="📅 Enlace de Agendamiento de Inspección"
+            tipoCitaPredefinido="inspeccion"
+            rolEtiqueta="Operador"
+          />
+        </div>
+
+        {/* 3. Cotizaciones y Propuestas */}
         <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
@@ -598,12 +577,51 @@ export function DetalleExpediente({ id }: { id: string }) {
           )}
         </div>
 
-        {/* 5. Historial de llamadas telefónicas y grabaciones */}
-        {expediente.telefono && (
-          <LlamadasHistoricas telefono={expediente.telefono} />
-        )}
+        {/* 4. Origen y Atribución de Campaña Publicitaria */}
+        <div className="rounded-xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-carbon/5 pb-2.5">
+            <h3 className="font-titular text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
+              🎯 Origen y Campaña Publicitaria
+            </h3>
+            <span className="text-[10px] text-carbon/40 font-mono">Atribución de captación (Meta / TikTok / Web / Referido)</span>
+          </div>
 
-        {/* Programación de Llamada Telefónica */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Canal / Origen */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📡 Canal / Origen</span>
+              <span className="font-semibold text-xs text-carbon capitalize block mt-1">
+                {expediente.origenProspecto || "Orgánico / Directo"}
+              </span>
+            </div>
+
+            {/* Campaña */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📢 Campaña</span>
+              <span className="font-mono text-xs font-bold text-verde-profundo block mt-1 truncate" title={expediente.campaignName || "Sin datos de campaña"}>
+                {expediente.campaignName || "—"}
+              </span>
+            </div>
+
+            {/* Conjunto (Adset) */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">🎯 Conjunto (Adset)</span>
+              <span className="font-mono text-xs font-medium text-carbon/80 block mt-1 truncate" title={expediente.adsetName || "Sin datos de adset"}>
+                {expediente.adsetName || "—"}
+              </span>
+            </div>
+
+            {/* Anuncio (Ad) */}
+            <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-2.5 flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">🖼️ Anuncio (Ad)</span>
+              <span className="font-mono text-xs font-medium text-carbon/80 block mt-1 truncate" title={expediente.adName || "Sin datos de ad"}>
+                {expediente.adName || "—"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 5. Programación de Llamada Telefónica */}
         <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
@@ -711,39 +729,12 @@ export function DetalleExpediente({ id }: { id: string }) {
           )}
         </div>
 
-        {/* 6. Los que sigan: Agendamiento, Avance, Traspaso, BPM, Secuencias, etc. */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <LinkCitaWidget
-            asesorId={expediente.asesorId ?? null}
-            asesorNombre={expediente.asesorNombre ?? null}
-            prospectoId={expediente.prospectoId || ""}
-            prospectoNombre={expediente.cliente}
-            prospectoTelefono={expediente.telefono ?? null}
-            siteUrl={siteUrl}
-          />
-
-          <LinkCitaWidget
-            asesorId={expediente.operadorId ?? null}
-            asesorNombre={expediente.operadorNombre ?? null}
-            prospectoId={expediente.prospectoId || ""}
-            prospectoNombre={expediente.cliente}
-            prospectoTelefono={expediente.telefono ?? null}
-            siteUrl={siteUrl}
-            titulo="📅 Enlace de Agendamiento de Inspección"
-            tipoCitaPredefinido="inspeccion"
-            rolEtiqueta="Operador"
-          />
-        </div>
-
-        {/* Widget de Agendamiento Directo e Historial de Citas del Expediente */}
-        <WidgetAgendaCitas
-          prospectoId={expediente.prospectoId}
+        {/* 6. Actividades con el expediente */}
+        <ActividadesConExpediente
           expedienteId={expediente.id}
-          clienteNombre={expediente.nombreCompleto || expediente.cliente}
-          clienteTelefono={expediente.telefono || ""}
-          onRefresh={async () => {
-            await recargar();
-          }}
+          prospectoId={expediente.prospectoId}
+          asesorNombreDefault={expediente.asesorNombre}
+          operadorNombreDefault={expediente.operadorNombre}
         />
 
         {/* Avance por etapas (Solo visible para Traspaso / Compra de casa) */}
@@ -1083,201 +1074,6 @@ export function DetalleExpediente({ id }: { id: string }) {
               expedienteId: expediente.id,
             }}
           />
-
-          {/* Módulo de Cotizaciones y Propuesta Comercial (Sauceda Construye) */}
-          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
-                  📋 Cotizaciones y Propuestas
-                </h3>
-                <p className="text-xs text-carbon/50">
-                  Propuestas comerciales y visitas técnicas asociadas
-                </p>
-              </div>
-              <Link
-                href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
-                className="rounded-lg bg-sauce/10 border border-sauce/20 hover:bg-sauce hover:text-white transition px-3 py-1.5 text-xs font-semibold text-sauce flex items-center gap-1 font-titular"
-              >
-                + Nueva Cotización
-              </Link>
-            </div>
-
-            {cotizaciones.length === 0 ? (
-              <div className="py-6 text-center border border-dashed border-carbon/15 rounded-lg bg-carbon/[0.01]">
-                <p className="text-xs text-carbon/40 mb-2">No hay cotizaciones para este expediente.</p>
-                <Link
-                  href={`/construccion?prospectoId=${expediente.prospectoId}&expedienteId=${expediente.id}&crear=1`}
-                  className="inline-flex items-center gap-1 text-xs text-sauce hover:underline font-semibold"
-                >
-                  Crear primera cotización →
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {cotizaciones.map((c) => (
-                  <div key={c.id} className="p-3.5 rounded-xl border border-carbon/10 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col xs:flex-row xs:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Link href={`/construccion/${c.id}`} className="font-mono font-bold text-sauce hover:underline">
-                          {c.id}
-                        </Link>
-                        <span className="text-xs font-semibold text-carbon/60">
-                          {c.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
-                           c.servicioTipo === "pintura" ? "Pintura" :
-                           c.servicioTipo === "losa" ? "Construcción de Losa" :
-                           c.servicioTipo === "remodelacion" ? "Remodelación" : "Otro Servicio"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-carbon/40 mt-0.5">
-                        Creada: {new Date(c.createdAt).toLocaleDateString("es-MX")}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between xs:justify-end gap-3 flex-wrap">
-                      <div className="text-right font-mono">
-                        <span className="block text-xs font-bold text-verde-profundo">
-                          {c.precioFinal > 0 ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(c.precioFinal) : "—"}
-                        </span>
-                        <span className="text-[10px] text-carbon/40 uppercase tracking-wide">Precio Venta</span>
-                      </div>
-                      
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                          c.estatus === "aceptada" ? "bg-green-100 text-green-700" :
-                          c.estatus === "rechazada" ? "bg-red-100 text-red-700" :
-                          c.estatus === "esperando_visita" ? "bg-amber-100 text-amber-700" :
-                          "bg-slate-100 text-slate-700"
-                        }`}>
-                          {c.estatus.replace("_", " ")}
-                        </span>
-
-                        {(c.estatus === "aprobada" || c.estatus === "enviada" || c.estatus === "aceptada") && (
-                          <a
-                            href={`/cotizacion/${c.token}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[9px] text-sauce hover:underline font-semibold flex items-center gap-0.5 animate-pulse"
-                            title="Ver vista pública del cliente"
-                          >
-                            🔗 Portal Cliente
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Módulo de Programación de Llamada Telefónica */}
-          <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
-                  📞 Programar Llamada a Realizar
-                </h3>
-                <p className="text-xs text-carbon/50">
-                  Agendar llamada telefónica para que el técnico o asesor la realice
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMostrarFormLlamada(!mostrarFormLlamada)}
-                className="rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-600 hover:text-white transition px-3 py-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1 cursor-pointer"
-              >
-                {mostrarFormLlamada ? "Cancelar" : "📞 Agendar Llamada"}
-              </button>
-            </div>
-
-            {exitoLlamada && (
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800">
-                {exitoLlamada}
-              </div>
-            )}
-            {errorLlamada && (
-              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
-                {errorLlamada}
-              </div>
-            )}
-
-            {mostrarFormLlamada && (
-              <form onSubmit={handleProgramarLlamada} className="p-4 rounded-xl border border-carbon/15 bg-slate-50 space-y-3">
-                <h4 className="text-xs font-bold text-verde-profundo uppercase tracking-wider">Programar Llamada de Seguimiento</h4>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Fecha de Llamada</label>
-                    <input
-                      type="date"
-                      required
-                      value={fechaLlamada}
-                      onChange={(e) => setFechaLlamada(e.target.value)}
-                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Hora Tentativa</label>
-                    <input
-                      type="time"
-                      required
-                      value={horaLlamada}
-                      onChange={(e) => setHoraLlamada(e.target.value)}
-                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">
-                    Asignar Llamada a (Asesor o Técnico) *
-                  </label>
-                  <select
-                    required
-                    value={perfilLlamadaId || expediente.operadorId || expediente.asesorId || ""}
-                    onChange={(e) => setPerfilLlamadaId(e.target.value)}
-                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                  >
-                    <option value="">-- Seleccionar Asesor o Técnico --</option>
-                    {perfiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre} ({p.rol === "operaciones" ? "Técnico / Operador" : p.rol === "asesor" ? "Asesor Comercial" : "Administrador"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Notas / Propósito de la Llamada</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. Confirmar medidas de azotea / Acordar presupuesto..."
-                    value={notasLlamada}
-                    onChange={(e) => setNotasLlamada(e.target.value)}
-                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setMostrarFormLlamada(false)}
-                    className="px-3 py-1.5 rounded-lg border border-carbon/15 text-xs text-carbon/70 hover:bg-carbon/5"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={guardandoLlamada}
-                    className="px-4 py-1.5 rounded-lg bg-sauce hover:bg-verde-profundo text-white text-xs font-bold transition disabled:opacity-50"
-                  >
-                    {guardandoLlamada ? "Guardando..." : "Guardar Llamada en Agenda"}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
 
           {/* Historial de conversaciones de WhatsApp */}
           {expediente.telefono && (
