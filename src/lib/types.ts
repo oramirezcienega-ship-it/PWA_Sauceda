@@ -577,6 +577,8 @@ export interface ConversacionResumen {
   finalizado: boolean;
   /** Dirección del último mensaje: 'in' = cliente esperando respuesta, 'out' = ya respondimos. */
   ultimaDireccion: "in" | "out";
+  /** Tipo de negocio detectado por Sofía / clasificado para este contacto. */
+  tipoNegocio?: string | null;
 }
 
 /** Detalle de una conversación (hilo completo). */
@@ -592,6 +594,7 @@ export interface ConversacionDetalle {
   nombreProspecto?: string;
   nombreExpediente?: string;
   atiende?: string;
+  tipoNegocio?: string | null;
 }
 
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */
