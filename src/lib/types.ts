@@ -554,11 +554,15 @@ export interface MensajeChat {
   /** 'in' = del cliente · 'out' = enviado por nosotros. */
   direccion: "in" | "out";
   texto: string;
-  /** Estado del envío saliente: ''/'enviado'/'error'. */
+  /** Estado del envío saliente: ''/'enviado'/'delivered'/'read'/'error'. */
   estado: string;
   /** Nombre del asesor que envió el mensaje saliente. */
   agente: string;
   fecha: string;
+  /** Detalle o motivo amigable del fallo de entrega reportado por Meta. */
+  errorDetalle?: string | null;
+  /** Código numérico de error retornado por Meta Graph API. */
+  errorCodigo?: number | null;
 }
 
 /** Resumen de una conversación (para la lista de la bandeja). */
@@ -579,6 +583,10 @@ export interface ConversacionResumen {
   ultimaDireccion: "in" | "out";
   /** Tipo de negocio detectado por Sofía / clasificado para este contacto. */
   tipoNegocio?: string | null;
+  /** Si se detectaron indicios de posible bloqueo o número no entregable. */
+  posibleBloqueo?: boolean;
+  /** Motivo de la alerta de entrega / posible bloqueo. */
+  motivoAlerta?: string | null;
 }
 
 /** Detalle de una conversación (hilo completo). */
@@ -595,6 +603,10 @@ export interface ConversacionDetalle {
   nombreExpediente?: string;
   atiende?: string;
   tipoNegocio?: string | null;
+  /** Si se detectaron indicios de posible bloqueo o número no entregable. */
+  posibleBloqueo?: boolean;
+  /** Motivo de la alerta de entrega / posible bloqueo. */
+  motivoAlerta?: string | null;
 }
 
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */

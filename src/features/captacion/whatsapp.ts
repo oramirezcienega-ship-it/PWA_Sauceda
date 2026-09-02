@@ -7,6 +7,7 @@ import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { detectarTipoNegocio } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
+import { interpretarErrorMeta } from "@/lib/whatsapp";
 
 /** Dispara asíncronamente el procesamiento de respuesta de la IA en segundo plano */
 export async function triggerResponderBackground(
@@ -667,12 +668,24 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
         let nuevoEstado = "enviado";
         if (estadoMeta === "delivered") nuevoEstado = "delivered";
         if (estadoMeta === "read") nuevoEstado = "read";
-        if (estadoMeta === "failed") nuevoEstado = "error";
+        let errorTxt = "";
+        let errorCode: number | null = null;
+        if (estadoMeta === "failed" && status.errors && status.errors.length > 0) {
+          const errObj = status.errors[0];
+          errorCode = errObj.code || null;
+          errorTxt = interpretarErrorMeta(errorCode ?? undefined, errObj.message || errObj.title);
+        }
 
         // 1. Actualizar en mensajes_whatsapp
+        const updatePayload: Record<string, any> = { estado: nuevoEstado };
+        if (estadoMeta === "failed" && errorTxt) {
+          updatePayload.error_detalle = errorTxt;
+          updatePayload.error_codigo = errorCode;
+        }
+
         const { data: msgActualizado } = await sb
           .from("mensajes_whatsapp")
-          .update({ estado: nuevoEstado })
+          .update(updatePayload)
           .eq("wa_message_id", waMessageId)
           .select("telefono, expediente_id, prospecto_id")
           .maybeSingle();
@@ -685,13 +698,6 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
             .eq("wa_message_id", waMessageId);
         } catch {
           // Ignorar si la columna aún no está migrada
-        }
-
-
-        // 2. Si falló y hay código de error, extraer el detalle
-        let errorTxt = "";
-        if (estadoMeta === "failed" && status.errors && status.errors.length > 0) {
-          errorTxt = `Meta Error ${status.errors[0].code}: ${status.errors[0].title || status.errors[0].message}`;
         }
 
         // 3. Buscar enrolamiento activo en secuencias para este teléfono
