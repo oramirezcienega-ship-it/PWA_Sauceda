@@ -2006,13 +2006,23 @@ export function DetalleCotizacionAdmin({
                               href={`/reporte-visita/${cotizacion.token}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="rounded-lg bg-sauce/15 text-sauce px-4 py-2 text-xs font-semibold hover:bg-sauce hover:text-white transition flex items-center"
+                              className="rounded-lg bg-sauce/15 text-sauce px-3 py-2 text-xs font-semibold hover:bg-sauce hover:text-white transition flex items-center"
                             >
                               Ver Reporte
                             </a>
+                            <a
+                              href={`/api/cotizaciones/${cotizacion.token}/pdf?tipo=reporte`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 px-3 py-2 text-xs font-semibold hover:bg-emerald-100 transition flex items-center gap-1 shadow-2xs"
+                              title="Descargar Ficha Técnica en PDF"
+                            >
+                              <span>📥</span>
+                              <span>Descargar PDF</span>
+                            </a>
                           </div>
                           
-                          <div className="flex gap-2 pt-2">
+                          <div className="flex gap-2 pt-2 flex-wrap">
                             <a
                               href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
                                 `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto el Reporte de Levantamiento Técnico y Diagnóstico del servicio en tu domicilio. Puedes revisarlo a detalle en el siguiente enlace: ${baseEnlace}/reporte-visita/${cotizacion.token}`
@@ -2689,6 +2699,7 @@ export function DetalleCotizacionAdmin({
         onCerrar={() => setMostrarModalDistribucion(false)}
         cotizacion={cotizacion}
         conceptos={conceptos}
+        reporteVisita={reporteVisita}
         baseEnlace={baseEnlace}
         onEnviarWhatsAppAPI={handleEnviarWhatsAppAPIWrapper}
         onEnviarCorreo={handleEnviarCorreoWrapper}

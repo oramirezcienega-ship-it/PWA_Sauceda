@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { formatoPesos } from "@/lib/formato";
-import type { Cotizacion, CotizacionConcepto } from "@/lib/types";
+import type { Cotizacion, CotizacionConcepto, VisitaReporte } from "@/lib/types";
 
 export interface ModalPrevisualizarCotizacionProps {
   abierto: boolean;
   onCerrar: () => void;
   cotizacion: Cotizacion;
   conceptos: CotizacionConcepto[];
+  reporteVisita?: VisitaReporte | null;
   baseEnlace: string;
   onEnviarWhatsAppAPI: (mensajePersonalizado?: string, enviarComoDocumentoPdf?: boolean) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
   onEnviarCorreo: (datos: { correoDestino: string; asunto: string; notasAdicionales: string }) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
@@ -20,6 +21,7 @@ export function ModalPrevisualizarCotizacion({
   onCerrar,
   cotizacion,
   conceptos,
+  reporteVisita,
   baseEnlace,
   onEnviarWhatsAppAPI,
   onEnviarCorreo,
@@ -41,7 +43,8 @@ export function ModalPrevisualizarCotizacion({
 
   const primerNombre = cotizacion.prospectoNombre?.split(" ")[0] || "Cliente";
   const portalUrl = `${baseEnlace}/cotizacion/${cotizacion.token}`;
-  const pdfUrl = `/api/cotizaciones/${cotizacion.token}/pdf`;
+  const pdfCotizacionUrl = `/api/cotizaciones/${cotizacion.token}/pdf`;
+  const pdfReporteUrl = `/api/cotizaciones/${cotizacion.token}/pdf?tipo=reporte`;
   const totalMonto = cotizacion.precioFinal || cotizacion.costoEstimado || 0;
 
   const servicioLabels: Record<string, string> = {
@@ -82,8 +85,12 @@ export function ModalPrevisualizarCotizacion({
     setTimeout(() => setCopiado(false), 2000);
   };
 
-  const handleDescargarPdf = () => {
-    window.open(pdfUrl, "_blank", "noopener,noreferrer");
+  const handleDescargarPdfCotizacion = () => {
+    window.open(pdfCotizacionUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleDescargarPdfReporte = () => {
+    window.open(pdfReporteUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleAbrirWhatsAppWeb = () => {
@@ -223,22 +230,35 @@ export function ModalPrevisualizarCotizacion({
               <span className="text-carbon/50 text-[10px]">IVA Incluido</span>
             </div>
             <div className="space-y-1.5">
-              <button
-                type="button"
-                onClick={handleDescargarPdf}
-                className="inline-flex items-center gap-1.5 rounded bg-emerald-50 border border-emerald-300 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition w-full justify-center shadow-2xs cursor-pointer"
-                title="Abre o descarga el documento PDF oficial"
-              >
-                <span>📥</span>
-                <span>Ver / Descargar PDF</span>
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleDescargarPdfCotizacion}
+                  className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-300 px-2 py-1 text-[10px] sm:text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition w-full justify-center shadow-2xs cursor-pointer truncate"
+                  title="Abre o descarga el documento PDF oficial de la Cotización"
+                >
+                  <span>📄</span>
+                  <span>PDF Cotización</span>
+                </button>
+                {(reporteVisita || cotizacion.requiereVisita) && (
+                  <button
+                    type="button"
+                    onClick={handleDescargarPdfReporte}
+                    className="inline-flex items-center gap-1 rounded bg-sauce/10 border border-sauce/30 px-2 py-1 text-[10px] sm:text-[11px] font-bold text-sauce hover:bg-sauce/20 transition w-full justify-center shadow-2xs cursor-pointer truncate"
+                    title="Abre o descarga la Ficha Técnica de Inspección en PDF"
+                  >
+                    <span>📋</span>
+                    <span>PDF Reporte</span>
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={handleCopiarEnlace}
                 className="inline-flex items-center gap-1.5 rounded bg-white border border-carbon/20 px-2.5 py-1 text-[11px] font-semibold text-carbon hover:bg-slate-100 transition w-full justify-center cursor-pointer"
               >
                 <span>🔗</span>
-                <span>{copiado ? "¡Copiado!" : "Copiar Enlace"}</span>
+                <span>{copiado ? "¡Copiado!" : "Copiar Enlace Portal"}</span>
               </button>
             </div>
           </div>
