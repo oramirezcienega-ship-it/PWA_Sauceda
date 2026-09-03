@@ -10,7 +10,7 @@ export interface ModalPrevisualizarCotizacionProps {
   cotizacion: Cotizacion;
   conceptos: CotizacionConcepto[];
   baseEnlace: string;
-  onEnviarWhatsAppAPI: (mensajePersonalizado?: string) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
+  onEnviarWhatsAppAPI: (mensajePersonalizado?: string, enviarComoDocumentoPdf?: boolean) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
   onEnviarCorreo: (datos: { correoDestino: string; asunto: string; notasAdicionales: string }) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
   onCotizacionActualizada?: (cambios: Partial<Cotizacion>) => void;
 }
@@ -28,6 +28,7 @@ export function ModalPrevisualizarCotizacion({
   const [pestaña, setPestaña] = useState<"whatsapp" | "email">("whatsapp");
   const [enviarWsp, setEnviarWsp] = useState<boolean>(true);
   const [enviarEmail, setEnviarEmail] = useState<boolean>(false);
+  const [enviarPdfWsp, setEnviarPdfWsp] = useState<boolean>(false);
   const [telefonoCliente, setTelefonoCliente] = useState<string>("");
   const [correoDestino, setCorreoDestino] = useState<string>("");
   const [asuntoEmail, setAsuntoEmail] = useState<string>("");
@@ -40,6 +41,7 @@ export function ModalPrevisualizarCotizacion({
 
   const primerNombre = cotizacion.prospectoNombre?.split(" ")[0] || "Cliente";
   const portalUrl = `${baseEnlace}/cotizacion/${cotizacion.token}`;
+  const pdfUrl = `/api/cotizaciones/${cotizacion.token}/pdf`;
   const totalMonto = cotizacion.precioFinal || cotizacion.costoEstimado || 0;
 
   const servicioLabels: Record<string, string> = {
@@ -65,6 +67,7 @@ export function ModalPrevisualizarCotizacion({
       setNotasEmail("");
       setEnviarWsp(Boolean(tel && tel.replace(/\D/g, "").length >= 10));
       setEnviarEmail(Boolean(email && email.includes("@")));
+      setEnviarPdfWsp(false);
       setMensajeWsp(generarTextoBaseWhatsApp());
       setEditandoWsp(false);
       setResultado(null);
@@ -77,6 +80,10 @@ export function ModalPrevisualizarCotizacion({
     navigator.clipboard.writeText(portalUrl);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
+  };
+
+  const handleDescargarPdf = () => {
+    window.open(pdfUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleAbrirWhatsAppWeb = () => {
@@ -106,16 +113,16 @@ export function ModalPrevisualizarCotizacion({
         if (!telefonoCliente.trim() || telefonoCliente.replace(/\D/g, "").length < 10) {
           errores.push("WhatsApp: El teléfono del cliente es inválido o menor a 10 dígitos.");
         } else {
-          const resWsp = await onEnviarWhatsAppAPI(mensajeWsp);
+          const resWsp = await onEnviarWhatsAppAPI(mensajeWsp, enviarPdfWsp);
           if (resWsp.ok) {
-            mensajesExito.push("WhatsApp enviado ✓");
+            mensajesExito.push(enviarPdfWsp ? "WhatsApp (con PDF adjunto) ✓" : "WhatsApp ✓");
           } else {
             errores.push(`WhatsApp: ${resWsp.error || "Fallo en el envío"}`);
           }
         }
       }
 
-      // 2. Envío por Correo Electrónico
+      // 2. Envío por Correo Electrónico (con PDF adjunto)
       if (enviarEmail) {
         if (!correoDestino.trim() || !correoDestino.includes("@")) {
           errores.push("Correo: Ingresa una dirección de correo válida.");
@@ -126,7 +133,7 @@ export function ModalPrevisualizarCotizacion({
             notasAdicionales: notasEmail.trim(),
           });
           if (resEmail.ok) {
-            mensajesExito.push("Correo electrónico enviado ✓");
+            mensajesExito.push("Correo (con PDF adjunto) ✓");
           } else {
             errores.push(`Correo: ${resEmail.error || "Fallo en el envío"}`);
           }
@@ -197,9 +204,9 @@ export function ModalPrevisualizarCotizacion({
           </button>
         </div>
 
-        {/* Barra Superior con Datos Clave */}
+        {/* Barra Superior con Datos Clave y Acciones Rápidas */}
         <div className="bg-slate-50 border-b border-carbon/10 p-3 sm:p-4 text-xs">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
             <div>
               <span className="text-carbon/50 block font-medium">Cliente</span>
               <strong className="text-carbon block truncate">{cotizacion.prospectoNombre || "Sin nombre"}</strong>
@@ -215,12 +222,20 @@ export function ModalPrevisualizarCotizacion({
               <strong className="text-emerald-700 block font-mono text-sm">{formatoPesos(totalMonto)}</strong>
               <span className="text-carbon/50 text-[10px]">IVA Incluido</span>
             </div>
-            <div>
-              <span className="text-carbon/50 block font-medium">Enlace del Portal</span>
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={handleDescargarPdf}
+                className="inline-flex items-center gap-1.5 rounded bg-emerald-50 border border-emerald-300 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition w-full justify-center shadow-2xs cursor-pointer"
+                title="Abre o descarga el documento PDF oficial"
+              >
+                <span>📥</span>
+                <span>Ver / Descargar PDF</span>
+              </button>
               <button
                 type="button"
                 onClick={handleCopiarEnlace}
-                className="mt-0.5 inline-flex items-center gap-1.5 rounded bg-white border border-carbon/20 px-2.5 py-1 text-[11px] font-semibold text-carbon hover:bg-slate-100 transition w-full justify-center"
+                className="inline-flex items-center gap-1.5 rounded bg-white border border-carbon/20 px-2.5 py-1 text-[11px] font-semibold text-carbon hover:bg-slate-100 transition w-full justify-center cursor-pointer"
               >
                 <span>🔗</span>
                 <span>{copiado ? "¡Copiado!" : "Copiar Enlace"}</span>
@@ -255,7 +270,7 @@ export function ModalPrevisualizarCotizacion({
             }`}
           >
             <span className="text-base">✉️</span>
-            <span>Correo Electrónico</span>
+            <span>Correo Electrónico (con PDF)</span>
             {enviarEmail && correoDestino.includes("@") && (
               <span className="w-2 h-2 rounded-full bg-sauce"></span>
             )}
@@ -287,30 +302,52 @@ export function ModalPrevisualizarCotizacion({
           {/* PESTAÑA WHATSAPP */}
           {pestaña === "whatsapp" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-50 p-3 rounded-xl border border-carbon/10">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enviarWsp}
-                    onChange={(e) => setEnviarWsp(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#25D366] focus:ring-[#25D366] cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-carbon">
-                    Enviar cotización por WhatsApp al {telefonoCliente || "(Sin teléfono)"}
-                  </span>
-                </label>
+              <div className="bg-slate-50 p-3 rounded-xl border border-carbon/10 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enviarWsp}
+                      onChange={(e) => setEnviarWsp(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#25D366] focus:ring-[#25D366] cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-carbon">
+                      Enviar cotización por WhatsApp al {telefonoCliente || "(Sin teléfono)"}
+                    </span>
+                  </label>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMensajeWsp(generarTextoBaseWhatsApp());
-                      setEditandoWsp(false);
-                    }}
-                    className="text-[11px] text-sauce hover:underline font-semibold cursor-pointer"
-                  >
-                    Restablecer texto original
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMensajeWsp(generarTextoBaseWhatsApp());
+                        setEditandoWsp(false);
+                      }}
+                      className="text-[11px] text-sauce hover:underline font-semibold cursor-pointer"
+                    >
+                      Restablecer texto original
+                    </button>
+                  </div>
+                </div>
+
+                {/* Switch para enviar como Documento PDF adjunto directo */}
+                <div className="pt-2 border-t border-carbon/10 flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enviarPdfWsp}
+                      onChange={(e) => setEnviarPdfWsp(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-600 cursor-pointer"
+                    />
+                    <span className="text-xs text-carbon/80 font-medium">
+                      📄 Adjuntar y enviar archivo PDF directo (vía API oficial de Meta)
+                    </span>
+                  </label>
+                  {enviarPdfWsp && (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                      Documento PDF Activo
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -322,6 +359,15 @@ export function ModalPrevisualizarCotizacion({
 
                 <div className="flex justify-end">
                   <div className="max-w-[90%] sm:max-w-[80%] bg-[#DCF8C6] text-carbon rounded-2xl rounded-tr-xs p-3.5 shadow-xs text-xs space-y-2 border border-[#b8e59e]">
+                    {enviarPdfWsp && (
+                      <div className="bg-white/80 border border-carbon/15 rounded-xl p-2.5 flex items-center gap-3 mb-1">
+                        <span className="text-2xl">📕</span>
+                        <div className="flex-1 min-w-0">
+                          <strong className="block text-xs text-carbon truncate">Cotizacion-{cotizacion.id}.pdf</strong>
+                          <span className="text-[10px] text-carbon/60">Documento PDF Oficial · SAUCEDA</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="whitespace-pre-wrap leading-relaxed font-sans text-carbon/90 text-[11px] sm:text-xs">
                       {mensajeWsp}
                     </div>
@@ -360,17 +406,24 @@ export function ModalPrevisualizarCotizacion({
           {pestaña === "email" && (
             <div className="space-y-4">
               <div className="bg-slate-50 p-3.5 rounded-xl border border-carbon/10 space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enviarEmail}
-                    onChange={(e) => setEnviarEmail(e.target.checked)}
-                    className="w-4 h-4 rounded text-sauce focus:ring-sauce cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-carbon">
-                    Enviar propuesta formal por correo electrónico
-                  </span>
-                </label>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enviarEmail}
+                      onChange={(e) => setEnviarEmail(e.target.checked)}
+                      className="w-4 h-4 rounded text-sauce focus:ring-sauce cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-carbon">
+                      Enviar propuesta formal por correo electrónico
+                    </span>
+                  </label>
+
+                  <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg text-[11px] font-semibold">
+                    <span>📎</span>
+                    <span>Adjunta automáticamente: <strong>Cotizacion-{cotizacion.id}.pdf</strong></span>
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
@@ -428,9 +481,14 @@ export function ModalPrevisualizarCotizacion({
                   <span className="font-medium text-carbon/70">
                     Asunto: <strong>{asuntoEmail}</strong>
                   </span>
-                  <span className="text-[10px] bg-white px-2 py-0.5 rounded text-carbon/60 font-mono">
-                    HTML Branded
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-mono font-bold">
+                      📎 PDF Adjunto
+                    </span>
+                    <span className="text-[10px] bg-white px-2 py-0.5 rounded text-carbon/60 font-mono">
+                      HTML Branded
+                    </span>
+                  </div>
                 </div>
 
                 <div className="p-4 bg-[#F5F1E8] text-xs">
@@ -495,6 +553,12 @@ export function ModalPrevisualizarCotizacion({
                           </table>
                         </div>
                       )}
+
+                      {/* Badge de Documento Adjunto */}
+                      <div className="bg-emerald-50 border border-emerald-200/80 p-2.5 rounded-lg flex items-center gap-2 text-emerald-900 text-[10px]">
+                        <span>📎</span>
+                        <span>Archivo adjunto incluido: <strong>Cotizacion-{cotizacion.id}.pdf</strong></span>
+                      </div>
 
                       <div className="text-center pt-2">
                         <span className="inline-block bg-[#2D4A2B] text-white font-bold px-4 py-2 rounded-lg text-xs shadow-xs">

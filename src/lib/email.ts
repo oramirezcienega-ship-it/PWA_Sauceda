@@ -21,12 +21,19 @@ export async function enviarCorreo(
   para: string,
   asunto: string,
   html: string,
+  attachments?: Array<{ filename: string; content: Buffer | string }>,
 ): Promise<void> {
   try {
     const resend = clienteResend();
     if (!resend || !para) return;
     const from = process.env.RESEND_FROM || "SAUCEDA <onboarding@resend.dev>";
-    await resend.emails.send({ from, to: para, subject: asunto, html });
+    await resend.emails.send({
+      from,
+      to: para,
+      subject: asunto,
+      html,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    });
   } catch (err) {
     console.error("No se pudo enviar el correo:", err);
   }
