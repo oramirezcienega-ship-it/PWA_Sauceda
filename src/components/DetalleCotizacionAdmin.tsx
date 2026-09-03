@@ -97,11 +97,15 @@ export function DetalleCotizacionAdmin({
     });
   };
 
-  const handleEnviarWhatsAppAPIWrapper = async (mensajePersonalizado?: string) => {
+  const handleEnviarWhatsAppAPIWrapper = async (
+    mensajePersonalizado?: string,
+    enviarComoDocumentoPdf?: boolean
+  ) => {
     return await enviarCotizacionPorWhatsAppAction({
       cotizacionId: cotizacion.id,
       telefono: cotizacion.prospectoTelefono || "",
       mensajePersonalizado,
+      enviarComoDocumentoPdf,
     });
   };
 

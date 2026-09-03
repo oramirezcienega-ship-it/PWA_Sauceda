@@ -6,6 +6,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { enviarCorreo } from "@/lib/email";
 import { MARCA } from "@/lib/marca";
 import { formatoPesos } from "@/lib/formato";
+import { generarPdfCotizacion } from "@/lib/cotizacionPdf";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 // Helper para generar el siguiente folio correlativo (COT-001)
@@ -18,7 +19,7 @@ function siguienteId(ids: string[]): string {
 }
 
 // Mapeos de base de datos a modelos de TypeScript
-function aCotizacion(fila: any): Cotizacion {
+export function aCotizacion(fila: any): Cotizacion {
   const pros = fila.prospectos;
   const nombreCompleto = pros
     ? [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ")
@@ -70,7 +71,7 @@ function aVisitaReporte(fila: any): VisitaReporte {
   };
 }
 
-function aCotizacionConcepto(fila: any): CotizacionConcepto {
+export function aCotizacionConcepto(fila: any): CotizacionConcepto {
   return {
     id: fila.id,
     cotizacionId: fila.cotizacion_id,
@@ -2204,10 +2205,25 @@ export async function enviarCotizacionPorCorreo(datos: {
 </body>
 </html>`;
 
-  // 5. Enviar correo por medio de Resend
-  await enviarCorreo(correoDestino, asunto, htmlBody);
+  // 5. Generar documento PDF branded y adjuntarlo al correo
+  let adjuntos: Array<{ filename: string; content: Buffer }> | undefined;
+  try {
+    const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl);
+    const pdfBuf = Buffer.from(docPdf.output("arraybuffer"));
+    adjuntos = [
+      {
+        filename: `Cotizacion-${cotizacion.id}.pdf`,
+        content: pdfBuf,
+      },
+    ];
+  } catch (errPdf) {
+    console.warn("No se pudo adjuntar el PDF al correo de cotización:", errPdf);
+  }
 
-  // 6. Si estaba en estatus aprobada, marcarla como enviada
+  // 6. Enviar correo por medio de Resend con el PDF adjunto
+  await enviarCorreo(correoDestino, asunto, htmlBody, adjuntos);
+
+  // 7. Si estaba en estatus aprobada, marcarla como enviada
   if (cotFila.estatus === "aprobada") {
     await sb
       .from("cotizaciones")
@@ -2215,7 +2231,7 @@ export async function enviarCotizacionPorCorreo(datos: {
       .eq("id", datos.cotizacionId);
   }
 
-  // 7. Si el prospecto no tenía correo asignado o era distinto, guardarlo permanentemente
+  // 8. Si el prospecto no tenía correo asignado o era distinto, guardarlo permanentemente
   if (cotFila.prospecto_id && (!cotFila.prospectos?.correo || cotFila.prospectos?.correo !== correoDestino)) {
     await sb
       .from("prospectos")
@@ -2223,29 +2239,30 @@ export async function enviarCotizacionPorCorreo(datos: {
       .eq("id", cotFila.prospecto_id);
   }
 
-  // 8. Registrar la Actividad especificando claramente que el medio fue Correo Electrónico
+  // 9. Registrar la Actividad especificando claramente que el medio fue Correo Electrónico con PDF adjunto
   await registrarActividad(sb, {
     prospectoId: cotFila.prospecto_id,
     expedienteId: cotFila.expediente_id,
     tipo: "envio_cotizacion_email",
-    titulo: `✉️ Cotización enviada por Correo Electrónico`,
-    detalle: `Se envió la propuesta comercial (Folio ${folioCot}) a la dirección ${correoDestino} por medio de Correo Electrónico. Enlace al portal: ${urlPortal}`,
+    titulo: `✉️ Cotización enviada por Correo Electrónico (con PDF adjunto)`,
+    detalle: `Se envió la propuesta comercial (Folio ${folioCot}) a la dirección ${correoDestino} con documento PDF adjunto. Enlace al portal: ${urlPortal}`,
   });
 
   return {
     ok: true,
-    mensaje: `Cotización ${folioCot} enviada exitosamente por correo electrónico a ${correoDestino} y registrada en la bitácora.`,
+    mensaje: `Cotización ${folioCot} con PDF adjunto enviada exitosamente por correo a ${correoDestino}.`,
   };
 }
 
 /**
- * Envía una cotización por WhatsApp (usando plantilla oficial de Meta o mensaje fallback)
+ * Envía una cotización por WhatsApp (usando documento PDF, plantilla oficial de Meta o mensaje fallback)
  * y registra la actividad en el historial especificando el medio (WhatsApp).
  */
 export async function enviarCotizacionPorWhatsAppAction(datos: {
   cotizacionId: string;
   telefono: string;
   mensajePersonalizado?: string;
+  enviarComoDocumentoPdf?: boolean;
 }): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -2282,8 +2299,43 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
 
   const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
   const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
+  const urlPdfPublico = `${siteUrl}/api/cotizaciones/${cotizacion.token}/pdf`;
 
-  const { enviarWhatsAppPlantilla, enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+  const { enviarWhatsAppPlantilla, enviarWhatsAppTexto, enviarWhatsAppDocumento } = await import("@/lib/whatsapp");
+
+  // Opción: Si se solicitó explícitamente enviar como documento PDF directo
+  if (datos.enviarComoDocumentoPdf) {
+    const captionDoc = `📄 Propuesta Comercial y Cotización Folio ${cotizacion.id} - ${servicioNombre}\nPortal en línea: ${urlPortal}`;
+    const resDoc = await enviarWhatsAppDocumento(
+      datos.telefono,
+      urlPdfPublico,
+      `Cotizacion-${cotizacion.id}.pdf`,
+      captionDoc,
+      "application/pdf"
+    );
+
+    if (resDoc.ok) {
+      if (cotFila.estatus === "aprobada") {
+        await sb
+          .from("cotizaciones")
+          .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+          .eq("id", datos.cotizacionId);
+      }
+
+      await registrarActividad(sb, {
+        prospectoId: cotFila.prospecto_id,
+        expedienteId: cotFila.expediente_id,
+        tipo: "envio_cotizacion_whatsapp",
+        titulo: `📲 Cotización enviada por WhatsApp (Documento PDF directo)`,
+        detalle: `Se envió el archivo PDF de la cotización ${cotizacion.id} por WhatsApp a ${datos.telefono}.`,
+      });
+
+      return {
+        ok: true,
+        mensaje: `Documento PDF de la cotización ${cotizacion.id} enviado exitosamente por WhatsApp a ${datos.telefono}.`,
+      };
+    }
+  }
 
   // Si se envió un mensaje personalizado, intentar enviarlo como texto directo
   if (datos.mensajePersonalizado && datos.mensajePersonalizado.trim()) {
