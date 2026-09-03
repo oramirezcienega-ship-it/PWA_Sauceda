@@ -20,6 +20,7 @@ import {
   enviarStickerConversacion,
   enviarArchivoDirectoConversacion,
   actualizarTipoNegocioConversacion,
+  corregirOrtografiaMensaje,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
@@ -599,6 +600,8 @@ export function Conversaciones() {
   const [enviandoArchivoDirecto, setEnviandoArchivoDirecto] = useState(false);
   const [mostrarStickers, setMostrarStickers] = useState(false);
   const [enviandoSticker, setEnviandoSticker] = useState(false);
+  const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
+  const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -857,6 +860,30 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     setTexto(mensaje);
     if (textareaRef.current) {
       textareaRef.current.focus();
+    }
+  }
+
+  async function handleCorregirOrtografia() {
+    if (!texto.trim() || corrigiendoOrtografia) return;
+    setCorrigiendoOrtografia(true);
+    setAviso(null);
+    setExitoOrtografia(false);
+    try {
+      const res = await corregirOrtografiaMensaje(texto);
+      if (res.ok && res.textoCorregido) {
+        setTexto(res.textoCorregido);
+        setExitoOrtografia(true);
+        setTimeout(() => setExitoOrtografia(false), 3000);
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+        }
+      } else if (res.error) {
+        setAviso(res.error);
+      }
+    } catch (err: any) {
+      setAviso(err.message || "Error al revisar ortografía.");
+    } finally {
+      setCorrigiendoOrtografia(false);
     }
   }
 
@@ -1881,6 +1908,36 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         ⭐ Encuesta Satisfacción
                       </button>
 
+                      {/* Botón Corregir Ortografía con IA */}
+                      <button
+                        type="button"
+                        onClick={handleCorregirOrtografia}
+                        disabled={corrigiendoOrtografia || !texto.trim()}
+                        title={
+                          !texto.trim()
+                            ? "Escribe un mensaje para revisar su ortografía"
+                            : "Revisar y corregir ortografía, acentos y signos con IA"
+                        }
+                        className={`flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-semibold transition shadow-sm ${
+                          corrigiendoOrtografia
+                            ? "bg-amber-50 text-amber-800 border-amber-300 animate-pulse cursor-wait"
+                            : exitoOrtografia
+                            ? "bg-emerald-100 text-emerald-900 border-emerald-400"
+                            : !texto.trim()
+                            ? "bg-white text-carbon/30 border-carbon/10 cursor-not-allowed opacity-60"
+                            : "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400 cursor-pointer"
+                        }`}
+                      >
+                        <span>{corrigiendoOrtografia ? "⏳" : exitoOrtografia ? "✅" : "✨"}</span>
+                        <span>
+                          {corrigiendoOrtografia
+                            ? "Corrigiendo..."
+                            : exitoOrtografia
+                            ? "¡Corregido!"
+                            : "Corregir Ortografía"}
+                        </span>
+                      </button>
+
                       <div className="relative">
                         <button
                           type="button"
@@ -1933,6 +1990,8 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       value={texto}
                       onChange={handleTextareaChange}
                       rows={2}
+                      spellCheck={true}
+                      lang="es"
                       placeholder={
                         (detalle.ventanaAbierta || canalDe(detalle.telefono) !== "whatsapp")
                           ? "Escribe un mensaje o usa #..."
