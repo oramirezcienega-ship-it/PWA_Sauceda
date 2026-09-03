@@ -2237,9 +2237,10 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   const { enviarWhatsAppPlantilla, enviarWhatsAppTexto, enviarWhatsAppDocumento } = await import("@/lib/whatsapp");
 
   // Opción: Si se solicitó explícitamente enviar como documento PDF directo
+  let resDoc: { ok: boolean; error?: string; errorDetail?: string } | null = null;
   if (datos.enviarComoDocumentoPdf) {
     const captionDoc = `📄 Propuesta Comercial y Cotización Folio ${cotizacion.id} - ${servicioNombre}\nPortal en línea: ${urlPortal}`;
-    const resDoc = await enviarWhatsAppDocumento(
+    resDoc = await enviarWhatsAppDocumento(
       datos.telefono,
       urlPdfPublico,
       `Cotizacion-${cotizacion.id}.pdf`,
@@ -2352,9 +2353,12 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     };
   }
 
+  const motivoError = resDoc?.error || resMeta?.error || resFallback?.error || "Meta Cloud API no pudo entregar el mensaje automáticamente.";
+  const detalleInterpretado = resDoc?.errorDetail || resMeta?.errorDetail || resFallback?.errorDetail || "";
+
   return {
     ok: false,
-    error: resMeta.error || resFallback.error || "Meta rechazó el envío del mensaje por WhatsApp.",
+    error: `${motivoError}${detalleInterpretado ? ` (${detalleInterpretado})` : ""}. Puedes usar 'Abrir WhatsApp Web' para enviarla directamente sin restricciones de ventana de 24 horas de Meta.`,
   };
 }
 
