@@ -401,6 +401,36 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
       );
     }
 
+    if (texto.startsWith("[reacción:") || texto.startsWith("[reaccion:") || texto.startsWith("[reaction:")) {
+      const match = texto.match(/^\[(?:reacción|reaccion|reaction):\s*([^\]]+)\]/i);
+      if (match) {
+        const emoji = match[1]?.trim();
+        if (emoji === "quitada" || emoji === "eliminada" || !emoji) {
+          return (
+            <div className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-carbon/5 border border-carbon/10 text-carbon/60 text-xs italic">
+              <span>⚪</span>
+              <span>Reacción eliminada</span>
+            </div>
+          );
+        }
+        return (
+          <div className="inline-flex items-center gap-2 py-1 px-3 rounded-full bg-white/95 border border-carbon/15 shadow-sm text-carbon">
+            <span className="text-xl leading-none select-none">{emoji}</span>
+            <span className="text-xs font-medium text-carbon/80">Reaccionó con {emoji}</span>
+          </div>
+        );
+      }
+    }
+
+    if (texto.toLowerCase().includes("tipo reaction") || texto.toLowerCase().includes("tipo reacción") || texto.toLowerCase().includes("tipo reaccion")) {
+      return (
+        <div className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-900 text-xs">
+          <span className="text-base select-none">👍</span>
+          <span className="font-medium">Reacción de WhatsApp (emoji)</span>
+        </div>
+      );
+    }
+
     const matchTipoGenerico = texto.match(/^[\({]mensaje de tipo ([a-zA-Z0-9_-]+)[\)}]$/i);
     if (matchTipoGenerico) {
       const tipo = matchTipoGenerico[1];

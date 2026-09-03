@@ -107,6 +107,7 @@ interface PayloadWhatsApp {
           sticker?: { id?: string };
           video?: { id?: string; caption?: string };
           document?: { id?: string; filename?: string; caption?: string };
+          reaction?: { message_id?: string; emoji?: string };
           contacts?: Array<{
             name?: { formatted_name?: string; first_name?: string; last_name?: string };
             phones?: Array<{ phone?: string; type?: string; wa_id?: string }>;
@@ -162,6 +163,9 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
             texto = `[image:${m.image.id}]${m.image.caption ? ' ' + m.image.caption : ''}`;
           } else if (m.type === "sticker" && m.sticker?.id) {
             texto = `[sticker:${m.sticker.id}]`;
+          } else if (m.type === "reaction" && m.reaction) {
+            const emoji = m.reaction.emoji;
+            texto = emoji ? `[reacción: ${emoji}]` : `[reacción: quitada]`;
           } else if (m.type === "video" && m.video?.id) {
             texto = `[video:${m.video.id}]${m.video.caption ? ' ' + m.video.caption : ''}`;
           } else if (m.type === "document" && m.document?.id) {

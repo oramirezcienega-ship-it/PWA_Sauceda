@@ -167,6 +167,27 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                     }`}
                   >
                     {(() => {
+                      if (m.texto.startsWith("[reacción:") || m.texto.startsWith("[reaccion:") || m.texto.startsWith("[reaction:")) {
+                        const match = m.texto.match(/^\[(?:reacción|reaccion|reaction):\s*([^\]]+)\]/i);
+                        if (match) {
+                          const emoji = match[1]?.trim();
+                          if (emoji === "quitada" || emoji === "eliminada" || !emoji) {
+                            return <span className="text-xs italic opacity-70">⚪ Reacción eliminada</span>;
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                              <span className="text-base leading-none">{emoji}</span> Reaccionó con {emoji}
+                            </span>
+                          );
+                        }
+                      }
+                      if (m.texto.toLowerCase().includes("tipo reaction") || m.texto.toLowerCase().includes("tipo reacción") || m.texto.toLowerCase().includes("tipo reaccion")) {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                            <span className="text-base leading-none">👍</span> Reacción de WhatsApp
+                          </span>
+                        );
+                      }
                       if (m.texto.startsWith("[plantilla:") || m.texto.startsWith("[Plantilla:")) {
                         const match = m.texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*(.*)$/);
                         if (match) {
