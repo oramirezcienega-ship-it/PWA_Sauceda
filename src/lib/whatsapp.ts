@@ -118,10 +118,10 @@ export async function enviarWhatsAppTexto(
   }
 }
 
-/** Envía un documento o imagen por WhatsApp usando una URL pública. */
+/** Envía un documento o imagen por WhatsApp usando un media_id o una URL pública. */
 export async function enviarWhatsAppDocumento(
   telefono: string,
-  documentoUrl: string,
+  documentoUrlOrId: string,
   nombreArchivo: string,
   caption?: string,
   tipoMime?: string | null,
@@ -135,8 +135,8 @@ export async function enviarWhatsAppDocumento(
   const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
 
   try {
-    const esUrl = /^https?:\/\//i.test(documentoUrl);
-    const mediaObj = esUrl ? { link: documentoUrl } : { id: documentoUrl };
+    const esUrl = /^https?:\/\//i.test(documentoUrlOrId);
+    const mediaObj = esUrl ? { link: documentoUrlOrId } : { id: documentoUrlOrId };
 
     const body: Record<string, unknown> = esImagen
       ? {

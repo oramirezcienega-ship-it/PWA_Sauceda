@@ -2236,7 +2236,11 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
   const urlPdfPublico = `${siteUrl}/api/cotizaciones/${cotizacion.token}/pdf`;
 
-  const { enviarWhatsAppPlantilla, enviarWhatsAppTexto, enviarWhatsAppDocumento } = await import("@/lib/whatsapp");
+  const totalMonto = cotizacion.precioFinal || cotizacion.costoEstimado || 0;
+  const textoDefault = `¡Hola ${primerNombre}! 👋 Te compartimos la propuesta comercial y cotización para el servicio de *${servicioNombre}* en tu domicilio.\n\n📄 *Folio:* ${cotizacion.id}\n💰 *Inversión:* ${formatoPesos(totalMonto)}\n\nEn el siguiente enlace puedes revisar a detalle el desglose de conceptos, garantías y autorizarla en línea por sistema:\n👉 ${urlPortal}\n\nQuedamos a tus órdenes para cualquier duda o ajuste. ¡Excelente día! 💚`;
+  const textoMensaje = datos.mensajePersonalizado?.trim() || textoDefault;
+
+  const { enviarWhatsAppPlantilla, enviarWhatsAppTexto, enviarWhatsAppDocumento, subirMediaMeta } = await import("@/lib/whatsapp");
 
   const user = await usuarioActual();
   let nombreAgente = "Asesor Comercial";
@@ -2250,16 +2254,40 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   // Opción 1: Si se solicitó explícitamente enviar como documento PDF directo
   let resDoc: { ok: boolean; error?: string; errorDetail?: string; messageId?: string } | null = null;
   if (datos.enviarComoDocumentoPdf) {
-    const captionDoc = `📄 Propuesta Comercial y Cotización Folio ${cotizacion.id} - ${servicioNombre}\nPortal en línea: ${urlPortal}`;
-    resDoc = await enviarWhatsAppDocumento(
-      datos.telefono,
-      urlPdfPublico,
-      `Cotizacion-${cotizacion.id}.pdf`,
-      captionDoc,
-      "application/pdf"
-    );
+    try {
+      const { data: concFilas } = await sb
+        .from("cotizacion_conceptos")
+        .select("*")
+        .eq("cotizacion_id", datos.cotizacionId)
+        .order("created_at", { ascending: true });
+      const conceptos = (concFilas || []).map(aCotizacionConcepto);
 
-    if (resDoc.ok) {
+      const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl);
+      const pdfBuf = Buffer.from(docPdf.output("arraybuffer"));
+      const subida = await subirMediaMeta(pdfBuf, "application/pdf", `Cotizacion-${cotizacion.id}.pdf`, "document");
+
+      if (subida.mediaId) {
+        resDoc = await enviarWhatsAppDocumento(
+          datos.telefono,
+          subida.mediaId,
+          `Cotizacion-${cotizacion.id}.pdf`,
+          textoMensaje,
+          "application/pdf"
+        );
+      } else {
+        resDoc = await enviarWhatsAppDocumento(
+          datos.telefono,
+          urlPdfPublico,
+          `Cotizacion-${cotizacion.id}.pdf`,
+          textoMensaje,
+          "application/pdf"
+        );
+      }
+    } catch (errSubida) {
+      console.warn("Error al generar/subir PDF para WhatsApp:", errSubida);
+    }
+
+    if (resDoc?.ok) {
       if (cotFila.estatus === "aprobada") {
         await sb
           .from("cotizaciones")
@@ -2270,7 +2298,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
       // Guardar en la conversación de WhatsApp para que aparezca en el chat
       await sb.from("mensajes_whatsapp").insert({
         telefono: telNormalizado,
-        texto: `${captionDoc}\n\n[Documento PDF Adjunto: Cotizacion-${cotizacion.id}.pdf]`,
+        texto: textoMensaje,
         direccion: "out",
         expediente_id: cotFila.expediente_id || null,
         prospecto_id: cotFila.prospecto_id || null,
@@ -2283,8 +2311,8 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
         prospectoId: cotFila.prospecto_id,
         expedienteId: cotFila.expediente_id,
         tipo: "envio_cotizacion_whatsapp",
-        titulo: `📲 Cotización enviada por WhatsApp (Documento PDF directo)`,
-        detalle: `Se envió el archivo PDF de la cotización ${cotizacion.id} por WhatsApp a ${datos.telefono}.`,
+        titulo: `📲 Cotización enviada por WhatsApp (con PDF adjunto)`,
+        detalle: `Se envió la propuesta con archivo PDF por WhatsApp a ${datos.telefono}. Folio: ${cotizacion.id}`,
       });
 
       revalidatePath("/conversaciones");
@@ -2297,45 +2325,43 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     }
   }
 
-  // Opción 2: Si se envió un mensaje personalizado, enviarlo como texto directo
-  if (datos.mensajePersonalizado && datos.mensajePersonalizado.trim()) {
-    const resTxt = await enviarWhatsAppTexto(datos.telefono, datos.mensajePersonalizado.trim());
-    if (resTxt.ok) {
-      if (cotFila.estatus === "aprobada") {
-        await sb
-          .from("cotizaciones")
-          .update({ estatus: "enviada", updated_at: new Date().toISOString() })
-          .eq("id", datos.cotizacionId);
-      }
-
-      // Guardar en la conversación de WhatsApp para que aparezca en el chat
-      await sb.from("mensajes_whatsapp").insert({
-        telefono: telNormalizado,
-        texto: datos.mensajePersonalizado.trim(),
-        direccion: "out",
-        expediente_id: cotFila.expediente_id || null,
-        prospecto_id: cotFila.prospecto_id || null,
-        estado: "enviado",
-        agente: nombreAgente,
-        wa_message_id: resTxt.messageId || null,
-      });
-
-      await registrarActividad(sb, {
-        prospectoId: cotFila.prospecto_id,
-        expedienteId: cotFila.expediente_id,
-        tipo: "envio_cotizacion_whatsapp",
-        titulo: `📲 Cotización enviada por WhatsApp (Mensaje Personalizado)`,
-        detalle: `Se envió la propuesta personalizada por WhatsApp a ${datos.telefono}. Folio: ${cotizacion.id}`,
-      });
-
-      revalidatePath("/conversaciones");
-      revalidatePath(`/construccion/${datos.cotizacionId}`);
-
-      return {
-        ok: true,
-        mensaje: `Cotización ${cotizacion.id} enviada exitosamente por WhatsApp a ${datos.telefono}.`,
-      };
+  // Opción 2: Enviar como texto directo personalizado
+  const resTxt = await enviarWhatsAppTexto(datos.telefono, textoMensaje);
+  if (resTxt.ok) {
+    if (cotFila.estatus === "aprobada") {
+      await sb
+        .from("cotizaciones")
+        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+        .eq("id", datos.cotizacionId);
     }
+
+    // Guardar en la conversación de WhatsApp para que aparezca en el chat
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: telNormalizado,
+      texto: textoMensaje,
+      direccion: "out",
+      expediente_id: cotFila.expediente_id || null,
+      prospecto_id: cotFila.prospecto_id || null,
+      estado: "enviado",
+      agente: nombreAgente,
+      wa_message_id: resTxt.messageId || null,
+    });
+
+    await registrarActividad(sb, {
+      prospectoId: cotFila.prospecto_id,
+      expedienteId: cotFila.expediente_id,
+      tipo: "envio_cotizacion_whatsapp",
+      titulo: `📲 Cotización enviada por WhatsApp`,
+      detalle: `Se envió la propuesta comercial por WhatsApp a ${datos.telefono}. Folio: ${cotizacion.id}`,
+    });
+
+    revalidatePath("/conversaciones");
+    revalidatePath(`/construccion/${datos.cotizacionId}`);
+
+    return {
+      ok: true,
+      mensaje: `Cotización ${cotizacion.id} enviada exitosamente por WhatsApp a ${datos.telefono}.`,
+    };
   }
 
   // Opción 3: Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
@@ -2383,48 +2409,8 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     };
   }
 
-  // Opción 4: Fallback de texto estándar si falla plantilla
-  const textoFallback = `Hola ${primerNombre}, te compartimos la propuesta comercial y cotización para el servicio de ${servicioNombre} en tu domicilio (Folio ${cotizacion.id}). Puedes revisarla a detalle y autorizarla en el siguiente enlace: ${urlPortal}`;
-  const resFallback = await enviarWhatsAppTexto(datos.telefono, textoFallback);
-
-  if (resFallback.ok) {
-    if (cotFila.estatus === "aprobada") {
-      await sb
-        .from("cotizaciones")
-        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
-        .eq("id", datos.cotizacionId);
-    }
-
-    await sb.from("mensajes_whatsapp").insert({
-      telefono: telNormalizado,
-      texto: textoFallback,
-      direccion: "out",
-      expediente_id: cotFila.expediente_id || null,
-      prospecto_id: cotFila.prospecto_id || null,
-      estado: "enviado",
-      agente: nombreAgente,
-      wa_message_id: resFallback.messageId || null,
-    });
-
-    await registrarActividad(sb, {
-      prospectoId: cotFila.prospecto_id,
-      expedienteId: cotFila.expediente_id,
-      tipo: "envio_cotizacion_whatsapp",
-      titulo: `📲 Cotización enviada por WhatsApp`,
-      detalle: `Se envió la propuesta comercial por WhatsApp a ${datos.telefono}. Enlace al portal: ${urlPortal}`,
-    });
-
-    revalidatePath("/conversaciones");
-    revalidatePath(`/construccion/${datos.cotizacionId}`);
-
-    return {
-      ok: true,
-      mensaje: `Cotización ${cotizacion.id} enviada exitosamente por WhatsApp a ${datos.telefono}.`,
-    };
-  }
-
-  const motivoError = resDoc?.error || resMeta?.error || resFallback?.error || "Meta Cloud API no pudo entregar el mensaje automáticamente.";
-  const detalleInterpretado = resDoc?.errorDetail || resMeta?.errorDetail || resFallback?.errorDetail || "";
+  const motivoError = resDoc?.error || resTxt?.error || resMeta?.error || "Meta Cloud API no pudo entregar el mensaje automáticamente.";
+  const detalleInterpretado = resDoc?.errorDetail || resTxt?.errorDetail || resMeta?.errorDetail || "";
 
   return {
     ok: false,
