@@ -215,7 +215,7 @@ export function FormularioExpediente({
           <input
             type="number"
             min={0}
-            step={1000}
+            step="any"
             value={datos.valorEstimado || ""}
             onChange={(e) => actualizar("valorEstimado", Number(e.target.value))}
             placeholder="0"
@@ -230,7 +230,7 @@ export function FormularioExpediente({
           <input
             type="number"
             min={0}
-            step={1000}
+            step="any"
             value={datos.saldoDeuda || ""}
             onChange={(e) => actualizar("saldoDeuda", Number(e.target.value))}
             placeholder="410000"
