@@ -300,20 +300,43 @@ export function ModalPrevisualizarCotizacion({
         {/* Mensaje de Resultado (Alerta) */}
         {resultado && (
           <div
-            className={`mx-4 mt-3 p-3 rounded-xl text-xs font-medium border flex items-center justify-between ${
+            className={`mx-4 mt-3 p-3.5 rounded-xl text-xs font-medium border flex flex-col gap-2 ${
               resultado.tipo === "ok"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-red-50 text-red-800 border-red-200"
+                ? "bg-emerald-50 text-emerald-900 border-emerald-300"
+                : "bg-red-50 text-red-900 border-red-300"
             }`}
           >
-            <span>{resultado.texto}</span>
-            <button
-              type="button"
-              onClick={() => setResultado(null)}
-              className="text-carbon/40 hover:text-carbon font-bold ml-2"
-            >
-              ✕
-            </button>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <span className="text-base">{resultado.tipo === "ok" ? "✅" : "⚠️"}</span>
+                <span className="leading-relaxed">{resultado.texto}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResultado(null)}
+                className="text-carbon/40 hover:text-carbon font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {resultado.tipo === "error" && telefonoCliente && (
+              <div className="pt-1 border-t border-red-200 flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[11px] text-red-700">
+                  ¿Prefieres enviarlo de inmediato por tu WhatsApp Web sin restricciones de API?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAbrirWhatsAppWeb}
+                  className="inline-flex items-center gap-1.5 bg-[#25D366] hover:bg-[#128C7E] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.37 5.054L2 22l5.13-1.346a9.945 9.945 0 004.88 1.28c5.505 0 9.988-4.478 9.989-9.984C22.01 6.477 17.528 2 12.012 2zm6.36 14.195c-.277.78-1.6 1.436-2.23 1.5-1.12.1-3.21-.6-5.71-3.1-2.07-2.07-3.07-4.14-3.07-5.13 0-1.12.77-1.74 1.1-2.04.28-.26.54-.3.72-.3.17 0 .34 0 .5.01.16 0 .38-.06.58.42.2.49.7 1.7.77 1.83.07.13.1.28.01.46-.09.18-.18.3-.32.46-.14.16-.3.36-.43.48-.15.14-.3.29-.13.58.18.29.8 1.3 1.7 2.1.86.76 1.8 1.14 2.1 1.28.3.14.47.12.65-.08.18-.2.78-.9.98-1.2.2-.3.4-.26.68-.16.27.1 1.73.81 2.03.96.3.15.5.22.58.36.08.14.08.82-.2 1.6z"/>
+                  </svg>
+                  <span>Abrir en WhatsApp Web Ahora</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
