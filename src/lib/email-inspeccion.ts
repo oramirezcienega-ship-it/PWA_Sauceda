@@ -9,12 +9,13 @@ interface DatosCorreoInspeccion {
   telefonoContacto: string;
   notas?: string;
   direccion?: string;
+  esReagendada?: boolean;
 }
 
 const SITE_URL = process.env.SITE_URL || "https://crm.saucedamx.com";
 
 /**
- * Genera el HTML de confirmación de inspección técnica con diseño premium SAUCEDA.
+ * Genera el HTML de confirmación o reagendamiento de inspección técnica con diseño premium SAUCEDA.
  */
 export function generarHtmlCorreoInspeccion(datos: DatosCorreoInspeccion): string {
   const fechaObj = new Date(`${datos.fecha}T00:00:00`);
@@ -28,6 +29,7 @@ export function generarHtmlCorreoInspeccion(datos: DatosCorreoInspeccion): strin
     : datos.fecha;
 
   const primerNombre = datos.clienteNombre.split(" ")[0] || datos.clienteNombre;
+  const esReagendada = Boolean(datos.esReagendada);
 
   return `
 <!DOCTYPE html>
@@ -35,7 +37,7 @@ export function generarHtmlCorreoInspeccion(datos: DatosCorreoInspeccion): strin
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Confirmación de Inspección Técnica - SAUCEDA</title>
+  <title>${esReagendada ? "Cita Reagendada" : "Confirmación de Inspección Técnica"} - SAUCEDA</title>
 </head>
 <body style="margin:0;padding:0;background-color:#F5F1E8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1A1A1A;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5F1E8;padding:24px 12px;">
@@ -56,15 +58,19 @@ export function generarHtmlCorreoInspeccion(datos: DatosCorreoInspeccion): strin
           <tr>
             <td style="padding:32px 28px;">
               <div style="display:inline-block;background-color:#EBF3E8;color:#2D4A2B;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:bold;margin-bottom:16px;">
-                🔍 VISITA TÉCNICA AGENDADA
+                ${esReagendada ? "🗓️ CITA REAGENDADA" : "🔍 VISITA TÉCNICA AGENDADA"}
               </div>
 
               <h1 style="color:#2D4A2B;font-size:20px;font-weight:700;margin:0 0 12px;line-height:1.3;">
-                ¡Hola, ${primerNombre}! Tu inspección técnica está confirmada
+                ¡Hola, ${primerNombre}! Tu ${esReagendada ? "cita ha sido reagendada" : "inspección técnica está confirmada"}
               </h1>
 
               <p style="color:#555555;font-size:14px;line-height:1.6;margin:0 0 24px;">
-                Nos complace confirmarte que tu visita técnica de valoración con el equipo de SAUCEDA ha quedado programada exitosamente. A continuación te compartimos los detalles:
+                ${
+                  esReagendada
+                    ? "Te confirmamos que tu visita técnica de valoración con el equipo de SAUCEDA ha sido reprogramada exitosamente. A continuación te compartimos los nuevos detalles:"
+                    : "Nos complace confirmarte que tu visita técnica de valoración con el equipo de SAUCEDA ha quedado programada exitosamente. A continuación te compartimos los detalles:"
+                }
               </p>
 
               <!-- Tarjeta de Detalles -->

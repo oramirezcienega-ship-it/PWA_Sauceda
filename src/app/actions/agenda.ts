@@ -1357,7 +1357,11 @@ export async function reagendarCitaCompleta(datos: {
   horaFin: string;
   notas?: string;
   notificarCliente?: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+  mensajeWhatsAppPersonalizado?: string;
+  enviarEmail?: boolean;
+  emailDestino?: string;
+  telefonoContacto?: string;
+}): Promise<{ ok: boolean; error?: string; citaId?: string; waMessageId?: string | null }> {
   await requireAdmin();
   const sb = supabaseServidor();
 
@@ -1383,6 +1387,7 @@ export async function reagendarCitaCompleta(datos: {
       .eq("id", datos.citaAnteriorId);
 
     // 3. Crear nueva cita
+    const emailFinal = datos.emailDestino?.trim() || citaPrev.cliente_email || null;
     const { data: nuevaCita, error: errNueva } = await sb
       .from("agenda_citas")
       .insert({
@@ -1392,7 +1397,7 @@ export async function reagendarCitaCompleta(datos: {
         fraccionamiento: citaPrev.fraccionamiento ?? null,
         cliente_nombre: citaPrev.cliente_nombre,
         cliente_telefono: citaPrev.cliente_telefono,
-        cliente_email: citaPrev.cliente_email ?? null,
+        cliente_email: emailFinal,
         tipo_cita: datos.tipoCita,
         fecha: datos.fecha,
         hora_inicio: datos.horaInicio,
@@ -1419,7 +1424,28 @@ export async function reagendarCitaCompleta(datos: {
         .eq("id", citaPrev.expediente_id);
     }
 
-    // 5. Registrar en la bitácora
+    // 5. Obtener datos del asesor / responsable
+    const { data: asesorPerf } = await sb
+      .from("perfiles")
+      .select("nombre, telefono")
+      .eq("id", datos.perfilId || citaPrev.perfil_id)
+      .maybeSingle();
+    const nombreAsesor = asesorPerf?.nombre || "Asesor Comercial";
+    const telContacto = datos.telefonoContacto || asesorPerf?.telefono || "477 465 4700";
+
+    const fechaObj = new Date(`${datos.fecha}T00:00:00`);
+    const fechaLegible = !isNaN(fechaObj.getTime())
+      ? fechaObj.toLocaleDateString("es-MX", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : datos.fecha;
+
+    const primerNombre = (citaPrev.cliente_nombre || "Cliente").split(" ")[0];
+
+    // 6. Registrar en la bitácora
     const detalleBitacora = `🔄 Cita/Visita Reagendada: Se canceló la cita previa del ${citaPrev.fecha} (${citaPrev.hora_inicio.slice(0,5)}) y se programó la nueva (${datos.tipoCita}) para el ${datos.fecha} de ${datos.horaInicio} a ${datos.horaFin}. ${datos.notas ? `Notas: ${datos.notas}` : ''}`;
 
     if (citaPrev.expediente_id) {
@@ -1438,19 +1464,84 @@ export async function reagendarCitaCompleta(datos: {
       });
     }
 
-    // 6. Notificación de WhatsApp al cliente
+    // 7. Notificación de WhatsApp al cliente
+    let waMessageId: string | null = null;
+    let estadoWhatsApp: string = "no_enviado";
+
     if (datos.notificarCliente && citaPrev.cliente_telefono) {
+      let msg = datos.mensajeWhatsAppPersonalizado?.trim();
+      if (!msg) {
+        if (datos.tipoCita === "inspeccion") {
+          msg = `¡Hola ${primerNombre}! 🗓️ Te confirmamos que tu inspección técnica en sitio con SAUCEDA ha sido *reagendada* para el día:\n\n🗓️ *Nueva Fecha:* ${fechaLegible}\n⏰ *Horario:* ${datos.horaInicio} a ${datos.horaFin} hrs\n👷 *Asesor / Técnico que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto:* ${telContacto}\n\nCualquier duda o ajuste de horario quedamos a tus órdenes respondiendo a este mensaje o comunicándote al número de contacto. ¡Que tengas un excelente día! 💚`;
+        } else {
+          msg = `¡Hola ${primerNombre}! 🗓️ Te confirmamos que tu cita de ${datos.tipoCita === "instalacion" ? "instalación profesional" : "servicio"} con SAUCEDA ha sido *reagendada* para el día:\n\n🗓️ *Nueva Fecha:* ${fechaLegible}\n⏰ *Horario:* ${datos.horaInicio} a ${datos.horaFin} hrs\n👷 *Responsable:* ${nombreAsesor}\n📞 *Teléfono de contacto:* ${telContacto}\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
+        }
+      }
+
       try {
         const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
-        const tipoNombre = datos.tipoCita === "instalacion" ? "instalación profesional" : datos.tipoCita === "inspeccion" ? "inspección técnica" : "cita";
-        const msg = `¡Hola ${citaPrev.cliente_nombre.split(" ")[0]}! 🗓️ Te confirmamos que tu ${tipoNombre} con SAUCEDA ha sido *reagendada* para el día *${datos.fecha}* a las *${datos.horaInicio} hrs*.\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
-        await enviarWhatsAppTexto(citaPrev.cliente_telefono, msg);
+        const resWsp = await enviarWhatsAppTexto(citaPrev.cliente_telefono, msg);
+        waMessageId = (resWsp as any).messageId || null;
+        estadoWhatsApp = resWsp.ok ? "enviado" : "error";
+
+        // Registrar en mensajes_whatsapp para bitácora y sincronización con el chat
+        const { normalizarTelefono } = await import("@/lib/telefono");
+        await sb.from("mensajes_whatsapp").insert({
+          telefono: normalizarTelefono(citaPrev.cliente_telefono),
+          texto: msg,
+          direccion: "out",
+          expediente_id: citaPrev.expediente_id ?? null,
+          prospecto_id: citaPrev.prospecto_id ?? null,
+          estado: resWsp.ok ? "enviado" : "error",
+          agente: nombreAsesor,
+          wa_message_id: waMessageId,
+        });
+
+        if (nuevaCita?.id) {
+          await sb
+            .from("agenda_citas")
+            .update({
+              wa_message_id: waMessageId,
+              mensaje_whatsapp_estado: estadoWhatsApp,
+            })
+            .eq("id", nuevaCita.id);
+        }
       } catch (errWsp) {
         console.error("Error enviando notificación WhatsApp:", errWsp);
       }
     }
 
-    return { ok: true };
+    // 8. Correo Electrónico
+    if (datos.enviarEmail && emailFinal && emailFinal.includes("@")) {
+      try {
+        const { enviarCorreo } = await import("@/lib/email");
+        const { generarHtmlCorreoInspeccion } = await import("@/lib/email-inspeccion");
+
+        const htmlCorreo = generarHtmlCorreoInspeccion({
+          clienteNombre: citaPrev.cliente_nombre,
+          fecha: datos.fecha,
+          horaInicio: datos.horaInicio,
+          horaFin: datos.horaFin,
+          asesorNombre: nombreAsesor,
+          telefonoContacto: telContacto,
+          notas: datos.notas,
+          esReagendada: true,
+        });
+
+        await enviarCorreo(
+          emailFinal,
+          `🗓️ Cita Reagendada: ${datos.tipoCita === "inspeccion" ? "Inspección Técnica" : "Cita"} - SAUCEDA`,
+          htmlCorreo
+        );
+      } catch (errEmail) {
+        console.error("Error enviando correo de reagendamiento:", errEmail);
+      }
+    }
+
+    revalidatePath("/agenda");
+    revalidatePath("/conversaciones");
+
+    return { ok: true, citaId: nuevaCita?.id, waMessageId };
   } catch (err: any) {
     console.error("Error al reagendar cita:", err);
     return { ok: false, error: err.message || "Error al reagendar la cita." };

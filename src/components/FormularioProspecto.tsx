@@ -220,7 +220,7 @@ export function FormularioProspecto({
         <input
           type="number"
           min={0}
-          step={50}
+          step="any"
           value={datos.valorCampana || ""}
           onChange={(e) => actualizar("valorCampana", Number(e.target.value))}
           placeholder="350"

@@ -1241,3 +1241,117 @@ export async function enviarArchivoDirectoConversacion(
     return { ok: false, error: err.message || "Error al procesar el archivo." };
   }
 }
+
+/**
+ * Corrige y pule la ortografía, acentuación, puntuación y signos de un mensaje
+ * antes de enviarlo por WhatsApp, manteniendo el tono y sentido exactos.
+ */
+export async function corregirOrtografiaMensaje(
+  texto: string,
+): Promise<{ ok: boolean; textoCorregido?: string; error?: string }> {
+  if (!texto || !texto.trim()) {
+    return { ok: true, textoCorregido: texto };
+  }
+
+  try {
+    const proveedor =
+      process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic");
+
+    const systemPrompt = `Eres un corrector ortográfico y de estilo profesional especializado en español mexicano para atención a clientes y ventas de SAUCEDA.
+Tu trabajo es revisar y corregir ÚNICAMENTE:
+1. Faltas de ortografía y tipográficas (typos).
+2. Acentuación correcta (ej. "que" vs "¿qué?", "como" vs "¿cómo?", "podríamos", "inspección", "cotización", "día", etc.).
+3. Signos de interrogación (¿?) y admiración (¡!) abriendo y cerrando adecuadamente.
+4. Puntuación y mayúsculas.
+
+REGLAS ESTRICTAS:
+- Mantén exactamente el mismo significado, tono natural y palabras del mensaje original.
+- NO agregues saludos ni despedidas nuevas que no estén en el texto original.
+- NO inventes información.
+- Devuelve EXCLUSIVAMENTE el texto corregido final, sin notas, sin comillas adicionales y sin preámbulos.`;
+
+    let textoFinal = texto;
+
+    if (proveedor === "kimi" && process.env.KIMI_API_KEY) {
+      const apiKey = process.env.KIMI_API_KEY;
+      const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
+      const model = process.env.KIMI_MODEL || "kimi-k3";
+
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: `Corrige la ortografía y puntuación del siguiente mensaje:\n\n${texto}`,
+            },
+          ],
+          temperature: 0.1,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Kimi API error ${res.status}`);
+      }
+
+      const json = await res.json();
+      textoFinal = (json.choices?.[0]?.message?.content || "").trim();
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1000,
+          temperature: 0.1,
+          messages: [
+            {
+              role: "user",
+              content: `Corrige la ortografía y puntuación del siguiente mensaje:\n\n${texto}`,
+            },
+          ],
+          system: systemPrompt,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Anthropic API error ${res.status}`);
+      }
+
+      const json = await res.json();
+      textoFinal = (json.content?.[0]?.text || "").trim();
+    } else {
+      return {
+        ok: false,
+        error: "No hay API Key configurada (KIMI_API_KEY o ANTHROPIC_API_KEY) para la corrección.",
+      };
+    }
+
+    // Remover comillas envolventes si el modelo las agregó
+    if (
+      (textoFinal.startsWith('"') && textoFinal.endsWith('"')) ||
+      (textoFinal.startsWith('«') && textoFinal.endsWith('»'))
+    ) {
+      textoFinal = textoFinal.slice(1, -1).trim();
+    }
+
+    return { ok: true, textoCorregido: textoFinal };
+  } catch (err: any) {
+    console.error("Error al corregir ortografía:", err);
+    return { ok: false, error: err.message || "Error al procesar la corrección." };
+  }
+}
+

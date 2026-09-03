@@ -12,6 +12,10 @@ import {
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
 import { obtenerUsuarioActual, listarPerfilesActivos } from "@/app/actions/usuarios";
 import { obtenerTelLink } from "@/lib/telefono";
+import {
+  ModalPrevisualizarInspeccion,
+  type DatosPrevisualizacionInspeccion,
+} from "./ModalPrevisualizarInspeccion";
 
 interface ProximasVisitasWidgetProps {
   perfilId?: string | null;
@@ -21,6 +25,7 @@ interface PerfilSimple {
   id: string;
   nombre: string;
   rol: string;
+  telefono?: string | null;
 }
 
 /** Formatea fechas de forma segura evitando problemas de zona horaria (UTC vs Local) */
@@ -60,6 +65,10 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
   const [reagendarNotas, setReagendarNotas] = useState("");
   const [reagendarNotificarWsp, setReagendarNotificarWsp] = useState(true);
   const [guardandoReagendado, setGuardandoReagendado] = useState(false);
+
+  // Modal de Previsualización Multicanal para Reagendar
+  const [datosPrevisualizacionReagendar, setDatosPrevisualizacionReagendar] = useState<DatosPrevisualizacionInspeccion | null>(null);
+  const [modalPrevisualizarReagendar, setModalPrevisualizarReagendar] = useState(false);
 
   // Modal de Cancelación de Cita
   const [citaCancelarModal, setCitaCancelarModal] = useState<Cita | null>(null);
@@ -181,13 +190,41 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
     setReagendarNotificarWsp(true);
   }
 
-  // Guarda el reagendamiento (Cancela cita previa y crea la nueva)
-  async function handleGuardarReagendamiento() {
+  // Prepara los datos y abre el modal de previsualización multicanal para reagendar
+  function handleAbrirPrevisualizacionReagendar() {
     if (!citaReagendarModal) return;
     if (!reagendarFecha || !reagendarHoraInicio || !reagendarHoraFin) {
       alert("Por favor indica la fecha y franja horaria.");
       return;
     }
+
+    const asesor = perfiles.find((p) => p.id === (reagendarPerfilId || citaReagendarModal.perfil_id));
+    setDatosPrevisualizacionReagendar({
+      clienteNombre: citaReagendarModal.cliente_nombre,
+      clienteTelefono: citaReagendarModal.cliente_telefono,
+      clienteEmail: citaReagendarModal.cliente_email,
+      fecha: reagendarFecha,
+      horaInicio: reagendarHoraInicio,
+      horaFin: reagendarHoraFin,
+      perfilId: reagendarPerfilId || citaReagendarModal.perfil_id || "",
+      asesorNombre: asesor?.nombre || "Asesor Sauceda",
+      asesorTelefono: asesor?.telefono,
+      telefonoContacto: asesor?.telefono || "477 465 4700",
+      notas: reagendarNotas,
+      tipoCita: reagendarTipoCita,
+    });
+    setModalPrevisualizarReagendar(true);
+  }
+
+  // Guarda el reagendamiento confirmado desde el modal de previsualización
+  async function handleConfirmarReagendamiento(opciones: {
+    mensajeWhatsApp: string;
+    enviarWhatsApp: boolean;
+    enviarEmail: boolean;
+    emailDestino: string;
+    telefonoContacto: string;
+  }) {
+    if (!citaReagendarModal) return;
     setGuardandoReagendado(true);
     try {
       const res = await reagendarCitaCompleta({
@@ -198,7 +235,11 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
         horaInicio: reagendarHoraInicio,
         horaFin: reagendarHoraFin,
         notas: reagendarNotas,
-        notificarCliente: reagendarNotificarWsp,
+        notificarCliente: opciones.enviarWhatsApp,
+        mensajeWhatsAppPersonalizado: opciones.mensajeWhatsApp,
+        enviarEmail: opciones.enviarEmail,
+        emailDestino: opciones.emailDestino,
+        telefonoContacto: opciones.telefonoContacto,
       });
 
       if (!res.ok) {
@@ -206,6 +247,7 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
         return;
       }
 
+      setModalPrevisualizarReagendar(false);
       setCitaReagendarModal(null);
       await cargarAgenda();
     } catch (err: any) {
@@ -611,37 +653,40 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                 />
               </div>
 
-              {/* Opción WhatsApp */}
-              <label className="flex items-center gap-2 cursor-pointer bg-green-50/70 p-2.5 rounded-xl border border-green-200 text-green-900 text-xs font-semibold">
-                <input
-                  type="checkbox"
-                  checked={reagendarNotificarWsp}
-                  onChange={(e) => setReagendarNotificarWsp(e.target.checked)}
-                  className="rounded text-sauce focus:ring-sauce h-4 w-4"
-                />
-                <span>Enviar confirmación automática por WhatsApp al cliente</span>
-              </label>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-carbon/10">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-carbon/10 flex-wrap">
               <button
                 type="button"
                 onClick={() => setCitaReagendarModal(null)}
-                className="rounded-lg border border-carbon/20 px-3.5 py-1.5 text-xs font-bold text-carbon/60 hover:bg-slate-50 cursor-pointer"
+                className="rounded-lg border border-carbon/20 px-3.5 py-2 text-xs font-bold text-carbon/60 hover:bg-slate-50 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                onClick={handleGuardarReagendamiento}
+                onClick={handleAbrirPrevisualizacionReagendar}
                 disabled={guardandoReagendado}
-                className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 text-xs font-bold transition shadow-xs cursor-pointer"
+                className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
               >
-                {guardandoReagendado ? "Guardando..." : "💾 Confirmar y Reagendar"}
+                <span>Previsualizar y Reagendar</span>
+                <span>➔</span>
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Previsualización Multicanal para Reagendar */}
+      {datosPrevisualizacionReagendar && (
+        <ModalPrevisualizarInspeccion
+          abierto={modalPrevisualizarReagendar}
+          onCerrar={() => setModalPrevisualizarReagendar(false)}
+          datos={datosPrevisualizacionReagendar}
+          onConfirmar={handleConfirmarReagendamiento}
+          procesando={guardandoReagendado}
+          modoReagendar={true}
+        />
       )}
 
       {/* Modal 2: Cancelación de Cita */}
