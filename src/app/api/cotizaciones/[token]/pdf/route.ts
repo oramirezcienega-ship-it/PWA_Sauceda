@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
-import { aCotizacion, aCotizacionConcepto } from "@/app/actions/cotizaciones";
+import { aCotizacion, aCotizacionConcepto } from "@/lib/cotizacionesMappers";
 import { generarPdfCotizacion } from "@/lib/cotizacionPdf";
 import type { CotizacionConcepto } from "@/lib/types";
 
