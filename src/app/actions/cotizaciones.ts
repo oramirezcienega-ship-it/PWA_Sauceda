@@ -2245,6 +2245,7 @@ export async function enviarCotizacionPorCorreo(datos: {
 export async function enviarCotizacionPorWhatsAppAction(datos: {
   cotizacionId: string;
   telefono: string;
+  mensajePersonalizado?: string;
 }): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -2282,8 +2283,35 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
   const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
 
+  const { enviarWhatsAppPlantilla, enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+
+  // Si se envió un mensaje personalizado, intentar enviarlo como texto directo
+  if (datos.mensajePersonalizado && datos.mensajePersonalizado.trim()) {
+    const resTxt = await enviarWhatsAppTexto(datos.telefono, datos.mensajePersonalizado.trim());
+    if (resTxt.ok) {
+      if (cotFila.estatus === "aprobada") {
+        await sb
+          .from("cotizaciones")
+          .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+          .eq("id", datos.cotizacionId);
+      }
+
+      await registrarActividad(sb, {
+        prospectoId: cotFila.prospecto_id,
+        expedienteId: cotFila.expediente_id,
+        tipo: "envio_cotizacion_whatsapp",
+        titulo: `📲 Cotización enviada por WhatsApp (Mensaje Personalizado)`,
+        detalle: `Se envió la propuesta personalizada por WhatsApp a ${datos.telefono}. Folio: ${cotizacion.id}`,
+      });
+
+      return {
+        ok: true,
+        mensaje: `Cotización ${cotizacion.id} enviada exitosamente por WhatsApp a ${datos.telefono}.`,
+      };
+    }
+  }
+
   // 2. Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
-  const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
   const resMeta = await enviarWhatsAppPlantilla(
     datos.telefono,
     "envio_cotizacion_cliente",
@@ -2313,12 +2341,11 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     };
   }
 
-  // 3. Fallback: Si falla por plantilla o ventana 24h, intentar envío de texto libre
-  const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
-  const textoMensaje = `Hola ${primerNombre}, te compartimos la propuesta comercial y cotización para el servicio de ${servicioNombre} en tu domicilio (Folio ${cotizacion.id}). Puedes revisarla a detalle y autorizarla en el siguiente enlace: ${urlPortal}`;
-  const resTxt = await enviarWhatsAppTexto(datos.telefono, textoMensaje);
+  // 3. Fallback: Envío de texto estándar si falla plantilla
+  const textoFallback = `Hola ${primerNombre}, te compartimos la propuesta comercial y cotización para el servicio de ${servicioNombre} en tu domicilio (Folio ${cotizacion.id}). Puedes revisarla a detalle y autorizarla en el siguiente enlace: ${urlPortal}`;
+  const resFallback = await enviarWhatsAppTexto(datos.telefono, textoFallback);
 
-  if (resTxt.ok) {
+  if (resFallback.ok) {
     if (cotFila.estatus === "aprobada") {
       await sb
         .from("cotizaciones")
@@ -2342,9 +2369,10 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
 
   return {
     ok: false,
-    error: resMeta.error || resTxt.error || "Meta rechazó el envío del mensaje por WhatsApp.",
+    error: resMeta.error || resFallback.error || "Meta rechazó el envío del mensaje por WhatsApp.",
   };
 }
+
 
 
 
