@@ -44,8 +44,27 @@ interface FilaMsg {
   agente: string;
   created_at: string;
   finalizado?: boolean;
-  error_detalle?: string | null;
-  error_codigo?: number | null;
+}
+
+/** Extrae el estado limpio y el motivo de error codificado en la columna estado. */
+function parsearEstado(rawEstado: string): { estado: string; errorDetalle: string | null } {
+  if (!rawEstado) return { estado: "", errorDetalle: null };
+  if (rawEstado.startsWith("error:")) {
+    return {
+      estado: "error",
+      errorDetalle: rawEstado.slice(6).trim(),
+    };
+  }
+  if (rawEstado === "error") {
+    return {
+      estado: "error",
+      errorDetalle: "Error al enviar mensaje",
+    };
+  }
+  return {
+    estado: rawEstado,
+    errorDetalle: null,
+  };
 }
 
 /** Nombre del asesor con sesión activa (de su perfil, o su correo). */
@@ -525,43 +544,48 @@ export async function obtenerConversacion(
 
   // Detección inteligente de posible bloqueo o fallo recurrente de entrega
   const salidasRecientes = recientes.filter((f) => f.direccion === "out");
-  const ultimasSalidasFallidas = salidasRecientes.slice(0, 3).filter((f) => f.estado === "error");
+  const ultimasSalidasFallidas = salidasRecientes.slice(0, 3).filter((f) => f.estado.startsWith("error"));
   
   let posibleBloqueo = false;
   let motivoAlerta: string | null = null;
 
   const msgConErrorBloqueo = salidasRecientes.find(
     (f) =>
-      f.estado === "error" &&
-      (f.error_codigo === 131026 ||
-        f.error_codigo === 131051 ||
-        f.error_codigo === 131048 ||
-        (f.error_detalle && (f.error_detalle.includes("bloqueo") || f.error_detalle.includes("no entregable") || f.error_detalle.includes("no disponible"))))
+      f.estado.startsWith("error") &&
+      (f.estado.includes("131026") ||
+        f.estado.includes("131051") ||
+        f.estado.includes("131048") ||
+        f.estado.includes("bloqueo") ||
+        f.estado.includes("no entregable") ||
+        f.estado.includes("no disponible"))
   );
 
   if (msgConErrorBloqueo) {
+    const { errorDetalle } = parsearEstado(msgConErrorBloqueo.estado);
     posibleBloqueo = true;
-    motivoAlerta = msgConErrorBloqueo.error_detalle || "Destinatario no disponible (posible bloqueo o número sin WhatsApp)";
+    motivoAlerta = errorDetalle || "Destinatario no disponible (posible bloqueo o número sin WhatsApp)";
   } else if (ultimasSalidasFallidas.length >= 2) {
-    const ultimoError = ultimasSalidasFallidas[0];
-    if (ultimoError.error_codigo === 131047) {
+    const { errorDetalle } = parsearEstado(ultimasSalidasFallidas[0].estado);
+    if (ultimasSalidasFallidas[0].estado.includes("24") || ultimasSalidasFallidas[0].estado.includes("131047")) {
       motivoAlerta = "Ventana de 24 h cerrada (se requiere enviar plantilla aprobada)";
     } else {
       posibleBloqueo = true;
-      motivoAlerta = ultimoError.error_detalle || "Múltiples envíos fallidos hacia este número";
+      motivoAlerta = errorDetalle || "Múltiples envíos fallidos hacia este número";
     }
   }
 
-  const mensajes: MensajeChat[] = filas.map((f) => ({
-    id: f.id,
-    direccion: f.direccion,
-    texto: f.texto,
-    estado: f.estado,
-    agente: f.agente ?? "",
-    fecha: f.created_at,
-    errorDetalle: f.error_detalle ?? (f.estado === "error" ? "Error al enviar mensaje" : null),
-    errorCodigo: f.error_codigo ?? null,
-  }));
+  const mensajes: MensajeChat[] = filas.map((f) => {
+    const parsed = parsearEstado(f.estado);
+    return {
+      id: f.id,
+      direccion: f.direccion,
+      texto: f.texto,
+      estado: parsed.estado,
+      agente: f.agente ?? "",
+      fecha: f.created_at,
+      errorDetalle: parsed.errorDetalle,
+    };
+  });
 
   return {
     telefono,
@@ -721,21 +745,28 @@ export async function responderConversacion(
     r = await enviarWhatsAppTexto(telefono, texto);
   }
 
-  const errorDetalle = r.ok ? null : ((r as any).errorDetail || r.error || "Error al enviar");
-  const errorCodigo = r.ok ? null : ((r as any).errorCode || null);
+  const estadoFinal = r.ok
+    ? "enviado"
+    : (r as any).errorDetail
+    ? `error:${(r as any).errorDetail}`
+    : r.error
+    ? `error:${r.error}`
+    : "error";
 
-  await sb.from("mensajes_whatsapp").insert({
+  const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
     telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
     texto,
     direccion: "out",
     expediente_id: expedienteId,
     prospecto_id: prospectoId,
-    estado: r.ok ? "enviado" : "error",
+    estado: estadoFinal,
     agente,
     wa_message_id: (r as any).messageId || null,
-    error_detalle: errorDetalle,
-    error_codigo: errorCodigo,
   });
+
+  if (insertErr) {
+    console.error("Error al insertar mensaje WhatsApp en DB:", insertErr);
+  }
 
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
@@ -795,21 +826,29 @@ export async function responderConPlantilla(
     `[plantilla: ${plantilla}]` +
     (parametros && parametros.length ? ` ${parametros.join(" | ")}` : "");
   
-  const errorDetalle = r.ok ? null : ((r as any).errorDetail || r.error || "Error al enviar plantilla");
-  const errorCodigo = r.ok ? null : ((r as any).errorCode || null);
+  const estadoFinal = r.ok
+    ? "enviado"
+    : (r as any).errorDetail
+    ? `error:${(r as any).errorDetail}`
+    : r.error
+    ? `error:${r.error}`
+    : "error";
 
-  await sb.from("mensajes_whatsapp").insert({
+  const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
     telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
     texto: resumen,
     direccion: "out",
     expediente_id: expedienteId,
     prospecto_id: prospectoId,
-    estado: r.ok ? "enviado" : "error",
+    estado: estadoFinal,
     agente,
     wa_message_id: r.messageId || null,
-    error_detalle: errorDetalle,
-    error_codigo: errorCodigo,
   });
+
+  if (insertErr) {
+    console.error("Error al insertar plantilla en DB:", insertErr);
+  }
+
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
       expedienteId,

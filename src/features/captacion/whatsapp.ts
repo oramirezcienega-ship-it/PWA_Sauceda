@@ -669,23 +669,19 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
         if (estadoMeta === "delivered") nuevoEstado = "delivered";
         if (estadoMeta === "read") nuevoEstado = "read";
         let errorTxt = "";
-        let errorCode: number | null = null;
-        if (estadoMeta === "failed" && status.errors && status.errors.length > 0) {
-          const errObj = status.errors[0];
-          errorCode = errObj.code || null;
-          errorTxt = interpretarErrorMeta(errorCode ?? undefined, errObj.message || errObj.title);
+        if (estadoMeta === "failed") {
+          if (status.errors && status.errors.length > 0) {
+            const errObj = status.errors[0];
+            const errorCode = errObj.code || null;
+            errorTxt = interpretarErrorMeta(errorCode ?? undefined, errObj.message || errObj.title);
+          }
+          nuevoEstado = errorTxt ? `error:${errorTxt}` : "error";
         }
 
         // 1. Actualizar en mensajes_whatsapp
-        const updatePayload: Record<string, any> = { estado: nuevoEstado };
-        if (estadoMeta === "failed" && errorTxt) {
-          updatePayload.error_detalle = errorTxt;
-          updatePayload.error_codigo = errorCode;
-        }
-
         const { data: msgActualizado } = await sb
           .from("mensajes_whatsapp")
-          .update(updatePayload)
+          .update({ estado: nuevoEstado })
           .eq("wa_message_id", waMessageId)
           .select("telefono, expediente_id, prospecto_id")
           .maybeSingle();
