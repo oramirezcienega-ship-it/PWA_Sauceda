@@ -32,7 +32,7 @@ const PAQUETES: PaqueteInfo[] = [
     titulo: "Impermeabilizante Acrílico",
     subtitulo: "Acrílico elastomérico con malla de refuerzo",
     precioM2: 170,
-    garantia: "3 años",
+    garantia: "2 años",
     ejecucion: "1-2 días",
     mejorPara: "Mantenimiento preventivo, azoteas con poco tráfico y presupuesto accesible.",
     incluye: [
@@ -132,7 +132,7 @@ Metros a impermeabilizar: *${m2Val} m²*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🟢 *1. PAQUETE ACRÍLICO*
 • Precio: *$170 / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*
-• Garantía: 3 años | Ejecución: 1-2 días
+• Garantía: 2 años | Ejecución: 1-2 días
 • Incluye: Acrílico elastomérico con malla de refuerzo, sellado de grietas y limpieza final.
 • Ideal para: Mantenimiento preventivo y azoteas con poco tráfico.
 
