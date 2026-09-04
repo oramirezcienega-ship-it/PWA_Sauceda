@@ -229,7 +229,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
   function construirCanvasCotizacion(): HTMLCanvasElement | null {
     const width = 1200;
-    const height = 1380;
+    const height = 750;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -242,41 +242,41 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
     // Encabezado superior verde
     ctx.fillStyle = "#2D4A2B";
-    ctx.fillRect(0, 0, width, 140);
+    ctx.fillRect(0, 0, width, 125);
 
     // Título y Marca
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 32px sans-serif";
+    ctx.font = "bold 30px sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.fillText("SAUCEDA CONSTRUYE", 54, 40);
+    ctx.fillText("SAUCEDA CONSTRUYE", 54, 32);
 
     ctx.fillStyle = "#C9A961";
-    ctx.font = "bold 18px sans-serif";
-    ctx.fillText("PROPUESTA DE IMPERMEABILIZACIÓN", 54, 82);
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText("PROPUESTA DE IMPERMEABILIZACIÓN", 54, 72);
 
     // Pill de Metros cuadrados
     const m2Text = `Propuesta para: ${m2Val} m²`;
-    ctx.font = "bold 20px sans-serif";
+    ctx.font = "bold 18px sans-serif";
     const m2TextWidth = ctx.measureText(m2Text).width;
-    const pillW = m2TextWidth + 44;
-    const pillH = 50;
+    const pillW = m2TextWidth + 40;
+    const pillH = 44;
     const pillX = width - pillW - 54;
-    const pillY = 45;
+    const pillY = 40;
 
-    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 25, "#5C7A52");
+    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 22, "#5C7A52");
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 20px sans-serif";
+    ctx.font = "bold 18px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(m2Text, pillX + pillW / 2, pillY + pillH / 2);
 
-    // Dibujar las 3 tarjetas comparativas
+    // Dibujar las 3 tarjetas comparativas compactas
     const cardWidth = 346;
-    const cardHeight = 1180;
+    const cardHeight = 580;
     const startX = 54;
     const gap = 27;
-    const startY = 165;
+    const startY = 145;
 
     PAQUETES.forEach((pkg, index) => {
       const x = startX + index * (cardWidth + gap);
@@ -287,31 +287,30 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       // 1. Fondo y borde de tarjeta
       const bgCard = esPremium ? "#FAF7EE" : "#FFFFFF";
       const borderCard = esPremium ? "#C9A961" : "#E2E8F0";
-      const strokeW = esPremium ? 2.5 : 1.5;
+      const strokeW = esPremium ? 2 : 1.5;
 
-      drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 24, bgCard, borderCard, strokeW);
+      drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 20, bgCard, borderCard, strokeW);
 
       // 2. Ribbon en Premium (10 años de garantía)
       if (esPremium) {
         ctx.save();
-        // Clip al contenedor redondeado
         ctx.beginPath();
-        ctx.moveTo(x + 24, y);
-        ctx.lineTo(x + cardWidth - 24, y);
-        ctx.arcTo(x + cardWidth, y, x + cardWidth, y + 24, 24);
-        ctx.arcTo(x + cardWidth, y + cardHeight, x + cardWidth - 24, y + cardHeight, 24);
-        ctx.arcTo(x, y + cardHeight, x, y + cardHeight - 24, 24);
-        ctx.arcTo(x, y, x + 24, y, 24);
+        ctx.moveTo(x + 20, y);
+        ctx.lineTo(x + cardWidth - 20, y);
+        ctx.arcTo(x + cardWidth, y, x + cardWidth, y + 20, 20);
+        ctx.arcTo(x + cardWidth, y + cardHeight, x + cardWidth - 20, y + cardHeight, 20);
+        ctx.arcTo(x, y + cardHeight, x, y + cardHeight - 20, 20);
+        ctx.arcTo(x, y, x + 20, y, 20);
         ctx.closePath();
         ctx.clip();
 
         // Franja dorada inclinada
-        ctx.translate(x + cardWidth - 48, y + 42);
+        ctx.translate(x + cardWidth - 42, y + 36);
         ctx.rotate((45 * Math.PI) / 180);
         ctx.fillStyle = "#B58E3F";
-        ctx.fillRect(-100, -14, 200, 28);
+        ctx.fillRect(-80, -12, 160, 24);
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 11px sans-serif";
+        ctx.font = "bold 10px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("10 AÑOS GARANTÍA", 0, 0);
@@ -323,130 +322,124 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
       // 3. Badge de Paquete (ACRÍLICO / ESTÁNDAR / PREMIUM)
       ctx.fillStyle = esPremium ? "#B58E3F" : "#5C7A52";
-      ctx.font = "bold 12px sans-serif";
-      ctx.fillText(pkg.badge, x + 24, y + 36);
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(pkg.badge, x + 22, y + 22);
 
       // 4. Título del Paquete
       ctx.fillStyle = "#0F172A";
-      ctx.font = "bold 21px sans-serif";
-      ctx.fillText(pkg.titulo, x + 24, y + 62);
+      ctx.font = "bold 18px sans-serif";
+      ctx.fillText(pkg.titulo, x + 22, y + 42);
 
       // 5. Subtítulo
       ctx.fillStyle = "#64748B";
-      ctx.font = "12.5px sans-serif";
-      ctx.fillText(pkg.subtitulo, x + 24, y + 94);
+      ctx.font = "11.5px sans-serif";
+      ctx.fillText(pkg.subtitulo, x + 22, y + 68);
 
-      // 6. Precio por m²
-      const priceY = y + 140;
+      // 6. PRECIO TOTAL GRANDE
+      const priceY = y + 92;
       ctx.fillStyle = esPremium ? "#B58E3F" : "#2D4A2B";
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillText("$", x + 24, priceY + 6);
+      ctx.font = "bold 18px sans-serif";
+      ctx.fillText("$", x + 22, priceY + 6);
 
-      ctx.font = "bold 44px sans-serif";
-      ctx.fillText(`${pkg.precioM2}`, x + 40, priceY - 4);
+      ctx.font = "bold 34px sans-serif";
+      const totalStr = total.toLocaleString("es-MX", { maximumFractionDigits: 0 });
+      ctx.fillText(totalStr, x + 36, priceY - 2);
 
-      const numWidth = ctx.measureText(`${pkg.precioM2}`).width;
+      const totalWidth = ctx.measureText(totalStr).width;
       ctx.fillStyle = "#64748B";
-      ctx.font = "14px sans-serif";
-      ctx.fillText("por m²", x + 45 + numWidth, priceY + 18);
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText("MXN", x + 42 + totalWidth, priceY + 14);
 
-      // 7. Caja de Total Calculado
-      const totalBoxY = priceY + 56;
-      const totalBoxFill = esPremium ? "#EFE5CD" : "#F1F5F9";
-      drawRoundedRect(ctx, x + 24, totalBoxY, cardWidth - 48, 44, 8, totalBoxFill);
-
-      ctx.fillStyle = "#0F172A";
-      ctx.font = "bold 14px sans-serif";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`Total: ${m2Val} m² = ${formatearDinero(total)} MXN`, x + 36, totalBoxY + 22);
+      // 7. PRECIO M² MÁS PEQUEÑO DEBAJO
+      ctx.fillStyle = "#64748B";
+      ctx.font = "12px sans-serif";
+      ctx.fillText(`$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`, x + 22, priceY + 38);
 
       // 8. Línea divisoria
       ctx.save();
       ctx.beginPath();
       ctx.strokeStyle = "#E2E8F0";
       ctx.lineWidth = 1;
-      ctx.moveTo(x + 24, totalBoxY + 60);
-      ctx.lineTo(x + cardWidth - 24, totalBoxY + 60);
+      ctx.moveTo(x + 22, priceY + 58);
+      ctx.lineTo(x + cardWidth - 22, priceY + 58);
       ctx.stroke();
       ctx.restore();
 
       // 9. Lista de Inclusiones
-      let listY = totalBoxY + 76;
+      let listY = priceY + 68;
       ctx.textBaseline = "top";
 
       pkg.incluye.forEach((item) => {
-        // Checkmark
         ctx.fillStyle = "#5C7A52";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText("✓", x + 24, listY);
+        ctx.font = "bold 13px sans-serif";
+        ctx.fillText("✓", x + 22, listY);
 
-        // Texto
         ctx.fillStyle = "#334155";
-        ctx.font = "12px sans-serif";
-        const itemLines = wrapText(ctx, item, cardWidth - 75);
+        ctx.font = "11px sans-serif";
+        const itemLines = wrapText(ctx, item, cardWidth - 65);
         itemLines.forEach((iLine, iIdx) => {
-          ctx.fillText(iLine, x + 44, listY + iIdx * 16);
+          ctx.fillText(iLine, x + 38, listY + iIdx * 14);
         });
-        listY += Math.max(22, itemLines.length * 16 + 8);
+        listY += Math.max(18, itemLines.length * 14 + 4);
       });
 
       // 10. Bloque Garantía y Ejecución
-      const metricsY = y + cardHeight - 245;
-      const colW = (cardWidth - 58) / 2;
+      const metricsY = y + cardHeight - 188;
+      const colW = (cardWidth - 54) / 2;
       const metricsBg = esPremium ? "#FAF0D7" : "#F8FAFC";
       const metricsBorder = esPremium ? "#E2D7BE" : "#E2E8F0";
 
-      drawRoundedRect(ctx, x + 24, metricsY, colW, 64, 8, metricsBg, metricsBorder, 1);
-      drawRoundedRect(ctx, x + 24 + colW + 10, metricsY, colW, 64, 8, metricsBg, metricsBorder, 1);
+      drawRoundedRect(ctx, x + 22, metricsY, colW, 52, 7, metricsBg, metricsBorder, 1);
+      drawRoundedRect(ctx, x + 22 + colW + 10, metricsY, colW, 52, 7, metricsBg, metricsBorder, 1);
 
       // Textos Garantía
       ctx.fillStyle = "#64748B";
-      ctx.font = "bold 9px sans-serif";
-      ctx.fillText("GARANTÍA", x + 34, metricsY + 12);
+      ctx.font = "bold 8.5px sans-serif";
+      ctx.fillText("GARANTÍA", x + 30, metricsY + 9);
 
       ctx.fillStyle = "#2D4A2B";
-      ctx.font = "bold 15px sans-serif";
-      ctx.fillText(pkg.garantia, x + 34, metricsY + 32);
+      ctx.font = "bold 13.5px sans-serif";
+      ctx.fillText(pkg.garantia, x + 30, metricsY + 26);
 
       // Textos Ejecución
       ctx.fillStyle = "#64748B";
-      ctx.font = "bold 9px sans-serif";
-      ctx.fillText("EJECUCIÓN", x + 34 + colW + 10, metricsY + 12);
+      ctx.font = "bold 8.5px sans-serif";
+      ctx.fillText("EJECUCIÓN", x + 30 + colW + 10, metricsY + 9);
 
       ctx.fillStyle = "#0F172A";
-      ctx.font = "bold 15px sans-serif";
-      ctx.fillText(pkg.ejecucion, x + 34 + colW + 10, metricsY + 32);
+      ctx.font = "bold 13.5px sans-serif";
+      ctx.fillText(pkg.ejecucion, x + 30 + colW + 10, metricsY + 26);
 
       // 11. Bloque "Mejor para"
-      const mejorY = metricsY + 76;
+      const mejorY = metricsY + 58;
       const mejorBg = esPremium ? "#FFFFFF" : "#F8FAFC";
       const mejorBorder = esPremium ? "#E2D7BE" : "#E2E8F0";
 
-      drawRoundedRect(ctx, x + 24, mejorY, cardWidth - 48, 80, 8, mejorBg, mejorBorder, 1);
+      drawRoundedRect(ctx, x + 22, mejorY, cardWidth - 44, 60, 7, mejorBg, mejorBorder, 1);
 
       ctx.fillStyle = "#475569";
-      ctx.font = "11.5px sans-serif";
-      const mejorLines = wrapText(ctx, `Mejor para: ${pkg.mejorPara}`, cardWidth - 66);
+      ctx.font = "10.5px sans-serif";
+      const mejorLines = wrapText(ctx, `Mejor para: ${pkg.mejorPara}`, cardWidth - 58);
       mejorLines.forEach((mLine, mIdx) => {
-        ctx.fillText(mLine, x + 34, mejorY + 14 + mIdx * 16);
+        ctx.fillText(mLine, x + 30, mejorY + 9 + mIdx * 14);
       });
 
       // 12. Botón de Acción en el pie de tarjeta
-      const btnY = y + cardHeight - 64;
-      const btnH = 44;
+      const btnY = y + cardHeight - 56;
+      const btnH = 40;
 
       if (esPremium) {
-        drawRoundedRect(ctx, x + 24, btnY, cardWidth - 48, btnH, 10, "#C9A961");
+        drawRoundedRect(ctx, x + 22, btnY, cardWidth - 44, btnH, 8, "#C9A961");
         ctx.fillStyle = "#FFFFFF";
       } else if (pkg.id === "estandar") {
-        drawRoundedRect(ctx, x + 24, btnY, cardWidth - 48, btnH, 10, "#2D4A2B");
+        drawRoundedRect(ctx, x + 22, btnY, cardWidth - 44, btnH, 8, "#2D4A2B");
         ctx.fillStyle = "#FFFFFF";
       } else {
-        drawRoundedRect(ctx, x + 24, btnY, cardWidth - 48, btnH, 10, "#FFFFFF", "#2D4A2B", 2);
+        drawRoundedRect(ctx, x + 22, btnY, cardWidth - 44, btnH, 8, "#FFFFFF", "#2D4A2B", 1.5);
         ctx.fillStyle = "#2D4A2B";
       }
 
-      ctx.font = "bold 13px sans-serif";
+      ctx.font = "bold 12px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(`Cotizar paquete ${pkg.badge}`, x + cardWidth / 2, btnY + btnH / 2);
@@ -713,31 +706,27 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
                       </p>
                     </div>
 
-                    {/* Precio por m² */}
+                    {/* Precio Total Grande y Precio m2 pequeño debajo */}
                     <div className="pt-2">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-xs font-bold text-carbon/50 self-start mt-1">$</span>
+                        <span className="text-sm font-bold text-carbon/50 self-start mt-1">$</span>
                         <span
                           className={`font-mono text-3xl sm:text-4xl font-black ${
                             esPremium ? "text-dorado" : "text-verde-profundo"
                           }`}
                         >
-                          {pkg.precioM2}
+                          {total.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
                         </span>
-                        <span className="text-xs font-semibold text-carbon/60">por m²</span>
+                        <span className="text-xs font-bold text-carbon/60">MXN</span>
                       </div>
 
-                      {/* Box Total Calculado */}
-                      <div
-                        className={`mt-2 p-2 rounded-lg text-xs font-mono font-bold flex items-center justify-between ${
-                          esPremium ? "bg-dorado/15 text-carbon" : "bg-slate-100 text-carbon/80"
-                        }`}
-                      >
-                        <span className="text-[11px] font-sans text-carbon/60 font-medium">
-                          Total {m2Val} m²:
+                      {/* Precio m² más pequeño debajo */}
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-carbon/70 font-semibold">
+                        <span className="px-1.5 py-0.5 rounded bg-carbon/5 text-carbon/80 font-mono font-bold">
+                          ${pkg.precioM2} / m²
                         </span>
-                        <span className="text-xs font-extrabold text-verde-profundo">
-                          {formatearDinero(total)} MXN
+                        <span className="text-[11px] text-carbon/50">
+                          (Superficie: {m2Val} m²)
                         </span>
                       </div>
                     </div>
