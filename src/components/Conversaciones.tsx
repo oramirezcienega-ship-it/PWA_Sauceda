@@ -29,6 +29,7 @@ import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
+import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -602,6 +603,7 @@ export function Conversaciones() {
   const [enviandoSticker, setEnviandoSticker] = useState(false);
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
+  const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -1883,10 +1885,20 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   )}
 
                   {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
-                  <div className="flex items-center justify-between text-[11px] text-carbon/40 px-1">
-                    <span>Escribe <strong className="text-sauce">#</strong> para usar respuestas rápidas</span>
+                  <div className="flex flex-wrap items-center justify-between gap-y-1.5 text-[11px] text-carbon/40 px-1">
+                    <span>Escribe <strong className="text-sauce">#</strong> para respuestas rápidas</span>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      {/* Botón Calculadora Rápida de Impermeabilización */}
+                      <button
+                        type="button"
+                        onClick={() => setMostrarCalculadora(true)}
+                        title="Calcular costos y generar comparativa de impermeabilización (Acrílico, Estándar, Premium)"
+                        className="flex items-center gap-1 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                      >
+                        <span>🧮</span>
+                        <span>Cotizador Impermeabilización</span>
+                      </button>
                       {detalle?.prospectoId && (
                         <button
                           type="button"
@@ -2128,6 +2140,22 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         </div>
       </div>
       </> /* fin tab bandeja */}
+
+      {/* Modal de Calculadora de Impermeabilización */}
+      <ModalCalculadoraImpermeabilizacion
+        abierto={mostrarCalculadora}
+        onCerrar={() => setMostrarCalculadora(false)}
+        nombreCliente={detalle?.nombre || "Cliente"}
+        onInsertarTexto={(textoCotizacion) => {
+          setTexto((prev) => {
+            if (!prev.trim()) return textoCotizacion;
+            return `${prev}\n\n${textoCotizacion}`;
+          });
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+          }
+        }}
+      />
     </div>
   );
 }
