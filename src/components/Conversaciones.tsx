@@ -1045,8 +1045,8 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     }
   }
 
-  async function handleEnviarArchivoDirecto(file: File) {
-    if (!sel) return;
+  async function handleEnviarArchivoDirecto(file: File, caption?: string): Promise<boolean> {
+    if (!sel) return false;
     setEnviandoArchivoDirecto(true);
     setMostrarAdjuntar(false);
     setAviso(null);
@@ -1055,18 +1055,22 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       const fd = new FormData();
       fd.append("telefono", sel);
       fd.append("archivo", file);
+      if (caption) fd.append("caption", caption);
 
       const r = await enviarArchivoDirectoConversacion(fd);
       setEnviandoArchivoDirecto(false);
 
       if (!r.ok) {
         setAviso(r.error ?? "No se pudo enviar el archivo.");
+        return false;
       } else {
         await refrescar(sel);
+        return true;
       }
     } catch (err: any) {
       setAviso(err.message || "Error al enviar el archivo.");
       setEnviandoArchivoDirecto(false);
+      return false;
     }
   }
 
@@ -2146,6 +2150,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         abierto={mostrarCalculadora}
         onCerrar={() => setMostrarCalculadora(false)}
         nombreCliente={detalle?.nombre || "Cliente"}
+        onEnviarImagenDirecta={handleEnviarArchivoDirecto}
         onInsertarTexto={(textoCotizacion) => {
           setTexto((prev) => {
             if (!prev.trim()) return textoCotizacion;

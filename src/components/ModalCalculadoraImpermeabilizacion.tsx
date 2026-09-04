@@ -8,6 +8,7 @@ export interface ModalCalculadoraProps {
   nombreCliente?: string;
   metrosIniciales?: number;
   onInsertarTexto?: (texto: string) => void;
+  onEnviarImagenDirecta?: (file: File, caption?: string) => Promise<boolean | void>;
 }
 
 interface PaqueteInfo {
@@ -92,10 +93,12 @@ export function ModalCalculadoraImpermeabilizacion({
   nombreCliente = "Cliente",
   metrosIniciales = 30,
   onInsertarTexto,
+  onEnviarImagenDirecta,
 }: ModalCalculadoraProps) {
   const [metros, setMetros] = useState<number>(metrosIniciales);
   const [copiado, setCopiado] = useState<string | null>(null);
   const [generandoImagen, setGenerandoImagen] = useState<boolean>(false);
+  const [enviandoImagenChat, setEnviandoImagenChat] = useState<boolean>(false);
   const cardsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -191,239 +194,245 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     }
   }
 
-  // Generación de imagen Canvas de alta definición para compartir como PNG
+  function construirCanvasCotizacion(): HTMLCanvasElement | null {
+    const width = 1200;
+    const height = 1350;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // Fondo general
+    ctx.fillStyle = "#F8FAFC";
+    ctx.fillRect(0, 0, width, height);
+
+    // Encabezado superior
+    ctx.fillStyle = "#2D4A2B";
+    ctx.fillRect(0, 0, width, 140);
+
+    // Logo / Nombre de marca
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 34px sans-serif";
+    ctx.fillText("SAUCEDA CONSTRUYE", 60, 60);
+
+    ctx.fillStyle = "#C9A961";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("COTIZADOR DE IMPERMEABILIZACIÓN", 60, 95);
+
+    // Metros cuadrados pill
+    const m2Text = `Propuesta para: ${m2Val} m²`;
+    ctx.font = "bold 22px sans-serif";
+    const m2Width = ctx.measureText(m2Text).width;
+    ctx.fillStyle = "#5C7A52";
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(width - m2Width - 100, 45, m2Width + 40, 50, 25);
+    } else {
+      ctx.rect(width - m2Width - 100, 45, m2Width + 40, 50);
+    }
+    ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText(m2Text, width - m2Width - 80, 78);
+
+    // Dibujar las 3 tarjetas
+    const cardWidth = 340;
+    const cardHeight = 1100;
+    const startX = 60;
+    const gap = 30;
+    const startY = 180;
+
+    PAQUETES.forEach((pkg, index) => {
+      const x = startX + index * (cardWidth + gap);
+      const y = startY;
+      const total = m2Val * pkg.precioM2;
+
+      // Sombra de tarjeta
+      ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetY = 6;
+
+      // Fondo de tarjeta
+      if (pkg.destacado) {
+        ctx.fillStyle = "#FAF7EE";
+        ctx.strokeStyle = "#C9A961";
+        ctx.lineWidth = 2.5;
+      } else {
+        ctx.fillStyle = "#FFFFFF";
+        ctx.strokeStyle = "#E2E8F0";
+        ctx.lineWidth = 1.5;
+      }
+
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x, y, cardWidth, cardHeight, 20);
+      } else {
+        ctx.rect(x, y, cardWidth, cardHeight);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      // Reset shadow
+      ctx.shadowColor = "transparent";
+
+      // Ribbon de 10 años en Premium
+      if (pkg.destacado) {
+        ctx.save();
+        ctx.translate(x + cardWidth - 65, y + 45);
+        ctx.rotate((45 * Math.PI) / 180);
+        ctx.fillStyle = "#B58E3F";
+        ctx.fillRect(-80, -14, 160, 28);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("10 AÑOS GARANTÍA", 0, 4);
+        ctx.restore();
+      }
+
+      // Badge de Paquete
+      ctx.textAlign = "left";
+      ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#5C7A52";
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(pkg.badge, x + 24, y + 45);
+
+      // Título
+      ctx.fillStyle = "#1E293B";
+      ctx.font = "bold 22px sans-serif";
+      const lines = wrapText(ctx, pkg.titulo, cardWidth - 48);
+      lines.forEach((line, lIdx) => {
+        ctx.fillText(line, x + 24, y + 80 + lIdx * 26);
+      });
+
+      const titleBottom = y + 80 + lines.length * 26;
+
+      // Subtítulo
+      ctx.fillStyle = "#64748B";
+      ctx.font = "13px sans-serif";
+      const subLines = wrapText(ctx, pkg.subtitulo, cardWidth - 48);
+      subLines.forEach((sLine, sIdx) => {
+        ctx.fillText(sLine, x + 24, titleBottom + sIdx * 18);
+      });
+
+      // Precio por m²
+      const priceY = titleBottom + subLines.length * 18 + 45;
+      ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
+      ctx.font = "bold 38px sans-serif";
+      ctx.fillText(`$${pkg.precioM2}`, x + 24, priceY);
+
+      ctx.fillStyle = "#64748B";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("por m²", x + 125, priceY - 6);
+
+      // Caja de Total
+      const totalBoxY = priceY + 20;
+      ctx.fillStyle = pkg.destacado ? "#EFE8D3" : "#F1F5F9";
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x + 24, totalBoxY, cardWidth - 48, 42, 8);
+      } else {
+        ctx.rect(x + 24, totalBoxY, cardWidth - 48, 42);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = "#1E293B";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText(`Total: ${m2Val} m² = ${formatearDinero(total)} MXN`, x + 38, totalBoxY + 26);
+
+      // Línea divisoria
+      ctx.strokeStyle = "#E2E8F0";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 24, totalBoxY + 56);
+      ctx.lineTo(x + cardWidth - 24, totalBoxY + 56);
+      ctx.stroke();
+
+      // Lista de Incluye
+      let listY = totalBoxY + 80;
+      ctx.fillStyle = "#334155";
+      ctx.font = "12px sans-serif";
+      pkg.incluye.forEach((item) => {
+        ctx.fillStyle = "#5C7A52";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText("✓", x + 24, listY);
+
+        ctx.fillStyle = "#334155";
+        ctx.font = "12px sans-serif";
+        const itemLines = wrapText(ctx, item, cardWidth - 75);
+        itemLines.forEach((iLine, iIdx) => {
+          ctx.fillText(iLine, x + 44, listY + iIdx * 16);
+        });
+        listY += itemLines.length * 16 + 8;
+      });
+
+      // Bloque Garantía y Ejecución
+      const metricsY = y + cardHeight - 210;
+      const colW = (cardWidth - 58) / 2;
+
+      ctx.fillStyle = pkg.destacado ? "#EFE8D3" : "#F8FAFC";
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x + 24, metricsY, colW, 58, 8);
+        ctx.fill();
+        ctx.roundRect(x + 24 + colW + 10, metricsY, colW, 58, 8);
+        ctx.fill();
+      } else {
+        ctx.rect(x + 24, metricsY, colW, 58);
+        ctx.fill();
+        ctx.rect(x + 24 + colW + 10, metricsY, colW, 58);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "#64748B";
+      ctx.font = "bold 9px sans-serif";
+      ctx.fillText("GARANTÍA", x + 32, metricsY + 20);
+      ctx.fillText("EJECUCIÓN", x + 32 + colW + 10, metricsY + 20);
+
+      ctx.fillStyle = "#2D4A2B";
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillText(pkg.garantia, x + 32, metricsY + 44);
+      ctx.fillText(pkg.ejecucion, x + 32 + colW + 10, metricsY + 44);
+
+      // Bloque "Mejor para"
+      const mejorY = metricsY + 70;
+      ctx.fillStyle = pkg.destacado ? "#FFFFFF" : "#F8FAFC";
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x + 24, mejorY, cardWidth - 48, 70, 8);
+      } else {
+        ctx.rect(x + 24, mejorY, cardWidth - 48, 70);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = "#475569";
+      ctx.font = "11px sans-serif";
+      const mejorLines = wrapText(ctx, `Mejor para: ${pkg.mejorPara}`, cardWidth - 66);
+      mejorLines.forEach((mLine, mIdx) => {
+        ctx.fillText(mLine, x + 34, mejorY + 20 + mIdx * 16);
+      });
+
+      // Pie de tarjeta
+      const footerY = y + cardHeight - 45;
+      ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(x + 24, footerY, cardWidth - 48, 38, 8);
+      } else {
+        ctx.rect(x + 24, footerY, cardWidth - 48, 38);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`Cotizar paquete ${pkg.badge}`, x + cardWidth / 2, footerY + 24);
+      ctx.textAlign = "left";
+    });
+
+    return canvas;
+  }
+
+  // Generación y descarga directa
   async function generarYDescargarImagen() {
     setGenerandoImagen(true);
     try {
-      const width = 1200;
-      const height = 1350;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      const canvas = construirCanvasCotizacion();
+      if (!canvas) throw new Error("No se pudo inicializar canvas");
 
-      // Fondo general
-      ctx.fillStyle = "#F8FAFC";
-      ctx.fillRect(0, 0, width, height);
-
-      // Encabezado superior
-      ctx.fillStyle = "#2D4A2B";
-      ctx.fillRect(0, 0, width, 140);
-
-      // Logo / Nombre de marca
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 34px sans-serif";
-      ctx.fillText("SAUCEDA CONSTRUYE", 60, 60);
-
-      ctx.fillStyle = "#C9A961";
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillText("COTIZADOR DE IMPERMEABILIZACIÓN", 60, 95);
-
-      // Metros cuadrados pill
-      const m2Text = `Propuesta para: ${m2Val} m²`;
-      ctx.font = "bold 22px sans-serif";
-      const m2Width = ctx.measureText(m2Text).width;
-      ctx.fillStyle = "#5C7A52";
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(width - m2Width - 100, 45, m2Width + 40, 50, 25);
-      } else {
-        ctx.rect(width - m2Width - 100, 45, m2Width + 40, 50);
-      }
-      ctx.fill();
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillText(m2Text, width - m2Width - 80, 78);
-
-      // Dibujar las 3 tarjetas
-      const cardWidth = 340;
-      const cardHeight = 1100;
-      const startX = 60;
-      const gap = 30;
-      const startY = 180;
-
-      PAQUETES.forEach((pkg, index) => {
-        const x = startX + index * (cardWidth + gap);
-        const y = startY;
-        const total = m2Val * pkg.precioM2;
-
-        // Sombra de tarjeta
-        ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
-        ctx.shadowBlur = 16;
-        ctx.shadowOffsetY = 6;
-
-        // Fondo de tarjeta
-        if (pkg.destacado) {
-          ctx.fillStyle = "#FAF7EE";
-          ctx.strokeStyle = "#C9A961";
-          ctx.lineWidth = 2.5;
-        } else {
-          ctx.fillStyle = "#FFFFFF";
-          ctx.strokeStyle = "#E2E8F0";
-          ctx.lineWidth = 1.5;
-        }
-
-        ctx.beginPath();
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(x, y, cardWidth, cardHeight, 20);
-        } else {
-          ctx.rect(x, y, cardWidth, cardHeight);
-        }
-        ctx.fill();
-        ctx.stroke();
-
-        // Reset shadow
-        ctx.shadowColor = "transparent";
-
-        // Ribbon de 10 años en Premium
-        if (pkg.destacado) {
-          ctx.save();
-          ctx.translate(x + cardWidth - 65, y + 45);
-          ctx.rotate((45 * Math.PI) / 180);
-          ctx.fillStyle = "#B58E3F";
-          ctx.fillRect(-80, -14, 160, 28);
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 11px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("10 AÑOS GARANTÍA", 0, 4);
-          ctx.restore();
-        }
-
-        // Badge de Paquete
-        ctx.textAlign = "left";
-        ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#5C7A52";
-        ctx.font = "bold 13px sans-serif";
-        ctx.fillText(pkg.badge, x + 24, y + 45);
-
-        // Título
-        ctx.fillStyle = "#1E293B";
-        ctx.font = "bold 22px sans-serif";
-        const lines = wrapText(ctx, pkg.titulo, cardWidth - 48);
-        lines.forEach((line, lIdx) => {
-          ctx.fillText(line, x + 24, y + 80 + lIdx * 26);
-        });
-
-        const titleBottom = y + 80 + lines.length * 26;
-
-        // Subtítulo
-        ctx.fillStyle = "#64748B";
-        ctx.font = "13px sans-serif";
-        const subLines = wrapText(ctx, pkg.subtitulo, cardWidth - 48);
-        subLines.forEach((sLine, sIdx) => {
-          ctx.fillText(sLine, x + 24, titleBottom + sIdx * 18);
-        });
-
-        // Precio por m²
-        const priceY = titleBottom + subLines.length * 18 + 45;
-        ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
-        ctx.font = "bold 38px sans-serif";
-        ctx.fillText(`$${pkg.precioM2}`, x + 24, priceY);
-
-        ctx.fillStyle = "#64748B";
-        ctx.font = "14px sans-serif";
-        ctx.fillText("por m²", x + 125, priceY - 6);
-
-        // Caja de Total
-        const totalBoxY = priceY + 20;
-        ctx.fillStyle = pkg.destacado ? "#EFE8D3" : "#F1F5F9";
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(x + 24, totalBoxY, cardWidth - 48, 42, 8);
-        } else {
-          ctx.rect(x + 24, totalBoxY, cardWidth - 48, 42);
-        }
-        ctx.fill();
-
-        ctx.fillStyle = "#1E293B";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText(`Total: ${m2Val} m² = ${formatearDinero(total)} MXN`, x + 38, totalBoxY + 26);
-
-        // Línea divisoria
-        ctx.strokeStyle = "#E2E8F0";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x + 24, totalBoxY + 56);
-        ctx.lineTo(x + cardWidth - 24, totalBoxY + 56);
-        ctx.stroke();
-
-        // Lista de Incluye
-        let listY = totalBoxY + 80;
-        ctx.fillStyle = "#334155";
-        ctx.font = "12px sans-serif";
-        pkg.incluye.forEach((item) => {
-          ctx.fillStyle = "#5C7A52";
-          ctx.font = "bold 14px sans-serif";
-          ctx.fillText("✓", x + 24, listY);
-
-          ctx.fillStyle = "#334155";
-          ctx.font = "12px sans-serif";
-          const itemLines = wrapText(ctx, item, cardWidth - 75);
-          itemLines.forEach((iLine, iIdx) => {
-            ctx.fillText(iLine, x + 44, listY + iIdx * 16);
-          });
-          listY += itemLines.length * 16 + 8;
-        });
-
-        // Bloque Garantía y Ejecución
-        const metricsY = y + cardHeight - 210;
-        const colW = (cardWidth - 58) / 2;
-
-        ctx.fillStyle = pkg.destacado ? "#EFE8D3" : "#F8FAFC";
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(x + 24, metricsY, colW, 58, 8);
-          ctx.fill();
-          ctx.roundRect(x + 24 + colW + 10, metricsY, colW, 58, 8);
-          ctx.fill();
-        } else {
-          ctx.rect(x + 24, metricsY, colW, 58);
-          ctx.fill();
-          ctx.rect(x + 24 + colW + 10, metricsY, colW, 58);
-          ctx.fill();
-        }
-
-        ctx.fillStyle = "#64748B";
-        ctx.font = "bold 9px sans-serif";
-        ctx.fillText("GARANTÍA", x + 32, metricsY + 20);
-        ctx.fillText("EJECUCIÓN", x + 32 + colW + 10, metricsY + 20);
-
-        ctx.fillStyle = "#2D4A2B";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText(pkg.garantia, x + 32, metricsY + 44);
-        ctx.fillText(pkg.ejecucion, x + 32 + colW + 10, metricsY + 44);
-
-        // Bloque "Mejor para"
-        const mejorY = metricsY + 70;
-        ctx.fillStyle = pkg.destacado ? "#FFFFFF" : "#F8FAFC";
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(x + 24, mejorY, cardWidth - 48, 70, 8);
-        } else {
-          ctx.rect(x + 24, mejorY, cardWidth - 48, 70);
-        }
-        ctx.fill();
-
-        ctx.fillStyle = "#475569";
-        ctx.font = "11px sans-serif";
-        const mejorLines = wrapText(ctx, `Mejor para: ${pkg.mejorPara}`, cardWidth - 66);
-        mejorLines.forEach((mLine, mIdx) => {
-          ctx.fillText(mLine, x + 34, mejorY + 20 + mIdx * 16);
-        });
-
-        // Pie de tarjeta
-        const footerY = y + cardHeight - 45;
-        ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
-        if (typeof ctx.roundRect === "function") {
-          ctx.roundRect(x + 24, footerY, cardWidth - 48, 38, 8);
-        } else {
-          ctx.rect(x + 24, footerY, cardWidth - 48, 38);
-        }
-        ctx.fill();
-
-        ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 12px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(`Cotizar paquete ${pkg.badge}`, x + cardWidth / 2, footerY + 24);
-        ctx.textAlign = "left";
-      });
-
-      // Descargar imagen generada
       const dataUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.download = `Cotizacion_Impermeabilizacion_${m2Val}m2_SAUCEDA.png`;
@@ -436,6 +445,40 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       alert("Hubo un detalle al generar la imagen.");
     } finally {
       setGenerandoImagen(false);
+    }
+  }
+
+  // Envío directo de la imagen al chat por WhatsApp / Meta API
+  async function manejarEnviarImagenAlChat() {
+    if (!onEnviarImagenDirecta) return;
+    setEnviandoImagenChat(true);
+    try {
+      const canvas = construirCanvasCotizacion();
+      if (!canvas) throw new Error("No se pudo construir canvas");
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/png", 0.95)
+      );
+
+      if (!blob) throw new Error("No se pudo crear el archivo de imagen");
+
+      const filename = `Cotizacion_Impermeabilizacion_${m2Val}m2_SAUCEDA.png`;
+      const file = new File([blob], filename, { type: "image/png" });
+      const caption = `Propuesta de Impermeabilización para ${m2Val} m² — SAUCEDA Construye`;
+
+      const exito = await onEnviarImagenDirecta(file, caption);
+      if (exito !== false) {
+        setCopiado("¡Imagen comparativa enviada directamente al chat!");
+        setTimeout(() => {
+          setCopiado(null);
+          onCerrar();
+        }, 900);
+      }
+    } catch (err) {
+      console.error("Error al enviar imagen al chat:", err);
+      alert("Hubo un detalle al enviar la imagen al chat.");
+    } finally {
+      setEnviandoImagenChat(false);
     }
   }
 
@@ -476,12 +519,26 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Botón Enviar Imagen Directa (si tiene callback de chat) */}
+            {onEnviarImagenDirecta && (
+              <button
+                type="button"
+                onClick={manejarEnviarImagenAlChat}
+                disabled={enviandoImagenChat || generandoImagen}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer"
+                title="Enviar la imagen comparativa directamente al chat del cliente"
+              >
+                <span>{enviandoImagenChat ? "⏳" : "📤"}</span>
+                <span>{enviandoImagenChat ? "Enviando imagen..." : "Enviar Imagen al Chat"}</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={generarYDescargarImagen}
-              disabled={generandoImagen}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dorado hover:bg-dorado/90 text-carbon font-bold text-xs shadow-sm transition disabled:opacity-50"
+              disabled={generandoImagen || enviandoImagenChat}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dorado hover:bg-dorado/90 text-carbon font-bold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer"
               title="Descargar imagen PNG lista para enviar"
             >
               <span>{generandoImagen ? "⏳" : "📸"}</span>
@@ -491,11 +548,11 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
             <button
               type="button"
               onClick={() => manejarInsertar(generarTextoComparativaCompleta(), "Comparativa Completa")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sauce hover:bg-sauce/80 text-white font-bold text-xs shadow-sm transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sauce hover:bg-sauce/80 text-white font-bold text-xs shadow-sm transition cursor-pointer"
               title="Insertar comparativa de los 3 paquetes en el chat"
             >
               <span>📋</span>
-              <span>Insertar Comparativa en Chat</span>
+              <span>Insertar Texto</span>
             </button>
 
             <button
@@ -738,29 +795,45 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
         </div>
 
         {/* Pie del Modal */}
-        <div className="bg-white p-3 sm:p-4 border-t border-carbon/10 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="bg-white p-3 sm:p-4 border-t border-carbon/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="text-[11px] text-carbon/60 flex items-center gap-1.5">
             <span className="text-sauce font-bold">💡 Tip:</span>
             <span>
-              Puedes hacer clic en <strong>Insertar Comparativa</strong> para pegar las 3 opciones con formato estructurado, o cotizar un paquete individual.
+              Puedes enviar la imagen comparativa directa a WhatsApp o pegar el texto estructurado en el chat.
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onCerrar}
-              className="px-4 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 font-bold text-xs transition cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-carbon/80 font-bold text-xs transition cursor-pointer"
             >
               Cerrar
             </button>
+
             <button
               type="button"
               onClick={() => manejarInsertar(generarTextoComparativaCompleta(), "Comparativa Completa")}
-              className="px-4 py-1.5 rounded-lg bg-verde-profundo hover:bg-verde-profundo/90 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-verde-profundo hover:bg-verde-profundo/90 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1.5"
             >
-              ⚡ Insertar Comparativa Completa
+              <span>📋</span>
+              <span>Insertar Texto Comparativo</span>
             </button>
+
+            {/* Botón Enviar Imagen Comparativa al Chat (lado derecho) */}
+            {onEnviarImagenDirecta && (
+              <button
+                type="button"
+                onClick={manejarEnviarImagenAlChat}
+                disabled={enviandoImagenChat || generandoImagen}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                title="Enviar la imagen comparativa directamente al chat"
+              >
+                <span>{enviandoImagenChat ? "⏳" : "📤"}</span>
+                <span>{enviandoImagenChat ? "Enviando imagen..." : "Enviar Imagen Comparativa"}</span>
+              </button>
+            )}
           </div>
         </div>
 
