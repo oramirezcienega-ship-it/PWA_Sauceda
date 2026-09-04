@@ -194,9 +194,42 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     }
   }
 
+  function drawRoundedRect(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    fill?: string,
+    stroke?: string,
+    strokeWidth: number = 1
+  ) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.arcTo(x + width, y, x + width, y + radius, radius);
+    ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+    ctx.arcTo(x, y + height, x, y + height - radius, radius);
+    ctx.arcTo(x, y, x + radius, y, radius);
+    ctx.closePath();
+
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = strokeWidth;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function construirCanvasCotizacion(): HTMLCanvasElement | null {
     const width = 1200;
-    const height = 1350;
+    const height = 1380;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -207,220 +240,216 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     ctx.fillStyle = "#F8FAFC";
     ctx.fillRect(0, 0, width, height);
 
-    // Encabezado superior
+    // Encabezado superior verde
     ctx.fillStyle = "#2D4A2B";
     ctx.fillRect(0, 0, width, 140);
 
-    // Logo / Nombre de marca
+    // Título y Marca
     ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 34px sans-serif";
-    ctx.fillText("SAUCEDA CONSTRUYE", 60, 60);
+    ctx.font = "bold 32px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("SAUCEDA CONSTRUYE", 54, 40);
 
     ctx.fillStyle = "#C9A961";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText("COTIZADOR DE IMPERMEABILIZACIÓN", 60, 95);
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText("PROPUESTA DE IMPERMEABILIZACIÓN", 54, 82);
 
-    // Metros cuadrados pill
+    // Pill de Metros cuadrados
     const m2Text = `Propuesta para: ${m2Val} m²`;
-    ctx.font = "bold 22px sans-serif";
-    const m2Width = ctx.measureText(m2Text).width;
-    ctx.fillStyle = "#5C7A52";
-    if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(width - m2Width - 100, 45, m2Width + 40, 50, 25);
-    } else {
-      ctx.rect(width - m2Width - 100, 45, m2Width + 40, 50);
-    }
-    ctx.fill();
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(m2Text, width - m2Width - 80, 78);
+    ctx.font = "bold 20px sans-serif";
+    const m2TextWidth = ctx.measureText(m2Text).width;
+    const pillW = m2TextWidth + 44;
+    const pillH = 50;
+    const pillX = width - pillW - 54;
+    const pillY = 45;
 
-    // Dibujar las 3 tarjetas
-    const cardWidth = 340;
-    const cardHeight = 1100;
-    const startX = 60;
-    const gap = 30;
-    const startY = 180;
+    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 25, "#5C7A52");
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(m2Text, pillX + pillW / 2, pillY + pillH / 2);
+
+    // Dibujar las 3 tarjetas comparativas
+    const cardWidth = 346;
+    const cardHeight = 1180;
+    const startX = 54;
+    const gap = 27;
+    const startY = 165;
 
     PAQUETES.forEach((pkg, index) => {
       const x = startX + index * (cardWidth + gap);
       const y = startY;
       const total = m2Val * pkg.precioM2;
+      const esPremium = !!pkg.destacado;
 
-      // Sombra de tarjeta
-      ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
-      ctx.shadowBlur = 16;
-      ctx.shadowOffsetY = 6;
+      // 1. Fondo y borde de tarjeta
+      const bgCard = esPremium ? "#FAF7EE" : "#FFFFFF";
+      const borderCard = esPremium ? "#C9A961" : "#E2E8F0";
+      const strokeW = esPremium ? 2.5 : 1.5;
 
-      // Fondo de tarjeta
-      if (pkg.destacado) {
-        ctx.fillStyle = "#FAF7EE";
-        ctx.strokeStyle = "#C9A961";
-        ctx.lineWidth = 2.5;
-      } else {
-        ctx.fillStyle = "#FFFFFF";
-        ctx.strokeStyle = "#E2E8F0";
-        ctx.lineWidth = 1.5;
-      }
+      drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 24, bgCard, borderCard, strokeW);
 
-      ctx.beginPath();
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(x, y, cardWidth, cardHeight, 20);
-      } else {
-        ctx.rect(x, y, cardWidth, cardHeight);
-      }
-      ctx.fill();
-      ctx.stroke();
-
-      // Reset shadow
-      ctx.shadowColor = "transparent";
-
-      // Ribbon de 10 años en Premium
-      if (pkg.destacado) {
+      // 2. Ribbon en Premium (10 años de garantía)
+      if (esPremium) {
         ctx.save();
-        ctx.translate(x + cardWidth - 65, y + 45);
+        // Clip al contenedor redondeado
+        ctx.beginPath();
+        ctx.moveTo(x + 24, y);
+        ctx.lineTo(x + cardWidth - 24, y);
+        ctx.arcTo(x + cardWidth, y, x + cardWidth, y + 24, 24);
+        ctx.arcTo(x + cardWidth, y + cardHeight, x + cardWidth - 24, y + cardHeight, 24);
+        ctx.arcTo(x, y + cardHeight, x, y + cardHeight - 24, 24);
+        ctx.arcTo(x, y, x + 24, y, 24);
+        ctx.closePath();
+        ctx.clip();
+
+        // Franja dorada inclinada
+        ctx.translate(x + cardWidth - 48, y + 42);
         ctx.rotate((45 * Math.PI) / 180);
         ctx.fillStyle = "#B58E3F";
-        ctx.fillRect(-80, -14, 160, 28);
+        ctx.fillRect(-100, -14, 200, 28);
         ctx.fillStyle = "#FFFFFF";
         ctx.font = "bold 11px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("10 AÑOS GARANTÍA", 0, 4);
+        ctx.textBaseline = "middle";
+        ctx.fillText("10 AÑOS GARANTÍA", 0, 0);
         ctx.restore();
       }
 
-      // Badge de Paquete
       ctx.textAlign = "left";
-      ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#5C7A52";
-      ctx.font = "bold 13px sans-serif";
-      ctx.fillText(pkg.badge, x + 24, y + 45);
+      ctx.textBaseline = "top";
 
-      // Título
-      ctx.fillStyle = "#1E293B";
-      ctx.font = "bold 22px sans-serif";
-      const lines = wrapText(ctx, pkg.titulo, cardWidth - 48);
-      lines.forEach((line, lIdx) => {
-        ctx.fillText(line, x + 24, y + 80 + lIdx * 26);
-      });
+      // 3. Badge de Paquete (ACRÍLICO / ESTÁNDAR / PREMIUM)
+      ctx.fillStyle = esPremium ? "#B58E3F" : "#5C7A52";
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillText(pkg.badge, x + 24, y + 36);
 
-      const titleBottom = y + 80 + lines.length * 26;
+      // 4. Título del Paquete
+      ctx.fillStyle = "#0F172A";
+      ctx.font = "bold 21px sans-serif";
+      ctx.fillText(pkg.titulo, x + 24, y + 62);
 
-      // Subtítulo
+      // 5. Subtítulo
       ctx.fillStyle = "#64748B";
-      ctx.font = "13px sans-serif";
-      const subLines = wrapText(ctx, pkg.subtitulo, cardWidth - 48);
-      subLines.forEach((sLine, sIdx) => {
-        ctx.fillText(sLine, x + 24, titleBottom + sIdx * 18);
-      });
+      ctx.font = "12.5px sans-serif";
+      ctx.fillText(pkg.subtitulo, x + 24, y + 94);
 
-      // Precio por m²
-      const priceY = titleBottom + subLines.length * 18 + 45;
-      ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
-      ctx.font = "bold 38px sans-serif";
-      ctx.fillText(`$${pkg.precioM2}`, x + 24, priceY);
+      // 6. Precio por m²
+      const priceY = y + 140;
+      ctx.fillStyle = esPremium ? "#B58E3F" : "#2D4A2B";
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText("$", x + 24, priceY + 6);
 
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText(`${pkg.precioM2}`, x + 40, priceY - 4);
+
+      const numWidth = ctx.measureText(`${pkg.precioM2}`).width;
       ctx.fillStyle = "#64748B";
       ctx.font = "14px sans-serif";
-      ctx.fillText("por m²", x + 125, priceY - 6);
+      ctx.fillText("por m²", x + 45 + numWidth, priceY + 18);
 
-      // Caja de Total
-      const totalBoxY = priceY + 20;
-      ctx.fillStyle = pkg.destacado ? "#EFE8D3" : "#F1F5F9";
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(x + 24, totalBoxY, cardWidth - 48, 42, 8);
-      } else {
-        ctx.rect(x + 24, totalBoxY, cardWidth - 48, 42);
-      }
-      ctx.fill();
+      // 7. Caja de Total Calculado
+      const totalBoxY = priceY + 56;
+      const totalBoxFill = esPremium ? "#EFE5CD" : "#F1F5F9";
+      drawRoundedRect(ctx, x + 24, totalBoxY, cardWidth - 48, 44, 8, totalBoxFill);
 
-      ctx.fillStyle = "#1E293B";
+      ctx.fillStyle = "#0F172A";
       ctx.font = "bold 14px sans-serif";
-      ctx.fillText(`Total: ${m2Val} m² = ${formatearDinero(total)} MXN`, x + 38, totalBoxY + 26);
+      ctx.textBaseline = "middle";
+      ctx.fillText(`Total: ${m2Val} m² = ${formatearDinero(total)} MXN`, x + 36, totalBoxY + 22);
 
-      // Línea divisoria
+      // 8. Línea divisoria
+      ctx.save();
+      ctx.beginPath();
       ctx.strokeStyle = "#E2E8F0";
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x + 24, totalBoxY + 56);
-      ctx.lineTo(x + cardWidth - 24, totalBoxY + 56);
+      ctx.moveTo(x + 24, totalBoxY + 60);
+      ctx.lineTo(x + cardWidth - 24, totalBoxY + 60);
       ctx.stroke();
+      ctx.restore();
 
-      // Lista de Incluye
-      let listY = totalBoxY + 80;
-      ctx.fillStyle = "#334155";
-      ctx.font = "12px sans-serif";
+      // 9. Lista de Inclusiones
+      let listY = totalBoxY + 76;
+      ctx.textBaseline = "top";
+
       pkg.incluye.forEach((item) => {
+        // Checkmark
         ctx.fillStyle = "#5C7A52";
         ctx.font = "bold 14px sans-serif";
         ctx.fillText("✓", x + 24, listY);
 
+        // Texto
         ctx.fillStyle = "#334155";
         ctx.font = "12px sans-serif";
         const itemLines = wrapText(ctx, item, cardWidth - 75);
         itemLines.forEach((iLine, iIdx) => {
           ctx.fillText(iLine, x + 44, listY + iIdx * 16);
         });
-        listY += itemLines.length * 16 + 8;
+        listY += Math.max(22, itemLines.length * 16 + 8);
       });
 
-      // Bloque Garantía y Ejecución
-      const metricsY = y + cardHeight - 210;
+      // 10. Bloque Garantía y Ejecución
+      const metricsY = y + cardHeight - 245;
       const colW = (cardWidth - 58) / 2;
+      const metricsBg = esPremium ? "#FAF0D7" : "#F8FAFC";
+      const metricsBorder = esPremium ? "#E2D7BE" : "#E2E8F0";
 
-      ctx.fillStyle = pkg.destacado ? "#EFE8D3" : "#F8FAFC";
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(x + 24, metricsY, colW, 58, 8);
-        ctx.fill();
-        ctx.roundRect(x + 24 + colW + 10, metricsY, colW, 58, 8);
-        ctx.fill();
-      } else {
-        ctx.rect(x + 24, metricsY, colW, 58);
-        ctx.fill();
-        ctx.rect(x + 24 + colW + 10, metricsY, colW, 58);
-        ctx.fill();
-      }
+      drawRoundedRect(ctx, x + 24, metricsY, colW, 64, 8, metricsBg, metricsBorder, 1);
+      drawRoundedRect(ctx, x + 24 + colW + 10, metricsY, colW, 64, 8, metricsBg, metricsBorder, 1);
 
+      // Textos Garantía
       ctx.fillStyle = "#64748B";
       ctx.font = "bold 9px sans-serif";
-      ctx.fillText("GARANTÍA", x + 32, metricsY + 20);
-      ctx.fillText("EJECUCIÓN", x + 32 + colW + 10, metricsY + 20);
+      ctx.fillText("GARANTÍA", x + 34, metricsY + 12);
 
       ctx.fillStyle = "#2D4A2B";
-      ctx.font = "bold 14px sans-serif";
-      ctx.fillText(pkg.garantia, x + 32, metricsY + 44);
-      ctx.fillText(pkg.ejecucion, x + 32 + colW + 10, metricsY + 44);
+      ctx.font = "bold 15px sans-serif";
+      ctx.fillText(pkg.garantia, x + 34, metricsY + 32);
 
-      // Bloque "Mejor para"
-      const mejorY = metricsY + 70;
-      ctx.fillStyle = pkg.destacado ? "#FFFFFF" : "#F8FAFC";
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(x + 24, mejorY, cardWidth - 48, 70, 8);
-      } else {
-        ctx.rect(x + 24, mejorY, cardWidth - 48, 70);
-      }
-      ctx.fill();
+      // Textos Ejecución
+      ctx.fillStyle = "#64748B";
+      ctx.font = "bold 9px sans-serif";
+      ctx.fillText("EJECUCIÓN", x + 34 + colW + 10, metricsY + 12);
+
+      ctx.fillStyle = "#0F172A";
+      ctx.font = "bold 15px sans-serif";
+      ctx.fillText(pkg.ejecucion, x + 34 + colW + 10, metricsY + 32);
+
+      // 11. Bloque "Mejor para"
+      const mejorY = metricsY + 76;
+      const mejorBg = esPremium ? "#FFFFFF" : "#F8FAFC";
+      const mejorBorder = esPremium ? "#E2D7BE" : "#E2E8F0";
+
+      drawRoundedRect(ctx, x + 24, mejorY, cardWidth - 48, 80, 8, mejorBg, mejorBorder, 1);
 
       ctx.fillStyle = "#475569";
-      ctx.font = "11px sans-serif";
+      ctx.font = "11.5px sans-serif";
       const mejorLines = wrapText(ctx, `Mejor para: ${pkg.mejorPara}`, cardWidth - 66);
       mejorLines.forEach((mLine, mIdx) => {
-        ctx.fillText(mLine, x + 34, mejorY + 20 + mIdx * 16);
+        ctx.fillText(mLine, x + 34, mejorY + 14 + mIdx * 16);
       });
 
-      // Pie de tarjeta
-      const footerY = y + cardHeight - 45;
-      ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(x + 24, footerY, cardWidth - 48, 38, 8);
-      } else {
-        ctx.rect(x + 24, footerY, cardWidth - 48, 38);
-      }
-      ctx.fill();
+      // 12. Botón de Acción en el pie de tarjeta
+      const btnY = y + cardHeight - 64;
+      const btnH = 44;
 
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = "bold 12px sans-serif";
+      if (esPremium) {
+        drawRoundedRect(ctx, x + 24, btnY, cardWidth - 48, btnH, 10, "#C9A961");
+        ctx.fillStyle = "#FFFFFF";
+      } else if (pkg.id === "estandar") {
+        drawRoundedRect(ctx, x + 24, btnY, cardWidth - 48, btnH, 10, "#2D4A2B");
+        ctx.fillStyle = "#FFFFFF";
+      } else {
+        drawRoundedRect(ctx, x + 24, btnY, cardWidth - 48, btnH, 10, "#FFFFFF", "#2D4A2B", 2);
+        ctx.fillStyle = "#2D4A2B";
+      }
+
+      ctx.font = "bold 13px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(`Cotizar paquete ${pkg.badge}`, x + cardWidth / 2, footerY + 24);
-      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`Cotizar paquete ${pkg.badge}`, x + cardWidth / 2, btnY + btnH / 2);
     });
 
     return canvas;
