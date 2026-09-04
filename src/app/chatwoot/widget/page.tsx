@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { obtenerInfoContactoChatwoot, type InfoContactoWidget } from "@/app/actions/chatwoot";
 import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
+import { ModalCalculadoraImpermeabilizacion } from "@/components/ModalCalculadoraImpermeabilizacion";
 
 function WidgetContenido() {
   const searchParams = useSearchParams();
@@ -13,6 +14,7 @@ function WidgetContenido() {
   const [info, setInfo] = useState<InfoContactoWidget | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
   const [isPending, startTransition] = useTransition();
+  const [mostrarCalculadora, setMostrarCalculadora] = useState<boolean>(false);
 
   // 1. Leer parámetros de URL iniciales
   useEffect(() => {
@@ -313,25 +315,43 @@ function WidgetContenido() {
         </div>
       )}
 
-      {/* Enlaces de Acceso Rápido */}
-      <div className="pt-1 flex items-center gap-2">
-        <a
-          href="/agenda"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 py-1.5 text-center rounded-lg bg-white border border-carbon/15 hover:bg-slate-50 text-[11px] font-bold text-carbon/70 transition shadow-2xs"
+      {/* Enlaces de Acceso Rápido y Cotizador */}
+      <div className="pt-1 space-y-1.5">
+        <button
+          type="button"
+          onClick={() => setMostrarCalculadora(true)}
+          className="w-full py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs shadow-2xs transition flex items-center justify-center gap-1.5 cursor-pointer"
         >
-          📅 Agenda
-        </a>
-        <a
-          href="/dashboard"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 py-1.5 text-center rounded-lg bg-white border border-carbon/15 hover:bg-slate-50 text-[11px] font-bold text-carbon/70 transition shadow-2xs"
-        >
-          📊 Dashboard
-        </a>
+          <span>🧮</span>
+          <span>Calculadora de Impermeabilización</span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          <a
+            href="/agenda"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 py-1.5 text-center rounded-lg bg-white border border-carbon/15 hover:bg-slate-50 text-[11px] font-bold text-carbon/70 transition shadow-2xs"
+          >
+            📅 Agenda
+          </a>
+          <a
+            href="/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 py-1.5 text-center rounded-lg bg-white border border-carbon/15 hover:bg-slate-50 text-[11px] font-bold text-carbon/70 transition shadow-2xs"
+          >
+            📊 Dashboard
+          </a>
+        </div>
       </div>
+
+      {/* Modal Cotizador */}
+      <ModalCalculadoraImpermeabilizacion
+        abierto={mostrarCalculadora}
+        onCerrar={() => setMostrarCalculadora(false)}
+        nombreCliente={nombreMostrar}
+      />
     </div>
   );
 }
