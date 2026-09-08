@@ -535,6 +535,7 @@ export async function obtenerConversacion(
   }
 
   nombre = nombreExpediente || nombreProspecto || telefono;
+  const ultimo = recientes[0];
   const ultimoInbound = recientes.find((f) => f.direccion === "in");
   const ultimoConAgente = recientes.find((f) => f.agente && f.agente.trim() !== "");
   const atiendeFinal = ultimoConAgente?.agente || "IA";

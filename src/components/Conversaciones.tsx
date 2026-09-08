@@ -734,9 +734,14 @@ export function Conversaciones() {
     setTexto("");
     setPlantillaSel("");
     setParams([]);
-    const d = await obtenerConversacion(telefono);
-    setDetalle(d);
-    marcarComoLeida(telefono, d?.ultimoInboundFecha);
+    try {
+      const d = await obtenerConversacion(telefono);
+      setDetalle(d);
+      marcarComoLeida(telefono, d?.ultimoInboundFecha);
+    } catch (err: any) {
+      console.error("Error al abrir conversación:", err);
+      setAviso(err.message || "Error al cargar los mensajes de la conversación.");
+    }
   }
 
   async function enviarTexto() {
