@@ -272,13 +272,11 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
     );
     const ultimo = ordenados[0];
     const ultimoInbound = ordenados.find((f) => f.direccion === "in") ?? null;
-    const ultimoConAgente = ordenados.find((f) => f.agente) ?? null;
+    const ultimoConAgente = ordenados.find((f) => f.agente && f.agente.trim() !== "") ?? null;
 
-    const asesorNombre =
-      (expId && nombresAsesor.get(expId)) ||
-      (prosId && nombresAsesorPros.get(prosId));
-
-    const atiendeFinal = asesorNombre || ultimoConAgente?.agente || "";
+    // Las conversaciones por default son atendidas por la IA (Sofía) a menos que
+    // un asesor humano haya intervenido o se haya asignado explícitamente a un agente.
+    const atiendeFinal = ultimoConAgente?.agente || "IA";
 
     resumenes.push({
       telefono,
@@ -467,7 +465,7 @@ export async function obtenerConversacion(
       finalizado: false,
       nombreProspecto: nombreProspecto || undefined,
       nombreExpediente: nombreExpediente || undefined,
-      atiende: asesorNombreMock || "",
+      atiende: "IA",
     };
   }
 
@@ -538,9 +536,8 @@ export async function obtenerConversacion(
 
   nombre = nombreExpediente || nombreProspecto || telefono;
   const ultimoInbound = recientes.find((f) => f.direccion === "in");
-  const ultimo = recientes[0];
-  const ultimoConAgente = recientes.find((f) => f.agente);
-  const atiendeFinal = asesorNombre || ultimoConAgente?.agente || "";
+  const ultimoConAgente = recientes.find((f) => f.agente && f.agente.trim() !== "");
+  const atiendeFinal = ultimoConAgente?.agente || "IA";
 
   // Detección inteligente de posible bloqueo o fallo recurrente de entrega
   const salidasRecientes = recientes.filter((f) => f.direccion === "out");

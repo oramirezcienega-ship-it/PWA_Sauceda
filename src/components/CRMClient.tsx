@@ -1427,10 +1427,20 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
     });
   }, [leads, soloPerdidos, filtroCalidad, filtroRecuperable, filtroNegocio, filtroMejora]);
 
-  // Leads que sí están analizados para los KPI superiores
+  // Leads que sí están analizados para los KPI superiores respetando los filtros activos
   const leadsAnalizados = useMemo(() => {
-    return leads.filter((l) => l.analisisIA && (l.status === "perdido" || l.qualified === "rojo"));
-  }, [leads]);
+    return leads.filter((l) => {
+      if (!l.analisisIA) return false;
+      if (soloPerdidos && l.status !== "perdido" && l.qualified !== "rojo") return false;
+      if (filtroNegocio !== "todos" && l.tipo_negocio !== filtroNegocio) return false;
+      return true;
+    });
+  }, [leads, soloPerdidos, filtroNegocio]);
+
+  // Leads pendientes de análisis dentro de los filtros activos
+  const leadsPendientesAnalisis = useMemo(() => {
+    return leadsFiltrados.filter((l) => !l.analisisIA && l.conversacionCompleta.length > 0);
+  }, [leadsFiltrados]);
 
   // 1. Razón más común de pérdida
   const razonMasComun = useMemo(() => {
@@ -1487,14 +1497,11 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
     }
   };
 
-  // Analiza todos los leads perdidos que no están analizados
+  // Analiza todos los leads pendientes de acuerdo a los filtros activos
   const handleAnalizarTodos = async () => {
-    const noAnalizados = leads.filter(
-      (l) => !l.analisisIA && (l.status === "perdido" || l.qualified === "rojo") && l.conversacionCompleta.length > 0
-    );
-    if (noAnalizados.length === 0) return;
+    if (leadsPendientesAnalisis.length === 0) return;
     setAnalizandoTodo(true);
-    for (const l of noAnalizados) {
+    for (const l of leadsPendientesAnalisis) {
       try {
         const result = await analizarConversacionConIA(l.phone, l.id);
         onUpdateLead(l.phone, result);
@@ -1699,7 +1706,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
           </select>
         </div>
 
-        {leads.filter((l) => !l.analisisIA && (l.status === "perdido" || l.qualified === "rojo") && l.conversacionCompleta.length > 0).length > 0 && (
+        {leadsPendientesAnalisis.length > 0 && (
           <button
             onClick={handleAnalizarTodos}
             disabled={analizandoTodo}
@@ -1712,7 +1719,9 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
               </svg>
             )}
-            {analizandoTodo ? "Analizando Lote..." : "Analizar Pendientes con IA"}
+            {analizandoTodo
+              ? "Analizando Lote..."
+              : `Analizar Pendientes con IA (${leadsPendientesAnalisis.length})`}
           </button>
         )}
       </div>

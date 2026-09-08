@@ -244,6 +244,11 @@ export default async function PaginaDashboard({
           </span>
         </p>
 
+        {/* Widget de Próximas Citas, Llamadas e Instalaciones (Global Admin) */}
+        <div className="mt-6">
+          <ProximasVisitasWidget />
+        </div>
+
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Embudo de conversión */}
           <div className="rounded-xl border border-carbon/10 bg-white p-5">
@@ -312,11 +317,6 @@ export default async function PaginaDashboard({
               </div>
             )}
           </div>
-        </div>
-
-        {/* Widget de Próximas Citas, Llamadas e Instalaciones (Global Admin) */}
-        <div className="mt-6">
-          <ProximasVisitasWidget />
         </div>
       </div>
     </main>
