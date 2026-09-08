@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { obtenerTodosLosAnalisis } from "./analisis-ia";
+import { normalizarTelefono } from "@/lib/telefono";
 
 // Definición de Interfaces Estándar (Schema A)
 export interface CRMLead {
@@ -10,6 +11,7 @@ export interface CRMLead {
   name: string;
   phone: string;
   source: string;
+  tipo_negocio?: string;
   created_at: string;
 }
 
@@ -195,8 +197,9 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
     leadsRaw = prospectos.map((p) => ({
       id: p.id,
       name: [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ") || p.telefono || "Sin nombre",
-      phone: p.telefono,
+      phone: p.telefono || "",
       source: p.origen || "otro",
+      tipo_negocio: p.tipo_negocio || "",
       created_at: p.created_at
     }));
 
@@ -224,11 +227,9 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
       };
     });
 
-    // Mapear mensajes_whatsapp a CRMMessage
+    // Mapear mensajes_whatsapp a CRMMessage e indexar de forma múltiple
     messagesRaw = mensajes.map((m) => {
-      // Enlazar la conversación por el id de expediente o prospecto o por el teléfono
-      let conversation_id = m.expediente_id || m.prospecto_id || m.telefono;
-      
+      let conversation_id = m.expediente_id || m.prospecto_id || m.telefono || "";
       return {
         id: m.id,
         conversation_id,
@@ -277,12 +278,19 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
     };
   }
 
-  // Mapear mensajes por id de conversación/teléfono
+  // Mapear mensajes por id de conversación/expediente/prospecto/teléfono
   const mensajesPorConversacion = new Map<string, CRMMessage[]>();
-  messagesRaw.forEach((m) => {
-    const list = mensajesPorConversacion.get(m.conversation_id) ?? [];
+  const indexarMensaje = (clave: string | null | undefined, m: CRMMessage) => {
+    if (!clave) return;
+    const k = String(clave).trim();
+    if (!k) return;
+    const list = mensajesPorConversacion.get(k) ?? [];
     list.push(m);
-    mensajesPorConversacion.set(m.conversation_id, list);
+    mensajesPorConversacion.set(k, list);
+  };
+
+  messagesRaw.forEach((m) => {
+    if (m.conversation_id) indexarMensaje(m.conversation_id, m);
   });
 
   // Mapear conversaciones por lead_id
@@ -297,7 +305,14 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
   const listAnalisis = await obtenerTodosLosAnalisis();
   const analisisMap = new Map<string, any>();
   listAnalisis.forEach((a) => {
-    analisisMap.set(a.telefono, a);
+    if (a.telefono) {
+      analisisMap.set(a.telefono, a);
+      const c = normalizarTelefono(a.telefono);
+      if (c) {
+        analisisMap.set(c, a);
+        analisisMap.set(c.slice(-10), a);
+      }
+    }
   });
 
   // Procesamos cada lead individualmente
@@ -305,8 +320,17 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
     let conv = conversacionesPorLead.get(l.id);
     let convId = conv ? conv.id : l.id;
 
-    // Buscar mensajes por id de conversación o por teléfono
-    let msgs = mensajesPorConversacion.get(convId) || mensajesPorConversacion.get(l.phone) || [];
+    // Buscar mensajes por id de conversación, ID de lead o teléfono (con variantes)
+    const telCanon = l.phone ? normalizarTelefono(l.phone) : "";
+    const telDiez = telCanon ? telCanon.slice(-10) : "";
+
+    let msgs =
+      (convId && mensajesPorConversacion.get(convId)) ||
+      (l.id && mensajesPorConversacion.get(l.id)) ||
+      (l.phone && mensajesPorConversacion.get(l.phone)) ||
+      (telCanon && mensajesPorConversacion.get(telCanon)) ||
+      (telDiez && mensajesPorConversacion.get(telDiez)) ||
+      [];
 
     // Sintetizar conversación si no existe pero hay mensajes
     if (!conv && msgs.length > 0) {
@@ -338,6 +362,14 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
       }
     }
 
+    const tipoNegocioFinal = conv?.tipo_negocio || l.tipo_negocio || "";
+    const analisisIA =
+      (l.phone && analisisMap.get(l.phone)) ||
+      (telCanon && analisisMap.get(telCanon)) ||
+      (telDiez && analisisMap.get(telDiez)) ||
+      (l.id && analisisMap.get(l.id)) ||
+      null;
+
     return {
       id: l.id,
       name: l.name,
@@ -349,9 +381,9 @@ export async function obtenerDatosCRM(): Promise<CRMData> {
       tiempoUltimoMensaje,
       sinRespuestaSofia,
       ultimoTexto,
-      tipo_negocio: conv?.tipo_negocio || "",
+      tipo_negocio: tipoNegocioFinal,
       conversacionCompleta: msgs,
-      analisisIA: analisisMap.get(l.phone) || (l.phone ? null : analisisMap.get(l.id))
+      analisisIA
     };
   });
 
