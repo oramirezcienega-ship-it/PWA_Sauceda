@@ -385,14 +385,29 @@ export async function obtenerConversacion(
     }
   }
 
-  const { data, error } = await sb
+  let { data, error } = await sb
     .from("mensajes_whatsapp")
     .select("*")
     .in("telefono", variantesId(telefono))
     .order("created_at", { ascending: true })
     .limit(500);
   if (error) throw new Error(error.message);
-  const filas = (data as FilaMsg[]) ?? [];
+  let filas = (data as FilaMsg[]) ?? [];
+
+  if (filas.length === 0 && !esCanalSocial(telefono)) {
+    const digitos = telefono.replace(/\D/g, "").slice(-10);
+    if (digitos && digitos.length >= 7) {
+      const { data: dataLike } = await sb
+        .from("mensajes_whatsapp")
+        .select("*")
+        .like("telefono", `%${digitos}`)
+        .order("created_at", { ascending: true })
+        .limit(500);
+      if (dataLike && dataLike.length > 0) {
+        filas = dataLike as FilaMsg[];
+      }
+    }
+  }
   if (filas.length === 0) {
     // Si no hay mensajes de WhatsApp en el historial, intentamos resolver el nombre
     // buscando el número en expedientes o prospectos usando normalización de los últimos 10 dígitos.
@@ -535,6 +550,7 @@ export async function obtenerConversacion(
   }
 
   nombre = nombreExpediente || nombreProspecto || telefono;
+  const ultimo = recientes[0];
   const ultimoInbound = recientes.find((f) => f.direccion === "in");
   const ultimoConAgente = recientes.find((f) => f.agente && f.agente.trim() !== "");
   const atiendeFinal = ultimoConAgente?.agente || "IA";
