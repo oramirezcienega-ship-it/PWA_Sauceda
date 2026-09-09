@@ -66,6 +66,12 @@ export async function GET(
     }
 
     // CASO B: Cotización / Propuesta Comercial
+    const { data: repFilaVisita } = await sb
+      .from("visitas_reportes")
+      .select("id")
+      .eq("cotizacion_id", cotizacion.id)
+      .maybeSingle();
+
     const { data: concFilas } = await sb
       .from("cotizacion_conceptos")
       .select("*")
@@ -74,7 +80,7 @@ export async function GET(
 
     const conceptos: CotizacionConcepto[] = (concFilas || []).map(aCotizacionConcepto);
 
-    const doc = generarPdfCotizacion(cotizacion, conceptos, siteUrl);
+    const doc = generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(repFilaVisita));
     const pdfArrayBuffer = doc.output("arraybuffer");
     const pdfBuffer = Buffer.from(pdfArrayBuffer);
 

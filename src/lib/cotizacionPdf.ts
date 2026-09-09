@@ -35,7 +35,8 @@ function getServicioLabel(tipo: string): string {
 export function generarPdfCotizacion(
   cotizacion: Cotizacion,
   conceptos: CotizacionConcepto[],
-  baseUrl: string = "https://crm.saucedamx.com"
+  baseUrl: string = "https://crm.saucedamx.com",
+  tieneReporteVisita: boolean = false
 ): jsPDF {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -273,8 +274,8 @@ export function generarPdfCotizacion(
 
   y += 26;
 
-  // NOTA IMPORTANTE (CAJA ÁMBAR IDÉNTICA AL PORTAL)
-  if (cotizacion.servicioTipo === "impermeabilizacion" || cotizacion.requiereVisita) {
+  // NOTA IMPORTANTE (CAJA ÁMBAR IDÉNTICA AL PORTAL - Solo si AÚN NO se cuenta con inspección técnica realizada)
+  if ((cotizacion.servicioTipo === "impermeabilizacion" || cotizacion.requiereVisita) && !tieneReporteVisita) {
     doc.setFillColor(AMBER_BG[0], AMBER_BG[1], AMBER_BG[2]);
     doc.roundedRect(margin, y, contentWidth, 48, 2, 2, "F");
     doc.setDrawColor(AMBER_BORDER[0], AMBER_BORDER[1], AMBER_BORDER[2]);
