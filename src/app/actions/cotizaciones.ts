@@ -2143,7 +2143,13 @@ export async function enviarCotizacionPorCorreo(datos: {
   // 5. Generar documento PDF branded y adjuntarlo al correo
   let adjuntos: Array<{ filename: string; content: Buffer }> | undefined;
   try {
-    const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl);
+    const { data: repFila } = await sb
+      .from("visitas_reportes")
+      .select("id")
+      .eq("cotizacion_id", cotizacion.id)
+      .maybeSingle();
+
+    const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(repFila));
     const pdfBuf = Buffer.from(docPdf.output("arraybuffer"));
     adjuntos = [
       {
@@ -2262,7 +2268,13 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
         .order("created_at", { ascending: true });
       const conceptos = (concFilas || []).map(aCotizacionConcepto);
 
-      const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl);
+      const { data: repFila } = await sb
+        .from("visitas_reportes")
+        .select("id")
+        .eq("cotizacion_id", datos.cotizacionId)
+        .maybeSingle();
+
+      const docPdf = generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(repFila));
       const pdfBuf = Buffer.from(docPdf.output("arraybuffer"));
       const subida = await subirMediaMeta(pdfBuf, "application/pdf", `Cotizacion-${cotizacion.id}.pdf`, "document");
 
