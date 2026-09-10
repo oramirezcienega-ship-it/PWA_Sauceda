@@ -14,52 +14,20 @@ export async function triggerResponderBackground(
   telefono: string,
   expedienteId?: string | null,
 ): Promise<void> {
-  try {
-    let baseUrl = process.env.SITE_URL || "http://localhost:3000";
-    
-    // Solo intentar resolver dinámicamente si no hay una SITE_URL explícita
-    if (!process.env.SITE_URL) {
-      try {
-        const { headers } = await import("next/headers");
-        const host = headers().get("x-forwarded-host") || headers().get("host");
-        if (host) {
-          const protocol = host.includes("localhost") || host.startsWith("192.168.") ? "http" : "https";
-          baseUrl = `${protocol}://${host}`;
-        }
-      } catch (e) {
-        // Ignorar si se ejecuta fuera de una petición activa
-      }
+  // Ejecución directa en segundo plano dentro del proceso Node.js (fire-and-forget).
+  // No bloquea la respuesta HTTP del webhook a Meta y elimina cualquier fallo
+  // por resolución de DNS interno, NAT hairpinning, certificados o SITE_URL en Docker/VPS.
+  void (async () => {
+    try {
+      console.log(`[IA Trigger Direct] Ejecutando respuesta automática de IA para ${telefono}...`);
+      const { responderConIA } = await import("@/lib/ia/agente");
+      const sb = supabaseServidor();
+      await responderConIA(sb, { telefono, expedienteId });
+      console.log(`[IA Trigger Direct] Respuesta de IA completada para ${telefono}`);
+    } catch (err) {
+      console.error(`[IA Trigger Direct] Error al ejecutar responderConIA para ${telefono}:`, err);
     }
-
-    const secret = process.env.CRON_SECRET || "";
-    
-    // Desactivar temporalmente la validación de certificados auto-firmados en entornos de staging o locales
-    if (baseUrl.includes("crm-staging.saucedamx.com") || baseUrl.includes("192.168.100") || baseUrl.includes("localhost")) {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-    }
-    
-    // Usamos directamente la API Route de Next.js para asegurar la resolución de aliases y contexto
-    const endpoint = `${baseUrl}/api/ia/responder-background`;
-
-    console.log(`[IA Trigger] Enviando petición a: ${endpoint}`);
-
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify({ telefono, expedienteId }),
-    });
-
-    if (!res.ok) {
-      console.error(`[IA Trigger] Error al encolar respuesta en segundo plano: ${res.status} ${await res.text()}`);
-    } else {
-      console.log(`[IA Trigger] Encolado con éxito para ${telefono} (status: ${res.status})`);
-    }
-  } catch (err) {
-    console.error("[IA Trigger] Error de red disparando la respuesta en segundo plano:", err);
-  }
+  })();
 }
 
 /**
