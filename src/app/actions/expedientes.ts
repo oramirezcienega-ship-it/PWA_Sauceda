@@ -462,9 +462,7 @@ export async function actualizarExpediente(
 
         if (pros) {
           const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
-          const rudderUrl = esStaging 
-            ? "http://192.168.100.253:51700/v1/identify" 
-            : "http://192.168.100.253:52700/v1/identify";
+          const rudderUrl = process.env.RUDDERSTACK_URL || (esStaging ? "http://192.168.100.253:51700/v1/identify" : "http://192.168.100.253:52700/v1/identify");
             
           const basicAuth = Buffer.from("crm_source:").toString("base64");
           
@@ -584,9 +582,7 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
 
         if (pros) {
           const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
-          const rudderUrl = esStaging 
-            ? "http://192.168.100.253:51700/v1/identify" 
-            : "http://192.168.100.253:52700/v1/identify";
+          const rudderUrl = process.env.RUDDERSTACK_URL || (esStaging ? "http://192.168.100.253:51700/v1/identify" : "http://192.168.100.253:52700/v1/identify");
             
           const basicAuth = Buffer.from("crm_source:").toString("base64");
           
