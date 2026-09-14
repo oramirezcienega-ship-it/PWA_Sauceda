@@ -1,14 +1,24 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
+  return handle(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handle(req);
+}
+
+async function handle(req: NextRequest) {
   const secretToken = process.env.CRON_SECRET;
-  const tokenQuery = req.query.token;
+  const tokenQuery = req.nextUrl.searchParams.get("token");
   const tokenValido = (secretToken && tokenQuery === secretToken) || tokenQuery === "sauceda";
 
   if (!tokenValido) {
-    return res.status(401).json({ error: "Unauthorized" });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const email = "alex_cordova_barajas@hotmail.com";
@@ -84,7 +94,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       password: "sauceda123"
     });
 
-    return res.status(200).json({
+    return NextResponse.json({
       ok: true,
       mensaje: `Reseteo y sincronización completados con éxito para ${email} en Staging.`,
       auth: "Contraseña configurada a 'sauceda123' y correo confirmado.",
@@ -93,6 +103,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (err) {
     console.error("[Reset Usuario] Error general en el proceso:", err);
-    return res.status(500).json({ error: String(err) });
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
