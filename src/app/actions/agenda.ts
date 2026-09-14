@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import { revalidatePath } from "next/cache";
 
 export interface Cita {
   id: string;
