@@ -1,31 +1,35 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Solo permitir GET para facilitar la ejecución desde el navegador o fetch rápido
-  if (req.method !== "GET" && req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
+export const dynamic = "force-dynamic";
 
-  // Verificación de seguridad básica con token
-  const authHeader = req.headers.authorization;
+export async function GET(req: NextRequest) {
+  return handle(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handle(req);
+}
+
+async function handle(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
   const expectedToken = process.env.CRON_SECRET;
 
   if (!expectedToken) {
-    return res.status(500).json({ error: "CRON_SECRET no configurado en el servidor." });
+    return NextResponse.json({ error: "CRON_SECRET no configurado en el servidor." }, { status: 500 });
   }
 
-  const tokenQuery = req.query.token as string;
+  const tokenQuery = req.nextUrl.searchParams.get("token");
   const isAuthorized = 
     (authHeader === `Bearer ${expectedToken}`) || 
     (tokenQuery === expectedToken);
 
   if (!isAuthorized) {
     console.warn("[Limpiar Test] Intento de acceso no autorizado.");
-    return res.status(401).json({ error: "Unauthorized" });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const telefono = (req.query.telefono as string) || "524172702864";
+  const telefono = req.nextUrl.searchParams.get("telefono") || "524172702864";
 
   try {
     console.log(`[Limpiar Test] Iniciando limpieza en BD Staging para teléfono: ${telefono}`);
@@ -42,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       prospectos: r3.error ? r3.error.message : "Ok"
     });
 
-    return res.status(200).json({
+    return NextResponse.json({
       ok: true,
       mensaje: `Historial de test para ${telefono} eliminado de la base de datos con éxito.`,
       detalles: {
@@ -53,6 +57,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (err) {
     console.error("[Limpiar Test] Error en el endpoint de limpieza:", err);
-    return res.status(500).json({ error: String(err) });
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
