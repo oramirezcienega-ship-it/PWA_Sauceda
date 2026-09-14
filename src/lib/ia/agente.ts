@@ -779,6 +779,13 @@ export async function responderConIA(
     const historia = (data as FilaMsg[]) ?? [];
     if (historia.length === 0) return;
 
+    // Evitar responder si el último mensaje del hilo ya fue emitido por la IA (protección contra duplicados)
+    const ultimoMsg = historia[historia.length - 1];
+    if (ultimoMsg && ultimoMsg.direccion === "out" && ultimoMsg.agente === NOMBRE_AGENTE) {
+      console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el último mensaje ya fue enviado por la IA.`);
+      return;
+    }
+
     // Detectar bucles con auto-respondedores/bots.
     const ultimosIn = historia.filter((f) => f.direccion === "in").slice(-3);
     if (ultimosIn.length >= 2) {
@@ -1399,12 +1406,14 @@ export async function responderConIA(
     }
 
     // --- REGISTRO DEL MENSAJE Y LA ACTIVIDAD DE ENVÍO ---
+    const errorDetalle = !r.ok ? (r.error || "Error al enviar mensaje") : null;
     await sb.from("mensajes_whatsapp").insert({
       telefono: ctx.telefono,
       texto: textoRespuesta,
       direccion: "out",
       expediente_id: ctx.expedienteId ?? null,
-      estado: r.ok ? "enviado" : "error",
+      estado: r.ok ? "enviado" : (errorDetalle ? `error:${errorDetalle}` : "error"),
+      wa_message_id: (r as any).messageId || null,
       agente: NOMBRE_AGENTE,
     });
 

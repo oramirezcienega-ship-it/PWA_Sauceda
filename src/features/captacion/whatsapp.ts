@@ -9,25 +9,40 @@ import { detectarTipoNegocio } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
 
-/** Dispara asíncronamente el procesamiento de respuesta de la IA en segundo plano */
+// Semáforo en memoria para consolidar mensajes consecutivos en ráfaga
+const debounceMap = new Map<string, number>();
+
+/** Dispara el procesamiento de respuesta de la IA con debounce y protección contra duplicados */
 export async function triggerResponderBackground(
   telefono: string,
   expedienteId?: string | null,
 ): Promise<void> {
-  // Ejecución directa en segundo plano dentro del proceso Node.js (fire-and-forget).
-  // No bloquea la respuesta HTTP del webhook a Meta y elimina cualquier fallo
-  // por resolución de DNS interno, NAT hairpinning, certificados o SITE_URL en Docker/VPS.
-  void (async () => {
-    try {
-      console.log(`[IA Trigger Direct] Ejecutando respuesta automática de IA para ${telefono}...`);
-      const { responderConIA } = await import("@/lib/ia/agente");
-      const sb = supabaseServidor();
-      await responderConIA(sb, { telefono, expedienteId });
-      console.log(`[IA Trigger Direct] Respuesta de IA completada para ${telefono}`);
-    } catch (err) {
-      console.error(`[IA Trigger Direct] Error al ejecutar responderConIA para ${telefono}:`, err);
+  const telNormalizado = normalizarTelefono(telefono);
+  const timestampLlegada = Date.now();
+  debounceMap.set(telNormalizado, timestampLlegada);
+
+  // Breve espera de 3s para permitir que mensajes en ráfaga del cliente se consoliden
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+  // Si llegó un mensaje más reciente para el mismo número durante la espera, ceder el paso
+  if (debounceMap.get(telNormalizado) !== timestampLlegada) {
+    console.log(`[IA Debounce] Cediendo turno al mensaje más reciente para ${telefono}`);
+    return;
+  }
+
+  try {
+    console.log(`[IA Trigger Direct] Ejecutando respuesta automática de IA para ${telefono}...`);
+    const { responderConIA } = await import("@/lib/ia/agente");
+    const sb = supabaseServidor();
+    await responderConIA(sb, { telefono, expedienteId });
+    console.log(`[IA Trigger Direct] Respuesta de IA completada para ${telefono}`);
+  } catch (err) {
+    console.error(`[IA Trigger Direct] Error al ejecutar responderConIA para ${telefono}:`, err);
+  } finally {
+    if (debounceMap.get(telNormalizado) === timestampLlegada) {
+      debounceMap.delete(telNormalizado);
     }
-  })();
+  }
 }
 
 /**
@@ -348,7 +363,6 @@ export async function comprobarYSalirDeSecuenciaPorMensaje(
  */
 export async function registrarLeadWhatsApp(
   lead: MensajeWhatsApp,
-  esEspejo = false,
 ): Promise<void> {
   const sb = supabaseServidor();
 
@@ -449,8 +463,6 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
 
-    if (esEspejo) return;
-
     // Interceptar mensajes de audio
     if (lead.audioId) {
       await manejarFlujoAudio(sb, {
@@ -499,18 +511,16 @@ export async function registrarLeadWhatsApp(
   await sincronizarEstatusProspecto(sb, prospectoId);
 
   // Enrolar automáticamente en secuencias activas
-  if (!esEspejo) {
-    try {
-      const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
-      await enrolarLeadEnSecuenciasActivas(sb, {
-        nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
-        phone: telefono,
-        prospectoId,
-        expedienteId: id,
-      });
-    } catch (err) {
-      console.error("Error al enrolar lead de WhatsApp en secuencias activas:", err);
-    }
+  try {
+    const { enrolarLeadEnSecuenciasActivas } = await import("@/lib/automatizaciones/orquestador");
+    await enrolarLeadEnSecuenciasActivas(sb, {
+      nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
+      phone: telefono,
+      prospectoId,
+      expedienteId: id,
+    });
+  } catch (err) {
+    console.error("Error al enrolar lead de WhatsApp en secuencias activas:", err);
   }
 
   // Guarda el primer mensaje del cliente en el hilo de conversación.
@@ -521,8 +531,6 @@ export async function registrarLeadWhatsApp(
     prospectoId,
     waMessageId: lead.waMessageId,
   });
-
-  if (esEspejo) return;
 
   // Interceptar mensajes de audio
   if (lead.audioId) {

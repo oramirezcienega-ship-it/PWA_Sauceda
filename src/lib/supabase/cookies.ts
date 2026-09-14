@@ -15,7 +15,7 @@ export function opcionesCookieSeguras(options?: CookieOptions): CookieOptions {
   return {
     path: "/",
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: options?.secure ?? false,
     ...options,
   };
 }

@@ -57,38 +57,12 @@ export async function POST(request: NextRequest) {
   try {
     const payload = JSON.parse(raw);
 
-    // Reenvío espejo a crm.saucedamx.com / app.saucedamx.com para mantener ambos al día
-    const host = request.headers.get("host") || "";
-    const esEspejo = request.headers.get("x-webhook-mirror") === "true";
-
-    if (!esEspejo) {
-      const destinoEspejo = host.includes("crm.saucedamx.com")
-        ? "https://app.saucedamx.com/api/captacion/whatsapp"
-        : "https://crm.saucedamx.com/api/captacion/whatsapp";
-
-      const headersForward: Record<string, string> = {
-        "Content-Type": "application/json",
-        "x-webhook-mirror": "true",
-      };
-
-      const signature = request.headers.get("x-hub-signature-256");
-      if (signature) {
-        headersForward["x-hub-signature-256"] = signature;
-      }
-
-      void fetch(destinoEspejo, {
-        method: "POST",
-        headers: headersForward,
-        body: raw,
-      }).catch((e) => console.error("[Webhook Espejo] Error al reexpedir a " + destinoEspejo, e));
-    }
-
     // Procesar actualizaciones de estado de envío (delivered, read, failed)
     await procesarEstadosWhatsApp(payload);
 
     const mensajes = extraerMensajes(payload);
     for (const mensaje of mensajes) {
-      await registrarLeadWhatsApp(mensaje, esEspejo);
+      await registrarLeadWhatsApp(mensaje);
     }
   } catch (err) {
     console.error("Error procesando webhook de WhatsApp:", err);
