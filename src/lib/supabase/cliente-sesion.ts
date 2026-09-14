@@ -1,5 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { supabaseServidor } from "./server";
 import { opcionesCookieSeguras } from "./cookies";
 
@@ -33,8 +33,20 @@ export function supabaseSesion() {
           cookiesToSet: { name: string; value: string; options?: CookieOptions }[],
         ) {
           try {
+            let esHttps = false;
+            try {
+              const h = headers();
+              const proto = h.get("x-forwarded-proto") || (h.get("referer")?.startsWith("https") ? "https" : "http");
+              esHttps = proto.startsWith("https");
+            } catch {
+              esHttps = false;
+            }
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, opcionesCookieSeguras(options)),
+              cookieStore.set(
+                name,
+                value,
+                opcionesCookieSeguras({ ...options, secure: esHttps }),
+              ),
             );
           } catch {
             // En server components no se pueden escribir cookies; el

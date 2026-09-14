@@ -25,6 +25,9 @@ export async function middleware(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
+  const proto = request.headers.get("x-forwarded-proto") || request.nextUrl.protocol;
+  const esHttps = proto.startsWith("https");
+
   const supabase = createServerClient(url, anon, {
     cookies: {
       getAll() {
@@ -38,7 +41,11 @@ export async function middleware(request: NextRequest) {
         );
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, opcionesCookieSeguras(options)),
+          response.cookies.set(
+            name,
+            value,
+            opcionesCookieSeguras({ ...options, secure: esHttps }),
+          ),
         );
       },
     },
