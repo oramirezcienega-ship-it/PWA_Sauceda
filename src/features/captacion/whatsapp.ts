@@ -9,11 +9,27 @@ import { detectarTipoNegocio } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
 
-/** Dispara el procesamiento de respuesta de la IA */
+// Semáforo en memoria para consolidar mensajes consecutivos en ráfaga
+const debounceMap = new Map<string, number>();
+
+/** Dispara el procesamiento de respuesta de la IA con debounce y protección contra duplicados */
 export async function triggerResponderBackground(
   telefono: string,
   expedienteId?: string | null,
 ): Promise<void> {
+  const telNormalizado = normalizarTelefono(telefono);
+  const timestampLlegada = Date.now();
+  debounceMap.set(telNormalizado, timestampLlegada);
+
+  // Breve espera de 3s para permitir que mensajes en ráfaga del cliente se consoliden
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+  // Si llegó un mensaje más reciente para el mismo número durante la espera, ceder el paso
+  if (debounceMap.get(telNormalizado) !== timestampLlegada) {
+    console.log(`[IA Debounce] Cediendo turno al mensaje más reciente para ${telefono}`);
+    return;
+  }
+
   try {
     console.log(`[IA Trigger Direct] Ejecutando respuesta automática de IA para ${telefono}...`);
     const { responderConIA } = await import("@/lib/ia/agente");
@@ -22,6 +38,10 @@ export async function triggerResponderBackground(
     console.log(`[IA Trigger Direct] Respuesta de IA completada para ${telefono}`);
   } catch (err) {
     console.error(`[IA Trigger Direct] Error al ejecutar responderConIA para ${telefono}:`, err);
+  } finally {
+    if (debounceMap.get(telNormalizado) === timestampLlegada) {
+      debounceMap.delete(telNormalizado);
+    }
   }
 }
 
