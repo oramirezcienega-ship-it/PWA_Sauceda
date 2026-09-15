@@ -48,6 +48,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    serverComponentsExternalPackages: ["@opentelemetry/api"],
+  },
   async headers() {
     return [
       {
