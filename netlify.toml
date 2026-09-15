@@ -10,6 +10,9 @@
   command = "npm run build"
   publish = ".next"
 
+[functions]
+  external_node_modules = ["@opentelemetry/api"]
+
 
 [[headers]]
   for = "/*"
