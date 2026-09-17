@@ -121,6 +121,32 @@ export async function listarCotizaciones(): Promise<Cotizacion[]> {
   return (data ?? []).map(aCotizacion);
 }
 
+// Helper para resolver datos completos de empresa, incluyendo matriz si es sucursal
+async function resolverDatosEmpresa(sb: any, empresaId: string) {
+  try {
+    const { data: empData } = await sb
+      .from("empresas")
+      .select("id, name, industry, phone, address, billing_address, parent_id")
+      .eq("id", empresaId)
+      .maybeSingle();
+
+    if (empData) {
+      if (empData.parent_id) {
+        const { data: parentEmp } = await sb
+          .from("empresas")
+          .select("id, name")
+          .eq("id", empData.parent_id)
+          .maybeSingle();
+        if (parentEmp) {
+          (empData as any).parent_name = parentEmp.name;
+        }
+      }
+      return empData;
+    }
+  } catch {}
+  return null;
+}
+
 // 3. Obtener Cotización por ID (Detalle completo admin)
 export async function obtenerCotizacionPorId(
   id: string
@@ -143,16 +169,10 @@ export async function obtenerCotizacionPorId(
   if (errCot) throw new Error(errCot.message);
   if (!filaCot) return null;
 
-  // Si tiene empresa_id vinculada, resolver sus datos de forma tolerante
+  // Si tiene empresa_id vinculada, resolver sus datos de forma tolerante (incluyendo matriz si es sucursal)
   if (filaCot.empresa_id) {
-    try {
-      const { data: empData } = await sb
-        .from("empresas")
-        .select("id, name, industry, phone, address, billing_address")
-        .eq("id", filaCot.empresa_id)
-        .maybeSingle();
-      if (empData) filaCot.empresas = empData;
-    } catch {}
+    const empData = await resolverDatosEmpresa(sb, filaCot.empresa_id);
+    if (empData) filaCot.empresas = empData;
   }
 
   const { data: filasConceptos, error: errCon } = await sb
@@ -206,6 +226,12 @@ export async function obtenerCotizacionPorToken(
   if (errCot) throw new Error(errCot.message);
   if (!filaCot) return null;
 
+  // Si tiene empresa_id vinculada, resolver datos de empresa y matriz si es sucursal
+  if (filaCot.empresa_id) {
+    const empData = await resolverDatosEmpresa(sb, filaCot.empresa_id);
+    if (empData) filaCot.empresas = empData;
+  }
+
   const cot = aCotizacion(filaCot);
 
   // El cliente solo puede verla si ya fue procesada, aprobada, o está en espera de visita (preliminar)
@@ -249,6 +275,12 @@ export async function obtenerCotizacionPorToken(
     cotizacion: {
       id: cot.id,
       prospectoId: cot.prospectoId,
+      empresaId: cot.empresaId,
+      empresaNombre: cot.empresaNombre,
+      empresaMatrizNombre: cot.empresaMatrizNombre,
+      sucursalNombre: cot.sucursalNombre,
+      contactoNombre: cot.contactoNombre,
+      clienteNombrePersonalizado: cot.clienteNombrePersonalizado,
       prospectoNombre: cot.prospectoNombre,
       prospectoTelefono: cot.prospectoTelefono,
       prospectoCorreo: cot.prospectoCorreo,
@@ -2514,14 +2546,8 @@ export async function reasignarClienteCotizacion(
 
   const filaCot = resUpdate.data;
   if (filaCot.empresa_id) {
-    try {
-      const { data: empData } = await sb
-        .from("empresas")
-        .select("id, name, industry, phone, address, billing_address")
-        .eq("id", filaCot.empresa_id)
-        .maybeSingle();
-      if (empData) filaCot.empresas = empData;
-    } catch {}
+    const empData = await resolverDatosEmpresa(sb, filaCot.empresa_id);
+    if (empData) filaCot.empresas = empData;
   }
 
   const cotizacionActualizada = aCotizacion(filaCot);

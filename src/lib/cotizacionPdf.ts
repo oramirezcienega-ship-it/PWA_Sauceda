@@ -119,51 +119,93 @@ export function generarPdfCotizacion(
   doc.line(margin, y, pageWidth - margin, y);
   y += 4;
 
-  // TARJETA DE DATOS DEL CLIENTE Y CONTACTO
-  const cardHeight = 22;
+  // TARJETA DE DATOS DEL CLIENTE Y CONTACTO (B2B Corporativo o Residencial)
+  const esEmpresa = Boolean(cotizacion.empresaNombre || cotizacion.empresaId);
+  const cardHeight = esEmpresa && cotizacion.sucursalNombre ? 24 : 22;
   doc.setFillColor(BG_CARD[0], BG_CARD[1], BG_CARD[2]);
   doc.roundedRect(margin, y, contentWidth, cardHeight, 2, 2, "F");
   doc.setDrawColor(BORDE_CARD[0], BORDE_CARD[1], BORDE_CARD[2]);
   doc.roundedRect(margin, y, contentWidth, cardHeight, 2, 2, "D");
 
-  // Columna Izquierda: Datos del Cliente
+  // Columna Izquierda: Datos de la Empresa / Cliente
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.5);
   doc.setTextColor(CARBON_LIGHT[0], CARBON_LIGHT[1], CARBON_LIGHT[2]);
-  doc.text("DATOS DEL CLIENTE", margin + 4.5, y + 4.5);
+  doc.text(esEmpresa ? "DATOS DE LA EMPRESA / CUENTA" : "DATOS DEL CLIENTE", margin + 4.5, y + 4.5);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text(nombreCliente, margin + 4.5, y + 9.5);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
-  doc.text("Número de Cliente: ", margin + 4.5, y + 15);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
-  doc.text(cotizacion.prospectoId || cotizacion.id, margin + 28, y + 15);
+  if (esEmpresa) {
+    const nombreEntidad = cotizacion.empresaMatrizNombre || cotizacion.empresaNombre || "Empresa";
+    const entidadTrunc = doc.splitTextToSize(nombreEntidad, contentWidth / 2 - 8)[0];
+    doc.text(entidadTrunc, margin + 4.5, y + 9.5);
 
-  // Columna Derecha: Contacto y Ubicación
+    if (cotizacion.sucursalNombre) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(91, 33, 182); // Violeta / Púrpura distintivo de sucursal
+      doc.text(`Sucursal / Sede: ${cotizacion.sucursalNombre}`, margin + 4.5, y + 14.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+      doc.text("No. Cliente / Folio: ", margin + 4.5, y + 19.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
+      doc.text(cotizacion.prospectoId || cotizacion.id, margin + 28, y + 19.5);
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+      doc.text("No. Cliente / Folio: ", margin + 4.5, y + 15);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
+      doc.text(cotizacion.prospectoId || cotizacion.id, margin + 28, y + 15);
+    }
+  } else {
+    doc.text(nombreCliente, margin + 4.5, y + 9.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
+    doc.text("Número de Cliente: ", margin + 4.5, y + 15);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
+    doc.text(cotizacion.prospectoId || cotizacion.id, margin + 28, y + 15);
+  }
+
+  // Columna Derecha: Contacto, Atención y Ubicación
   const colDerX = margin + contentWidth / 2 + 3;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.5);
   doc.setTextColor(CARBON_LIGHT[0], CARBON_LIGHT[1], CARBON_LIGHT[2]);
-  doc.text("CONTACTO Y UBICACIÓN", colDerX, y + 4.5);
+  doc.text(esEmpresa ? "ATENCIÓN Y UBICACIÓN DE SERVICIO" : "CONTACTO Y UBICACIÓN", colDerX, y + 4.5);
+
+  let currentRightY = y + 9.5;
+  if (esEmpresa && (cotizacion.contactoNombre || cotizacion.clienteNombrePersonalizado)) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
+    const atnText = `At'n: ${cotizacion.contactoNombre || cotizacion.clienteNombrePersonalizado}`;
+    const atnTrunc = doc.splitTextToSize(atnText, contentWidth / 2 - 6)[0];
+    doc.text(atnTrunc, colDerX, currentRightY);
+    currentRightY += 5;
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
-  doc.text("Teléfono:", colDerX, y + 9.5);
+  doc.text("Teléfono:", colDerX, currentRightY);
   doc.setTextColor(CARBON[0], CARBON[1], CARBON[2]);
-  doc.text(cotizacion.prospectoTelefono || "—", colDerX + 14, y + 9.5);
+  doc.text(cotizacion.prospectoTelefono || "—", colDerX + 13, currentRightY);
 
   if (cotizacion.prospectoDireccion || cotizacion.prospectoCorreo) {
-    const textoUb = cotizacion.prospectoDireccion ? `Dirección: ${cotizacion.prospectoDireccion}` : `Correo: ${cotizacion.prospectoCorreo}`;
+    currentRightY += 5;
+    const textoUb = cotizacion.prospectoDireccion ? `Ubicación: ${cotizacion.prospectoDireccion}` : `Correo: ${cotizacion.prospectoCorreo}`;
     doc.setTextColor(CARBON_MUTED[0], CARBON_MUTED[1], CARBON_MUTED[2]);
     const ubTrunc = doc.splitTextToSize(textoUb, contentWidth / 2 - 6)[0];
-    doc.text(ubTrunc, colDerX, y + 15);
+    doc.text(ubTrunc, colDerX, currentRightY);
   }
 
   y += cardHeight + 5;
