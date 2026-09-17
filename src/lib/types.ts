@@ -712,6 +712,9 @@ export interface Cotizacion {
   id: string;
   prospectoId: string;
   expedienteId?: string | null;
+  empresaId?: string | null;
+  empresaNombre?: string | null;
+  clienteNombrePersonalizado?: string | null;
   prospectoNombre?: string;
   prospectoTelefono?: string;
   prospectoCorreo?: string | null;

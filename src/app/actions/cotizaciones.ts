@@ -132,7 +132,7 @@ export async function obtenerCotizacionPorId(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(nombre, telefono),
+      prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion, empresa_id),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -142,6 +142,18 @@ export async function obtenerCotizacionPorId(
 
   if (errCot) throw new Error(errCot.message);
   if (!filaCot) return null;
+
+  // Si tiene empresa_id vinculada, resolver sus datos de forma tolerante
+  if (filaCot.empresa_id) {
+    try {
+      const { data: empData } = await sb
+        .from("empresas")
+        .select("id, name, industry, phone, address, billing_address")
+        .eq("id", filaCot.empresa_id)
+        .maybeSingle();
+      if (empData) filaCot.empresas = empData;
+    } catch {}
+  }
 
   const { data: filasConceptos, error: errCon } = await sb
     .from("cotizacion_conceptos")
@@ -2430,6 +2442,101 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   };
 }
 
+/**
+ * Reasigna o personaliza el cliente, contacto o empresa vinculada a una cotización.
+ */
+export async function reasignarClienteCotizacion(
+  cotizacionId: string,
+  datos: {
+    prospectoId?: string;
+    empresaId?: string | null;
+    clienteNombrePersonalizado?: string | null;
+  }
+): Promise<{ ok: boolean; cotizacion: Cotizacion }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
 
+  const updates: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
 
+  if (datos.prospectoId) {
+    updates.prospecto_id = datos.prospectoId;
+  }
 
+  if (datos.empresaId !== undefined) {
+    updates.empresa_id = datos.empresaId || null;
+  }
+
+  if (datos.clienteNombrePersonalizado !== undefined) {
+    updates.cliente_nombre_personalizado = datos.clienteNombrePersonalizado?.trim() || null;
+  }
+
+  // Actualización tolerante por si alguna columna aún no está migrada
+  let resUpdate = await sb
+    .from("cotizaciones")
+    .update(updates)
+    .eq("id", cotizacionId)
+    .select(`
+      *,
+      prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .single();
+
+  if (
+    resUpdate.error &&
+    (resUpdate.error.message.includes("empresa_id") ||
+      resUpdate.error.message.includes("cliente_nombre_personalizado"))
+  ) {
+    // Reintentar solo con prospecto_id
+    const fallbackUpdates: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (datos.prospectoId) fallbackUpdates.prospecto_id = datos.prospectoId;
+    resUpdate = await sb
+      .from("cotizaciones")
+      .update(fallbackUpdates)
+      .eq("id", cotizacionId)
+      .select(`
+        *,
+        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
+        perfiles_inspector:inspector_id(nombre),
+        perfiles_comercial:aprobado_comercial_by(nombre),
+        perfiles_operativo:aprobado_operativo_by(nombre)
+      `)
+      .single();
+  }
+
+  if (resUpdate.error) {
+    throw new Error(`Error al actualizar cliente de la cotización: ${resUpdate.error.message}`);
+  }
+
+  const filaCot = resUpdate.data;
+  if (filaCot.empresa_id) {
+    try {
+      const { data: empData } = await sb
+        .from("empresas")
+        .select("id, name, industry, phone, address, billing_address")
+        .eq("id", filaCot.empresa_id)
+        .maybeSingle();
+      if (empData) filaCot.empresas = empData;
+    } catch {}
+  }
+
+  const cotizacionActualizada = aCotizacion(filaCot);
+
+  // Registrar actividad
+  await registrarActividad(sb, {
+    tipo: "construccion",
+    titulo: `Cliente/Empresa modificado en cotización ${cotizacionId}`,
+    detalle: `Se actualizó el destinatario a: ${cotizacionActualizada.prospectoNombre}.`,
+    prospectoId: datos.prospectoId || undefined,
+    empresaId: datos.empresaId || undefined,
+  });
+
+  revalidatePath(`/construccion/${cotizacionId}`);
+  revalidatePath("/construccion");
+
+  return { ok: true, cotizacion: cotizacionActualizada };
+}

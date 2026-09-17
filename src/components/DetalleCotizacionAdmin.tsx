@@ -21,10 +21,12 @@ import {
   duplicarCotizacion,
   enviarCotizacionPorCorreo,
   enviarCotizacionPorWhatsAppAction,
+  reasignarClienteCotizacion,
 } from "@/app/actions/cotizaciones";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { listarProspectosMin } from "@/app/actions/prospectos";
+import { listarEmpresasMin } from "@/app/actions/empresas";
 import { formatoPesos } from "@/lib/formato";
 import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
@@ -182,6 +184,75 @@ export function DetalleCotizacionAdmin({
       setDuplicando(false);
     }
   };
+
+  // --- State & Handlers para Cambiar Cliente / Empresa ---
+  const [modalCambiarCliente, setModalCambiarCliente] = useState(false);
+  const [prospectoIdCambio, setProspectoIdCambio] = useState(cotizacion.prospectoId || "");
+  const [empresaIdCambio, setEmpresaIdCambio] = useState(cotizacion.empresaId || "");
+  const [nombrePersonalizadoCambio, setNombrePersonalizadoCambio] = useState(
+    cotizacion.clienteNombrePersonalizado || ""
+  );
+  const [empresasLista, setEmpresasLista] = useState<{ id: string; name: string }[]>([]);
+  const [guardandoCambioCliente, setGuardandoCambioCliente] = useState(false);
+  const [mensajeCambioCliente, setMensajeCambioCliente] = useState({ tipo: "", texto: "" });
+
+  const handleAbrirModalCambiarCliente = async () => {
+    setModalCambiarCliente(true);
+    setProspectoIdCambio(cotizacion.prospectoId || "");
+    setEmpresaIdCambio(cotizacion.empresaId || "");
+    setNombrePersonalizadoCambio(cotizacion.clienteNombrePersonalizado || "");
+    setMensajeCambioCliente({ tipo: "", texto: "" });
+
+    if (prospectosLista.length === 0) {
+      try {
+        const listaPros = await listarProspectosMin();
+        setProspectosLista(listaPros);
+      } catch (e) {
+        console.error("Error al cargar prospectos:", e);
+      }
+    }
+    if (empresasLista.length === 0) {
+      try {
+        const listaEmp = await listarEmpresasMin();
+        setEmpresasLista(listaEmp);
+      } catch (e) {
+        console.error("Error al cargar empresas:", e);
+      }
+    }
+  };
+
+  const handleGuardarCambioCliente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setGuardandoCambioCliente(true);
+      setMensajeCambioCliente({ tipo: "", texto: "" });
+
+      const res = await reasignarClienteCotizacion(cotizacion.id, {
+        prospectoId: prospectoIdCambio || undefined,
+        empresaId: empresaIdCambio || null,
+        clienteNombrePersonalizado: nombrePersonalizadoCambio || null,
+      });
+
+      if (res.ok) {
+        setCotizacion(res.cotizacion);
+        setMensajeCambioCliente({
+          tipo: "ok",
+          texto: "¡Cliente y empresa actualizados exitosamente!",
+        });
+        setTimeout(() => {
+          setModalCambiarCliente(false);
+        }, 500);
+      }
+    } catch (err: any) {
+      setMensajeCambioCliente({
+        tipo: "error",
+        texto: err?.message || "Ocurrió un error al actualizar.",
+      });
+    } finally {
+      setGuardandoCambioCliente(false);
+    }
+  };
+
   const [rotaciones, setRotaciones] = useState<Record<string, number>>(reporteVisitaInicial?.medidas?.rotaciones || {});
 
   // --- State para Cambio de Requerimiento de Visita ---
@@ -988,7 +1059,17 @@ export function DetalleCotizacionAdmin({
             <span className="font-mono text-xs bg-crema/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Sauceda Construye</span>
             <span className="font-mono text-lg font-bold text-dorado">{cotizacion.id}</span>
           </div>
-          <h2 className="font-titular text-2xl font-semibold mt-1 text-crema">{cotizacion.prospectoNombre}</h2>
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            <h2 className="font-titular text-2xl font-semibold text-crema">{cotizacion.prospectoNombre}</h2>
+            <button
+              type="button"
+              onClick={handleAbrirModalCambiarCliente}
+              className="rounded-lg bg-crema/20 hover:bg-crema/30 text-crema text-[11px] font-bold px-2 py-1 transition flex items-center gap-1 shadow-2xs border border-crema/30"
+              title="Cambiar persona de contacto, empresa o personalizar nombre de cotización"
+            >
+              ✏️ Cambiar Cliente / Empresa
+            </button>
+          </div>
           <p className="text-xs text-crema/80 font-cuerpo mt-1">
             Creada el {new Date(cotizacion.createdAt).toLocaleDateString()} · Tipo:{" "}
             <span className="font-semibold">{cotizacion.servicioTipo.toUpperCase()}</span>
@@ -1071,9 +1152,37 @@ export function DetalleCotizacionAdmin({
                 <h3 className="font-titular text-lg font-semibold text-verde-profundo border-b pb-2">Información Comercial</h3>
                 <table className="w-full text-sm">
                   <tbody>
-                    <tr className="border-b"><td className="py-2 text-carbon/50">Cliente</td><td className="py-2 font-semibold">{cotizacion.prospectoNombre}</td></tr>
                     <tr className="border-b">
-                      <td className="py-2 text-carbon/50">Prospecto Vinculado</td>
+                      <td className="py-2 text-carbon/50">Cliente / Razón Social</td>
+                      <td className="py-2 font-semibold flex items-center justify-between gap-2">
+                        <span className="text-carbon font-bold">{cotizacion.prospectoNombre}</span>
+                        <button
+                          type="button"
+                          onClick={handleAbrirModalCambiarCliente}
+                          className="text-xs text-sauce hover:underline font-bold"
+                        >
+                          ✏️ Modificar
+                        </button>
+                      </td>
+                    </tr>
+                    <tr className="border-b">
+                      <td className="py-2 text-carbon/50">Empresa / Sucursal</td>
+                      <td className="py-2">
+                        {cotizacion.empresaId ? (
+                          <Link
+                            href={`/empresas/${cotizacion.empresaId}`}
+                            className="font-bold text-purple-700 hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>🏢 {cotizacion.empresaNombre || "Empresa vinculada"}</span>
+                            <span className="text-xs font-normal text-purple-600">(Ver cuenta 360° →)</span>
+                          </Link>
+                        ) : (
+                          <span className="italic text-carbon/40">Sin empresa vinculada (Persona física / Residencial)</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="border-b">
+                      <td className="py-2 text-carbon/50">Contacto (Prospecto)</td>
                       <td className="py-2 font-mono">
                         {cotizacion.prospectoId ? (
                           <Link
@@ -2689,6 +2798,138 @@ export function DetalleCotizacionAdmin({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Cambiar Cliente o Empresa de la Cotización */}
+      {modalCambiarCliente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/50 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-carbon/10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-carbon/10 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sauce/15 text-lg">
+                  ✏️
+                </span>
+                <div>
+                  <h3 className="font-titular text-base font-bold text-verde-profundo">
+                    Reasignar Cliente o Empresa
+                  </h3>
+                  <p className="text-xs text-carbon/60">
+                    Modifica a quién está dirigida la propuesta comercial {cotizacion.id}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalCambiarCliente(false)}
+                disabled={guardandoCambioCliente}
+                className="text-carbon/40 hover:text-carbon text-sm p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarCambioCliente} className="space-y-4">
+              {/* 1. Selección de Empresa / Sucursal */}
+              <div>
+                <label className="block text-xs font-bold text-carbon/80 mb-1">
+                  🏢 Empresa o Sucursal (Opcional - B2B):
+                </label>
+                <select
+                  value={empresaIdCambio}
+                  onChange={(e) => setEmpresaIdCambio(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs font-medium focus:border-sauce focus:outline-none bg-white text-carbon"
+                >
+                  <option value="">Ninguna (Persona particular / Residencial)</option>
+                  {empresasLista.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      🏢 {emp.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-carbon/50 mt-1">
+                  Si seleccionas una empresa o sucursal, la propuesta se asociará a su cuenta corporativa.
+                </p>
+              </div>
+
+              {/* 2. Persona de Contacto (Prospecto) */}
+              <div>
+                <label className="block text-xs font-bold text-carbon/80 mb-1">
+                  👤 Persona de Contacto (Prospecto):
+                </label>
+                {prospectosLista.length > 0 ? (
+                  <select
+                    value={prospectoIdCambio}
+                    onChange={(e) => setProspectoIdCambio(e.target.value)}
+                    className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs font-medium focus:border-sauce focus:outline-none bg-white text-carbon"
+                  >
+                    {prospectosLista.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} ({p.id})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    readOnly
+                    value={`${cotizacion.prospectoNombre} (${cotizacion.prospectoId})`}
+                    className="w-full rounded-lg border border-carbon/20 bg-slate-50 px-3 py-2 text-xs font-medium text-carbon/70"
+                  />
+                )}
+                <p className="text-[10px] text-carbon/50 mt-1">
+                  El contacto principal para envío de cotización por WhatsApp, email o portal.
+                </p>
+              </div>
+
+              {/* 3. Nombre Personalizado en el Documento / PDF */}
+              <div>
+                <label className="block text-xs font-bold text-carbon/80 mb-1">
+                  🏷️ Nombre Personalizado en Cotización / PDF (Opcional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Grupo Bimbo - Planta Silao (At'n: Ing. Juan Pérez)"
+                  value={nombrePersonalizadoCambio}
+                  onChange={(e) => setNombrePersonalizadoCambio(e.target.value)}
+                  className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs font-medium focus:border-sauce focus:outline-none text-carbon"
+                />
+                <p className="text-[10px] text-carbon/50 mt-1">
+                  Deja en blanco para que el sistema use automáticamente el nombre de la empresa o del prospecto.
+                </p>
+              </div>
+
+              {mensajeCambioCliente.texto && (
+                <div
+                  className={`p-3 rounded-lg text-xs font-semibold ${
+                    mensajeCambioCliente.tipo === "ok"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border border-rose-200"
+                  }`}
+                >
+                  {mensajeCambioCliente.texto}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-carbon/10">
+                <button
+                  type="button"
+                  onClick={() => setModalCambiarCliente(false)}
+                  disabled={guardandoCambioCliente}
+                  className="px-4 py-2 rounded-lg border border-carbon/20 text-xs font-semibold text-carbon/70 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoCambioCliente}
+                  className="px-4 py-2 rounded-lg bg-sauce hover:bg-verde-profundo text-white text-xs font-bold transition shadow-xs disabled:opacity-50"
+                >
+                  {guardandoCambioCliente ? "Guardando..." : "Guardar Cambios"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
