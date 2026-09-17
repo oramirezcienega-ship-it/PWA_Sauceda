@@ -210,32 +210,58 @@ export function VisualizadorCotizacionCliente({
 
           <div className="p-6 sm:p-8 space-y-8 print:p-4 print:space-y-4">
             
-            {/* Datos del Cliente */}
+            {/* Datos del Cliente / Empresa */}
             <div className="bg-slate-50 p-5 rounded-2xl border border-carbon/5 grid grid-cols-1 md:grid-cols-2 print-grid-2 gap-6 text-xs print-break-inside-avoid shadow-sm/5 print:p-4 print:gap-4 print:my-0">
               <div className="space-y-2">
-                <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Datos del Cliente</div>
-                <div className="text-base font-extrabold text-verde-profundo font-titular leading-tight">{cotizacion.prospectoNombre}</div>
+                <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">
+                  {cotizacion.empresaNombre ? "Datos de la Empresa / Cuenta" : "Datos del Cliente"}
+                </div>
+                {cotizacion.empresaNombre ? (
+                  <div className="space-y-1.5">
+                    <div className="text-base font-extrabold text-verde-profundo font-titular leading-tight">
+                      🏢 {cotizacion.empresaMatrizNombre || cotizacion.empresaNombre}
+                    </div>
+                    {cotizacion.sucursalNombre && (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 text-xs font-semibold">
+                        <span>📍 Sucursal / Sede:</span>
+                        <span className="font-bold">{cotizacion.sucursalNombre}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-base font-extrabold text-verde-profundo font-titular leading-tight">
+                    {cotizacion.prospectoNombre}
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 text-carbon/70">
                   <span className="font-semibold text-carbon/50">Número de Cliente:</span>
                   <span className="font-mono bg-slate-200/60 px-2 py-0.5 rounded text-[10px] font-bold text-carbon/80">{cotizacion.prospectoId}</span>
                 </div>
               </div>
               <div className="space-y-2">
-                <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Contacto y Ubicación</div>
-                <div className="space-y-1 text-carbon/70">
+                <div className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">
+                  {cotizacion.empresaNombre ? "Atención y Ubicación de Servicio" : "Contacto y Ubicación"}
+                </div>
+                <div className="space-y-1.5 text-carbon/70">
+                  {cotizacion.empresaNombre && (cotizacion.contactoNombre || cotizacion.clienteNombrePersonalizado) && (
+                    <div className="flex items-start gap-1.5">
+                      <span className="font-semibold text-carbon/50 w-20">Atención a:</span>
+                      <span className="font-bold text-verde-profundo">{cotizacion.contactoNombre || cotizacion.clienteNombrePersonalizado}</span>
+                    </div>
+                  )}
                   <div className="flex items-start gap-1.5">
-                    <span className="font-semibold text-carbon/50 w-16">Teléfono:</span>
+                    <span className="font-semibold text-carbon/50 w-20">Teléfono:</span>
                     <span>{cotizacion.prospectoTelefono || "—"}</span>
                   </div>
                   {cotizacion.prospectoCorreo && (
                     <div className="flex items-start gap-1.5">
-                      <span className="font-semibold text-carbon/50 w-16">Correo:</span>
+                      <span className="font-semibold text-carbon/50 w-20">Correo:</span>
                       <span className="break-all">{cotizacion.prospectoCorreo}</span>
                     </div>
                   )}
                   {cotizacion.prospectoDireccion && (
                     <div className="flex items-start gap-1.5">
-                      <span className="font-semibold text-carbon/50 w-16">Dirección:</span>
+                      <span className="font-semibold text-carbon/50 w-20">Ubicación / Sede:</span>
                       <span className="leading-relaxed">{cotizacion.prospectoDireccion}</span>
                     </div>
                   )}

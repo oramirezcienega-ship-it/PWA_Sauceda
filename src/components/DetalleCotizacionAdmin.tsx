@@ -192,7 +192,7 @@ export function DetalleCotizacionAdmin({
   const [nombrePersonalizadoCambio, setNombrePersonalizadoCambio] = useState(
     cotizacion.clienteNombrePersonalizado || ""
   );
-  const [empresasLista, setEmpresasLista] = useState<{ id: string; name: string }[]>([]);
+  const [empresasLista, setEmpresasLista] = useState<{ id: string; name: string; parentId?: string | null; parentName?: string | null }[]>([]);
   const [guardandoCambioCliente, setGuardandoCambioCliente] = useState(false);
   const [mensajeCambioCliente, setMensajeCambioCliente] = useState({ tipo: "", texto: "" });
 
@@ -1166,34 +1166,45 @@ export function DetalleCotizacionAdmin({
                       </td>
                     </tr>
                     <tr className="border-b">
-                      <td className="py-2 text-carbon/50">Empresa / Sucursal</td>
+                      <td className="py-2 text-carbon/50">Empresa / Cuenta</td>
                       <td className="py-2">
                         {cotizacion.empresaId ? (
-                          <Link
-                            href={`/empresas/${cotizacion.empresaId}`}
-                            className="font-bold text-purple-700 hover:underline inline-flex items-center gap-1"
-                          >
-                            <span>🏢 {cotizacion.empresaNombre || "Empresa vinculada"}</span>
-                            <span className="text-xs font-normal text-purple-600">(Ver cuenta 360° →)</span>
-                          </Link>
+                          <div className="flex flex-col gap-1">
+                            <Link
+                              href={`/empresas/${cotizacion.empresaId}`}
+                              className="font-bold text-purple-700 hover:underline inline-flex items-center gap-1"
+                            >
+                              <span>🏢 {cotizacion.empresaMatrizNombre || cotizacion.empresaNombre || "Empresa vinculada"}</span>
+                              <span className="text-xs font-normal text-purple-600">(Ver cuenta 360° →)</span>
+                            </Link>
+                            {cotizacion.sucursalNombre && (
+                              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 text-xs font-semibold w-fit">
+                                <span>📍 Sucursal:</span>
+                                <span>{cotizacion.sucursalNombre}</span>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="italic text-carbon/40">Sin empresa vinculada (Persona física / Residencial)</span>
                         )}
                       </td>
                     </tr>
                     <tr className="border-b">
-                      <td className="py-2 text-carbon/50">Contacto (Prospecto)</td>
-                      <td className="py-2 font-mono">
+                      <td className="py-2 text-carbon/50">Contacto (Atención a)</td>
+                      <td className="py-2">
                         {cotizacion.prospectoId ? (
-                          <Link
-                            href={`/prospectos/${cotizacion.prospectoId}`}
-                            className="font-bold text-sauce hover:underline inline-flex items-center gap-1"
-                          >
-                            <span>👤 {cotizacion.prospectoId}</span>
-                            <span className="text-xs font-normal text-sauce/80">(Ver prospecto →)</span>
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-verde-profundo">{cotizacion.contactoNombre || cotizacion.prospectoNombre}</span>
+                            <Link
+                              href={`/prospectos/${cotizacion.prospectoId}`}
+                              className="text-xs font-mono text-sauce hover:underline inline-flex items-center gap-0.5"
+                            >
+                              <span>({cotizacion.prospectoId})</span>
+                              <span>→</span>
+                            </Link>
+                          </div>
                         ) : (
-                          <span className="italic text-carbon/40">Sin prospecto asignado</span>
+                          <span className="italic text-carbon/40">Sin contacto asignado</span>
                         )}
                       </td>
                     </tr>
@@ -2844,7 +2855,9 @@ export function DetalleCotizacionAdmin({
                   <option value="">Ninguna (Persona particular / Residencial)</option>
                   {empresasLista.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      🏢 {emp.name}
+                      {emp.parentId
+                        ? `↳ 📍 ${emp.name} (Sucursal de ${emp.parentName || "Matriz"})`
+                        : `🏢 ${emp.name} (Matriz)`}
                     </option>
                   ))}
                 </select>

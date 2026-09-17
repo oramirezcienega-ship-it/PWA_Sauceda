@@ -362,14 +362,16 @@ export async function asociarNegocioAEmpresa(
 /**
  * Lista empresas mínima para desplegables y modales de selección rápida.
  */
-export async function listarEmpresasMin(excludeId?: string): Promise<{ id: string; name: string }[]> {
+export async function listarEmpresasMin(
+  excludeId?: string
+): Promise<{ id: string; name: string; parentId?: string | null; parentName?: string | null }[]> {
   await requireAdmin();
   const sb = supabaseServidor();
 
   try {
     let query = sb
       .from("empresas")
-      .select("id, name")
+      .select("id, name, parent_id")
       .order("name", { ascending: true });
 
     if (excludeId) {
@@ -379,7 +381,16 @@ export async function listarEmpresasMin(excludeId?: string): Promise<{ id: strin
     const { data, error } = await query;
 
     if (error || !data) return [];
-    return data.map((d) => ({ id: d.id, name: d.name }));
+
+    const mapNombres = new Map<string, string>();
+    data.forEach((d: any) => mapNombres.set(d.id, d.name));
+
+    return data.map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      parentId: d.parent_id || null,
+      parentName: d.parent_id ? (mapNombres.get(d.parent_id) || null) : null,
+    }));
   } catch {
     return [];
   }

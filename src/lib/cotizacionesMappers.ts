@@ -7,16 +7,25 @@ export function aCotizacion(fila: any): Cotizacion {
     ? [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ")
     : "";
 
-  const empNombre = fila.empresas?.name || null;
+  const empRaw = fila.empresas;
+  const esSucursal = Boolean(empRaw?.parent_id);
+  const empresaMatriz = esSucursal ? (empRaw?.parent_name || null) : (empRaw?.name || null);
+  const sucursalNombre = esSucursal ? (empRaw?.name || null) : null;
+  const empresaNombreCompleto = esSucursal && empresaMatriz
+    ? `${empresaMatriz} · ${empRaw.name}`
+    : (empRaw?.name || null);
+
   const nombrePersonalizado = fila.cliente_nombre_personalizado?.trim() || null;
 
   // Si tiene un nombre personalizado explícito, lo prioriza;
-  // Si tiene empresa vinculada, muestra la empresa y el contacto;
+  // Si tiene empresa vinculada (con o sin sucursal), muestra la empresa, sucursal y contacto;
   // Si es persona física, muestra su nombre completo.
   let nombreMostrado = nombrePersonalizado;
   if (!nombreMostrado) {
-    if (empNombre) {
-      nombreMostrado = nombreContacto ? `${empNombre} (At'n: ${nombreContacto})` : empNombre;
+    if (empresaNombreCompleto) {
+      nombreMostrado = nombreContacto
+        ? `${empresaNombreCompleto} (At'n: ${nombreContacto})`
+        : empresaNombreCompleto;
     } else {
       nombreMostrado = nombreContacto || pros?.nombre || "Cliente";
     }
@@ -27,12 +36,15 @@ export function aCotizacion(fila: any): Cotizacion {
     prospectoId: fila.prospecto_id,
     expedienteId: fila.expediente_id,
     empresaId: fila.empresa_id || null,
-    empresaNombre: empNombre,
+    empresaNombre: empresaNombreCompleto,
+    empresaMatrizNombre: empresaMatriz,
+    sucursalNombre: sucursalNombre,
+    contactoNombre: nombreContacto || null,
     clienteNombrePersonalizado: nombrePersonalizado,
     prospectoNombre: nombreMostrado,
-    prospectoTelefono: pros?.telefono || fila.empresas?.phone || "",
+    prospectoTelefono: pros?.telefono || empRaw?.phone || "",
     prospectoCorreo: pros?.correo || null,
-    prospectoDireccion: pros?.direccion || fila.empresas?.address || null,
+    prospectoDireccion: empRaw?.address || pros?.direccion || null,
     servicioTipo: fila.servicio_tipo,
     estatus: fila.estatus,
     requiereVisita: fila.requiere_visita,

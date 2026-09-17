@@ -714,6 +714,9 @@ export interface Cotizacion {
   expedienteId?: string | null;
   empresaId?: string | null;
   empresaNombre?: string | null;
+  empresaMatrizNombre?: string | null;
+  sucursalNombre?: string | null;
+  contactoNombre?: string | null;
   clienteNombrePersonalizado?: string | null;
   prospectoNombre?: string;
   prospectoTelefono?: string;
