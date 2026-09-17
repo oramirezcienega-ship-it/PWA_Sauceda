@@ -8,6 +8,8 @@ import type {
   EstatusProspecto,
   CalificacionProspecto,
   TipoNegocioId,
+  Empresa,
+  DatosEmpresa,
 } from "@/lib/types";
 
 /** Arma el nombre completo a partir de nombre + apellidos. */
@@ -63,6 +65,9 @@ export interface FilaExpediente {
     adset_name?: string | null;
     ad_name?: string | null;
   } | null;
+  empresa_id?: string | null;
+  empresas?: { id: string; name: string } | null;
+  empresa?: { id: string; name: string } | null;
   asesor_id?: string | null;
   operador_id?: string | null;
   asesor?: { nombre: string } | null;
@@ -122,6 +127,8 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     statusProceso: fila.status_proceso ?? null,
     fechaConfirmacion: fila.fecha_confirmacion ?? null,
     calificacion: fila.calificacion ?? "frio",
+    empresaId: fila.empresa_id ?? null,
+    empresaNombre: fila.empresas?.name ?? fila.empresa?.name ?? null,
   };
 }
 
@@ -154,6 +161,7 @@ export function aFila(datos: DatosExpediente) {
     asesor_id: datos.asesorId ?? null,
     operador_id: datos.operadorId ?? null,
     calificacion: datos.calificacion || "frio",
+    empresa_id: datos.empresaId ?? null,
   };
 }
 
@@ -187,6 +195,8 @@ export interface FilaProspecto {
   perfiles?: { nombre: string } | null;
   no_viable?: boolean;
   expedientes?: { id: string; tipo_negocio?: string | null; etapa?: string | null }[] | null;
+  empresa_id?: string | null;
+  empresas?: { id: string; name: string } | null;
   created_at?: string;
 }
 
@@ -227,6 +237,8 @@ export function aProspecto(fila: FilaProspecto): Prospecto {
     noViable: fila.no_viable ?? false,
     tipoNegocioPrincipal,
     expedientesCount,
+    empresaId: fila.empresa_id ?? null,
+    empresaNombre: fila.empresas?.name ?? null,
     createdAt: fila.created_at ?? "",
   };
 }
@@ -252,5 +264,60 @@ export function aFilaProspecto(datos: DatosProspecto) {
     calificacion: datos.calificacion || "frio",
     asesor_id: datos.asesorId || null,
     operador_id: datos.operadorId || null,
+    empresa_id: datos.empresaId || null,
+  };
+}
+
+// ------------------------------------------------------------
+// MÓDULO EMPRESAS (COMPANIES - B2B)
+// ------------------------------------------------------------
+
+export interface FilaEmpresa {
+  id: string;
+  name: string;
+  industry: string;
+  website: string;
+  phone: string;
+  address: string;
+  billing_address: string;
+  owner_id?: string | null;
+  perfiles?: { nombre: string } | null;
+  created_at: string;
+  updated_at: string;
+  prospectos?: { count?: number }[] | { count: number } | null;
+  expedientes?: { count?: number; valor_estimado?: number }[] | null;
+}
+
+export function aEmpresa(
+  fila: FilaEmpresa,
+  metricas?: { prospectosCount?: number; negociosCount?: number; valorTotalNegocios?: number }
+): Empresa {
+  return {
+    id: fila.id,
+    name: fila.name,
+    industry: fila.industry ?? "",
+    website: fila.website ?? "",
+    phone: fila.phone ?? "",
+    address: fila.address ?? "",
+    billingAddress: fila.billing_address ?? "",
+    ownerId: fila.owner_id ?? null,
+    ownerNombre: fila.perfiles?.nombre ?? null,
+    createdAt: fila.created_at ?? "",
+    updatedAt: fila.updated_at ?? "",
+    prospectosCount: metricas?.prospectosCount ?? 0,
+    negociosCount: metricas?.negociosCount ?? 0,
+    valorTotalNegocios: metricas?.valorTotalNegocios ?? 0,
+  };
+}
+
+export function aFilaEmpresa(datos: DatosEmpresa) {
+  return {
+    name: datos.name.trim(),
+    industry: datos.industry || "",
+    website: datos.website || "",
+    phone: datos.phone || "",
+    address: datos.address || "",
+    billing_address: datos.billingAddress || "",
+    owner_id: datos.ownerId || null,
   };
 }

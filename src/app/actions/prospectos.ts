@@ -55,7 +55,28 @@ export async function listarProspectos(): Promise<Prospecto[]> {
 
   const { data, error } = await query.order("id", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data as FilaProspecto[]).map(aProspecto);
+
+  const prospectosFilas = (data as FilaProspecto[]) ?? [];
+  const empresaIds = prospectosFilas.map((p) => p.empresa_id).filter(Boolean) as string[];
+  const empresasMap = new Map<string, string>();
+  if (empresaIds.length > 0) {
+    try {
+      const { data: emps } = await sb.from("empresas").select("id, name").in("id", empresaIds);
+      if (emps) {
+        emps.forEach((em) => empresasMap.set(em.id, em.name));
+      }
+    } catch {
+      // tolerante
+    }
+  }
+
+  return prospectosFilas.map((p) => {
+    const mapped = aProspecto(p);
+    return {
+      ...mapped,
+      empresaNombre: empresasMap.get(p.empresa_id || "") || mapped.empresaNombre || null,
+    };
+  });
 }
 
 /** Obtiene un prospecto con sus expedientes relacionados. */
@@ -83,6 +104,20 @@ export async function obtenerProspecto(
     }
   }
 
+  let empresaNombre: string | null = null;
+  if (filaProspecto.empresa_id) {
+    try {
+      const { data: emp } = await sb
+        .from("empresas")
+        .select("name")
+        .eq("id", filaProspecto.empresa_id)
+        .maybeSingle();
+      if (emp) empresaNombre = emp.name;
+    } catch {
+      // tolerante
+    }
+  }
+
   const { data: filasExp, error: errExp } = await sb
     .from("expedientes")
     .select("*, prospectos(origen), asesor:asesor_id(nombre), operador:operador_id(nombre)")
@@ -90,8 +125,13 @@ export async function obtenerProspecto(
     .order("id", { ascending: true });
   if (errExp) throw new Error(errExp.message);
 
+  const prospecto = aProspecto(filaProspecto as FilaProspecto);
+  if (empresaNombre) {
+    prospecto.empresaNombre = empresaNombre;
+  }
+
   return {
-    prospecto: aProspecto(filaProspecto as FilaProspecto),
+    prospecto,
     expedientes: (filasExp as FilaExpediente[]).map(aExpediente),
   };
 }

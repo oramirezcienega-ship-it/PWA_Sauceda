@@ -54,12 +54,13 @@ function Formulario() {
   >([]);
 
   const prospectoInicial = searchParams?.get("prospecto");
+  const empresaInicial = searchParams?.get("empresa_id") || searchParams?.get("empresa");
 
   useEffect(() => {
     listarProspectosMin().then(setProspectos).catch(() => setProspectos([]));
   }, []);
 
-  const valorInicial: DatosExpediente | undefined = prospectoInicial
+  const valorInicial: DatosExpediente | undefined = (prospectoInicial || empresaInicial)
     ? {
         cliente: "",
         primerApellido: "",
@@ -74,7 +75,8 @@ function Formulario() {
         adName: "",
         adsetName: "",
         campaignName: "",
-        prospectoId: prospectoInicial,
+        prospectoId: prospectoInicial || null,
+        empresaId: empresaInicial || null,
       }
     : undefined;
 
@@ -83,10 +85,14 @@ function Formulario() {
       valorInicial={valorInicial}
       prospectos={prospectos}
       textoBoton="Crear expediente"
-      onCancelar={() => router.push("/")}
+      onCancelar={() => router.push(empresaInicial ? `/empresas/${empresaInicial}` : "/")}
       onGuardar={async (datos) => {
         const id = await crearExpediente(datos);
-        router.push(`/expediente/${id}`);
+        if (empresaInicial) {
+          router.push(`/empresas/${empresaInicial}`);
+        } else {
+          router.push(`/expediente/${id}`);
+        }
       }}
     />
   );

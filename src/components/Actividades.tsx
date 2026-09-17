@@ -5,6 +5,7 @@ import {
   crearActividadManual,
   listarActividadesDeExpediente,
   listarActividadesDeProspecto,
+  listarActividadesDeEmpresa,
 } from "@/app/actions/actividades";
 import { formatoFechaHora } from "@/lib/formato";
 import type { Actividad, TipoActividad } from "@/lib/types";
@@ -36,15 +37,17 @@ const TIPOS_MANUALES: { id: TipoActividad; nombre: string }[] = [
 ];
 
 /**
- * Bitácora de actividades de un expediente o prospecto. Muestra el timeline
+ * Bitácora de actividades de un expediente, prospecto o empresa. Muestra el timeline
  * y permite registrar actividades manuales (notas, llamadas, correos…).
  */
 export function Actividades({
   expedienteId,
   prospectoId,
+  empresaId,
 }: {
   expedienteId?: string;
   prospectoId?: string;
+  empresaId?: string;
 }) {
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [tipo, setTipo] = useState<TipoActividad>("nota");
@@ -53,11 +56,13 @@ export function Actividades({
   const [fechaProg, setFechaProg] = useState("");
   const [horaProg, setHoraProg] = useState("");
   const [guardando, setGuardando] = useState(false);
-  const [colapsado, setColapsado] = useState(true);
+  const [colapsado, setColapsado] = useState(false);
 
   async function cargar() {
     try {
-      const data = expedienteId
+      const data = empresaId
+        ? await listarActividadesDeEmpresa(empresaId)
+        : expedienteId
         ? await listarActividadesDeExpediente(expedienteId)
         : prospectoId
           ? await listarActividadesDeProspecto(prospectoId)
@@ -71,7 +76,7 @@ export function Actividades({
   useEffect(() => {
     void cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expedienteId, prospectoId]);
+  }, [expedienteId, prospectoId, empresaId]);
 
   async function registrar() {
     if (!titulo.trim()) return;
@@ -84,6 +89,7 @@ export function Actividades({
       }
 
       await crearActividadManual({
+        empresaId: empresaId ?? null,
         expedienteId: expedienteId ?? null,
         prospectoId: prospectoId ?? null,
         tipo,

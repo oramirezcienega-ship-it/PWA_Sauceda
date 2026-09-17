@@ -27,6 +27,7 @@ import { programarInstalacionExpediente, programarLlamadaExpediente } from "@/ap
 import { PromocionVentaWidget } from "./PromocionVentaWidget";
 import { WidgetAgendaCitas } from "./WidgetAgendaCitas";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
+import { EmpresaSelector } from "./EmpresaSelector";
 
 /**
  * Vista de detalle de un expediente.
@@ -275,6 +276,14 @@ export function DetalleExpediente({ id }: { id: string }) {
               </Link>
             </>
           )}
+          <span className="text-carbon/25 font-bold">•</span>
+          <EmpresaSelector
+            entidadId={expediente.id}
+            tipoEntidad="expediente"
+            empresaIdActual={expediente.empresaId ?? null}
+            empresaNombreActual={expediente.empresaNombre ?? null}
+            onAsignado={recargar}
+          />
         </p>
 
         {/* Calificación / Prioridad y Tipo de Negocio responsivos */}

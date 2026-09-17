@@ -118,10 +118,25 @@ export async function listarExpedientes(): Promise<Expediente[]> {
     }
   }
 
+  // 3. Obtener nombres de empresas si hay expedientes vinculados a empresa_id
+  const empresaIds = expedientesFilas.map((e) => e.empresa_id).filter(Boolean) as string[];
+  const empresasMap = new Map<string, string>();
+  if (empresaIds.length > 0) {
+    try {
+      const { data: emps } = await sb.from("empresas").select("id, name").in("id", empresaIds);
+      if (emps) {
+        emps.forEach((em) => empresasMap.set(em.id, em.name));
+      }
+    } catch {
+      // tolerante
+    }
+  }
+
   return expedientesFilas.map((e) => {
     const mapped = aExpediente(e);
     return {
       ...mapped,
+      empresaNombre: empresasMap.get(e.empresa_id || "") || mapped.empresaNombre || null,
       secuenciaNombre: secuenciasMap.get(e.id) || null,
       ultimaActividadTitulo: ultimaActividadMap.get(e.id)?.titulo || null,
       ultimaActividadFecha: ultimaActividadMap.get(e.id)?.created_at || null,

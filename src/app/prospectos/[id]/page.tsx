@@ -20,7 +20,7 @@ import { LinkCitaWidget } from "@/components/LinkCitaWidget";
 import { OperadorSelector } from "@/components/OperadorSelector";
 import { WidgetAgendaCitas } from "@/components/WidgetAgendaCitas";
 import { BotonDuplicarCotizacion } from "@/components/BotonDuplicarCotizacion";
-
+import { EmpresaSelector } from "@/components/EmpresaSelector";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +144,12 @@ export default async function PaginaProspecto({
               )}
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-3">
+              <EmpresaSelector
+                entidadId={prospecto.id}
+                tipoEntidad="prospecto"
+                empresaIdActual={prospecto.empresaId ?? null}
+                empresaNombreActual={prospecto.empresaNombre ?? null}
+              />
               <AsesorSelector
                 entidadId={prospecto.id}
                 tipoEntidad="prospecto"

@@ -19,10 +19,11 @@ export async function prospectoDeExpediente(
   return (data as { prospecto_id: string | null } | null)?.prospecto_id ?? null;
 }
 
-/** Registra una actividad (relacionada a expediente y/o prospecto). */
+/** Registra una actividad (relacionada a empresa, expediente y/o prospecto). */
 export async function registrarActividad(
   sb: SupabaseClient,
   datos: {
+    empresaId?: string | null;
     expedienteId?: string | null;
     prospectoId?: string | null;
     tipo: string;
@@ -36,6 +37,7 @@ export async function registrarActividad(
       prospectoId = await prospectoDeExpediente(sb, datos.expedienteId);
     }
     await sb.from("actividades").insert({
+      empresa_id: datos.empresaId ?? null,
       expediente_id: datos.expedienteId ?? null,
       prospecto_id: prospectoId,
       tipo: datos.tipo,
