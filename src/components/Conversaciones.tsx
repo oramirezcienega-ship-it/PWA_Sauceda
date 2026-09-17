@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { rolUsuarioActual, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import {
@@ -595,6 +595,8 @@ export function Conversaciones() {
   const [filtroAtajos, setFiltroAtajos] = useState("");
   const [indiceAtajoSeleccionado, setIndiceAtajoSeleccionado] = useState(0);
   const [mostrarDropdownMenu, setMostrarDropdownMenu] = useState(false);
+  const [filtroCatalogo, setFiltroCatalogo] = useState("");
+  const [categoriaCatalogo, setCategoriaCatalogo] = useState("Todos");
   const [respuestasRapidas, setRespuestasRapidas] = useState<RespuestaRapidaDB[]>([]);
   const [mostrarAdjuntar, setMostrarAdjuntar] = useState(false);
   const [enviandoDoc, setEnviandoDoc] = useState(false);
@@ -606,6 +608,18 @@ export function Conversaciones() {
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Cerrar modales con Escape
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (mostrarDropdownMenu) setMostrarDropdownMenu(false);
+        if (mostrarAdjuntar) setMostrarAdjuntar(false);
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [mostrarDropdownMenu, mostrarAdjuntar]);
 
   // Registro local de conversaciones leídas (para quitar 'Pendiente de Respuesta')
   const [leidasHasta, setLeidasHasta] = useState<Record<string, string>>({});
@@ -955,6 +969,25 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     r.atajo.toLowerCase().includes(filtroAtajos.toLowerCase()) ||
     r.titulo.toLowerCase().includes(filtroAtajos.toLowerCase())
   );
+
+  const categoriasCatalogo = useMemo(() => {
+    const cats = Array.from(new Set(respuestasRapidas.map((r) => r.categoria).filter(Boolean)));
+    return ["Todos", ...Array.from(new Set(["General", "Productos", "FAQs", "Seguimiento", "Otro", ...cats]))];
+  }, [respuestasRapidas]);
+
+  const respuestasFiltradasCatalogo = useMemo(() => {
+    return respuestasRapidas.filter((r) => {
+      const cumpleCat = categoriaCatalogo === "Todos" || r.categoria === categoriaCatalogo;
+      if (!cumpleCat) return false;
+      if (!filtroCatalogo.trim()) return true;
+      const q = filtroCatalogo.toLowerCase().trim();
+      return (
+        r.titulo?.toLowerCase().includes(q) ||
+        r.atajo?.toLowerCase().includes(q) ||
+        r.texto?.toLowerCase().includes(q)
+      );
+    });
+  }, [respuestasRapidas, categoriaCatalogo, filtroCatalogo]);
 
   function insertarRespuesta(textoRespuesta: string) {
     const textoResuelto = resolverParametros(textoRespuesta, detalle, usuario);
@@ -1867,7 +1900,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
                   {/* Tarjeta Flotante de Atajos (#) */}
                   {mostrarAtajos && filteredAtajos.length > 0 && (
-                    <div className="absolute left-0 bottom-full mb-2 z-50 w-80 max-h-60 overflow-y-auto rounded-lg border border-carbon/10 bg-white p-1 shadow-lg scrollbar-sutil">
+                    <div className="absolute left-0 bottom-full mb-2 z-50 w-[calc(100vw-2rem)] sm:w-80 max-h-60 overflow-y-auto rounded-lg border border-carbon/10 bg-white p-1 shadow-lg scrollbar-sutil">
                       <div className="bg-crema/40 px-2 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 flex items-center justify-between">
                         <span>Atajos disponibles</span>
                         <span className="font-normal text-carbon/40">Usa ↑↓ y Enter</span>
@@ -1959,50 +1992,21 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         </span>
                       </button>
 
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setMostrarDropdownMenu(!mostrarDropdownMenu)}
-                          className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm"
-                        >
-                          ⚡ Respuestas Rápidas
-                        </button>
-                      
-                      {/* Menú Dropdown de Respuestas Rápidas */}
-                      {mostrarDropdownMenu && (
-                        <div className="absolute right-0 bottom-full mb-1.5 z-50 w-72 max-h-80 overflow-y-auto rounded-lg border border-carbon/10 bg-white py-1.5 shadow-lg scrollbar-sutil">
-                          <div className="px-3 py-1 text-[10px] font-bold text-verde-profundo border-b border-carbon/5 uppercase tracking-wider">
-                            Catálogo de Respuestas
-                          </div>
-                          
-                          {/* Agrupación por Categorías */}
-                          {["General", "Productos", "FAQs", "Seguimiento", "Otro"].map((cat) => {
-                            const list = respuestasRapidas.filter((r) => r.categoria === cat);
-                            if (list.length === 0) return null;
-                            return (
-                              <div key={cat} className="mt-1.5">
-                                <div className="px-3 py-0.5 text-[9px] font-bold text-carbon/30 bg-carbon/5 uppercase">
-                                  {cat}
-                                  </div>
-                                {list.map((r) => (
-                                  <button
-                                    key={r.atajo}
-                                    type="button"
-                                    onClick={() => insertarRespuesta(r.texto)}
-                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-carbon/5 text-carbon flex flex-col transition"
-                                  >
-                                    <span className="font-semibold text-verde-profundo">{r.titulo}</span>
-                                    <span className="text-[10px] text-carbon/50 line-clamp-2 mt-0.5">{r.texto}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      {/* Botón Respuestas Rápidas */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFiltroCatalogo("");
+                          setCategoriaCatalogo("Todos");
+                          setMostrarDropdownMenu(true);
+                        }}
+                        className="flex items-center gap-1.5 rounded bg-crema hover:bg-crema/80 border border-carbon/15 px-2 py-1 text-[11px] font-semibold text-verde-profundo transition shadow-sm cursor-pointer"
+                        title="Ver catálogo de respuestas rápidas y plantillas"
+                      >
+                        ⚡ Respuestas Rápidas
+                      </button>
                     </div>
                   </div>
-                </div>
 
                   {/* Caja de Texto + Botón de Enviar */}
                   <div className="flex items-end gap-2">
@@ -2035,50 +2039,56 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       </button>
                       {/* Modal de selección de documentos y archivos locales */}
                       {mostrarAdjuntar && (
-                        <div className="absolute right-0 bottom-full mb-2 z-50 w-80 max-h-[420px] overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
-                          <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between z-10">
-                            <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">📎 Adjuntar Archivo</span>
-                            <button
-                              type="button"
-                              onClick={() => setMostrarAdjuntar(false)}
-                              className="text-carbon/40 hover:text-carbon text-sm"
-                            >✕</button>
-                          </div>
-                          <div className="p-3 space-y-3">
-                            {/* Botón de carga directa desde la computadora */}
-                            <label
-                              htmlFor="direct-file-upload"
-                              className="flex items-center gap-3 border-2 border-dashed border-sauce/40 bg-sauce/5 rounded-lg p-3 cursor-pointer hover:bg-sauce/15 hover:border-sauce transition group"
-                            >
-                              <span className="text-2xl shrink-0 group-hover:scale-110 transition-transform">💻</span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-bold text-verde-profundo leading-snug">Elegir de mi computadora</p>
-                                <p className="text-[10px] text-carbon/60 leading-tight">PDF, Word, Excel, Imágenes, Videos, etc.</p>
-                              </div>
-                              <input
-                                type="file"
-                                id="direct-file-upload"
-                                className="hidden"
-                                disabled={enviandoArchivoDirecto}
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) void handleEnviarArchivoDirecto(f);
-                                }}
-                              />
-                            </label>
-
-                            <div className="relative flex py-0.5 items-center">
-                              <div className="flex-grow border-t border-carbon/10"></div>
-                              <span className="flex-shrink mx-2 text-[9px] uppercase font-bold text-carbon/40 tracking-wider">o seleccionar del CRM</span>
-                              <div className="flex-grow border-t border-carbon/10"></div>
+                        <>
+                          <div
+                            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                            onClick={() => setMostrarAdjuntar(false)}
+                          />
+                          <div className="fixed inset-x-3 bottom-20 sm:inset-auto sm:absolute sm:right-0 sm:bottom-full sm:mb-2 z-50 max-h-[75vh] sm:max-h-[420px] sm:w-80 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
+                            <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between z-10">
+                              <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">📎 Adjuntar Archivo</span>
+                              <button
+                                type="button"
+                                onClick={() => setMostrarAdjuntar(false)}
+                                className="text-carbon/40 hover:text-carbon text-sm p-1 rounded hover:bg-carbon/5 transition cursor-pointer"
+                              >✕</button>
                             </div>
+                            <div className="p-3 space-y-3">
+                              {/* Botón de carga directa desde la computadora */}
+                              <label
+                                htmlFor="direct-file-upload"
+                                className="flex items-center gap-3 border-2 border-dashed border-sauce/40 bg-sauce/5 rounded-lg p-3 cursor-pointer hover:bg-sauce/15 hover:border-sauce transition group"
+                              >
+                                <span className="text-2xl shrink-0 group-hover:scale-110 transition-transform">💻</span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-verde-profundo leading-snug">Elegir de mi computadora</p>
+                                  <p className="text-[10px] text-carbon/60 leading-tight">PDF, Word, Excel, Imágenes, Videos, etc.</p>
+                                </div>
+                                <input
+                                  type="file"
+                                  id="direct-file-upload"
+                                  className="hidden"
+                                  disabled={enviandoArchivoDirecto}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) void handleEnviarArchivoDirecto(f);
+                                  }}
+                                />
+                              </label>
 
-                            <DocumentosVentas
-                              modoSelector
-                              onSeleccionar={(doc) => enviarDocumento(doc)}
-                            />
+                              <div className="relative flex py-0.5 items-center">
+                                <div className="flex-grow border-t border-carbon/10"></div>
+                                <span className="flex-shrink mx-2 text-[9px] uppercase font-bold text-carbon/40 tracking-wider">o seleccionar del CRM</span>
+                                <div className="flex-grow border-t border-carbon/10"></div>
+                              </div>
+
+                              <DocumentosVentas
+                                modoSelector
+                                onSeleccionar={(doc) => enviarDocumento(doc)}
+                              />
+                            </div>
                           </div>
-                        </div>
+                        </>
                       )}
                     </div>
                     {/* Botón enviar sticker */}
@@ -2094,43 +2104,49 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       </button>
                       {/* Modal de selección de stickers */}
                       {mostrarStickers && (
-                        <div className="absolute right-0 bottom-full mb-2 z-50 w-72 rounded-xl border border-carbon/15 bg-white shadow-xl p-3 space-y-3">
-                          <div className="flex items-center justify-between border-b border-carbon/10 pb-1.5">
-                            <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">🏷️ Enviar Sticker</span>
-                            <button
-                              type="button"
-                              onClick={() => setMostrarStickers(false)}
-                              className="text-carbon/40 hover:text-carbon text-xs"
-                            >✕</button>
-                          </div>
-                          
-                          <div className="text-[10px] text-carbon/60 leading-normal space-y-1.5">
-                            <p><strong>Requisitos de WhatsApp:</strong></p>
-                            <ul className="list-disc pl-3.5 space-y-0.5">
-                              <li>Formato WebP (.webp) únicamente.</li>
-                              <li>Dimensiones exactas: 512x512 px.</li>
-                              <li>Fondo transparente y menor a 100 KB.</li>
-                            </ul>
-                          </div>
+                        <>
+                          <div
+                            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                            onClick={() => setMostrarStickers(false)}
+                          />
+                          <div className="fixed inset-x-3 bottom-20 sm:inset-auto sm:absolute sm:right-0 sm:bottom-full sm:mb-2 z-50 sm:w-72 rounded-xl border border-carbon/15 bg-white shadow-xl p-3 space-y-3">
+                            <div className="flex items-center justify-between border-b border-carbon/10 pb-1.5">
+                              <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">🏷️ Enviar Sticker</span>
+                              <button
+                                type="button"
+                                onClick={() => setMostrarStickers(false)}
+                                className="text-carbon/40 hover:text-carbon text-xs p-1 rounded hover:bg-carbon/5 transition cursor-pointer"
+                              >✕</button>
+                            </div>
+                            
+                            <div className="text-[10px] text-carbon/60 leading-normal space-y-1.5">
+                              <p><strong>Requisitos de WhatsApp:</strong></p>
+                              <ul className="list-disc pl-3.5 space-y-0.5">
+                                <li>Formato WebP (.webp) únicamente.</li>
+                                <li>Dimensiones exactas: 512x512 px.</li>
+                                <li>Fondo transparente y menor a 100 KB.</li>
+                              </ul>
+                            </div>
 
-                          <label
-                            htmlFor="sticker-file"
-                            className="flex flex-col items-center justify-center border-2 border-dashed border-carbon/20 rounded-lg p-4 cursor-pointer hover:border-sauce hover:bg-sauce/5 transition group"
-                          >
-                            <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🖼️</span>
-                            <span className="text-xs font-semibold text-carbon/80 group-hover:text-sauce">Elegir WebP</span>
-                            <input
-                              type="file"
-                              id="sticker-file"
-                              accept="image/webp"
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) void handleEnviarSticker(f);
-                              }}
-                            />
-                          </label>
-                        </div>
+                            <label
+                              htmlFor="sticker-file"
+                              className="flex flex-col items-center justify-center border-2 border-dashed border-carbon/20 rounded-lg p-4 cursor-pointer hover:border-sauce hover:bg-sauce/5 transition group"
+                            >
+                              <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">🖼️</span>
+                              <span className="text-xs font-semibold text-carbon/80 group-hover:text-sauce">Elegir WebP</span>
+                              <input
+                                type="file"
+                                id="sticker-file"
+                                accept="image/webp"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) void handleEnviarSticker(f);
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </>
                       )}
                     </div>
                     <button
@@ -2166,6 +2182,170 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           }
         }}
       />
+
+      {/* Modal / Bottom Sheet de Catálogo de Respuestas Rápidas */}
+      {mostrarDropdownMenu && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-carbon/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setMostrarDropdownMenu(false)}
+        >
+          <div
+            className="w-full sm:max-w-xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-carbon/10 flex flex-col max-h-[85vh] sm:max-h-[82vh] overflow-hidden animate-in slide-in-from-bottom duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Handle táctil superior en móvil */}
+            <div className="pt-2.5 pb-1 flex justify-center sm:hidden shrink-0 bg-crema/20">
+              <div className="w-12 h-1.5 bg-carbon/20 rounded-full" />
+            </div>
+
+            {/* Encabezado */}
+            <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-carbon/10 flex items-center justify-between bg-crema/20 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl p-1.5 bg-sauce/15 text-verde-profundo rounded-lg shrink-0">⚡</span>
+                <div>
+                  <h3 className="font-titular text-sm sm:text-base font-bold text-verde-profundo">
+                    Respuestas Rápidas
+                  </h3>
+                  <p className="text-[11px] text-carbon/50">
+                    {respuestasFiltradasCatalogo.length} de {respuestasRapidas.length} plantillas disponibles
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarDropdownMenu(false)}
+                className="text-carbon/40 hover:text-carbon p-1.5 rounded-lg hover:bg-carbon/5 transition text-lg leading-none cursor-pointer"
+                title="Cerrar (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Barra de búsqueda y categorías */}
+            <div className="p-3 sm:p-4 border-b border-carbon/10 space-y-2.5 bg-white shrink-0">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-carbon/40 text-xs">🔍</span>
+                <input
+                  type="text"
+                  placeholder="Buscar por atajo, título o mensaje..."
+                  value={filtroCatalogo}
+                  onChange={(e) => setFiltroCatalogo(e.target.value)}
+                  autoFocus
+                  className="w-full pl-8 pr-8 py-2 text-xs sm:text-sm bg-carbon/5 border border-carbon/15 rounded-lg text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce focus:bg-white transition"
+                />
+                {filtroCatalogo && (
+                  <button
+                    type="button"
+                    onClick={() => setFiltroCatalogo("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-carbon/40 hover:text-carbon text-xs p-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Chips de categorías */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-sutil no-scrollbar">
+                {categoriasCatalogo.map((cat) => {
+                  const count = cat === "Todos"
+                    ? respuestasRapidas.length
+                    : respuestasRapidas.filter((r) => r.categoria === cat).length;
+                  if (count === 0 && cat !== "Todos") return null;
+                  const activa = categoriaCatalogo === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoriaCatalogo(cat)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                        activa
+                          ? "bg-verde-profundo text-white shadow-xs"
+                          : "bg-carbon/5 text-carbon/60 hover:bg-carbon/10 hover:text-carbon"
+                      }`}
+                    >
+                      <span>{cat}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        activa ? "bg-white/20 text-white" : "bg-carbon/10 text-carbon/50"
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Lista de Respuestas con scroll táctil */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 bg-slate-50/50 scrollbar-sutil min-h-[180px]">
+              {respuestasFiltradasCatalogo.length === 0 ? (
+                <div className="py-10 text-center">
+                  <span className="text-3xl block mb-2 opacity-60">🔍</span>
+                  <p className="text-xs font-semibold text-carbon/60">No se encontraron respuestas rápidas</p>
+                  <p className="text-[11px] text-carbon/40 mt-1">Prueba con otro término de búsqueda o cambia de categoría.</p>
+                  {filtroCatalogo && (
+                    <button
+                      type="button"
+                      onClick={() => { setFiltroCatalogo(""); setCategoriaCatalogo("Todos"); }}
+                      className="mt-3 text-xs text-sauce hover:underline font-semibold cursor-pointer"
+                    >
+                      Restablecer filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                respuestasFiltradasCatalogo.map((r) => (
+                  <button
+                    key={r.id || r.atajo}
+                    type="button"
+                    onClick={() => insertarRespuesta(r.texto)}
+                    className="w-full text-left p-3 rounded-xl border border-carbon/10 bg-white hover:border-sauce/50 hover:shadow-md transition group cursor-pointer flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-[10px] sm:text-xs font-bold bg-sauce/15 text-verde-profundo px-2 py-0.5 rounded-md shrink-0">
+                          #{r.atajo}
+                        </span>
+                        <span className="font-titular font-bold text-xs sm:text-sm text-verde-profundo truncate">
+                          {r.titulo}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-carbon/40 uppercase tracking-wider bg-carbon/5 px-2 py-0.5 rounded shrink-0">
+                        {r.categoria}
+                      </span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-carbon/70 line-clamp-3 leading-relaxed font-normal group-hover:text-carbon transition">
+                      {r.texto}
+                    </p>
+                    <div className="flex items-center justify-between pt-1 border-t border-carbon/5 text-[10px] text-carbon/40 mt-0.5">
+                      <span className="text-sauce font-semibold group-hover:underline flex items-center gap-0.5">
+                        Toca para insertar ↵
+                      </span>
+                      <span className="text-carbon/30 font-mono">
+                        {r.texto.length} caracteres
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Footer informativo */}
+            <div className="px-4 py-2.5 bg-white border-t border-carbon/10 flex items-center justify-between text-[11px] text-carbon/50 shrink-0">
+              <span>💡 También puedes escribir <strong className="text-sauce font-bold">#</strong> directo en el chat.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMostrarDropdownMenu(false);
+                  setTab("respuestas");
+                }}
+                className="text-sauce hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                ⚙️ Gestionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
