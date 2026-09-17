@@ -3,18 +3,36 @@ import type { Cotizacion, CotizacionConcepto, VisitaReporte } from "@/lib/types"
 // Mapeos de base de datos a modelos de TypeScript
 export function aCotizacion(fila: any): Cotizacion {
   const pros = fila.prospectos;
-  const nombreCompleto = pros
+  const nombreContacto = pros
     ? [pros.nombre, pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" ")
     : "";
+
+  const empNombre = fila.empresas?.name || null;
+  const nombrePersonalizado = fila.cliente_nombre_personalizado?.trim() || null;
+
+  // Si tiene un nombre personalizado explícito, lo prioriza;
+  // Si tiene empresa vinculada, muestra la empresa y el contacto;
+  // Si es persona física, muestra su nombre completo.
+  let nombreMostrado = nombrePersonalizado;
+  if (!nombreMostrado) {
+    if (empNombre) {
+      nombreMostrado = nombreContacto ? `${empNombre} (At'n: ${nombreContacto})` : empNombre;
+    } else {
+      nombreMostrado = nombreContacto || pros?.nombre || "Cliente";
+    }
+  }
 
   return {
     id: fila.id,
     prospectoId: fila.prospecto_id,
     expedienteId: fila.expediente_id,
-    prospectoNombre: nombreCompleto || pros?.nombre || "",
-    prospectoTelefono: pros?.telefono || "",
+    empresaId: fila.empresa_id || null,
+    empresaNombre: empNombre,
+    clienteNombrePersonalizado: nombrePersonalizado,
+    prospectoNombre: nombreMostrado,
+    prospectoTelefono: pros?.telefono || fila.empresas?.phone || "",
     prospectoCorreo: pros?.correo || null,
-    prospectoDireccion: pros?.direccion || null,
+    prospectoDireccion: pros?.direccion || fila.empresas?.address || null,
     servicioTipo: fila.servicio_tipo,
     estatus: fila.estatus,
     requiereVisita: fila.requiere_visita,

@@ -191,13 +191,25 @@ export function TablaEmpresas({
                     className="hover:bg-sauce/5 transition-colors group"
                   >
                     <td className="py-3 px-4">
-                      <Link
-                        href={`/empresas/${emp.id}`}
-                        className="font-bold text-carbon group-hover:text-sauce transition block text-sm"
-                      >
-                        {emp.name}
-                      </Link>
-                      <div className="flex items-center gap-2 mt-0.5 text-carbon/50 text-[11px]">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Link
+                          href={`/empresas/${emp.id}`}
+                          className="font-bold text-carbon group-hover:text-sauce transition text-sm"
+                        >
+                          {emp.name}
+                        </Link>
+                        {emp.parentNombre && (
+                          <span className="rounded bg-azul/10 px-1.5 py-0.2 text-[10px] font-semibold text-azul border border-azul/20">
+                            🏬 Sucursal de {emp.parentNombre}
+                          </span>
+                        )}
+                        {(emp.sucursalesCount || 0) > 0 && (
+                          <span className="rounded bg-purple-100 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 border border-purple-200">
+                            🏢 Matriz ({emp.sucursalesCount} {emp.sucursalesCount === 1 ? "sede" : "sedes"})
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-carbon/50 text-[11px] flex-wrap">
                         {emp.website && (
                           <a
                             href={emp.website.startsWith("http") ? emp.website : `https://${emp.website}`}

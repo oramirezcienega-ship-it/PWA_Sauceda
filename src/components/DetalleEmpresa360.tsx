@@ -8,6 +8,7 @@ import { Actividades } from "./Actividades";
 import { EtapaBadge } from "./EtapaBadge";
 import { EstatusProspectoBadge } from "./EstatusProspectoBadge";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
+import { ModalCrearEmpresa } from "./ModalCrearEmpresa";
 import {
   actualizarEmpresa,
   eliminarEmpresa,
@@ -22,6 +23,7 @@ interface DetalleEmpresa360Props {
   empresaInicial: Empresa;
   prospectosIniciales: Prospecto[];
   negociosIniciales: Expediente[];
+  sucursalesIniciales?: Empresa[];
   asesores: { id: string; nombre: string }[];
 }
 
@@ -29,12 +31,14 @@ export function DetalleEmpresa360({
   empresaInicial,
   prospectosIniciales,
   negociosIniciales,
+  sucursalesIniciales = [],
   asesores,
 }: DetalleEmpresa360Props) {
   const router = useRouter();
   const [empresa, setEmpresa] = useState<Empresa>(empresaInicial);
   const [prospectos, setProspectos] = useState<Prospecto[]>(prospectosIniciales);
   const [negocios, setNegocios] = useState<Expediente[]>(negociosIniciales);
+  const [sucursales, setSucursales] = useState<Empresa[]>(sucursalesIniciales);
 
   // Modo edición datos generales
   const [editando, setEditando] = useState(false);
@@ -46,12 +50,16 @@ export function DetalleEmpresa360({
     address: empresaInicial.address,
     billingAddress: empresaInicial.billingAddress,
     ownerId: empresaInicial.ownerId || "",
+    parentId: empresaInicial.parentId || "",
   });
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
 
-  // Pestaña derecha: "prospectos" | "negocios"
-  const [tabActiva, setTabActiva] = useState<"prospectos" | "negocios">("prospectos");
+  // Pestaña derecha: "prospectos" | "negocios" | "sucursales"
+  const [tabActiva, setTabActiva] = useState<"prospectos" | "negocios" | "sucursales">("prospectos");
+
+  // Modal crear sucursal
+  const [modalCrearSucursal, setModalCrearSucursal] = useState(false);
 
   // Modal asociar prospecto existente
   const [modalAsociarPros, setModalAsociarPros] = useState(false);
@@ -235,7 +243,26 @@ export function DetalleEmpresa360({
                 </span>
               )}
             </div>
-            <p className="mt-0.5 text-xs text-carbon/60 flex items-center gap-3 flex-wrap">
+
+            {/* Relación Matriz / Sucursal */}
+            {empresa.parentId && (
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-azul font-medium">
+                <span>🏬 Sucursal de:</span>
+                <Link
+                  href={`/empresas/${empresa.parentId}`}
+                  className="underline font-bold hover:text-verde-profundo"
+                >
+                  {empresa.parentNombre || "Empresa Matriz"}
+                </Link>
+              </div>
+            )}
+            {sucursales.length > 0 && (
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-purple-700 font-medium">
+                <span>🏢 Matriz Corporativa ({sucursales.length} {sucursales.length === 1 ? "sucursal" : "sucursales"})</span>
+              </div>
+            )}
+
+            <p className="mt-1 text-xs text-carbon/60 flex items-center gap-3 flex-wrap">
               <span className="font-mono text-[11px] bg-carbon/5 px-2 py-0.5 rounded text-carbon/70">
                 ID: {empresa.id.slice(0, 8)}...
               </span>
@@ -276,6 +303,16 @@ export function DetalleEmpresa360({
               {negocios.length}
             </span>
           </div>
+          {sucursales.length > 0 && (
+            <div className="text-center">
+              <span className="text-[10px] uppercase tracking-wider text-carbon/50 font-bold block">
+                Sucursales
+              </span>
+              <span className="text-lg font-bold text-purple-700">
+                {sucursales.length}
+              </span>
+            </div>
+          )}
           <div className="text-center">
             <span className="text-[10px] uppercase tracking-wider text-carbon/50 font-bold block">
               Pipeline Total
@@ -507,29 +544,43 @@ export function DetalleEmpresa360({
               <button
                 type="button"
                 onClick={() => setTabActiva("prospectos")}
-                className={`flex-1 py-3 px-4 text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-3 px-2 text-xs font-bold transition flex items-center justify-center gap-1 ${
                   tabActiva === "prospectos"
                     ? "bg-white text-indigo-800 border-t-2 border-indigo-600 shadow-2xs"
                     : "text-carbon/60 hover:text-carbon"
                 }`}
               >
                 <span>👤 Contactos</span>
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] text-indigo-700 font-mono">
+                <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-700 font-mono">
                   {prospectos.length}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => setTabActiva("negocios")}
-                className={`flex-1 py-3 px-4 text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-3 px-2 text-xs font-bold transition flex items-center justify-center gap-1 ${
                   tabActiva === "negocios"
                     ? "bg-white text-amber-800 border-t-2 border-amber-600 shadow-2xs"
                     : "text-carbon/60 hover:text-carbon"
                 }`}
               >
-                <span>📁 Negocios (Deals)</span>
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 font-mono">
+                <span>📁 Negocios</span>
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 font-mono">
                   {negocios.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTabActiva("sucursales")}
+                className={`flex-1 py-3 px-2 text-xs font-bold transition flex items-center justify-center gap-1 ${
+                  tabActiva === "sucursales"
+                    ? "bg-white text-purple-800 border-t-2 border-purple-600 shadow-2xs"
+                    : "text-carbon/60 hover:text-carbon"
+                }`}
+              >
+                <span>🏬 Sedes</span>
+                <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] text-purple-700 font-mono">
+                  {sucursales.length}
                 </span>
               </button>
             </div>
@@ -704,6 +755,82 @@ export function DetalleEmpresa360({
                   )}
                 </div>
               )}
+
+              {/* -------------------------------------------------------- */}
+              {/* TAB 3: SUCURSALES / FILIALES VINCULADAS                  */}
+              {/* -------------------------------------------------------- */}
+              {tabActiva === "sucursales" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-carbon/70 uppercase tracking-wider">
+                      Sedes y Sucursales ({sucursales.length})
+                    </span>
+                    <button
+                      onClick={() => setModalCrearSucursal(true)}
+                      className="rounded bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-purple-700 transition"
+                    >
+                      + Nueva Sucursal
+                    </button>
+                  </div>
+
+                  {sucursales.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-carbon/20 p-8 text-center bg-carbon/5">
+                      <span className="text-2xl block mb-1">🏬</span>
+                      <p className="text-xs font-medium text-carbon/70">No hay sucursales registradas</p>
+                      <p className="text-[11px] text-carbon/50 mt-1">
+                        Esta empresa opera como sede única o aún no se han registrado sus filiales.
+                      </p>
+                      <button
+                        onClick={() => setModalCrearSucursal(true)}
+                        className="mt-3 rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700 transition"
+                      >
+                        + Registrar primera sucursal
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {sucursales.map((suc) => (
+                        <div
+                          key={suc.id}
+                          className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-2xs hover:border-purple-300 hover:shadow-xs transition"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <Link
+                                href={`/empresas/${suc.id}`}
+                                className="text-xs font-bold text-carbon hover:text-purple-700 hover:underline block"
+                              >
+                                🏬 {suc.name}
+                              </Link>
+                              {suc.address && (
+                                <p className="text-[11px] text-carbon/60 mt-0.5 line-clamp-1">
+                                  📍 {suc.address}
+                                </p>
+                              )}
+                            </div>
+                            <Link
+                              href={`/empresas/${suc.id}`}
+                              className="shrink-0 text-[11px] font-semibold text-purple-700 hover:underline bg-purple-50 px-2 py-1 rounded"
+                            >
+                              Ver 360° ↗
+                            </Link>
+                          </div>
+
+                          <div className="mt-2.5 flex items-center gap-3 text-[11px] text-carbon/50 pt-2 border-t border-carbon/5 flex-wrap">
+                            {suc.phone && (
+                              <a href={`tel:${suc.phone}`} className="hover:text-sauce">
+                                📞 {suc.phone}
+                              </a>
+                            )}
+                            {suc.industry && <span>🏷️ {suc.industry}</span>}
+                            {suc.ownerNombre && <span>👤 Asesor: {suc.ownerNombre}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -827,6 +954,21 @@ export function DetalleEmpresa360({
           </div>
         </div>
       )}
+
+      {/* ============================================================ */}
+      {/* MODAL: CREAR SUCURSAL VINCULADA                              */}
+      {/* ============================================================ */}
+      <ModalCrearEmpresa
+        abierto={modalCrearSucursal}
+        onCerrar={() => setModalCrearSucursal(false)}
+        onCreada={(nueva) => {
+          setSucursales((prev) => [nueva, ...prev]);
+          setTabActiva("sucursales");
+        }}
+        asesores={asesores}
+        defaultParentId={empresa.id}
+        defaultParentNombre={empresa.name}
+      />
 
     </div>
   );

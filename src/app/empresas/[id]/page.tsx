@@ -46,7 +46,7 @@ export default async function PaginaDetalleEmpresa({
     );
   }
 
-  const { empresa, prospectos, negocios } = resultado;
+  const { empresa, prospectos, negocios, sucursales } = resultado;
 
   return (
     <main className="min-h-screen pb-12 bg-carbon/5">
@@ -56,6 +56,7 @@ export default async function PaginaDetalleEmpresa({
           empresaInicial={empresa}
           prospectosIniciales={prospectos}
           negociosIniciales={negocios}
+          sucursalesIniciales={sucursales || []}
           asesores={asesores}
         />
       </div>

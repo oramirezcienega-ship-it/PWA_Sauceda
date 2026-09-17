@@ -387,8 +387,14 @@ export interface Empresa {
   billingAddress: string;
   ownerId?: string | null;
   ownerNombre?: string | null;
+  parentId?: string | null;
+  parentNombre?: string | null;
   createdAt: string;
   updatedAt: string;
+
+  // Sucursales / Filiales
+  sucursales?: Empresa[];
+  sucursalesCount?: number;
 
   // Métricas calculadas
   prospectosCount?: number;
@@ -398,7 +404,16 @@ export interface Empresa {
 
 export type DatosEmpresa = Omit<
   Empresa,
-  "id" | "createdAt" | "updatedAt" | "ownerNombre" | "prospectosCount" | "negociosCount" | "valorTotalNegocios"
+  | "id"
+  | "createdAt"
+  | "updatedAt"
+  | "ownerNombre"
+  | "parentNombre"
+  | "sucursales"
+  | "sucursalesCount"
+  | "prospectosCount"
+  | "negociosCount"
+  | "valorTotalNegocios"
 >;
 
 /** Lista de industrias estándar para sugerir o filtrar */
@@ -697,6 +712,9 @@ export interface Cotizacion {
   id: string;
   prospectoId: string;
   expedienteId?: string | null;
+  empresaId?: string | null;
+  empresaNombre?: string | null;
+  clienteNombrePersonalizado?: string | null;
   prospectoNombre?: string;
   prospectoTelefono?: string;
   prospectoCorreo?: string | null;
