@@ -2473,11 +2473,12 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   }
 
   // Opción 3: Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
+  const nombreDestinoPlantilla = cotizacion.contactoNombre || primerNombre;
   const resMeta = await enviarWhatsAppPlantilla(
     datos.telefono,
     "envio_cotizacion_cliente",
     "es_MX",
-    [primerNombre, servicioNombre, cotizacion.id]
+    [nombreDestinoPlantilla, servicioNombre, cotizacion.id, urlPortal]
   );
 
   if (resMeta.ok) {
