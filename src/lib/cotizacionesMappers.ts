@@ -35,7 +35,7 @@ export function aCotizacion(fila: any): Cotizacion {
     id: fila.id,
     prospectoId: fila.prospecto_id,
     expedienteId: fila.expediente_id,
-    empresaId: fila.empresa_id || null,
+    empresaId: fila.empresa_id || pros?.empresa_id || null,
     empresaNombre: empresaNombreCompleto,
     empresaMatrizNombre: empresaMatriz,
     sucursalNombre: sucursalNombre,

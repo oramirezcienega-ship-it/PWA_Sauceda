@@ -101,26 +101,6 @@ export async function crearCotizacion(datos: {
 }
 
 
-// 2. Listar Cotizaciones
-export async function listarCotizaciones(): Promise<Cotizacion[]> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const { data, error } = await sb
-    .from("cotizaciones")
-    .select(`
-      *,
-      prospectos(nombre, telefono),
-      perfiles_inspector:inspector_id(nombre),
-      perfiles_comercial:aprobado_comercial_by(nombre),
-      perfiles_operativo:aprobado_operativo_by(nombre)
-    `)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(aCotizacion);
-}
-
 // Helper para resolver datos completos de empresa, incluyendo matriz si es sucursal
 async function resolverDatosEmpresa(sb: any, empresaId: string) {
   try {
@@ -147,6 +127,70 @@ async function resolverDatosEmpresa(sb: any, empresaId: string) {
   return null;
 }
 
+// 2. Listar Cotizaciones
+export async function listarCotizaciones(): Promise<Cotizacion[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data, error } = await sb
+    .from("cotizaciones")
+    .select(`
+      *,
+      prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, empresa_id),
+      perfiles_inspector:inspector_id(nombre),
+      perfiles_comercial:aprobado_comercial_by(nombre),
+      perfiles_operativo:aprobado_operativo_by(nombre)
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  // Recopilar todos los IDs de empresa (de la cotización o del prospecto)
+  const empresaIds = new Set<string>();
+  (data ?? []).forEach((fila: any) => {
+    const empId = fila.empresa_id || fila.prospectos?.empresa_id;
+    if (empId) empresaIds.add(empId);
+  });
+
+  const empresasMap = new Map<string, any>();
+  if (empresaIds.size > 0) {
+    try {
+      const { data: emps } = await sb
+        .from("empresas")
+        .select("id, name, parent_id, phone, address")
+        .in("id", Array.from(empresaIds));
+
+      const parentIds = (emps ?? []).map((e: any) => e.parent_id).filter(Boolean);
+      const matricesMap = new Map<string, string>();
+      if (parentIds.length > 0) {
+        const { data: matrices } = await sb
+          .from("empresas")
+          .select("id, name")
+          .in("id", parentIds);
+        (matrices ?? []).forEach((m: any) => matricesMap.set(m.id, m.name));
+      }
+
+      (emps ?? []).forEach((e: any) => {
+        if (e.parent_id && matricesMap.has(e.parent_id)) {
+          e.parent_name = matricesMap.get(e.parent_id);
+        }
+        empresasMap.set(e.id, e);
+      });
+    } catch {}
+  }
+
+  return (data ?? []).map((fila: any) => {
+    const empId = fila.empresa_id || fila.prospectos?.empresa_id;
+    if (empId && empresasMap.has(empId)) {
+      fila.empresas = empresasMap.get(empId);
+      if (!fila.empresa_id) {
+        fila.empresa_id = empId;
+      }
+    }
+    return aCotizacion(fila);
+  });
+}
+
 // 3. Obtener Cotización por ID (Detalle completo admin)
 export async function obtenerCotizacionPorId(
   id: string
@@ -169,10 +213,14 @@ export async function obtenerCotizacionPorId(
   if (errCot) throw new Error(errCot.message);
   if (!filaCot) return null;
 
-  // Si tiene empresa_id vinculada, resolver sus datos de forma tolerante (incluyendo matriz si es sucursal)
-  if (filaCot.empresa_id) {
-    const empData = await resolverDatosEmpresa(sb, filaCot.empresa_id);
-    if (empData) filaCot.empresas = empData;
+  // Si tiene empresa_id vinculada (en cotización o en prospecto), resolver sus datos
+  const idEmpresa = filaCot.empresa_id || filaCot.prospectos?.empresa_id;
+  if (idEmpresa) {
+    const empData = await resolverDatosEmpresa(sb, idEmpresa);
+    if (empData) {
+      filaCot.empresas = empData;
+      if (!filaCot.empresa_id) filaCot.empresa_id = idEmpresa;
+    }
   }
 
   const { data: filasConceptos, error: errCon } = await sb
@@ -215,7 +263,7 @@ export async function obtenerCotizacionPorToken(
     .from("cotizaciones")
     .select(`
       *,
-      prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion),
+      prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, correo, direccion, empresa_id),
       perfiles_inspector:inspector_id(nombre),
       perfiles_comercial:aprobado_comercial_by(nombre),
       perfiles_operativo:aprobado_operativo_by(nombre)
@@ -226,10 +274,14 @@ export async function obtenerCotizacionPorToken(
   if (errCot) throw new Error(errCot.message);
   if (!filaCot) return null;
 
-  // Si tiene empresa_id vinculada, resolver datos de empresa y matriz si es sucursal
-  if (filaCot.empresa_id) {
-    const empData = await resolverDatosEmpresa(sb, filaCot.empresa_id);
-    if (empData) filaCot.empresas = empData;
+  // Si tiene empresa_id vinculada (en cotización o prospecto), resolver datos de empresa y matriz si es sucursal
+  const idEmpresaToken = filaCot.empresa_id || filaCot.prospectos?.empresa_id;
+  if (idEmpresaToken) {
+    const empData = await resolverDatosEmpresa(sb, idEmpresaToken);
+    if (empData) {
+      filaCot.empresas = empData;
+      if (!filaCot.empresa_id) filaCot.empresa_id = idEmpresaToken;
+    }
   }
 
   const cot = aCotizacion(filaCot);
