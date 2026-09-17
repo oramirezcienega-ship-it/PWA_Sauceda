@@ -282,6 +282,8 @@ export interface FilaEmpresa {
   billing_address: string;
   owner_id?: string | null;
   perfiles?: { nombre: string } | null;
+  parent_id?: string | null;
+  parent?: { name: string } | null;
   created_at: string;
   updated_at: string;
   prospectos?: { count?: number }[] | { count: number } | null;
@@ -290,7 +292,7 @@ export interface FilaEmpresa {
 
 export function aEmpresa(
   fila: FilaEmpresa,
-  metricas?: { prospectosCount?: number; negociosCount?: number; valorTotalNegocios?: number }
+  metricas?: { prospectosCount?: number; negociosCount?: number; valorTotalNegocios?: number; sucursalesCount?: number }
 ): Empresa {
   return {
     id: fila.id,
@@ -302,8 +304,11 @@ export function aEmpresa(
     billingAddress: fila.billing_address ?? "",
     ownerId: fila.owner_id ?? null,
     ownerNombre: fila.perfiles?.nombre ?? null,
+    parentId: fila.parent_id ?? null,
+    parentNombre: fila.parent?.name ?? null,
     createdAt: fila.created_at ?? "",
     updatedAt: fila.updated_at ?? "",
+    sucursalesCount: metricas?.sucursalesCount ?? 0,
     prospectosCount: metricas?.prospectosCount ?? 0,
     negociosCount: metricas?.negociosCount ?? 0,
     valorTotalNegocios: metricas?.valorTotalNegocios ?? 0,
@@ -319,5 +324,6 @@ export function aFilaEmpresa(datos: DatosEmpresa) {
     address: datos.address || "",
     billing_address: datos.billingAddress || "",
     owner_id: datos.ownerId || null,
+    parent_id: datos.parentId || null,
   };
 }

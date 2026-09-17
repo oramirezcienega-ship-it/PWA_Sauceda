@@ -34,7 +34,7 @@ export async function listarEmpresas(filtros?: FiltrosEmpresas): Promise<Empresa
   // 1. Obtener empresas
   let query = sb
     .from("empresas")
-    .select("*, perfiles:owner_id(nombre)")
+    .select("*, perfiles:owner_id(nombre), parent:parent_id(name)")
     .order("name", { ascending: true });
 
   if (rol === "asesor") {
@@ -64,7 +64,25 @@ export async function listarEmpresas(filtros?: FiltrosEmpresas): Promise<Empresa
 
   const empresasIds = empresasData.map((e) => e.id);
 
-  // 2. Obtener métricas agregadas de prospectos por empresa
+  // 2. Obtener conteo de sucursales (hijas con parent_id)
+  let sucursalesPorEmpresa: Record<string, number> = {};
+  try {
+    const { data: sucData } = await sb
+      .from("empresas")
+      .select("parent_id")
+      .not("parent_id", "is", null)
+      .in("parent_id", empresasIds);
+
+    if (sucData) {
+      sucData.forEach((s) => {
+        if (s.parent_id) {
+          sucursalesPorEmpresa[s.parent_id] = (sucursalesPorEmpresa[s.parent_id] || 0) + 1;
+        }
+      });
+    }
+  } catch {}
+
+  // 3. Obtener métricas agregadas de prospectos por empresa
   let prospectosPorEmpresa: Record<string, number> = {};
   try {
     const { data: prosData } = await sb
@@ -79,11 +97,11 @@ export async function listarEmpresas(filtros?: FiltrosEmpresas): Promise<Empresa
         }
       });
     }
-  } catch {
-    // Tolerante si la columna empresa_id aún no existe
+  } catch (e) {
+    console.warn("No se pudieron calcular métricas de prospectos:", e);
   }
 
-  // 3. Obtener métricas agregadas de expedientes (deals) por empresa
+  // 4. Obtener métricas agregadas de negocios por empresa
   let negociosPorEmpresa: Record<string, { count: number; totalValor: number }> = {};
   try {
     const { data: expsData } = await sb
@@ -92,24 +110,26 @@ export async function listarEmpresas(filtros?: FiltrosEmpresas): Promise<Empresa
       .in("empresa_id", empresasIds);
 
     if (expsData) {
-      expsData.forEach((e) => {
-        if (e.empresa_id) {
-          if (!negociosPorEmpresa[e.empresa_id]) {
-            negociosPorEmpresa[e.empresa_id] = { count: 0, totalValor: 0 };
-          }
-          negociosPorEmpresa[e.empresa_id].count += 1;
-          negociosPorEmpresa[e.empresa_id].totalValor += Number(e.valor_estimado || 0);
+      expsData.forEach((exp) => {
+        if (exp.empresa_id) {
+          const actual = negociosPorEmpresa[exp.empresa_id] || { count: 0, totalValor: 0 };
+          negociosPorEmpresa[exp.empresa_id] = {
+            count: actual.count + 1,
+            totalValor: actual.totalValor + (exp.valor_estimado || 0),
+          };
         }
       });
     }
-  } catch {
-    // Tolerante si la columna empresa_id aún no existe
+  } catch (e) {
+    console.warn("No se pudieron calcular métricas de expedientes:", e);
   }
 
+  // 5. Ensamblar modelo de dominio
   return (empresasData as FilaEmpresa[]).map((f) => {
     const pCount = prospectosPorEmpresa[f.id] || 0;
     const neg = negociosPorEmpresa[f.id] || { count: 0, totalValor: 0 };
     return aEmpresa(f, {
+      sucursalesCount: sucursalesPorEmpresa[f.id] || 0,
       prospectosCount: pCount,
       negociosCount: neg.count,
       valorTotalNegocios: neg.totalValor,
@@ -118,25 +138,42 @@ export async function listarEmpresas(filtros?: FiltrosEmpresas): Promise<Empresa
 }
 
 /**
- * Obtiene el detalle completo de una Empresa con sus prospectos (contactos)
+ * Obtiene el detalle completo de una Empresa con sus sucursales, prospectos (contactos)
  * y expedientes (deals) relacionados para la vista 360°.
  */
 export async function obtenerEmpresa(id: string): Promise<{
   empresa: Empresa;
   prospectos: Prospecto[];
   negocios: Expediente[];
+  sucursales: Empresa[];
 } | null> {
   await requireAdmin();
   const sb = supabaseServidor();
 
   const { data: empresaData, error: errEmpresa } = await sb
     .from("empresas")
-    .select("*, perfiles:owner_id(nombre)")
+    .select("*, perfiles:owner_id(nombre), parent:parent_id(name)")
     .eq("id", id)
     .maybeSingle();
 
   if (errEmpresa || !empresaData) {
     return null;
+  }
+
+  // Sucursales vinculadas a esta empresa (hijas con parent_id = id)
+  let sucursales: Empresa[] = [];
+  try {
+    const { data: sucData } = await sb
+      .from("empresas")
+      .select("*, perfiles:owner_id(nombre)")
+      .eq("parent_id", id)
+      .order("name", { ascending: true });
+
+    if (sucData) {
+      sucursales = (sucData as FilaEmpresa[]).map((s) => aEmpresa(s));
+    }
+  } catch (e) {
+    console.warn("No se pudieron cargar sucursales de la empresa:", e);
   }
 
   // Prospectos vinculados a esta empresa
@@ -174,12 +211,13 @@ export async function obtenerEmpresa(id: string): Promise<{
   const totalValor = negocios.reduce((acc, curr) => acc + (curr.valorEstimado || 0), 0);
 
   const empresa = aEmpresa(empresaData as FilaEmpresa, {
+    sucursalesCount: sucursales.length,
     prospectosCount: prospectos.length,
     negociosCount: negocios.length,
     valorTotalNegocios: totalValor,
   });
 
-  return { empresa, prospectos, negocios };
+  return { empresa, prospectos, negocios, sucursales };
 }
 
 /**
@@ -324,15 +362,21 @@ export async function asociarNegocioAEmpresa(
 /**
  * Lista empresas mínima para desplegables y modales de selección rápida.
  */
-export async function listarEmpresasMin(): Promise<{ id: string; name: string }[]> {
+export async function listarEmpresasMin(excludeId?: string): Promise<{ id: string; name: string }[]> {
   await requireAdmin();
   const sb = supabaseServidor();
 
   try {
-    const { data, error } = await sb
+    let query = sb
       .from("empresas")
       .select("id, name")
       .order("name", { ascending: true });
+
+    if (excludeId) {
+      query = query.neq("id", excludeId);
+    }
+
+    const { data, error } = await query;
 
     if (error || !data) return [];
     return data.map((d) => ({ id: d.id, name: d.name }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { crearEmpresa } from "@/app/actions/empresas";
 import { type DatosEmpresa, type Empresa, INDUSTRIAS_COMUNES } from "@/lib/types";
 
@@ -9,6 +9,8 @@ interface ModalCrearEmpresaProps {
   onCerrar: () => void;
   onCreada: (empresa: Empresa) => void;
   asesores: { id: string; nombre: string }[];
+  defaultParentId?: string;
+  defaultParentNombre?: string;
 }
 
 export function ModalCrearEmpresa({
@@ -16,6 +18,8 @@ export function ModalCrearEmpresa({
   onCerrar,
   onCreada,
   asesores,
+  defaultParentId,
+  defaultParentNombre,
 }: ModalCrearEmpresaProps) {
   const [nombre, setNombre] = useState("");
   const [industria, setIndustria] = useState("");
@@ -25,15 +29,26 @@ export function ModalCrearEmpresa({
   const [direccion, setDireccion] = useState("");
   const [direccionFiscal, setDireccionFiscal] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [parentId, setParentId] = useState(defaultParentId || "");
+  const [empresasPadre, setEmpresasPadre] = useState<{ id: string; name: string }[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Cargar lista de posibles empresas matrices si no viene fija
+  useEffect(() => {
+    if (abierto && !defaultParentId) {
+      import("@/app/actions/empresas").then(({ listarEmpresasMin }) => {
+        listarEmpresasMin().then(setEmpresasPadre).catch(() => setEmpresasPadre([]));
+      });
+    }
+  }, [abierto, defaultParentId]);
 
   if (!abierto) return null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim()) {
-      setError("El nombre de la empresa es obligatorio.");
+      setError("El nombre de la empresa o sucursal es obligatorio.");
       return;
     }
 
@@ -50,6 +65,7 @@ export function ModalCrearEmpresa({
       address: direccion.trim(),
       billingAddress: direccionFiscal.trim(),
       ownerId: ownerId || null,
+      parentId: defaultParentId || parentId || null,
     };
 
     try {
@@ -69,14 +85,16 @@ export function ModalCrearEmpresa({
         <div className="flex items-center justify-between border-b border-carbon/10 pb-4">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sauce/15 text-lg">
-              🏢
+              {defaultParentNombre ? "🏬" : "🏢"}
             </span>
             <div>
               <h2 className="font-titular text-lg font-bold text-verde-profundo">
-                Nueva Empresa (Cuenta B2B)
+                {defaultParentNombre ? "Nueva Sucursal / Sede B2B" : "Nueva Empresa (Cuenta B2B)"}
               </h2>
               <p className="text-xs text-carbon/60">
-                Registra la entidad corporativa para asociar prospectos y negocios.
+                {defaultParentNombre
+                  ? `Registra una sede dependiente de ${defaultParentNombre}`
+                  : "Registra la entidad corporativa para asociar prospectos, negocios y sucursales."}
               </p>
             </div>
           </div>
@@ -96,20 +114,48 @@ export function ModalCrearEmpresa({
           </div>
         )}
 
+        {defaultParentNombre && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl bg-azul/10 px-3 py-2 text-xs font-semibold text-azul border border-azul/20">
+            <span>🏢</span>
+            <span>Empresa Matriz: <strong>{defaultParentNombre}</strong></span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="block text-xs font-semibold text-carbon/80 mb-1">
-              Nombre de la Empresa <span className="text-rojo">*</span>
+              {defaultParentNombre ? "Nombre de la Sucursal / Sede" : "Nombre de la Empresa"}{" "}
+              <span className="text-rojo">*</span>
             </label>
             <input
               type="text"
               required
-              placeholder="Ej. Grupo Industrial del Bajío S.A. de C.V."
+              placeholder={defaultParentNombre ? "Ej. Sucursal Centro / Planta Silao" : "Ej. Grupo Industrial del Bajío S.A. de C.V."}
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-1 focus:ring-sauce"
             />
           </div>
+
+          {!defaultParentId && empresasPadre.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-carbon/80 mb-1">
+                ¿Es sucursal de una empresa matriz? (Opcional)
+              </label>
+              <select
+                value={parentId}
+                onChange={(e) => setParentId(e.target.value)}
+                className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-1 focus:ring-sauce"
+              >
+                <option value="">Ninguna (Es empresa matriz independiente)</option>
+                {empresasPadre.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    🏢 {emp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
