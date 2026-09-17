@@ -588,6 +588,7 @@ export function Conversaciones() {
   const [probandoIA, setProbandoIA] = useState(false);
   const [proveedorIA, setProveedorIA] = useState("anthropic");
   const [cambiandoProveedor, setCambiandoProveedor] = useState(false);
+  const [mostrarConfigIA, setMostrarConfigIA] = useState(false);
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [asignando, setAsignando] = useState(false);
   const [esAdmin, setEsAdmin] = useState(false);
@@ -1198,42 +1199,91 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       {/* Tab: Bandeja (contenido original) */}
       {tab === "bandeja" && <>
 
-      {/* Diagnóstico del agente de IA */}
+      {/* Diagnóstico del agente de IA (Colapsable y compacto para móvil) */}
       {esAdmin && (
-        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-carbon/10 bg-white px-4 py-2.5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-carbon/60">Proveedor de IA (Sofía):</span>
-            <select
-              value={proveedorIA}
-              disabled={cambiandoProveedor}
-              onChange={(e) => cambiarProveedor(e.target.value)}
-              className="rounded-lg border border-carbon/15 bg-slate-50 text-xs font-semibold text-verde-profundo px-2.5 py-1.5 transition outline-none focus:border-sauce focus:ring-1 focus:ring-sauce/30 disabled:opacity-50 cursor-pointer"
-            >
-              <option value="anthropic">Claude (Anthropic)</option>
-              <option value="kimi">Kimi K3 (Moonshot)</option>
-              <option value="ollama">Local (Ollama)</option>
-            </select>
-          </div>
-
+        <div className="rounded-xl border border-carbon/10 bg-white shadow-2xs overflow-hidden transition">
           <button
             type="button"
-            onClick={ejecutarPruebaIA}
-            disabled={probandoIA}
-            className="shrink-0 rounded-lg border border-sauce/40 px-3.5 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50"
+            onClick={() => setMostrarConfigIA(!mostrarConfigIA)}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-carbon/5 transition cursor-pointer text-left"
           >
-            {probandoIA ? "Probando…" : "Probar IA"}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm shrink-0">🤖</span>
+              <span className="font-semibold text-verde-profundo text-xs shrink-0">
+                Sofía (IA):
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-0.5 text-[11px] font-medium shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                {proveedorIA === "anthropic" ? "Claude (Anthropic)" : proveedorIA === "kimi" ? "Kimi K3 (Moonshot)" : "Local (Ollama)"}
+              </span>
+              {estadoIA && (
+                <span
+                  className={`text-[11px] font-semibold truncate hidden sm:inline ${
+                    estadoIA.ok ? "text-emerald-700" : "text-rojo"
+                  }`}
+                >
+                  {estadoIA.ok ? "✓ Activo" : "✕ Falló"}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-sauce shrink-0 ml-2">
+              <span>{mostrarConfigIA ? "Cerrar" : "Configurar"}</span>
+              <span className={`text-[9px] transition-transform duration-200 ${mostrarConfigIA ? "rotate-180" : ""}`}>
+                ▼
+              </span>
+            </div>
           </button>
-          {estadoIA ? (
-            <span
-              className={`text-xs font-medium ${estadoIA.ok ? "text-verde-profundo" : "text-rojo"}`}
-            >
-              {estadoIA.ok ? "✓ " : "✕ "}
-              {estadoIA.mensaje}
-            </span>
-          ) : (
-            <span className="text-xs text-carbon/40 font-medium">
-              Verifica que el agente de IA esté activo (key, modelo y crédito).
-            </span>
+
+          {/* Panel expandido con controles de configuración y prueba */}
+          {mostrarConfigIA && (
+            <div className="border-t border-carbon/10 bg-slate-50/50 p-3 space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="select-proveedor-ia" className="text-xs font-medium text-carbon/70">
+                    Cambiar Proveedor:
+                  </label>
+                  <select
+                    id="select-proveedor-ia"
+                    value={proveedorIA}
+                    disabled={cambiandoProveedor}
+                    onChange={(e) => cambiarProveedor(e.target.value)}
+                    className="rounded-lg border border-carbon/15 bg-white text-xs font-semibold text-verde-profundo px-2.5 py-1.5 transition outline-none focus:border-sauce focus:ring-1 focus:ring-sauce/30 disabled:opacity-50 cursor-pointer shadow-2xs"
+                  >
+                    <option value="anthropic">Claude (Anthropic)</option>
+                    <option value="kimi">Kimi K3 (Moonshot)</option>
+                    <option value="ollama">Local (Ollama)</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={ejecutarPruebaIA}
+                  disabled={probandoIA}
+                  className="rounded-lg border border-sauce/40 bg-white px-3 py-1.5 text-xs font-semibold text-verde-profundo transition hover:bg-sauce/10 disabled:opacity-50 shadow-2xs cursor-pointer"
+                >
+                  {probandoIA ? "Probando conexión…" : "⚡ Probar Conexión IA"}
+                </button>
+              </div>
+
+              {/* Mensaje de estado de prueba */}
+              {estadoIA ? (
+                <div
+                  className={`rounded-lg p-2 text-xs font-medium ${
+                    estadoIA.ok
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  }`}
+                >
+                  {estadoIA.ok ? "✓ " : "✕ "}
+                  {estadoIA.mensaje}
+                </div>
+              ) : (
+                <p className="text-[11px] text-carbon/45">
+                  Verifica que el agente de IA tenga API key activa, modelo y créditos configurados.
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
