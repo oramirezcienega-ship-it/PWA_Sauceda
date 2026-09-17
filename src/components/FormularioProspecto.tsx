@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ORIGENES } from "@/lib/origenes";
 import { ESTATUS_PROSPECTO_LISTA, CALIFICACION_PROSPECTO_LISTA } from "@/lib/estatus";
+import { listarEmpresasMin } from "@/app/actions/empresas";
 import type { DatosProspecto, EstatusProspecto, CalificacionProspecto } from "@/lib/types";
 
 /** Valores por defecto para un prospecto nuevo. */
@@ -23,6 +24,7 @@ const VACIO: DatosProspecto = {
   canalId: "",
   estatus: "lead",
   calificacion: "frio",
+  empresaId: null,
 };
 
 /**
@@ -41,8 +43,15 @@ export function FormularioProspecto({
   onCancelar: () => void;
 }) {
   const [datos, setDatos] = useState<DatosProspecto>(valorInicial ?? VACIO);
+  const [empresas, setEmpresas] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    listarEmpresasMin()
+      .then(setEmpresas)
+      .catch((err) => console.error("Error al cargar empresas:", err));
+  }, []);
 
   function actualizar<K extends keyof DatosProspecto>(
     campo: K,
@@ -205,6 +214,21 @@ export function FormularioProspecto({
           </select>
         </Campo>
       </div>
+
+      <Campo etiqueta="Empresa Asociada (Cuenta B2B)">
+        <select
+          value={datos.empresaId || ""}
+          onChange={(e) => actualizar("empresaId", e.target.value || null)}
+          className={INPUT}
+        >
+          <option value="">Ninguna (Persona individual / B2C)</option>
+          {empresas.map((em) => (
+            <option key={em.id} value={em.id}>
+              {em.name}
+            </option>
+          ))}
+        </select>
+      </Campo>
 
       <Campo etiqueta="Dirección">
         <input

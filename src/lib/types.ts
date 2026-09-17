@@ -272,6 +272,10 @@ export interface Expediente {
   prospectoCorreo?: string | null;
   /** Dirección del prospecto enlazado (vía join). */
   prospectoDireccion?: string | null;
+  /** Empresa asociada al negocio (deal). Null si no está asociada. */
+  empresaId?: string | null;
+  /** Nombre de la empresa asociada (solo lectura, vía join). */
+  empresaNombre?: string | null;
 }
 
 /**
@@ -281,7 +285,7 @@ export interface Expediente {
  */
 export type DatosExpediente = Omit<
   Expediente,
-  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto" | "asesorNombre" | "operadorNombre"
+  "id" | "ultimoMovimiento" | "token" | "origenProspecto" | "nombreCompleto" | "asesorNombre" | "operadorNombre" | "empresaNombre"
 >;
 
 /** Origen de adquisición de un prospecto (lista fija). */
@@ -359,11 +363,59 @@ export interface Prospecto {
   tipoNegocioPrincipal?: string | null;
   /** Cantidad total de expedientes enlazados a este prospecto. */
   expedientesCount?: number;
+  /** Empresa a la que pertenece el prospecto (cuenta corporativa). */
+  empresaId?: string | null;
+  /** Nombre de la empresa asociada (solo lectura, vía join). */
+  empresaNombre?: string | null;
   createdAt?: string;
 }
 
 /** Datos editables de un prospecto (el `id` lo administra la app). */
-export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto" | "asesorNombre" | "operadorNombre">;
+export type DatosProspecto = Omit<Prospecto, "id" | "nombreCompleto" | "asesorNombre" | "operadorNombre" | "empresaNombre">;
+
+// ------------------------------------------------------------
+// MÓDULO EMPRESAS (COMPANIES - B2B)
+// ------------------------------------------------------------
+
+export interface Empresa {
+  id: string;
+  name: string;
+  industry: string;
+  website: string;
+  phone: string;
+  address: string;
+  billingAddress: string;
+  ownerId?: string | null;
+  ownerNombre?: string | null;
+  createdAt: string;
+  updatedAt: string;
+
+  // Métricas calculadas
+  prospectosCount?: number;
+  negociosCount?: number;
+  valorTotalNegocios?: number;
+}
+
+export type DatosEmpresa = Omit<
+  Empresa,
+  "id" | "createdAt" | "updatedAt" | "ownerNombre" | "prospectosCount" | "negociosCount" | "valorTotalNegocios"
+>;
+
+/** Lista de industrias estándar para sugerir o filtrar */
+export const INDUSTRIAS_COMUNES = [
+  "Inmobiliaria / Bienes Raíces",
+  "Construcción e Ingeniería",
+  "Servicios Financieros / Hipotecarios",
+  "Tecnología y Software",
+  "Manufactura / Industrial",
+  "Comercio / Retail",
+  "Consultoría y Servicios Profesionales",
+  "Salud y Farmacéutica",
+  "Logística y Transporte",
+  "Educación",
+  "Gobierno / Sector Público",
+  "Otra",
+];
 
 // ------------------------------------------------------------
 // MÓDULO FORMULARIOS

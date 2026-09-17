@@ -31,6 +31,7 @@ import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
 const ENLACES = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/", label: "Negocios" },
+  { href: "/empresas", label: "Empresas" },
   { href: "/prospectos", label: "Prospectos" },
   { href: "/prospectos/pipeline", label: "Pipeline" },
   { href: "/conversaciones", label: "Conversaciones" },

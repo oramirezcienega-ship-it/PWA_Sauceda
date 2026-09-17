@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ETAPAS } from "@/lib/etapas";
 import type { DatosExpediente, CalificacionProspecto } from "@/lib/types";
 import { listarAsesoresActivos, listarOperariosActivos } from "@/app/actions/usuarios";
+import { listarEmpresasMin } from "@/app/actions/empresas";
 
 /** Valores por defecto para un expediente nuevo. */
 const VACIO: DatosExpediente = {
@@ -33,6 +34,7 @@ const VACIO: DatosExpediente = {
   habitada: "",
   asesorId: null,
   operadorId: null,
+  empresaId: null,
 };
 
 /**
@@ -59,10 +61,12 @@ export function FormularioExpediente({
   const [enviando, setEnviando] = useState(false);
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [operadores, setOperadores] = useState<{ id: string; nombre: string }[]>([]);
+  const [empresas, setEmpresas] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     listarAsesoresActivos().then(setAsesores).catch(() => setAsesores([]));
     listarOperariosActivos().then(setOperadores).catch(() => setOperadores([]));
+    listarEmpresasMin().then(setEmpresas).catch(() => setEmpresas([]));
   }, []);
 
   function actualizar<K extends keyof DatosExpediente>(
@@ -355,6 +359,25 @@ export function FormularioExpediente({
             {prospectos.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre} · {p.id}
+              </option>
+            ))}
+          </select>
+        </Campo>
+      )}
+
+      {empresas.length > 0 && (
+        <Campo etiqueta="Empresa Asociada (Cuenta B2B)">
+          <select
+            value={datos.empresaId ?? ""}
+            onChange={(e) =>
+              actualizar("empresaId", e.target.value || null)
+            }
+            className={INPUT}
+          >
+            <option value="">Sin empresa (Negocio individual)</option>
+            {empresas.map((em) => (
+              <option key={em.id} value={em.id}>
+                {em.name}
               </option>
             ))}
           </select>

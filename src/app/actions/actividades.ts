@@ -51,8 +51,27 @@ export async function listarActividadesDeProspecto(
   return (data as FilaActividad[]).map(aActividad);
 }
 
+export async function listarActividadesDeEmpresa(
+  empresaId: string,
+): Promise<Actividad[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("actividades")
+    .select("*")
+    .eq("empresa_id", empresaId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    // Fallback tolerante si la columna aún no está migrada
+    console.warn("No se pudieron cargar actividades de empresa:", error.message);
+    return [];
+  }
+  return (data as FilaActividad[]).map(aActividad);
+}
+
 /** Registra una actividad manual (nota, llamada, correo, reunión). */
 export async function crearActividadManual(datos: {
+  empresaId?: string | null;
   expedienteId?: string | null;
   prospectoId?: string | null;
   tipo: TipoActividad;
