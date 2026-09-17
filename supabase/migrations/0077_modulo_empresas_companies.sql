@@ -32,6 +32,10 @@ create policy "Acceso completo a empresas para usuarios autenticados"
   using (true)
   with check (true);
 
+-- Asegurar que columnas añadidas existan si la tabla ya había sido creada
+alter table public.empresas
+  add column if not exists parent_id uuid references public.empresas(id) on delete set null;
+
 -- 2. Índices de empresas
 create index if not exists empresas_name_idx on public.empresas (name);
 create index if not exists empresas_owner_idx on public.empresas (owner_id);
