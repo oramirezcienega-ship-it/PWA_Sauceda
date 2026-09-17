@@ -24,17 +24,12 @@ create table if not exists public.empresas (
 alter table public.empresas enable row level security;
 
 -- Política de acceso para usuarios autenticados del CRM
-do $$
-begin
-  if not exists (
-    select 1 from pg_policies 
-    where tablename = 'empresas' and policyname = 'Acceso completo a empresas para usuarios autenticados'
-  ) then
-    create policy "Acceso completo a empresas para usuarios autenticados"
-      on public.empresas for all
-      using (auth.role() = 'authenticated');
-  end if;
-end $$;
+drop policy if exists "Acceso completo a empresas para usuarios autenticados" on public.empresas;
+create policy "Acceso completo a empresas para usuarios autenticados"
+  on public.empresas for all
+  to authenticated
+  using (true)
+  with check (true);
 
 -- 2. Índices de empresas
 create index if not exists empresas_name_idx on public.empresas (name);
