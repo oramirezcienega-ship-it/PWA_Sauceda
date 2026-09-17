@@ -114,9 +114,16 @@ export function TableroCotizaciones({
 
 
   const cotizacionesFiltradas = cotizaciones.filter((c) => {
+    const q = busqueda.toLowerCase().trim();
     const coincideBusqueda =
-      c.id.toLowerCase().includes(busqueda.toLowerCase()) ||
-      c.prospectoNombre?.toLowerCase().includes(busqueda.toLowerCase());
+      !q ||
+      c.id.toLowerCase().includes(q) ||
+      c.prospectoNombre?.toLowerCase().includes(q) ||
+      c.empresaNombre?.toLowerCase().includes(q) ||
+      c.empresaMatrizNombre?.toLowerCase().includes(q) ||
+      c.sucursalNombre?.toLowerCase().includes(q) ||
+      c.contactoNombre?.toLowerCase().includes(q) ||
+      c.prospectoTelefono?.includes(q);
 
     const coincideEstatus = filtroEstatus === "todos" || c.estatus === filtroEstatus;
     const coincideServicio = filtroServicio === "todos" || c.servicioTipo === filtroServicio;
@@ -253,8 +260,32 @@ export function TableroCotizaciones({
                   <tr key={c.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-4 font-mono font-bold text-sauce">{c.id}</td>
                     <td className="px-6 py-4">
-                      <div className="font-semibold">{c.prospectoNombre}</div>
-                      <div className="text-xs text-carbon/40 font-mono">{c.prospectoTelefono}</div>
+                      {c.empresaNombre ? (
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-verde-profundo flex items-center gap-1.5 leading-snug">
+                            <span className="text-purple-600">🏢</span>
+                            <span>{c.empresaMatrizNombre || c.empresaNombre}</span>
+                          </div>
+                          {c.sucursalNombre && (
+                            <div className="text-[11px] font-semibold text-purple-700 flex items-center gap-1">
+                              <span>📍</span>
+                              <span>{c.sucursalNombre}</span>
+                            </div>
+                          )}
+                          <div className="text-xs text-carbon/70 flex items-center gap-1">
+                            <span className="text-carbon/40 font-medium">At&apos;n:</span>
+                            <span className="font-semibold text-carbon/90">{c.contactoNombre || c.prospectoNombre}</span>
+                            {c.prospectoTelefono && (
+                              <span className="text-carbon/40 font-mono text-[11px]">({c.prospectoTelefono})</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="font-semibold">{c.prospectoNombre}</div>
+                          <div className="text-xs text-carbon/40 font-mono">{c.prospectoTelefono}</div>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">{getServicioLabel(c.servicioTipo)}</td>
                     <td className="px-6 py-4">{getEstatusBadge(c.estatus)}</td>
