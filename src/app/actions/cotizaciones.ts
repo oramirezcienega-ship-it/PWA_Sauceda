@@ -2122,6 +2122,8 @@ export async function enviarCotizacionPorCorreo(datos: {
     pintura: "Pintura & Acabados",
     losa: "Construcción de Losa",
     remodelacion: "Remodelación Integral",
+    herreria: "Herrería Residencial e Industrial",
+    piso_estampado: "Piso Estampado",
   };
   const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
 
@@ -2331,6 +2333,8 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     pintura: "Pintura & Acabados",
     losa: "Construcción de Losa",
     remodelacion: "Remodelación Integral",
+    herreria: "Herrería Residencial e Industrial",
+    piso_estampado: "Piso Estampado",
   };
   const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
 
@@ -2473,11 +2477,30 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   }
 
   // Opción 3: Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
+  const nombreDestinoPlantilla = cotizacion.contactoNombre || cotizacion.empresaNombre || primerNombre;
+
+  let ubicacionPlantilla = "tu domicilio";
+  if (cotizacion.empresaNombre) {
+    const matriz = cotizacion.empresaMatrizNombre || cotizacion.empresaNombre;
+    ubicacionPlantilla = cotizacion.sucursalNombre
+      ? `${matriz} 📍 Sucursal / Sede: ${cotizacion.sucursalNombre}`
+      : matriz;
+  }
+
+  const inversionTexto = formatoPesos(totalMonto);
+
   const resMeta = await enviarWhatsAppPlantilla(
     datos.telefono,
     "envio_cotizacion_cliente",
     "es_MX",
-    [primerNombre, servicioNombre, cotizacion.id]
+    [
+      nombreDestinoPlantilla, // {{1}}
+      servicioNombre,         // {{2}}
+      ubicacionPlantilla,     // {{3}}
+      cotizacion.id,          // {{4}}
+      inversionTexto,         // {{5}}
+      urlPortal               // {{6}}
+    ]
   );
 
   if (resMeta.ok) {
@@ -2488,7 +2511,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
         .eq("id", datos.cotizacionId);
     }
 
-    const textoPlantilla = `¡Hola ${primerNombre}! Te compartimos la propuesta comercial y cotización para el servicio de ${servicioNombre} (Folio ${cotizacion.id}). Portal: ${urlPortal}`;
+    const textoPlantilla = `¡Hola ${nombreDestinoPlantilla}! 👋 Te compartimos la propuesta comercial y cotización para el servicio de *${servicioNombre}* en ${ubicacionPlantilla}\n\n📄 *Folio:* ${cotizacion.id}\n💰 *Inversión:* ${inversionTexto}\n\nEn el siguiente enlace puedes revisar a detalle el desglose de conceptos, garantías y autorizarla en línea por sistema:\n👉 ${urlPortal}\n\nQuedamos a tus órdenes para cualquier duda o ajuste. ¡Excelente día! 💚`;
     await sb.from("mensajes_whatsapp").insert({
       telefono: telNormalizado,
       texto: textoPlantilla,

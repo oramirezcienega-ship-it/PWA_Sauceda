@@ -18,6 +18,8 @@ export async function generateMetadata({ params }: PaginaPropuestaProps): Promis
     if (datos?.cotizacion) {
       const { cotizacion } = datos;
       const servicio = cotizacion.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
+                       cotizacion.servicioTipo === "herreria" ? "Herrería" :
+                       cotizacion.servicioTipo === "piso_estampado" ? "Piso Estampado" :
                        cotizacion.servicioTipo === "pintura" ? "Pintura" :
                        cotizacion.servicioTipo === "losa" ? "Construcción de Losa" :
                        cotizacion.servicioTipo === "remodelacion" ? "Remodelación" : "Servicio";

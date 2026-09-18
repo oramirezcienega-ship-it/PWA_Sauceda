@@ -42,6 +42,7 @@ export type TipoNegocioId =
   | "construccion-remodelacion"
   | "construccion-piso-estampado"
   | "construccion-mantenimiento-postventa"
+  | "construccion-herreria"
   | "otro";
 
 export function labelTipoNegocio(tipo: string): string {
@@ -62,6 +63,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Piso Estampado)";
     case "construccion-mantenimiento-postventa":
       return "Sauceda Construye (Mantenimiento Postventa)";
+    case "construccion-herreria":
+      return "Sauceda Construye (Herrería)";
     case "otro":
       return "Otro";
     default:
@@ -75,8 +78,29 @@ export function labelTipoNegocio(tipo: string): string {
  */
 export function detectarTipoNegocio(mensaje: string, campaignName?: string): TipoNegocioId {
   const texto = `${mensaje} ${campaignName ?? ""}`.toLowerCase();
+  const campLower = (campaignName ?? "").toLowerCase();
 
-  // 1. Piso Estampado / Concreto Estampado (Alta prioridad por Adset/Campaña/Mensaje)
+  // 1. Herrería (Campaña de Facebook/Meta o palabras clave de Herrería)
+  if (
+    campLower.includes("herreria") ||
+    campLower.includes("herrería") ||
+    texto.includes("herreria") ||
+    texto.includes("herrería") ||
+    texto.includes("porton") ||
+    texto.includes("portón") ||
+    texto.includes("protecciones") ||
+    texto.includes("barandal") ||
+    texto.includes("reja") ||
+    texto.includes("techumbre") ||
+    texto.includes("estructura metalica") ||
+    texto.includes("estructura metálica") ||
+    texto.includes("saguan") ||
+    texto.includes("zaguán")
+  ) {
+    return "construccion-herreria";
+  }
+
+  // 2. Piso Estampado / Concreto Estampado (Alta prioridad por Adset/Campaña/Mensaje)
   if (
     texto.includes("concreto estampado") ||
     texto.includes("piso estampado") ||
@@ -85,8 +109,7 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     return "construccion-piso-estampado";
   }
 
-  // 2. Mantenimiento Postventa (Campaña de Facebook/Meta o palabras clave de Mantenimiento de tu Hogar / Postventa)
-  const campLower = (campaignName ?? "").toLowerCase();
+  // 3. Mantenimiento Postventa (Campaña de Facebook/Meta o palabras clave de Mantenimiento de tu Hogar / Postventa)
   if (
     campLower.includes("mantenimiento") ||
     campLower.includes("postventa") ||
@@ -693,7 +716,7 @@ export interface EjecucionAutomatizacion {
 // MÓDULO CONSTRUCCIÓN (Sauceda Construye)
 // ------------------------------------------------------------
 
-export type ServicioConstruccionTipo = 'pintura' | 'impermeabilizacion' | 'losa' | 'remodelacion' | 'otro';
+export type ServicioConstruccionTipo = 'pintura' | 'impermeabilizacion' | 'losa' | 'remodelacion' | 'herreria' | 'piso_estampado' | 'otro';
 
 export type CotizacionEstatus =
   | 'borrador'

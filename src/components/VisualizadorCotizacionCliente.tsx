@@ -142,6 +142,8 @@ export function VisualizadorCotizacionCliente({
       case "impermeabilizacion": return "Impermeabilización";
       case "losa": return "Construcción de Losa (Techo)";
       case "remodelacion": return "Remodelación";
+      case "herreria": return "Herrería";
+      case "piso_estampado": return "Piso Estampado";
       case "otro": return "Servicios de Construcción";
     }
   };

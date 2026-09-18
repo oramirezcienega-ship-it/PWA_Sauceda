@@ -24,6 +24,8 @@ function getServicioLabel(tipo: string): string {
     case "impermeabilizacion": return "Impermeabilización";
     case "losa": return "Construcción de Losa (Techo)";
     case "remodelacion": return "Remodelación";
+    case "herreria": return "Herrería";
+    case "piso_estampado": return "Piso Estampado";
     default: return "Servicios de Construcción";
   }
 }
