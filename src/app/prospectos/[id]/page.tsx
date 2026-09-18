@@ -308,6 +308,8 @@ export default async function PaginaProspecto({
                       </Link>
                       <span className="text-xs font-semibold text-carbon/60">
                         {c.servicioTipo === "impermeabilizacion" ? "Impermeabilización" :
+                         c.servicioTipo === "herreria" ? "Herrería" :
+                         c.servicioTipo === "piso_estampado" ? "Piso Estampado" :
                          c.servicioTipo === "pintura" ? "Pintura" :
                          c.servicioTipo === "losa" ? "Construcción de Losa" :
                          c.servicioTipo === "remodelacion" ? "Remodelación" : "Otro Servicio"}

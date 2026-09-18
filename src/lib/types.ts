@@ -716,7 +716,7 @@ export interface EjecucionAutomatizacion {
 // MÓDULO CONSTRUCCIÓN (Sauceda Construye)
 // ------------------------------------------------------------
 
-export type ServicioConstruccionTipo = 'pintura' | 'impermeabilizacion' | 'losa' | 'remodelacion' | 'otro';
+export type ServicioConstruccionTipo = 'pintura' | 'impermeabilizacion' | 'losa' | 'remodelacion' | 'herreria' | 'piso_estampado' | 'otro';
 
 export type CotizacionEstatus =
   | 'borrador'

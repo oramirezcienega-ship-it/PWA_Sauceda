@@ -1692,6 +1692,8 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
             <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
             <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
             <option value="construccion-piso-estampado">Sauceda Construye (Piso Estampado)</option>
+            <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
+            <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
             <option value="otro">Otro</option>
           </select>
 

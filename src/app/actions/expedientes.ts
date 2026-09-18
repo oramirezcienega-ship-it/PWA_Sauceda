@@ -1448,6 +1448,13 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "construccion-piso-estampado": "Piso Estampado",
     "construccion_piso_estampado": "Piso Estampado",
     "piso_estampado": "Piso Estampado",
+    "construccion-mantenimiento-postventa": "Mantenimiento Postventa",
+    "construccion_mantenimiento_postventa": "Mantenimiento Postventa",
+    "mantenimiento_postventa": "Mantenimiento Postventa",
+    "mantenimiento": "Mantenimiento Postventa",
+    "construccion-herreria": "Herrería",
+    "construccion_herreria": "Herrería",
+    "herreria": "Herrería",
   };
 
   const etapaLabels: Record<string, string> = {

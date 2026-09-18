@@ -75,6 +75,8 @@ export default async function PaginaReporteVisita({ params }: PaginaReporteProps
       case "impermeabilizacion": return "Impermeabilización";
       case "losa": return "Construcción de Losa (Techo)";
       case "remodelacion": return "Remodelación";
+      case "herreria": return "Herrería";
+      case "piso_estampado": return "Piso Estampado";
       default: return "Servicios de Construcción";
     }
   };

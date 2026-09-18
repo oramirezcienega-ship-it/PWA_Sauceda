@@ -52,6 +52,8 @@ export function ModalPrevisualizarCotizacion({
     pintura: "Pintura & Acabados",
     losa: "Construcción de Losa",
     remodelacion: "Remodelación Integral",
+    herreria: "Herrería Residencial e Industrial",
+    piso_estampado: "Piso Estampado",
   };
   const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
 

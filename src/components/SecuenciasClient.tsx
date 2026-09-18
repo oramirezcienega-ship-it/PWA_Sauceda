@@ -79,7 +79,7 @@ export function SecuenciasClient() {
 
   // Estado para el Monitoreo en Tiempo Real (Analytics)
   const [filtroEstadoMonitoreo, setFiltroEstadoMonitoreo] = useState<"todos" | "activo" | "respondio" | "otros">("todos");
-  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "construccion-piso-estampado" | "otro">("todos");
+  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "construccion-piso-estampado" | "construccion-mantenimiento-postventa" | "construccion-herreria" | "otro">("todos");
   const [busquedaLeadMonitoreo, setBusquedaLeadMonitoreo] = useState("");
 
   const enrollmentsFiltrados = useMemo(() => {
@@ -755,6 +755,8 @@ export function SecuenciasClient() {
                     <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
                     <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
                     <option value="construccion-piso-estampado">Sauceda Construye (Piso Estampado)</option>
+                    <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
+                    <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
@@ -1159,6 +1161,8 @@ export function SecuenciasClient() {
                       <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
                       <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>
                       <option value="construccion-piso-estampado">Sauceda Construye (Piso Estampado)</option>
+                      <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
+                      <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
                       <option value="otro">Otro</option>
                     </select>
                     
@@ -1243,6 +1247,11 @@ export function SecuenciasClient() {
                                           : "bg-slate-50 text-slate-700 border border-slate-200"
                                       }`}>
                                         {en.expediente.tipo_negocio === "construccion-impermeabilizacion" ? "Impermeabilización" :
+                                         en.expediente.tipo_negocio === "construccion-herreria" ? "Herrería" :
+                                         en.expediente.tipo_negocio === "construccion-piso-estampado" ? "Piso Estampado" :
+                                         en.expediente.tipo_negocio === "construccion-mantenimiento-postventa" ? "Mantenimiento" :
+                                         en.expediente.tipo_negocio === "construccion-remodelacion" ? "Remodelación" :
+                                         en.expediente.tipo_negocio === "construccion" ? "Construcción" :
                                          en.expediente.tipo_negocio === "traspaso_compra" ? "Compra Directa" :
                                          en.expediente.tipo_negocio === "promocion_venta" ? "Promoción" :
                                          en.expediente.tipo_negocio === "solo_tramite" ? "Trámite" : en.expediente.tipo_negocio}

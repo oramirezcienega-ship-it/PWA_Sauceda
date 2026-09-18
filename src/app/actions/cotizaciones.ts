@@ -2122,6 +2122,8 @@ export async function enviarCotizacionPorCorreo(datos: {
     pintura: "Pintura & Acabados",
     losa: "Construcción de Losa",
     remodelacion: "Remodelación Integral",
+    herreria: "Herrería Residencial e Industrial",
+    piso_estampado: "Piso Estampado",
   };
   const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
 
@@ -2331,6 +2333,8 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     pintura: "Pintura & Acabados",
     losa: "Construcción de Losa",
     remodelacion: "Remodelación Integral",
+    herreria: "Herrería Residencial e Industrial",
+    piso_estampado: "Piso Estampado",
   };
   const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
 

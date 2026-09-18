@@ -164,6 +164,8 @@ export function TableroCotizaciones({
       case "impermeabilizacion": return "Impermeabilización";
       case "losa": return "Construcción de Losa";
       case "remodelacion": return "Remodelación";
+      case "herreria": return "Herrería";
+      case "piso_estampado": return "Piso Estampado";
       case "otro": return "Otro Servicio";
     }
   };
@@ -201,6 +203,8 @@ export function TableroCotizaciones({
             <option value="impermeabilizacion">Impermeabilización</option>
             <option value="losa">Construcción de Losa</option>
             <option value="remodelacion">Remodelación</option>
+            <option value="herreria">Herrería</option>
+            <option value="piso_estampado">Piso Estampado</option>
             <option value="otro">Otro</option>
           </select>
 
@@ -387,6 +391,8 @@ export function TableroCotizaciones({
                   <option value="impermeabilizacion">Impermeabilización</option>
                   <option value="losa">Construcción de Losa (Techo)</option>
                   <option value="remodelacion">Remodelación</option>
+                  <option value="herreria">Herrería</option>
+                  <option value="piso_estampado">Piso Estampado</option>
                   <option value="otro">Otro Servicio</option>
                 </select>
               </div>
