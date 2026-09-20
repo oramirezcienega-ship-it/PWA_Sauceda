@@ -10,6 +10,7 @@ export interface DatosPrevisualizacionInspeccion {
   horaInicio: string;
   horaFin: string;
   perfilId: string;
+  asignadosIds?: string[];
   asesorNombre: string;
   asesorTelefono?: string | null;
   telefonoContacto: string;

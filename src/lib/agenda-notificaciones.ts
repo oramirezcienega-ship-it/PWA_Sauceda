@@ -214,13 +214,19 @@ export async function procesarAlertasYResumenesAgenda(
       let enviados = 0;
       let errores = 0;
 
-      // Agrupar citas por asesor
+      // Agrupar citas por asesor (considerando asignación múltiple)
       const citasPorAsesor = new Map<string, typeof citasHoy>();
       for (const c of citasHoy || []) {
-        if (!citasPorAsesor.has(c.perfil_id)) {
-          citasPorAsesor.set(c.perfil_id, []);
+        const asignados: string[] = (c.asignados_ids && c.asignados_ids.length > 0)
+          ? c.asignados_ids
+          : (c.perfil_id ? [c.perfil_id] : []);
+
+        for (const pId of asignados) {
+          if (!citasPorAsesor.has(pId)) {
+            citasPorAsesor.set(pId, []);
+          }
+          citasPorAsesor.get(pId)!.push(c);
         }
-        citasPorAsesor.get(c.perfil_id)!.push(c);
       }
 
       // Enviar a cada asesor sus citas de hoy
@@ -260,12 +266,17 @@ export async function procesarAlertasYResumenesAgenda(
 
         const primerNombre = admin.nombre?.split(" ")[0] || "Administrador";
         const cuerpoConsolidado = (citasHoy || [])
-          .map((c) => {
-            const asesor = perfilesMap.get(c.perfil_id);
-            const asesorNombre = asesor?.nombre?.split(" ")[0] || "Sin asignar";
+          .map((c: any) => {
+            const asignados: string[] = (c.asignados_ids && c.asignados_ids.length > 0)
+              ? c.asignados_ids
+              : (c.perfil_id ? [c.perfil_id] : []);
+            const nombres = asignados
+              .map((pId) => perfilesMap.get(pId)?.nombre?.split(" ")[0])
+              .filter(Boolean);
+            const equipoTexto = nombres.length > 0 ? nombres.join(", ") : "Sin asignar";
             const hora = c.hora_inicio?.slice(0, 5) || "Pendiente";
             const tipo = formatearTipoCita(c.tipo_cita);
-            return `• *${hora}* | ${tipo} | ${c.cliente_nombre} ➡️ Atiende: *${asesorNombre}*`;
+            return `• *${hora}* | ${tipo} | ${c.cliente_nombre} ➡️ Atienden: *${equipoTexto}*`;
           })
           .join("\n");
 
@@ -331,13 +342,19 @@ export async function procesarAlertasYResumenesAgenda(
       let enviados = 0;
       let errores = 0;
 
-      // Agrupar por asesor
+      // Agrupar por asesor (considerando asignación múltiple)
       const citasPorAsesorManana = new Map<string, typeof citasManana>();
       for (const c of citasManana || []) {
-        if (!citasPorAsesorManana.has(c.perfil_id)) {
-          citasPorAsesorManana.set(c.perfil_id, []);
+        const asignados: string[] = (c.asignados_ids && c.asignados_ids.length > 0)
+          ? c.asignados_ids
+          : (c.perfil_id ? [c.perfil_id] : []);
+
+        for (const pId of asignados) {
+          if (!citasPorAsesorManana.has(pId)) {
+            citasPorAsesorManana.set(pId, []);
+          }
+          citasPorAsesorManana.get(pId)!.push(c);
         }
-        citasPorAsesorManana.get(c.perfil_id)!.push(c);
       }
 
       // Enviar a cada asesor su resumen de mañana
@@ -377,12 +394,17 @@ export async function procesarAlertasYResumenesAgenda(
 
         const primerNombre = admin.nombre?.split(" ")[0] || "Administrador";
         const cuerpoConsolidado = (citasManana || [])
-          .map((c) => {
-            const asesor = perfilesMap.get(c.perfil_id);
-            const asesorNombre = asesor?.nombre?.split(" ")[0] || "Sin asignar";
+          .map((c: any) => {
+            const asignados: string[] = (c.asignados_ids && c.asignados_ids.length > 0)
+              ? c.asignados_ids
+              : (c.perfil_id ? [c.perfil_id] : []);
+            const nombres = asignados
+              .map((pId) => perfilesMap.get(pId)?.nombre?.split(" ")[0])
+              .filter(Boolean);
+            const equipoTexto = nombres.length > 0 ? nombres.join(", ") : "Sin asignar";
             const hora = c.hora_inicio?.slice(0, 5) || "Pendiente";
             const tipo = formatearTipoCita(c.tipo_cita);
-            return `• *${hora}* | ${tipo} | ${c.cliente_nombre} ➡️ Atiende: *${asesorNombre}*`;
+            return `• *${hora}* | ${tipo} | ${c.cliente_nombre} ➡️ Atienden: *${equipoTexto}*`;
           })
           .join("\n");
 
@@ -435,11 +457,16 @@ export async function procesarAlertasYResumenesAgenda(
       const horaCitaMin = horaAMinutos(cita.hora_inicio);
       const minutosFaltantes = horaCitaMin - tiempo.minutosDesdeMedianoche;
 
-      const asesor = perfilesMap.get(cita.perfil_id);
-      if (!asesor || !asesor.telefono?.trim()) continue;
-      if (asesor.notificar_whatsapp_alertas_previas === false) continue;
+      const asignadosIds: string[] = (cita.asignados_ids && cita.asignados_ids.length > 0)
+        ? cita.asignados_ids
+        : (cita.perfil_id ? [cita.perfil_id] : []);
 
-      const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+      const asesoresAsignados = asignadosIds
+        .map((pId) => perfilesMap.get(pId))
+        .filter((a): a is NonNullable<typeof a> => Boolean(a && a.telefono?.trim() && a.notificar_whatsapp_alertas_previas !== false));
+
+      if (asesoresAsignados.length === 0) continue;
+
       const tipoServicio = formatearTipoCita(cita.tipo_cita);
       const horaStr = cita.hora_inicio?.slice(0, 5) || "00:00";
       const ubicacion = [cita.fraccionamiento, cita.direccion].filter(Boolean).join(", ") || "Dirección en expediente";
@@ -452,29 +479,38 @@ export async function procesarAlertasYResumenesAgenda(
         !cita.alerta_2h_enviada_at;
 
       if (debeEnviar2h) {
-        const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *2 horas*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
+        let exitoAlguno = false;
+        for (const asesor of asesoresAsignados) {
+          const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+          const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *2 horas*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
 
-        const res = await enviarNotificacionConRespaldo(
-          sb,
-          asesor.telefono,
-          PLANTILLA_ALERTA,
-          [
-            primerNombre,
-            "2 horas",
-            tipoServicio,
-            cita.cliente_nombre,
-            cita.cliente_telefono,
-            horaStr,
-            ubicacion,
-            notas,
-          ],
-          textoAlerta,
-          cita.id
-        );
+          const res = await enviarNotificacionConRespaldo(
+            sb,
+            asesor.telefono,
+            PLANTILLA_ALERTA,
+            [
+              primerNombre,
+              "2 horas",
+              tipoServicio,
+              cita.cliente_nombre,
+              cita.cliente_telefono,
+              horaStr,
+              ubicacion,
+              notas,
+            ],
+            textoAlerta,
+            cita.id
+          );
 
-        if (res.ok) {
-          alertas2h++;
-          // Marcar alerta_2h_enviada_at para evitar duplicados
+          if (res.ok) {
+            alertas2h++;
+            exitoAlguno = true;
+          } else {
+            erroresAlertas++;
+          }
+        }
+
+        if (exitoAlguno) {
           try {
             await sb
               .from("agenda_citas")
@@ -483,8 +519,6 @@ export async function procesarAlertasYResumenesAgenda(
           } catch (e) {
             console.warn("[Notificaciones Agenda] Error al actualizar alerta_2h_enviada_at:", e);
           }
-        } else {
-          erroresAlertas++;
         }
       }
 
@@ -495,29 +529,38 @@ export async function procesarAlertasYResumenesAgenda(
         !cita.alerta_1h_enviada_at;
 
       if (debeEnviar1h) {
-        const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *1 hora*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
+        let exitoAlguno = false;
+        for (const asesor of asesoresAsignados) {
+          const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+          const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *1 hora*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
 
-        const res = await enviarNotificacionConRespaldo(
-          sb,
-          asesor.telefono,
-          PLANTILLA_ALERTA,
-          [
-            primerNombre,
-            "1 hora",
-            tipoServicio,
-            cita.cliente_nombre,
-            cita.cliente_telefono,
-            horaStr,
-            ubicacion,
-            notas,
-          ],
-          textoAlerta,
-          cita.id
-        );
+          const res = await enviarNotificacionConRespaldo(
+            sb,
+            asesor.telefono,
+            PLANTILLA_ALERTA,
+            [
+              primerNombre,
+              "1 hora",
+              tipoServicio,
+              cita.cliente_nombre,
+              cita.cliente_telefono,
+              horaStr,
+              ubicacion,
+              notas,
+            ],
+            textoAlerta,
+            cita.id
+          );
 
-        if (res.ok) {
-          alertas1h++;
-          // Marcar alerta_1h_enviada_at para evitar duplicados
+          if (res.ok) {
+            alertas1h++;
+            exitoAlguno = true;
+          } else {
+            erroresAlertas++;
+          }
+        }
+
+        if (exitoAlguno) {
           try {
             await sb
               .from("agenda_citas")
@@ -526,8 +569,6 @@ export async function procesarAlertasYResumenesAgenda(
           } catch (e) {
             console.warn("[Notificaciones Agenda] Error al actualizar alerta_1h_enviada_at:", e);
           }
-        } else {
-          erroresAlertas++;
         }
       }
     }
