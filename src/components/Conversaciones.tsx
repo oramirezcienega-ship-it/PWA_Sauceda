@@ -174,8 +174,12 @@ function resolverParametros(
   return t;
 }
 
-/** Renderiza el texto del mensaje, soportando reproductores de audio para audios de WhatsApp */
-function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp[] = []) {
+/** Renderiza el texto del mensaje, soportando reproductores de audio para audios de WhatsApp y visor modal de imágenes */
+function renderizarContenidoMensaje(
+  texto: string,
+  plantillas: PlantillaWhatsApp[] = [],
+  onVerImagen?: (url: string, caption?: string) => void
+) {
   if (texto) {
     if (texto.startsWith("[audio:")) {
       const match = texto.match(/^\[audio:([^\]]+)\]\s*(.*)$/);
@@ -208,23 +212,35 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
       if (match) {
         const mediaId = match[1];
         const caption = match[2];
+        const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
         return (
           <div className="space-y-1 max-w-[280px]">
             <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
-              <a
-                href={`/api/conversaciones/media?mediaId=${mediaId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="block hover:opacity-90 transition-opacity"
+              <button
+                type="button"
+                onClick={() => {
+                  if (onVerImagen) {
+                    onVerImagen(mediaUrl, caption);
+                  } else {
+                    window.open(mediaUrl, "_blank");
+                  }
+                }}
+                className="block w-full text-left hover:opacity-95 active:scale-[0.99] transition cursor-pointer relative group focus:outline-none"
+                title="Toca para ampliar foto"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                  src={mediaUrl}
                   alt={caption || "Imagen de WhatsApp"}
                   className="max-h-[220px] w-full object-contain mx-auto"
                   loading="lazy"
                 />
-              </a>
+                <div className="absolute inset-0 bg-carbon/0 group-hover:bg-carbon/15 transition-colors flex items-center justify-center pointer-events-none">
+                  <span className="opacity-0 group-hover:opacity-100 bg-carbon/80 text-white text-[11px] px-2.5 py-1 rounded-full font-medium transition-opacity shadow-md flex items-center gap-1">
+                    🔍 Ampliar
+                  </span>
+                </div>
+              </button>
             </div>
             {caption && <p className="text-xs text-carbon/80 font-normal mt-1 leading-normal">{caption}</p>}
           </div>
@@ -236,17 +252,22 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
       const match = texto.match(/^\[sticker:([^\]]+)\]/);
       if (match) {
         const mediaId = match[1];
+        const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
         return (
           <div className="relative inline-block my-1">
-            <a
-              href={`/api/conversaciones/media?mediaId=${mediaId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="block group transition-transform duration-200 hover:scale-105"
+            <button
+              type="button"
+              onClick={() => {
+                if (onVerImagen) {
+                  onVerImagen(mediaUrl, "Sticker");
+                }
+              }}
+              className="block group transition-transform duration-200 hover:scale-105 cursor-pointer focus:outline-none"
+              title="Sticker (toca para ampliar)"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                src={mediaUrl}
                 alt="Sticker"
                 className="h-28 w-28 object-contain drop-shadow-sm"
                 loading="lazy"
@@ -261,7 +282,7 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
                   }
                 }}
               />
-            </a>
+            </button>
           </div>
         );
       }
@@ -473,7 +494,7 @@ function renderizarContenidoMensaje(texto: string, plantillas: PlantillaWhatsApp
         return (
           <div className="min-w-[220px] max-w-[280px]">
             <a
-              href={`/api/conversaciones/media?mediaId=${mediaId}`}
+              href={`/api/conversaciones/media?mediaId=${mediaId}&download=1&filename=${encodeURIComponent(filename)}`}
               download={filename}
               target="_blank"
               rel="noreferrer"
@@ -568,6 +589,21 @@ export function Conversaciones() {
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
+  const [fotoAmpliada, setFotoAmpliada] = useState<{
+    url: string;
+    caption?: string;
+    rotacion?: number;
+  } | null>(null);
+
+  // Cerrar visor de imagen ampliada con tecla Escape
+  useEffect(() => {
+    if (!fotoAmpliada) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFotoAmpliada(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [fotoAmpliada]);
 
   // Cargar documentos del prospecto seleccionado
   useEffect(() => {
@@ -1804,7 +1840,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           : "bg-white border border-carbon/5 text-carbon"
                       }`}
                     >
-                      {renderizarContenidoMensaje(m.texto, plantillas)}
+                      {renderizarContenidoMensaje(m.texto, plantillas, (url, caption) =>
+                        setFotoAmpliada({ url, caption, rotacion: 0 })
+                      )}
                       <span
                         className={`mt-1 block text-right text-[10px] ${
                           m.texto.startsWith("[sticker:")
@@ -2394,6 +2432,111 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 ⚙️ Gestionar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Lightbox de Foto Ampliada / Visor de Imagen Móvil y Escritorio */}
+      {fotoAmpliada && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visor de imagen"
+          onClick={() => setFotoAmpliada(null)}
+          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-200"
+          style={{
+            paddingTop: "max(env(safe-area-inset-top), 16px)",
+            paddingBottom: "max(env(safe-area-inset-bottom), 16px)",
+          }}
+        >
+          {/* Barra superior con controles táctiles grandes y botón de Volver */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full px-4 py-2 flex items-center justify-between gap-2 z-20 shrink-0"
+          >
+            {/* Botón principal: Volver al chat */}
+            <button
+              type="button"
+              onClick={() => setFotoAmpliada(null)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white font-semibold text-sm backdrop-blur-md transition active:scale-95 shadow-lg cursor-pointer"
+              title="Volver al chat"
+            >
+              <span className="text-base font-bold leading-none">←</span>
+              <span>Volver a la conversación</span>
+            </button>
+
+            {/* Herramientas derechas: Rotar, Descargar, Cerrar */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setFotoAmpliada((prev) =>
+                    prev ? { ...prev, rotacion: ((prev.rotacion || 0) + 90) % 360 } : null
+                  )
+                }
+                className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center backdrop-blur-md transition active:scale-95 cursor-pointer text-sm"
+                title="Rotar 90°"
+                aria-label="Rotar 90 grados"
+              >
+                🔄
+              </button>
+
+              <a
+                href={`${fotoAmpliada.url}&download=1`}
+                download
+                className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center backdrop-blur-md transition active:scale-95 text-sm"
+                title="Descargar imagen"
+                aria-label="Descargar imagen"
+              >
+                ⬇️
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setFotoAmpliada(null)}
+                className="w-10 h-10 rounded-full bg-white/20 hover:bg-red-600 text-white font-bold text-lg flex items-center justify-center backdrop-blur-md transition active:scale-95 shadow-lg cursor-pointer"
+                title="Cerrar foto (Esc)"
+                aria-label="Cerrar imagen"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Área central con la imagen maximizada */}
+          <div
+            onClick={() => setFotoAmpliada(null)}
+            className="flex-1 w-full flex items-center justify-center p-3 min-h-0 overflow-auto cursor-zoom-out"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-full max-h-full flex items-center justify-center cursor-default"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={fotoAmpliada.url}
+                alt={fotoAmpliada.caption || "Imagen de WhatsApp ampliada"}
+                className="max-h-[74vh] max-w-[94vw] object-contain rounded-xl shadow-2xl transition-transform duration-200"
+                style={{
+                  transform: `rotate(${fotoAmpliada.rotacion || 0}deg)`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Pie del visor: Caption y consejo de navegación */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full px-4 py-2 flex flex-col items-center gap-1 z-20 shrink-0"
+          >
+            {fotoAmpliada.caption && (
+              <div className="max-w-xl px-4 py-2 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md text-white/90 text-sm font-medium text-center shadow-lg">
+                {fotoAmpliada.caption}
+              </div>
+            )}
+            <p className="text-[11px] text-white/50 text-center tracking-wide">
+              Toca fuera de la foto o pulsa &ldquo;Volver a la conversación&rdquo; para regresar
+            </p>
           </div>
         </div>
       )}
