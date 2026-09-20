@@ -174,6 +174,67 @@ function resolverParametros(
   return t;
 }
 
+/** Renderiza un bloque de plantilla de WhatsApp con sus variables, cuerpo resuelto y etiqueta de campaña */
+function renderizarPlantillaBlock(
+  nombrePlantilla: string,
+  paramsRaw: string,
+  plantillas: PlantillaWhatsApp[] = []
+) {
+  let campana = "";
+  let cleanParams = paramsRaw;
+  const campMatch = cleanParams.match(/\[(?:Campaña|campaña|Campana|campana):\s*([^\]]+)\]/);
+  if (campMatch) {
+    campana = campMatch[1].trim();
+    cleanParams = cleanParams.replace(campMatch[0], "").trim();
+  }
+  const params = cleanParams ? cleanParams.split(/\s*\|\s*/).map(s => s.trim()).filter(Boolean) : [];
+
+  const plantillaObj = plantillas.find(
+    (p) => p.nombre.toLowerCase() === nombrePlantilla.toLowerCase()
+  );
+
+  let textoRenderizado = "";
+  if (plantillaObj && plantillaObj.cuerpo) {
+    textoRenderizado = plantillaObj.cuerpo;
+    params.forEach((val, i) => {
+      textoRenderizado = textoRenderizado.replace(
+        new RegExp(`\\{\\{\\s*${i + 1}\\s*\\}\\}`, "g"),
+        val
+      );
+    });
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider select-none">
+        <span className="text-verde-profundo/70 bg-verde-profundo/5 px-1.5 py-0.5 rounded border border-verde-profundo/10">
+          📝 Plantilla: {plantillaObj ? plantillaObj.nombre : nombrePlantilla}
+        </span>
+        {campana && (
+          <span className="text-sauce bg-sauce/10 px-1.5 py-0.5 rounded border border-sauce/20 font-semibold">
+            📢 {campana}
+          </span>
+        )}
+      </div>
+      {textoRenderizado ? (
+        <span className="whitespace-pre-line leading-relaxed text-xs text-carbon/90 font-normal block">
+          {textoRenderizado}
+        </span>
+      ) : params.length > 0 ? (
+        <div className="space-y-0.5 text-xs">
+          {params.map((val, i) => (
+            <p key={i} className="text-carbon/80 leading-normal">
+              <span className="font-mono font-bold text-[9px] text-carbon/40">{"{{"}{i + 1}{"}}"}</span> {val}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <span className="text-xs text-carbon/40 italic">(sin variables)</span>
+      )}
+    </div>
+  );
+}
+
 /** Renderiza el texto del mensaje, soportando reproductores de audio para audios de WhatsApp y visor modal de imágenes */
 function renderizarContenidoMensaje(
   texto: string,
@@ -208,13 +269,22 @@ function renderizarContenidoMensaje(
     }
 
     if (texto.startsWith("[image:")) {
-      const match = texto.match(/^\[image:([^\]]+)\]\s*(.*)$/);
+      const match = texto.match(/^\[image:([^\]]+)\]\s*([\s\S]*)$/);
       if (match) {
         const mediaId = match[1];
-        const caption = match[2];
-        const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
+        const caption = match[2]?.trim();
+        const mediaUrl = mediaId.startsWith("http") ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
+        
+        let plantillaAnidada: React.ReactNode = null;
+        if (caption && (caption.startsWith("[plantilla:") || caption.startsWith("[Plantilla:"))) {
+          const pMatch = caption.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*([\s\S]*)$/);
+          if (pMatch) {
+            plantillaAnidada = renderizarPlantillaBlock(pMatch[1].trim(), pMatch[2] || "", plantillas);
+          }
+        }
+
         return (
-          <div className="space-y-1 max-w-[280px]">
+          <div className="space-y-2 max-w-[280px]">
             <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
               <button
                 type="button"
@@ -242,11 +312,16 @@ function renderizarContenidoMensaje(
                 </div>
               </button>
             </div>
-            {caption && <p className="text-xs text-carbon/80 font-normal mt-1 leading-normal">{caption}</p>}
+            {plantillaAnidada ? (
+              plantillaAnidada
+            ) : caption ? (
+              <p className="text-xs text-carbon/80 font-normal mt-1 leading-normal whitespace-pre-line">{caption}</p>
+            ) : null}
           </div>
         );
       }
     }
+
 
     if (texto.startsWith("[sticker:")) {
       const match = texto.match(/^\[sticker:([^\]]+)\]/);
@@ -511,57 +586,14 @@ function renderizarContenidoMensaje(
       }
     }
 
-    // Renderizar plantilla de WhatsApp con variables
+    // Renderizar plantilla de WhatsApp con variables y campaña
     if (texto.startsWith("[plantilla:") || texto.startsWith("[Plantilla:")) {
-      const match = texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*(.*)$/);
+      const match = texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*([\s\S]*)$/);
       if (match) {
-        const nombrePlantilla = match[1].trim();
-        const paramsString = match[2] ? match[2].trim() : "";
-        const params = paramsString ? paramsString.split(/\s*\|\s*/) : [];
-        
-        const plantillaObj = plantillas.find(
-          (p) => p.nombre.toLowerCase() === nombrePlantilla.toLowerCase()
-        );
-        
-        if (plantillaObj && plantillaObj.cuerpo) {
-          let textoRenderizado = plantillaObj.cuerpo;
-          params.forEach((val, i) => {
-            textoRenderizado = textoRenderizado.replace(
-              new RegExp(`\\{\\{\\s*${i + 1}\\s*\\}\\}`, "g"),
-              val
-            );
-          });
-          
-          return (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-verde-profundo/60 select-none">
-                <span>📝 Plantilla: {plantillaObj.nombre}</span>
-              </div>
-              <span className="whitespace-pre-line leading-relaxed">{textoRenderizado}</span>
-            </div>
-          );
-        } else {
-          return (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-carbon/40 select-none">
-                <span>📝 Plantilla: {nombrePlantilla}</span>
-              </div>
-              {params.length > 0 ? (
-                <div className="space-y-0.5 text-xs">
-                  {params.map((val, i) => (
-                    <p key={i} className="text-carbon/80 leading-normal">
-                      <span className="font-mono font-bold text-[9px] text-carbon/40">{"{{"}{i + 1}{"}}"}</span> {val}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-xs text-carbon/40 italic">(sin variables)</span>
-              )}
-            </div>
-          );
-        }
+        return renderizarPlantillaBlock(match[1].trim(), match[2] || "", plantillas);
       }
     }
+
   }
   return <span>{texto}</span>;
 }
