@@ -30,6 +30,9 @@ export interface UsuarioApp {
   horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
   notificar_whatsapp_nuevo_lead?: boolean;
   asignacion_automatica?: boolean;
+  notificar_whatsapp_resumen_matutino?: boolean;
+  notificar_whatsapp_resumen_nocturno?: boolean;
+  notificar_whatsapp_alertas_previas?: boolean;
 }
 
 /** Rol del usuario actual (para la UI). No lanza error. */
@@ -123,6 +126,9 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
       },
       notificar_whatsapp_nuevo_lead: p?.notificar_whatsapp_nuevo_lead ?? (p?.rol === "admin" || (p?.nombre ?? "").toLowerCase().includes("oscar")),
       asignacion_automatica: p?.asignacion_automatica ?? esGerardoFallback,
+      notificar_whatsapp_resumen_matutino: (p as any)?.notificar_whatsapp_resumen_matutino ?? true,
+      notificar_whatsapp_resumen_nocturno: (p as any)?.notificar_whatsapp_resumen_nocturno ?? true,
+      notificar_whatsapp_alertas_previas: (p as any)?.notificar_whatsapp_alertas_previas ?? true,
     };
   });
 
@@ -232,6 +238,9 @@ export async function actualizarUsuario(
     horarios_guardia?: Record<string, { inicio: string; fin: string }[]>;
     notificar_whatsapp_nuevo_lead?: boolean;
     asignacion_automatica?: boolean;
+    notificar_whatsapp_resumen_matutino?: boolean;
+    notificar_whatsapp_resumen_nocturno?: boolean;
+    notificar_whatsapp_alertas_previas?: boolean;
   },
 ): Promise<{ ok: boolean; mensaje?: string }> {
   try {
@@ -268,6 +277,9 @@ export async function actualizarUsuario(
       "horario_inicio", "horario_fin", "horarios_guardia",
       "notificar_whatsapp_nuevo_lead",
       "asignacion_automatica",
+      "notificar_whatsapp_resumen_matutino",
+      "notificar_whatsapp_resumen_nocturno",
+      "notificar_whatsapp_alertas_previas",
     ]);
 
     const updateData: Record<string, any> = {};
@@ -291,6 +303,18 @@ export async function actualizarUsuario(
       }
       if (error.message.includes("asignacion_automatica")) {
         delete updateData.asignacion_automatica;
+        reintentar = true;
+      }
+      if (error.message.includes("notificar_whatsapp_resumen_matutino")) {
+        delete updateData.notificar_whatsapp_resumen_matutino;
+        reintentar = true;
+      }
+      if (error.message.includes("notificar_whatsapp_resumen_nocturno")) {
+        delete updateData.notificar_whatsapp_resumen_nocturno;
+        reintentar = true;
+      }
+      if (error.message.includes("notificar_whatsapp_alertas_previas")) {
+        delete updateData.notificar_whatsapp_alertas_previas;
         reintentar = true;
       }
 
