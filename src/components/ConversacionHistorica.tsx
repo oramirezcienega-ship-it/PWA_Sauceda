@@ -203,15 +203,28 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                         );
                       }
                       if (m.texto.startsWith("[plantilla:") || m.texto.startsWith("[Plantilla:")) {
-                        const match = m.texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*(.*)$/);
+                        const match = m.texto.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*([\s\S]*)$/);
                         if (match) {
                           const nombrePlantilla = match[1].trim();
-                          const paramsString = match[2] ? match[2].trim() : "";
-                          const params = paramsString ? paramsString.split(/\s*\|\s*/) : [];
+                          let cleanParams = match[2] ? match[2].trim() : "";
+                          let campana = "";
+                          const campMatch = cleanParams.match(/\[(?:Campaña|campaña|Campana|campana):\s*([^\]]+)\]/);
+                          if (campMatch) {
+                            campana = campMatch[1].trim();
+                            cleanParams = cleanParams.replace(campMatch[0], "").trim();
+                          }
+                          const params = cleanParams ? cleanParams.split(/\s*\|\s*/).map(s => s.trim()).filter(Boolean) : [];
                           return (
-                            <div className="space-y-1">
-                              <div className={`text-[9px] font-bold uppercase tracking-wider select-none ${esCliente ? "text-carbon/40" : "text-crema/60"}`}>
-                                📝 Plantilla: {nombrePlantilla}
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider select-none">
+                                <span className={esCliente ? "text-carbon/60" : "text-crema/70"}>
+                                  📝 Plantilla: {nombrePlantilla}
+                                </span>
+                                {campana && (
+                                  <span className={`px-1.5 py-0.5 rounded font-semibold ${esCliente ? "bg-amber-100 text-amber-800" : "bg-amber-400/20 text-amber-200"}`}>
+                                    📢 {campana}
+                                  </span>
+                                )}
                               </div>
                               {params.length > 0 ? (
                                 <div className="space-y-0.5 text-xs">
@@ -222,20 +235,60 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                                   ))}
                                 </div>
                               ) : (
-                                <span className={`text-xs italic (sin variables) ${esCliente ? "text-carbon/40" : "text-crema/40"}`}></span>
+                                <span className={`text-xs italic ${esCliente ? "text-carbon/40" : "text-crema/40"}`}>(sin variables)</span>
                               )}
                             </div>
                           );
                         }
                       }
                       if (m.texto.startsWith("[image:")) {
-                        const match = m.texto.match(/^\[image:([^\]]+)\]\s*(.*)$/);
+                        const match = m.texto.match(/^\[image:([^\]]+)\]\s*([\s\S]*)$/);
                         if (match) {
                           const mediaId = match[1];
-                          const caption = match[2];
-                          const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
+                          const caption = match[2]?.trim();
+                          const mediaUrl = mediaId.startsWith("http") ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
+                          
+                          let plantillaAnidada: React.ReactNode = null;
+                          if (caption && (caption.startsWith("[plantilla:") || caption.startsWith("[Plantilla:"))) {
+                            const pMatch = caption.match(/^\[[pP]lantilla:\s*([^\]]+)\]\s*([\s\S]*)$/);
+                            if (pMatch) {
+                              const nombreP = pMatch[1].trim();
+                              let pRest = pMatch[2] ? pMatch[2].trim() : "";
+                              let camp = "";
+                              const cMatch = pRest.match(/\[(?:Campaña|campaña|Campana|campana):\s*([^\]]+)\]/);
+                              if (cMatch) {
+                                camp = cMatch[1].trim();
+                                pRest = pRest.replace(cMatch[0], "").trim();
+                              }
+                              const pParams = pRest ? pRest.split(/\s*\|\s*/).map(s => s.trim()).filter(Boolean) : [];
+                              plantillaAnidada = (
+                                <div className="space-y-1 mt-1.5 pt-1.5 border-t border-black/10">
+                                  <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider select-none">
+                                    <span className={esCliente ? "text-carbon/60" : "text-crema/70"}>
+                                      📝 Plantilla: {nombreP}
+                                    </span>
+                                    {camp && (
+                                      <span className={`px-1.5 py-0.5 rounded font-semibold ${esCliente ? "bg-amber-100 text-amber-800" : "bg-amber-400/20 text-amber-200"}`}>
+                                        📢 {camp}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {pParams.length > 0 && (
+                                    <div className="space-y-0.5 text-xs">
+                                      {pParams.map((val, i) => (
+                                        <p key={i} className={`leading-normal ${esCliente ? "text-carbon/80" : "text-crema/90"}`}>
+                                          <span className={`font-mono font-bold text-[9px] ${esCliente ? "text-carbon/40" : "text-crema/40"}`}>{"{{"}{i + 1}{"}}"}</span> {val}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                          }
+
                           return (
-                            <div className="space-y-1 max-w-[240px]">
+                            <div className="space-y-1.5 max-w-[240px]">
                               <button
                                 type="button"
                                 onClick={() => setFotoAmpliada({ url: mediaUrl, caption, rotacion: 0 })}
@@ -255,7 +308,11 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                                   </span>
                                 </div>
                               </button>
-                              {caption && <p className={`text-xs ${esCliente ? "text-carbon/80" : "text-crema/90"}`}>{caption}</p>}
+                              {plantillaAnidada ? (
+                                plantillaAnidada
+                              ) : caption ? (
+                                <p className={`text-xs whitespace-pre-line ${esCliente ? "text-carbon/80" : "text-crema/90"}`}>{caption}</p>
+                              ) : null}
                             </div>
                           );
                         }

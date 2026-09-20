@@ -284,6 +284,90 @@ export async function enviarWhatsAppPlantilla(
   }
 }
 
+/**
+ * Envía un mensaje por WhatsApp usando una plantilla con componentes arbitrarios de Meta Cloud API
+ * (header con imagen/video/documento, body con parámetros, botones, etc.).
+ */
+export async function enviarWhatsAppPlantillaCompleta(
+  telefono: string,
+  plantilla: string,
+  idioma: string = "es_MX",
+  components: Record<string, unknown>[] = [],
+): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
+  try {
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const to = normalizarTelefono(telefono);
+    if (!token || !phoneId) {
+      return {
+        ok: false,
+        error: "WhatsApp no está configurado (faltan credenciales).",
+      };
+    }
+    if (!to || to.length < 10) {
+      return {
+        ok: false,
+        error: `Teléfono inválido o demasiado corto (${to || "vacío"}). Debe tener al menos 10 dígitos.`,
+      };
+    }
+    if (!plantilla) return { ok: false, error: "Falta el nombre de la plantilla." };
+
+    const res = await fetch(
+      `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to,
+          type: "template",
+          template: {
+            name: plantilla,
+            language: { code: idioma || "es_MX" },
+            ...(components && components.length > 0 ? { components } : {}),
+          },
+        }),
+      },
+    );
+    const bodyText = await res.text();
+    if (!res.ok) {
+      let errorDetalle = bodyText;
+      let metaCode: number | undefined;
+      let metaMsg = "";
+      try {
+        const parsed = JSON.parse(bodyText);
+        metaCode = parsed?.error?.code;
+        metaMsg = parsed?.error?.message || "";
+        errorDetalle = parsed?.error ? JSON.stringify(parsed.error) : bodyText;
+      } catch {
+        // respuesta no-JSON
+      }
+      const interpretado = interpretarErrorMeta(metaCode, metaMsg || errorDetalle);
+      return {
+        ok: false,
+        error: metaMsg || errorDetalle,
+        errorCode: metaCode,
+        errorDetail: interpretado,
+      };
+    }
+    let messageId: string | undefined;
+    try {
+      const j = JSON.parse(bodyText);
+      messageId = j?.messages?.[0]?.id;
+    } catch {
+      // Ignorar
+    }
+    return { ok: true, messageId };
+  } catch (err) {
+    console.error("Error al enviar WhatsApp (plantilla completa):", err);
+    return { ok: false, error: "Error de red al enviar el WhatsApp." };
+  }
+}
+
+
 /** Plantilla de mensaje aprobada (o en revisión) tal como vive en Meta. */
 export interface PlantillaWhatsApp {
   nombre: string;
