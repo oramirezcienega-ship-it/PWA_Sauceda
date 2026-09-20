@@ -9,6 +9,20 @@ import type { ConversacionDetalle } from "@/lib/types";
 export function ConversacionHistorica({ telefono }: { telefono: string }) {
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [fotoAmpliada, setFotoAmpliada] = useState<{
+    url: string;
+    caption?: string;
+    rotacion?: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!fotoAmpliada) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFotoAmpliada(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [fotoAmpliada]);
 
   async function borrarMensaje(mensajeId: string) {
     const ok = window.confirm("¿Seguro que deseas eliminar este mensaje de forma permanente?");
@@ -214,6 +228,85 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                           );
                         }
                       }
+                      if (m.texto.startsWith("[image:")) {
+                        const match = m.texto.match(/^\[image:([^\]]+)\]\s*(.*)$/);
+                        if (match) {
+                          const mediaId = match[1];
+                          const caption = match[2];
+                          const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
+                          return (
+                            <div className="space-y-1 max-w-[240px]">
+                              <button
+                                type="button"
+                                onClick={() => setFotoAmpliada({ url: mediaUrl, caption, rotacion: 0 })}
+                                className="block w-full text-left overflow-hidden rounded-lg border border-carbon/10 bg-black/5 hover:opacity-95 active:scale-[0.99] transition cursor-pointer relative group focus:outline-none"
+                                title="Toca para ampliar foto"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={mediaUrl}
+                                  alt={caption || "Imagen de WhatsApp"}
+                                  className="max-h-[180px] w-full object-contain mx-auto"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-carbon/0 group-hover:bg-carbon/15 transition-colors flex items-center justify-center pointer-events-none">
+                                  <span className="opacity-0 group-hover:opacity-100 bg-carbon/80 text-white text-[10px] px-2 py-0.5 rounded-full font-medium transition-opacity shadow-md">
+                                    🔍 Ampliar
+                                  </span>
+                                </div>
+                              </button>
+                              {caption && <p className={`text-xs ${esCliente ? "text-carbon/80" : "text-crema/90"}`}>{caption}</p>}
+                            </div>
+                          );
+                        }
+                      }
+
+                      if (m.texto.startsWith("[audio:")) {
+                        const match = m.texto.match(/^\[audio:([^\]]+)\]\s*(.*)$/);
+                        if (match) {
+                          const mediaId = match[1];
+                          const resto = match[2];
+                          return (
+                            <div className="space-y-1.5 min-w-[200px]">
+                              <audio
+                                src={`/api/conversaciones/audio?mediaId=${mediaId}`}
+                                controls
+                                className="h-8 w-full max-w-[220px] outline-none"
+                                preload="metadata"
+                              />
+                              {resto && resto !== "(mensaje de tipo audio)" && (
+                                <p className={`text-[11px] italic mt-1 ${esCliente ? "text-carbon/80" : "text-crema/90"}`}>
+                                  "{resto}"
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }
+                      }
+
+                      if (m.texto.startsWith("[sticker:")) {
+                        const match = m.texto.match(/^\[sticker:([^\]]+)\]/);
+                        if (match) {
+                          const mediaId = match[1];
+                          const mediaUrl = `/api/conversaciones/media?mediaId=${mediaId}`;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setFotoAmpliada({ url: mediaUrl, caption: "Sticker", rotacion: 0 })}
+                              className="block cursor-pointer focus:outline-none"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={mediaUrl}
+                                alt="Sticker"
+                                className="h-24 w-24 object-contain"
+                                loading="lazy"
+                              />
+                            </button>
+                          );
+                        }
+                      }
+
                       return m.texto;
                     })()}
                   </div>
@@ -264,6 +357,105 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal Lightbox de Foto Ampliada */}
+      {fotoAmpliada && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visor de imagen"
+          onClick={() => setFotoAmpliada(null)}
+          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-200"
+          style={{
+            paddingTop: "max(env(safe-area-inset-top), 16px)",
+            paddingBottom: "max(env(safe-area-inset-bottom), 16px)",
+          }}
+        >
+          {/* Barra superior */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full px-4 py-2 flex items-center justify-between gap-2 z-20 shrink-0"
+          >
+            <button
+              type="button"
+              onClick={() => setFotoAmpliada(null)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/20 hover:bg-white/30 text-white font-semibold text-sm backdrop-blur-md transition active:scale-95 shadow-lg cursor-pointer"
+            >
+              <span className="text-base font-bold leading-none">←</span>
+              <span>Volver a la conversación</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setFotoAmpliada((prev) =>
+                    prev ? { ...prev, rotacion: ((prev.rotacion || 0) + 90) % 360 } : null
+                  )
+                }
+                className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center backdrop-blur-md transition active:scale-95 cursor-pointer text-sm"
+                title="Rotar 90°"
+              >
+                🔄
+              </button>
+
+              <a
+                href={`${fotoAmpliada.url}&download=1`}
+                download
+                className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center backdrop-blur-md transition active:scale-95 text-sm"
+                title="Descargar imagen"
+              >
+                ⬇️
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setFotoAmpliada(null)}
+                className="w-10 h-10 rounded-full bg-white/20 hover:bg-red-600 text-white font-bold text-lg flex items-center justify-center backdrop-blur-md transition active:scale-95 shadow-lg cursor-pointer"
+                title="Cerrar foto"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Área central */}
+          <div
+            onClick={() => setFotoAmpliada(null)}
+            className="flex-1 w-full flex items-center justify-center p-3 min-h-0 overflow-auto cursor-zoom-out"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-full max-h-full flex items-center justify-center cursor-default"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={fotoAmpliada.url}
+                alt={fotoAmpliada.caption || "Foto ampliada"}
+                className="max-h-[74vh] max-w-[94vw] object-contain rounded-xl shadow-2xl transition-transform duration-200"
+                style={{
+                  transform: `rotate(${fotoAmpliada.rotacion || 0}deg)`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Pie */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full px-4 py-2 flex flex-col items-center gap-1 z-20 shrink-0"
+          >
+            {fotoAmpliada.caption && (
+              <div className="max-w-xl px-4 py-2 rounded-xl bg-black/60 border border-white/10 backdrop-blur-md text-white/90 text-sm font-medium text-center shadow-lg">
+                {fotoAmpliada.caption}
+              </div>
+            )}
+            <p className="text-[11px] text-white/50 text-center tracking-wide">
+              Toca fuera de la foto o pulsa &ldquo;Volver a la conversación&rdquo; para regresar
+            </p>
+          </div>
         </div>
       )}
     </div>

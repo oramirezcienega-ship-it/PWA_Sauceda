@@ -1,7 +1,7 @@
 import { Encabezado } from "@/components/Encabezado";
 import { TablaEmpresas } from "@/components/TablaEmpresas";
 import { listarEmpresas } from "@/app/actions/empresas";
-import { INDUSTRIAS_COMUNES } from "@/lib/types";
+import { INDUSTRIAS_COMUNES, type Empresa } from "@/lib/types";
 import { listarAsesoresActivos, obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { redirect } from "next/navigation";
 
@@ -14,7 +14,7 @@ export default async function PaginaEmpresas() {
     redirect("/login");
   }
 
-  let empresas = [];
+  let empresas: Empresa[] = [];
   let asesores: { id: string; nombre: string }[] = [];
 
   try {
