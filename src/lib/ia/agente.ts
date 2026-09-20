@@ -402,6 +402,20 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
   "¡Excelente! Un asesor te contactará vía telefónica o por WhatsApp para agendar la cita de inspección técnica si es necesario. ¡Que tengas un excelente día! 👍"
 
+- RESPUESTAS A CAMPAÑAS / PROMOCIONES DE IMPERMEABILIZACIÓN (3 MSI / Visita Técnica):
+  Si en el historial se le envió una plantilla de campaña o promoción al cliente, o si el cliente escribe mencionando "la promoción", "la promo que me enviaste", "promoción", "opción 1", "1", "agendar visita técnica", "cotización estimada" u "opción 2":
+  * Si elige OPCIÓN 1 o muestra interés en la promoción / visita técnica ("me interesa la promoción", "agendar visita", "1", etc.):
+    Agradece amablemente su interés en la promoción y avanza directo al PASO 3 (coordinar la inspección técnica gratuita sin costo en su domicilio):
+    "¡Excelente! Con gusto aprovechamos la promoción para tu proyecto. Para coordinar tu inspección técnica gratuita y sin compromiso en tu domicilio, un asesor de nuestro equipo te contactará a la brevedad por este chat para confirmar el día y la hora. ¿En qué colonia o zona se encuentra tu propiedad?"
+    Asigna en "datosExtraidos": "paso_flujo": "paso_3".
+  * Si elige OPCIÓN 2 ("cotización", "cotización estimada", "2"):
+    Pide amablemente los metros cuadrados aproximados para calcularle el presupuesto estimado:
+    "Con gusto te compartimos el presupuesto estimado. ¿Cuántos metros cuadrados aproximadamente tiene tu azotea o área a impermeabilizar?"
+    Asigna en "datosExtraidos": "paso_flujo": "paso_1".
+  * Si elige OPCIÓN 3 ("no me interesa", "ya lo resolví", "3"):
+    Despídete amablemente:
+    "¡Muchas gracias por avisarnos! Quedamos a tus órdenes para cuando lo necesites. ¡Que tengas un excelente día! 👍"
+
 E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA o MANTENIMIENTO TÉCNICO (Servicios 3, 4, 5, 6, 7 - tipo_negocio: 'construccion'):
   Pregunta de forma amigable y progresiva (una a la vez):
   1. ¿Qué tipo de trabajo específico (concreto premezclado, fontanería, instalación eléctrica, acabados/pintura, o mantenimiento técnico) deseas realizar en tu hogar?
@@ -466,8 +480,10 @@ REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
   NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y cotiza el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente.
 
-REGLA CRÍTICA DE CONTEXTO:
-  Si la información ya está presente en los "Datos del cliente" abajo (como la ubicación/fraccionamiento, dirección exacta de la propiedad, tipo de crédito, valor de la casa, monto de la deuda o detalles de impermeabilización/remodelación) porque el cliente ya la proporcionó previamente, NO debes volver a preguntársela en absoluto. En su lugar, reconócela/valídala amablemente en tu saludo y continúa directamente con la información que falte.
+REGLA CRÍTICA DE CONTINUIDAD Y PROHIBICIÓN DE RE-SALUDO:
+- Si en el historial de la conversación el asistente ya saludó previamente (o si la conversación ya está iniciada con mensajes previos), queda ESTRICTAMENTE PROHIBIDO volver a saludar (como "¡Hola [Nombre]!", "Hola 👋", "Gracias por contactarnos nuevamente...", "Vemos que ya nos comunicamos contigo...", etc.) y queda PROHIBIDO reiniciar la conversación con preguntas genéricas de apertura ("¿En qué te podemos ayudar hoy?", "¿Hay algo más en lo que podamos ayudarte?").
+- Responde DIRECTAMENTE y con total naturalidad a lo que el cliente acaba de decir o preguntar en su último mensaje, manteniendo el hilo de la conversación de forma fluida.
+- Si la información ya está presente en los "Datos del cliente" abajo (como la ubicación/fraccionamiento, dirección exacta de la propiedad, tipo de crédito, valor de la casa, monto de la deuda o detalles de impermeabilización/remodelación) porque el cliente ya la proporcionó previamente, NO debes volver a preguntársela en absoluto. Valídala brevemente y continúa directamente con la información que falte.
 
 REGLA DE CRÉDITOS NO ADMITIDOS (AGIOTISTAS / PRESTAMISTAS PARTICULARES):
 Si el cliente menciona que su propiedad tiene una hipoteca, adeudo o embargo con un AGIOTISTA, PRESTAMISTA INFORMAL o persona física particular (en lugar de instituciones oficiales como INFONAVIT, FOVISSSTE o bancos), debes informarle de inmediato y con amabilidad que por políticas de la empresa SAUCEDA Bienes Raíces únicamente compra o traspasa propiedades con deudas de instituciones formales y que NO podemos atender deudas con prestamistas particulares. Despídete amablemente de ellos sin solicitar más datos.
@@ -604,8 +620,15 @@ function aMensajes(
     if (last && last.role === role) last.content += "\n" + f.texto;
     else msgs.push({ role, content: f.texto });
   }
-  // La API exige que el primer mensaje sea del usuario.
-  while (msgs.length && msgs[0].role === "assistant") msgs.shift();
+  // La API exige que el primer mensaje sea del usuario. Si el hilo comenzó con un mensaje saliente
+  // (por ejemplo, una plantilla de campaña o notificación enviada por nosotros), agregamos un mensaje
+  // inicial de usuario de contexto para que el modelo preserve el contenido de la plantilla/campaña.
+  if (msgs.length && msgs[0].role === "assistant") {
+    msgs.unshift({
+      role: "user",
+      content: "[Mensaje inicial del sistema / Campaña o notificación enviada previamente al cliente]",
+    });
+  }
   return msgs;
 }
 
@@ -782,13 +805,16 @@ export async function responderConIA(
     if (!iaAgenteActivo()) return;
 
     // Historial reciente del hilo usando variantes de teléfono.
+    // Obtenemos los últimos MAX_HISTORIAL mensajes ordenados por created_at descendente
+    // y los invertimos para alimentar a la IA en estricto orden cronológico reciente.
     const { data } = await sb
       .from("mensajes_whatsapp")
       .select("direccion, texto, agente, created_at")
       .in("telefono", variantesTelefono(ctx.telefono))
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(MAX_HISTORIAL);
-    const historia = (data as FilaMsg[]) ?? [];
+    const historiaDesc = (data as FilaMsg[]) ?? [];
+    const historia = historiaDesc.reverse();
     if (historia.length === 0) return;
 
     // Evitar responder si el último mensaje del hilo ya fue emitido por la IA (protección contra duplicados)
