@@ -822,22 +822,17 @@ export async function responderConIA(
       }
     }
 
-    // Toma de control humano: si el último mensaje asignado en el hilo lo
-    // tiene un asesor o persona (agente distinto de "IA" y no vacío), la IA
-    // no interviene. Esto cubre tanto respuestas directas de humanos como
-    // asignaciones explícitas de chat desde la bandeja.
-    // Los mensajes de la secuencia automatizada ("Sistema (Secuencia)") NO
-    // cuentan como toma de control — el lead que responde a un mensaje de
-    // rescate debe ser atendido por Sofía con su contexto completo.
-    const AGENTES_AUTOMATICOS = new Set([NOMBRE_AGENTE, "Sistema (Secuencia)", "Sistema", "IA (Retoque)"]);
-    const ultimoConAgente = historia
-      .slice()
-      .reverse()
-      .find((f) => f.agente && f.agente.trim() !== "");
-    if (ultimoConAgente && ultimoConAgente.agente && !AGENTES_AUTOMATICOS.has(ultimoConAgente.agente)) {
-      console.log(`IA: Ignorando respuesta automática para ${ctx.telefono} porque el chat está tomado por: ${ultimoConAgente.agente}`);
+    // Control de pausa de Sofía (copilotaje con el asesor):
+    // Si la conversación está explícitamente pausada en el CRM por el asesor, la IA no interviene.
+    // Si NO está pausada, Sofía responde aun cuando el chat esté asignado a un asesor humano,
+    // aprovechando el contexto previo de la conversación.
+    const { esConversacionPausada } = await import("@/lib/ia/control-pausa");
+    const estaPausada = await esConversacionPausada(sb, ctx.telefono, ctx.expedienteId);
+    if (estaPausada) {
+      console.log(`IA: Ignorando respuesta automática para ${ctx.telefono} porque la conversación está pausada por el asesor.`);
       return;
     }
+
 
     // Contexto del expediente (si lo hay).
     let exp: FilaExp | null = null;

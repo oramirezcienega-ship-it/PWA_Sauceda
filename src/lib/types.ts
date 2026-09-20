@@ -697,6 +697,8 @@ export interface ConversacionDetalle {
   posibleBloqueo?: boolean;
   /** Motivo de la alerta de entrega / posible bloqueo. */
   motivoAlerta?: string | null;
+  /** Indica si las respuestas automáticas de Sofía están pausadas para este chat. */
+  iaPausada?: boolean;
 }
 
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */

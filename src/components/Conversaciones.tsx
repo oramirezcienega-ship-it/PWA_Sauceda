@@ -21,6 +21,7 @@ import {
   enviarArchivoDirectoConversacion,
   actualizarTipoNegocioConversacion,
   corregirOrtografiaMensaje,
+  alternarPausaIA,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
@@ -659,6 +660,7 @@ export function Conversaciones() {
   const [mostrarConfigIA, setMostrarConfigIA] = useState(false);
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [asignando, setAsignando] = useState(false);
+  const [alternandoIA, setAlternandoIA] = useState(false);
   const [esAdmin, setEsAdmin] = useState(false);
   const [mostrarAtajos, setMostrarAtajos] = useState(false);
   const [filtroAtajos, setFiltroAtajos] = useState("");
@@ -1749,6 +1751,35 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         Tomar
                       </button>
                     )}
+
+                    {/* Control de Pausa / Encendido de Sofía */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setAlternandoIA(true);
+                        const res = await alternarPausaIA(detalle.telefono);
+                        setAlternandoIA(false);
+                        if (!res.ok) {
+                          setAviso(res.error ?? "No se pudo cambiar el estado de Sofía.");
+                        } else {
+                          await refrescar(detalle.telefono);
+                        }
+                      }}
+                      disabled={alternandoIA || enviando}
+                      title={
+                        detalle.iaPausada
+                          ? "Sofía está en PAUSA (modo asesor humano). Haz clic para encender a Sofía y que responda automáticamente cuando no estés disponible."
+                          : "Sofía está ACTIVA (respondiendo automáticamente). Haz clic para pausar a Sofía si vas a atender al cliente en vivo."
+                      }
+                      className={`text-[8px] font-bold px-2 py-0.5 rounded shadow-xs transition disabled:opacity-50 flex items-center gap-1 shrink-0 border cursor-pointer ${
+                        detalle.iaPausada
+                          ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-400"
+                          : "bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-400"
+                      }`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${detalle.iaPausada ? "bg-amber-600" : "bg-emerald-600 animate-pulse"}`} />
+                      <span>{detalle.iaPausada ? "⏸️ Sofía Pausada (Encender)" : "🟢 Sofía Activa (Pausar)"}</span>
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -2052,6 +2083,35 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     <span>Escribe <strong className="text-sauce">#</strong> para respuestas rápidas</span>
                     
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      {/* Control de Sofía rápido */}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setAlternandoIA(true);
+                          const res = await alternarPausaIA(detalle.telefono);
+                          setAlternandoIA(false);
+                          if (!res.ok) {
+                            setAviso(res.error ?? "No se pudo cambiar el estado de Sofía.");
+                          } else {
+                            await refrescar(detalle.telefono);
+                          }
+                        }}
+                        disabled={alternandoIA || enviando}
+                        title={
+                          detalle.iaPausada
+                            ? "Sofía está en PAUSA para este cliente. Haz clic para encenderla y que vuelva a responder."
+                            : "Sofía está ACTIVA. Haz clic para pausarla mientras chateas en vivo con el cliente."
+                        }
+                        className={`flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer ${
+                          detalle.iaPausada
+                            ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-400"
+                            : "bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border-emerald-400"
+                        }`}
+                      >
+                        <span className={`h-2 w-2 rounded-full ${detalle.iaPausada ? "bg-amber-600" : "bg-emerald-600 animate-pulse"}`} />
+                        <span>{detalle.iaPausada ? "⏸️ Sofía Pausada (Encender)" : "🟢 Sofía Activa (Pausar)"}</span>
+                      </button>
+
                       {/* Botón Calculadora Rápida de Impermeabilización */}
                       <button
                         type="button"

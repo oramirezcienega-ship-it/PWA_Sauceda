@@ -8,6 +8,7 @@ import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
+import { esConversacionPausada, setConversacionPausada } from "@/lib/ia/control-pausa";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -481,6 +482,7 @@ export async function obtenerConversacion(
       nombreProspecto: nombreProspecto || undefined,
       nombreExpediente: nombreExpediente || undefined,
       atiende: "IA",
+      iaPausada: false,
     };
   }
 
@@ -600,6 +602,8 @@ export async function obtenerConversacion(
     };
   });
 
+  const iaPausada = await esConversacionPausada(sb, telefono, expedienteId);
+
   return {
     telefono,
     expedienteId,
@@ -615,6 +619,7 @@ export async function obtenerConversacion(
     tipoNegocio: tipoNegocio || null,
     posibleBloqueo,
     motivoAlerta,
+    iaPausada,
   };
 }
 
@@ -781,6 +786,12 @@ export async function responderConversacion(
     console.error("Error al insertar mensaje WhatsApp en DB:", insertErr);
   }
 
+  if (r.ok) {
+    // Cuando el asesor humano responde manualmente, pausar temporalmente a Sofía
+    // para evitar que se cruce mientras el asesor atiende la conversación en vivo
+    await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId);
+  }
+
   if (r.ok && expedienteId) {
     await registrarActividad(sb, {
       expedienteId,
@@ -918,6 +929,33 @@ export async function asignarAgente(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+/** Alterna o define el estado de pausa de la IA Sofía para una conversación. */
+export async function alternarPausaIA(
+  telefono: string,
+  pausar?: boolean,
+): Promise<{ ok: boolean; pausada: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+
+  let nuevoEstado = pausar;
+  if (nuevoEstado === undefined) {
+    const actual = await esConversacionPausada(sb, telefono, expedienteId);
+    nuevoEstado = !actual;
+  }
+
+  const res = await setConversacionPausada(sb, telefono, nuevoEstado, expedienteId, prospectoId);
+
+  // Si se reactiva Sofía (nuevoEstado === false), aseguramos que el último mensaje tenga agente "IA"
+  // para que el UI muestre inmediatamente que Sofía atiende
+  if (!nuevoEstado) {
+    await asignarAgente(telefono, "IA");
+  }
+
+  return res;
+}
+
 
 /** Lista todos los asesores activos para reasignar conversaciones. */
 export async function listarAsesoresActivos(): Promise<{ id: string; nombre: string }[]> {
