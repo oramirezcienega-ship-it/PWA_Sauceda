@@ -43,6 +43,15 @@ function TarjetaUsuario({
   const [asignacionAutomatica, setAsignacionAutomatica] = useState(
     u.asignacion_automatica ?? false
   );
+  const [notificarResumenMatutino, setNotificarResumenMatutino] = useState(
+    u.notificar_whatsapp_resumen_matutino ?? true
+  );
+  const [notificarResumenNocturno, setNotificarResumenNocturno] = useState(
+    u.notificar_whatsapp_resumen_nocturno ?? true
+  );
+  const [notificarAlertasPrevias, setNotificarAlertasPrevias] = useState(
+    u.notificar_whatsapp_alertas_previas ?? true
+  );
   const [password, setPassword] = useState("");
 
   // Sincronizar el estado local cuando cambien los datos del prop (ej. desde el modal)
@@ -53,6 +62,9 @@ function TarjetaUsuario({
     setActivo(u.activo);
     setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin");
     setAsignacionAutomatica(u.asignacion_automatica ?? false);
+    setNotificarResumenMatutino(u.notificar_whatsapp_resumen_matutino ?? true);
+    setNotificarResumenNocturno(u.notificar_whatsapp_resumen_nocturno ?? true);
+    setNotificarAlertasPrevias(u.notificar_whatsapp_alertas_previas ?? true);
   }, [
     u.nombre,
     u.telefono,
@@ -60,6 +72,9 @@ function TarjetaUsuario({
     u.activo,
     u.notificar_whatsapp_nuevo_lead,
     u.asignacion_automatica,
+    u.notificar_whatsapp_resumen_matutino,
+    u.notificar_whatsapp_resumen_nocturno,
+    u.notificar_whatsapp_alertas_previas,
   ]);
 
   async function handleGuardar() {
@@ -86,6 +101,9 @@ function TarjetaUsuario({
         activo,
         notificar_whatsapp_nuevo_lead: notificarWhatsapp,
         asignacion_automatica: asignacionAutomatica,
+        notificar_whatsapp_resumen_matutino: notificarResumenMatutino,
+        notificar_whatsapp_resumen_nocturno: notificarResumenNocturno,
+        notificar_whatsapp_alertas_previas: notificarAlertasPrevias,
       });
       if (resUpd && !resUpd.ok) {
         alert(resUpd.mensaje || "No se pudo actualizar el usuario.");
@@ -109,6 +127,9 @@ function TarjetaUsuario({
     setActivo(u.activo);
     setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin");
     setAsignacionAutomatica(u.asignacion_automatica ?? false);
+    setNotificarResumenMatutino(u.notificar_whatsapp_resumen_matutino ?? true);
+    setNotificarResumenNocturno(u.notificar_whatsapp_resumen_nocturno ?? true);
+    setNotificarAlertasPrevias(u.notificar_whatsapp_alertas_previas ?? true);
     setPassword("");
     setEditando(false);
   }
@@ -267,6 +288,42 @@ function TarjetaUsuario({
                 className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
               />
               <span>⚡ Asignación automática de todos los leads nuevos</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
+            <label className="flex items-center gap-2.5 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notificarResumenMatutino}
+                onChange={(e) => setNotificarResumenMatutino(e.target.checked)}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>🌅 Resumen diario de citas (8:00 AM)</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-2.5">
+            <label className="flex items-center gap-2.5 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notificarResumenNocturno}
+                onChange={(e) => setNotificarResumenNocturno(e.target.checked)}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>🌙 Resumen nocturno para mañana (8:00 PM)</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 md:col-span-2">
+            <label className="flex items-center gap-2.5 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={notificarAlertasPrevias}
+                onChange={(e) => setNotificarAlertasPrevias(e.target.checked)}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>⏰ Alertas de proximidad de cita (2 horas y 1 hora antes)</span>
             </label>
           </div>
         </div>
@@ -617,6 +674,9 @@ export function TablaUsuarios({
       horarios_guardia: actualizado.horarios_guardia,
       notificar_whatsapp_nuevo_lead: actualizado.notificar_whatsapp_nuevo_lead,
       asignacion_automatica: actualizado.asignacion_automatica,
+      notificar_whatsapp_resumen_matutino: actualizado.notificar_whatsapp_resumen_matutino,
+      notificar_whatsapp_resumen_nocturno: actualizado.notificar_whatsapp_resumen_nocturno,
+      notificar_whatsapp_alertas_previas: actualizado.notificar_whatsapp_alertas_previas,
     });
 
     if (res.ok) {

@@ -26,6 +26,8 @@ export interface Cita {
   mensaje_whatsapp_estado?: "pendiente" | "enviado" | "delivered" | "read" | "error" | null;
   email_enviado?: boolean | null;
   email_destinatario?: string | null;
+  asignados_ids?: string[] | null;
+  asignados_nombres?: string[] | null;
 }
 
 export interface Bloqueo {
@@ -100,16 +102,27 @@ export async function obtenerAgendaUsuario(perfilId: string) {
   if (errBloqueos) throw new Error(errBloqueos.message);
 
   // 3. Obtener citas (futuras o recientes)
-  const { data: citas, error: errCitas } = await sb
+  let { data: citas, error: errCitas } = await sb
     .from("agenda_citas")
     .select("*")
-    .eq("perfil_id", perfilId)
+    .or(`perfil_id.eq.${perfilId},asignados_ids.cs.{${perfilId}}`)
     .gte("fecha", hoy)
     .neq("estado", "cancelada")
     .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true });
 
-  if (errCitas) throw new Error(errCitas.message);
+  if (errCitas) {
+    const resFallback = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("perfil_id", perfilId)
+      .gte("fecha", hoy)
+      .neq("estado", "cancelada")
+      .order("fecha", { ascending: true })
+      .order("hora_inicio", { ascending: true });
+    if (resFallback.error) throw new Error(resFallback.error.message);
+    citas = resFallback.data;
+  }
 
   return {
     horarios_agenda: perfil?.horarios_agenda || {},
@@ -448,16 +461,27 @@ export async function obtenerAgendaRango(
   await requireAdmin();
   const sb = supabaseServidor();
 
-  const { data: citas, error: errCitas } = await sb
+  let { data: citas, error: errCitas } = await sb
     .from("agenda_citas")
     .select("*")
-    .eq("perfil_id", perfilId)
+    .or(`perfil_id.eq.${perfilId},asignados_ids.cs.{${perfilId}}`)
     .gte("fecha", inicio)
     .lte("fecha", fin)
     .neq("estado", "cancelada")
     .order("hora_inicio", { ascending: true });
 
-  if (errCitas) throw new Error(errCitas.message);
+  if (errCitas) {
+    const resFallback = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("perfil_id", perfilId)
+      .gte("fecha", inicio)
+      .lte("fecha", fin)
+      .neq("estado", "cancelada")
+      .order("hora_inicio", { ascending: true });
+    if (resFallback.error) throw new Error(resFallback.error.message);
+    citas = resFallback.data;
+  }
 
   const { data: bloqueos, error: errBloqueos } = await sb
     .from("agenda_bloqueos")
@@ -847,10 +871,33 @@ export async function obtenerCitasDeEntidad(
     return [];
   }
 
-  return (data || []).map((row: any) => ({
-    ...row,
-    perfil_nombre: row.perfiles?.nombre || null,
-  })) as Cita[];
+  // Traer nombres de todos los perfiles para resolver asignados_nombres
+  const todosAsignadosIds = Array.from(
+    new Set((data || []).flatMap((r: any) => r.asignados_ids || [r.perfil_id]).filter(Boolean))
+  );
+
+  let mapaNombres = new Map<string, string>();
+  if (todosAsignadosIds.length > 0) {
+    const { data: perfilesData } = await sb
+      .from("perfiles")
+      .select("id, nombre")
+      .in("id", todosAsignadosIds);
+    (perfilesData || []).forEach((p: any) => mapaNombres.set(p.id, p.nombre));
+  }
+
+  return (data || []).map((row: any) => {
+    const ids: string[] = (row.asignados_ids && row.asignados_ids.length > 0)
+      ? row.asignados_ids
+      : (row.perfil_id ? [row.perfil_id] : []);
+    const nombres = ids.map((id) => mapaNombres.get(id)).filter(Boolean) as string[];
+
+    return {
+      ...row,
+      perfil_nombre: row.perfiles?.nombre || null,
+      asignados_ids: ids,
+      asignados_nombres: nombres.length > 0 ? nombres : (row.perfiles?.nombre ? [row.perfiles.nombre] : []),
+    };
+  }) as Cita[];
 }
 
 /**
@@ -861,6 +908,7 @@ export async function programarCitaManual(data: {
   prospectoId?: string | null;
   expedienteId?: string | null;
   perfilId: string;
+  asignadosIds?: string[];
   clienteNombre: string;
   clienteTelefono: string;
   clienteEmail?: string | null;
@@ -889,18 +937,23 @@ export async function programarCitaManual(data: {
   const sb = supabaseServidor();
 
   try {
-    // 1. Obtener datos del perfil/asesor asignado para enriquecer la notificación
-    const { data: perfil } = await sb
+    const asignados = Array.from(
+      new Set([data.perfilId, ...(data.asignadosIds || [])].filter(Boolean))
+    );
+
+    // 1. Obtener datos de todos los perfiles asignados para enriquecer la notificación
+    const { data: perfilesAsignados = [] } = await sb
       .from("perfiles")
       .select("id, nombre, telefono, telefono_desvio")
-      .eq("id", data.perfilId)
-      .maybeSingle();
+      .in("id", asignados);
 
-    const nombreAsesor = perfil?.nombre || "Asesor Técnico";
+    const nombresAsesores = (perfilesAsignados || []).map((p: any) => p.nombre).filter(Boolean);
+    const nombreAsesor = nombresAsesores.length > 0 ? nombresAsesores.join(" y ") : "Asesor Técnico";
+    const primerAsesor = perfilesAsignados?.find((p: any) => p.id === data.perfilId) || perfilesAsignados?.[0];
     const telContacto =
       data.telefonoContacto?.trim() ||
-      perfil?.telefono ||
-      perfil?.telefono_desvio ||
+      primerAsesor?.telefono ||
+      primerAsesor?.telefono_desvio ||
       "477 465 4700";
 
     // 2. Si es inspección o instalación y tiene expedienteId, actualizar la etapa del expediente
@@ -926,6 +979,7 @@ export async function programarCitaManual(data: {
     // 3. Insertar en agenda_citas
     const insertPayload: any = {
       perfil_id: data.perfilId,
+      asignados_ids: asignados,
       prospecto_id: data.prospectoId ?? null,
       expediente_id: data.expedienteId ?? null,
       cliente_nombre: data.clienteNombre.trim(),
@@ -939,11 +993,18 @@ export async function programarCitaManual(data: {
       estado: "confirmada",
     };
 
-    const { data: citaCreada, error: errCita } = await sb
+    let { data: citaCreada, error: errCita } = await sb
       .from("agenda_citas")
       .insert(insertPayload)
       .select("id")
       .single();
+
+    if (errCita && errCita.message.includes("asignados_ids")) {
+      delete insertPayload.asignados_ids;
+      const resRetry = await sb.from("agenda_citas").insert(insertPayload).select("id").single();
+      errCita = resRetry.error;
+      citaCreada = resRetry.data;
+    }
 
     if (errCita) {
       return { ok: false, error: errCita.message };
@@ -1094,6 +1155,29 @@ export async function programarCitaManual(data: {
         }
       } catch (errEmail) {
         console.error("Error al enviar correo de confirmación de inspección:", errEmail);
+      }
+    }
+
+    // 7. Notificar por WhatsApp a cada integrante del equipo asignado
+    if (perfilesAsignados && perfilesAsignados.length > 0) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      for (const asesor of perfilesAsignados) {
+        const tel = asesor.telefono?.trim();
+        if (tel) {
+          const tipoLabel =
+            data.tipoCita === "inspeccion"
+              ? "Inspección Técnica"
+              : data.tipoCita === "instalacion"
+              ? "Instalación"
+              : "Cita";
+          const primerNom = asesor.nombre?.split(" ")[0] || "Compañero";
+          const msgEquipo = `📅 *Nueva ${tipoLabel} Asignada*\n\nHola ${primerNom},\nHas sido asignado a un nuevo compromiso:\n\n• Evento: ${tipoLabel}\n• Cliente: ${data.clienteNombre} (${data.clienteTelefono})\n• Fecha: ${data.fecha}\n• Hora: ${data.horaInicio} hrs\n• Equipo asignado: ${nombreAsesor}\n• Notas: ${data.notas || "Sin notas adicionales"}\n\nRevisa los detalles en el CRM: https://crm.saucedamx.com/agenda`;
+          try {
+            await enviarWhatsAppTexto(tel, msgEquipo);
+          } catch (e) {
+            console.warn(`[Agenda] No se pudo notificar por WhatsApp al asesor ${asesor.nombre}:`, e);
+          }
+        }
       }
     }
 

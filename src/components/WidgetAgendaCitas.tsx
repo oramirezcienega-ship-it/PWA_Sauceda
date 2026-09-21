@@ -42,6 +42,7 @@ export function WidgetAgendaCitas({
   const [horaInicio, setHoraInicio] = useState("09:00");
   const [horaFin, setHoraFin] = useState("10:00");
   const [perfilId, setPerfilId] = useState("");
+  const [asignadosIds, setAsignadosIds] = useState<string[]>([]);
   const [notas, setNotas] = useState("");
   const [telefonoCliente, setTelefonoCliente] = useState(clienteTelefono || "");
   const [emailCliente, setEmailCliente] = useState(clienteEmail || "");
@@ -73,10 +74,27 @@ export function WidgetAgendaCitas({
     listarPerfilesActivos()
       .then((p) => {
         setPerfiles(p);
-        if (p.length > 0) setPerfilId(p[0].id);
+        if (p.length > 0) {
+          setPerfilId(p[0].id);
+          setAsignadosIds([p[0].id]);
+        }
       })
       .catch(console.error);
   }, [prospectoId, expedienteId]);
+
+  const toggleAsignado = (id: string) => {
+    setAsignadosIds((prev) => {
+      let nuevo: string[];
+      if (prev.includes(id)) {
+        if (prev.length === 1) return prev; // Mantener al menos uno
+        nuevo = prev.filter((x) => x !== id);
+      } else {
+        nuevo = [...prev, id];
+      }
+      setPerfilId(nuevo[0] || "");
+      return nuevo;
+    });
+  };
 
   useEffect(() => {
     if (clienteTelefono) setTelefonoCliente(clienteTelefono);
@@ -103,14 +121,15 @@ export function WidgetAgendaCitas({
   // Disparar la previsualización del mensaje antes de agendar
   const handleAbrirPrevisualizacion = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fecha || !horaInicio || !horaFin || !perfilId) {
-      setMensaje({ tipo: "error", texto: "Por favor completa la fecha, horario y asesor asignado." });
+    const idsFinales = asignadosIds.length > 0 ? asignadosIds : (perfilId ? [perfilId] : []);
+    if (!fecha || !horaInicio || !horaFin || idsFinales.length === 0) {
+      setMensaje({ tipo: "error", texto: "Por favor completa la fecha, horario y al menos un responsable asignado." });
       return;
     }
 
-    const asesorSel = perfiles.find((p) => p.id === perfilId);
-    const asesorNombre = asesorSel?.nombre || "Asesor Técnico";
-    const telContacto = asesorSel?.telefono || "477 465 4700";
+    const asesoresSel = perfiles.filter((p) => idsFinales.includes(p.id));
+    const asesorNombre = asesoresSel.map((p) => p.nombre).join(" y ") || "Equipo Técnico";
+    const telContacto = asesoresSel[0]?.telefono || "477 465 4700";
 
     const datos: DatosPrevisualizacionInspeccion = {
       clienteNombre,
@@ -119,9 +138,10 @@ export function WidgetAgendaCitas({
       fecha,
       horaInicio,
       horaFin,
-      perfilId,
+      perfilId: idsFinales[0],
+      asignadosIds: idsFinales,
       asesorNombre,
-      asesorTelefono: asesorSel?.telefono,
+      asesorTelefono: asesoresSel[0]?.telefono,
       telefonoContacto: telContacto,
       notas,
       tipoCita: tipoForm,
@@ -149,6 +169,7 @@ export function WidgetAgendaCitas({
         prospectoId,
         expedienteId,
         perfilId: datosPrevisualizacion.perfilId,
+        asignadosIds: datosPrevisualizacion.asignadosIds || [datosPrevisualizacion.perfilId],
         clienteNombre,
         clienteTelefono: datosPrevisualizacion.clienteTelefono,
         clienteEmail: opciones.emailDestino || datosPrevisualizacion.clienteEmail,
@@ -331,25 +352,45 @@ export function WidgetAgendaCitas({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-carbon/70 mb-1">
-                Asignar Responsable (Técnico / Asesor)
-              </label>
-              <select
-                value={perfilId}
-                onChange={(e) => setPerfilId(e.target.value)}
-                required
-                className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-xs font-medium text-carbon focus:border-sauce focus:outline-none"
-              >
-                {perfiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} ({p.rol === "admin" ? "Admin" : p.rol === "asesor" ? "Asesor" : "Operario"}) {p.telefono ? `· ${p.telefono}` : ""}
-                  </option>
-                ))}
-              </select>
+          <div>
+            <label className="block text-[11px] font-semibold text-carbon/70 mb-1 flex items-center justify-between">
+              <span>Asignar Responsables (Técnicos / Asesores)</span>
+              <span className="text-[10px] text-sauce font-bold">
+                {asignadosIds.length} {asignadosIds.length === 1 ? "seleccionado" : "seleccionados"}
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-carbon/20 bg-white max-h-36 overflow-y-auto">
+              {perfiles.map((p) => {
+                const isSelected = asignadosIds.includes(p.id);
+                const isPrincipal = asignadosIds[0] === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => toggleAsignado(p.id)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                      isSelected
+                        ? isPrincipal
+                          ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+                          : "bg-sauce/15 text-verde-profundo border-sauce/30 font-semibold"
+                        : "bg-carbon/5 text-carbon/70 border-carbon/15 hover:bg-carbon/10"
+                    }`}
+                  >
+                    <span>{isSelected ? (isPrincipal ? "👑" : "✅") : "⚪"}</span>
+                    <span>{p.nombre}</span>
+                    <span className="text-[10px] opacity-75">
+                      ({p.rol === "admin" ? "Admin" : p.rol === "asesor" ? "Asesor" : "Operario"})
+                    </span>
+                  </button>
+                );
+              })}
             </div>
+            <p className="text-[10px] text-carbon/50 mt-1">
+              Haz clic para sumar a 2 o más personas. El primero seleccionado (👑) será el responsable principal.
+            </p>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-carbon/70 mb-1">Teléfono WhatsApp Cliente</label>
               <input
@@ -455,7 +496,15 @@ export function WidgetAgendaCitas({
                     </div>
                     
                     <p className="text-[11px] text-carbon/60 mt-1">
-                      Asignado: <strong className="text-carbon/80">{c.perfil_nombre || "Sin asignar"}</strong>
+                      {c.asignados_nombres && c.asignados_nombres.length > 1 ? (
+                        <>
+                          👥 Equipo Asignado: <strong className="text-carbon/80">{c.asignados_nombres.join(", ")}</strong>
+                        </>
+                      ) : (
+                        <>
+                          👤 Asignado: <strong className="text-carbon/80">{c.perfil_nombre || "Sin asignar"}</strong>
+                        </>
+                      )}
                       {c.notas && <span className="italic block mt-0.5 text-carbon/50">Notas: "{c.notas}"</span>}
                     </p>
 
