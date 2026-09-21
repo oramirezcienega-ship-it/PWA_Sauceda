@@ -761,12 +761,96 @@ export interface Cotizacion {
   aprobadoOperativo: boolean;
   aprobadoOperativoBy?: string | null;
   aprobadoOperativoByNombre?: string | null;
+  modalidad?: CotizacionModalidad;
+  datosModulares?: CotizacionModularData | null;
+  opcionesSeleccionadas?: OpcionesSeleccionadasModular | null;
   token: string;
   notasInternas: string;
   condicionesPago: string;
   garantia: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CotizacionModalidad = 'estatica' | 'modular';
+
+export interface ModularDimensiones {
+  titulo?: string;
+  superficieM2?: number;
+  alturaLibreM?: number;
+  postes?: number;
+  plazoDiasHabiles?: number;
+  garantiaMeses?: number;
+  [key: string]: any;
+}
+
+export interface ModularEstructuraBase {
+  titulo: string;
+  subtitulo?: string;
+  precio: number;
+  detalles: string[];
+  nota?: string;
+}
+
+export interface ModularOpcion {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  precio: number;
+  incluido?: boolean;
+  recomendado?: boolean;
+}
+
+export interface ModularGrupoOpciones {
+  id: string;
+  titulo: string;
+  tipo: 'radio';
+  notaPie?: string;
+  opciones: ModularOpcion[];
+}
+
+export interface ModularComplemento {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  precio: number;
+}
+
+export interface ModularPreset {
+  id: string;
+  nombre: string;
+  opciones: Record<string, string>;
+  complementos: string[];
+  recomendado?: boolean;
+}
+
+export interface ModularCondiciones {
+  anticipo?: string;
+  plazo?: string;
+  garantia?: string;
+  precios?: string;
+  notaLegal?: string;
+}
+
+export interface CotizacionModularData {
+  plantillaKey?: string;
+  titulo: string;
+  descripcion?: string;
+  dimensiones?: ModularDimensiones;
+  estructuraBase: ModularEstructuraBase;
+  gruposOpciones: ModularGrupoOpciones[];
+  complementos: ModularComplemento[];
+  presets?: ModularPreset[];
+  condiciones?: ModularCondiciones;
+}
+
+export interface OpcionesSeleccionadasModular {
+  opciones: Record<string, string>;
+  complementos: string[];
+  incluirIva: boolean;
+  precioCalculado?: number;
+  precioM2?: number;
+  presetActivo?: string | null;
 }
 
 export interface VisitaReporte {

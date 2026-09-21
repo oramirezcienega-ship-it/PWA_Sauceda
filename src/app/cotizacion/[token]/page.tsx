@@ -1,5 +1,6 @@
 import { obtenerCotizacionPorToken } from "@/app/actions/cotizaciones";
 import { VisualizadorCotizacionCliente } from "@/components/VisualizadorCotizacionCliente";
+import { VisualizadorCotizacionModular } from "@/components/VisualizadorCotizacionModular";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -66,11 +67,15 @@ export default async function PaginaPropuestaCliente({ params }: PaginaPropuesta
 
   return (
     <main className="min-h-screen bg-slate-50/50 py-6">
-      <VisualizadorCotizacionCliente
-        cotizacion={cotizacion}
-        conceptos={conceptos}
-        reporteVisita={reporteVisita}
-      />
+      {cotizacion.modalidad === "modular" ? (
+        <VisualizadorCotizacionModular cotizacion={cotizacion} />
+      ) : (
+        <VisualizadorCotizacionCliente
+          cotizacion={cotizacion}
+          conceptos={conceptos}
+          reporteVisita={reporteVisita}
+        />
+      )}
     </main>
   );
 }

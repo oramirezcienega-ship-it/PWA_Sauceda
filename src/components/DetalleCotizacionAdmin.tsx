@@ -22,7 +22,10 @@ import {
   enviarCotizacionPorCorreo,
   enviarCotizacionPorWhatsAppAction,
   reasignarClienteCotizacion,
+  cambiarModalidadCotizacion,
+  guardarDatosModulares,
 } from "@/app/actions/cotizaciones";
+import { PLANTILLAS_MODULARES_DISPONIBLES } from "@/lib/plantillasModulares";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { listarProspectosMin } from "@/app/actions/prospectos";
@@ -250,6 +253,49 @@ export function DetalleCotizacionAdmin({
       });
     } finally {
       setGuardandoCambioCliente(false);
+    }
+  };
+
+  // --- State & Handlers para Modalidad (Estática vs Modular) ---
+  const [modalModalidad, setModalModalidad] = useState(false);
+  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState("pergola_azotea_3x3");
+  const [cambiandoModalidad, setCambiandoModalidad] = useState(false);
+  const [mensajeModalidad, setMensajeModalidad] = useState({ tipo: "", texto: "" });
+
+  const handleEjecutarCambioModalidad = async (nuevaModalidad: "estatica" | "modular") => {
+    try {
+      setCambiandoModalidad(true);
+      setMensajeModalidad({ tipo: "", texto: "" });
+      const res = await cambiarModalidadCotizacion({
+        cotizacionId: cotizacion.id,
+        modalidad: nuevaModalidad,
+        plantillaKey: plantillaSeleccionada,
+      });
+      if (res.ok) {
+        const nuevosDatos = nuevaModalidad === "modular" 
+          ? (PLANTILLAS_MODULARES_DISPONIBLES[plantillaSeleccionada]?.data || null)
+          : null;
+        setCotizacion((prev) => ({
+          ...prev,
+          modalidad: nuevaModalidad,
+          datosModulares: nuevosDatos,
+          precioFinal: nuevosDatos?.estructuraBase?.precio ? nuevosDatos.estructuraBase.precio : prev.precioFinal,
+        }));
+        setMensajeModalidad({
+          tipo: "ok",
+          texto: `Modalidad cambiada a ${nuevaModalidad === "modular" ? "Modular / Configurable" : "Estática tradicional"}.`,
+        });
+        setTimeout(() => {
+          setModalModalidad(false);
+        }, 600);
+      }
+    } catch (err: any) {
+      setMensajeModalidad({
+        tipo: "error",
+        texto: err?.message || "Error al cambiar la modalidad.",
+      });
+    } finally {
+      setCambiandoModalidad(false);
     }
   };
 
@@ -1077,6 +1123,18 @@ export function DetalleCotizacionAdmin({
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setModalModalidad(true)}
+            className={`rounded-xl px-3.5 py-2.5 text-xs font-bold transition flex items-center gap-1.5 shadow-xs border ${
+              cotizacion.modalidad === "modular"
+                ? "bg-amber-400/25 border-amber-300 text-crema ring-1 ring-amber-300"
+                : "bg-crema/15 hover:bg-crema/25 border-crema/30 text-crema"
+            }`}
+            title="Cambiar entre Cotización Tradicional (Estática) y Modular (con Opcionales)"
+          >
+            <span>{cotizacion.modalidad === "modular" ? "🧩 Modo Modular" : "📄 Modo Estático"}</span>
+            <span className="text-[10px] opacity-75">(Cambiar)</span>
+          </button>
+          <button
             onClick={handleAbrirModalDuplicar}
             className="rounded-xl bg-crema/15 hover:bg-crema/25 border border-crema/30 px-3.5 py-2.5 text-xs font-bold text-crema transition flex items-center gap-1.5 shadow-xs"
             title="Duplicar esta cotización generando un nuevo folio"
@@ -1600,6 +1658,81 @@ export function DetalleCotizacionAdmin({
                 </div>
               )}
             </div>
+
+            {/* Banner Informativo de Cotización Modular */}
+            {cotizacion.modalidad === "modular" ? (
+              <div className="rounded-2xl border-2 border-[#1E3A2F]/20 bg-emerald-50/40 p-5 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1E3A2F] text-white text-sm font-bold shadow-xs">
+                      🧩
+                    </span>
+                    <div>
+                      <h4 className="font-titular text-sm font-bold text-[#1E3A2F]">
+                        Cotización Configurada en Modalidad Modular / Dinámica
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        {cotizacion.datosModulares?.titulo || "Plantilla Modular"} · Los conceptos se calculan y personalizan interactivamente en la propuesta del cliente.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={`/cotizacion/${cotizacion.token}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-xl bg-[#1E3A2F] hover:bg-[#1E3A2F]/90 text-white text-xs font-bold px-3.5 py-2 transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      👁️ Ver Vista Interactiva del Cliente ↗
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setModalModalidad(true)}
+                      className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 transition"
+                    >
+                      ⚙️ Cambiar Modalidad
+                    </button>
+                  </div>
+                </div>
+
+                {cotizacion.datosModulares && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-emerald-900/10 text-xs text-slate-700">
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-900/10">
+                      <span className="font-bold text-slate-500 uppercase text-[10px] block">Partida Base:</span>
+                      <span className="font-semibold text-slate-900">{cotizacion.datosModulares.estructuraBase?.titulo}</span>
+                      <div className="font-mono text-xs font-bold text-emerald-800 mt-0.5">
+                        {formatMoneda(cotizacion.datosModulares.estructuraBase?.precio || 0)}
+                      </div>
+                    </div>
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-900/10">
+                      <span className="font-bold text-slate-500 uppercase text-[10px] block">Grupos de Variantes:</span>
+                      <span className="font-semibold text-slate-900">
+                        {cotizacion.datosModulares.gruposOpciones?.map(g => g.titulo).join(", ") || "Ninguno"}
+                      </span>
+                    </div>
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-900/10">
+                      <span className="font-bold text-slate-500 uppercase text-[10px] block">Complementos Opcionales:</span>
+                      <span className="font-semibold text-slate-900">
+                        {cotizacion.datosModulares.complementos?.length || 0} adicionales disponibles
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs">
+                <span className="text-slate-600">
+                  Modalidad actual: <strong className="text-slate-800">Estática (Tradicional)</strong>.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setModalModalidad(true)}
+                  className="rounded-lg bg-[#1E3A2F]/10 hover:bg-[#1E3A2F]/20 text-[#1E3A2F] font-bold px-2.5 py-1 text-xs transition flex items-center gap-1"
+                >
+                  🧩 Convertir a Cotización Modular con Opcionales
+                </button>
+              </div>
+            )}
 
             {!puedeCostear ? (
               <p className="text-sm text-carbon/50 py-6 text-center">Tu rol no tiene permisos para cotizar conceptos financieros.</p>
@@ -2943,6 +3076,139 @@ export function DetalleCotizacionAdmin({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Cambiar Modalidad (Estática vs Modular) */}
+      {modalModalidad && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-carbon/10 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🧩</span>
+                <h3 className="font-titular text-base font-bold text-verde-profundo">
+                  Modalidad de Cotización
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalModalidad(false)}
+                className="text-carbon/40 hover:text-carbon text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-carbon/60 leading-relaxed">
+              Selecciona cómo deseas estructurar esta cotización. Puedes alternar libremente entre modalidad
+              tradicional (estática con precio cerrado) y modular (con opciones interactivas y complementos).
+            </p>
+
+            <div className="space-y-3 pt-1">
+              {/* Opción 1: Estática */}
+              <div
+                className={`p-4 rounded-xl border-2 transition cursor-pointer ${
+                  cotizacion.modalidad !== "modular"
+                    ? "border-verde-profundo bg-emerald-50/30"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+                onClick={() => handleEjecutarCambioModalidad("estatica")}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-800">📄 Modalidad Estática (Tradicional)</span>
+                      {cotizacion.modalidad !== "modular" && (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          Actual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Partidas cerradas fijas. Ideal para trabajos estándar directos a precio cerrado.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Opción 2: Modular */}
+              <div
+                className={`p-4 rounded-xl border-2 transition ${
+                  cotizacion.modalidad === "modular"
+                    ? "border-verde-profundo bg-emerald-50/30"
+                    : "border-slate-200"
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-800">🧩 Modalidad Modular / Opcionales</span>
+                      {cotizacion.modalidad === "modular" && (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          Actual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Configurador dinámico interactivo con partida base, opciones de cubierta/plafón y complementos.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                    Seleccionar Plantilla Modular:
+                  </label>
+                  <select
+                    value={plantillaSeleccionada}
+                    onChange={(e) => setPlantillaSeleccionada(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium focus:border-sauce focus:outline-none"
+                  >
+                    {Object.entries(PLANTILLAS_MODULARES_DISPONIBLES).map(([key, p]) => (
+                      <option key={key} value={key}>
+                        {p.nombre} — {p.descripcion}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    disabled={cambiandoModalidad}
+                    onClick={() => handleEjecutarCambioModalidad("modular")}
+                    className="w-full mt-2 rounded-xl bg-verde-profundo hover:bg-verde-profundo/90 text-white font-bold py-2 text-xs transition shadow-xs disabled:opacity-50"
+                  >
+                    {cambiandoModalidad
+                      ? "Aplicando..."
+                      : cotizacion.modalidad === "modular"
+                      ? "Recargar Plantilla Modular"
+                      : "Activar Modalidad Modular"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {mensajeModalidad.texto && (
+              <div
+                className={`p-3 rounded-lg text-xs font-semibold ${
+                  mensajeModalidad.tipo === "ok"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {mensajeModalidad.texto}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setModalModalidad(false)}
+                className="px-4 py-1.5 rounded-lg border border-carbon/20 text-xs font-semibold text-carbon/70 hover:bg-slate-50 transition"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}
