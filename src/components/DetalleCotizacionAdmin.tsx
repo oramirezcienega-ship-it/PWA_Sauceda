@@ -32,6 +32,7 @@ import { listarProspectosMin } from "@/app/actions/prospectos";
 import { listarEmpresasMin } from "@/app/actions/empresas";
 import { formatoPesos } from "@/lib/formato";
 import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
+import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -258,6 +259,7 @@ export function DetalleCotizacionAdmin({
 
   // --- State & Handlers para Modalidad (Estática vs Modular) ---
   const [modalModalidad, setModalModalidad] = useState(false);
+  const [modalEditorModular, setModalEditorModular] = useState(false);
   const [plantillaSeleccionada, setPlantillaSeleccionada] = useState("pergola_azotea_3x3");
   const [cambiandoModalidad, setCambiandoModalidad] = useState(false);
   const [mensajeModalidad, setMensajeModalidad] = useState({ tipo: "", texto: "" });
@@ -1141,6 +1143,15 @@ export function DetalleCotizacionAdmin({
             <span>{cotizacion.modalidad === "modular" ? "🧩 Modo Modular" : "📄 Modo Estático"}</span>
             <span className="text-[10px] opacity-75">(Cambiar)</span>
           </button>
+          {cotizacion.modalidad === "modular" && (
+            <button
+              onClick={() => setModalEditorModular(true)}
+              className="rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 px-3.5 py-2.5 text-xs font-bold transition flex items-center gap-1.5 shadow-xs border border-amber-300"
+              title="Editar precios, opciones y complementos de la cotización dinámica"
+            >
+              <span>✏️</span> Editar Cotización Dinámica
+            </button>
+          )}
           <button
             onClick={handleAbrirModalDuplicar}
             className="rounded-xl bg-crema/15 hover:bg-crema/25 border border-crema/30 px-3.5 py-2.5 text-xs font-bold text-crema transition flex items-center gap-1.5 shadow-xs"
@@ -1683,7 +1694,7 @@ export function DetalleCotizacionAdmin({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                     <a
                       href={`/cotizacion/${cotizacion.token}`}
                       target="_blank"
@@ -1692,6 +1703,13 @@ export function DetalleCotizacionAdmin({
                     >
                       👁️ Ver Vista Interactiva del Cliente ↗
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => setModalEditorModular(true)}
+                      className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2 transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      ✏️ Editar Partidas y Precios Dinámicos
+                    </button>
                     <button
                       type="button"
                       onClick={() => setModalModalidad(true)}
@@ -3231,6 +3249,20 @@ export function DetalleCotizacionAdmin({
         onEnviarWhatsAppAPI={handleEnviarWhatsAppAPIWrapper}
         onEnviarCorreo={handleEnviarCorreoWrapper}
         onCotizacionActualizada={(cambios) => setCotizacion((prev) => ({ ...prev, ...cambios }))}
+      />
+
+      {/* Modal Editor de Cotización Dinámica / Modular */}
+      <ModalEditorCotizacionModular
+        abierto={modalEditorModular}
+        onCerrar={() => setModalEditorModular(false)}
+        cotizacion={cotizacion}
+        onGuardado={(nuevosDatos) => {
+          setCotizacion((prev) => ({
+            ...prev,
+            datosModulares: nuevosDatos,
+            precioFinal: nuevosDatos.estructuraBase?.precio || prev.precioFinal,
+          }));
+        }}
       />
     </div>
   );

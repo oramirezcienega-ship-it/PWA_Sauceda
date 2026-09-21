@@ -8,7 +8,11 @@ ALTER TABLE public.cotizaciones ADD CONSTRAINT cotizaciones_servicio_tipo_check 
   'impermeabilizacion',
   'losa',
   'remodelacion',
+  'plomeria',
+  'electricidad',
+  'albanileria',
+  'acabados',
   'herreria',
   'piso_estampado',
   'otro'
-));
+)) NOT VALID;
