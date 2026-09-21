@@ -10,7 +10,8 @@ import { formatoPesos } from "@/lib/formato";
 import { normalizarTelefono } from "@/lib/telefono";
 import { generarPdfCotizacion } from "@/lib/cotizacionPdf";
 import { aCotizacion, aVisitaReporte, aCotizacionConcepto } from "@/lib/cotizacionesMappers";
-import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento } from "@/lib/types";
+import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento, CotizacionModalidad, CotizacionModularData, OpcionesSeleccionadasModular } from "@/lib/types";
+import { PLANTILLAS_MODULARES_DISPONIBLES, PLANTILLA_PERGOLA_AZOTEA_3X3 } from "@/lib/plantillasModulares";
 
 // Helper para generar el siguiente folio correlativo (COT-001)
 function siguienteId(ids: string[]): string {
@@ -346,6 +347,9 @@ export async function obtenerCotizacionPorToken(
       precioFinal: finalPrecio,
       aprobadoComercial: cot.aprobadoComercial,
       aprobadoOperativo: cot.aprobadoOperativo,
+      modalidad: cot.modalidad || 'estatica',
+      datosModulares: cot.datosModulares || null,
+      opcionesSeleccionadas: cot.opcionesSeleccionadas || null,
       token: cot.token,
       condicionesPago: cot.condicionesPago,
       garantia: cot.garantia,
@@ -926,13 +930,15 @@ export async function marcarComoEnviada(id: string): Promise<Cotizacion> {
 // 10. Aceptar Cotización (Cliente - Pública, usa Token)
 export async function aceptarCotizacionCliente(
   token: string,
-  firmaNombre: string
+  firmaNombre: string,
+  opcionesSeleccionadas?: OpcionesSeleccionadasModular | null,
+  precioFinalCalculado?: number | null
 ): Promise<{ ok: boolean; id: string }> {
   const sb = supabaseServidor();
 
   const { data: cot, error: errCot } = await sb
     .from("cotizaciones")
-    .select("id, prospecto_id, estatus")
+    .select("id, prospecto_id, estatus, modalidad, datos_modulares")
     .eq("token", token)
     .maybeSingle();
 
@@ -946,28 +952,185 @@ export async function aceptarCotizacionCliente(
     throw new Error("Esta propuesta no está disponible para firma en este momento.");
   }
 
+  const updatePayload: Record<string, any> = {
+    estatus: "aceptada",
+    notas_internas: `Aceptada por el cliente: ${firmaNombre} vía portal web.`,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (opcionesSeleccionadas) {
+    updatePayload.opciones_seleccionadas = opcionesSeleccionadas;
+  }
+  if (precioFinalCalculado && precioFinalCalculado > 0) {
+    updatePayload.precio_final = precioFinalCalculado;
+  }
+
   const { error } = await sb
     .from("cotizaciones")
-    .update({
-      estatus: "aceptada",
-      notas_internas: `Aceptada por el cliente: ${firmaNombre} vía portal web.`,
-      updated_at: new Date().toISOString()
-    })
+    .update(updatePayload)
     .eq("id", cot.id);
 
   if (error) throw new Error(error.message);
+
+  // Si es modular y tenemos datos modulares y opciones seleccionadas, sincronizar conceptos para downstream
+  if (cot.modalidad === "modular" && cot.datos_modulares && opcionesSeleccionadas) {
+    try {
+      const dm = cot.datos_modulares as CotizacionModularData;
+      const conceptosNuevos: Array<{
+        cotizacion_id: string;
+        descripcion: string;
+        cantidad: number;
+        unidad: string;
+        costo_unitario: number;
+        precio_unitario: number;
+        descuento: number;
+        importe: number;
+      }> = [];
+
+      // 1. Estructura Base
+      if (dm.estructuraBase) {
+        conceptosNuevos.push({
+          cotizacion_id: cot.id,
+          descripcion: `${dm.estructuraBase.titulo} (Partida Base Obligatoria)`,
+          cantidad: 1,
+          unidad: "servicio",
+          costo_unitario: Math.round(dm.estructuraBase.precio * 0.7),
+          precio_unitario: dm.estructuraBase.precio,
+          descuento: 0,
+          importe: dm.estructuraBase.precio,
+        });
+      }
+
+      // 2. Opciones de Grupos (Cubierta, Plafón, etc.)
+      for (const grupo of dm.gruposOpciones || []) {
+        const opcionIdElegida = opcionesSeleccionadas.opciones?.[grupo.id];
+        const opcion = grupo.opciones?.find((o) => o.id === opcionIdElegida);
+        if (opcion && opcion.precio > 0) {
+          conceptosNuevos.push({
+            cotizacion_id: cot.id,
+            descripcion: `${grupo.titulo}: ${opcion.nombre}`,
+            cantidad: 1,
+            unidad: "partida",
+            costo_unitario: Math.round(opcion.precio * 0.7),
+            precio_unitario: opcion.precio,
+            descuento: 0,
+            importe: opcion.precio,
+          });
+        }
+      }
+
+      // 3. Complementos
+      for (const compId of opcionesSeleccionadas.complementos || []) {
+        const comp = dm.complementos?.find((c) => c.id === compId);
+        if (comp && comp.precio > 0) {
+          conceptosNuevos.push({
+            cotizacion_id: cot.id,
+            descripcion: `Complemento: ${comp.nombre}`,
+            cantidad: 1,
+            unidad: "servicio",
+            costo_unitario: Math.round(comp.precio * 0.7),
+            precio_unitario: comp.precio,
+            descuento: 0,
+            importe: comp.precio,
+          });
+        }
+      }
+
+      if (conceptosNuevos.length > 0) {
+        await sb.from("cotizacion_conceptos").delete().eq("cotizacion_id", cot.id);
+        await sb.from("cotizacion_conceptos").insert(conceptosNuevos);
+      }
+    } catch (errSync) {
+      console.error("Error sincronizando conceptos de cotización modular:", errSync);
+    }
+  }
 
   await registrarActividad(sb, {
     prospectoId: cot.prospecto_id,
     tipo: "construccion",
     titulo: `Cotización Aceptada por el Cliente 🎉 (${cot.id})`,
-    detalle: `Aceptada formalmente por: ${firmaNombre} a través del portal de cliente.`
+    detalle: `Aceptada formalmente por: ${firmaNombre} a través del portal de cliente (Modalidad: ${cot.modalidad || "estatica"}).`,
   });
 
   // Sincronizar etapa del expediente
   await sincronizarEtapaExpediente(sb, cot.id);
 
   return { ok: true, id: cot.id };
+}
+
+/** 10b. Cambiar Modalidad de Cotización (Estática ⇄ Modular) */
+export async function cambiarModalidadCotizacion(datos: {
+  cotizacionId: string;
+  modalidad: CotizacionModalidad;
+  plantillaKey?: string;
+  datosModulares?: CotizacionModularData;
+}): Promise<{ ok: boolean; modalidad: CotizacionModalidad }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  let datosModularesAGuardar = datos.datosModulares || null;
+  let nuevoPrecioFinal: number | undefined;
+
+  if (datos.modalidad === "modular") {
+    if (!datosModularesAGuardar) {
+      const key = datos.plantillaKey || "pergola_azotea_3x3";
+      datosModularesAGuardar = PLANTILLAS_MODULARES_DISPONIBLES[key]?.data || PLANTILLA_PERGOLA_AZOTEA_3X3;
+    }
+    if (datosModularesAGuardar.estructuraBase?.precio) {
+      nuevoPrecioFinal = datosModularesAGuardar.estructuraBase.precio;
+    }
+  }
+
+  const updateData: Record<string, any> = {
+    modalidad: datos.modalidad,
+    datos_modulares: datosModularesAGuardar,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (nuevoPrecioFinal !== undefined) {
+    updateData.precio_final = nuevoPrecioFinal;
+  }
+
+  const { error } = await sb
+    .from("cotizaciones")
+    .update(updateData)
+    .eq("id", datos.cotizacionId);
+
+  if (error) throw new Error(error.message);
+
+  await registrarActividad(sb, {
+    tipo: "construccion",
+    titulo: `Modalidad cambiada a ${datos.modalidad.toUpperCase()} (${datos.cotizacionId})`,
+    detalle:
+      datos.modalidad === "modular"
+        ? `Configurada con plantilla modular: ${datosModularesAGuardar?.titulo || "Personalizada"}.`
+        : `Restablecida a modalidad tradicional estática.`,
+  });
+
+  revalidatePath(`/construccion/${datos.cotizacionId}`);
+  return { ok: true, modalidad: datos.modalidad };
+}
+
+/** 10c. Guardar Datos Modulares */
+export async function guardarDatosModulares(datos: {
+  cotizacionId: string;
+  datosModulares: CotizacionModularData;
+}): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { error } = await sb
+    .from("cotizaciones")
+    .update({
+      datos_modulares: datos.datosModulares,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", datos.cotizacionId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/construccion/${datos.cotizacionId}`);
+  return { ok: true };
 }
 
 /** 11. Listar Cotizaciones de un Expediente */
