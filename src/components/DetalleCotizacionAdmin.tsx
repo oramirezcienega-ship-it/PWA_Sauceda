@@ -271,24 +271,31 @@ export function DetalleCotizacionAdmin({
         modalidad: nuevaModalidad,
         plantillaKey: plantillaSeleccionada,
       });
-      if (res.ok) {
-        const nuevosDatos = nuevaModalidad === "modular" 
-          ? (PLANTILLAS_MODULARES_DISPONIBLES[plantillaSeleccionada]?.data || null)
-          : null;
-        setCotizacion((prev) => ({
-          ...prev,
-          modalidad: nuevaModalidad,
-          datosModulares: nuevosDatos,
-          precioFinal: nuevosDatos?.estructuraBase?.precio ? nuevosDatos.estructuraBase.precio : prev.precioFinal,
-        }));
+
+      if (!res.ok) {
         setMensajeModalidad({
-          tipo: "ok",
-          texto: `Modalidad cambiada a ${nuevaModalidad === "modular" ? "Modular / Configurable" : "Estática tradicional"}.`,
+          tipo: "error",
+          texto: res.error || "No se pudo cambiar la modalidad de la cotización.",
         });
-        setTimeout(() => {
-          setModalModalidad(false);
-        }, 600);
+        return;
       }
+
+      const nuevosDatos = nuevaModalidad === "modular" 
+        ? (PLANTILLAS_MODULARES_DISPONIBLES[plantillaSeleccionada]?.data || null)
+        : null;
+      setCotizacion((prev) => ({
+        ...prev,
+        modalidad: nuevaModalidad,
+        datosModulares: nuevosDatos,
+        precioFinal: nuevosDatos?.estructuraBase?.precio ? nuevosDatos.estructuraBase.precio : prev.precioFinal,
+      }));
+      setMensajeModalidad({
+        tipo: "ok",
+        texto: `Modalidad cambiada a ${nuevaModalidad === "modular" ? "Modular / Configurable" : "Estática tradicional"}.`,
+      });
+      setTimeout(() => {
+        setModalModalidad(false);
+      }, 600);
     } catch (err: any) {
       setMensajeModalidad({
         tipo: "error",
