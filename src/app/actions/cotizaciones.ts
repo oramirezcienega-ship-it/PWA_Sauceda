@@ -1113,6 +1113,16 @@ export async function cambiarModalidadCotizacion(datos: {
 
     if (errUpdate) {
       console.error("[cambiarModalidadCotizacion] Error BD:", errUpdate);
+      if (
+        errUpdate.message.includes("modalidad") ||
+        errUpdate.message.includes("datos_modulares")
+      ) {
+        return {
+          ok: false,
+          error:
+            "La base de datos conectada a este entorno aún no tiene aplicada la migración 0082 (falta la columna 'modalidad'). Ejecuta la migración 0082 en el SQL Editor de tu Supabase.",
+        };
+      }
       return { ok: false, error: `Error al actualizar cotización: ${errUpdate.message}` };
     }
 
