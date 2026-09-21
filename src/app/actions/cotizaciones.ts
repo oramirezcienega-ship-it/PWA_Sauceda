@@ -1064,73 +1064,121 @@ export async function cambiarModalidadCotizacion(datos: {
   modalidad: CotizacionModalidad;
   plantillaKey?: string;
   datosModulares?: CotizacionModularData;
-}): Promise<{ ok: boolean; modalidad: CotizacionModalidad }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  let datosModularesAGuardar = datos.datosModulares || null;
-  let nuevoPrecioFinal: number | undefined;
-
-  if (datos.modalidad === "modular") {
-    if (!datosModularesAGuardar) {
-      const key = datos.plantillaKey || "pergola_azotea_3x3";
-      datosModularesAGuardar = PLANTILLAS_MODULARES_DISPONIBLES[key]?.data || PLANTILLA_PERGOLA_AZOTEA_3X3;
+}): Promise<{ ok: boolean; modalidad?: CotizacionModalidad; error?: string }> {
+  try {
+    const usuario = await usuarioActual();
+    if (!usuario) {
+      return { ok: false, error: "No autorizado. Sesión no encontrada o expirada." };
     }
-    if (datosModularesAGuardar.estructuraBase?.precio) {
-      nuevoPrecioFinal = datosModularesAGuardar.estructuraBase.precio;
+    const sb = supabaseServidor();
+
+    // Obtener cotización existente para extraer prospecto_id y verificar existencia
+    const { data: cotExistente, error: errCot } = await sb
+      .from("cotizaciones")
+      .select("id, prospecto_id, expediente_id, modalidad, precio_final")
+      .eq("id", datos.cotizacionId)
+      .maybeSingle();
+
+    if (errCot || !cotExistente) {
+      return { ok: false, error: errCot?.message || `No se encontró la cotización ${datos.cotizacionId}.` };
     }
+
+    let datosModularesAGuardar = datos.datosModulares || null;
+    let nuevoPrecioFinal: number | undefined;
+
+    if (datos.modalidad === "modular") {
+      if (!datosModularesAGuardar) {
+        const key = datos.plantillaKey || "pergola_azotea_3x3";
+        datosModularesAGuardar = PLANTILLAS_MODULARES_DISPONIBLES[key]?.data || PLANTILLA_PERGOLA_AZOTEA_3X3;
+      }
+      if (datosModularesAGuardar?.estructuraBase?.precio) {
+        nuevoPrecioFinal = datosModularesAGuardar.estructuraBase.precio;
+      }
+    }
+
+    const updateData: Record<string, any> = {
+      modalidad: datos.modalidad,
+      datos_modulares: datosModularesAGuardar,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (nuevoPrecioFinal !== undefined) {
+      updateData.precio_final = nuevoPrecioFinal;
+    }
+
+    const { error: errUpdate } = await sb
+      .from("cotizaciones")
+      .update(updateData)
+      .eq("id", datos.cotizacionId);
+
+    if (errUpdate) {
+      console.error("[cambiarModalidadCotizacion] Error BD:", errUpdate);
+      return { ok: false, error: `Error al actualizar cotización: ${errUpdate.message}` };
+    }
+
+    // Registrar actividad de forma segura sin interrumpir la operación
+    try {
+      await registrarActividad(sb, {
+        tipo: "construccion",
+        titulo: `Modalidad cambiada a ${datos.modalidad.toUpperCase()} (${datos.cotizacionId})`,
+        detalle:
+          datos.modalidad === "modular"
+            ? `Configurada con plantilla modular: ${datosModularesAGuardar?.titulo || "Personalizada"}.`
+            : `Restablecida a modalidad tradicional estática.`,
+        prospectoId: cotExistente.prospecto_id,
+        expedienteId: cotExistente.expediente_id,
+      });
+    } catch (errAct) {
+      console.warn("[cambiarModalidadCotizacion] No se pudo registrar actividad:", errAct);
+    }
+
+    // Revalidación segura
+    try {
+      revalidatePath(`/construccion/${datos.cotizacionId}`);
+      revalidatePath("/construccion");
+    } catch (errRev) {
+      console.warn("[cambiarModalidadCotizacion] Error en revalidatePath:", errRev);
+    }
+
+    return { ok: true, modalidad: datos.modalidad };
+  } catch (err: any) {
+    console.error("[cambiarModalidadCotizacion] Error general:", err);
+    return { ok: false, error: err?.message || "Ocurrió un error inesperado al cambiar la modalidad." };
   }
-
-  const updateData: Record<string, any> = {
-    modalidad: datos.modalidad,
-    datos_modulares: datosModularesAGuardar,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (nuevoPrecioFinal !== undefined) {
-    updateData.precio_final = nuevoPrecioFinal;
-  }
-
-  const { error } = await sb
-    .from("cotizaciones")
-    .update(updateData)
-    .eq("id", datos.cotizacionId);
-
-  if (error) throw new Error(error.message);
-
-  await registrarActividad(sb, {
-    tipo: "construccion",
-    titulo: `Modalidad cambiada a ${datos.modalidad.toUpperCase()} (${datos.cotizacionId})`,
-    detalle:
-      datos.modalidad === "modular"
-        ? `Configurada con plantilla modular: ${datosModularesAGuardar?.titulo || "Personalizada"}.`
-        : `Restablecida a modalidad tradicional estática.`,
-  });
-
-  revalidatePath(`/construccion/${datos.cotizacionId}`);
-  return { ok: true, modalidad: datos.modalidad };
 }
 
 /** 10c. Guardar Datos Modulares */
 export async function guardarDatosModulares(datos: {
   cotizacionId: string;
   datosModulares: CotizacionModularData;
-}): Promise<{ ok: boolean }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const usuario = await usuarioActual();
+    if (!usuario) {
+      return { ok: false, error: "Sesión no válida o expirada." };
+    }
+    const sb = supabaseServidor();
 
-  const { error } = await sb
-    .from("cotizaciones")
-    .update({
-      datos_modulares: datos.datosModulares,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", datos.cotizacionId);
+    const { error } = await sb
+      .from("cotizaciones")
+      .update({
+        datos_modulares: datos.datosModulares,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", datos.cotizacionId);
 
-  if (error) throw new Error(error.message);
+    if (error) {
+      return { ok: false, error: `Error al guardar datos modulares: ${error.message}` };
+    }
 
-  revalidatePath(`/construccion/${datos.cotizacionId}`);
-  return { ok: true };
+    try {
+      revalidatePath(`/construccion/${datos.cotizacionId}`);
+    } catch {}
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al guardar datos modulares." };
+  }
 }
 
 /** 11. Listar Cotizaciones de un Expediente */
