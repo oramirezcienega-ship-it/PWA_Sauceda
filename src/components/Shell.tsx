@@ -37,12 +37,14 @@ const ENLACES = [
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/construccion", label: "Construcción" },
   { href: "/agenda", label: "Agenda" },
+  { href: "/visualizador", label: "Visualizador IA (Nuevo)" },
   { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
 ];
 
 function esRutaPublica(path: string): boolean {
   return (
     path.startsWith("/login") ||
+    path.startsWith("/visualizador") ||
     path.startsWith("/seguimiento") ||
     path.startsWith("/expediente-cliente") ||
     path.startsWith("/privacidad") ||

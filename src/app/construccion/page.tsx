@@ -101,6 +101,12 @@ export default async function PaginaConstruccion({
             >
               📦 Catálogo de Conceptos
             </Link>
+            <Link
+              href="/visualizador"
+              className="px-4 py-2 rounded-lg transition-all text-verde-profundo bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60 shadow-xs flex items-center gap-1.5"
+            >
+              <span>✨</span> Visualizador IA
+            </Link>
           </div>
         </div>
 
