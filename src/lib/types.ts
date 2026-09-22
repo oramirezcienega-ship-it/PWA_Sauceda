@@ -776,7 +776,9 @@ export type CotizacionModalidad = 'estatica' | 'modular';
 
 export interface ModularDimensiones {
   titulo?: string;
-  superficieM2?: number;
+  superficieM2: number;
+  largoM?: number;
+  anchoM?: number;
   alturaLibreM?: number;
   postes?: number;
   plazoDiasHabiles?: number;
@@ -788,6 +790,8 @@ export interface ModularEstructuraBase {
   titulo: string;
   subtitulo?: string;
   precio: number;
+  costoFijo?: number;
+  costoPorM2?: number;
   detalles: string[];
   nota?: string;
 }
@@ -797,6 +801,8 @@ export interface ModularOpcion {
   nombre: string;
   descripcion?: string;
   precio: number;
+  precioPorM2?: number;
+  tipoPrecio?: 'm2' | 'fijo';
   incluido?: boolean;
   recomendado?: boolean;
 }
@@ -814,11 +820,14 @@ export interface ModularComplemento {
   nombre: string;
   descripcion?: string;
   precio: number;
+  precioPorM2?: number;
+  tipoPrecio?: 'm2' | 'fijo';
 }
 
 export interface ModularPreset {
   id: string;
   nombre: string;
+  descripcion?: string;
   opciones: Record<string, string>;
   complementos: string[];
   recomendado?: boolean;

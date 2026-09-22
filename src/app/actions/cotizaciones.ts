@@ -1161,6 +1161,8 @@ export async function cambiarModalidadCotizacion(datos: {
 export async function guardarDatosModulares(datos: {
   cotizacionId: string;
   datosModulares: CotizacionModularData;
+  opcionesSeleccionadas?: OpcionesSeleccionadasModular;
+  precioFinal?: number;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
     const usuario = await usuarioActual();
@@ -1169,12 +1171,22 @@ export async function guardarDatosModulares(datos: {
     }
     const sb = supabaseServidor();
 
+    const updatePayload: Record<string, any> = {
+      datos_modulares: datos.datosModulares,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (datos.opcionesSeleccionadas !== undefined) {
+      updatePayload.opciones_seleccionadas = datos.opcionesSeleccionadas;
+    }
+
+    if (datos.precioFinal !== undefined) {
+      updatePayload.precio_final = datos.precioFinal;
+    }
+
     const { error } = await sb
       .from("cotizaciones")
-      .update({
-        datos_modulares: datos.datosModulares,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", datos.cotizacionId);
 
     if (error) {
@@ -1183,6 +1195,7 @@ export async function guardarDatosModulares(datos: {
 
     try {
       revalidatePath(`/construccion/${datos.cotizacionId}`);
+      revalidatePath("/construccion");
     } catch {}
 
     return { ok: true };
