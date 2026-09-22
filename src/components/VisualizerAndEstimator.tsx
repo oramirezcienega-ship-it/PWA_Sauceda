@@ -30,9 +30,8 @@ const EJEMPLOS_FACHADAS = [
       p_piso_izq: { x: 0.18, y: 0.82 },
       p_piso_der: { x: 0.82, y: 0.78 },
     },
-    // Usamos el render fotorrealista que acabamos de generar como muestra pre-cargada
-    urlBase: "https://replicate.delivery/yhqm/4YlsFGfJBUTCByiXyqsxdfuK0nrpM80rE0cQnZ8YVEHRzFQXA/out-0.png",
-    renderIaEjemplo: "https://replicate.delivery/xezq/XVsQuyQwIwrEF5d7KvBcA9ZwunlCpWue7G9vPkVVge0R0FQXA/out-0.png",
+    urlBase: "/images/ejemplo-patio-original.png",
+    renderIaEjemplo: "/images/ejemplo-patio-flux.png",
   },
   {
     id: "cochera_doble",
@@ -499,8 +498,8 @@ export function VisualizerAndEstimator() {
                     alt="Propuesta Fotorrealista IA"
                     className="w-full h-full object-cover"
                   />
-                ) : (
-                  // VISTA ARQUITECTÓNICA 3D CON PERSPECTIVA
+                ) : modoVisualizacion === "3d" ? (
+                  // VISTA DE PLANO ESTRUCTURAL 3D
                   <>
                     <img
                       src={imagenUrl}
@@ -512,12 +511,43 @@ export function VisualizerAndEstimator() {
                       dangerouslySetInnerHTML={{ __html: svgPerspectiva3D }}
                     />
                   </>
+                ) : (
+                  // ESTADO INICIAL ANTES DE GENERAR IA: FOTO BASE CON BOTÓN DIRECTO
+                  <div className="relative w-full h-full">
+                    <img
+                      src={imagenUrl}
+                      alt="Fachada base"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-carbon/30 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center">
+                      <div className="bg-white/95 text-carbon p-5 rounded-2xl shadow-xl max-w-sm border border-white/40">
+                        <span className="text-3xl mb-2 block">✨</span>
+                        <h4 className="font-titular font-bold text-base text-verde-profundo mb-1">
+                          Listo para Generar Render Fotorrealista
+                        </h4>
+                        <p className="text-xs text-carbon/70 mb-4">
+                          La IA de Flux Fill integrará el modelo de {tipoProyecto === "porton" ? "portón" : "pérgola"} en tu espacio con iluminación y sombras reales.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={generandoInpaint}
+                          onClick={() => generarRenderIaFotorrealista()}
+                          className="w-full bg-verde-profundo hover:bg-verde-profundo/90 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>{generandoInpaint ? "⏳" : "🎨"}</span>
+                          <span>{generandoInpaint ? "Generando con IA..." : "Generar Render con IA"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
-                <span className="absolute bottom-3 right-3 bg-verde-profundo/90 backdrop-blur-xs text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow pointer-events-none">
+                <span className="absolute bottom-3 right-3 bg-verde-profundo/90 backdrop-blur-xs text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow pointer-events-none z-10">
                   {renderFotorrealistaUrl && modoVisualizacion === "ia"
                     ? "✨ Propuesta Fotorrealista (IA)"
-                    : "📐 Propuesta Arquitectónica"}
+                    : modoVisualizacion === "3d"
+                    ? "📐 Plano Estructural 3D"
+                    : "⏳ Esperando Render IA"}
                 </span>
               </div>
 
