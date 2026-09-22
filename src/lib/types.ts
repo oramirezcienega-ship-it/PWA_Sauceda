@@ -841,6 +841,15 @@ export interface ModularCondiciones {
   notaLegal?: string;
 }
 
+export interface ModularFotos {
+  renderUrl?: string;
+  renderTitulo?: string;
+  renderDescripcion?: string;
+  estructuralUrl?: string;
+  estructuralTitulo?: string;
+  estructuralDescripcion?: string;
+}
+
 export interface CotizacionModularData {
   plantillaKey?: string;
   titulo: string;
@@ -851,6 +860,7 @@ export interface CotizacionModularData {
   complementos: ModularComplemento[];
   presets?: ModularPreset[];
   condiciones?: ModularCondiciones;
+  fotos?: ModularFotos;
 }
 
 export interface OpcionesSeleccionadasModular {

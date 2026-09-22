@@ -172,6 +172,14 @@ export const PLANTILLA_PERGOLA_AZOTEA_3X3: CotizacionModularData = {
     notaLegal:
       "No incluye retiro de impermeabilizante previo ni resanes si se detecta que los muros no tienen dala estructural; en caso necesario se cotiza por separado antes de iniciar.",
   },
+  fotos: {
+    renderUrl: "/images/render-pergola-real.jpg",
+    renderTitulo: "Visualización 3D / Render Arquitectónico",
+    renderDescripcion: "Simulación estética fotorrealista de la propuesta con estructura en negro mate, cubierta multipanel y plafón tipo madera.",
+    estructuralUrl: "/images/plano-estructural-desarrollo.jpg",
+    estructuralTitulo: "Ingeniería Estructural & Taller",
+    estructuralDescripcion: "Despiece isométrico técnico: columnas PTR, vigas perimetrales, largueros de cubierta y placas de anclaje químico.",
+  },
 };
 
 export const PLANTILLAS_MODULARES_DISPONIBLES: Record<string, { nombre: string; descripcion: string; data: CotizacionModularData }> = {
