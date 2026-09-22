@@ -14,6 +14,11 @@ import {
   type GeometriaVano3D,
 } from "@/lib/ia/generador-visual-fachada";
 import type { AnalisisVanoVision } from "@/lib/ia/estimador-vision";
+import {
+  calcularHashImagen,
+  guardarRenderCache,
+  obtenerRendersCache,
+} from "@/lib/storage/inpaint-cache";
 
 // Fachadas de muestra pre-cargadas para pruebas inmediatas
 const EJEMPLOS_FACHADAS = [
@@ -68,12 +73,14 @@ export function VisualizerAndEstimator() {
   // 1. Estados principales
   const [tipoProyecto, setTipoProyecto] = useState<"porton" | "pergola">("porton");
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
+  const [hashImagenActual, setHashImagenActual] = useState<string>("");
   const [analizando, setAnalizando] = useState(false);
   const [pasoAnalisis, setPasoAnalisis] = useState("");
   const [errorAnalisis, setErrorAnalisis] = useState<string | null>(null);
 
   // 2. Estado de Generación de Inpainting Fotorrealista con IA
-  const [renderFotorrealistaUrl, setRenderFotorrealistaUrl] = useState<string | null>(null);
+  // Almacén multimodelo: { [model_id]: dataUrl }
+  const [rendersPorModelo, setRendersPorModelo] = useState<Record<string, string>>({});
   const [generandoInpaint, setGenerandoInpaint] = useState(false);
   const [modoVisualizacion, setModoVisualizacion] = useState<"ia" | "3d">("ia");
 
@@ -98,6 +105,9 @@ export function VisualizerAndEstimator() {
   const [isDraggingSlider, setIsDraggingSlider] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Render activo para el modelo actualmente seleccionado
+  const renderFotorrealistaUrl = rendersPorModelo[modeloSeleccionado] || null;
+
   useEffect(() => {
     if (tipoProyecto === "porton") {
       setModeloSeleccionado("porton_duela");
@@ -107,13 +117,18 @@ export function VisualizerAndEstimator() {
       setMotorElectrico(false);
       setGeo3D(obtenerGeometriaInicial("pergola"));
     }
-    // Limpiar render previo al cambiar tipo
-    setRenderFotorrealistaUrl(null);
   }, [tipoProyecto]);
 
   const modelosDisponibles = useMemo(() => {
     return Object.values(CATALOGO_MODELOS).filter((m) => m.tipo === tipoProyecto);
   }, [tipoProyecto]);
+
+  // Lista de modelos que ya tienen render generado para este tipo de proyecto
+  const modelosConRender = useMemo(() => {
+    return Object.keys(rendersPorModelo).filter(
+      (mId) => CATALOGO_MODELOS[mId]?.tipo === tipoProyecto
+    );
+  }, [rendersPorModelo, tipoProyecto]);
 
   const areaM2 = useMemo(() => {
     return Number((anchoManual * altoManual).toFixed(2));
@@ -130,9 +145,20 @@ export function VisualizerAndEstimator() {
 
   // Disparar generación con IA Fotorrealista (Flux Fill en Replicate)
   const generarRenderIaFotorrealista = useCallback(
-    async (imagenBase?: string) => {
+    async (
+      imagenBase?: string,
+      modeloTarget?: string,
+      forceRegenerate = false
+    ) => {
       const img = imagenBase || imagenUrl;
+      const targetModel = modeloTarget || modeloSeleccionado;
       if (!img) return;
+
+      // Si no es regeneración forzada y ya tenemos el render en memoria, mostrarlo de inmediato
+      if (!forceRegenerate && rendersPorModelo[targetModel]) {
+        setModoVisualizacion("ia");
+        return;
+      }
 
       setGenerandoInpaint(true);
       setErrorAnalisis(null);
@@ -144,8 +170,9 @@ export function VisualizerAndEstimator() {
           body: JSON.stringify({
             image: img,
             project_type: tipoProyecto,
-            model_id: modeloSeleccionado,
+            model_id: targetModel,
             geometry: geo3D,
+            force_regenerate: forceRegenerate,
           }),
         });
 
@@ -155,8 +182,16 @@ export function VisualizerAndEstimator() {
         }
 
         if (data.image_url) {
-          setRenderFotorrealistaUrl(data.image_url);
+          setRendersPorModelo((prev) => ({
+            ...prev,
+            [targetModel]: data.image_url,
+          }));
           setModoVisualizacion("ia");
+
+          // Guardar de forma persistente en IndexedDB para futuras visitas
+          const imgHash = hashImagenActual || (await calcularHashImagen(img));
+          if (!hashImagenActual) setHashImagenActual(imgHash);
+          guardarRenderCache(imgHash, targetModel, tipoProyecto, data.image_url);
         }
       } catch (err: any) {
         console.error("Error al generar inpainting con IA:", err);
@@ -166,14 +201,13 @@ export function VisualizerAndEstimator() {
         setGenerandoInpaint(false);
       }
     },
-    [imagenUrl, tipoProyecto, modeloSeleccionado, geo3D]
+    [imagenUrl, tipoProyecto, modeloSeleccionado, geo3D, rendersPorModelo, hashImagenActual]
   );
 
   // Procesar archivo cargado por el usuario
   const procesarArchivoImagen = useCallback(
     async (file: File) => {
       setErrorAnalisis(null);
-      setRenderFotorrealistaUrl(null);
       setAnalizando(true);
       setPasoAnalisis("Optimizando imagen de alta resolución...");
 
@@ -186,6 +220,12 @@ export function VisualizerAndEstimator() {
         reader.readAsDataURL(file);
         const dataUrl = await base64Promise;
         setImagenUrl(dataUrl);
+
+        // 1. Calcular hash de la foto y recuperar renders guardados en IndexedDB
+        const imgHash = await calcularHashImagen(dataUrl);
+        setHashImagenActual(imgHash);
+        const cacheados = await obtenerRendersCache(imgHash);
+        setRendersPorModelo(cacheados);
 
         setPasoAnalisis("Visión artificial: detectando vano y calibrando proporciones...");
         const res = await fetch("/api/estimator/analyze", {
@@ -205,8 +245,12 @@ export function VisualizerAndEstimator() {
           setGeo3D(obtenerGeometriaInicial(tipoProyecto, data.bounding_box_normalized));
         }
 
-        // Detonar de inmediato la generación del render fotorrealista con IA
-        generarRenderIaFotorrealista(dataUrl);
+        // Si ya teníamos el render para el modelo activo en IndexedDB, activarlo de inmediato
+        if (cacheados[modeloSeleccionado]) {
+          setModoVisualizacion("ia");
+        } else {
+          generarRenderIaFotorrealista(dataUrl, modeloSeleccionado);
+        }
       } catch (err: any) {
         console.error("Error al procesar archivo:", err);
         setErrorAnalisis(err.message || "Error al procesar la fotografía.");
@@ -214,11 +258,11 @@ export function VisualizerAndEstimator() {
         setAnalizando(false);
       }
     },
-    [tipoProyecto, generarRenderIaFotorrealista]
+    [tipoProyecto, modeloSeleccionado, generarRenderIaFotorrealista]
   );
 
   // Cargar ejemplo pre-cargado
-  const cargarEjemplo = (ejemplo: (typeof EJEMPLOS_FACHADAS)[0]) => {
+  const cargarEjemplo = async (ejemplo: (typeof EJEMPLOS_FACHADAS)[0]) => {
     setTipoProyecto(ejemplo.tipo);
     setImagenUrl(ejemplo.urlBase);
     setErrorAnalisis(null);
@@ -226,11 +270,20 @@ export function VisualizerAndEstimator() {
     setAltoManual(ejemplo.altoM);
     setGeo3D(ejemplo.geo);
 
+    const imgHash = await calcularHashImagen(ejemplo.urlBase);
+    setHashImagenActual(imgHash);
+    const cacheados = await obtenerRendersCache(imgHash);
+
+    const rendersIniciales: Record<string, string> = { ...cacheados };
     if (ejemplo.renderIaEjemplo) {
-      setRenderFotorrealistaUrl(ejemplo.renderIaEjemplo);
+      rendersIniciales["pergola_cristal"] = ejemplo.renderIaEjemplo;
+    }
+    setRendersPorModelo(rendersIniciales);
+
+    const modeloActivo = ejemplo.tipo === "porton" ? "porton_duela" : "pergola_cristal";
+    if (rendersIniciales[modeloActivo]) {
       setModoVisualizacion("ia");
     } else {
-      setRenderFotorrealistaUrl(null);
       setModoVisualizacion("3d");
     }
 
@@ -437,19 +490,25 @@ export function VisualizerAndEstimator() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* Botón para detonar render con IA */}
+                {/* Botón para detonar render con IA o regenerar */}
                 <button
                   type="button"
                   disabled={generandoInpaint}
-                  onClick={() => generarRenderIaFotorrealista()}
+                  onClick={() =>
+                    generarRenderIaFotorrealista(
+                      undefined,
+                      undefined,
+                      Boolean(renderFotorrealistaUrl)
+                    )
+                  }
                   className="text-xs font-bold px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-verde-profundo text-white shadow-xs hover:opacity-90 disabled:opacity-50 transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>{generandoInpaint ? "⏳" : "✨"}</span>
+                  <span>{generandoInpaint ? "⏳" : renderFotorrealistaUrl ? "🔄" : "✨"}</span>
                   <span>
                     {generandoInpaint
                       ? "Generando con IA..."
                       : renderFotorrealistaUrl
-                      ? "Regenerar Render IA"
+                      ? "Regenerar esta variante"
                       : "Generar Render con IA"}
                   </span>
                 </button>
@@ -471,7 +530,8 @@ export function VisualizerAndEstimator() {
                   type="button"
                   onClick={() => {
                     setImagenUrl(null);
-                    setRenderFotorrealistaUrl(null);
+                    setRendersPorModelo({});
+                    setHashImagenActual("");
                     setAnalisis(null);
                     setErrorAnalisis(null);
                   }}
@@ -512,30 +572,34 @@ export function VisualizerAndEstimator() {
                     />
                   </>
                 ) : (
-                  // ESTADO INICIAL ANTES DE GENERAR IA: FOTO BASE CON BOTÓN DIRECTO
+                  // ESTADO CUANDO ESTE MODELO AÚN NO SE HA GENERADO
                   <div className="relative w-full h-full">
                     <img
                       src={imagenUrl}
                       alt="Fachada base"
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-carbon/30 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center">
+                    <div className="absolute inset-0 bg-carbon/40 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center">
                       <div className="bg-white/95 text-carbon p-5 rounded-2xl shadow-xl max-w-sm border border-white/40">
                         <span className="text-3xl mb-2 block">✨</span>
                         <h4 className="font-titular font-bold text-base text-verde-profundo mb-1">
-                          Listo para Generar Render Fotorrealista
+                          {CATALOGO_MODELOS[modeloSeleccionado]?.nombre || "Modelo Seleccionado"}
                         </h4>
                         <p className="text-xs text-carbon/70 mb-4">
-                          La IA de Flux Fill integrará el modelo de {tipoProyecto === "porton" ? "portón" : "pérgola"} en tu espacio con iluminación y sombras reales.
+                          La IA integrará este diseño fotorrealista con sombras, reflejos e iluminación natural en tu espacio.
                         </p>
                         <button
                           type="button"
                           disabled={generandoInpaint}
-                          onClick={() => generarRenderIaFotorrealista()}
+                          onClick={() => generarRenderIaFotorrealista(undefined, modeloSeleccionado)}
                           className="w-full bg-verde-profundo hover:bg-verde-profundo/90 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <span>{generandoInpaint ? "⏳" : "🎨"}</span>
-                          <span>{generandoInpaint ? "Generando con IA..." : "Generar Render con IA"}</span>
+                          <span>
+                            {generandoInpaint
+                              ? "Generando con IA..."
+                              : `Generar Render para ${CATALOGO_MODELOS[modeloSeleccionado]?.nombre || "este modelo"}`}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -610,6 +674,41 @@ export function VisualizerAndEstimator() {
             <p className="mt-2 text-center text-xs text-carbon/50">
               👉 Desliza la barra horizontalmente para comparar tu espacio actual vs. el diseño fotorrealista terminado.
             </p>
+
+            {/* Barra de acceso rápido entre variantes ya generadas */}
+            {modelosConRender.length > 1 && (
+              <div className="mt-4 p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs animate-fadeIn">
+                <div className="flex items-center gap-2 font-bold text-emerald-900">
+                  <span className="text-base">✨</span>
+                  <span>{modelosConRender.length} variantes generadas listas para comparar:</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {modelosConRender.map((modId) => {
+                    const mod = CATALOGO_MODELOS[modId];
+                    if (!mod) return null;
+                    const esSeleccionado = modeloSeleccionado === modId;
+                    return (
+                      <button
+                        key={modId}
+                        type="button"
+                        onClick={() => {
+                          setModeloSeleccionado(modId);
+                          setModoVisualizacion("ia");
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold transition-all text-xs flex items-center gap-1.5 shadow-xs cursor-pointer ${
+                          esSeleccionado
+                            ? "bg-verde-profundo text-white shadow-md ring-2 ring-emerald-400"
+                            : "bg-white text-carbon hover:bg-emerald-100/70 border border-emerald-300"
+                        }`}
+                      >
+                        <span>✓</span>
+                        <span>{mod.nombre}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Aviso si hubo advertencia */}
@@ -641,32 +740,45 @@ export function VisualizerAndEstimator() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {modelosDisponibles.map((m) => {
                 const esActivo = modeloSeleccionado === m.id;
+                const tieneRenderGuardado = Boolean(rendersPorModelo[m.id]);
+
                 return (
                   <button
                     key={m.id}
                     type="button"
                     onClick={() => {
                       setModeloSeleccionado(m.id);
-                      // Si cambia el modelo, limpiamos el render previo para detonar el nuevo
-                      setRenderFotorrealistaUrl(null);
+                      if (rendersPorModelo[m.id]) {
+                        setModoVisualizacion("ia");
+                      }
                     }}
-                    className={`text-left p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between ${
+                    className={`text-left p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between cursor-pointer ${
                       esActivo
-                        ? "border-verde-profundo bg-verde-profundo/5 shadow-md"
+                        ? "border-verde-profundo bg-verde-profundo/5 shadow-md ring-2 ring-verde-profundo/20"
                         : "border-carbon/10 hover:border-carbon/30 bg-slate-50/50"
                     }`}
                   >
-                    {m.badge && (
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md self-start mb-2 ${
-                          esActivo
-                            ? "bg-verde-profundo text-white"
-                            : "bg-carbon/10 text-carbon/70"
-                        }`}
-                      >
-                        {m.badge}
-                      </span>
-                    )}
+                    <div className="flex items-center justify-between w-full mb-2 gap-2">
+                      {m.badge ? (
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                            esActivo
+                              ? "bg-verde-profundo text-white"
+                              : "bg-carbon/10 text-carbon/70"
+                          }`}
+                        >
+                          {m.badge}
+                        </span>
+                      ) : (
+                        <span />
+                      )}
+
+                      {tieneRenderGuardado && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <span>✓</span> Render Listo (0s)
+                        </span>
+                      )}
+                    </div>
 
                     <div>
                       <h5 className="font-bold text-carbon text-base mb-1">{m.nombre}</h5>

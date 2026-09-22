@@ -3,8 +3,67 @@ import { CATALOGO_MODELOS } from "@/lib/cotizador/motor-precios";
 import { crearMascaraPng } from "@/lib/ia/crear-mascara";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 export const maxDuration = 60; // Hasta 60s para inferencia de Flux Fill
+
+interface CacheItem {
+  image_url: string;
+  prompt_used: string;
+  created_at: number;
+}
+
+// Caché en memoria durante la ejecución de la instancia
+const memCache: Map<string, CacheItem> =
+  (globalThis as any).__INPAINT_CACHE_MAP__ || new Map<string, CacheItem>();
+(globalThis as any).__INPAINT_CACHE_MAP__ = memCache;
+
+const CACHE_DIR = path.join(process.cwd(), ".cache", "inpaint_renders");
+
+function calcularHashEntrada(
+  image: string,
+  projectType: string,
+  modelId: string,
+  geometry: any
+): string {
+  const muestra =
+    image.length > 32768
+      ? image.slice(0, 16384) + image.length + image.slice(-16384)
+      : image;
+  const data = `${muestra}_${projectType}_${modelId}_${JSON.stringify(geometry || {})}`;
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
+function obtenerDeCache(key: string): CacheItem | null {
+  if (memCache.has(key)) {
+    return memCache.get(key)!;
+  }
+  try {
+    const filePath = path.join(CACHE_DIR, `${key}.json`);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8");
+      const item: CacheItem = JSON.parse(content);
+      memCache.set(key, item);
+      return item;
+    }
+  } catch (e) {
+    // Silencioso en entornos de solo lectura
+  }
+  return null;
+}
+
+function guardarEnCache(key: string, item: CacheItem) {
+  try {
+    memCache.set(key, item);
+    if (!fs.existsSync(CACHE_DIR)) {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    const filePath = path.join(CACHE_DIR, `${key}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(item), "utf8");
+  } catch (e) {
+    console.warn("No se pudo persistir caché en disco:", e);
+  }
+}
 
 function obtenerTokenReplicate(): string {
   let rawToken = process.env.REPLICATE_API_TOKEN || "";
@@ -31,10 +90,25 @@ function obtenerTokenReplicate(): string {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { image, project_type, model_id, geometry } = body;
+    const { image, project_type, model_id, geometry, force_regenerate } = body;
 
     if (!image) {
       return NextResponse.json({ error: "Falta la imagen para inpainting." }, { status: 400 });
+    }
+
+    // 0. Comprobar si ya existe en caché antes de llamar a Replicate
+    const cacheKey = calcularHashEntrada(image, project_type, model_id, geometry);
+    if (!force_regenerate) {
+      const cached = obtenerDeCache(cacheKey);
+      if (cached) {
+        console.log("Servido desde caché para modelo:", model_id, "key:", cacheKey.slice(0, 8));
+        return NextResponse.json({
+          success: true,
+          image_url: cached.image_url,
+          prompt_used: cached.prompt_used,
+          cached: true,
+        });
+      }
     }
 
     const token = obtenerTokenReplicate();
@@ -179,10 +253,18 @@ export async function POST(req: Request) {
         console.warn("No se pudo convertir a base64, usando URL directa:", dlErr);
       }
 
+      // Guardar en la caché del servidor
+      guardarEnCache(cacheKey, {
+        image_url: finalImageUrl,
+        prompt_used: promptIa,
+        created_at: Date.now(),
+      });
+
       return NextResponse.json({
         success: true,
         image_url: finalImageUrl,
         prompt_used: promptIa,
+        cached: false,
       });
     } else {
       console.error("Inpainting falló o excedió tiempo:", current.error);
