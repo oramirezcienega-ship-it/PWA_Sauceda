@@ -18,6 +18,23 @@ import type { AnalisisVanoVision } from "@/lib/ia/estimador-vision";
 // Fachadas de muestra pre-cargadas para pruebas inmediatas
 const EJEMPLOS_FACHADAS = [
   {
+    id: "patio_terraza",
+    tipo: "pergola" as const,
+    titulo: "Patio / Terraza Jardín",
+    descripcion: "Jardín abierto para pérgola",
+    anchoM: 4.60,
+    altoM: 2.70,
+    geo: {
+      p_techo_izq: { x: 0.16, y: 0.22 },
+      p_techo_der: { x: 0.84, y: 0.18 },
+      p_piso_izq: { x: 0.18, y: 0.82 },
+      p_piso_der: { x: 0.82, y: 0.78 },
+    },
+    // Usamos el render fotorrealista que acabamos de generar como muestra pre-cargada
+    urlBase: "https://replicate.delivery/yhqm/4YlsFGfJBUTCByiXyqsxdfuK0nrpM80rE0cQnZ8YVEHRzFQXA/out-0.png",
+    renderIaEjemplo: "https://replicate.delivery/xezq/XVsQuyQwIwrEF5d7KvBcA9ZwunlCpWue7G9vPkVVge0R0FQXA/out-0.png",
+  },
+  {
     id: "cochera_doble",
     tipo: "porton" as const,
     titulo: "Cochera Doble Residencial",
@@ -30,7 +47,7 @@ const EJEMPLOS_FACHADAS = [
       p_piso_izq: { x: 0.12, y: 0.88 },
       p_piso_der: { x: 0.88, y: 0.88 },
     },
-    svgPlaceholder: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+    urlBase: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
       <defs>
         <linearGradient id="cielo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%2393C5FD"/><stop offset="100%" stop-color="%23E2E8F0"/></linearGradient>
         <linearGradient id="muro" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="%23F1F5F9"/><stop offset="100%" stop-color="%23E2E8F0"/></linearGradient>
@@ -41,34 +58,10 @@ const EJEMPLOS_FACHADAS = [
       <rect x="50" y="80" width="700" height="260" fill="url(%23muro)" stroke="%23CBD5E1" stroke-width="2"/>
       <rect x="70" y="100" width="100" height="180" fill="%23475569" rx="3"/>
       <rect x="96" y="120" width="608" height="200" fill="%231E293B" rx="4"/>
-      <text x="400" y="220" fill="%2394A3B8" font-family="sans-serif" font-size="20" font-weight="bold" text-anchor="middle">COCHERA ABIERTA (5.10m x 2.40m)</text>
+      <text x="400" y="220" fill="%2394A3B8" font-family="sans-serif" font-size="20" font-weight="bold" text-anchor="middle">COCHERA RESIDENCIAL (5.10m x 2.40m)</text>
       <text x="400" y="250" fill="%2364748B" font-family="sans-serif" font-size="14" text-anchor="middle">Vano para portón contemporáneo</text>
     </svg>`,
-  },
-  {
-    id: "patio_terraza",
-    tipo: "pergola" as const,
-    titulo: "Patio / Terraza Jardín",
-    descripcion: "Jardín abierto para pérgola",
-    anchoM: 4.60,
-    altoM: 2.70,
-    geo: {
-      p_techo_izq: { x: 0.15, y: 0.22 },
-      p_techo_der: { x: 0.85, y: 0.18 },
-      p_piso_izq: { x: 0.18, y: 0.82 },
-      p_piso_der: { x: 0.82, y: 0.78 },
-    },
-    svgPlaceholder: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
-      <defs>
-        <linearGradient id="cielo2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%2360A5FA"/><stop offset="100%" stop-color="%23BFDBFE"/></linearGradient>
-        <linearGradient id="pasto" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="%2316A34A"/><stop offset="100%" stop-color="%2315803D"/></linearGradient>
-      </defs>
-      <rect width="800" height="500" fill="url(%23cielo2)"/>
-      <rect x="0" y="340" width="800" height="160" fill="url(%23pasto)"/>
-      <rect x="60" y="100" width="680" height="250" fill="%23FEF3C7" stroke="%23FDE68A" stroke-width="2"/>
-      <text x="400" y="210" fill="%2392400E" font-family="sans-serif" font-size="20" font-weight="bold" text-anchor="middle">ESPACIO DE TERRAZA (4.60m x 2.70m)</text>
-      <text x="400" y="240" fill="%23B45309" font-family="sans-serif" font-size="14" text-anchor="middle">Área para Pérgola Estructural o Cristal</text>
-    </svg>`,
+    renderIaEjemplo: null,
   },
 ];
 
@@ -80,28 +73,32 @@ export function VisualizerAndEstimator() {
   const [pasoAnalisis, setPasoAnalisis] = useState("");
   const [errorAnalisis, setErrorAnalisis] = useState<string | null>(null);
 
-  // 2. Geometría 3D y Perspectiva
+  // 2. Estado de Generación de Inpainting Fotorrealista con IA
+  const [renderFotorrealistaUrl, setRenderFotorrealistaUrl] = useState<string | null>(null);
+  const [generandoInpaint, setGenerandoInpaint] = useState(false);
+  const [modoVisualizacion, setModoVisualizacion] = useState<"ia" | "3d">("ia");
+
+  // 3. Geometría 3D y Perspectiva
   const [geo3D, setGeo3D] = useState<GeometriaVano3D>(obtenerGeometriaInicial("porton"));
   const [calibrandoPerspectiva, setCalibrandoPerspectiva] = useState(false);
   const [pinActivo, setPinActivo] = useState<string | null>(null);
 
-  // 3. Medidas paramétricas
+  // 4. Medidas paramétricas
   const [analisis, setAnalisis] = useState<AnalisisVanoVision | null>(null);
   const [anchoManual, setAnchoManual] = useState<number>(5.0);
   const [altoManual, setAltoManual] = useState<number>(2.4);
   const [modoEdicionMedidas, setModoEdicionMedidas] = useState(false);
 
-  // 4. Opciones de modelo y accesorios
+  // 5. Opciones de modelo y accesorios
   const [modeloSeleccionado, setModeloSeleccionado] = useState<string>("porton_duela");
   const [motorElectrico, setMotorElectrico] = useState<boolean>(false);
   const [cerraduraDigital, setCerraduraDigital] = useState<boolean>(false);
 
-  // 5. Control del Split Slider Antes vs Después
+  // 6. Split Slider Antes vs Después
   const [sliderPos, setSliderPos] = useState<number>(50);
   const [isDraggingSlider, setIsDraggingSlider] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Sincronizar tipo de proyecto con modelo por defecto y geometría
   useEffect(() => {
     if (tipoProyecto === "porton") {
       setModeloSeleccionado("porton_duela");
@@ -111,6 +108,8 @@ export function VisualizerAndEstimator() {
       setMotorElectrico(false);
       setGeo3D(obtenerGeometriaInicial("pergola"));
     }
+    // Limpiar render previo al cambiar tipo
+    setRenderFotorrealistaUrl(null);
   }, [tipoProyecto]);
 
   const modelosDisponibles = useMemo(() => {
@@ -130,10 +129,52 @@ export function VisualizerAndEstimator() {
     });
   }, [areaM2, modeloSeleccionado, motorElectrico, cerraduraDigital]);
 
-  // Procesar archivo cargado
+  // Disparar generación con IA Fotorrealista (Flux Fill en Replicate)
+  const generarRenderIaFotorrealista = useCallback(
+    async (imagenBase?: string) => {
+      const img = imagenBase || imagenUrl;
+      if (!img) return;
+
+      setGenerandoInpaint(true);
+      setErrorAnalisis(null);
+
+      try {
+        const res = await fetch("/api/estimator/inpaint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image: img,
+            project_type: tipoProyecto,
+            model_id: modeloSeleccionado,
+            geometry: geo3D,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "No se pudo generar el render con IA.");
+        }
+
+        if (data.image_url) {
+          setRenderFotorrealistaUrl(data.image_url);
+          setModoVisualizacion("ia");
+        }
+      } catch (err: any) {
+        console.error("Error al generar inpainting con IA:", err);
+        setErrorAnalisis(err.message || "Error durante el renderizado fotorrealista con IA.");
+        setModoVisualizacion("3d");
+      } finally {
+        setGenerandoInpaint(false);
+      }
+    },
+    [imagenUrl, tipoProyecto, modeloSeleccionado, geo3D]
+  );
+
+  // Procesar archivo cargado por el usuario
   const procesarArchivoImagen = useCallback(
     async (file: File) => {
       setErrorAnalisis(null);
+      setRenderFotorrealistaUrl(null);
       setAnalizando(true);
       setPasoAnalisis("Optimizando imagen de alta resolución...");
 
@@ -147,7 +188,7 @@ export function VisualizerAndEstimator() {
         const dataUrl = await base64Promise;
         setImagenUrl(dataUrl);
 
-        setPasoAnalisis("IA Multimodal: extrayendo vano, líneas de fuga y escala...");
+        setPasoAnalisis("Visión artificial: detectando vano y calibrando proporciones...");
         const res = await fetch("/api/estimator/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -157,22 +198,16 @@ export function VisualizerAndEstimator() {
           }),
         });
 
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || "No se pudo completar el análisis visual.");
+        if (res.ok) {
+          const data: AnalisisVanoVision = await res.json();
+          setAnalisis(data);
+          setAnchoManual(data.estimated_width_m || (tipoProyecto === "porton" ? 5.0 : 4.5));
+          setAltoManual(data.estimated_height_m || (tipoProyecto === "porton" ? 2.4 : 2.7));
+          setGeo3D(obtenerGeometriaInicial(tipoProyecto, data.bounding_box_normalized));
         }
 
-        const data: AnalisisVanoVision = await res.json();
-        setAnalisis(data);
-        setAnchoManual(data.estimated_width_m || (tipoProyecto === "porton" ? 5.0 : 4.5));
-        setAltoManual(data.estimated_height_m || (tipoProyecto === "porton" ? 2.4 : 2.7));
-
-        // Inicializar geometría espacial 3D según vano detectado
-        setGeo3D(obtenerGeometriaInicial(tipoProyecto, data.bounding_box_normalized));
-
-        if (data.error_user_friendly) {
-          setErrorAnalisis(data.error_user_friendly);
-        }
+        // Detonar de inmediato la generación del render fotorrealista con IA
+        generarRenderIaFotorrealista(dataUrl);
       } catch (err: any) {
         console.error("Error al procesar archivo:", err);
         setErrorAnalisis(err.message || "Error al procesar la fotografía.");
@@ -180,17 +215,26 @@ export function VisualizerAndEstimator() {
         setAnalizando(false);
       }
     },
-    [tipoProyecto]
+    [tipoProyecto, generarRenderIaFotorrealista]
   );
 
   // Cargar ejemplo pre-cargado
   const cargarEjemplo = (ejemplo: (typeof EJEMPLOS_FACHADAS)[0]) => {
     setTipoProyecto(ejemplo.tipo);
-    setImagenUrl(ejemplo.svgPlaceholder);
+    setImagenUrl(ejemplo.urlBase);
     setErrorAnalisis(null);
     setAnchoManual(ejemplo.anchoM);
     setAltoManual(ejemplo.altoM);
     setGeo3D(ejemplo.geo);
+
+    if (ejemplo.renderIaEjemplo) {
+      setRenderFotorrealistaUrl(ejemplo.renderIaEjemplo);
+      setModoVisualizacion("ia");
+    } else {
+      setRenderFotorrealistaUrl(null);
+      setModoVisualizacion("3d");
+    }
+
     setAnalisis({
       opening_detected: true,
       opening_type: ejemplo.tipo === "porton" ? "garage" : "patio",
@@ -198,9 +242,9 @@ export function VisualizerAndEstimator() {
       estimated_width_m: ejemplo.anchoM,
       estimated_height_m: ejemplo.altoM,
       estimated_area_sqm: Number((ejemplo.anchoM * ejemplo.altoM).toFixed(2)),
-      confidence_score: 0.95,
+      confidence_score: 0.96,
       reference_anchors_used: ["car", "slab_height", "pedestrian_door"],
-      notes: "Ejemplo pre-calibrado para simulación visual 3D.",
+      notes: "Demostración fotorrealista de alta definición con IA.",
     });
   };
 
@@ -233,7 +277,6 @@ export function VisualizerAndEstimator() {
     [pinActivo]
   );
 
-  // Manejador unificado de puntero
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (pinActivo) {
@@ -250,7 +293,7 @@ export function VisualizerAndEstimator() {
     setIsDraggingSlider(false);
   }, []);
 
-  // SVG 3D generado en tiempo real según la geometría de anclaje
+  // SVG 3D para modo estructural interactivo
   const svgPerspectiva3D = useMemo(() => {
     return generarSvgArquitectonicoPerspectiva(modeloSeleccionado, geo3D, 1000, 700);
   }, [modeloSeleccionado, geo3D]);
@@ -266,10 +309,10 @@ export function VisualizerAndEstimator() {
     if (motorElectrico) extrasTxt += " + Motor Merik/LiftMaster";
     if (cerraduraDigital) extrasTxt += " + Cerradura Digital";
 
-    const msg = `Hola SAUCEDA, acabo de cotizar un *${mod}* en su visualizador 3D.
-📐 *Medidas estimadas:* ${anchoManual.toFixed(2)}m (Ancho) × ${altoManual.toFixed(2)}m (Alto) = *${areaM2} m²*
-💵 *Presupuesto aprox:* ${precioProm} (Rango: ${precioRango})${extrasTxt ? `\n⚙️ *Adicionales:* ${extrasTxt}` : ""}
-📍 Me gustaría agendar una visita técnica en León, Gto. para validar medidas físicas con láser y revisar acabados.`;
+    const msg = `Hola SAUCEDA, acabo de cotizar un *${mod}* en su visualizador IA.
+📐 *Medidas:* ${anchoManual.toFixed(2)}m (Ancho) × ${altoManual.toFixed(2)}m (Alto) = *${areaM2} m²*
+💵 *Presupuesto estimado:* ${precioProm} (Rango: ${precioRango})${extrasTxt ? `\n⚙️ *Adicionales:* ${extrasTxt}` : ""}
+📍 Me gustaría agendar una visita técnica en León, Gto. para calibrar medidas con rayo láser y revisar muestras de materiales.`;
 
     return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
   }, [presupuesto, anchoManual, altoManual, areaM2, motorElectrico, cerraduraDigital]);
@@ -280,13 +323,13 @@ export function VisualizerAndEstimator() {
       <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-carbon/10 shadow-xs">
         <div>
           <span className="text-xs font-bold uppercase tracking-wider text-sauce bg-sauce/10 px-2.5 py-1 rounded-full">
-            Visualizador Arquitectónico 3D
+            Inpainting Neuronal & Cotizador IA
           </span>
           <h2 className="text-xl sm:text-2xl font-titular font-bold text-verde-profundo mt-1">
-            Simulador Espacial de Fachada y Terraza
+            Visualizador Fotorrealista de Fachadas
           </h2>
           <p className="text-xs sm:text-sm text-carbon/70">
-            Renderizado estructural con columnas, vigas en perspectiva, sombras reales y cotización paramétrica instantánea.
+            Sube tu foto y la IA genera un render fotográfico de tu portón o pérgola con iluminación natural y cotización en tiempo real.
           </p>
         </div>
 
@@ -324,10 +367,10 @@ export function VisualizerAndEstimator() {
               📸
             </div>
             <h3 className="text-lg sm:text-xl font-bold font-titular text-carbon mb-2">
-              Sube una foto de tu cochera, patio o terraza
+              Sube una foto de tu cochera o patio
             </h3>
             <p className="text-xs sm:text-sm text-carbon/60 mb-6">
-              El motor detecta el vano, proyecta la estructura en perspectiva 3D sobre tu muro y terreno, y calcula el presupuesto exacto.
+              Nuestra IA integrará fotográficamente el modelo seleccionado en tu propio espacio con sombras y acabados hiperrealistas.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -362,7 +405,7 @@ export function VisualizerAndEstimator() {
             {/* Ejemplos de prueba rápida */}
             <div className="mt-8 pt-6 border-t border-carbon/10">
               <span className="text-xs font-semibold text-carbon/50 uppercase tracking-wider block mb-3">
-                O prueba al instante con una muestra pre-cargada:
+                O prueba con una muestra fotorrealista pre-cargada:
               </span>
               <div className="flex flex-wrap justify-center gap-2">
                 {EJEMPLOS_FACHADAS.map((ej) => (
@@ -382,35 +425,54 @@ export function VisualizerAndEstimator() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* SIMULADOR 3D INTERACTIVO CON SLIDER ANTES VS DESPUÉS */}
+          {/* SIMULADOR VISUAL CON SLIDER ANTES VS DESPUÉS */}
           <div className="bg-white rounded-3xl border border-carbon/15 p-4 sm:p-6 shadow-xs overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <h3 className="font-titular font-bold text-lg text-carbon">
-                  Simulador de Fachada y Espacio Real
+                  {renderFotorrealistaUrl && modoVisualizacion === "ia"
+                    ? "Render Fotorrealista Generado por IA"
+                    : "Simulador Arquitectónico"}
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Botón para activar/desactivar calibración de perspectiva con 4 puntos */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Botón para detonar render con IA */}
                 <button
                   type="button"
-                  onClick={() => setCalibrandoPerspectiva(!calibrandoPerspectiva)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
-                    calibrandoPerspectiva
-                      ? "bg-amber-100 text-amber-900 border-amber-300"
-                      : "bg-slate-50 text-carbon/70 border-carbon/10 hover:bg-slate-100"
-                  }`}
+                  disabled={generandoInpaint}
+                  onClick={() => generarRenderIaFotorrealista()}
+                  className="text-xs font-bold px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-verde-profundo text-white shadow-xs hover:opacity-90 disabled:opacity-50 transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>📐</span>
-                  <span>{calibrandoPerspectiva ? "Fijar Anclajes" : "Calibrar Perspectiva 3D"}</span>
+                  <span>{generandoInpaint ? "⏳" : "✨"}</span>
+                  <span>
+                    {generandoInpaint
+                      ? "Generando con IA..."
+                      : renderFotorrealistaUrl
+                      ? "Regenerar Render IA"
+                      : "Generar Render con IA"}
+                  </span>
                 </button>
+
+                {/* Alternar entre vista IA y vista 3D si hay render disponible */}
+                {renderFotorrealistaUrl && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModoVisualizacion(modoVisualizacion === "ia" ? "3d" : "ia")
+                    }
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-carbon/10 bg-slate-50 hover:bg-slate-100 text-carbon/70 transition"
+                  >
+                    {modoVisualizacion === "ia" ? "📐 Ver Plano 3D" : "✨ Ver Render IA"}
+                  </button>
+                )}
 
                 <button
                   type="button"
                   onClick={() => {
                     setImagenUrl(null);
+                    setRenderFotorrealistaUrl(null);
                     setAnalisis(null);
                     setErrorAnalisis(null);
                   }}
@@ -421,49 +483,45 @@ export function VisualizerAndEstimator() {
               </div>
             </div>
 
-            {/* Aviso de Calibración Activa */}
-            {calibrandoPerspectiva && (
-              <div className="mb-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs px-3.5 py-2 rounded-xl flex items-center justify-between">
-                <span>
-                  💡 <strong>Modo Calibración:</strong> Arrastra los 4 círculos blancos para alinear las columnas en el piso y anclar las vigas en el muro.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCalibrandoPerspectiva(false)}
-                  className="font-bold underline ml-2 cursor-pointer"
-                >
-                  Listo
-                </button>
-              </div>
-            )}
-
-            {/* CONTENEDOR DEL SLIDER & LIENZO 3D */}
+            {/* LIENZO Y COMPARADOR INTERACTIVO */}
             <div
               ref={containerRef}
               className="relative w-full aspect-[4/3] sm:aspect-[16/10] bg-carbon/5 rounded-2xl overflow-hidden select-none border border-carbon/10 shadow-inner"
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
             >
-              {/* CAPA DE FONDO: DESPUÉS (Render con Estructura 3D, Columnas, Sombras y Materiales) */}
+              {/* CAPA DE FONDO: DESPUÉS */}
               <div className="absolute inset-0 w-full h-full">
-                <img
-                  src={imagenUrl}
-                  alt="Fachada base"
-                  className="w-full h-full object-cover"
-                />
-
-                {/* SVG Tridimensional en perspectiva */}
-                <div
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  dangerouslySetInnerHTML={{ __html: svgPerspectiva3D }}
-                />
+                {renderFotorrealistaUrl && modoVisualizacion === "ia" ? (
+                  // IMAGEN FOTORREALISTA GENERADA POR IA (FLUX)
+                  <img
+                    src={renderFotorrealistaUrl}
+                    alt="Propuesta Fotorrealista IA"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  // VISTA ARQUITECTÓNICA 3D CON PERSPECTIVA
+                  <>
+                    <img
+                      src={imagenUrl}
+                      alt="Fachada base"
+                      className="w-full h-full object-cover"
+                    />
+                    <div
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      dangerouslySetInnerHTML={{ __html: svgPerspectiva3D }}
+                    />
+                  </>
+                )}
 
                 <span className="absolute bottom-3 right-3 bg-verde-profundo/90 backdrop-blur-xs text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow pointer-events-none">
-                  ✨ Propuesta SAUCEDA 3D
+                  {renderFotorrealistaUrl && modoVisualizacion === "ia"
+                    ? "✨ Propuesta Fotorrealista (IA)"
+                    : "📐 Propuesta Arquitectónica"}
                 </span>
               </div>
 
-              {/* CAPA FRONTAL: ANTES (Foto Original del Cliente) recortada por el slider */}
+              {/* CAPA FRONTAL: ANTES (FOTO ORIGINAL) */}
               <div
                 className="absolute inset-0 overflow-hidden"
                 style={{ width: `${sliderPos}%` }}
@@ -484,112 +542,43 @@ export function VisualizerAndEstimator() {
                 </span>
               </div>
 
-              {/* PINES INTERACTIVOS DE PERSPECTIVA 3D (Visibles en modo calibración) */}
-              {calibrandoPerspectiva && (
-                <div className="absolute inset-0 z-30">
-                  {/* Pin 1: Anclaje Muro Izquierdo */}
-                  <div
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setPinActivo("techo_izq");
-                    }}
-                    className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 border-2 border-white shadow-lg cursor-grab active:cursor-grabbing flex items-center justify-center text-[10px] font-bold text-carbon"
-                    style={{
-                      left: `${geo3D.p_techo_izq.x * 100}%`,
-                      top: `${geo3D.p_techo_izq.y * 100}%`,
-                    }}
-                    title="Anclaje Muro Izquierdo"
-                  >
-                    1
-                  </div>
-
-                  {/* Pin 2: Anclaje Muro Derecho */}
-                  <div
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setPinActivo("techo_der");
-                    }}
-                    className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 border-2 border-white shadow-lg cursor-grab active:cursor-grabbing flex items-center justify-center text-[10px] font-bold text-carbon"
-                    style={{
-                      left: `${geo3D.p_techo_der.x * 100}%`,
-                      top: `${geo3D.p_techo_der.y * 100}%`,
-                    }}
-                    title="Anclaje Muro Derecho"
-                  >
-                    2
-                  </div>
-
-                  {/* Pin 3: Base Columna Piso Izquierda */}
-                  <div
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setPinActivo("piso_izq");
-                    }}
-                    className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400 border-2 border-white shadow-lg cursor-grab active:cursor-grabbing flex items-center justify-center text-[10px] font-bold text-carbon"
-                    style={{
-                      left: `${geo3D.p_piso_izq.x * 100}%`,
-                      top: `${geo3D.p_piso_izq.y * 100}%`,
-                    }}
-                    title="Base Columna Piso Izquierda"
-                  >
-                    3
-                  </div>
-
-                  {/* Pin 4: Base Columna Piso Derecha */}
-                  <div
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setPinActivo("piso_der");
-                    }}
-                    className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400 border-2 border-white shadow-lg cursor-grab active:cursor-grabbing flex items-center justify-center text-[10px] font-bold text-carbon"
-                    style={{
-                      left: `${geo3D.p_piso_der.x * 100}%`,
-                      top: `${geo3D.p_piso_der.y * 100}%`,
-                    }}
-                    title="Base Columna Piso Derecha"
-                  >
-                    4
-                  </div>
-                </div>
-              )}
-
               {/* LÍNEA DIVISORIA Y CONTROLADOR DEL SLIDER */}
-              {!calibrandoPerspectiva && (
-                <div
-                  className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_rgba(0,0,0,0.5)] cursor-ew-resize z-20"
-                  style={{ left: `${sliderPos}%` }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    setIsDraggingSlider(true);
-                  }}
-                >
-                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-9 h-9 bg-white text-carbon rounded-full shadow-lg border-2 border-verde-profundo flex items-center justify-center font-bold text-xs select-none cursor-ew-resize">
-                    ↔
-                  </div>
+              <div
+                className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_rgba(0,0,0,0.5)] cursor-ew-resize z-20"
+                style={{ left: `${sliderPos}%` }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  setIsDraggingSlider(true);
+                }}
+              >
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-9 h-9 bg-white text-carbon rounded-full shadow-lg border-2 border-verde-profundo flex items-center justify-center font-bold text-xs select-none cursor-ew-resize">
+                  ↔
                 </div>
-              )}
+              </div>
 
-              {/* HUD Animado de Escaneo Láser */}
-              {analizando && (
-                <div className="absolute inset-0 bg-carbon/65 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-white z-40">
-                  <div className="relative w-full max-w-xs h-40 border-2 border-sauce/50 rounded-xl overflow-hidden mb-4 bg-carbon/40">
-                    <div className="absolute inset-x-0 h-1 bg-emerald-400 shadow-[0_0_15px_#10B981] animate-[bounce_2s_infinite]"></div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-16 h-16 border-4 border-sauce/30 border-t-sauce rounded-full animate-spin"></div>
-                    </div>
+              {/* HUD Animado durante análisis o renderizado con IA */}
+              {(analizando || generandoInpaint) && (
+                <div className="absolute inset-0 bg-carbon/75 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-white z-40">
+                  <div className="relative w-full max-w-xs h-36 border-2 border-sauce/50 rounded-xl overflow-hidden mb-4 bg-carbon/40 flex items-center justify-center">
+                    <div className="absolute inset-x-0 h-1 bg-emerald-400 shadow-[0_0_20px_#10B981] animate-[bounce_2s_infinite]"></div>
+                    <div className="w-14 h-14 border-4 border-sauce/30 border-t-sauce rounded-full animate-spin"></div>
                   </div>
                   <span className="text-sm font-bold tracking-wide uppercase text-emerald-400 mb-1">
-                    Análisis Métrico y Espacial
+                    {generandoInpaint
+                      ? "Pintando Render Fotorrealista con IA"
+                      : "Análisis Métrico y Espacial"}
                   </span>
                   <p className="text-xs text-slate-200 text-center max-w-xs animate-pulse">
-                    {pasoAnalisis || "Detectando geometría y escala..."}
+                    {generandoInpaint
+                      ? "Integrando acero estructural, iluminación y reflejos con Flux Fill..."
+                      : pasoAnalisis || "Detectando geometría de fachada..."}
                   </p>
                 </div>
               )}
             </div>
 
             <p className="mt-2 text-center text-xs text-carbon/50">
-              👉 Desliza la barra horizontalmente para comparar la foto actual vs. el diseño en 3D.
+              👉 Desliza la barra horizontalmente para comparar tu espacio actual vs. el diseño fotorrealista terminado.
             </p>
           </div>
 
@@ -600,7 +589,7 @@ export function VisualizerAndEstimator() {
               <div>
                 <p className="font-semibold">{errorAnalisis}</p>
                 <p className="mt-0.5 text-amber-700/90 text-xs">
-                  Puedes calibrar los anclajes con el botón "Calibrar Perspectiva 3D" o ajustar las medidas en el panel inferior.
+                  Puedes intentar generar de nuevo con el botón "Generar Render con IA" o ajustar las medidas en el panel inferior.
                 </p>
               </div>
             </div>
@@ -608,9 +597,16 @@ export function VisualizerAndEstimator() {
 
           {/* 3. Selector de Variantes de Diseño */}
           <div className="bg-white rounded-3xl border border-carbon/15 p-4 sm:p-6 shadow-xs">
-            <h4 className="font-titular font-bold text-lg text-carbon mb-3">
-              Selecciona el Modelo de {tipoProyecto === "porton" ? "Portón" : "Pérgola"}
-            </h4>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-titular font-bold text-lg text-carbon">
+                Selecciona el Modelo de {tipoProyecto === "porton" ? "Portón" : "Pérgola"}
+              </h4>
+              {renderFotorrealistaUrl && (
+                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+                  ✨ Render IA Activo
+                </span>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {modelosDisponibles.map((m) => {
@@ -619,7 +615,11 @@ export function VisualizerAndEstimator() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setModeloSeleccionado(m.id)}
+                    onClick={() => {
+                      setModeloSeleccionado(m.id);
+                      // Si cambia el modelo, limpiamos el render previo para detonar el nuevo
+                      setRenderFotorrealistaUrl(null);
+                    }}
                     className={`text-left p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between ${
                       esActivo
                         ? "border-verde-profundo bg-verde-profundo/5 shadow-md"
