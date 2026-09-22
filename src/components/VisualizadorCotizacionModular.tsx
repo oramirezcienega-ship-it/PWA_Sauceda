@@ -325,6 +325,11 @@ export function VisualizadorCotizacionModular({
                 <div className="mt-0.5 font-mono text-sm font-bold text-slate-800">
                   {datosModulares.dimensiones.superficieM2?.toFixed(2)} m²
                 </div>
+                {datosModulares.dimensiones.largoM && datosModulares.dimensiones.anchoM && (
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    {datosModulares.dimensiones.largoM.toFixed(2)}m × {datosModulares.dimensiones.anchoM.toFixed(2)}m
+                  </div>
+                )}
               </div>
               <div className="rounded-xl border border-slate-200/60 bg-white p-3 shadow-xs">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Altura Libre</div>
@@ -460,6 +465,11 @@ export function VisualizadorCotizacionModular({
                           <span className="font-mono text-sm font-bold text-slate-900">
                             {op.precio === 0 ? "Incluido" : `+${formatoPesos(op.precio)}`}
                           </span>
+                          {op.tipoPrecio === "m2" && op.precioPorM2 && op.precio > 0 && (
+                            <div className="text-[10px] font-medium text-slate-500">
+                              {formatoPesos(op.precioPorM2)}/m²
+                            </div>
+                          )}
                         </div>
                       </label>
                     );
@@ -515,6 +525,11 @@ export function VisualizadorCotizacionModular({
                           <span className="font-mono text-sm font-bold text-slate-900">
                             +{formatoPesos(comp.precio)}
                           </span>
+                          {comp.tipoPrecio === "m2" && comp.precioPorM2 && comp.precio > 0 && (
+                            <div className="text-[10px] font-medium text-slate-500">
+                              {formatoPesos(comp.precioPorM2)}/m²
+                            </div>
+                          )}
                         </div>
                       </label>
                     );
@@ -550,11 +565,7 @@ export function VisualizadorCotizacionModular({
                         {preset.recomendado && <span>★</span>}
                       </div>
                       <span className="text-[10px] font-normal opacity-80 mt-0.5">
-                        {preset.id === "esencial"
-                          ? "Funcional & Económico"
-                          : preset.id === "recomendado"
-                          ? "Aislante Térmico + WPC"
-                          : "Acabado Total Llave en Mano"}
+                        {preset.descripcion}
                       </span>
                     </button>
                   );
@@ -606,83 +617,95 @@ export function VisualizadorCotizacionModular({
             </div>
           </div>
 
-          {/* TABLA COMPARATIVA DE PAQUETES SUGERIDOS */}
-          <div className="space-y-3 pt-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Comparativa de Paquetes Sugeridos
-            </h4>
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-500">
-                  <tr>
-                    <th className="px-3.5 py-2.5">Paquete</th>
-                    <th className="px-3.5 py-2.5">Cubierta</th>
-                    <th className="px-3.5 py-2.5">Plafón</th>
-                    <th className="px-3.5 py-2.5">Complementos</th>
-                    <th className="px-3.5 py-2.5 text-right font-mono">Total s/IVA</th>
-                    <th className="px-3.5 py-2.5 text-right font-mono">Por m²</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className={presetActivoId === "esencial" ? "bg-emerald-50/50 font-semibold" : ""}>
-                    <td className="px-3.5 py-2.5">
-                      <div className="font-bold text-slate-800">Esencial</div>
-                      {presetActivoId === "esencial" && (
-                        <span className="text-[9px] font-bold text-emerald-700 uppercase">
-                          Tu selección
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5">Lámina pintro</td>
-                    <td className="px-3.5 py-2.5">Sin plafón</td>
-                    <td className="px-3.5 py-2.5 text-slate-400">—</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono font-bold">$31,000</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">$3,444</td>
-                  </tr>
+          {/* TABLA COMPARATIVA DE PAQUETES SUGERIDOS (DINÁMICA) */}
+          {datosModulares.presets && datosModulares.presets.length > 0 && (
+            <div className="space-y-3 pt-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Comparativa de Paquetes Sugeridos
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 font-semibold text-slate-500">
+                    <tr>
+                      <th className="px-3.5 py-2.5">Paquete</th>
+                      {datosModulares.gruposOpciones.map((g) => (
+                        <th key={g.id} className="px-3.5 py-2.5">{g.titulo}</th>
+                      ))}
+                      <th className="px-3.5 py-2.5">Complementos</th>
+                      <th className="px-3.5 py-2.5 text-right font-mono">Total s/IVA</th>
+                      <th className="px-3.5 py-2.5 text-right font-mono">Por m²</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {datosModulares.presets.map((preset) => {
+                      const esActivo = presetActivoId === preset.id;
+                      const base = datosModulares.estructuraBase?.precio || 0;
+                      let presetSubtotal = base;
+                      for (const [grupoId, opId] of Object.entries(preset.opciones)) {
+                        const g = datosModulares.gruposOpciones.find((gr) => gr.id === grupoId);
+                        const op = g?.opciones.find((o) => o.id === opId);
+                        if (op) presetSubtotal += op.precio;
+                      }
+                      for (const cId of preset.complementos) {
+                        const c = datosModulares.complementos.find((item) => item.id === cId);
+                        if (c) presetSubtotal += c.precio;
+                      }
+                      const m2 = datosModulares.dimensiones?.superficieM2 || 0;
+                      const porM2 = m2 > 0 ? Math.round(presetSubtotal / m2) : 0;
 
-                  <tr className={presetActivoId === "recomendado" ? "bg-emerald-50/50 font-semibold" : ""}>
-                    <td className="px-3.5 py-2.5">
-                      <div className="flex items-center gap-1">
-                        <span className="font-bold text-slate-800">Recomendado</span>
-                        <span className="text-[10px] text-[#D4AF37]">★</span>
-                      </div>
-                      {presetActivoId === "recomendado" && (
-                        <span className="text-[9px] font-bold text-emerald-700 uppercase">
-                          Tu selección
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5">Multipanel 1"</td>
-                    <td className="px-3.5 py-2.5">Plafón WPC madera</td>
-                    <td className="px-3.5 py-2.5 text-slate-400">—</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono font-bold">$47,600</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">$5,289</td>
-                  </tr>
-
-                  <tr className={presetActivoId === "premium" ? "bg-emerald-50/50 font-semibold" : ""}>
-                    <td className="px-3.5 py-2.5">
-                      <div className="font-bold text-slate-800">Premium</div>
-                      {presetActivoId === "premium" && (
-                        <span className="text-[9px] font-bold text-emerald-700 uppercase">
-                          Tu selección
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2.5">Multipanel 1"</td>
-                    <td className="px-3.5 py-2.5">Plafón WPC madera</td>
-                    <td className="px-3.5 py-2.5">Iluminación + Pintura electrostática</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono font-bold">$57,800</td>
-                    <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">$6,422</td>
-                  </tr>
-                </tbody>
-              </table>
+                      return (
+                        <tr
+                          key={preset.id}
+                          className={`cursor-pointer transition hover:bg-slate-50 ${
+                            esActivo ? "bg-emerald-50/60 font-semibold" : ""
+                          }`}
+                          onClick={() => aplicarPreset(preset.id)}
+                        >
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-1">
+                              <span className="font-bold text-slate-800">{preset.nombre}</span>
+                              {preset.recomendado && <span className="text-[10px] text-[#D4AF37]">★</span>}
+                            </div>
+                            {esActivo && (
+                              <span className="text-[9px] font-bold text-emerald-700 uppercase">
+                                Tu selección
+                              </span>
+                            )}
+                          </td>
+                          {datosModulares.gruposOpciones.map((g) => {
+                            const opId = preset.opciones[g.id];
+                            const op = g.opciones.find((o) => o.id === opId);
+                            return (
+                              <td key={g.id} className="px-3.5 py-2.5 text-slate-700">
+                                {op ? op.nombre : "—"}
+                              </td>
+                            );
+                          })}
+                          <td className="px-3.5 py-2.5 text-slate-600">
+                            {preset.complementos.length > 0
+                              ? preset.complementos
+                                  .map((cId) => datosModulares.complementos.find((c) => c.id === cId)?.nombre)
+                                  .filter(Boolean)
+                                  .join(" + ")
+                              : "—"}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-slate-900">
+                            {formatoPesos(presetSubtotal)}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right font-mono text-slate-500">
+                            {porM2 > 0 ? formatoPesos(porM2) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-slate-400 italic">
+                Haz clic en cualquier paquete para alternar tu configuración al instante.
+              </p>
             </div>
-            <p className="text-[11px] text-slate-400 italic">
-              Esta pérgola cotizada se ubica en el rango medio del mercado local para estructura
-              metálica. El paquete recomendado y premium destacan por incluir aislamiento térmico y
-              acabado de plafón que garantizan durabilidad y confort térmico.
-            </p>
-          </div>
+          )}
 
           {/* CONDICIONES COMERCIALES */}
           {datosModulares.condiciones && (

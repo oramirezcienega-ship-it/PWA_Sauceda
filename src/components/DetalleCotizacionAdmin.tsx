@@ -3256,11 +3256,13 @@ export function DetalleCotizacionAdmin({
         abierto={modalEditorModular}
         onCerrar={() => setModalEditorModular(false)}
         cotizacion={cotizacion}
-        onGuardado={(nuevosDatos) => {
+        reporteVisita={reporteVisita}
+        onGuardado={(nuevosDatos, seleccionActualizada, nuevoPrecio) => {
           setCotizacion((prev) => ({
             ...prev,
             datosModulares: nuevosDatos,
-            precioFinal: nuevosDatos.estructuraBase?.precio || prev.precioFinal,
+            opcionesSeleccionadas: seleccionActualizada || prev.opcionesSeleccionadas,
+            precioFinal: nuevoPrecio || nuevosDatos.estructuraBase?.precio || prev.precioFinal,
           }));
         }}
       />
