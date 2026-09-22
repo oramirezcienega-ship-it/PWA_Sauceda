@@ -1,8 +1,32 @@
 import { NextResponse } from "next/server";
 import { CATALOGO_MODELOS } from "@/lib/cotizador/motor-precios";
 import { crearMascaraPng } from "@/lib/ia/crear-mascara";
+import fs from "fs";
+import path from "path";
 
 export const maxDuration = 60; // Hasta 60s para inferencia de Flux Fill
+
+function obtenerTokenReplicate(): string {
+  let rawToken = process.env.REPLICATE_API_TOKEN || "";
+
+  // Si no está en process.env, leerlo directamente de .env.local
+  if (!rawToken) {
+    try {
+      const envPath = path.resolve(process.cwd(), ".env.local");
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, "utf8");
+        const match = content.match(/REPLICATE_API_TOKEN=([^\r\n]+)/);
+        if (match) {
+          rawToken = match[1].trim();
+        }
+      }
+    } catch (e) {
+      console.warn("No se pudo leer .env.local directamente:", e);
+    }
+  }
+
+  return rawToken.trim().replace(/^["']|["']$/g, "");
+}
 
 export async function POST(req: Request) {
   try {
@@ -13,19 +37,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Falta la imagen para inpainting." }, { status: 400 });
     }
 
-    const rawToken = process.env.REPLICATE_API_TOKEN || "";
-    const token = rawToken.trim().replace(/^["']|["']$/g, "");
+    const token = obtenerTokenReplicate();
 
     if (!token) {
       return NextResponse.json(
         {
-          error: "No hay REPLICATE_API_TOKEN configurado en las variables de entorno.",
+          error:
+            "No se detectó REPLICATE_API_TOKEN en el entorno ni en .env.local. Por favor verifica tu clave de Replicate.",
         },
         { status: 500 }
       );
     }
-
-    const modelo = CATALOGO_MODELOS[model_id] || CATALOGO_MODELOS["porton_duela"];
 
     // 1. Prompts fotorrealistas de alta fidelidad arquitectónica
     let promptIa = "";
@@ -63,7 +85,6 @@ export async function POST(req: Request) {
         [geometry.p_piso_izq.x, geometry.p_piso_izq.y],
       ];
     } else {
-      // Coordenadas por defecto para el vano central
       puntosMascara =
         project_type === "pergola"
           ? [
@@ -83,7 +104,7 @@ export async function POST(req: Request) {
     const maskBuffer = crearMascaraPng(600, 400, puntosMascara);
     const maskBase64 = "data:image/png;base64," + maskBuffer.toString("base64");
 
-    console.log("Detonando Flux Fill en Replicate con prompt:", promptIa);
+    console.log("Invocando Flux Fill en Replicate con token:", token.slice(0, 4) + "...");
 
     // 3. Iniciar predicción en Replicate (black-forest-labs/flux-fill-dev)
     const repRes = await fetch("https://api.replicate.com/v1/predictions", {
@@ -118,7 +139,7 @@ export async function POST(req: Request) {
     const prediction = await repRes.json();
     const predictionId = prediction.id;
 
-    // 4. Polling hasta completar la inferencia (máximo 45 segundos)
+    // 4. Polling hasta completar la inferencia (máximo 48 segundos)
     let current = prediction;
     const startTime = Date.now();
 
@@ -145,9 +166,22 @@ export async function POST(req: Request) {
         ? current.output[0]
         : current.output;
 
+      // Descargar la imagen en el backend para convertirla a base64
+      // Esto evita problemas de CORS, expiración de URLs de Replicate y restricciones de CSP
+      let finalImageUrl = outputUrl;
+      try {
+        const imgFetch = await fetch(outputUrl);
+        if (imgFetch.ok) {
+          const imgBuf = await imgFetch.arrayBuffer();
+          finalImageUrl = `data:image/png;base64,${Buffer.from(imgBuf).toString("base64")}`;
+        }
+      } catch (dlErr) {
+        console.warn("No se pudo convertir a base64, usando URL directa:", dlErr);
+      }
+
       return NextResponse.json({
         success: true,
-        image_url: outputUrl,
+        image_url: finalImageUrl,
         prompt_used: promptIa,
       });
     } else {

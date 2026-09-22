@@ -14,7 +14,7 @@ const csp = [
   "object-src 'none'",
   "frame-ancestors 'self'",
   "form-action 'self'",
-  "img-src 'self' data: blob: https://*.supabase.co https://*.saucedamx.com http://localhost:* http://127.0.0.1:* http://192.168.100.*",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.saucedamx.com https://*.replicate.delivery https://replicate.delivery http://localhost:* http://127.0.0.1:* http://192.168.100.*",
   "font-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   `script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com${esDev ? " 'unsafe-eval'" : ""}`,
