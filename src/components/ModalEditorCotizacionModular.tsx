@@ -23,7 +23,7 @@ export function ModalEditorCotizacionModular({
   const datosIniciales: CotizacionModularData =
     cotizacion.datosModulares || PLANTILLA_PERGOLA_AZOTEA_3X3;
 
-  const [seccion, setSeccion] = useState<"armar" | "dimensiones" | "costos_m2" | "condiciones">("armar");
+  const [seccion, setSeccion] = useState<"armar" | "dimensiones" | "fotos" | "costos_m2" | "condiciones">("armar");
   const [datos, setDatos] = useState<CotizacionModularData>(JSON.parse(JSON.stringify(datosIniciales)));
   
   // Selección de opciones activas (para el selector visual del ejecutivo)
@@ -92,7 +92,9 @@ export function ModalEditorCotizacionModular({
       opcionesTotal,
       complementosTotal,
       totalSinIva,
+      subtotal: totalSinIva,
       precioM2,
+      precioPorM2: precioM2,
       itemsOpciones,
       itemsComplementos,
     };
@@ -103,13 +105,11 @@ export function ModalEditorCotizacionModular({
   const formatMoneda = (val: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(val);
 
-  // Recalcular dimensiones
   const handleCambiarDimensiones = (nuevoLargo: number, nuevoAncho: number) => {
     const recalculado = recalcularCotizacionModular(datos, nuevoLargo, nuevoAncho);
     setDatos(recalculado);
   };
 
-  // Sincronizar desde la Visita Técnica
   const handleSincronizarVisita = () => {
     if (!reporteVisita?.medidas?.largo || !reporteVisita?.medidas?.ancho) return;
     const l = Number(reporteVisita.medidas.largo);
@@ -120,52 +120,43 @@ export function ModalEditorCotizacionModular({
         tipo: "ok",
         texto: `Medidas sincronizadas desde el reporte de visita técnica: ${l} m × ${a} m (${(l * a).toFixed(2)} m²). Precios recalculados.`,
       });
+      setTimeout(() => setMensaje({ tipo: "", texto: "" }), 4000);
     }
   };
 
-  // Toggle complementos
   const handleToggleComplemento = (id: string) => {
     setComplementosElegidos((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  // Guardar en Base de Datos
-  const handleGuardar = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGuardar = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     try {
       setGuardando(true);
       setMensaje({ tipo: "", texto: "" });
 
-      const seleccionAGuardar: OpcionesSeleccionadasModular = {
+      // Guardar también las opciones seleccionadas y el precio final actualizado
+      const opcionesGuardar: OpcionesSeleccionadasModular = {
         opciones: opcionesElegidas,
         complementos: complementosElegidos,
-        incluirIva: cotizacion.opcionesSeleccionadas?.incluirIva || false,
+        incluirIva: cotizacion.opcionesSeleccionadas?.incluirIva ?? false,
+        precioCalculado: desgloseEnVivo.totalSinIva,
+        precioM2: desgloseEnVivo.precioM2,
       };
 
       const res = await guardarDatosModulares({
         cotizacionId: cotizacion.id,
         datosModulares: datos,
-        opcionesSeleccionadas: seleccionAGuardar,
+        opcionesSeleccionadas: opcionesGuardar,
         precioFinal: desgloseEnVivo.totalSinIva,
       });
 
-      if (!res.ok) {
-        setMensaje({
-          tipo: "error",
-          texto: res.error || "Error al guardar los cambios en la cotización dinámica.",
-        });
-        return;
-      }
+      if (!res.ok) throw new Error(res.error || "No se pudo guardar la configuración.");
 
-      setMensaje({
-        tipo: "ok",
-        texto: "¡Cotización dinámica y selección de opciones guardadas exitosamente!",
-      });
-
-      onGuardado(datos, seleccionAGuardar, desgloseEnVivo.totalSinIva);
-
+      setMensaje({ tipo: "ok", texto: "¡Configuración modular guardada con éxito!" });
       setTimeout(() => {
+        onGuardado?.(datos, opcionesGuardar, desgloseEnVivo.totalSinIva);
         onCerrar();
       }, 700);
     } catch (err: any) {
@@ -191,6 +182,11 @@ export function ModalEditorCotizacionModular({
                   Configurador Paramétrico
                 </span>
                 <span className="text-xs font-mono font-bold text-amber-300">{cotizacion.id}</span>
+                {(cotizacion.prospectoNombre || cotizacion.clienteNombrePersonalizado) && (
+                  <span className="text-xs bg-white/15 px-2 py-0.5 rounded text-white font-medium">
+                    👤 {cotizacion.clienteNombrePersonalizado || cotizacion.prospectoNombre}
+                  </span>
+                )}
               </div>
               <h3 className="font-titular text-base font-bold text-white leading-tight mt-0.5">
                 {datos.titulo || "Cotización Modular Dinámica"}
@@ -211,6 +207,7 @@ export function ModalEditorCotizacionModular({
           {[
             { id: "armar", etiqueta: "⚡ Armar Paquete & Resumen", icono: "🎛️" },
             { id: "dimensiones", etiqueta: "📐 Dimensiones & Levantamiento", icono: "📏" },
+            { id: "fotos", etiqueta: "📸 Renders & Planos", icono: "🖼️" },
             { id: "costos_m2", etiqueta: "🏷️ Costos Unitarios / m²", icono: "🧱" },
             { id: "condiciones", etiqueta: "⚖️ Condiciones Comerciales", icono: "📄" },
           ].map((tab) => (
@@ -218,7 +215,7 @@ export function ModalEditorCotizacionModular({
               key={tab.id}
               type="button"
               onClick={() => setSeccion(tab.id as any)}
-              className={`pb-2.5 px-3.5 font-semibold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`pb-2.5 px-3.5 font-semibold border-b-2 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                 seccion === tab.id
                   ? "border-[#1E3A2F] text-[#1E3A2F] font-bold bg-white rounded-t-lg shadow-2xs"
                   : "border-transparent text-carbon/60 hover:text-carbon"
@@ -595,6 +592,250 @@ export function ModalEditorCotizacionModular({
                   onChange={(e) => setDatos((p) => ({ ...p, descripcion: e.target.value }))}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* PESTAÑA: RENDERS Y PLANOS DEL PROYECTO */}
+          {/* ========================================================================= */}
+          {seccion === "fotos" && (
+            <div className="space-y-6">
+              <div className="bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-xl flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">📸</span>
+                  <div>
+                    <h4 className="font-titular text-sm font-bold text-emerald-950">
+                      Renders Fotorrealistas y Planos Estructurales
+                    </h4>
+                    <p className="text-xs text-emerald-800 leading-relaxed">
+                      Personaliza las imágenes que verá el cliente en su cotización interactiva: una simulación fotorrealista de cómo lucirá terminado y el plano o isométrico técnico de taller.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Si hay fotos de inspección de la visita técnica, permitir seleccionar con 1 clic */}
+              {reporteVisita?.fotos && reporteVisita.fotos.length > 0 && (
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">
+                      📷 Fotos del Sitio (Levantamiento en Visita Técnica):
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      {reporteVisita.fotos.length} fotos capturadas
+                    </span>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {reporteVisita.fotos.map((f, i) => (
+                      <div key={i} className="group relative shrink-0 w-24 h-20 rounded-lg overflow-hidden border border-slate-300 bg-white">
+                        <img src={f} alt={`Foto ${i}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition p-1 text-[9px] text-white">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDatos((p) => ({
+                                ...p,
+                                fotos: { ...(p.fotos || {}), renderUrl: f },
+                              }))
+                            }
+                            className="bg-emerald-600 px-1.5 py-0.5 rounded hover:bg-emerald-500 font-bold"
+                          >
+                            Como Render
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDatos((p) => ({
+                                ...p,
+                                fotos: { ...(p.fotos || {}), estructuralUrl: f },
+                              }))
+                            }
+                            className="bg-sky-600 px-1.5 py-0.5 rounded hover:bg-sky-500 font-bold"
+                          >
+                            Como Plano
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 1. Render Fotorrealista */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-700 font-bold text-sm">✨ Foto 1:</span>
+                      <span className="text-xs font-bold text-slate-800">Render Fotorrealista ("Cómo se vería real")</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDatos((p) => ({
+                          ...p,
+                          fotos: {
+                            ...(p.fotos || {}),
+                            renderUrl: "/images/render-pergola-real.jpg",
+                            renderTitulo: "Visualización 3D / Render Arquitectónico Fotorrealista",
+                            renderDescripcion: "Simulación estética fotorrealista de la propuesta con estructura en negro mate, cubierta multipanel y plafón de madera.",
+                          },
+                        }))
+                      }
+                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold underline cursor-pointer"
+                    >
+                      Restaurar Render Oficial
+                    </button>
+                  </div>
+
+                  <div className="relative aspect-[16/9] w-full rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+                    <img
+                      src={datos.fotos?.renderUrl || "/images/render-pergola-real.jpg"}
+                      alt="Vista previa render"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        URL de la Imagen / Render:
+                      </label>
+                      <input
+                        type="text"
+                        value={datos.fotos?.renderUrl || "/images/render-pergola-real.jpg"}
+                        onChange={(e) =>
+                          setDatos((p) => ({
+                            ...p,
+                            fotos: { ...(p.fotos || {}), renderUrl: e.target.value },
+                          }))
+                        }
+                        placeholder="https://... o /images/..."
+                        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Título de la Visualización:
+                      </label>
+                      <input
+                        type="text"
+                        value={datos.fotos?.renderTitulo || "Visualización 3D / Render Arquitectónico"}
+                        onChange={(e) =>
+                          setDatos((p) => ({
+                            ...p,
+                            fotos: { ...(p.fotos || {}), renderTitulo: e.target.value },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Descripción Explicativa:
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={datos.fotos?.renderDescripcion || "Simulación estética fotorrealista de la propuesta con acabados seleccionados, integración a los muros y protección perimetral."}
+                        onChange={(e) =>
+                          setDatos((p) => ({
+                            ...p,
+                            fotos: { ...(p.fotos || {}), renderDescripcion: e.target.value },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Diseño Estructural del Desarrollo */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-4 shadow-2xs">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sky-700 font-bold text-sm">📐 Foto 2:</span>
+                      <span className="text-xs font-bold text-slate-800">Diseño Estructural del Desarrollo</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDatos((p) => ({
+                          ...p,
+                          fotos: {
+                            ...(p.fotos || {}),
+                            estructuralUrl: "/images/plano-estructural-desarrollo.jpg",
+                            estructuralTitulo: "Ingeniería Estructural & Desarrollo de Taller",
+                            estructuralDescripcion: "Despiece isométrico estructural: columnas PTR, vigas perimetrales, largueros de cubierta y placas de anclaje químico.",
+                          },
+                        }))
+                      }
+                      className="text-[11px] text-sky-700 hover:text-sky-800 font-bold underline cursor-pointer"
+                    >
+                      Restaurar Plano Oficial
+                    </button>
+                  </div>
+
+                  <div className="relative aspect-[16/9] w-full rounded-lg overflow-hidden bg-slate-900 border border-slate-800">
+                    <img
+                      src={datos.fotos?.estructuralUrl || "/images/plano-estructural-desarrollo.jpg"}
+                      alt="Vista previa plano"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        URL del Plano / Isométrico:
+                      </label>
+                      <input
+                        type="text"
+                        value={datos.fotos?.estructuralUrl || "/images/plano-estructural-desarrollo.jpg"}
+                        onChange={(e) =>
+                          setDatos((p) => ({
+                            ...p,
+                            fotos: { ...(p.fotos || {}), estructuralUrl: e.target.value },
+                          }))
+                        }
+                        placeholder="https://... o /images/..."
+                        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Título del Esquema Estructural:
+                      </label>
+                      <input
+                        type="text"
+                        value={datos.fotos?.estructuralTitulo || "Ingeniería Estructural & Desarrollo de Taller"}
+                        onChange={(e) =>
+                          setDatos((p) => ({
+                            ...p,
+                            fotos: { ...(p.fotos || {}), estructuralTitulo: e.target.value },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Descripción Técnica:
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={datos.fotos?.estructuralDescripcion || "Despiece isométrico técnico: columnas PTR, vigas perimetrales, largueros de cubierta y placas de anclaje químico."}
+                        onChange={(e) =>
+                          setDatos((p) => ({
+                            ...p,
+                            fotos: { ...(p.fotos || {}), estructuralDescripcion: e.target.value },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
