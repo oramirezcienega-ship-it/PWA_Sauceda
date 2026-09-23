@@ -211,26 +211,30 @@ async function dispararWebhookN8N(
   pub: PublicacionProgramada,
   accion: "aprobar" | "publicar"
 ): Promise<{ enviado: boolean; aviso?: string }> {
-  const webhookUrl = process.env.N8N_MARKETING_WEBHOOK_URL;
-  if (!webhookUrl) {
-    const msg = "n8n no configurado: falta N8N_MARKETING_WEBHOOK_URL en las variables de entorno (Netlify/.env). Operando en modo manual.";
-    console.warn(`[Marketing Webhook] ${msg}`);
-    return { enviado: false, aviso: msg };
-  }
+  // URL por defecto para n8n staging si no está configurada en el entorno
+  const defaultWebhookUrl = "https://n8n-staging.saucedamx.com/webhook/publicar-contenido";
+  const webhookUrl = process.env.N8N_MARKETING_WEBHOOK_URL || defaultWebhookUrl;
 
   // Prevenir error común: pegar la URL del editor de n8n (/workflow/...) en lugar de la del Webhook (/webhook/...)
-  if (webhookUrl.includes("/workflow/")) {
-    const msg = `URL de n8n incorrecta ('${webhookUrl}'). Esa es la URL del editor visual de n8n. Debes copiar la 'Production URL' dentro del nodo Webhook (ej. 'https://n8n-staging.saucedamx.com/webhook/...').`;
-    console.error(`[Marketing Webhook] ${msg}`);
-    return { enviado: false, aviso: msg };
+  let effectiveUrl = webhookUrl;
+  if (effectiveUrl.includes("/workflow/")) {
+    console.warn(`[Marketing Webhook] URL configurada '${effectiveUrl}' es del editor. Corrigiendo automáticamente a la URL del webhook.`);
+    effectiveUrl = defaultWebhookUrl;
   }
 
-  console.log(`[Marketing Webhook] Disparando para post ${pub.id} (${accion}) a ${webhookUrl}`);
+  // Resolver la URL base del CRM actual para que n8n pueda enviar el creativo de vuelta
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.URL ? process.env.URL : null) ||
+    "https://crm.saucedamx.com";
+  const callbackUrl = `${baseUrl.replace(/\/$/, "")}/api/marketing/actualizar-media`;
+
+  console.log(`[Marketing Webhook] Disparando para post ${pub.id} (${accion}) a ${effectiveUrl} (Callback: ${callbackUrl})`);
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const res = await fetch(webhookUrl, {
+    const res = await fetch(effectiveUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -239,6 +243,7 @@ async function dispararWebhookN8N(
         ...pub,
         accion_evento: accion,
         fuente: "CRM Sauceda IA",
+        callback_url: callbackUrl,
       }),
       signal: controller.signal,
     });
