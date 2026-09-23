@@ -25,6 +25,7 @@ export interface PublicacionProgramada {
   plataforma: "facebook" | "instagram" | "tiktok" | "whatsapp";
   tipo_formato: "imagen" | "carrusel" | "video" | "reel";
   sugerencia_visual?: string;
+  prompt_imagen_flux?: string;
   guion_video?: string;
   url_imagen?: string;
   diseno_banner?: DisenoBannerParams;
@@ -205,6 +206,74 @@ export async function obtenerPublicaciones(filtros?: {
 }
 
 /**
+ * Construye un prompt fotográfico profesional en inglés altamente detallado y optimizado
+ * para el modelo Flux de Replicate, evitando artefactos como albercas, botellas o sábanas.
+ */
+function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
+  // Si ya tiene un prompt en inglés limpio y sólido sin palabras de tiempo o secuencias, usarlo
+  if (
+    pub.prompt_imagen_flux &&
+    pub.prompt_imagen_flux.trim().length > 40 &&
+    !pub.prompt_imagen_flux.match(/antes|despu[eé]s|transici[oó]n|gotera|reel/i)
+  ) {
+    return pub.prompt_imagen_flux.trim();
+  }
+
+  const texto = `${pub.titulo} ${pub.contenido} ${pub.sugerencia_visual || ""}`.toLowerCase();
+
+  // 1. Impermeabilización / Goteras / Azotea / Techos / Filtraciones
+  if (
+    texto.includes("impermea") ||
+    texto.includes("gotera") ||
+    texto.includes("filtraci") ||
+    texto.includes("azotea") ||
+    texto.includes("techo") ||
+    texto.includes("lluvia")
+  ) {
+    return "Award-winning commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato. A Mexican construction specialist in clean navy blue workwear and white safety helmet precisely rolling out a premium asphalt waterproof roofing membrane with a heavy industrial roller on a clean, finished flat roof surface. Warm golden hour sunlight, sharp texture details of concrete and smooth roofing material, crisp building lines, bright blue clear sky, shot on Hasselblad H6D-100c, 35mm lens, f/4, pristine realistic composition, 8k resolution.";
+  }
+
+  // 2. Infonavit / Bienes Raíces / Traspasos / Venta de Casa / Expediente
+  if (
+    texto.includes("infonavit") ||
+    texto.includes("traspaso") ||
+    texto.includes("inmobiliari") ||
+    texto.includes("bienes ra") ||
+    texto.includes("comprar casa") ||
+    texto.includes("expediente") ||
+    texto.includes("venta") ||
+    texto.includes("asesor")
+  ) {
+    return "High-end interior architectural photography of a sunny, contemporary Mexican residential living room in León Guanajuato. A professional Mexican real estate advisor in clean business casual attire warmly consulting with a smiling young couple over an executive property folder on a polished wood table. Natural daylight streaming through floor-to-ceiling glass windows, minimalist modern Mexican decor, lush courtyard in background, shot on Sony A7R V, 35mm f/2.8, magazine editorial quality.";
+  }
+
+  // 3. Concreto Premezclado / Losas / Firmes
+  if (
+    texto.includes("concreto") ||
+    texto.includes("premezclado") ||
+    texto.includes("losa") ||
+    texto.includes("cemento")
+  ) {
+    return "Dynamic, crisp industrial architectural photography of a modern residential construction site in sunny León Guanajuato. A clean concrete mixer truck chute delivering smooth, high-quality pre-mixed concrete onto a reinforced foundation slab, Mexican builders in high-vis vests and helmets leveling the surface smoothly. Bright daylight, sharp textures of aggregate and wet concrete, shot on 35mm lens, f/4, authentic craftsmanship.";
+  }
+
+  // 4. Remodelaciones / Ampliaciones / Fachadas
+  if (
+    texto.includes("remodela") ||
+    texto.includes("amplia") ||
+    texto.includes("cochera") ||
+    texto.includes("fachada") ||
+    texto.includes("baño") ||
+    texto.includes("cocina")
+  ) {
+    return "Cinematic architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato. Clean geometric architecture, warm sand-colored stucco, natural wood accents, contemporary steel beams, sunny day, clear blue sky, sharp realistic textures of stone and smooth concrete, shot on 35mm lens, f/4, pristine luxury home editorial.";
+  }
+
+  // Fallback por defecto: Arquitectura residencial moderna mexicana limpia
+  return "Award-winning commercial architectural editorial photography of a modern Mexican residential home in sunny León Guanajuato, warm natural sunlight, clear blue sky, Hasselblad H6D-100c, 35mm lens, f/4, crisp realistic composition, 8k resolution.";
+}
+
+/**
  * Dispara el webhook de n8n para publicar o solicitar generación de creativos.
  */
 async function dispararWebhookN8N(
@@ -229,7 +298,10 @@ async function dispararWebhookN8N(
     "https://crm.saucedamx.com";
   const callbackUrl = `${baseUrl.replace(/\/$/, "")}/api/marketing/actualizar-media`;
 
+  const promptFluxOptimizado = construirPromptFluxRobusto(pub);
   console.log(`[Marketing Webhook] Disparando para post ${pub.id} (${accion}) a ${effectiveUrl} (Callback: ${callbackUrl})`);
+  console.log(`[Marketing Webhook] Prompt Flux optimizado: ${promptFluxOptimizado.substring(0, 90)}...`);
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -241,6 +313,7 @@ async function dispararWebhookN8N(
       },
       body: JSON.stringify({
         ...pub,
+        prompt_imagen_flux: promptFluxOptimizado,
         accion_evento: accion,
         fuente: "CRM Sauceda IA",
         callback_url: callbackUrl,
@@ -537,12 +610,14 @@ INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
    - Remodelaciones, ampliaciones (cocheras, cocinas, baños) bajo diseño arquitectónico. Visitas técnicas y presupuestos gratuitos a domicilio en León.
    - Suministro de Concreto Premezclado certificado para losas y firmes.
 
-INSTRUCCIONES VISUALES DE ALTA CALIDAD FOTOGRÁFICA PARA 'sugerencia_visual':
+INSTRUCCIONES VISUALES DE ALTA CALIDAD FOTOGRÁFICA PARA 'sugerencia_visual' Y 'prompt_imagen_flux':
 - Describe EXCLUSIVAMENTE escenas de fotografía comercial y editorial arquitectónica limpia (estilo revista Dwell o Architectural Digest), con luz natural de día, cielo despejado, tomas de plano medio o general en casas residenciales modernas en León, Gto.
-- Ejemplos de tomas ganadoras:
-  * Para Impermeabilización/Construcción: Un técnico profesional con vestimenta de trabajo limpia aplicando con rodillo industrial un recubrimiento blanco impecable sobre la azotea de una casa moderna bajo cielo azul brillante, con líneas limpias y arquitectura contemporánea de fondo.
-  * Para Bienes Raíces: Una familia o pareja joven sonriente recibiendo las llaves de su casa en una sala iluminada y moderna, o un asesor profesional en oficina contemporánea revisando una carpeta ejecutiva.
-- PROHIBICIÓN ESTRICTA: NUNCA menciones botellas, botes de spray, latas, envases con etiquetas, cubetas con texto ni logotipos en la fotografía. NUNCA pidas texto, letras, marcas ni gráficos flotantes. Todo el logotipo oficial, sellos de garantía y textos publicitarios se montan automáticamente en el banner digital del CRM. La foto debe ser 100% fotográfica, limpia y realista.
+- 'sugerencia_visual': Explicación breve en español para el usuario del CRM.
+- 'prompt_imagen_flux' (OBLIGATORIO): Prompt en INGLÉS optimizado para el motor fotográfico Flux.
+  * Debe describir UNA SOLA ESCENA FOTOGRÁFICA ESTÁTICA Y NÍTIDA (nunca secuencias temporales, nunca "before and after", nunca transiciones).
+  * NUNCA pongas códigos de color HEX (#...), NUNCA pidas palabras negativas como "no bottles" o "no water", NUNCA incluyas albercas ni sábanas en publicaciones de techos/impermeabilización.
+  * Estructura requerida: "Award-winning commercial architectural editorial photography of a modern Mexican residential [rooftop/living room/facade] in sunny León Guanajuato. [Descripción creíble de artesano o asesor mexicano con uniforme limpio realizando su labor]. Warm natural golden sunlight, clear blue sky, sharp realistic textures, shot on Hasselblad H6D-100c, 35mm lens, f/4, crisp realistic composition, 8k resolution."
+- PROHIBICIÓN ESTRICTA: NUNCA menciones botellas, botes de spray, latas, envases con etiquetas, cubetas con texto ni logotipos en la fotografía. La foto debe ser 100% fotográfica, limpia y realista.
 
 REGLAS TÉCNICAS ESTRICTAS:
 - RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
@@ -554,7 +629,8 @@ Formato esperado:
     "plataforma": "facebook | instagram | tiktok | whatsapp",
     "tipo_formato": "imagen | carrusel | video | reel",
     "contenido": "Texto/Copy completo con gancho, oferta, viñetas de valor, llamada a la acción al 477 465 4700 y hashtags.",
-    "sugerencia_visual": "Descripción escénica de fotografía fotorrealista de alto impacto visual.",
+    "sugerencia_visual": "Descripción escénica en español.",
+    "prompt_imagen_flux": "Award-winning commercial architectural editorial photography of a modern Mexican residential rooftop in sunny León Guanajuato. A Mexican construction specialist in clean navy blue workwear and white safety helmet precisely rolling out a premium asphalt waterproof roofing membrane with a heavy industrial roller on a clean, finished flat roof surface. Warm golden hour sunlight, sharp texture details of concrete and smooth roofing material, crisp building lines, bright blue clear sky, shot on Hasselblad H6D-100c, 35mm lens, f/4, pristine realistic composition, 8k resolution.",
     "guion_video": "Si es video o reel, proporciona el guion estructurado paso a paso con tomas y diálogos.",
     "diseno_banner": {
       "titulo_ad": "IMPERMEABILIZACIÓN PROFESIONAL $210/M² | TRASPASO DIRECTO INFONAVIT",
@@ -690,7 +766,10 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         tipo_formato: prop.tipo_formato,
         sugerencia_visual: prop.sugerencia_visual || "",
         guion_video: prop.guion_video || "",
-        diseno_banner: prop.diseno_banner || {},
+        diseno_banner: {
+          ...(prop.diseno_banner || {}),
+          prompt_imagen_flux: prop.prompt_imagen_flux || construirPromptFluxRobusto(prop),
+        },
         fecha_programacion: fechaProg,
         estado: "pendiente_revision" as const,
         notas_revision: "",
