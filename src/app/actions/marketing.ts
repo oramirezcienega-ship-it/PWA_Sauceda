@@ -726,10 +726,19 @@ export async function actualizarImagenManual(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    // Limpiar si por alguna razón se intentara pasar una URL con banner SVG
+    let urlLimpia = urlImagen.trim();
+    if (urlLimpia.includes("/api/marketing/generar-banner?foto=")) {
+      const match = urlLimpia.match(/foto=([^&]+)/);
+      if (match && match[1]) {
+        urlLimpia = decodeURIComponent(match[1]);
+      }
+    }
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
       .update({
-        url_imagen: urlImagen,
+        url_imagen: urlLimpia,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -743,3 +752,49 @@ export async function actualizarImagenManual(
     return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
+
+/**
+ * Restaura la fotografía original limpia generada por IA (Flux)
+ * si la publicación tiene actualmente un banner SVG compuesto con textos pegados.
+ */
+export async function restaurarFotoLimpia(
+  id: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data: post, error: fetchErr } = await sb
+      .from("publicaciones_programadas")
+      .select("url_imagen")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !post) throw fetchErr || new Error("Publicación no encontrada");
+
+    let urlLimpia = post.url_imagen || "";
+    if (urlLimpia.includes("generar-banner")) {
+      const match = urlLimpia.match(/foto=([^&]+)/);
+      if (match && match[1]) {
+        urlLimpia = decodeURIComponent(match[1]);
+      }
+    }
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        url_imagen: urlLimpia,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data: data as PublicacionProgramada };
+  } catch (err: any) {
+    console.error("Error al restaurar foto limpia:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
+

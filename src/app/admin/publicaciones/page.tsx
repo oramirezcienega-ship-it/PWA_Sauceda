@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   PublicacionProgramada,
   obtenerPublicaciones,
@@ -12,6 +12,7 @@ import {
   eliminarPublicacionesMasivo,
   cambiarEstadoPublicacionesMasivo,
   actualizarImagenManual,
+  restaurarFotoLimpia,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
@@ -264,20 +265,68 @@ notify pgrst, 'reload schema';`;
     }
   };
 
-  const handleReemplazarArte = async (id: string) => {
-    const nuevaUrl = prompt(
-      "Introduce el enlace (URL) de la imagen descargada de Canva o pega la URL del arte final:"
-    );
-    if (!nuevaUrl || !nuevaUrl.trim()) return;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pubIdParaSubir, setPubIdParaSubir] = useState<string | null>(null);
 
-    setMensajeCarga("Actualizando arte publicitario...");
+  const handleReemplazarArte = (id: string) => {
+    setPubIdParaSubir(id);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleArchivoSeleccionado = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const targetId = pubIdParaSubir;
+    if (!file || !targetId) return;
+
+    setMensajeCarga("Subiendo y guardando arte desde tu equipo...");
     startTransition(async () => {
-      const res = await actualizarImagenManual(id, nuevaUrl.trim());
+      try {
+        const formData = new FormData();
+        formData.append("id", targetId);
+        formData.append("file", file);
+
+        const res = await fetch("/api/marketing/subir-arte", {
+          method: "POST",
+          body: formData,
+        });
+
+        const json = await res.json();
+        if (res.ok && json.success) {
+          await cargarDatos();
+          // Si estamos editando en el modal, actualizar también su estado
+          if (pubEditando && pubEditando.id === targetId) {
+            setPubEditando({ ...pubEditando, url_imagen: json.url_imagen });
+          }
+          alert("🎉 ¡Arte publicitario guardado con éxito!");
+        } else {
+          alert("Error al subir imagen: " + (json.error || "Fallo desconocido"));
+        }
+      } catch (err: any) {
+        console.error("Error al subir archivo de imagen:", err);
+        alert("Error de red al subir imagen: " + err.message);
+      } finally {
+        setPubIdParaSubir(null);
+      }
+    });
+  };
+
+  const handleRestaurarFotoLimpia = async (id: string) => {
+    if (!confirm("¿Deseas remover el banner SVG y restaurar la fotografía limpia generada por IA (Flux)?")) return;
+
+    setMensajeCarga("Restaurando fotografía limpia original...");
+    startTransition(async () => {
+      const res = await restaurarFotoLimpia(id);
       if (res.success) {
-        alert("¡Arte publicitario actualizado con éxito!");
         await cargarDatos();
+        if (pubEditando && pubEditando.id === id) {
+          setPubEditando(res.data);
+        }
+        alert("✨ Fotografía limpia restaurada con éxito.");
       } else {
-        alert("Error al actualizar arte: " + res.error);
+        alert("Error al restaurar: " + res.error);
       }
     });
   };
@@ -447,6 +496,13 @@ notify pgrst, 'reload schema';`;
 
   return (
     <main className="min-h-screen pb-16 bg-crema/20">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleArchivoSeleccionado}
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+      />
       <div className="bg-white border-b border-dorado/20 shadow-xs">
         <div className="mx-auto max-w-[1700px] px-6 py-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -703,8 +759,12 @@ notify pgrst, 'reload schema';`;
                     </div>
 
                     {pub.url_imagen && pub.url_imagen.length > 5 && (() => {
-                      const mediaUrl = pub.url_imagen.startsWith("http") ? pub.url_imagen : `https://${pub.url_imagen}`;
+                      const mediaUrl = pub.url_imagen.startsWith("http") || pub.url_imagen.startsWith("data:")
+                        ? pub.url_imagen
+                        : `https://${pub.url_imagen}`;
                       const esVideo = Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i));
+                      const esBannerSvg = Boolean(mediaUrl.includes("generar-banner"));
+
                       return (
                         <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group bg-black">
                           {esVideo ? (
@@ -723,7 +783,7 @@ notify pgrst, 'reload schema';`;
                             />
                           )}
                           <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
-                            <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : "Creativo Generado por IA (Flux)"}
+                            <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : (esBannerSvg ? "Banner Compuesto SVG" : "Fotografía Limpia (Flux)")}
                           </div>
                           <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                             <a
@@ -739,11 +799,21 @@ notify pgrst, 'reload schema';`;
                             <button
                               type="button"
                               onClick={() => handleReemplazarArte(pub.id!)}
-                              className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                              title="Reemplazar con imagen exportada de Canva"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Subir archivo (.png/.jpg) descargado de Canva a este post"
                             >
-                              🖼️ Reemplazar
+                              📁 Subir Arte
                             </button>
+                            {esBannerSvg && (
+                              <button
+                                type="button"
+                                onClick={() => handleRestaurarFotoLimpia(pub.id!)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                                title="Remover banner SVG y restaurar la foto original limpia de Flux"
+                              >
+                                🧹 Foto Limpia
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleRegenerarCreativo(pub.id!)}
@@ -839,6 +909,15 @@ notify pgrst, 'reload schema';`;
                         </span>
                       )}
                     </a>
+
+                    <button
+                      type="button"
+                      onClick={() => handleReemplazarArte(pub.id!)}
+                      className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                      title="Subir archivo (.png/.jpg) descargado de Canva a este post"
+                    >
+                      <span>📁</span> Subir Arte
+                    </button>
 
                     <button
                       onClick={() => setPubEditando(pub)}
@@ -1109,6 +1188,61 @@ notify pgrst, 'reload schema';`;
                     />
                   </div>
                 )}
+
+                {/* Sección de Arte / Imagen de la Publicación */}
+                <div className="md:col-span-2 border-t border-dorado/20 pt-4 mt-2">
+                  <label className="text-xs font-bold text-verde-profundo uppercase block mb-2 flex items-center gap-1.5">
+                    <span>🖼️</span> Arte / Creativo Visual
+                  </label>
+                  <div className="bg-crema/10 border border-dorado/30 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center">
+                    {pubEditando.url_imagen && pubEditando.url_imagen.length > 5 ? (
+                      <div className="w-24 h-24 rounded-xl overflow-hidden border border-dorado/30 relative flex-shrink-0 bg-black shadow-xs">
+                        <img
+                          src={pubEditando.url_imagen}
+                          alt="Vista previa"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 rounded-xl border border-dashed border-dorado/40 flex items-center justify-center text-xs text-carbon/40 flex-shrink-0">
+                        Sin imagen
+                      </div>
+                    )}
+                    <div className="flex-1 w-full space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPubIdParaSubir(pubEditando.id!);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = "";
+                              fileInputRef.current.click();
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>📁</span> Cargar PNG de Canva / PC
+                        </button>
+                        {pubEditando.url_imagen?.includes("generar-banner") && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestaurarFotoLimpia(pubEditando.id!)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>🧹</span> Restaurar Foto Limpia
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="O pega una URL directa (https://...)"
+                        value={pubEditando.url_imagen || ""}
+                        onChange={(e) => setPubEditando({ ...pubEditando, url_imagen: e.target.value })}
+                        className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Sección de Parametrización Dinámica de Anuncio Vendedor (Banner Meta Ads) */}
                 <div className="md:col-span-2 border-t border-dorado/20 pt-4 mt-2">

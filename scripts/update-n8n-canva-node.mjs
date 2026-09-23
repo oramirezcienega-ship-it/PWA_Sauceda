@@ -1,3 +1,4 @@
+try { process.loadEnvFile('.env.local'); } catch {}
 const N8N_URL = process.env.N8N_API_URL || "https://n8n-staging.saucedamx.com";
 const N8N_API_KEY = process.env.N8N_API_KEY || "";
 
@@ -36,14 +37,16 @@ async function main() {
 
   wf.nodes.push(canvaUploadNode);
 
-  // Encontrar la clave de switch "¿Imagen lista?"
-  const switchKey = Object.keys(wf.connections).find(k => k.includes("Imagen lista") && !k.includes("Video"));
-  if (switchKey && wf.connections[switchKey] && wf.connections[switchKey].main) {
-    const mainOutputs = wf.connections[switchKey].main;
-    if (mainOutputs[0]) {
-      const alreadyHas = mainOutputs[0].some(conn => conn.node === "Canva: Subir a Galería");
-      if (!alreadyHas) {
-        mainOutputs[0].push({ node: "Canva: Subir a Galería", type: "main", index: 0 });
+  // Encontrar todas las claves de switch donde la imagen esté lista (estática o video)
+  const switchKeys = Object.keys(wf.connections).filter(k => k.includes("Imagen") && k.includes("lista"));
+  for (const switchKey of switchKeys) {
+    if (wf.connections[switchKey] && wf.connections[switchKey].main) {
+      const mainOutputs = wf.connections[switchKey].main;
+      if (mainOutputs[0]) {
+        const alreadyHas = mainOutputs[0].some(conn => conn.node === "Canva: Subir a Galería");
+        if (!alreadyHas) {
+          mainOutputs[0].push({ node: "Canva: Subir a Galería", type: "main", index: 0 });
+        }
       }
     }
   }
