@@ -1199,9 +1199,11 @@ export async function programarCitaManual(data: {
  * Sincroniza fecha_instalacion si aplica y permite notificar al cliente sobre el cambio.
  */
 export async function editarCita(data: {
-  id: string;
+  id?: string;
+  citaId?: string;
   perfilId: string;
   asignadosIds?: string[];
+  clienteNombre?: string;
   clienteTelefono?: string;
   clienteEmail?: string | null;
   tipoCita: "inspeccion" | "instalacion" | "llamada" | "venta" | "asesoria";
@@ -1222,7 +1224,8 @@ export async function editarCita(data: {
   emailEnviado?: boolean;
 }> {
   await requireAdmin();
-  if (!data.id || !data.perfilId || !data.fecha || !data.horaInicio || !data.horaFin) {
+  const idCita = data.id || data.citaId;
+  if (!idCita || !data.perfilId || !data.fecha || !data.horaInicio || !data.horaFin) {
     return { ok: false, error: "Faltan datos obligatorios para editar la cita." };
   }
 
@@ -1233,7 +1236,7 @@ export async function editarCita(data: {
     const { data: citaActual, error: errCita } = await sb
       .from("agenda_citas")
       .select("*")
-      .eq("id", data.id)
+      .eq("id", idCita)
       .maybeSingle();
 
     if (errCita || !citaActual) {
@@ -1275,11 +1278,11 @@ export async function editarCita(data: {
     let { error: errUpdate } = await sb
       .from("agenda_citas")
       .update(updatePayload)
-      .eq("id", data.id);
+      .eq("id", idCita);
 
     if (errUpdate && errUpdate.message.includes("asignados_ids")) {
       delete updatePayload.asignados_ids;
-      const resRetry = await sb.from("agenda_citas").update(updatePayload).eq("id", data.id);
+      const resRetry = await sb.from("agenda_citas").update(updatePayload).eq("id", idCita);
       errUpdate = resRetry.error;
     }
 
@@ -1367,33 +1370,42 @@ export async function editarCita(data: {
             wa_message_id: waMessageId,
             mensaje_whatsapp_estado: "enviado",
           })
-          .eq("id", data.id);
+          .eq("id", idCita);
       }
     }
 
     // 7. Enviar correo si se solicitó
     const emailCliente = data.emailDestino?.trim() || data.clienteEmail?.trim() || citaActual.cliente_email;
     if (data.enviarEmail && emailCliente && emailCliente.includes("@")) {
-      const { enviarNotificacionInspeccionEmail } = await import("@/lib/email");
-      const resEmail = await enviarNotificacionInspeccionEmail({
-        emailDestino: emailCliente,
-        clienteNombre: citaActual.cliente_nombre,
-        asesorNombre: nombreAsesor,
-        fecha: data.fecha,
-        horaInicio: data.horaInicio,
-        horaFin: data.horaFin,
-        telefonoContacto: telContacto,
-        tipoCita: data.tipoCita,
-      });
-      emailEnviado = resEmail.ok;
-      if (emailEnviado) {
+      try {
+        const { enviarCorreo } = await import("@/lib/email");
+        const { generarHtmlCorreoInspeccion } = await import("@/lib/email-inspeccion");
+
+        const htmlCorreo = generarHtmlCorreoInspeccion({
+          clienteNombre: citaActual.cliente_nombre,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          horaFin: data.horaFin,
+          asesorNombre: nombreAsesor,
+          telefonoContacto: telContacto,
+          notas: data.notas,
+        });
+
+        await enviarCorreo(
+          emailCliente,
+          `📅 Actualización de ${data.tipoCita === "instalacion" ? "Instalación" : "Inspección Técnica"} - SAUCEDA`,
+          htmlCorreo
+        );
+        emailEnviado = true;
         await sb
           .from("agenda_citas")
           .update({
             email_enviado: true,
             email_destinatario: emailCliente,
           })
-          .eq("id", data.id);
+          .eq("id", idCita);
+      } catch (errEmail) {
+        console.error("Error al enviar correo de actualización de cita:", errEmail);
       }
     }
 
