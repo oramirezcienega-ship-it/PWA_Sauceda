@@ -11,6 +11,7 @@ import {
   eliminarPublicacion,
   eliminarPublicacionesMasivo,
   cambiarEstadoPublicacionesMasivo,
+  actualizarImagenManual,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
@@ -245,6 +246,38 @@ notify pgrst, 'reload schema';`;
         await cargarDatos();
       } else {
         alert("Error al solicitar regeneración de creativo: " + res.error);
+      }
+    });
+  };
+
+  const CANVA_DESIGN_URL = "https://www.canva.com/design/DAHWDlTjYjc/XtvEUXD8s18p0J0PIsD_Dg/edit";
+
+  const handleAbrirEnCanva = (pub: PublicacionProgramada) => {
+    const textoCopiar = `📢 TÍTULO:\n${pub.titulo}\n\n📝 COPY:\n${pub.contenido}\n\n📞 CONTACTO:\n477 465 4700 • León, Gto.`;
+    navigator.clipboard.writeText(textoCopiar);
+    alert(
+      "¡Contenido copiado al portapapeles! 📋✨\n\n" +
+      "1. Se abrirá tu plantilla de Canva.\n" +
+      "2. La fotografía generada por la IA de Sauceda ya está sincronizada en tu sección 'Subidos' (Uploads) de Canva.\n" +
+      "3. Pega los textos, arrastra la foto al marco y descarga tu imagen final en PNG."
+    );
+    window.open(CANVA_DESIGN_URL, "_blank");
+  };
+
+  const handleReemplazarArte = async (id: string) => {
+    const nuevaUrl = prompt(
+      "Introduce el enlace (URL) de la imagen descargada de Canva o pega la URL del arte final:"
+    );
+    if (!nuevaUrl || !nuevaUrl.trim()) return;
+
+    setMensajeCarga("Actualizando arte publicitario...");
+    startTransition(async () => {
+      const res = await actualizarImagenManual(id, nuevaUrl.trim());
+      if (res.success) {
+        alert("¡Arte publicitario actualizado con éxito!");
+        await cargarDatos();
+      } else {
+        alert("Error al actualizar arte: " + res.error);
       }
     });
   };
@@ -695,6 +728,22 @@ notify pgrst, 'reload schema';`;
                           <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                             <button
                               type="button"
+                              onClick={() => handleAbrirEnCanva(pub)}
+                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Copiar contenido y abrir tu plantilla en Canva"
+                            >
+                              🎨 Canva
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReemplazarArte(pub.id!)}
+                              className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Reemplazar con imagen exportada de Canva"
+                            >
+                              🖼️ Reemplazar
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleRegenerarCreativo(pub.id!)}
                               className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
                               title="Generar otra variante de imagen/video"
@@ -707,7 +756,7 @@ notify pgrst, 'reload schema';`;
                               rel="noreferrer"
                               className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
                             >
-                              🔍 Ver en HD
+                              🔍 HD
                             </a>
                           </div>
                         </div>
@@ -771,6 +820,14 @@ notify pgrst, 'reload schema';`;
                       title="Eliminar esta publicación permanentemente"
                     >
                       🗑️ Eliminar
+                    </button>
+
+                    <button
+                      onClick={() => handleAbrirEnCanva(pub)}
+                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                      title="Copiar contenido de este post y abrir tu plantilla en Canva"
+                    >
+                      <span>🎨</span> Canva
                     </button>
 
                     <button
