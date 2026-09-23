@@ -1341,6 +1341,29 @@ notify pgrst, 'reload schema';`;
                   />
                 </div>
 
+                <div className="md:col-span-2">
+                  <label className="text-xs font-bold text-carbon/60 block mb-1">
+                    Prompt Fotográfico IA (Flux / Replicate en Inglés)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Award-winning commercial architectural editorial photography of a modern Mexican residential..."
+                    value={pubEditando.prompt_imagen_flux || (pubEditando.diseno_banner as any)?.prompt_imagen_flux || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPubEditando({
+                        ...pubEditando,
+                        prompt_imagen_flux: val,
+                        diseno_banner: {
+                          ...(pubEditando.diseno_banner || {}),
+                          prompt_imagen_flux: val,
+                        },
+                      });
+                    }}
+                    className="w-full bg-crema/10 border border-dorado/30 rounded-xl p-4 text-xs text-carbon focus:outline-none focus:border-verde-profundo font-mono"
+                  />
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-carbon/60 block mb-1">Fecha de Programación</label>
                   <input
