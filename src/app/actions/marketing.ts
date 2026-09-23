@@ -48,6 +48,14 @@ export interface ActionResult<T> {
   error?: string;
 }
 
+function formatearErrorBDMarketing(err: any): string {
+  const msg = err?.message || String(err || "");
+  if (msg.includes("publicaciones_programadas") || msg.includes("schema cache")) {
+    return "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración consolidada de marketing en el SQL Editor de tu Supabase.";
+  }
+  return msg;
+}
+
 /**
  * Obtiene todas las publicaciones de la base de datos con filtros opcionales.
  */
@@ -86,13 +94,13 @@ export async function obtenerPublicaciones(filtros?: {
 
     if (error) {
       console.error("Error al obtener publicaciones:", error);
-      throw new Error(`Error de base de datos: ${error.message}`);
+      throw new Error(formatearErrorBDMarketing(error));
     }
 
     return (data || []) as PublicacionProgramada[];
   } catch (err: any) {
     console.error("Error en obtenerPublicaciones:", err);
-    throw err;
+    throw new Error(formatearErrorBDMarketing(err));
   }
 }
 
@@ -187,7 +195,7 @@ export async function guardarPublicacion(
     return { success: true, data: result };
   } catch (err: any) {
     console.error("Error en guardarPublicacion:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
@@ -227,7 +235,7 @@ export async function cambiarEstadoPublicacion(
     return { success: true, data: result };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacion:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
@@ -260,7 +268,7 @@ export async function regenerarCreativoPublicacion(
     return { success: true, data: result };
   } catch (err: any) {
     console.error("Error en regenerarCreativoPublicacion:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
@@ -284,7 +292,7 @@ export async function eliminarPublicacion(
     return { success: true, data: true };
   } catch (err: any) {
     console.error("Error en eliminarPublicacion:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
@@ -309,7 +317,7 @@ export async function eliminarPublicacionesMasivo(
     return { success: true, data: true };
   } catch (err: any) {
     console.error("Error en eliminarPublicacionesMasivo:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
@@ -346,7 +354,7 @@ export async function cambiarEstadoPublicacionesMasivo(
     return { success: true, data: true };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacionesMasivo:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
@@ -552,6 +560,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         tipo_formato: prop.tipo_formato,
         sugerencia_visual: prop.sugerencia_visual || "",
         guion_video: prop.guion_video || "",
+        diseno_banner: prop.diseno_banner || {},
         fecha_programacion: fechaProg,
         estado: "pendiente_revision" as const,
         notas_revision: "",
@@ -572,6 +581,6 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
     return { success: true, data: publicacionesCreadas };
   } catch (err: any) {
     console.error("Error en generarPublicacionesAutomaticas:", err);
-    return { success: false, error: err.message || String(err) };
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
