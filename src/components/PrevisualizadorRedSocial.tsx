@@ -49,12 +49,34 @@ export default function PrevisualizadorRedSocial({
 
   if (!abierto || !publicacion) return null;
 
-  const mediaUrl = publicacion.url_imagen && publicacion.url_imagen.length > 5
-    ? (publicacion.url_imagen.startsWith("http") || publicacion.url_imagen.startsWith("data:")
-        ? publicacion.url_imagen
-        : `https://${publicacion.url_imagen}`)
-    : null;
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
 
+  useEffect(() => {
+    setImgError(false);
+    if (publicacion?.url_imagen && publicacion.url_imagen.length > 5) {
+      const u = publicacion.url_imagen.startsWith("http") || publicacion.url_imagen.startsWith("data:")
+        ? publicacion.url_imagen
+        : `https://${publicacion.url_imagen}`;
+      setImgSrc(u);
+    } else if (publicacion?.id) {
+      // Si no tiene url_imagen directa, intentar proxy por ID
+      setImgSrc(`/api/marketing/imagen/${publicacion.id}`);
+    } else {
+      setImgSrc(null);
+    }
+  }, [publicacion]);
+
+  const handleImgError = () => {
+    if (publicacion?.id && imgSrc && !imgSrc.includes("/api/marketing/imagen/")) {
+      // Intentar a través del proxy del CRM que sirve buffer con CSP 'self'
+      setImgSrc(`/api/marketing/imagen/${publicacion.id}`);
+    } else {
+      setImgError(true);
+    }
+  };
+
+  const mediaUrl = imgSrc;
   const esVideo = mediaUrl ? Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i)) : false;
 
   const handleCopiarTexto = () => {
@@ -203,18 +225,20 @@ export default function PrevisualizadorRedSocial({
                 </div>
 
                 {/* Creativo Multimedia */}
-                {mediaUrl ? (
+                {imgSrc && !imgError ? (
                   <div className="relative bg-black">
                     {esVideo ? (
                       <video
-                        src={mediaUrl}
+                        src={imgSrc}
                         controls
                         className="w-full max-h-[380px] object-contain"
                       />
                     ) : (
                       <img
-                        src={mediaUrl}
+                        src={imgSrc}
                         alt="Facebook Post Media"
+                        referrerPolicy="no-referrer"
+                        onError={handleImgError}
                         className="w-full max-h-[380px] object-cover"
                       />
                     )}
@@ -222,8 +246,8 @@ export default function PrevisualizadorRedSocial({
                 ) : (
                   <div className="h-48 bg-gradient-to-br from-dorado/20 to-verde-profundo/20 flex flex-col items-center justify-center text-carbon/60 p-4 text-center">
                     <span className="text-3xl mb-1">🖼️</span>
-                    <span className="text-xs font-semibold">Sin imagen asignada aún</span>
-                    <span className="text-[10px] text-carbon/40">Se mostrará la foto limpia al aprobar o subir arte</span>
+                    <span className="text-xs font-semibold">Fotografía en proceso de generación</span>
+                    <span className="text-[10px] text-carbon/40 mt-1">Se visualizará la foto limpia al finalizar o cargar el archivo</span>
                   </div>
                 )}
 
@@ -311,18 +335,20 @@ export default function PrevisualizadorRedSocial({
                 </div>
 
                 {/* Contenedor Cuadrado o 4:5 */}
-                {mediaUrl ? (
+                {imgSrc && !imgError ? (
                   <div className="relative bg-black aspect-square overflow-hidden flex items-center justify-center">
                     {esVideo ? (
                       <video
-                        src={mediaUrl}
+                        src={imgSrc}
                         controls
                         className="w-full h-full object-cover"
                       />
                     ) : (
                       <img
-                        src={mediaUrl}
+                        src={imgSrc}
                         alt="Instagram Post Media"
+                        referrerPolicy="no-referrer"
+                        onError={handleImgError}
                         className="w-full h-full object-cover"
                       />
                     )}
@@ -331,7 +357,7 @@ export default function PrevisualizadorRedSocial({
                   <div className="aspect-square bg-gradient-to-tr from-purple-100 via-pink-50 to-amber-50 flex flex-col items-center justify-center text-carbon/60 p-6 text-center">
                     <span className="text-4xl mb-2">📸</span>
                     <span className="text-xs font-bold text-carbon/80">Vista Previa Instagram (1:1)</span>
-                    <span className="text-[10px] text-carbon/50 mt-1">Sube el arte editado de Canva para visualizarlo en alta fidelidad</span>
+                    <span className="text-[10px] text-carbon/50 mt-1">Sube el arte editado de Canva o espera a que n8n genere la foto</span>
                   </div>
                 )}
 
@@ -387,11 +413,11 @@ export default function PrevisualizadorRedSocial({
             {plataformaActiva === "tiktok" && (
               <div className="bg-black text-white rounded-3xl shadow-2xl overflow-hidden aspect-[9/16] relative flex flex-col justify-between border-4 border-gray-900 animate-in zoom-in-95 duration-150">
                 {/* Media de Fondo */}
-                {mediaUrl ? (
+                {imgSrc && !imgError ? (
                   <div className="absolute inset-0 z-0">
                     {esVideo ? (
                       <video
-                        src={mediaUrl}
+                        src={imgSrc}
                         autoPlay
                         loop
                         muted
@@ -400,8 +426,10 @@ export default function PrevisualizadorRedSocial({
                       />
                     ) : (
                       <img
-                        src={mediaUrl}
+                        src={imgSrc}
                         alt="Reel TikTok Media"
+                        referrerPolicy="no-referrer"
+                        onError={handleImgError}
                         className="w-full h-full object-cover"
                       />
                     )}
@@ -411,7 +439,7 @@ export default function PrevisualizadorRedSocial({
                   <div className="absolute inset-0 bg-gradient-to-b from-gray-900 via-gray-800 to-black flex flex-col items-center justify-center p-6 text-center z-0">
                     <span className="text-5xl mb-3">📱</span>
                     <span className="text-sm font-bold">Formato Vertical 9:16</span>
-                    <span className="text-xs text-white/60 mt-1">Ideal para Reels de Instagram y TikTok</span>
+                    <span className="text-xs text-white/60 mt-1">Generando fotografía o procesando creativo en n8n...</span>
                   </div>
                 )}
 
@@ -526,12 +554,18 @@ export default function PrevisualizadorRedSocial({
 
                   {/* Burbuja Enviada */}
                   <div className="max-w-[88%] self-end bg-[#E7FFDB] rounded-2xl rounded-tr-xs p-2 shadow-xs border border-[#D5EAC9] text-xs">
-                    {mediaUrl && (
+                    {imgSrc && !imgError && (
                       <div className="rounded-xl overflow-hidden mb-2 bg-black">
                         {esVideo ? (
-                          <video src={mediaUrl} controls className="w-full max-h-48 object-cover" />
+                          <video src={imgSrc} controls className="w-full max-h-48 object-cover" />
                         ) : (
-                          <img src={mediaUrl} alt="WhatsApp Media" className="w-full max-h-48 object-cover" />
+                          <img
+                            src={imgSrc}
+                            alt="WhatsApp Media"
+                            referrerPolicy="no-referrer"
+                            onError={handleImgError}
+                            className="w-full max-h-48 object-cover"
+                          />
                         )}
                       </div>
                     )}
@@ -589,9 +623,15 @@ export default function PrevisualizadorRedSocial({
                     <span className="text-[10px] text-carbon/50">León, Gto.</span>
                   </div>
 
-                  {mediaUrl && (
+                  {imgSrc && !imgError && (
                     <div className="rounded-xl overflow-hidden border border-gray-200">
-                      <img src={mediaUrl} alt="Email Hero" className="w-full max-h-52 object-cover" />
+                      <img
+                        src={imgSrc}
+                        alt="Email Hero"
+                        referrerPolicy="no-referrer"
+                        onError={handleImgError}
+                        className="w-full max-h-52 object-cover"
+                      />
                     </div>
                   )}
 

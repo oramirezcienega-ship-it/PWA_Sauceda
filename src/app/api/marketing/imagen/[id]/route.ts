@@ -47,7 +47,34 @@ export async function GET(
       }
     }
 
-    // Redirección directa a la URL pública de la imagen
+    // Intentar servir la imagen directamente (proxy buffer) para garantizar entrega y evitar bloqueos de CSP/CORS/Referer
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const imgRes = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (CRM Sauceda Image Proxy)",
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (imgRes.ok) {
+        const contentType = imgRes.headers.get("content-type") || "image/webp";
+        const arrayBuf = await imgRes.arrayBuffer();
+        return new Response(Buffer.from(arrayBuf), {
+          headers: {
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=86400, immutable",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+    } catch (fetchErr) {
+      console.warn("[Proxy Imagen] Falló proxy directo, usando redirect fallback:", fetchErr);
+    }
+
+    // Redirección fallback si falló la descarga en servidor
     return NextResponse.redirect(url, { status: 307 });
   } catch (err: any) {
     console.error("Error al servir imagen de publicación:", err);
