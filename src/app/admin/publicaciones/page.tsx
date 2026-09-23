@@ -331,6 +331,68 @@ notify pgrst, 'reload schema';`;
     });
   };
 
+  const [copiandoFotoId, setCopiandoFotoId] = useState<string | null>(null);
+
+  const handleCopiarFoto = async (url: string, id: string) => {
+    try {
+      setCopiandoFotoId(id);
+      let targetUrl = url;
+      if (targetUrl.includes("generar-banner")) {
+        const match = targetUrl.match(/foto=([^&]+)/);
+        if (match && match[1]) targetUrl = decodeURIComponent(match[1]);
+      }
+
+      const res = await fetch(targetUrl);
+      const blob = await res.blob();
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const objectUrl = URL.createObjectURL(blob);
+      img.src = objectUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("No se pudo obtener contexto 2D");
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(objectUrl);
+
+      canvas.toBlob(async (pngBlob) => {
+        if (!pngBlob) {
+          window.open(targetUrl, "_blank");
+          setCopiandoFotoId(null);
+          return;
+        }
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": pngBlob }),
+          ]);
+          setCopiandoFotoId(null);
+          alert("📋 ¡Foto copiada al portapapeles!\n\nVe a tu pestaña de Canva y presiona Ctrl + V para pegarla directamente en tu plantilla.");
+        } catch {
+          window.open(targetUrl, "_blank");
+          setCopiandoFotoId(null);
+          alert("Se abrió la foto limpia en una pestaña para copiarla (clic derecho -> Copiar imagen) o arrastrarla directamente a Canva.");
+        }
+      }, "image/png");
+    } catch (err: any) {
+      console.warn("Fallo al copiar imagen directo al portapapeles:", err);
+      let targetUrl = url;
+      if (targetUrl.includes("generar-banner")) {
+        const match = targetUrl.match(/foto=([^&]+)/);
+        if (match && match[1]) targetUrl = decodeURIComponent(match[1]);
+      }
+      window.open(targetUrl, "_blank");
+      setCopiandoFotoId(null);
+      alert("Se abrió la foto limpia en una pestaña para copiarla (clic derecho -> Copiar imagen) o arrastrarla a Canva.");
+    }
+  };
+
   const handleToggleSeleccion = (id: string) => {
     setSeleccionados(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
@@ -798,6 +860,14 @@ notify pgrst, 'reload schema';`;
                             </a>
                             <button
                               type="button"
+                              onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              title="Copiar foto al portapapeles para pegarla en Canva con Ctrl + V"
+                            >
+                              📋 Copiar Foto
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleReemplazarArte(pub.id!)}
                               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
                               title="Subir archivo (.png/.jpg) descargado de Canva a este post"
@@ -909,6 +979,17 @@ notify pgrst, 'reload schema';`;
                         </span>
                       )}
                     </a>
+
+                    {pub.url_imagen && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
+                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                        title="Copiar foto al portapapeles para pegarla en Canva con Ctrl + V"
+                      >
+                        <span>📋</span> {copiandoFotoId === pub.id ? "Copiando..." : "Copiar Foto"}
+                      </button>
+                    )}
 
                     <button
                       type="button"
