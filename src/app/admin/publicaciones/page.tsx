@@ -251,17 +251,17 @@ notify pgrst, 'reload schema';`;
   };
 
   const CANVA_DESIGN_URL = "https://www.canva.com/design?create=true&template=EAHWDrq_iM8";
+  const [copiadoId, setCopiadoId] = useState<string | null>(null);
 
-  const handleAbrirEnCanva = (pub: PublicacionProgramada) => {
-    const textoCopiar = `📢 TÍTULO:\n${pub.titulo}\n\n📝 COPY:\n${pub.contenido}\n\n📞 CONTACTO:\n477 465 4700 • León, Gto.`;
-    navigator.clipboard.writeText(textoCopiar);
-    alert(
-      "¡Contenido copiado al portapapeles! 📋✨\n\n" +
-      "1. Se abrirá tu plantilla de Canva.\n" +
-      "2. La fotografía generada por la IA de Sauceda ya está sincronizada en tu sección 'Subidos' (Uploads) de Canva.\n" +
-      "3. Pega los textos, arrastra la foto al marco y descarga tu imagen final en PNG."
-    );
-    window.open(CANVA_DESIGN_URL, "_blank");
+  const handleCopiarYNotificar = (pub: PublicacionProgramada) => {
+    try {
+      const textoCopiar = `📢 TÍTULO:\n${pub.titulo}\n\n📝 COPY:\n${pub.contenido}\n\n📞 CONTACTO:\n477 465 4700 • León, Gto.`;
+      navigator.clipboard.writeText(textoCopiar);
+      setCopiadoId(pub.id || "copy");
+      setTimeout(() => setCopiadoId(null), 4000);
+    } catch (e) {
+      console.error("Error al copiar al portapapeles:", e);
+    }
   };
 
   const handleReemplazarArte = async (id: string) => {
@@ -726,14 +726,16 @@ notify pgrst, 'reload schema';`;
                             <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : "Creativo Generado por IA (Flux)"}
                           </div>
                           <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                            <button
-                              type="button"
-                              onClick={() => handleAbrirEnCanva(pub)}
+                            <a
+                              href={CANVA_DESIGN_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => handleCopiarYNotificar(pub)}
                               className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
                               title="Copiar contenido y abrir tu plantilla en Canva"
                             >
                               🎨 Canva
-                            </button>
+                            </a>
                             <button
                               type="button"
                               onClick={() => handleReemplazarArte(pub.id!)}
@@ -822,13 +824,21 @@ notify pgrst, 'reload schema';`;
                       🗑️ Eliminar
                     </button>
 
-                    <button
-                      onClick={() => handleAbrirEnCanva(pub)}
+                    <a
+                      href={CANVA_DESIGN_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => handleCopiarYNotificar(pub)}
                       className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
                       title="Copiar contenido de este post y abrir tu plantilla en Canva"
                     >
                       <span>🎨</span> Canva
-                    </button>
+                      {copiadoId === pub.id && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold animate-in fade-in">
+                          ¡Copiado!
+                        </span>
+                      )}
+                    </a>
 
                     <button
                       onClick={() => setPubEditando(pub)}
