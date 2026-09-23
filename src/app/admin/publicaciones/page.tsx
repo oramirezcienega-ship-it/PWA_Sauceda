@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import PrevisualizadorRedSocial from "@/components/PrevisualizadorRedSocial";
+import CalendarioMarketingOmnicanal from "@/components/CalendarioMarketingOmnicanal";
 import {
   PublicacionProgramada,
   obtenerPublicaciones,
   guardarPublicacion,
   cambiarEstadoPublicacion,
+  reprogramarPublicacion,
   generarPublicacionesAutomaticas,
   regenerarCreativoPublicacion,
   eliminarPublicacion,
@@ -25,6 +28,10 @@ export default function PaginaPublicaciones() {
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
+  const [pubPrevisualizar, setPubPrevisualizar] = useState<PublicacionProgramada | null>(null);
+  const [pubProgramar, setPubProgramar] = useState<PublicacionProgramada | null>(null);
+  const [fechaHoraProgramar, setFechaHoraProgramar] = useState<string>("");
+  const [guardandoProgramacion, setGuardandoProgramacion] = useState(false);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
   const [cantidadIA, setCantidadIA] = useState(1);
   
@@ -197,6 +204,65 @@ notify pgrst, 'reload schema';`;
     } else {
       alert("Error al aprobar publicación: " + res.error);
     }
+  };
+
+  const handleAbrirProgramar = (pub: PublicacionProgramada) => {
+    setPubProgramar(pub);
+    if (pub.fecha_programacion) {
+      setFechaHoraProgramar(pub.fecha_programacion.substring(0, 16));
+    } else {
+      const manana = new Date();
+      manana.setDate(manana.getDate() + 1);
+      manana.setHours(10, 0, 0, 0);
+      const tzOffset = manana.getTimezoneOffset() * 60000;
+      setFechaHoraProgramar(new Date(manana.getTime() - tzOffset).toISOString().slice(0, 16));
+    }
+  };
+
+  const handleGuardarProgramacionModal = async (nuevoEstado?: "aprobado" | "publicado") => {
+    if (!pubProgramar?.id || !fechaHoraProgramar) return;
+    setGuardandoProgramacion(true);
+    try {
+      const fechaIso = new Date(fechaHoraProgramar).toISOString();
+      const res = await reprogramarPublicacion(pubProgramar.id, fechaIso, nuevoEstado);
+      if (res.success) {
+        if (nuevoEstado === "aprobado") {
+          alert("¡Publicación aprobada y programada con éxito para la fecha seleccionada!");
+        } else if (nuevoEstado === "publicado") {
+          alert("¡Publicación marcada como publicada!");
+        } else {
+          alert("¡Fecha y hora de programación actualizadas con éxito!");
+        }
+        setPubProgramar(null);
+        await cargarDatos();
+      } else {
+        alert("Error al programar: " + res.error);
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setGuardandoProgramacion(false);
+    }
+  };
+
+  const handleAtajoFechaModal = (tipo: "hoy_tarde" | "manana_10" | "manana_19" | "sabado_11") => {
+    const base = new Date();
+    if (tipo === "hoy_tarde") {
+      base.setHours(18, 0, 0, 0);
+    } else if (tipo === "manana_10") {
+      base.setDate(base.getDate() + 1);
+      base.setHours(10, 0, 0, 0);
+    } else if (tipo === "manana_19") {
+      base.setDate(base.getDate() + 1);
+      base.setHours(19, 30, 0, 0);
+    } else if (tipo === "sabado_11") {
+      const diasHastaSabado = (6 - base.getDay() + 7) % 7 || 7;
+      base.setDate(base.getDate() + diasHastaSabado);
+      base.setHours(11, 0, 0, 0);
+    }
+    const tzOffset = base.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(base.getTime() - tzOffset).toISOString().slice(0, 16);
+    setFechaHoraProgramar(localISOTime);
   };
 
   const handleRechazar = async (id: string, notas?: string) => {
@@ -534,13 +600,16 @@ notify pgrst, 'reload schema';`;
   const getPlataformaBadge = (plataforma: string) => {
     switch (plataforma) {
       case "facebook":
-        return <span className="bg-blue-600/10 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-md">Facebook</span>;
+        return <span className="bg-blue-600/10 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🔵</span> Facebook</span>;
       case "instagram":
-        return <span className="bg-pink-600/10 text-pink-600 text-xs font-semibold px-2.5 py-1 rounded-md">Instagram</span>;
+        return <span className="bg-pink-600/10 text-pink-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🟣</span> Instagram</span>;
       case "tiktok":
-        return <span className="bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-md">TikTok</span>;
+        return <span className="bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>⚫</span> TikTok</span>;
       case "whatsapp":
-        return <span className="bg-emerald-600/10 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-md">WhatsApp</span>;
+        return <span className="bg-emerald-600/10 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🟢</span> WhatsApp</span>;
+      case "email":
+      case "mautic":
+        return <span className="bg-orange-600/10 text-orange-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🟠</span> Mautic / Correo</span>;
       default:
         return <span className="bg-gray-100 text-gray-800 text-xs font-semibold px-2.5 py-1 rounded-md">{plataforma}</span>;
     }
@@ -636,6 +705,7 @@ notify pgrst, 'reload schema';`;
                 <option value="instagram">Instagram</option>
                 <option value="tiktok">TikTok</option>
                 <option value="whatsapp">WhatsApp</option>
+                <option value="mautic">Mautic / Correo</option>
               </select>
             </div>
             <div className="flex flex-col">
@@ -1001,6 +1071,15 @@ notify pgrst, 'reload schema';`;
                     </button>
 
                     <button
+                      type="button"
+                      onClick={() => setPubPrevisualizar(pub)}
+                      className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      title="Previsualizar cómo se verá en la red social"
+                    >
+                      <span>👁️</span> Previsualizar
+                    </button>
+
+                    <button
                       onClick={() => setPubEditando(pub)}
                       className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/80 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
                     >
@@ -1016,10 +1095,18 @@ notify pgrst, 'reload schema';`;
                           ✕ Rechazar
                         </button>
                         <button
+                          type="button"
+                          onClick={() => handleAbrirProgramar(pub)}
+                          className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                          title="Elegir fecha y hora exacta para este post"
+                        >
+                          <span>⏰</span> Programar
+                        </button>
+                        <button
                           onClick={() => handleAprobar(pub.id!)}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
                         >
-                          ✓ Aprobar y Mandar a n8n
+                          ✓ Aprobar
                         </button>
                       </>
                     )}
@@ -1031,6 +1118,14 @@ notify pgrst, 'reload schema';`;
                           className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
                         >
                           ✕ Rechazar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirProgramar(pub)}
+                          className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                          title="Reagendar fecha y hora de publicación"
+                        >
+                          <span>⏰</span> Reagendar
                         </button>
                         <button
                           onClick={() => handlePublicar(pub.id!)}
@@ -1055,6 +1150,18 @@ notify pgrst, 'reload schema';`;
             })}
           </div>
         )}
+
+        {/* Sección de Calendario Editorial Omnicanal */}
+        <CalendarioMarketingOmnicanal
+          publicaciones={publicaciones}
+          onRecargar={cargarDatos}
+          onPrevisualizar={(pub) => setPubPrevisualizar(pub)}
+          onEditar={(pub) => setPubEditando(pub)}
+          onNuevaPublicacionParaFecha={(fechaIso) => {
+            setFechaIA(fechaIso);
+            setMostrarModalIA(true);
+          }}
+        />
       </div>
 
       {isPending && (
@@ -1185,6 +1292,7 @@ notify pgrst, 'reload schema';`;
                     <option value="instagram">Instagram</option>
                     <option value="tiktok">TikTok</option>
                     <option value="whatsapp">WhatsApp</option>
+                    <option value="mautic">Mautic / Correo</option>
                   </select>
                 </div>
 
@@ -1468,6 +1576,152 @@ notify pgrst, 'reload schema';`;
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Previsualización en Redes Sociales */}
+      {pubPrevisualizar && (
+        <PrevisualizadorRedSocial
+          publicacion={pubPrevisualizar}
+          abierto={Boolean(pubPrevisualizar)}
+          onCerrar={() => setPubPrevisualizar(null)}
+          onEditar={(pub) => setPubEditando(pub)}
+          onProgramar={(pub) => handleAbrirProgramar(pub)}
+        />
+      )}
+
+      {/* Modal de Programación Rápida con Horario Específico */}
+      {pubProgramar && (
+        <div className="fixed inset-0 z-50 bg-carbon/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-dorado/30 overflow-hidden">
+            {/* Cabecera */}
+            <div className="bg-verde-profundo text-crema p-5 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-dorado block">
+                  Programación de Publicación
+                </span>
+                <h3 className="font-bold text-base mt-0.5 truncate max-w-[340px]">
+                  ⏰ Definir Horario de Publicación
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPubProgramar(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-4">
+              <div>
+                <h4 className="font-bold text-sm text-verde-profundo mb-1">
+                  {pubProgramar.titulo}
+                </h4>
+                <div className="flex items-center gap-2 mb-2">
+                  {getPlataformaBadge(pubProgramar.plataforma)}
+                  <span className="text-xs bg-gray-100 text-carbon/70 font-semibold px-2 py-0.5 rounded-md">
+                    {getFormatoIcon(pubProgramar.tipo_formato)}
+                  </span>
+                </div>
+                <p className="text-xs text-carbon/70 bg-gray-50 p-3 rounded-xl border border-gray-200 line-clamp-2">
+                  {pubProgramar.contenido}
+                </p>
+              </div>
+
+              {/* Selector de Fecha y Hora */}
+              <div className="border border-dorado/30 rounded-2xl p-4 bg-dorado/5 space-y-3">
+                <label className="text-xs font-bold text-carbon/80 block">
+                  Fecha y Hora Programada:
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={fechaHoraProgramar}
+                  onChange={(e) => setFechaHoraProgramar(e.target.value)}
+                  className="w-full bg-white border border-dorado/30 rounded-xl px-3.5 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
+                />
+
+                {/* Atajos de 1 clic */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-carbon/50 block">Atajos de horarios recomendados:</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("hoy_tarde")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      🌆 Hoy a las 18:00 hrs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("manana_10")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      🌅 Mañana a las 10:00 hrs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("manana_19")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      🌙 Mañana a las 19:30 hrs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("sabado_11")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      ☀️ Sábado a las 11:00 hrs
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  disabled={guardandoProgramacion}
+                  onClick={() => handleGuardarProgramacionModal("aprobado")}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <span>✓</span> {guardandoProgramacion ? "Guardando..." : "Aprobar y Programar a esta Hora"}
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={guardandoProgramacion}
+                    onClick={() => handleGuardarProgramacionModal(undefined)}
+                    className="w-full bg-white hover:bg-gray-100 border border-dorado/40 text-carbon font-bold text-xs py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50"
+                  >
+                    💾 Guardar Fecha
+                  </button>
+                  <button
+                    type="button"
+                    disabled={guardandoProgramacion}
+                    onClick={() => handleGuardarProgramacionModal("publicado")}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    <span>📲</span> Publicar Ahora
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Pie */}
+            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPubProgramar(null)}
+                className="text-xs font-semibold text-carbon/60 hover:text-carbon cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

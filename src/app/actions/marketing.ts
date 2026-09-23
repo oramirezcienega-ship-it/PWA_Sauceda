@@ -22,7 +22,7 @@ export interface PublicacionProgramada {
   id?: string;
   titulo: string;
   contenido: string;
-  plataforma: "facebook" | "instagram" | "tiktok" | "whatsapp";
+  plataforma: "facebook" | "instagram" | "tiktok" | "whatsapp" | "email" | "mautic";
   tipo_formato: "imagen" | "carrusel" | "video" | "reel";
   sugerencia_visual?: string;
   prompt_imagen_flux?: string;
@@ -444,6 +444,49 @@ export async function cambiarEstadoPublicacion(
     return { success: true, data: result, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacion:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
+
+/**
+ * Reprograma la fecha y hora de una publicación, con opción de actualizar su estado.
+ */
+export async function reprogramarPublicacion(
+  id: string,
+  fecha_programacion: string,
+  estado?: "pendiente_revision" | "aprobado" | "rechazado" | "publicado"
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const updatePayload: any = {
+      fecha_programacion,
+      updated_at: new Date().toISOString(),
+    };
+    if (estado) {
+      updatePayload.estado = estado;
+    }
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update(updatePayload)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const result = data as PublicacionProgramada;
+    let avisoWebhook: string | undefined;
+    if (estado === "aprobado") {
+      const wh = await dispararWebhookN8N(result, "aprobar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
+    }
+
+    return { success: true, data: result, aviso: avisoWebhook };
+  } catch (err: any) {
+    console.error("Error en reprogramarPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
