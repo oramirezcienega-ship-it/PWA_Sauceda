@@ -23,6 +23,7 @@ export interface UsuarioApp {
   rol: "admin" | "asesor" | "operaciones";
   activo: boolean;
   telefono: string;
+  telefono_whatsapp?: string;
   telefono_desvio?: string;
   disponible_llamadas?: boolean;
   horario_inicio?: string;
@@ -111,6 +112,7 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
       rol: p?.rol ?? "admin",
       activo: p?.activo ?? true,
       telefono: p?.telefono ?? "",
+      telefono_whatsapp: (p as any)?.telefono_whatsapp ?? p?.telefono ?? "",
       telefono_desvio: p?.telefono_desvio ?? "",
       disponible_llamadas: p?.disponible_llamadas ?? false,
       horario_inicio: p?.horario_inicio ?? "09:00:00",
@@ -143,13 +145,14 @@ export async function listarUsuarios(): Promise<UsuarioApp[]> {
   return usuariosResult;
 }
 
-/** Crea un usuario nuevo (correo + contraseña + nombre + rol + teléfono + notificaciones). */
+/** Crea un usuario nuevo (correo + contraseña + nombre + rol + teléfonos + notificaciones). */
 export async function crearUsuario(datos: {
   email: string;
   password: string;
   nombre: string;
   rol: "admin" | "asesor" | "operaciones";
   telefono: string;
+  telefono_whatsapp?: string;
   notificar_whatsapp_nuevo_lead?: boolean;
   asignacion_automatica?: boolean;
 }): Promise<{ ok: boolean; mensaje?: string }> {
@@ -168,12 +171,18 @@ export async function crearUsuario(datos: {
     await sb.from("perfiles").update({ asignacion_automatica: false }).neq("id", data.user.id);
   }
 
+  const telLlamadas = datos.telefono.trim();
+  const telWhatsapp = (datos.telefono_whatsapp && datos.telefono_whatsapp.trim() !== "")
+    ? datos.telefono_whatsapp.trim()
+    : telLlamadas;
+
   const { error: errPerfil } = await sb.from("perfiles").insert({
     id: data.user.id,
     nombre: datos.nombre.trim(),
     rol: datos.rol,
-    telefono: datos.telefono.trim(),
-    telefono_desvio: datos.telefono.trim(), // Por defecto igual al teléfono principal
+    telefono: telLlamadas,
+    telefono_whatsapp: telWhatsapp,
+    telefono_desvio: telLlamadas, // Por defecto igual al teléfono de llamadas
     disponible_llamadas: false,
     horario_inicio: "09:00:00",
     horario_fin: "18:00:00",
@@ -231,6 +240,7 @@ export async function actualizarUsuario(
     rol?: "admin" | "asesor" | "operaciones";
     activo?: boolean;
     telefono?: string;
+    telefono_whatsapp?: string;
     telefono_desvio?: string;
     disponible_llamadas?: boolean;
     horario_inicio?: string;
@@ -272,7 +282,7 @@ export async function actualizarUsuario(
 
     // Columnas que pueden enviarse a la tabla perfiles
     const columnasPerfiles = new Set([
-      "nombre", "rol", "activo", "telefono",
+      "nombre", "rol", "activo", "telefono", "telefono_whatsapp",
       "telefono_desvio", "disponible_llamadas",
       "horario_inicio", "horario_fin", "horarios_guardia",
       "notificar_whatsapp_nuevo_lead",
@@ -297,6 +307,10 @@ export async function actualizarUsuario(
     if (error) {
       // Si la BD de producción no tiene columnas opcionales recien agregadas, eliminarlas y reintentar
       let reintentar = false;
+      if (error.message.includes("telefono_whatsapp")) {
+        delete updateData.telefono_whatsapp;
+        reintentar = true;
+      }
       if (error.message.includes("notificar_whatsapp_nuevo_lead")) {
         delete updateData.notificar_whatsapp_nuevo_lead;
         reintentar = true;
@@ -525,11 +539,11 @@ export async function reasignarOperador(
 }
 
 /** Lista todos los perfiles activos para asignación. */
-export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string; telefono?: string | null }[]> {
+export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string; telefono?: string | null; telefono_whatsapp?: string | null }[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("perfiles")
-    .select("id, nombre, rol, telefono")
+    .select("id, nombre, rol, telefono, telefono_whatsapp")
     .neq("activo", false)
     .order("nombre", { ascending: true });
   if (error) throw new Error(error.message);

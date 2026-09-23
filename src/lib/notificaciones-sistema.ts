@@ -259,22 +259,26 @@ export async function notificarNuevoLead(expedienteId: string): Promise<void> {
         const debeNotificar = (p as any).notificar_whatsapp_nuevo_lead ?? (p.rol === "admin" || (p.nombre ?? "").toLowerCase().includes("oscar"));
         if (!debeNotificar) return;
 
-        if (!p.telefono || !p.telefono.trim()) {
+        const telWa = ((p as any).telefono_whatsapp && (p as any).telefono_whatsapp.trim())
+          ? (p as any).telefono_whatsapp.trim()
+          : p.telefono?.trim();
+
+        if (!telWa) {
           console.warn(`El asesor/admin ${p.nombre} no tiene teléfono configurado para notificaciones de WhatsApp.`);
           return;
         }
 
         const resWa = await enviarWhatsAppPlantilla(
-          p.telefono,
+          telWa,
           plantillaNombre,
           plantillaIdiomaReal,
           parametrosCuerpo,
           urlBotonParam
         );
         if (!resWa.ok) {
-          console.error(`Error de WhatsApp para ${p.nombre} (${p.telefono}):`, resWa.error);
+          console.error(`Error de WhatsApp para ${p.nombre} (${telWa}):`, resWa.error);
         } else {
-          console.log(`Notificación de WhatsApp enviada exitosamente a ${p.nombre} (${p.telefono})`);
+          console.log(`Notificación de WhatsApp enviada exitosamente a ${p.nombre} (${telWa})`);
         }
       });
 
@@ -626,13 +630,14 @@ export async function notificarCitaAgendadaAsesor(
     // 3. Notificar al asesor vía WhatsApp si tiene número configurado
     const { data: asesor } = await sb
       .from("perfiles")
-      .select("nombre, telefono, activo")
+      .select("nombre, telefono, telefono_whatsapp, activo")
       .eq("id", pros.asesor_id)
       .maybeSingle();
 
-    if (asesor && asesor.activo && asesor.telefono && asesor.telefono.trim()) {
+    const telAsesorWa = (asesor as any)?.telefono_whatsapp?.trim() || asesor?.telefono?.trim();
+    if (asesor && asesor.activo && telAsesorWa) {
       const mensajeWA = `📅 *Cita Programada*\n\nHola ${asesor.nombre},\n\nEl cliente *${clienteNombre}* ha seleccionado fecha para su *${tipoCitaTexto}*:\n• Con: ${operarioNombre}\n• Fecha: ${fechaLegible}\n• Hora: ${cita.hora_inicio.slice(0, 5)}hs\n\nVer prospecto: ${process.env.SITE_URL || "https://crm.saucedamx.com"}/prospectos/${cita.prospecto_id}`;
-      await enviarWhatsAppTexto(asesor.telefono, mensajeWA);
+      await enviarWhatsAppTexto(telAsesorWa, mensajeWA);
     }
   } catch (err) {
     console.error("Error al notificar cita agendada al asesor:", err);

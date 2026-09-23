@@ -171,11 +171,11 @@ export async function procesarAlertasYResumenesAgenda(
   // 1. Obtener todos los perfiles de asesores y administradores activos
   const { data: perfiles = [] } = await sb
     .from("perfiles")
-    .select("id, nombre, email, telefono, rol, activo, notificar_whatsapp_resumen_matutino, notificar_whatsapp_resumen_nocturno, notificar_whatsapp_alertas_previas")
+    .select("id, nombre, email, telefono, telefono_whatsapp, rol, activo, notificar_whatsapp_resumen_matutino, notificar_whatsapp_resumen_nocturno, notificar_whatsapp_alertas_previas")
     .eq("activo", true);
 
   const perfilesMap = new Map((perfiles || []).map((p) => [p.id, p]));
-  const administradores = (perfiles || []).filter((p) => p.rol === "admin" && p.telefono?.trim());
+  const administradores = (perfiles || []).filter((p: any) => p.rol === "admin" && (p.telefono_whatsapp?.trim() || p.telefono?.trim()));
 
   // =========================================================================
   // A. RESUMEN MATUTINO (8:00 AM) — Citas del día de hoy
@@ -231,8 +231,9 @@ export async function procesarAlertasYResumenesAgenda(
 
       // Enviar a cada asesor sus citas de hoy
       for (const [perfilId, listaCitas] of Array.from(citasPorAsesor.entries())) {
-        const asesor = perfilesMap.get(perfilId);
-        if (!asesor || !asesor.telefono?.trim()) continue;
+        const asesor = perfilesMap.get(perfilId) as any;
+        const telWa = asesor?.telefono_whatsapp?.trim() || asesor?.telefono?.trim();
+        if (!asesor || !telWa) continue;
         if (asesor.notificar_whatsapp_resumen_matutino === false) continue;
 
         const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
@@ -250,7 +251,7 @@ export async function procesarAlertasYResumenesAgenda(
 
         const res = await enviarNotificacionConRespaldo(
           sb,
-          asesor.telefono,
+          telWa,
           PLANTILLA_RESUMEN,
           [primerNombre, encabezado, cuerpoDetalle],
           textoCompleto
@@ -261,8 +262,10 @@ export async function procesarAlertasYResumenesAgenda(
       }
 
       // Enviar a administradores el consolidado global
-      for (const admin of administradores) {
+      for (const admin of administradores as any[]) {
         if (admin.notificar_whatsapp_resumen_matutino === false) continue;
+        const telAdminWa = admin.telefono_whatsapp?.trim() || admin.telefono?.trim();
+        if (!telAdminWa) continue;
 
         const primerNombre = admin.nombre?.split(" ")[0] || "Administrador";
         const cuerpoConsolidado = (citasHoy || [])
@@ -285,7 +288,7 @@ export async function procesarAlertasYResumenesAgenda(
 
         const res = await enviarNotificacionConRespaldo(
           sb,
-          admin.telefono,
+          telAdminWa,
           PLANTILLA_RESUMEN,
           [primerNombre, encabezado, cuerpoConsolidado],
           textoCompleto
@@ -359,8 +362,9 @@ export async function procesarAlertasYResumenesAgenda(
 
       // Enviar a cada asesor su resumen de mañana
       for (const [perfilId, listaCitas] of Array.from(citasPorAsesorManana.entries())) {
-        const asesor = perfilesMap.get(perfilId);
-        if (!asesor || !asesor.telefono?.trim()) continue;
+        const asesor = perfilesMap.get(perfilId) as any;
+        const telWa = asesor?.telefono_whatsapp?.trim() || asesor?.telefono?.trim();
+        if (!asesor || !telWa) continue;
         if (asesor.notificar_whatsapp_resumen_nocturno === false) continue;
 
         const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
@@ -378,7 +382,7 @@ export async function procesarAlertasYResumenesAgenda(
 
         const res = await enviarNotificacionConRespaldo(
           sb,
-          asesor.telefono,
+          telWa,
           PLANTILLA_RESUMEN,
           [primerNombre, encabezado, cuerpoDetalle],
           textoCompleto
@@ -389,8 +393,10 @@ export async function procesarAlertasYResumenesAgenda(
       }
 
       // Enviar al administrador el resumen general de mañana
-      for (const admin of administradores) {
+      for (const admin of administradores as any[]) {
         if (admin.notificar_whatsapp_resumen_nocturno === false) continue;
+        const telAdminWa = admin.telefono_whatsapp?.trim() || admin.telefono?.trim();
+        if (!telAdminWa) continue;
 
         const primerNombre = admin.nombre?.split(" ")[0] || "Administrador";
         const cuerpoConsolidado = (citasManana || [])
@@ -413,7 +419,7 @@ export async function procesarAlertasYResumenesAgenda(
 
         const res = await enviarNotificacionConRespaldo(
           sb,
-          admin.telefono,
+          telAdminWa,
           PLANTILLA_RESUMEN,
           [primerNombre, encabezado, cuerpoConsolidado],
           textoCompleto
@@ -462,8 +468,8 @@ export async function procesarAlertasYResumenesAgenda(
         : (cita.perfil_id ? [cita.perfil_id] : []);
 
       const asesoresAsignados = asignadosIds
-        .map((pId) => perfilesMap.get(pId))
-        .filter((a): a is NonNullable<typeof a> => Boolean(a && a.telefono?.trim() && a.notificar_whatsapp_alertas_previas !== false));
+        .map((pId) => perfilesMap.get(pId) as any)
+        .filter((a): a is NonNullable<typeof a> => Boolean(a && (a.telefono_whatsapp?.trim() || a.telefono?.trim()) && a.notificar_whatsapp_alertas_previas !== false));
 
       if (asesoresAsignados.length === 0) continue;
 
@@ -482,11 +488,12 @@ export async function procesarAlertasYResumenesAgenda(
         let exitoAlguno = false;
         for (const asesor of asesoresAsignados) {
           const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+          const telAsesor = asesor.telefono_whatsapp?.trim() || asesor.telefono?.trim();
           const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *2 horas*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
 
           const res = await enviarNotificacionConRespaldo(
             sb,
-            asesor.telefono,
+            telAsesor,
             PLANTILLA_ALERTA,
             [
               primerNombre,
@@ -532,11 +539,12 @@ export async function procesarAlertasYResumenesAgenda(
         let exitoAlguno = false;
         for (const asesor of asesoresAsignados) {
           const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+          const telAsesor = asesor.telefono_whatsapp?.trim() || asesor.telefono?.trim();
           const textoAlerta = `⏰ *Alerta de Cita Próxima*\n\nHola ${primerNombre}, tienes un evento programado en *1 hora*:\n\n• Tipo: ${tipoServicio}\n• Cliente: ${cita.cliente_nombre} (${cita.cliente_telefono})\n• Hora: ${horaStr} hrs\n• Ubicación: ${ubicacion}\n• Notas: ${notas}\n\nRecuerda comunicarte con el cliente con anticipación para confirmar tu traslado.`;
 
           const res = await enviarNotificacionConRespaldo(
             sb,
-            asesor.telefono,
+            telAsesor,
             PLANTILLA_ALERTA,
             [
               primerNombre,
