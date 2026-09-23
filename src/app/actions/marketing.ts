@@ -714,3 +714,32 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
     return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
+
+/**
+ * Actualiza directamente la URL del creativo/imagen de una publicación (ej. tras editar en Canva).
+ */
+export async function actualizarImagenManual(
+  id: string,
+  urlImagen: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        url_imagen: urlImagen,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data: data as PublicacionProgramada };
+  } catch (err: any) {
+    console.error("Error al actualizar imagen de publicación:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
