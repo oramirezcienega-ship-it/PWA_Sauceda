@@ -262,6 +262,8 @@ export default async function PaginaProspecto({
         <div className="mt-6">
           <WidgetAgendaCitas
             prospectoId={prospecto.id}
+            asesorId={prospecto.asesorId ?? null}
+            operadorId={prospecto.operadorId ?? null}
             clienteNombre={prospecto.nombreCompleto}
             clienteTelefono={prospecto.telefono || ""}
             clienteEmail={prospecto.correo || null}

@@ -467,6 +467,8 @@ export function DetalleExpediente({ id }: { id: string }) {
         <WidgetAgendaCitas
           prospectoId={expediente.prospectoId}
           expedienteId={expediente.id}
+          asesorId={expediente.asesorId ?? null}
+          operadorId={expediente.operadorId ?? null}
           clienteNombre={expediente.nombreCompleto || expediente.cliente}
           clienteTelefono={expediente.telefono || ""}
           clienteEmail={expediente.prospectoCorreo || null}

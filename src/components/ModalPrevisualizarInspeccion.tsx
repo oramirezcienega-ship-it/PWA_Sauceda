@@ -69,6 +69,8 @@ export function ModalPrevisualizarInspeccion({
     if (modoReagendar) {
       if (esInspeccion) {
         return `¡Hola ${primerNombre}! 🗓️ Te confirmamos que tu inspección técnica en sitio con SAUCEDA ha sido *reagendada* para el día:\n\n🗓️ *Nueva Fecha:* ${fechaLegible}\n⏰ *Horario:* ${datos.horaInicio} a ${datos.horaFin} hrs\n👷 *Asesor / Técnico que te visitará:* ${datos.asesorNombre}\n📞 *Teléfono de contacto:* ${tel}\n\nCualquier duda o ajuste de horario quedamos a tus órdenes respondiendo a este mensaje o comunicándote al número de contacto. ¡Que tengas un excelente día! 💚`;
+      } else if (datos.tipoCita === "instalacion") {
+        return `¡Hola ${primerNombre}! 🛠️ Te confirmamos que la fecha u horario de tu *instalación profesional* con SAUCEDA ha sido *actualizada* para el día:\n\n🗓️ *Nueva Fecha:* ${fechaLegible}\n⏰ *Horario:* ${datos.horaInicio} a ${datos.horaFin} hrs\n👷 *Responsables:* ${datos.asesorNombre}\n📞 *Teléfono de contacto:* ${tel}\n\nPor favor asegúrate de tener libre el acceso. ¡Cualquier duda quedamos a tus órdenes! 💚`;
       } else {
         return `¡Hola ${primerNombre}! 🗓️ Te confirmamos que tu cita de ${datos.tipoCita || "servicio"} con SAUCEDA ha sido *reagendada* para el día:\n\n🗓️ *Nueva Fecha:* ${fechaLegible}\n⏰ *Horario:* ${datos.horaInicio} a ${datos.horaFin} hrs\n👷 *Responsable:* ${datos.asesorNombre}\n📞 *Teléfono de contacto:* ${tel}\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
       }

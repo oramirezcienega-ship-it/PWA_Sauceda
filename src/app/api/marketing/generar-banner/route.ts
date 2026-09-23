@@ -31,7 +31,10 @@ export async function GET(req: Request) {
     let base64Foto = fotoUrl;
     try {
       if (fotoUrl.startsWith("http")) {
-        const imgRes = await fetch(fotoUrl);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const imgRes = await fetch(fotoUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (imgRes.ok) {
           const buffer = await imgRes.arrayBuffer();
           const mime = imgRes.headers.get("content-type") || "image/jpeg";
@@ -47,7 +50,7 @@ export async function GET(req: Request) {
 
     // SVG Institucional Totalmente Parametrizable y Dinámico con Paleta Oficial SAUCEDA
     const svg = `
-    <svg width="1080" height="1350" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg">
+    <svg width="1080" height="1350" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
       <defs>
         <linearGradient id="footerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="${colorDestacado}"/>
@@ -111,7 +114,7 @@ export async function GET(req: Request) {
       <!-- FOTO CENTRAL FOTORREALISTA DE FLUX -->
       <g filter="url(#shadow)">
         <rect x="35" y="185" width="1010" height="740" rx="16" fill="#CBD5E0" />
-        <image href="${base64Foto}" x="40" y="190" width="1000" height="730" preserveAspectRatio="xMidYMid slice" />
+        <image href="${escapeXml(base64Foto)}" xlink:href="${escapeXml(base64Foto)}" x="40" y="190" width="1000" height="730" preserveAspectRatio="xMidYMid slice" />
       </g>
 
       <!-- CALLOUT SUPERPUESTO DINÁMICO (Título y Subtítulo de Anuncio) -->
