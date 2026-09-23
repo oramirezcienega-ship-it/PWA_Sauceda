@@ -537,9 +537,12 @@ INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
    - Remodelaciones, ampliaciones (cocheras, cocinas, baños) bajo diseño arquitectónico. Visitas técnicas y presupuestos gratuitos a domicilio en León.
    - Suministro de Concreto Premezclado certificado para losas y firmes.
 
-INSTRUCCIONES VISUALES PARA GENERACIÓN EN FLUX:
-- En 'sugerencia_visual' describe escénicamente fotografías fotorrealistas publicitarias de alto impacto en León, Gto, incorporando sutilmente elementos arquitectónicos y la PALETA DE MARCA OFICIAL DE SAUCEDA: Verde Profundo (#2D4A2B), Verde Sauce (#5C7A52), acentos en Dorado Tierra (#C9A961) y Blanco puro.
-- Describe escenas realistas que transmitan VENTA E IMPACTO: parejas firmando escrituras con felicidad, entrega de llaves de casa, trabajadora aplicando impermeabilización blanca profesional en azotea con rodillo, o inspección técnica con acabado moderno. NUNCA pidas texto, letras o infografías dentro de la imagen.
+INSTRUCCIONES VISUALES DE ALTA CALIDAD FOTOGRÁFICA PARA 'sugerencia_visual':
+- Describe EXCLUSIVAMENTE escenas de fotografía comercial y editorial arquitectónica limpia (estilo revista Dwell o Architectural Digest), con luz natural de día, cielo despejado, tomas de plano medio o general en casas residenciales modernas en León, Gto.
+- Ejemplos de tomas ganadoras:
+  * Para Impermeabilización/Construcción: Un técnico profesional con vestimenta de trabajo limpia aplicando con rodillo industrial un recubrimiento blanco impecable sobre la azotea de una casa moderna bajo cielo azul brillante, con líneas limpias y arquitectura contemporánea de fondo.
+  * Para Bienes Raíces: Una familia o pareja joven sonriente recibiendo las llaves de su casa en una sala iluminada y moderna, o un asesor profesional en oficina contemporánea revisando una carpeta ejecutiva.
+- PROHIBICIÓN ESTRICTA: NUNCA menciones botellas, botes de spray, latas, envases con etiquetas, cubetas con texto ni logotipos en la fotografía. NUNCA pidas texto, letras, marcas ni gráficos flotantes. Todo el logotipo oficial, sellos de garantía y textos publicitarios se montan automáticamente en el banner digital del CRM. La foto debe ser 100% fotográfica, limpia y realista.
 
 REGLAS TÉCNICAS ESTRICTAS:
 - RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
