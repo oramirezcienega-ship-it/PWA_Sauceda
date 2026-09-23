@@ -678,6 +678,12 @@ export default function CalendarioMarketingOmnicanal({
                   <img
                     src={pubSeleccionada.url_imagen}
                     alt="Arte"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      if (pubSeleccionada.id) {
+                        (e.target as HTMLImageElement).src = `/api/marketing/imagen/${pubSeleccionada.id}`;
+                      }
+                    }}
                     className="w-16 h-16 rounded-xl object-cover border border-gray-300 shrink-0 bg-black"
                   />
                 )}
