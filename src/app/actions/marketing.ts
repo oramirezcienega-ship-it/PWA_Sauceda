@@ -46,6 +46,7 @@ export interface ActionResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  aviso?: string;
 }
 
 function formatearErrorBDMarketing(err: any): string {
@@ -57,6 +58,105 @@ function formatearErrorBDMarketing(err: any): string {
 }
 
 /**
+ * Cierra comillas, llaves y corchetes abiertos cuando un JSON de LLM queda truncado por límite de tokens.
+ */
+function autoCerrarJson(str: string): string {
+  let s = str.trim();
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inString = !inString; }
+  }
+  if (inString) {
+    s += '"';
+  }
+
+  // Quitar trailing comas o dos puntos sueltos
+  s = s.replace(/[,:\s]+$/, "");
+
+  // Balancear llaves y corchetes
+  const stack: string[] = [];
+  inString = false;
+  escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (!inString) {
+      if (c === "{" || c === "[") {
+        stack.push(c);
+      } else if (c === "}") {
+        if (stack.length > 0 && stack[stack.length - 1] === "{") stack.pop();
+      } else if (c === "]") {
+        if (stack.length > 0 && stack[stack.length - 1] === "[") stack.pop();
+      }
+    }
+  }
+
+  while (stack.length > 0) {
+    const ultimo = stack.pop();
+    if (ultimo === "{") s += "}";
+    else if (ultimo === "[") s += "]";
+  }
+
+  return s;
+}
+
+/**
+ * Parsea respuestas JSON de IA de forma ultra-resiliente ante truncamientos o formato imperfecto.
+ */
+function parsearJsonResiliente<T = any>(rawText: string): T {
+  let limpio = rawText.trim();
+  if (limpio.startsWith("```")) {
+    limpio = limpio.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  }
+
+  const primerCorchete = limpio.indexOf("[");
+  if (primerCorchete !== -1) {
+    const ultimoCorchete = limpio.lastIndexOf("]");
+    if (ultimoCorchete !== -1 && ultimoCorchete > primerCorchete) {
+      limpio = limpio.slice(primerCorchete, ultimoCorchete + 1);
+    } else {
+      limpio = limpio.slice(primerCorchete);
+    }
+  }
+
+  // 1. Intento parseo directo
+  try {
+    return JSON.parse(limpio);
+  } catch {
+    // Si falla, proceder a las estrategias de rescate
+  }
+
+  // 2. Intento: buscar el último objeto cerrado } antes del truncamiento y cerrar array
+  const ultimoCierreObjeto = limpio.lastIndexOf("}");
+  if (ultimoCierreObjeto !== -1) {
+    const reparado = limpio.slice(0, ultimoCierreObjeto + 1) + "\n]";
+    try {
+      const res = JSON.parse(reparado);
+      if (Array.isArray(res) && res.length > 0) {
+        return res as T;
+      }
+    } catch {}
+  }
+
+  // 3. Intento: balanceo inteligente de comillas y llaves
+  try {
+    const autoCerrado = autoCerrarJson(limpio);
+    const res = JSON.parse(autoCerrado);
+    if (Array.isArray(res) && res.length > 0) {
+      return res as T;
+    }
+  } catch {}
+
+  throw new Error("La respuesta del modelo de IA se interrumpió por exceso de longitud. Por favor genera 1 o 2 publicaciones a la vez.");
+}
+
+/**
  * Obtiene todas las publicaciones de la base de datos con filtros opcionales.
  */
 export async function obtenerPublicaciones(filtros?: {
@@ -65,11 +165,11 @@ export async function obtenerPublicaciones(filtros?: {
   tipo_formato?: string;
   fechaInicio?: string;
   fechaFin?: string;
-}): Promise<PublicacionProgramada[]> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
-
+}): Promise<ActionResult<PublicacionProgramada[]>> {
   try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
     let query = sb.from("publicaciones_programadas").select("*");
 
     if (filtros?.estado && filtros.estado !== "todos") {
@@ -94,28 +194,42 @@ export async function obtenerPublicaciones(filtros?: {
 
     if (error) {
       console.error("Error al obtener publicaciones:", error);
-      throw new Error(formatearErrorBDMarketing(error));
+      return { success: false, error: formatearErrorBDMarketing(error) };
     }
 
-    return (data || []) as PublicacionProgramada[];
+    return { success: true, data: (data || []) as PublicacionProgramada[] };
   } catch (err: any) {
     console.error("Error en obtenerPublicaciones:", err);
-    throw new Error(formatearErrorBDMarketing(err));
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 
 /**
- * Dispara el webhook de n8n para publicar.
+ * Dispara el webhook de n8n para publicar o solicitar generación de creativos.
  */
-async function dispararWebhookN8N(pub: PublicacionProgramada, accion: "aprobar" | "publicar") {
+async function dispararWebhookN8N(
+  pub: PublicacionProgramada,
+  accion: "aprobar" | "publicar"
+): Promise<{ enviado: boolean; aviso?: string }> {
   const webhookUrl = process.env.N8N_MARKETING_WEBHOOK_URL;
   if (!webhookUrl) {
-    console.log("n8n Webhook: No configurado (N8N_MARKETING_WEBHOOK_URL vacía). Operando en modo manual.");
-    return;
+    const msg = "n8n no configurado: falta N8N_MARKETING_WEBHOOK_URL en las variables de entorno (Netlify/.env). Operando en modo manual.";
+    console.warn(`[Marketing Webhook] ${msg}`);
+    return { enviado: false, aviso: msg };
   }
 
-  console.log(`n8n Webhook: Disparando para post ${pub.id} (${accion}) a ${webhookUrl}`);
+  // Prevenir error común: pegar la URL del editor de n8n (/workflow/...) en lugar de la del Webhook (/webhook/...)
+  if (webhookUrl.includes("/workflow/")) {
+    const msg = `URL de n8n incorrecta ('${webhookUrl}'). Esa es la URL del editor visual de n8n. Debes copiar la 'Production URL' dentro del nodo Webhook (ej. 'https://n8n-staging.saucedamx.com/webhook/...').`;
+    console.error(`[Marketing Webhook] ${msg}`);
+    return { enviado: false, aviso: msg };
+  }
+
+  console.log(`[Marketing Webhook] Disparando para post ${pub.id} (${accion}) a ${webhookUrl}`);
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const res = await fetch(webhookUrl, {
       method: "POST",
       headers: {
@@ -124,16 +238,27 @@ async function dispararWebhookN8N(pub: PublicacionProgramada, accion: "aprobar" 
       body: JSON.stringify({
         ...pub,
         accion_evento: accion,
-        fuente: "CRM Sauceda IA"
-      })
+        fuente: "CRM Sauceda IA",
+      }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (!res.ok) {
-      console.error(`n8n Webhook: Retornó código de estado inválido ${res.status}`);
-    } else {
-      console.log("n8n Webhook: Enviado exitosamente.");
+      const msg = `n8n retornó código HTTP ${res.status} (${res.statusText}). Verifica que el flujo esté Activo ('Active') en n8n.`;
+      console.error(`[Marketing Webhook] ${msg}`);
+      return { enviado: false, aviso: msg };
     }
-  } catch (err) {
-    console.error("n8n Webhook: Falló el envío de red:", err);
+
+    console.log("[Marketing Webhook] Enviado exitosamente a n8n.");
+    return { enviado: true, aviso: "Evento enviado a n8n con éxito. n8n está procesando el creativo." };
+  } catch (err: any) {
+    const errorMsg =
+      err?.name === "AbortError"
+        ? "Tiempo de espera agotado al conectar con n8n (timeout 10s)."
+        : `Error al conectar con n8n: ${err?.message || String(err)}`;
+    console.error(`[Marketing Webhook] ${errorMsg}`);
+    return { enviado: false, aviso: errorMsg };
   }
 }
 
@@ -186,13 +311,16 @@ export async function guardarPublicacion(
       result = data as PublicacionProgramada;
     }
 
+    let avisoWebhook: string | undefined;
     if (result.estado === "aprobado") {
-      dispararWebhookN8N(result, "aprobar");
+      const wh = await dispararWebhookN8N(result, "aprobar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     } else if (result.estado === "publicado") {
-      dispararWebhookN8N(result, "publicar");
+      const wh = await dispararWebhookN8N(result, "publicar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     }
 
-    return { success: true, data: result };
+    return { success: true, data: result, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en guardarPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -226,13 +354,16 @@ export async function cambiarEstadoPublicacion(
 
     const result = data as PublicacionProgramada;
 
+    let avisoWebhook: string | undefined;
     if (estado === "aprobado") {
-      dispararWebhookN8N(result, "aprobar");
+      const wh = await dispararWebhookN8N(result, "aprobar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     } else if (estado === "publicado") {
-      dispararWebhookN8N(result, "publicar");
+      const wh = await dispararWebhookN8N(result, "publicar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     }
 
-    return { success: true, data: result };
+    return { success: true, data: result, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -263,9 +394,9 @@ export async function regenerarCreativoPublicacion(
     if (error) throw error;
 
     const result = data as PublicacionProgramada;
-    dispararWebhookN8N(result, "aprobar");
+    const wh = await dispararWebhookN8N(result, "aprobar");
 
-    return { success: true, data: result };
+    return { success: true, data: result, aviso: wh.aviso };
   } catch (err: any) {
     console.error("Error en regenerarCreativoPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -345,13 +476,15 @@ export async function cambiarEstadoPublicacionesMasivo(
     if (error) throw error;
 
     // Si se aprueban, disparar webhooks n8n para cada una
+    let avisoWebhook: string | undefined;
     if (estado === "aprobado" && data) {
       for (const pub of data as PublicacionProgramada[]) {
-        dispararWebhookN8N(pub, "aprobar");
+        const wh = await dispararWebhookN8N(pub, "aprobar");
+        if (!wh.enviado && wh.aviso) avisoWebhook = wh.aviso;
       }
     }
 
-    return { success: true, data: true };
+    return { success: true, data: true, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacionesMasivo:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -403,7 +536,9 @@ INSTRUCCIONES VISUALES PARA GENERACIÓN EN FLUX:
 - En 'sugerencia_visual' describe escénicamente fotografías fotorrealistas publicitarias de alto impacto en León, Gto, incorporando sutilmente elementos arquitectónicos y la PALETA DE MARCA OFICIAL DE SAUCEDA: Verde Profundo (#2D4A2B), Verde Sauce (#5C7A52), acentos en Dorado Tierra (#C9A961) y Blanco puro.
 - Describe escenas realistas que transmitan VENTA E IMPACTO: parejas firmando escrituras con felicidad, entrega de llaves de casa, trabajadora aplicando impermeabilización blanca profesional en azotea con rodillo, o inspección técnica con acabado moderno. NUNCA pidas texto, letras o infografías dentro de la imagen.
 
-RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
+REGLAS TÉCNICAS ESTRICTAS:
+- RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
+- Sé potente, vendedor y conciso en cada publicación (copy de 150 a 250 palabras con viñetas y emojis). Evita textos excesivamente largos para asegurar que el arreglo JSON cierre de forma íntegra e impecable.
 Formato esperado:
 [
   {
@@ -474,7 +609,8 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
           ],
-          temperature: 1
+          temperature: 1,
+          max_tokens: 8192
         })
       });
 
@@ -504,7 +640,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         },
         body: JSON.stringify({
           model: model,
-          max_tokens: 4000,
+          max_tokens: 8192,
           messages: [{
             role: "user",
             content: prompt
@@ -526,23 +662,9 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         .trim();
     }
 
-    let jsonLimpio = rawText;
-    if (jsonLimpio.startsWith("```")) {
-      jsonLimpio = jsonLimpio.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-    }
-    jsonLimpio = jsonLimpio.trim();
-
-    if (!jsonLimpio.startsWith("[")) {
-      const startIdx = jsonLimpio.indexOf("[");
-      const endIdx = jsonLimpio.lastIndexOf("]");
-      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        jsonLimpio = jsonLimpio.slice(startIdx, endIdx + 1);
-      }
-    }
-
-    const propuestas = JSON.parse(jsonLimpio);
-    if (!Array.isArray(propuestas)) {
-      throw new Error("La respuesta no es un arreglo de publicaciones.");
+    const propuestas = parsearJsonResiliente<any[]>(rawText);
+    if (!Array.isArray(propuestas) || propuestas.length === 0) {
+      throw new Error("La respuesta no contiene propuestas de publicaciones válidas.");
     }
 
     const publicacionesCreadas: PublicacionProgramada[] = [];

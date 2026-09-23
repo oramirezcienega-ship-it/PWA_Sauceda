@@ -35,6 +35,9 @@ function TarjetaUsuario({
   // Estados locales para la edición
   const [nombre, setNombre] = useState(u.nombre);
   const [telefono, setTelefono] = useState(u.telefono);
+  const [telefonoWhatsapp, setTelefonoWhatsapp] = useState(
+    u.telefono_whatsapp ?? u.telefono ?? ""
+  );
   const [rol, setRol] = useState(u.rol);
   const [activo, setActivo] = useState(u.activo);
   const [notificarWhatsapp, setNotificarWhatsapp] = useState(
@@ -58,6 +61,7 @@ function TarjetaUsuario({
   useEffect(() => {
     setNombre(u.nombre);
     setTelefono(u.telefono);
+    setTelefonoWhatsapp(u.telefono_whatsapp ?? u.telefono ?? "");
     setRol(u.rol);
     setActivo(u.activo);
     setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin");
@@ -68,6 +72,7 @@ function TarjetaUsuario({
   }, [
     u.nombre,
     u.telefono,
+    u.telefono_whatsapp,
     u.rol,
     u.activo,
     u.notificar_whatsapp_nuevo_lead,
@@ -97,6 +102,7 @@ function TarjetaUsuario({
       const resUpd = await onUpdate(u.id, {
         nombre: nombre.trim(),
         telefono: telefono.trim(),
+        telefono_whatsapp: telefonoWhatsapp.trim() !== "" ? telefonoWhatsapp.trim() : telefono.trim(),
         rol,
         activo,
         notificar_whatsapp_nuevo_lead: notificarWhatsapp,
@@ -123,6 +129,7 @@ function TarjetaUsuario({
   function handleCancelar() {
     setNombre(u.nombre);
     setTelefono(u.telefono);
+    setTelefonoWhatsapp(u.telefono_whatsapp ?? u.telefono ?? "");
     setRol(u.rol);
     setActivo(u.activo);
     setNotificarWhatsapp(u.notificar_whatsapp_nuevo_lead ?? u.rol === "admin");
@@ -158,8 +165,8 @@ function TarjetaUsuario({
         </div>
 
         {/* Campos de Formulario Distribuidos */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end flex-grow">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end flex-grow">
+          <div className="md:col-span-2">
             <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
               Nombre Completo
             </label>
@@ -173,15 +180,49 @@ function TarjetaUsuario({
           </div>
 
           <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
-              Teléfono / WhatsApp
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+                📞 Tel. Llamadas
+              </label>
+              {telefono && telefono !== telefonoWhatsapp && (
+                <button
+                  type="button"
+                  onClick={() => setTelefonoWhatsapp(telefono)}
+                  className="text-[9px] font-semibold text-sauce hover:underline"
+                  title="Copiar número al campo de WhatsApp"
+                >
+                  Copiar ➡️
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              placeholder="Sin teléfono"
-              className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-sm text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20"
+              onChange={(e) => {
+                const val = e.target.value;
+                setTelefono(val);
+                if (!telefonoWhatsapp || telefonoWhatsapp === telefono) {
+                  setTelefonoWhatsapp(val);
+                }
+              }}
+              placeholder="Voz / Conmutador"
+              className="w-full rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20 font-mono"
+            />
+          </div>
+
+          <div>
+            <label
+              className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40"
+              title="Número donde se reciben las alertas del sistema por WhatsApp. Útil si el número principal usa la Cloud API de Meta."
+            >
+              💬 WhatsApp Notif.
+            </label>
+            <input
+              type="text"
+              value={telefonoWhatsapp}
+              onChange={(e) => setTelefonoWhatsapp(e.target.value)}
+              placeholder="Alertas WhatsApp"
+              className="w-full rounded-lg border border-carbon/15 bg-white px-2.5 py-1.5 text-xs text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20 font-mono"
             />
           </div>
 
@@ -247,8 +288,11 @@ function TarjetaUsuario({
               {activo ? "🟢 Activo" : "⚪ Inactivo"}
             </button>
           </div>
+        </div>
 
-          <div>
+        {/* Fila secundaria en edición: Contraseña y aclaración de teléfonos */}
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
+          <div className="md:col-span-2">
             <label
               className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40"
               title="Dejar en blanco para conservar la contraseña actual"
@@ -259,9 +303,15 @@ function TarjetaUsuario({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Nueva contraseña"
+              placeholder="Nueva contraseña (opcional)"
               className="w-full rounded-lg border border-carbon/15 bg-white px-3 py-1.5 text-xs text-verde-profundo outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/20"
             />
+          </div>
+          <div className="md:col-span-4 rounded-lg bg-carbon/5 border border-carbon/10 px-3 py-1.5 text-[11px] text-carbon/60 flex items-center gap-2">
+            <span className="text-sm">💡</span>
+            <span>
+              <strong>Teléfonos diferenciados:</strong> El de llamadas se usa para voz y conmutador. El de WhatsApp recibe las notificaciones del CRM (necesario si tu línea principal usa la API de Meta).
+            </span>
           </div>
         </div>
 
@@ -390,28 +440,32 @@ function TarjetaUsuario({
         </div>
       </div>
 
-      {/* 2. Teléfono */}
-      <div className="col-span-1 md:col-span-2 flex items-center gap-2 text-sm text-carbon/70 min-w-0">
-        <svg
-          className="h-4 w-4 flex-shrink-0 text-carbon/40"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-          />
-        </svg>
-        <span className="font-mono text-carbon/80 truncate">
-          {u.telefono || "Sin teléfono"}
-        </span>
+      {/* 2. Teléfonos (Llamadas y WhatsApp) */}
+      <div className="col-span-1 md:col-span-3 flex flex-col justify-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 text-xs text-carbon/75 min-w-0" title="Número para llamadas telefónicas y conmutador">
+          <span className="flex-shrink-0 text-xs">📞</span>
+          <span className="font-mono text-carbon/80 truncate text-xs">
+            {u.telefono || "Sin tel. llamadas"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-carbon/75 min-w-0" title="Número receptor de notificaciones vía WhatsApp">
+          <span className="flex-shrink-0 text-xs">💬</span>
+          <span className="font-mono text-verde-profundo/90 truncate text-xs font-semibold">
+            {u.telefono_whatsapp || u.telefono || "Sin WhatsApp"}
+          </span>
+          {u.telefono_whatsapp && u.telefono && u.telefono_whatsapp !== u.telefono && (
+            <span
+              className="rounded bg-sauce/15 px-1.5 py-0.5 text-[9px] font-bold text-verde-profundo leading-none flex-shrink-0"
+              title="Número de WhatsApp independiente al de llamadas (API de Meta / celular de notificaciones)"
+            >
+              WA Sep.
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 3. Ajustes Conmutador y Agenda */}
-      <div className="col-span-1 md:col-span-3 flex items-center justify-between gap-2.5 rounded-xl border border-carbon/5 bg-crema p-2.5 shadow-sm min-w-0">
+      <div className="col-span-1 md:col-span-2 flex items-center justify-between gap-2 rounded-xl border border-carbon/5 bg-crema p-2 shadow-sm min-w-0">
         <div className="min-w-0">
           <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">
             Conmutador e IVR
@@ -667,6 +721,7 @@ export function TablaUsuarios({
       rol: actualizado.rol,
       activo: actualizado.activo,
       telefono: actualizado.telefono,
+      telefono_whatsapp: actualizado.telefono_whatsapp,
       telefono_desvio: actualizado.telefono_desvio,
       disponible_llamadas: actualizado.disponible_llamadas,
       horario_inicio: actualizado.horario_inicio,

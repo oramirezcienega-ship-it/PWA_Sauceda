@@ -13,6 +13,8 @@ export default function PaginaNuevoUsuario() {
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [telefonoWhatsapp, setTelefonoWhatsapp] = useState("");
+  const [mismoNumero, setMismoNumero] = useState(true);
   const [rol, setRol] = useState<"admin" | "asesor" | "operaciones">("asesor");
   const [notificarWhatsapp, setNotificarWhatsapp] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,16 @@ export default function PaginaNuevoUsuario() {
     }
     setError(null);
     setGuardando(true);
-    const res = await crearUsuario({ email, password, nombre, rol, telefono, notificar_whatsapp_nuevo_lead: notificarWhatsapp });
+    const telWa = mismoNumero ? telefono.trim() : (telefonoWhatsapp.trim() || telefono.trim());
+    const res = await crearUsuario({
+      email,
+      password,
+      nombre,
+      rol,
+      telefono: telefono.trim(),
+      telefono_whatsapp: telWa,
+      notificar_whatsapp_nuevo_lead: notificarWhatsapp,
+    });
     if (!res.ok) {
       setError(res.mensaje ?? "No se pudo crear el usuario.");
       setGuardando(false);
@@ -66,7 +77,7 @@ export default function PaginaNuevoUsuario() {
               type="text"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Nombre del asesor"
+              placeholder="Nombre del usuario"
               className={INPUT}
             />
           </Campo>
@@ -88,15 +99,62 @@ export default function PaginaNuevoUsuario() {
               className={`${INPUT} font-mono`}
             />
           </Campo>
-          <Campo etiqueta="Teléfono / WhatsApp">
+
+          {/* Teléfono para llamadas telefónicas */}
+          <Campo etiqueta="📞 Teléfono para llamadas">
             <input
               type="tel"
               value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              placeholder="524771234567"
+              onChange={(e) => {
+                const val = e.target.value;
+                setTelefono(val);
+                if (mismoNumero) {
+                  setTelefonoWhatsapp(val);
+                }
+              }}
+              placeholder="Ej: 4771234567 (Voz y clientes)"
               className={INPUT}
             />
+            <span className="mt-1 block text-[11px] text-carbon/50">
+              Número para llamadas telefónicas directas y conmutador.
+            </span>
           </Campo>
+
+          {/* Opción para número igual o diferente */}
+          <div className="rounded-lg border border-carbon/10 bg-crema/25 p-3 space-y-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-verde-profundo cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={mismoNumero}
+                onChange={(e) => {
+                  const check = e.target.checked;
+                  setMismoNumero(check);
+                  if (check) setTelefonoWhatsapp(telefono);
+                }}
+                className="h-4 w-4 rounded border-carbon/20 text-sauce focus:ring-sauce accent-sauce"
+              />
+              <span>Mismo número para recibir notificaciones de WhatsApp</span>
+            </label>
+
+            {!mismoNumero && (
+              <div className="pt-2">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+                  💬 Teléfono de WhatsApp (Notificaciones)
+                </label>
+                <input
+                  type="tel"
+                  value={telefonoWhatsapp}
+                  onChange={(e) => setTelefonoWhatsapp(e.target.value)}
+                  placeholder="Ej: 524771234567"
+                  className={INPUT}
+                />
+                <span className="mt-1 block text-[10px] text-carbon/50">
+                  Útil si tu número principal usa la API de Meta o deseas recibir las alertas en un celular personal.
+                </span>
+              </div>
+            )}
+          </div>
+
           <Campo etiqueta="Rol">
             <select
               value={rol}

@@ -119,26 +119,21 @@ notify pgrst, 'reload schema';`;
     setCargandoLista(true);
     setErrorBd(null);
     try {
-      const datos = await obtenerPublicaciones({
+      const res = await obtenerPublicaciones({
         estado: filtroEstado,
         plataforma: filtroPlataforma,
         tipo_formato: filtroFormato,
       });
-      setPublicaciones(datos);
+      if (res.success && res.data) {
+        setPublicaciones(res.data);
+      } else if (res.error) {
+        setErrorBd(res.error);
+      }
     } catch (err: any) {
       console.error("Error al cargar publicaciones:", err);
-      const msg = err?.message || String(err);
-      if (
-        msg.includes("publicaciones_programadas") ||
-        msg.includes("schema cache") ||
-        msg.includes("TABLA_NO_EXISTE")
-      ) {
-        setErrorBd(
-          "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración SQL en Supabase para poder guardar y gestionar publicaciones."
-        );
-      } else {
-        setErrorBd(msg);
-      }
+      setErrorBd(
+        "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración SQL en Supabase para poder guardar y gestionar publicaciones."
+      );
     } finally {
       setCargandoLista(false);
     }
@@ -191,7 +186,11 @@ notify pgrst, 'reload schema';`;
   const handleAprobar = async (id: string) => {
     const res = await cambiarEstadoPublicacion(id, "aprobado");
     if (res.success) {
-      alert("¡Publicación aprobada y enviada a n8n!");
+      if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+        alert("Publicación aprobada en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
+      } else {
+        alert("¡Publicación aprobada y enviada a n8n con éxito! (n8n está generando el creativo)");
+      }
       await cargarDatos();
     } else {
       alert("Error al aprobar publicación: " + res.error);
@@ -213,7 +212,11 @@ notify pgrst, 'reload schema';`;
   const handlePublicar = async (id: string) => {
     const res = await cambiarEstadoPublicacion(id, "publicado");
     if (res.success) {
-      alert("¡Publicación marcada como publicada e informada a n8n!");
+      if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+        alert("Publicación marcada como publicada.\n\n⚠️ Aviso de n8n: " + res.aviso);
+      } else {
+        alert("¡Publicación marcada como publicada e informada a n8n!");
+      }
       await cargarDatos();
     } else {
       alert("Error al marcar como publicado: " + res.error);
@@ -234,6 +237,11 @@ notify pgrst, 'reload schema';`;
     startTransition(async () => {
       const res = await regenerarCreativoPublicacion(id);
       if (res.success) {
+        if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+          alert("Se solicitó regeneración.\n\n⚠️ Aviso de n8n: " + res.aviso);
+        } else {
+          alert("¡Solicitud enviada a n8n! Generando nuevo diseño con IA...");
+        }
         await cargarDatos();
       } else {
         alert("Error al solicitar regeneración de creativo: " + res.error);
@@ -295,7 +303,11 @@ notify pgrst, 'reload schema';`;
       if (res.success) {
         setSeleccionados([]);
         await cargarDatos();
-        alert("¡Publicaciones aprobadas y enviadas a n8n con éxito!");
+        if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+          alert("Publicaciones aprobadas en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
+        } else {
+          alert("¡Publicaciones aprobadas y enviadas a n8n con éxito!");
+        }
       } else {
         alert("Error al aprobar publicaciones: " + res.error);
       }
