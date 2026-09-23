@@ -39,6 +39,61 @@ export default function PaginaPublicaciones() {
   const [cargandoLista, setCargandoLista] = useState(true);
   const [mensajeCarga, setMensajeCarga] = useState("Generando contenido...");
   const [guionesExpandidos, setGuionesExpandidos] = useState<Record<string, boolean>>({});
+  const [errorBd, setErrorBd] = useState<string | null>(null);
+
+  const SQL_MIGRACION_COMPLETA = `-- ==============================================================================
+-- MIGRACIÓN CONSOLIDADA: MÓDULO MARKETING & PUBLICACIONES IA
+-- Compatible con: Supabase Producción y Staging
+-- Ejecutar en: Supabase Dashboard -> SQL Editor
+-- ==============================================================================
+
+create table if not exists public.publicaciones_programadas (
+  id                  uuid primary key default gen_random_uuid(),
+  titulo              text not null,
+  contenido           text not null,
+  plataforma          text not null check (plataforma in ('facebook', 'instagram', 'tiktok', 'whatsapp')),
+  tipo_formato        text not null check (tipo_formato in ('imagen', 'carrusel', 'video', 'reel')),
+  sugerencia_visual   text,
+  guion_video         text,
+  fecha_programacion  timestamptz not null,
+  estado              text not null default 'pendiente_revision' 
+                        check (estado in ('pendiente_revision', 'aprobado', 'rechazado', 'publicado')),
+  notas_revision      text,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+
+alter table public.publicaciones_programadas 
+  add column if not exists url_imagen text,
+  add column if not exists diseno_banner jsonb default '{}'::jsonb,
+  add column if not exists inversion_ads numeric default 0,
+  add column if not exists impresiones integer default 0,
+  add column if not exists clics integer default 0,
+  add column if not exists leads_generados integer default 0,
+  add column if not exists cpl numeric default 0,
+  add column if not exists roi_score numeric default 0,
+  add column if not exists meta_ad_id text;
+
+create index if not exists publicaciones_programadas_estado_idx on public.publicaciones_programadas(estado);
+create index if not exists publicaciones_programadas_fecha_idx on public.publicaciones_programadas(fecha_programacion);
+create index if not exists publicaciones_programadas_cpl_idx on public.publicaciones_programadas(cpl) where estado = 'publicado';
+
+alter table public.publicaciones_programadas enable row level security;
+
+drop policy if exists "Acceso total para usuarios autenticados" on public.publicaciones_programadas;
+create policy "Acceso total para usuarios autenticados"
+  on public.publicaciones_programadas
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+notify pgrst, 'reload schema';`;
+
+  const handleCopiarSqlMigracion = () => {
+    navigator.clipboard.writeText(SQL_MIGRACION_COMPLETA);
+    alert("¡SQL de migración copiado al portapapeles!\n\nPégalo en el SQL Editor de tu consola Supabase y presiona 'Run'.");
+  };
 
   const frasesCarga = [
     "Analizando el mercado inmobiliario de León, Gto...",
@@ -62,6 +117,7 @@ export default function PaginaPublicaciones() {
 
   const cargarDatos = async () => {
     setCargandoLista(true);
+    setErrorBd(null);
     try {
       const datos = await obtenerPublicaciones({
         estado: filtroEstado,
@@ -69,8 +125,20 @@ export default function PaginaPublicaciones() {
         tipo_formato: filtroFormato,
       });
       setPublicaciones(datos);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al cargar publicaciones:", err);
+      const msg = err?.message || String(err);
+      if (
+        msg.includes("publicaciones_programadas") ||
+        msg.includes("schema cache") ||
+        msg.includes("TABLA_NO_EXISTE")
+      ) {
+        setErrorBd(
+          "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración SQL en Supabase para poder guardar y gestionar publicaciones."
+        );
+      } else {
+        setErrorBd(msg);
+      }
     } finally {
       setCargandoLista(false);
     }
@@ -261,9 +329,17 @@ export default function PaginaPublicaciones() {
       const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA, temaIA);
       if (res.success) {
         setMostrarModalIA(false);
+        setErrorBd(null);
         await cargarDatos();
       } else {
         alert("Ocurrió un error en la generación automática:\n\n" + res.error);
+        if (
+          res.error?.includes("publicaciones_programadas") ||
+          res.error?.includes("schema cache") ||
+          res.error?.includes("migración")
+        ) {
+          setErrorBd(res.error);
+        }
       }
     });
   };
@@ -346,6 +422,28 @@ export default function PaginaPublicaciones() {
       </div>
 
       <div className="mx-auto max-w-[1700px] px-6 mt-8">
+        {errorBd && (
+          <div className="mb-6 rounded-2xl bg-amber-50 border border-amber-300 p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl mt-0.5">⚠️</span>
+              <div>
+                <h3 className="text-sm font-bold text-amber-900">
+                  Base de datos incompleta: falta la tabla de publicaciones
+                </h3>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed max-w-4xl">
+                  {errorBd} Ejecuta la migración SQL en tu consola Supabase para activar el módulo.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleCopiarSqlMigracion}
+              className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>📋</span> Copiar SQL de Migración
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-4 items-center justify-between mb-8 bg-white p-4 rounded-2xl border border-dorado/20 shadow-xs">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex flex-col">
