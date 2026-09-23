@@ -35,7 +35,7 @@ export default async function PaginaUsuarios() {
   return (
     <main className="min-h-screen pb-10">
       <Encabezado />
-      <div className="mx-auto max-w-4xl px-4 pt-5">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-5">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-titular text-3xl font-semibold text-verde-profundo">

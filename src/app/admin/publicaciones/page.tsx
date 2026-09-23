@@ -322,7 +322,7 @@ notify pgrst, 'reload schema';`;
       if (res.success) {
         await cargarDatos();
         if (pubEditando && pubEditando.id === id) {
-          setPubEditando(res.data);
+          setPubEditando(res.data ?? null);
         }
         alert("✨ Fotografía limpia restaurada con éxito.");
       } else {
