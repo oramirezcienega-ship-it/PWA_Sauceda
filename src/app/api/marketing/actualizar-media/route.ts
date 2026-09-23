@@ -22,35 +22,18 @@ export async function POST(req: Request) {
     const tituloPost = titulo || post?.titulo || "SAUCEDA BIENES RAÍCES Y CONSTRUCCIÓN";
     const diseno = (post?.diseno_banner as any) || {};
 
+    // Preservar la fotografía limpia de Flux / Replicate sin sellos ni textos SVG superpuestos.
+    // Si la URL entrante contenía un generar-banner anterior, rescatamos la foto pura.
     let finalMediaUrl = url_imagen;
-    const esVideo = Boolean(url_imagen.match(/\.(mp4|webm|mov)(\?.*)?$/i));
-    if (url_imagen.startsWith("http") && !url_imagen.includes("/api/marketing/generar-banner") && !esVideo) {
-      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "crm.saucedamx.com";
-      const proto = req.headers.get("x-forwarded-proto") || "https";
-      const origin = `${proto}://${host}`;
-
-      const encodedFoto = encodeURIComponent(url_imagen);
-      const encodedTitulo = encodeURIComponent(diseno.titulo_ad || tituloPost);
-      const encodedSub = encodeURIComponent(diseno.subtitulo_ad || "Cotiza hoy al WhatsApp 477 465 4700 • León, Guanajuato");
-      
-      const sellos = diseno.sellos || [];
-      const s1Top = encodeURIComponent(sellos[0]?.texto_top || "GARANTÍA");
-      const s1Bot = encodeURIComponent(sellos[0]?.texto_bottom || "10 AÑOS");
-      const s1Color = encodeURIComponent(sellos[0]?.color_fondo || "#2D4A2B");
-
-      const s2Top = encodeURIComponent(sellos[1]?.texto_top || "MARCA");
-      const s2Bot = encodeURIComponent(sellos[1]?.texto_bottom || "GTO");
-      const s2Color = encodeURIComponent(sellos[1]?.color_fondo || "#5C7A52");
-
-      const s3Top = encodeURIComponent(sellos[2]?.texto_top || "CALIDAD");
-      const s3Bot = encodeURIComponent(sellos[2]?.texto_bottom || "PRO 100%");
-      const s3Color = encodeURIComponent(sellos[2]?.color_fondo || "#C9A961");
-
-      const ctaTexto = encodeURIComponent(diseno.cta_texto || "WhatsApp Directo:");
-      const telefono = encodeURIComponent(diseno.telefono_contacto || "477 465 4700");
-      const colorDestacado = encodeURIComponent(diseno.color_destacado || "#2D4A2B");
-
-      finalMediaUrl = `${origin}/api/marketing/generar-banner?foto=${encodedFoto}&titulo=${encodedTitulo}&sub=${encodedSub}&sello1_top=${s1Top}&sello1_bot=${s1Bot}&sello1_color=${s1Color}&sello2_top=${s2Top}&sello2_bot=${s2Bot}&sello2_color=${s2Color}&sello3_top=${s3Top}&sello3_bot=${s3Bot}&sello3_color=${s3Color}&cta_texto=${ctaTexto}&telefono=${telefono}&color=${colorDestacado}`;
+    if (typeof url_imagen === "string" && url_imagen.includes("generar-banner")) {
+      try {
+        const parsed = new URL(url_imagen);
+        const fotoPura = parsed.searchParams.get("foto");
+        if (fotoPura) finalMediaUrl = fotoPura;
+      } catch {
+        const match = url_imagen.match(/foto=([^&]+)/);
+        if (match && match[1]) finalMediaUrl = decodeURIComponent(match[1]);
+      }
     }
 
     const { data, error } = await sb
