@@ -16,6 +16,7 @@ export interface DisenoBannerParams {
   cta_texto?: string;
   telefono_contacto?: string;
   color_destacado?: string;
+  prompt_imagen_flux?: string;
 }
 
 export interface PublicacionProgramada {
@@ -198,7 +199,12 @@ export async function obtenerPublicaciones(filtros?: {
       return { success: false, error: formatearErrorBDMarketing(error) };
     }
 
-    return { success: true, data: (data || []) as PublicacionProgramada[] };
+    const lista = (data || []).map((p: any) => ({
+      ...p,
+      prompt_imagen_flux: p.prompt_imagen_flux || p.diseno_banner?.prompt_imagen_flux || undefined,
+    })) as PublicacionProgramada[];
+
+    return { success: true, data: lista };
   } catch (err: any) {
     console.error("Error en obtenerPublicaciones:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -207,21 +213,51 @@ export async function obtenerPublicaciones(filtros?: {
 
 /**
  * Construye un prompt fotográfico profesional en inglés altamente detallado y optimizado
- * para el modelo Flux de Replicate, evitando artefactos como albercas, botellas o sábanas.
+ * para el modelo Flux de Replicate, con exactitud técnica para construcción y bienes raíces en México.
  */
 function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
-  // Si ya tiene un prompt en inglés limpio y sólido sin palabras de tiempo o secuencias, usarlo
+  const texto = `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`.toLowerCase();
+  const esVertical =
+    pub.tipo_formato === "video" ||
+    pub.tipo_formato === "reel" ||
+    pub.plataforma === "tiktok";
+
+  const promptExistente = (
+    pub.prompt_imagen_flux ||
+    (pub.diseno_banner as any)?.prompt_imagen_flux ||
+    ""
+  ).trim();
+
+  // Si ya tiene un prompt en inglés limpio y sólido, verificar que no contenga artefactos obsoletos (rodillos, botellas, etc.)
   if (
-    pub.prompt_imagen_flux &&
-    pub.prompt_imagen_flux.trim().length > 40 &&
-    !pub.prompt_imagen_flux.match(/antes|despu[eé]s|transici[oó]n|gotera|reel/i)
+    promptExistente.length > 40 &&
+    !promptExistente.match(/antes|despu[eé]s|transici[oó]n|gotera|reel|roller|rodillo|machine|lawn|pool|alberca|botella|bottle/i)
   ) {
-    return pub.prompt_imagen_flux.trim();
+    const esImpermeabilizacion =
+      texto.includes("impermea") ||
+      texto.includes("gotera") ||
+      texto.includes("filtraci") ||
+      texto.includes("azotea") ||
+      texto.includes("techo") ||
+      texto.includes("lluvia");
+
+    // Para impermeabilización, solo aceptar prompt existente si describe soplete/blowtorch y gravilla/membrane
+    if (esImpermeabilizacion) {
+      const tieneSopleteYGravilla =
+        promptExistente.match(/torch|blowtorch|flame/i) &&
+        promptExistente.match(/granule|gravilla|membrane|mineral/i);
+
+      if (tieneSopleteYGravilla) {
+        return promptExistente;
+      }
+    } else {
+      return promptExistente;
+    }
   }
 
-  const texto = `${pub.titulo} ${pub.contenido} ${pub.sugerencia_visual || ""}`.toLowerCase();
-
-  // 1. Impermeabilización / Goteras / Azotea / Techos / Filtraciones
+  // 1. Impermeabilización / Goteras / Azotea / Techos / Filtraciones / Lluvias
+  // Técnica mexicana profesional: rollo de membrana asfáltica prefabricada con acabado de gravilla mineral blanca
+  // termo-fusionada con soplete de gas propano con flama controlada, sin rodillos.
   if (
     texto.includes("impermea") ||
     texto.includes("gotera") ||
@@ -230,10 +266,14 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
     texto.includes("techo") ||
     texto.includes("lluvia")
   ) {
-    return "Award-winning commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato. A Mexican construction specialist in clean navy blue workwear and white safety helmet precisely rolling out a premium asphalt waterproof roofing membrane with a heavy industrial roller on a clean, finished flat roof surface. Warm golden hour sunlight, sharp texture details of concrete and smooth roofing material, crisp building lines, bright blue clear sky, shot on Hasselblad H6D-100c, 35mm lens, f/4, pristine realistic composition, 8k resolution.";
+    const prefijoCamara = esVertical
+      ? "Award-winning 9:16 vertical commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato"
+      : "Award-winning commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato";
+
+    return `${prefijoCamara}. A skilled Mexican roofing technician in clean navy blue workwear, protective heat-resistant gloves, and safety helmet, precisely applying a heavy roll of torch-on prefabricated waterproofing membrane finished with reflective white mineral granules. He operates a long propane gas blowtorch wand with a bright controlled orange and blue flame, heating and melting the bottom asphalt layer as the roll unrolls seamlessly onto the primed flat concrete roof deck. Visible red propane cylinder tank with hose nearby. In the background, the pristine finished roof surface is covered in clean, neat parallel sheets of white mineral granules reflecting bright natural sunlight. Clear blue sky, crisp architectural lines, shot on Hasselblad H6D-100c, 35mm lens, f/4, authentic craftsmanship, crisp realistic textures, 8k resolution.`;
   }
 
-  // 2. Infonavit / Bienes Raíces / Traspasos / Venta de Casa / Expediente
+  // 2. Infonavit / Bienes Raíces / Traspasos / Venta de Casa / Expediente / Deudas
   if (
     texto.includes("infonavit") ||
     texto.includes("traspaso") ||
@@ -242,9 +282,14 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
     texto.includes("comprar casa") ||
     texto.includes("expediente") ||
     texto.includes("venta") ||
-    texto.includes("asesor")
+    texto.includes("asesor") ||
+    texto.includes("deuda")
   ) {
-    return "High-end interior architectural photography of a sunny, contemporary Mexican residential living room in León Guanajuato. A professional Mexican real estate advisor in clean business casual attire warmly consulting with a smiling young couple over an executive property folder on a polished wood table. Natural daylight streaming through floor-to-ceiling glass windows, minimalist modern Mexican decor, lush courtyard in background, shot on Sony A7R V, 35mm f/2.8, magazine editorial quality.";
+    const prefijoCamara = esVertical
+      ? "High-end 9:16 vertical interior architectural photography of a sunny, contemporary Mexican residential living room in León Guanajuato"
+      : "High-end interior architectural photography of a sunny, contemporary Mexican residential living room in León Guanajuato";
+
+    return `${prefijoCamara}. A professional Mexican real estate advisor in clean business casual attire warmly consulting with a smiling young couple over an executive property folder on a polished wood table. Natural daylight streaming through floor-to-ceiling glass windows, minimalist modern Mexican decor, lush courtyard in background, shot on Sony A7R V, 35mm f/2.8, magazine editorial quality.`;
   }
 
   // 3. Concreto Premezclado / Losas / Firmes
@@ -254,10 +299,14 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
     texto.includes("losa") ||
     texto.includes("cemento")
   ) {
-    return "Dynamic, crisp industrial architectural photography of a modern residential construction site in sunny León Guanajuato. A clean concrete mixer truck chute delivering smooth, high-quality pre-mixed concrete onto a reinforced foundation slab, Mexican builders in high-vis vests and helmets leveling the surface smoothly. Bright daylight, sharp textures of aggregate and wet concrete, shot on 35mm lens, f/4, authentic craftsmanship.";
+    const prefijoCamara = esVertical
+      ? "Dynamic 9:16 vertical crisp industrial architectural photography of a modern residential construction site in sunny León Guanajuato"
+      : "Dynamic, crisp industrial architectural photography of a modern residential construction site in sunny León Guanajuato";
+
+    return `${prefijoCamara}. A clean concrete mixer truck chute delivering smooth, high-quality pre-mixed concrete onto a reinforced foundation slab, Mexican builders in high-vis vests and helmets leveling the surface smoothly. Bright daylight, sharp textures of aggregate and wet concrete, shot on 35mm lens, f/4, authentic craftsmanship.`;
   }
 
-  // 4. Remodelaciones / Ampliaciones / Fachadas
+  // 4. Remodelaciones / Ampliaciones / Fachadas / Cocheras
   if (
     texto.includes("remodela") ||
     texto.includes("amplia") ||
@@ -266,11 +315,19 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
     texto.includes("baño") ||
     texto.includes("cocina")
   ) {
-    return "Cinematic architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato. Clean geometric architecture, warm sand-colored stucco, natural wood accents, contemporary steel beams, sunny day, clear blue sky, sharp realistic textures of stone and smooth concrete, shot on 35mm lens, f/4, pristine luxury home editorial.";
+    const prefijoCamara = esVertical
+      ? "Cinematic 9:16 vertical architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato"
+      : "Cinematic architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato";
+
+    return `${prefijoCamara}. Clean geometric architecture, warm sand-colored stucco, natural wood accents, contemporary steel beams, sunny day, clear blue sky, sharp realistic textures of stone and smooth concrete, shot on 35mm lens, f/4, pristine luxury home editorial.`;
   }
 
   // Fallback por defecto: Arquitectura residencial moderna mexicana limpia
-  return "Award-winning commercial architectural editorial photography of a modern Mexican residential home in sunny León Guanajuato, warm natural sunlight, clear blue sky, Hasselblad H6D-100c, 35mm lens, f/4, crisp realistic composition, 8k resolution.";
+  const prefijoCamara = esVertical
+    ? "Award-winning 9:16 vertical commercial architectural editorial photography of a modern Mexican residential home in sunny León Guanajuato"
+    : "Award-winning commercial architectural editorial photography of a modern Mexican residential home in sunny León Guanajuato";
+
+  return `${prefijoCamara}, warm natural sunlight, clear blue sky, Hasselblad H6D-100c, 35mm lens, f/4, crisp realistic composition, 8k resolution.`;
 }
 
 /**
@@ -350,19 +407,31 @@ export async function guardarPublicacion(
     await requireAdministrador();
     const sb = supabaseServidor();
 
-    const payload = {
+    const disenoBannerFinal = {
+      ...(pub.diseno_banner || {}),
+      prompt_imagen_flux:
+        pub.prompt_imagen_flux ||
+        (pub.diseno_banner as any)?.prompt_imagen_flux ||
+        construirPromptFluxRobusto(pub),
+    };
+
+    const payload: any = {
       titulo: pub.titulo,
       contenido: pub.contenido,
       plataforma: pub.plataforma,
       tipo_formato: pub.tipo_formato,
       sugerencia_visual: pub.sugerencia_visual || "",
       guion_video: pub.guion_video || "",
-      diseno_banner: pub.diseno_banner || null,
+      diseno_banner: disenoBannerFinal,
       fecha_programacion: pub.fecha_programacion,
       estado: pub.estado,
       notas_revision: pub.notas_revision || "",
       updated_at: new Date().toISOString(),
     };
+
+    if (pub.url_imagen !== undefined) {
+      payload.url_imagen = pub.url_imagen;
+    }
 
     let result: PublicacionProgramada;
     if (pub.id) {
@@ -501,11 +570,30 @@ export async function regenerarCreativoPublicacion(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    // Obtener la publicación actual para regenerar su prompt si contenía términos obsoletos
+    const { data: pubActual } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    let nuevoPrompt: string | undefined;
+    let nuevoDisenoBanner = (pubActual?.diseno_banner as any) || {};
+
+    if (pubActual) {
+      nuevoPrompt = construirPromptFluxRobusto(pubActual as PublicacionProgramada);
+      nuevoDisenoBanner = {
+        ...nuevoDisenoBanner,
+        prompt_imagen_flux: nuevoPrompt,
+      };
+    }
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
       .update({
         url_imagen: null,
         estado: "aprobado",
+        diseno_banner: nuevoDisenoBanner,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -514,7 +602,10 @@ export async function regenerarCreativoPublicacion(
 
     if (error) throw error;
 
-    const result = data as PublicacionProgramada;
+    const result: PublicacionProgramada = {
+      ...(data as PublicacionProgramada),
+      prompt_imagen_flux: nuevoPrompt,
+    };
     const wh = await dispararWebhookN8N(result, "aprobar");
 
     return { success: true, data: result, aviso: wh.aviso };
@@ -649,7 +740,7 @@ INFORMACIÓN CLAVE DE LA MARCA SAUCEDA:
    - Gestión de armado de expediente INFONAVIT cuando ya tienen un comprador/vendedor directo.
    - Advertimos sobre el riesgo de agiotistas/prestamistas particulares.
 2. SAUCEDA Construye (Construcción):
-   - Especialistas en impermeabilización profesional en León, Gto. Costo: $210 pesos por metro cuadrado (Estándar 3.5mm con gravilla roja o gris). Instalación en 1 día y garantía de 5 a 10 años por escrito.
+   - Especialistas en impermeabilización profesional en León, Gto. Aplicación con rollo de membrana asfáltica prefabricada con gravilla blanca reflectiva termo-fusionada con soplete de gas propano con flama controlada. Costo: $210 pesos por metro cuadrado. Instalación en 1 día y garantía de 5 a 10 años por escrito.
    - Remodelaciones, ampliaciones (cocheras, cocinas, baños) bajo diseño arquitectónico. Visitas técnicas y presupuestos gratuitos a domicilio en León.
    - Suministro de Concreto Premezclado certificado para losas y firmes.
 
@@ -659,8 +750,9 @@ INSTRUCCIONES VISUALES DE ALTA CALIDAD FOTOGRÁFICA PARA 'sugerencia_visual' Y '
 - 'prompt_imagen_flux' (OBLIGATORIO): Prompt en INGLÉS optimizado para el motor fotográfico Flux.
   * Debe describir UNA SOLA ESCENA FOTOGRÁFICA ESTÁTICA Y NÍTIDA (nunca secuencias temporales, nunca "before and after", nunca transiciones).
   * NUNCA pongas códigos de color HEX (#...), NUNCA pidas palabras negativas como "no bottles" o "no water", NUNCA incluyas albercas ni sábanas en publicaciones de techos/impermeabilización.
+  * Para impermeabilización y techos: El prompt en inglés DEBE describir un técnico mexicano con uniforme azul marino limpio, guantes térmicos y casco, aplicando un rollo de membrana asfáltica prefabricada con gravilla blanca reflectiva ("white mineral granule-finished asphalt waterproofing membrane roll") utilizando un soplete de gas propano con flama visible ("propane gas blowtorch wand with a bright controlled orange and blue flame") derritiendo la base asfáltica mientras se desenrolla sobre la losa plana de concreto. Tanque de gas propano rojo con manguera cercano. Fondo con azotea terminada en gravilla blanca limpia reflejando el sol de León Gto.
+  * PROHIBICIÓN ESTRICTA: NUNCA menciones rodillos (NO ROLLERS, no heavy rollers, no paint rollers, no lawn rollers), nunca cubetas con pintura ni escobas ni albercas. NUNCA menciones botellas, botes de spray, latas, envases con etiquetas, cubetas con texto ni logotipos en la fotografía. La foto debe ser 100% fotográfica, limpia y realista.
   * Estructura requerida: "Award-winning commercial architectural editorial photography of a modern Mexican residential [rooftop/living room/facade] in sunny León Guanajuato. [Descripción creíble de artesano o asesor mexicano con uniforme limpio realizando su labor]. Warm natural golden sunlight, clear blue sky, sharp realistic textures, shot on Hasselblad H6D-100c, 35mm lens, f/4, crisp realistic composition, 8k resolution."
-- PROHIBICIÓN ESTRICTA: NUNCA menciones botellas, botes de spray, latas, envases con etiquetas, cubetas con texto ni logotipos en la fotografía. La foto debe ser 100% fotográfica, limpia y realista.
 
 REGLAS TÉCNICAS ESTRICTAS:
 - RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
@@ -673,7 +765,7 @@ Formato esperado:
     "tipo_formato": "imagen | carrusel | video | reel",
     "contenido": "Texto/Copy completo con gancho, oferta, viñetas de valor, llamada a la acción al 477 465 4700 y hashtags.",
     "sugerencia_visual": "Descripción escénica en español.",
-    "prompt_imagen_flux": "Award-winning commercial architectural editorial photography of a modern Mexican residential rooftop in sunny León Guanajuato. A Mexican construction specialist in clean navy blue workwear and white safety helmet precisely rolling out a premium asphalt waterproof roofing membrane with a heavy industrial roller on a clean, finished flat roof surface. Warm golden hour sunlight, sharp texture details of concrete and smooth roofing material, crisp building lines, bright blue clear sky, shot on Hasselblad H6D-100c, 35mm lens, f/4, pristine realistic composition, 8k resolution.",
+    "prompt_imagen_flux": "Award-winning commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato. A skilled Mexican roofing technician in clean navy blue workwear, protective heat-resistant gloves, and safety helmet, applying a heavy roll of torch-on prefabricated waterproofing membrane finished with reflective white mineral granules. He precisely operates a long propane gas blowtorch wand with a bright controlled orange and blue flame, heating and melting the bottom asphalt layer as the roll unrolls seamlessly onto the primed flat concrete roof deck. Visible red propane cylinder tank with hose nearby. In the background, the pristine finished roof surface is covered in clean, neat parallel sheets of white mineral granules reflecting bright natural sunlight. Clear blue sky, crisp architectural lines, shot on Hasselblad H6D-100c, 35mm lens, f/4, authentic craftsmanship, crisp realistic textures, 8k resolution.",
     "guion_video": "Si es video o reel, proporciona el guion estructurado paso a paso con tomas y diálogos.",
     "diseno_banner": {
       "titulo_ad": "IMPERMEABILIZACIÓN PROFESIONAL $210/M² | TRASPASO DIRECTO INFONAVIT",
