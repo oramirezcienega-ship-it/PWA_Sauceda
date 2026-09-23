@@ -65,11 +65,11 @@ export async function obtenerPublicaciones(filtros?: {
   tipo_formato?: string;
   fechaInicio?: string;
   fechaFin?: string;
-}): Promise<PublicacionProgramada[]> {
-  await requireAdministrador();
-  const sb = supabaseServidor();
-
+}): Promise<ActionResult<PublicacionProgramada[]>> {
   try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
     let query = sb.from("publicaciones_programadas").select("*");
 
     if (filtros?.estado && filtros.estado !== "todos") {
@@ -94,13 +94,13 @@ export async function obtenerPublicaciones(filtros?: {
 
     if (error) {
       console.error("Error al obtener publicaciones:", error);
-      throw new Error(formatearErrorBDMarketing(error));
+      return { success: false, error: formatearErrorBDMarketing(error) };
     }
 
-    return (data || []) as PublicacionProgramada[];
+    return { success: true, data: (data || []) as PublicacionProgramada[] };
   } catch (err: any) {
     console.error("Error en obtenerPublicaciones:", err);
-    throw new Error(formatearErrorBDMarketing(err));
+    return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
 

@@ -119,26 +119,21 @@ notify pgrst, 'reload schema';`;
     setCargandoLista(true);
     setErrorBd(null);
     try {
-      const datos = await obtenerPublicaciones({
+      const res = await obtenerPublicaciones({
         estado: filtroEstado,
         plataforma: filtroPlataforma,
         tipo_formato: filtroFormato,
       });
-      setPublicaciones(datos);
+      if (res.success && res.data) {
+        setPublicaciones(res.data);
+      } else if (res.error) {
+        setErrorBd(res.error);
+      }
     } catch (err: any) {
       console.error("Error al cargar publicaciones:", err);
-      const msg = err?.message || String(err);
-      if (
-        msg.includes("publicaciones_programadas") ||
-        msg.includes("schema cache") ||
-        msg.includes("TABLA_NO_EXISTE")
-      ) {
-        setErrorBd(
-          "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración SQL en Supabase para poder guardar y gestionar publicaciones."
-        );
-      } else {
-        setErrorBd(msg);
-      }
+      setErrorBd(
+        "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración SQL en Supabase para poder guardar y gestionar publicaciones."
+      );
     } finally {
       setCargandoLista(false);
     }
