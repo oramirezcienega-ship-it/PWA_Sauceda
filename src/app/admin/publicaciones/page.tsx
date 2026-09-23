@@ -250,7 +250,7 @@ notify pgrst, 'reload schema';`;
     });
   };
 
-  const CANVA_DESIGN_URL = "https://www.canva.com/design/DAHWDlTjYjc/XtvEUXD8s18p0J0PIsD_Dg/edit";
+  const CANVA_DESIGN_URL = "https://www.canva.com/design?create=true&template=EAHWDrq_iM8";
 
   const handleAbrirEnCanva = (pub: PublicacionProgramada) => {
     const textoCopiar = `📢 TÍTULO:\n${pub.titulo}\n\n📝 COPY:\n${pub.contenido}\n\n📞 CONTACTO:\n477 465 4700 • León, Gto.`;
