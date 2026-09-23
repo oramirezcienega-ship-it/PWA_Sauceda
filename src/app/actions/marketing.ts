@@ -57,6 +57,105 @@ function formatearErrorBDMarketing(err: any): string {
 }
 
 /**
+ * Cierra comillas, llaves y corchetes abiertos cuando un JSON de LLM queda truncado por límite de tokens.
+ */
+function autoCerrarJson(str: string): string {
+  let s = str.trim();
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inString = !inString; }
+  }
+  if (inString) {
+    s += '"';
+  }
+
+  // Quitar trailing comas o dos puntos sueltos
+  s = s.replace(/[,:\s]+$/, "");
+
+  // Balancear llaves y corchetes
+  const stack: string[] = [];
+  inString = false;
+  escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === "\\") { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (!inString) {
+      if (c === "{" || c === "[") {
+        stack.push(c);
+      } else if (c === "}") {
+        if (stack.length > 0 && stack[stack.length - 1] === "{") stack.pop();
+      } else if (c === "]") {
+        if (stack.length > 0 && stack[stack.length - 1] === "[") stack.pop();
+      }
+    }
+  }
+
+  while (stack.length > 0) {
+    const ultimo = stack.pop();
+    if (ultimo === "{") s += "}";
+    else if (ultimo === "[") s += "]";
+  }
+
+  return s;
+}
+
+/**
+ * Parsea respuestas JSON de IA de forma ultra-resiliente ante truncamientos o formato imperfecto.
+ */
+function parsearJsonResiliente<T = any>(rawText: string): T {
+  let limpio = rawText.trim();
+  if (limpio.startsWith("```")) {
+    limpio = limpio.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  }
+
+  const primerCorchete = limpio.indexOf("[");
+  if (primerCorchete !== -1) {
+    const ultimoCorchete = limpio.lastIndexOf("]");
+    if (ultimoCorchete !== -1 && ultimoCorchete > primerCorchete) {
+      limpio = limpio.slice(primerCorchete, ultimoCorchete + 1);
+    } else {
+      limpio = limpio.slice(primerCorchete);
+    }
+  }
+
+  // 1. Intento parseo directo
+  try {
+    return JSON.parse(limpio);
+  } catch {
+    // Si falla, proceder a las estrategias de rescate
+  }
+
+  // 2. Intento: buscar el último objeto cerrado } antes del truncamiento y cerrar array
+  const ultimoCierreObjeto = limpio.lastIndexOf("}");
+  if (ultimoCierreObjeto !== -1) {
+    const reparado = limpio.slice(0, ultimoCierreObjeto + 1) + "\n]";
+    try {
+      const res = JSON.parse(reparado);
+      if (Array.isArray(res) && res.length > 0) {
+        return res as T;
+      }
+    } catch {}
+  }
+
+  // 3. Intento: balanceo inteligente de comillas y llaves
+  try {
+    const autoCerrado = autoCerrarJson(limpio);
+    const res = JSON.parse(autoCerrado);
+    if (Array.isArray(res) && res.length > 0) {
+      return res as T;
+    }
+  } catch {}
+
+  throw new Error("La respuesta del modelo de IA se interrumpió por exceso de longitud. Por favor genera 1 o 2 publicaciones a la vez.");
+}
+
+/**
  * Obtiene todas las publicaciones de la base de datos con filtros opcionales.
  */
 export async function obtenerPublicaciones(filtros?: {
@@ -403,7 +502,9 @@ INSTRUCCIONES VISUALES PARA GENERACIÓN EN FLUX:
 - En 'sugerencia_visual' describe escénicamente fotografías fotorrealistas publicitarias de alto impacto en León, Gto, incorporando sutilmente elementos arquitectónicos y la PALETA DE MARCA OFICIAL DE SAUCEDA: Verde Profundo (#2D4A2B), Verde Sauce (#5C7A52), acentos en Dorado Tierra (#C9A961) y Blanco puro.
 - Describe escenas realistas que transmitan VENTA E IMPACTO: parejas firmando escrituras con felicidad, entrega de llaves de casa, trabajadora aplicando impermeabilización blanca profesional en azotea con rodillo, o inspección técnica con acabado moderno. NUNCA pidas texto, letras o infografías dentro de la imagen.
 
-RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
+REGLAS TÉCNICAS ESTRICTAS:
+- RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON VÁLIDO. No agregues explicaciones antes ni después del JSON.
+- Sé potente, vendedor y conciso en cada publicación (copy de 150 a 250 palabras con viñetas y emojis). Evita textos excesivamente largos para asegurar que el arreglo JSON cierre de forma íntegra e impecable.
 Formato esperado:
 [
   {
@@ -474,7 +575,8 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
           ],
-          temperature: 1
+          temperature: 1,
+          max_tokens: 8192
         })
       });
 
@@ -504,7 +606,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         },
         body: JSON.stringify({
           model: model,
-          max_tokens: 4000,
+          max_tokens: 8192,
           messages: [{
             role: "user",
             content: prompt
@@ -526,23 +628,9 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         .trim();
     }
 
-    let jsonLimpio = rawText;
-    if (jsonLimpio.startsWith("```")) {
-      jsonLimpio = jsonLimpio.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-    }
-    jsonLimpio = jsonLimpio.trim();
-
-    if (!jsonLimpio.startsWith("[")) {
-      const startIdx = jsonLimpio.indexOf("[");
-      const endIdx = jsonLimpio.lastIndexOf("]");
-      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        jsonLimpio = jsonLimpio.slice(startIdx, endIdx + 1);
-      }
-    }
-
-    const propuestas = JSON.parse(jsonLimpio);
-    if (!Array.isArray(propuestas)) {
-      throw new Error("La respuesta no es un arreglo de publicaciones.");
+    const propuestas = parsearJsonResiliente<any[]>(rawText);
+    if (!Array.isArray(propuestas) || propuestas.length === 0) {
+      throw new Error("La respuesta no contiene propuestas de publicaciones válidas.");
     }
 
     const publicacionesCreadas: PublicacionProgramada[] = [];
