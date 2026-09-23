@@ -46,6 +46,7 @@ export interface ActionResult<T> {
   success: boolean;
   data?: T;
   error?: string;
+  aviso?: string;
 }
 
 function formatearErrorBDMarketing(err: any): string {
@@ -204,17 +205,31 @@ export async function obtenerPublicaciones(filtros?: {
 }
 
 /**
- * Dispara el webhook de n8n para publicar.
+ * Dispara el webhook de n8n para publicar o solicitar generación de creativos.
  */
-async function dispararWebhookN8N(pub: PublicacionProgramada, accion: "aprobar" | "publicar") {
+async function dispararWebhookN8N(
+  pub: PublicacionProgramada,
+  accion: "aprobar" | "publicar"
+): Promise<{ enviado: boolean; aviso?: string }> {
   const webhookUrl = process.env.N8N_MARKETING_WEBHOOK_URL;
   if (!webhookUrl) {
-    console.log("n8n Webhook: No configurado (N8N_MARKETING_WEBHOOK_URL vacía). Operando en modo manual.");
-    return;
+    const msg = "n8n no configurado: falta N8N_MARKETING_WEBHOOK_URL en las variables de entorno (Netlify/.env). Operando en modo manual.";
+    console.warn(`[Marketing Webhook] ${msg}`);
+    return { enviado: false, aviso: msg };
   }
 
-  console.log(`n8n Webhook: Disparando para post ${pub.id} (${accion}) a ${webhookUrl}`);
+  // Prevenir error común: pegar la URL del editor de n8n (/workflow/...) en lugar de la del Webhook (/webhook/...)
+  if (webhookUrl.includes("/workflow/")) {
+    const msg = `URL de n8n incorrecta ('${webhookUrl}'). Esa es la URL del editor visual de n8n. Debes copiar la 'Production URL' dentro del nodo Webhook (ej. 'https://n8n-staging.saucedamx.com/webhook/...').`;
+    console.error(`[Marketing Webhook] ${msg}`);
+    return { enviado: false, aviso: msg };
+  }
+
+  console.log(`[Marketing Webhook] Disparando para post ${pub.id} (${accion}) a ${webhookUrl}`);
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const res = await fetch(webhookUrl, {
       method: "POST",
       headers: {
@@ -223,16 +238,27 @@ async function dispararWebhookN8N(pub: PublicacionProgramada, accion: "aprobar" 
       body: JSON.stringify({
         ...pub,
         accion_evento: accion,
-        fuente: "CRM Sauceda IA"
-      })
+        fuente: "CRM Sauceda IA",
+      }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (!res.ok) {
-      console.error(`n8n Webhook: Retornó código de estado inválido ${res.status}`);
-    } else {
-      console.log("n8n Webhook: Enviado exitosamente.");
+      const msg = `n8n retornó código HTTP ${res.status} (${res.statusText}). Verifica que el flujo esté Activo ('Active') en n8n.`;
+      console.error(`[Marketing Webhook] ${msg}`);
+      return { enviado: false, aviso: msg };
     }
-  } catch (err) {
-    console.error("n8n Webhook: Falló el envío de red:", err);
+
+    console.log("[Marketing Webhook] Enviado exitosamente a n8n.");
+    return { enviado: true, aviso: "Evento enviado a n8n con éxito. n8n está procesando el creativo." };
+  } catch (err: any) {
+    const errorMsg =
+      err?.name === "AbortError"
+        ? "Tiempo de espera agotado al conectar con n8n (timeout 10s)."
+        : `Error al conectar con n8n: ${err?.message || String(err)}`;
+    console.error(`[Marketing Webhook] ${errorMsg}`);
+    return { enviado: false, aviso: errorMsg };
   }
 }
 
@@ -285,13 +311,16 @@ export async function guardarPublicacion(
       result = data as PublicacionProgramada;
     }
 
+    let avisoWebhook: string | undefined;
     if (result.estado === "aprobado") {
-      dispararWebhookN8N(result, "aprobar");
+      const wh = await dispararWebhookN8N(result, "aprobar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     } else if (result.estado === "publicado") {
-      dispararWebhookN8N(result, "publicar");
+      const wh = await dispararWebhookN8N(result, "publicar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     }
 
-    return { success: true, data: result };
+    return { success: true, data: result, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en guardarPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -325,13 +354,16 @@ export async function cambiarEstadoPublicacion(
 
     const result = data as PublicacionProgramada;
 
+    let avisoWebhook: string | undefined;
     if (estado === "aprobado") {
-      dispararWebhookN8N(result, "aprobar");
+      const wh = await dispararWebhookN8N(result, "aprobar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     } else if (estado === "publicado") {
-      dispararWebhookN8N(result, "publicar");
+      const wh = await dispararWebhookN8N(result, "publicar");
+      if (wh.aviso) avisoWebhook = wh.aviso;
     }
 
-    return { success: true, data: result };
+    return { success: true, data: result, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -362,9 +394,9 @@ export async function regenerarCreativoPublicacion(
     if (error) throw error;
 
     const result = data as PublicacionProgramada;
-    dispararWebhookN8N(result, "aprobar");
+    const wh = await dispararWebhookN8N(result, "aprobar");
 
-    return { success: true, data: result };
+    return { success: true, data: result, aviso: wh.aviso };
   } catch (err: any) {
     console.error("Error en regenerarCreativoPublicacion:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
@@ -444,13 +476,15 @@ export async function cambiarEstadoPublicacionesMasivo(
     if (error) throw error;
 
     // Si se aprueban, disparar webhooks n8n para cada una
+    let avisoWebhook: string | undefined;
     if (estado === "aprobado" && data) {
       for (const pub of data as PublicacionProgramada[]) {
-        dispararWebhookN8N(pub, "aprobar");
+        const wh = await dispararWebhookN8N(pub, "aprobar");
+        if (!wh.enviado && wh.aviso) avisoWebhook = wh.aviso;
       }
     }
 
-    return { success: true, data: true };
+    return { success: true, data: true, aviso: avisoWebhook };
   } catch (err: any) {
     console.error("Error en cambiarEstadoPublicacionesMasivo:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
