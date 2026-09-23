@@ -24,6 +24,10 @@ export async function POST(req: Request) {
 
     let finalMediaUrl = url_imagen;
     if (url_imagen.includes("replicate.delivery") || url_imagen.includes("replicate.com")) {
+      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "crm.saucedamx.com";
+      const proto = req.headers.get("x-forwarded-proto") || "https";
+      const origin = `${proto}://${host}`;
+
       const encodedFoto = encodeURIComponent(url_imagen);
       const encodedTitulo = encodeURIComponent(diseno.titulo_ad || tituloPost);
       const encodedSub = encodeURIComponent(diseno.subtitulo_ad || "Cotiza hoy al WhatsApp 477 465 4700 • León, Guanajuato");
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
       const telefono = encodeURIComponent(diseno.telefono_contacto || "477 465 4700");
       const colorDestacado = encodeURIComponent(diseno.color_destacado || "#C53030");
 
-      finalMediaUrl = `https://crm-staging.saucedamx.com/api/marketing/generar-banner?foto=${encodedFoto}&titulo=${encodedTitulo}&sub=${encodedSub}&sello1_top=${s1Top}&sello1_bot=${s1Bot}&sello1_color=${s1Color}&sello2_top=${s2Top}&sello2_bot=${s2Bot}&sello2_color=${s2Color}&sello3_top=${s3Top}&sello3_bot=${s3Bot}&sello3_color=${s3Color}&cta_texto=${ctaTexto}&telefono=${telefono}&color=${colorDestacado}`;
+      finalMediaUrl = `${origin}/api/marketing/generar-banner?foto=${encodedFoto}&titulo=${encodedTitulo}&sub=${encodedSub}&sello1_top=${s1Top}&sello1_bot=${s1Bot}&sello1_color=${s1Color}&sello2_top=${s2Top}&sello2_bot=${s2Bot}&sello2_color=${s2Color}&sello3_top=${s3Top}&sello3_bot=${s3Bot}&sello3_color=${s3Color}&cta_texto=${ctaTexto}&telefono=${telefono}&color=${colorDestacado}`;
     }
 
     const { data, error } = await sb
