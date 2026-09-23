@@ -540,14 +540,36 @@ export async function reasignarOperador(
 
 /** Lista todos los perfiles activos para asignación. */
 export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string; telefono?: string | null; telefono_whatsapp?: string | null }[]> {
-  const sb = supabaseServidor();
-  const { data, error } = await sb
-    .from("perfiles")
-    .select("id, nombre, rol, telefono, telefono_whatsapp")
-    .neq("activo", false)
-    .order("nombre", { ascending: true });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  try {
+    const sb = supabaseServidor();
+    let { data, error } = await sb
+      .from("perfiles")
+      .select("id, nombre, rol, telefono, telefono_whatsapp")
+      .neq("activo", false)
+      .order("nombre", { ascending: true });
+
+    if (error && (error.message.includes("telefono_whatsapp") || (error as any).code === "42703")) {
+      const fallbackRes = await sb
+        .from("perfiles")
+        .select("id, nombre, rol, telefono")
+        .neq("activo", false)
+        .order("nombre", { ascending: true });
+      data = (fallbackRes.data || []).map((p: any) => ({
+        ...p,
+        telefono_whatsapp: p.telefono || "",
+      }));
+      error = fallbackRes.error;
+    }
+
+    if (error) {
+      console.error("Error al listar perfiles activos:", error.message);
+      return [];
+    }
+    return (data ?? []) as { id: string; nombre: string; rol: string; telefono?: string | null; telefono_whatsapp?: string | null }[];
+  } catch (err: any) {
+    console.error("Excepción en listarPerfilesActivos:", err);
+    return [];
+  }
 }
 
 

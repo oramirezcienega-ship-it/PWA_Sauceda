@@ -17,6 +17,8 @@ import {
 interface WidgetAgendaCitasProps {
   prospectoId?: string | null;
   expedienteId?: string | null;
+  asesorId?: string | null;
+  operadorId?: string | null;
   clienteNombre: string;
   clienteTelefono: string;
   clienteEmail?: string | null;
@@ -26,6 +28,8 @@ interface WidgetAgendaCitasProps {
 export function WidgetAgendaCitas({
   prospectoId,
   expedienteId,
+  asesorId,
+  operadorId,
   clienteNombre,
   clienteTelefono,
   clienteEmail,
@@ -75,12 +79,18 @@ export function WidgetAgendaCitas({
       .then((p) => {
         setPerfiles(p);
         if (p.length > 0) {
-          setPerfilId(p[0].id);
-          setAsignadosIds([p[0].id]);
+          // Si viene asesorId o operadorId predefinido, buscarlo
+          const objetivoId = (asesorId && p.find(x => x.id === asesorId)?.id) ||
+                             (operadorId && p.find(x => x.id === operadorId)?.id) ||
+                             p[0].id;
+          setPerfilId(objetivoId);
+          setAsignadosIds([objetivoId]);
         }
       })
-      .catch(console.error);
-  }, [prospectoId, expedienteId]);
+      .catch((err) => {
+        console.error("Error al cargar perfiles activos:", err);
+      });
+  }, [prospectoId, expedienteId, asesorId, operadorId]);
 
   const toggleAsignado = (id: string) => {
     setAsignadosIds((prev) => {
@@ -359,31 +369,52 @@ export function WidgetAgendaCitas({
                 {asignadosIds.length} {asignadosIds.length === 1 ? "seleccionado" : "seleccionados"}
               </span>
             </label>
-            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-carbon/20 bg-white max-h-36 overflow-y-auto">
-              {perfiles.map((p) => {
-                const isSelected = asignadosIds.includes(p.id);
-                const isPrincipal = asignadosIds[0] === p.id;
-                return (
+            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-carbon/20 bg-white min-h-[46px] max-h-36 overflow-y-auto items-center">
+              {perfiles.length === 0 ? (
+                <div className="flex items-center justify-between w-full px-2 py-1 text-xs text-carbon/40">
+                  <span>Cargando responsables del equipo...</span>
                   <button
-                    key={p.id}
                     type="button"
-                    onClick={() => toggleAsignado(p.id)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
-                      isSelected
-                        ? isPrincipal
-                          ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
-                          : "bg-sauce/15 text-verde-profundo border-sauce/30 font-semibold"
-                        : "bg-carbon/5 text-carbon/70 border-carbon/15 hover:bg-carbon/10"
-                    }`}
+                    onClick={() => {
+                      listarPerfilesActivos().then((p) => {
+                        setPerfiles(p);
+                        if (p.length > 0) {
+                          setPerfilId(p[0].id);
+                          setAsignadosIds([p[0].id]);
+                        }
+                      });
+                    }}
+                    className="text-sauce hover:underline font-semibold text-[11px]"
                   >
-                    <span>{isSelected ? (isPrincipal ? "👑" : "✅") : "⚪"}</span>
-                    <span>{p.nombre}</span>
-                    <span className="text-[10px] opacity-75">
-                      ({p.rol === "admin" ? "Admin" : p.rol === "asesor" ? "Asesor" : "Operario"})
-                    </span>
+                    Reintentar
                   </button>
-                );
-              })}
+                </div>
+              ) : (
+                perfiles.map((p) => {
+                  const isSelected = asignadosIds.includes(p.id);
+                  const isPrincipal = asignadosIds[0] === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleAsignado(p.id)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                        isSelected
+                          ? isPrincipal
+                            ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+                            : "bg-sauce/15 text-verde-profundo border-sauce/30 font-semibold"
+                          : "bg-carbon/5 text-carbon/70 border-carbon/15 hover:bg-carbon/10"
+                      }`}
+                    >
+                      <span>{isSelected ? (isPrincipal ? "👑" : "✅") : "⚪"}</span>
+                      <span>{p.nombre}</span>
+                      <span className="text-[10px] opacity-75">
+                        ({p.rol === "admin" ? "Admin" : p.rol === "asesor" ? "Asesor" : "Operario"})
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
             <p className="text-[10px] text-carbon/50 mt-1">
               Haz clic para sumar a 2 o más personas. El primero seleccionado (👑) será el responsable principal.
