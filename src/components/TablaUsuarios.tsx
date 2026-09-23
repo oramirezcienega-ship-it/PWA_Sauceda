@@ -418,21 +418,73 @@ function TarjetaUsuario({
     <div
       className={`group relative w-full rounded-2xl border ${
         u.asignacion_automatica
-          ? "border-sauce/50 ring-2 ring-sauce/20 bg-sauce/5"
+          ? "border-sauce/40 ring-2 ring-sauce/20 bg-gradient-to-r from-sauce/5 via-white to-sauce/5"
           : "border-carbon/10 bg-white"
-      } p-4 shadow-sm transition-all duration-300 hover:border-sauce/40 hover:shadow-md grid grid-cols-1 md:grid-cols-12 gap-4 items-center`}
+      } p-4 shadow-xs transition-all duration-200 hover:border-sauce/40 hover:shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4`}
     >
-      {/* 1. Información de Usuario (Nombre y Email) */}
-      <div className="col-span-1 md:col-span-3 flex items-center gap-3 min-w-0">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sauce/15 to-verde-profundo/10 font-titular text-base font-semibold text-verde-profundo shadow-inner">
+      {/* 1. Información de Usuario (Nombre, Email y Badges) */}
+      <div className="flex items-center gap-3.5 min-w-[260px] flex-1">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sauce/20 to-verde-profundo/10 font-titular text-lg font-bold text-verde-profundo shadow-inner">
           {inicialNombre}
         </div>
         <div className="min-w-0">
-          <h3 className="truncate font-titular text-base font-semibold text-carbon">
-            {u.nombre}
-          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-titular text-base font-bold text-carbon">
+              {u.nombre}
+            </h3>
+            {/* Badges alineados horizontalmente */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {u.rol === "admin" && (
+                <span className="inline-flex items-center rounded-full border border-dorado/30 bg-dorado/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-900">
+                  👑 Admin
+                </span>
+              )}
+              {u.rol === "asesor" && (
+                <span className="inline-flex items-center rounded-full border border-sauce/20 bg-sauce/10 px-2 py-0.5 text-[10px] font-semibold text-verde-profundo">
+                  💼 Asesor
+                </span>
+              )}
+              {u.rol === "operaciones" && (
+                <span className="inline-flex items-center rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+                  🛠️ Operario
+                </span>
+              )}
+              {u.activo ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Activo
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-carbon/15 bg-carbon/5 px-2 py-0.5 text-[10px] font-semibold text-carbon/50">
+                  <span className="h-1.5 w-1.5 rounded-full bg-carbon/30" /> Inactivo
+                </span>
+              )}
+              {u.asignacion_automatica && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-sauce/40 bg-sauce/20 px-2 py-0.5 text-[10px] font-bold text-verde-profundo shadow-xs"
+                  title="Receptor de asignación automática de todos los leads nuevos"
+                >
+                  ⚡ Leads Automáticos
+                </span>
+              )}
+              {u.notificar_whatsapp_nuevo_lead ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/70 px-2 py-0.5 text-[10px] font-medium text-emerald-800"
+                  title="Recibe notificaciones por WhatsApp de nuevos leads"
+                >
+                  💬 Notif. WA
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center rounded-full border border-carbon/10 bg-carbon/5 px-2 py-0.5 text-[10px] font-medium text-carbon/40"
+                  title="Sin notificaciones por WhatsApp de nuevos leads"
+                >
+                  📵 Sin WA
+                </span>
+              )}
+            </div>
+          </div>
           <p
-            className="truncate font-mono text-xs text-carbon/40"
+            className="truncate font-mono text-xs text-carbon/50 mt-0.5"
             title={u.email}
           >
             {u.email}
@@ -441,119 +493,80 @@ function TarjetaUsuario({
       </div>
 
       {/* 2. Teléfonos (Llamadas y WhatsApp) */}
-      <div className="col-span-1 md:col-span-3 flex flex-col justify-center gap-1.5 min-w-0">
-        <div className="flex items-center gap-1.5 text-xs text-carbon/75 min-w-0" title="Número para llamadas telefónicas y conmutador">
-          <span className="flex-shrink-0 text-xs">📞</span>
-          <span className="font-mono text-carbon/80 truncate text-xs">
-            {u.telefono || "Sin tel. llamadas"}
+      <div className="flex flex-col justify-center gap-1 min-w-[200px] border-t lg:border-t-0 lg:border-l border-carbon/10 pt-2 lg:pt-0 lg:pl-5">
+        <div className="flex items-center gap-2 text-xs" title="Número para llamadas telefónicas y conmutador">
+          <span className="text-xs text-carbon/40 flex-shrink-0">📞</span>
+          <span className="text-[11px] text-carbon/50 font-medium">Llamadas:</span>
+          <span className="font-mono text-carbon/80 text-xs font-semibold truncate">
+            {u.telefono || "—"}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-carbon/75 min-w-0" title="Número receptor de notificaciones vía WhatsApp">
-          <span className="flex-shrink-0 text-xs">💬</span>
-          <span className="font-mono text-verde-profundo/90 truncate text-xs font-semibold">
-            {u.telefono_whatsapp || u.telefono || "Sin WhatsApp"}
+        <div className="flex items-center gap-2 text-xs" title="Número receptor de notificaciones vía WhatsApp">
+          <span className="text-xs text-emerald-600 flex-shrink-0">💬</span>
+          <span className="text-[11px] text-carbon/50 font-medium">WhatsApp:</span>
+          <span className="font-mono text-verde-profundo text-xs font-semibold truncate">
+            {u.telefono_whatsapp || u.telefono || "—"}
           </span>
           {u.telefono_whatsapp && u.telefono && u.telefono_whatsapp !== u.telefono && (
             <span
-              className="rounded bg-sauce/15 px-1.5 py-0.5 text-[9px] font-bold text-verde-profundo leading-none flex-shrink-0"
-              title="Número de WhatsApp independiente al de llamadas (API de Meta / celular de notificaciones)"
+              className="rounded bg-sauce/15 px-1.5 py-0.5 text-[9px] font-bold text-verde-profundo flex-shrink-0"
+              title="Número de WhatsApp independiente al de llamadas"
             >
-              WA Sep.
+              Indep.
             </span>
           )}
         </div>
       </div>
 
-      {/* 3. Ajustes Conmutador y Agenda */}
-      <div className="col-span-1 md:col-span-2 flex items-center justify-between gap-2 rounded-xl border border-carbon/5 bg-crema p-2 shadow-sm min-w-0">
+      {/* 3. Conmutador y Agenda */}
+      <div className="flex items-center justify-between gap-3 min-w-[260px] border-t lg:border-t-0 lg:border-l border-carbon/10 pt-2 lg:pt-0 lg:pl-5">
         <div className="min-w-0">
-          <span className="block text-[9px] font-bold uppercase tracking-wider text-carbon/40">
-            Conmutador e IVR
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-carbon/40">
+            Conmutador & IVR
           </span>
-          <span className="block truncate text-xs text-carbon/70 font-semibold text-verde-profundo">
-            {u.disponible_llamadas ? `🟢 Guardia` : "⚪ Inactivo"}
-          </span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span
+              className={`inline-block h-2 w-2 rounded-full flex-shrink-0 ${
+                u.disponible_llamadas ? "bg-emerald-500 animate-pulse" : "bg-carbon/25"
+              }`}
+            />
+            <span className="text-xs font-semibold text-carbon/80 truncate">
+              {u.disponible_llamadas ? "Guardia Activa" : "Inactivo"}
+            </span>
+          </div>
           {u.disponible_llamadas && u.telefono_desvio && (
-            <span className="mt-0.5 block truncate font-mono text-[9px] text-carbon/40">
+            <span className="block truncate font-mono text-[10px] text-carbon/45">
               Desvío: {u.telefono_desvio}
             </span>
           )}
         </div>
-        <div className="flex flex-col gap-1 flex-shrink-0">
+
+        <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
           <button
             type="button"
             onClick={() => onConfigConmutador(u)}
-            className="rounded-lg border border-carbon/10 bg-carbon/5 px-2 py-1 text-[10px] font-semibold text-carbon/75 transition hover:border-carbon/20 hover:bg-carbon/10 text-left"
+            className="rounded-lg border border-carbon/15 bg-carbon/5 px-2.5 py-1.5 text-xs font-semibold text-carbon/75 transition hover:border-carbon/30 hover:bg-carbon/10 flex items-center gap-1 cursor-pointer"
+            title="Configurar guardia y desvío del conmutador"
           >
             ⚙️ Conmutador
           </button>
           <button
             type="button"
             onClick={() => onConfigAgenda(u)}
-            className="rounded-lg border border-sauce/20 bg-sauce/5 px-2 py-1 text-[10px] font-semibold text-verde-profundo transition hover:border-sauce/40 hover:bg-sauce/15 text-left"
+            className="rounded-lg border border-sauce/25 bg-sauce/10 px-2.5 py-1.5 text-xs font-semibold text-verde-profundo transition hover:border-sauce/40 hover:bg-sauce/20 flex items-center gap-1 cursor-pointer"
+            title="Configurar horarios y agenda de citas"
           >
-            📅 Agenda/Citas
+            📅 Agenda
           </button>
         </div>
       </div>
 
-      {/* 4. Badges (Rol, Estado, Notificaciones y Asignación Automática) */}
-      <div className="col-span-1 md:col-span-2 flex flex-row md:flex-col gap-1.5 items-center md:items-start min-w-0">
-        {u.asignacion_automatica && (
-          <span
-            className="inline-flex items-center gap-1 rounded-full border border-sauce/40 bg-sauce/25 px-2.5 py-0.5 text-[10px] font-bold text-verde-profundo shadow-sm"
-            title="Receptor de asignación automática de todos los leads nuevos"
-          >
-            ⚡ Leads Automáticos
-          </span>
-        )}
-        {u.rol === "admin" && (
-          <span className="inline-flex items-center rounded-full border border-dorado/20 bg-dorado/15 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-800">
-            👑 Admin
-          </span>
-        )}
-        {u.rol === "asesor" && (
-          <span className="inline-flex items-center rounded-full border border-sauce/10 bg-sauce/10 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo">
-            💼 Asesor
-          </span>
-        )}
-        {u.rol === "operaciones" && (
-          <span className="inline-flex items-center rounded-full border border-cielo/25 bg-cielo/20 px-2.5 py-0.5 text-[10px] font-semibold text-sky-800">
-            🛠️ Operario
-          </span>
-        )}
-        {u.activo ? (
-          <span className="inline-flex items-center rounded-full border border-sauce/20 bg-sauce/20 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo">
-            🟢 Activo
-          </span>
-        ) : (
-          <span className="inline-flex items-center rounded-full border border-carbon/15 bg-carbon/10 px-2.5 py-0.5 text-[10px] font-semibold text-carbon/50">
-            ⚪ Inactivo
-          </span>
-        )}
-        {u.notificar_whatsapp_nuevo_lead ? (
-          <span
-            className="inline-flex items-center rounded-full border border-sauce/30 bg-sauce/10 px-2.5 py-0.5 text-[10px] font-semibold text-verde-profundo"
-            title="Recibe notificaciones por WhatsApp de nuevos leads"
-          >
-            📱 Notif. WhatsApp
-          </span>
-        ) : (
-          <span
-            className="inline-flex items-center rounded-full border border-carbon/10 bg-carbon/5 px-2.5 py-0.5 text-[10px] font-semibold text-carbon/40"
-            title="Sin notificaciones por WhatsApp de nuevos leads"
-          >
-            📵 Sin Notif. WA
-          </span>
-        )}
-      </div>
-
-      {/* 5. Acción Editar */}
-      <div className="col-span-1 md:col-span-2 flex items-center justify-end">
+      {/* 4. Acción Editar */}
+      <div className="flex items-center justify-end border-t lg:border-t-0 lg:border-l border-carbon/10 pt-2 lg:pt-0 lg:pl-4 flex-shrink-0">
         <button
           type="button"
           onClick={() => setEditando(true)}
-          className="inline-flex items-center gap-1 rounded-xl border border-sauce/15 bg-sauce/5 px-3 py-1.5 text-xs font-semibold text-verde-profundo transition-all hover:border-sauce/30 hover:bg-sauce/15"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-sauce/30 bg-sauce/10 px-3.5 py-2 text-xs font-bold text-verde-profundo transition-all hover:bg-sauce hover:text-white shadow-xs cursor-pointer"
         >
           ✏️ Editar
         </button>
@@ -815,7 +828,15 @@ export function TablaUsuarios({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
+          {/* Cabecera visual en desktop */}
+          <div className="hidden lg:flex items-center justify-between gap-4 px-5 text-[11px] font-bold uppercase tracking-wider text-carbon/40">
+            <div className="min-w-[260px] flex-1">Usuario y Rol</div>
+            <div className="min-w-[200px] pl-5">Teléfonos de Contacto</div>
+            <div className="min-w-[260px] pl-5">Conmutador & Citas</div>
+            <div className="w-24 text-right pr-2">Acción</div>
+          </div>
+
           {usuarios.map((u) => (
             <TarjetaUsuario
               key={u.id}
