@@ -287,6 +287,10 @@ export async function crearExpediente(
     .single();
   if (error) throw new Error(error.message);
 
+  // A partir de aquí el expediente YA existe: los efectos secundarios son
+  // best-effort. Si alguno falla no debe tumbar el alta (el usuario vería un
+  // error y, al reintentar, crearía un expediente duplicado).
+  try {
   // Sincroniza todos los campos compartidos con el prospecto (bidireccional)
   if (datos.prospectoId) {
     const syncObj: Record<string, any> = {
@@ -298,7 +302,7 @@ export async function crearExpediente(
       asesor_id: datos.asesorId ?? null,
       operador_id: datos.operadorId ?? null,
     };
-    if ((datos as any).email !== undefined) syncObj.email = (datos as any).email;
+    if ((datos as any).email !== undefined) syncObj.correo = (datos as any).email;
     await sb
       .from("prospectos")
       .update(syncObj)
@@ -342,8 +346,42 @@ export async function crearExpediente(
     const { instanciarFlujoEnExpediente } = await import("@/app/actions/bpm");
     void instanciarFlujoEnExpediente(id, datos.tipoNegocio);
   }
+  } catch (err) {
+    console.error(`[crearExpediente] Efectos secundarios fallaron para ${id}:`, err);
+  }
 
   return aExpediente(data as FilaExpediente);
+}
+
+type ResultadoExpediente =
+  | { ok: true; expediente: Expediente }
+  | { ok: false; mensaje: string };
+
+/**
+ * Variantes que NO lanzan: devuelven el error como dato para que el formulario
+ * muestre el mensaje real (Next.js lo oculta en producción si se lanza).
+ */
+export async function guardarNuevoExpediente(
+  datos: DatosExpediente,
+): Promise<ResultadoExpediente> {
+  try {
+    return { ok: true, expediente: await crearExpediente(datos) };
+  } catch (err) {
+    console.error("[guardarNuevoExpediente]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "Error desconocido" };
+  }
+}
+
+export async function guardarCambiosExpediente(
+  id: string,
+  datos: DatosExpediente,
+): Promise<ResultadoExpediente> {
+  try {
+    return { ok: true, expediente: await actualizarExpediente(id, datos) };
+  } catch (err) {
+    console.error("[guardarCambiosExpediente]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "Error desconocido" };
+  }
 }
 
 /** Actualiza los datos editables de un expediente. */
