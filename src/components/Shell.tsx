@@ -64,6 +64,50 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [conversacionesPendientes, setConversacionesPendientes] = useState(0);
   const [notificadosIds, setNotificadosIds] = useState<string[]>([]);
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
+  const [colapsada, setColapsada] = useState(false);
+
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem("sauceda_sidebar_colapsada");
+      if (guardado !== null) {
+        setColapsada(guardado === "true");
+      }
+    } catch {}
+  }, []);
+
+  const toggleSidebar = () => {
+    setColapsada((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sauceda_sidebar_colapsada", String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Atajos de teclado: Ctrl+B para barra lateral, Escape para cerrar modales/cajón
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAbierto(false);
+        setNotifsAbierto(false);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        const target = e.target as HTMLElement;
+        if (
+          target?.tagName === "INPUT" ||
+          target?.tagName === "TEXTAREA" ||
+          target?.isContentEditable
+        ) {
+          return;
+        }
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     rolUsuarioActual()
@@ -358,6 +402,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Link
             key={l.href}
             href={l.href}
+            onClick={() => setAbierto(false)}
             className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition ${
               activo(l.href)
                 ? "bg-crema/15 font-medium text-crema"
@@ -390,32 +435,92 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div>
+      {/* Botón flotante para reabrir la barra en escritorio cuando está oculta */}
+      {colapsada && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title="Mostrar barra lateral (Ctrl+B)"
+          className="hidden md:flex fixed top-3 left-3 z-40 items-center gap-2 rounded-xl bg-verde-profundo/95 hover:bg-verde-profundo text-crema border border-dorado/40 px-3 py-2 text-xs font-semibold shadow-xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer group animate-in fade-in zoom-in-95 duration-200"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-dorado transition group-hover:translate-x-0.5"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M9 3v18" />
+            <path d="m13 15 3-3-3-3" />
+          </svg>
+          <span className="font-display font-medium tracking-wide">Menú</span>
+          <kbd className="hidden lg:inline-block rounded bg-black/30 border border-crema/20 px-1 py-0.5 text-[9px] font-mono text-crema/60">
+            Ctrl+B
+          </kbd>
+        </button>
+      )}
+
       {/* Columna lateral (escritorio) */}
-      <aside className="hidden border-r border-dorado/30 bg-verde-profundo text-crema md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:w-60 md:flex-col">
-        <div className="flex items-center justify-between border-b border-crema/10 pr-4">
+      <aside
+        className={`hidden border-r border-dorado/30 bg-verde-profundo text-crema md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:w-60 md:flex-col transition-transform duration-300 ease-in-out ${
+          colapsada ? "md:-translate-x-full" : "md:translate-x-0"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-crema/10 pr-3">
           {marca}
           
-          {/* Campana de Notificaciones en Escritorio */}
-          <div className="relative">
+          <div className="flex items-center gap-1">
+            {/* Campana de Notificaciones en Escritorio */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotifsAbierto(!notifsAbierto)}
+                className="relative rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10 hover:text-crema cursor-pointer"
+                aria-label="Notificaciones"
+              >
+                <IconoCampana />
+                {unreadCount > 0 && (
+                  <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rojo text-[9px] font-bold text-crema">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {notifsAbierto && (
+                <div className="absolute left-[180px] top-2 z-50 w-80 rounded-xl border border-carbon/10 bg-white p-2 shadow-xl text-carbon">
+                  {renderNotificacionesLista(true)}
+                  {renderContenidoNotificaciones()}
+                </div>
+              )}
+            </div>
+
+            {/* Botón para ocultar/colapsar la barra lateral */}
             <button
               type="button"
-              onClick={() => setNotifsAbierto(!notifsAbierto)}
-              className="relative rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10 hover:text-crema"
-              aria-label="Notificaciones"
+              onClick={toggleSidebar}
+              title="Ocultar barra lateral (Ctrl+B)"
+              className="rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10 hover:text-crema cursor-pointer"
+              aria-label="Ocultar barra lateral"
             >
-              <IconoCampana />
-              {unreadCount > 0 && (
-                <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rojo text-[9px] font-bold text-crema">
-                  {unreadCount}
-                </span>
-              )}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M9 3v18" />
+                <path d="m15 9-3 3 3 3" />
+              </svg>
             </button>
-            {notifsAbierto && (
-              <div className="absolute left-[200px] top-2 z-50 w-80 rounded-xl border border-carbon/10 bg-white p-2 shadow-xl text-carbon">
-                {renderNotificacionesLista(true)}
-                {renderContenidoNotificaciones()}
-              </div>
-            )}
           </div>
         </div>
         {navegacion}
@@ -486,20 +591,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {abierto && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-carbon/50"
+            className="absolute inset-0 bg-carbon/50 backdrop-blur-xs transition-opacity"
             onClick={() => setAbierto(false)}
             aria-hidden
           />
-          <aside className="absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col bg-verde-profundo text-crema shadow-xl">
-            <div className="flex items-center justify-between">
+          <aside className="absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col bg-verde-profundo text-crema shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between pr-2">
               {marca}
               <button
                 type="button"
                 onClick={() => setAbierto(false)}
                 aria-label="Cerrar menú"
-                className="mr-3 rounded-md p-1.5 text-crema/80 transition hover:bg-crema/10"
+                className="rounded-md p-2 text-crema/80 transition hover:bg-crema/10 hover:text-crema cursor-pointer"
               >
-                ✕
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
               </button>
             </div>
             {navegacion}
@@ -509,7 +625,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Contenido (con espacio a la izquierda para la columna en escritorio) */}
-      <div className="md:pl-60">{children}</div>
+      <div
+        className={`transition-all duration-300 ease-in-out ${
+          colapsada ? "md:pl-0" : "md:pl-60"
+        }`}
+      >
+        {children}
+      </div>
 
       {/* Modal de Búsqueda Global Omnipresente */}
       <BuscadorGlobalModal

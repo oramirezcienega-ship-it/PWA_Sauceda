@@ -504,6 +504,28 @@ notify pgrst, 'reload schema';`;
         alert("¡Publicación aprobada y enviada a n8n con éxito! (n8n está generando el creativo)");
       }
       await cargarDatos();
+
+      // Si no tenía imagen previa, iniciar sondeo automático para cargar la imagen en cuanto n8n la genere
+      if (!tieneImagen) {
+        setRegenerandoIds((prev) => ({ ...prev, [id]: true }));
+        let intentos = 0;
+        const interval = setInterval(async () => {
+          intentos++;
+          try {
+            const resPubs = await obtenerPublicaciones();
+            if (resPubs.success && resPubs.data) {
+              setPublicaciones(resPubs.data);
+              const pubActualizada = resPubs.data.find((p) => p.id === id);
+              if (pubActualizada?.url_imagen || intentos >= 12) {
+                clearInterval(interval);
+                setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
+              }
+            }
+          } catch (e) {
+            console.warn("Error en sondeo tras aprobación:", e);
+          }
+        }, 2500);
+      }
     } else {
       alert("Error al aprobar publicación: " + res.error);
     }
@@ -869,6 +891,11 @@ notify pgrst, 'reload schema';`;
     if (seleccionados.length === 0) return;
     if (!confirm(`¿Aprobar y enviar a n8n las ${seleccionados.length} publicaciones seleccionadas?`)) return;
     
+    const idsSinImagen = seleccionados.filter((id) => {
+      const p = publicaciones.find((pub) => pub.id === id);
+      return !p?.url_imagen || p.url_imagen.length <= 5;
+    });
+
     setMensajeCarga(`Aprobando ${seleccionados.length} publicaciones y enviando a n8n...`);
     startTransition(async () => {
       const res = await cambiarEstadoPublicacionesMasivo(seleccionados, "aprobado");
@@ -879,6 +906,36 @@ notify pgrst, 'reload schema';`;
           alert("Publicaciones aprobadas en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
         } else {
           alert("¡Publicaciones aprobadas y enviadas a n8n con éxito!");
+        }
+
+        if (idsSinImagen.length > 0) {
+          idsSinImagen.forEach((id) => {
+            setRegenerandoIds((prev) => ({ ...prev, [id]: true }));
+          });
+          let intentos = 0;
+          const interval = setInterval(async () => {
+            intentos++;
+            try {
+              const resPubs = await obtenerPublicaciones();
+              if (resPubs.success && resPubs.data) {
+                setPublicaciones(resPubs.data);
+                const todosListos = idsSinImagen.every((id) => {
+                  const p = resPubs.data?.find((pub) => pub.id === id);
+                  return Boolean(p?.url_imagen && p.url_imagen.length > 5);
+                });
+                if (todosListos || intentos >= 14) {
+                  clearInterval(interval);
+                  setRegenerandoIds((prev) => {
+                    const copia = { ...prev };
+                    idsSinImagen.forEach((id) => delete copia[id]);
+                    return copia;
+                  });
+                }
+              }
+            } catch (e) {
+              console.warn("Error en sondeo masivo:", e);
+            }
+          }, 2500);
         }
       } else {
         alert("Error al aprobar publicaciones: " + res.error);
