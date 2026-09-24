@@ -26,7 +26,7 @@ export default function ModalConexionMeta({
 
   const [pageId, setPageId] = useState("61589957630232");
   const [token, setToken] = useState("");
-  const [instagramId, setInstagramId] = useState("");
+  const [instagramId, setInstagramId] = useState("17841427222951604");
   const [mostrarToken, setMostrarToken] = useState(false);
 
   const [estado, setEstado] = useState<EstadoConexionMeta | null>(null);

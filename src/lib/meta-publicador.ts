@@ -139,7 +139,7 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
     instagramAccountId = (
       process.env.META_INSTAGRAM_ACCOUNT_ID ||
       process.env.INSTAGRAM_ACCOUNT_ID ||
-      ""
+      "17841427222951604" // ID oficial de la cuenta @saucedamx_
     ).trim();
   }
 
