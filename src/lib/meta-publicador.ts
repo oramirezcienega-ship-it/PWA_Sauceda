@@ -96,13 +96,14 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
       .in("clave", [
         "meta_page_id",
         "meta_page_access_token",
+        "meta_system_user_token",
         "meta_instagram_id",
       ]);
 
     if (configs && configs.length > 0) {
       const mapa = new Map(configs.map((c) => [c.clave, c.valor]));
       const dbPageId = mapa.get("meta_page_id");
-      const dbToken = mapa.get("meta_page_access_token");
+      const dbToken = mapa.get("meta_page_access_token") || mapa.get("meta_system_user_token");
       const dbIgId = mapa.get("meta_instagram_id");
 
       if (dbPageId) pageId = dbPageId.trim();
@@ -117,12 +118,12 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
     console.warn("No se pudo leer credenciales Meta desde BD, recurriendo a variables de entorno:", err);
   }
 
-  // Fallback a variables de entorno
+  // Fallback a variables de entorno con IDs reales de Sauceda
   if (!pageId) {
     pageId = (
       process.env.META_PAGE_ID ||
       process.env.FACEBOOK_PAGE_ID ||
-      "61589957630232" // ID oficial de la página Sauceda
+      "1198618089992233" // ID oficial de la página Sauceda
     ).trim();
   }
 
@@ -139,7 +140,7 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
     instagramAccountId = (
       process.env.META_INSTAGRAM_ACCOUNT_ID ||
       process.env.INSTAGRAM_ACCOUNT_ID ||
-      "17841427222951604" // ID oficial de la cuenta @saucedamx_
+      "17841427222516604" // ID oficial de la cuenta @saucedamx_
     ).trim();
   }
 
@@ -157,8 +158,8 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
  */
 export async function probarConexionMeta(tokenManual?: string, pageIdManual?: string): Promise<EstadoConexionMeta> {
   const creds = await obtenerCredencialesMeta();
-  const token = (tokenManual || creds.pageAccessToken).trim();
-  const pageId = (pageIdManual || creds.pageId).trim();
+  let token = (tokenManual || creds.pageAccessToken).trim();
+  let pageId = (pageIdManual || creds.pageId).trim();
 
   if (!token) {
     return {
@@ -169,16 +170,37 @@ export async function probarConexionMeta(tokenManual?: string, pageIdManual?: st
     };
   }
 
-  if (!pageId) {
-    return {
-      ok: false,
-      tokenConfigurado: true,
-      tokenValido: false,
-      error: "No se ha configurado el ID de la Página de Facebook.",
-    };
-  }
-
   try {
+    // Si se trata de un System User Token o User Token, consultar /me/accounts para auto-resolver la Página y su Token
+    try {
+      const accountsRes = await fetch(`${META_GRAPH_BASE}/me/accounts?access_token=${encodeURIComponent(token)}`);
+      const accountsData = await accountsRes.json();
+      if (accountsRes.ok && accountsData?.data && accountsData.data.length > 0) {
+        // Encontrar la página Sauceda o la especificada
+        const paginaEncontrada = pageId
+          ? accountsData.data.find((p: any) => p.id === pageId) || accountsData.data[0]
+          : accountsData.data[0];
+
+        if (paginaEncontrada) {
+          pageId = paginaEncontrada.id;
+          if (paginaEncontrada.access_token) {
+            token = paginaEncontrada.access_token;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("No fue necesario resolver /me/accounts o token ya es de página directa:", e);
+    }
+
+    if (!pageId) {
+      return {
+        ok: false,
+        tokenConfigurado: true,
+        tokenValido: false,
+        error: "No se ha configurado el ID de la Página de Facebook.",
+      };
+    }
+
     const url = `${META_GRAPH_BASE}/${encodeURIComponent(pageId)}?fields=id,name,link,fan_count,instagram_business_account{id,username,name,profile_picture_url},connected_instagram_account{id,username,name,profile_picture_url}&access_token=${encodeURIComponent(token)}`;
     const res = await fetch(url, { method: "GET" });
     const data = await res.json();
