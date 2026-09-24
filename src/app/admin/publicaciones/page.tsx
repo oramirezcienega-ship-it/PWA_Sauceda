@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import PrevisualizadorRedSocial from "@/components/PrevisualizadorRedSocial";
 import CalendarioMarketingOmnicanal from "@/components/CalendarioMarketingOmnicanal";
+import ModalConexionMeta from "@/components/ModalConexionMeta";
 import {
   PublicacionProgramada,
   obtenerPublicaciones,
@@ -16,10 +17,13 @@ import {
   cambiarEstadoPublicacionesMasivo,
   actualizarImagenManual,
   restaurarFotoLimpia,
+  ejecutarPublicacionMeta,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
+  const [mostrarModalMeta, setMostrarModalMeta] = useState(false);
+  const [publicandoMetaId, setPublicandoMetaId] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
   const [filtroFormato, setFiltroFormato] = useState<string>("todos");
@@ -595,6 +599,32 @@ notify pgrst, 'reload schema';`;
     alert("¡Texto copiado al portapapeles con éxito!");
   };
 
+  const handlePublicarDirectoMeta = async (id: string, plataforma: string) => {
+    const destino = plataforma === "instagram" ? "instagram" : "facebook";
+    const nombreRed = destino === "instagram" ? "Instagram" : "Facebook";
+
+    if (!confirm(`¿Deseas publicar este contenido de inmediato en la cuenta oficial de ${nombreRed}?`)) {
+      return;
+    }
+
+    setPublicandoMetaId(id);
+    try {
+      const res = await ejecutarPublicacionMeta(id, destino);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        alert(`¡Publicación realizada con éxito en ${nombreRed}!`);
+      } else {
+        alert(`Aviso de Meta: ${res.error || "No se pudo completar la publicación."}`);
+      }
+    } catch (err: any) {
+      alert(`Error al intentar publicar en Meta: ${err?.message || String(err)}`);
+    } finally {
+      setPublicandoMetaId(null);
+    }
+  };
+
   const triggerGeneracionIA = () => {
     setMensajeCarga("Conectando con el Agente de Marketing IA...");
     startTransition(async () => {
@@ -695,12 +725,23 @@ notify pgrst, 'reload schema';`;
               Genera copys automáticos, guiones de video y dispara la publicación real con n8n.
             </p>
           </div>
-          <button
-            onClick={() => setMostrarModalIA(true)}
-            className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema font-semibold px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 text-sm transform hover:scale-[1.02] cursor-pointer"
-          >
-            <span>✨</span> Generar Publicaciones con IA
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMostrarModalMeta(true)}
+              className="bg-white hover:bg-gray-50 border border-dorado/30 text-carbon font-semibold px-4 py-3 rounded-xl shadow-xs transition-all flex items-center gap-2 text-sm cursor-pointer"
+              title="Configurar y probar conexión oficial con Meta Graph API (Facebook & Instagram)"
+            >
+              <span className="text-base">🔗</span>
+              <span>Conexión Meta</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </button>
+            <button
+              onClick={() => setMostrarModalIA(true)}
+              className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema font-semibold px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 text-sm transform hover:scale-[1.02] cursor-pointer"
+            >
+              <span>✨</span> Generar Publicaciones con IA
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1218,6 +1259,26 @@ notify pgrst, 'reload schema';`;
                         >
                           <span>⏰</span> Reagendar
                         </button>
+                        {(pub.plataforma === "facebook" || pub.plataforma === "instagram") && (
+                          <button
+                            type="button"
+                            onClick={() => handlePublicarDirectoMeta(pub.id!, pub.plataforma)}
+                            disabled={publicandoMetaId === pub.id}
+                            className={`${
+                              pub.plataforma === "instagram"
+                                ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
+                                : "bg-[#1877F2] hover:bg-[#166FE5]"
+                            } text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60`}
+                            title="Publicar directamente en la red social usando Meta Graph API"
+                          >
+                            <span>{publicandoMetaId === pub.id ? "⏳" : "🚀"}</span>
+                            <span>
+                              {publicandoMetaId === pub.id
+                                ? "Publicando..."
+                                : `Publicar en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                            </span>
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePublicar(pub.id!)}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
@@ -1227,7 +1288,28 @@ notify pgrst, 'reload schema';`;
                       </>
                     )}
 
-                    {(pub.estado === "rechazado" || pub.estado === "publicado") && (
+                    {pub.estado === "publicado" && (
+                      <>
+                        {pub.url_publicacion && (
+                          <a
+                            href={pub.url_publicacion}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                          >
+                            <span>🔗</span> Ver en {pub.plataforma === "instagram" ? "Instagram" : "Facebook"} ↗
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleReconsiderar(pub.id!)}
+                          className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/70 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
+                        >
+                          🔄 Regresar a Revisión
+                        </button>
+                      </>
+                    )}
+
+                    {pub.estado === "rechazado" && (
                       <button
                         onClick={() => handleReconsiderar(pub.id!)}
                         className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/70 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
@@ -1874,6 +1956,13 @@ notify pgrst, 'reload schema';`;
           </div>
         </div>
       )}
+
+      {/* Modal de Conexión y Diagnóstico Meta (Facebook & Instagram) */}
+      <ModalConexionMeta
+        abierto={mostrarModalMeta}
+        onCerrar={() => setMostrarModalMeta(false)}
+        onConexionActualizada={cargarDatos}
+      />
     </main>
   );
 }
