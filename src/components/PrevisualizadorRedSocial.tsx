@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PublicacionProgramada } from "@/app/actions/marketing";
+import { PublicacionProgramada, obtenerPublicacionPorId } from "@/app/actions/marketing";
 
 interface PrevisualizadorRedSocialProps {
   publicacion: PublicacionProgramada;
@@ -18,23 +18,47 @@ export default function PrevisualizadorRedSocial({
   onEditar,
   onProgramar,
 }: PrevisualizadorRedSocialProps) {
+  const [pubActual, setPubActual] = useState<PublicacionProgramada>(publicacion);
   const [plataformaActiva, setPlataformaActiva] = useState<string>("facebook");
   const [expandirTexto, setExpandirTexto] = useState(false);
   const [liked, setLiked] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
+  const [refrescando, setRefrescando] = useState(false);
+
+  // Sincronizar estado local si cambia la prop
+  useEffect(() => {
+    if (publicacion) {
+      setPubActual(publicacion);
+    }
+  }, [publicacion]);
+
+  // Al abrir el modal, consultar la versión más reciente en la base de datos por si n8n acaba de guardar la nueva imagen
+  useEffect(() => {
+    if (abierto && publicacion?.id) {
+      obtenerPublicacionPorId(publicacion.id)
+        .then((res) => {
+          if (res.success && res.data) {
+            setPubActual(res.data);
+          }
+        })
+        .catch((err) => console.warn("Error al refrescar publicación en modal:", err));
+    }
+  }, [abierto, publicacion?.id]);
 
   // Inicializar la pestaña activa según la plataforma de la publicación
   useEffect(() => {
-    if (publicacion) {
-      if (publicacion.plataforma === "email" || publicacion.plataforma === "mautic") {
+    if (pubActual) {
+      if (pubActual.plataforma === "email" || pubActual.plataforma === "mautic") {
         setPlataformaActiva("mautic");
-      } else if (publicacion.tipo_formato === "reel" || publicacion.plataforma === "tiktok") {
+      } else if (pubActual.tipo_formato === "reel" || pubActual.plataforma === "tiktok") {
         setPlataformaActiva("tiktok");
       } else {
-        setPlataformaActiva(publicacion.plataforma || "facebook");
+        setPlataformaActiva(pubActual.plataforma || "facebook");
       }
     }
-  }, [publicacion]);
+  }, [pubActual]);
 
   // Manejo de tecla ESC para cerrar
   useEffect(() => {
@@ -47,40 +71,72 @@ export default function PrevisualizadorRedSocial({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [abierto, onCerrar]);
 
-  if (!abierto || !publicacion) return null;
-
-  const [imgSrc, setImgSrc] = useState<string | null>(null);
-  const [imgError, setImgError] = useState(false);
-
+  // Construir URL de imagen con cache-buster para garantizar que nunca cargue una imagen obsoleta de la caché
   useEffect(() => {
     setImgError(false);
-    if (publicacion?.url_imagen && publicacion.url_imagen.length > 5) {
-      const u = publicacion.url_imagen.startsWith("http") || publicacion.url_imagen.startsWith("data:")
-        ? publicacion.url_imagen
-        : `https://${publicacion.url_imagen}`;
+    const targetUrl = pubActual?.url_imagen;
+    const cacheKey = pubActual?.updated_at
+      ? new Date(pubActual.updated_at).getTime()
+      : Date.now();
+
+    if (targetUrl && targetUrl.length > 5) {
+      let u = targetUrl.startsWith("http") || targetUrl.startsWith("data:")
+        ? targetUrl
+        : `https://${targetUrl}`;
+
+      // Si no es un data: URI, agregar cache buster dinámico
+      if (!u.startsWith("data:")) {
+        const sep = u.includes("?") ? "&" : "?";
+        u = `${u}${sep}_cb=${cacheKey}`;
+      }
       setImgSrc(u);
-    } else if (publicacion?.id) {
-      // Si no tiene url_imagen directa, intentar proxy por ID
-      setImgSrc(`/api/marketing/imagen/${publicacion.id}`);
+    } else if (pubActual?.id) {
+      // Si no tiene url_imagen directa, intentar proxy por ID con cache-buster
+      setImgSrc(`/api/marketing/imagen/${pubActual.id}?_cb=${cacheKey}`);
     } else {
       setImgSrc(null);
     }
-  }, [publicacion]);
+  }, [pubActual]);
 
   const handleImgError = () => {
-    if (publicacion?.id && imgSrc && !imgSrc.includes("/api/marketing/imagen/")) {
-      // Intentar a través del proxy del CRM que sirve buffer con CSP 'self'
-      setImgSrc(`/api/marketing/imagen/${publicacion.id}`);
+    if (pubActual?.id && imgSrc && !imgSrc.includes("/api/marketing/imagen/")) {
+      const cacheKey = Date.now();
+      setImgSrc(`/api/marketing/imagen/${pubActual.id}?_cb=${cacheKey}`);
     } else {
       setImgError(true);
     }
   };
 
+  const handleRefrescarArte = async () => {
+    if (!pubActual?.id) return;
+    setRefrescando(true);
+    setImgError(false);
+    try {
+      const res = await obtenerPublicacionPorId(pubActual.id);
+      if (res.success && res.data) {
+        setPubActual(res.data);
+      }
+      const cb = Date.now();
+      if (pubActual.url_imagen && !pubActual.url_imagen.startsWith("data:")) {
+        const sep = pubActual.url_imagen.includes("?") ? "&" : "?";
+        setImgSrc(`${pubActual.url_imagen}${sep}_cb=${cb}`);
+      } else {
+        setImgSrc(`/api/marketing/imagen/${pubActual.id}?_cb=${cb}`);
+      }
+    } catch (e) {
+      console.warn("Fallo al refrescar arte manualmente:", e);
+    } finally {
+      setTimeout(() => setRefrescando(false), 500);
+    }
+  };
+
+  if (!abierto || !publicacion) return null;
+
   const mediaUrl = imgSrc;
   const esVideo = mediaUrl ? Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i)) : false;
 
   const handleCopiarTexto = () => {
-    navigator.clipboard.writeText(publicacion.contenido);
+    navigator.clipboard.writeText(pubActual.contenido);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 3000);
   };
@@ -104,13 +160,25 @@ export default function PrevisualizadorRedSocial({
               </p>
             </div>
           </div>
-          <button
-            onClick={onCerrar}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer text-lg font-bold"
-            title="Cerrar (Esc)"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefrescarArte}
+              disabled={refrescando}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-crema text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Volver a consultar el servidor para cargar la foto más reciente de IA"
+            >
+              <span className={refrescando ? "animate-spin" : ""}>🔄</span>
+              <span className="hidden sm:inline">{refrescando ? "Actualizando..." : "Refrescar Foto"}</span>
+            </button>
+            <button
+              onClick={onCerrar}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer text-lg font-bold"
+              title="Cerrar (Esc)"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Pestañas de Plataforma */}
@@ -683,7 +751,7 @@ export default function PrevisualizadorRedSocial({
               <button
                 onClick={() => {
                   onCerrar();
-                  onEditar(publicacion);
+                  onEditar(pubActual);
                 }}
                 className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon font-semibold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
               >
@@ -694,7 +762,7 @@ export default function PrevisualizadorRedSocial({
               <button
                 onClick={() => {
                   onCerrar();
-                  onProgramar(publicacion);
+                  onProgramar(pubActual);
                 }}
                 className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema font-bold text-xs px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
               >

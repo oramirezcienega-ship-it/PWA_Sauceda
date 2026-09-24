@@ -48,6 +48,7 @@ export default function PaginaPublicaciones() {
   const [cargandoLista, setCargandoLista] = useState(true);
   const [mensajeCarga, setMensajeCarga] = useState("Generando contenido...");
   const [guionesExpandidos, setGuionesExpandidos] = useState<Record<string, boolean>>({});
+  const [regenerandoIds, setRegenerandoIds] = useState<Record<string, boolean>>({});
   const [errorBd, setErrorBd] = useState<string | null>(null);
 
   const SQL_MIGRACION_COMPLETA = `-- ==============================================================================
@@ -301,19 +302,60 @@ notify pgrst, 'reload schema';`;
   };
 
   const handleRegenerarCreativo = async (id: string) => {
+    setRegenerandoIds((prev) => ({ ...prev, [id]: true }));
     setMensajeCarga("Solicitando un nuevo creativo fotorrealista a n8n...");
+
     startTransition(async () => {
       const res = await regenerarCreativoPublicacion(id);
-      if (res.success) {
-        if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
-          alert("Se solicitó regeneración.\n\n⚠️ Aviso de n8n: " + res.aviso);
-        } else {
-          alert("¡Solicitud enviada a n8n! Generando nuevo diseño con IA...");
-        }
-        await cargarDatos();
-      } else {
+      if (!res.success) {
         alert("Error al solicitar regeneración de creativo: " + res.error);
+        setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
+        return;
       }
+
+      if (
+        res.aviso &&
+        (res.aviso.includes("falta") ||
+          res.aviso.includes("incorrecta") ||
+          res.aviso.includes("retornó") ||
+          res.aviso.includes("Error") ||
+          res.aviso.includes("Tiempo"))
+      ) {
+        alert("⚠️ Aviso de n8n: " + res.aviso);
+      }
+
+      // Actualizar inmediatamente para que url_imagen pase a estado de regeneración
+      await cargarDatos();
+
+      // Iniciar sondeo inteligente cada 2.5s para capturar la nueva imagen en cuanto n8n termine (toma ~5-8s)
+      let intentos = 0;
+      const interval = setInterval(async () => {
+        intentos++;
+        try {
+          const resPubs = await obtenerPublicaciones({
+            estado: filtroEstado,
+            plataforma: filtroPlataforma,
+            tipo_formato: filtroFormato,
+          });
+
+          if (resPubs.success && resPubs.data) {
+            setPublicaciones(resPubs.data);
+            const pubActualizada = resPubs.data.find((p) => p.id === id);
+
+            if (pubActualizada?.url_imagen || intentos >= 12) {
+              clearInterval(interval);
+              setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
+
+              // Si el modal de previsualización está abierto para esta publicación, actualizarlo en vivo
+              setPubPrevisualizar((prev) =>
+                prev?.id === id && pubActualizada ? pubActualizada : prev
+              );
+            }
+          }
+        } catch (e) {
+          console.warn("Error en sondeo de regeneración:", e);
+        }
+      }, 2500);
     });
   };
 
@@ -899,6 +941,13 @@ notify pgrst, 'reload schema';`;
 
                       return (
                         <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group bg-black">
+                          {regenerandoIds[pub.id!] && (
+                            <div className="absolute inset-0 bg-carbon/85 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20 p-4 text-center animate-in fade-in">
+                              <div className="w-9 h-9 border-3 border-dorado border-t-transparent rounded-full animate-spin mb-2" />
+                              <span className="text-xs font-bold text-dorado">Generando nuevo arte con IA...</span>
+                              <span className="text-[10px] text-white/70 mt-1">El modelo Flux está renderizando la foto fotorrealista en n8n</span>
+                            </div>
+                          )}
                           {esVideo ? (
                             <video
                               src={mediaUrl}
@@ -956,11 +1005,17 @@ notify pgrst, 'reload schema';`;
                             )}
                             <button
                               type="button"
+                              disabled={regenerandoIds[pub.id!]}
                               onClick={() => handleRegenerarCreativo(pub.id!)}
-                              className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                              className={`text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer ${
+                                regenerandoIds[pub.id!]
+                                  ? "bg-amber-800 opacity-60 cursor-not-allowed"
+                                  : "bg-amber-600/90 hover:bg-amber-600"
+                              }`}
                               title="Generar otra variante de imagen/video"
                             >
-                              🔄 Regenerar
+                              <span className={regenerandoIds[pub.id!] ? "animate-spin" : ""}>🔄</span>
+                              {regenerandoIds[pub.id!] ? "Generando..." : "Regenerar"}
                             </button>
                             <a
                               href={mediaUrl}
@@ -974,6 +1029,30 @@ notify pgrst, 'reload schema';`;
                         </div>
                       );
                     })()}
+
+                    {(!pub.url_imagen || pub.url_imagen.length <= 5) && (
+                      <div className="relative rounded-2xl border-2 border-dashed border-dorado/40 p-6 flex flex-col items-center justify-center text-center bg-dorado/5 min-h-[140px]">
+                        {regenerandoIds[pub.id!] ? (
+                          <div className="flex flex-col items-center justify-center">
+                            <div className="w-9 h-9 border-3 border-dorado border-t-transparent rounded-full animate-spin mb-2" />
+                            <span className="text-xs font-bold text-dorado">Generando nuevo arte con IA...</span>
+                            <span className="text-[10px] text-carbon/60 mt-1">El modelo Flux está renderizando la foto fotorrealista en n8n</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-carbon/50">
+                            <span className="text-3xl mb-1">🖼️</span>
+                            <span className="text-xs font-semibold">Sin imagen cargada</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerarCreativo(pub.id!)}
+                              className="mt-2 bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
+                            >
+                              <span>✨</span> Generar con IA (Flux)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {pub.guion_video && (
                       <div className="border border-carbon/10 rounded-xl overflow-hidden">
@@ -1072,7 +1151,10 @@ notify pgrst, 'reload schema';`;
 
                     <button
                       type="button"
-                      onClick={() => setPubPrevisualizar(pub)}
+                      onClick={() => {
+                        const actual = publicaciones.find((p) => p.id === pub.id) || pub;
+                        setPubPrevisualizar(actual);
+                      }}
                       className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
                       title="Previsualizar cómo se verá en la red social"
                     >
