@@ -47,15 +47,31 @@ export default function PrevisualizadorRedSocial({
     }
   }, [abierto, publicacion?.id]);
 
+  // Identificar el formato nativo de la publicación para restringir previsualizaciones incompatibles
+  const esReelOTikTok =
+    pubActual?.tipo_formato === "reel" ||
+    pubActual?.tipo_formato === "video" ||
+    pubActual?.plataforma === "tiktok";
+  const esWhatsApp = pubActual?.plataforma === "whatsapp";
+  const esMautic = pubActual?.plataforma === "email" || pubActual?.plataforma === "mautic";
+
   // Inicializar la pestaña activa según la plataforma de la publicación
   useEffect(() => {
     if (pubActual) {
       if (pubActual.plataforma === "email" || pubActual.plataforma === "mautic") {
         setPlataformaActiva("mautic");
-      } else if (pubActual.tipo_formato === "reel" || pubActual.plataforma === "tiktok") {
+      } else if (
+        pubActual.tipo_formato === "reel" ||
+        pubActual.tipo_formato === "video" ||
+        pubActual.plataforma === "tiktok"
+      ) {
         setPlataformaActiva("tiktok");
+      } else if (pubActual.plataforma === "whatsapp") {
+        setPlataformaActiva("whatsapp");
+      } else if (pubActual.plataforma === "instagram") {
+        setPlataformaActiva("instagram");
       } else {
-        setPlataformaActiva(pubActual.plataforma || "facebook");
+        setPlataformaActiva("facebook");
       }
     }
   }, [pubActual]);
@@ -181,65 +197,83 @@ export default function PrevisualizadorRedSocial({
           </div>
         </div>
 
-        {/* Pestañas de Plataforma */}
-        <div className="bg-gray-100 px-4 py-2.5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto border-b border-gray-200 shrink-0">
-          <span className="text-[11px] font-bold text-carbon/50 uppercase tracking-wider mr-1 hidden sm:inline">
-            Canal:
-          </span>
-          <button
-            onClick={() => setPlataformaActiva("facebook")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              plataformaActiva === "facebook"
-                ? "bg-[#1877F2] text-white shadow-sm"
-                : "bg-white text-carbon/70 hover:bg-gray-200"
-            }`}
-          >
-            <span>🔵</span> Facebook Feed
-          </button>
+        {/* Pestañas de Plataforma / Información del Formato */}
+        <div className="bg-gray-100 px-4 py-2.5 flex items-center justify-between border-b border-gray-200 shrink-0">
+          {esReelOTikTok ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span className="bg-black text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
+                  <span>📱</span> Formato Vertical 9:16 (Reel / TikTok)
+                </span>
+                <span className="text-[11px] text-carbon/60 hidden sm:inline">
+                  Simulación móvil a pantalla completa
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold bg-purple-100 text-purple-800 px-2.5 py-1 rounded-lg border border-purple-200">
+                {pubActual.plataforma === "tiktok" ? "⚫ TikTok Video" : "🟣 Instagram Reel"}
+              </span>
+            </div>
+          ) : esWhatsApp ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span className="bg-[#25D366] text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
+                  <span>🟢</span> WhatsApp Chat Directo
+                </span>
+                <span className="text-[11px] text-carbon/60 hidden sm:inline">
+                  Mensaje con fotografía 1:1 y CTA de WhatsApp
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-lg border border-emerald-200">
+                WhatsApp Oficial
+              </span>
+            </div>
+          ) : esMautic ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span className="bg-[#FF6A00] text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
+                  <span>🟠</span> Mautic / Correo Electrónico
+                </span>
+                <span className="text-[11px] text-carbon/60 hidden sm:inline">
+                  Plantilla de newsletter / email marketing
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold bg-orange-100 text-orange-800 px-2.5 py-1 rounded-lg border border-orange-200">
+                Email Marketing
+              </span>
+            </div>
+          ) : (
+            /* Feed Posts (Facebook e Instagram comparten aspecto cuadrado 1:1) */
+            <div className="flex items-center gap-2 overflow-x-auto w-full">
+              <span className="text-[11px] font-bold text-carbon/50 uppercase tracking-wider mr-1 hidden sm:inline">
+                Canal Feed (1:1):
+              </span>
+              <button
+                onClick={() => setPlataformaActiva("facebook")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  plataformaActiva === "facebook"
+                    ? "bg-[#1877F2] text-white shadow-sm"
+                    : "bg-white text-carbon/70 hover:bg-gray-200"
+                }`}
+              >
+                <span>🔵</span> Facebook Feed
+              </button>
 
-          <button
-            onClick={() => setPlataformaActiva("instagram")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              plataformaActiva === "instagram"
-                ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] text-white shadow-sm"
-                : "bg-white text-carbon/70 hover:bg-gray-200"
-            }`}
-          >
-            <span>🟣</span> Instagram Post
-          </button>
+              <button
+                onClick={() => setPlataformaActiva("instagram")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  plataformaActiva === "instagram"
+                    ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] text-white shadow-sm"
+                    : "bg-white text-carbon/70 hover:bg-gray-200"
+                }`}
+              >
+                <span>🟣</span> Instagram Post
+              </button>
 
-          <button
-            onClick={() => setPlataformaActiva("tiktok")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              plataformaActiva === "tiktok"
-                ? "bg-black text-white shadow-sm"
-                : "bg-white text-carbon/70 hover:bg-gray-200"
-            }`}
-          >
-            <span>📱</span> Reel / TikTok (9:16)
-          </button>
-
-          <button
-            onClick={() => setPlataformaActiva("whatsapp")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              plataformaActiva === "whatsapp"
-                ? "bg-[#25D366] text-white shadow-sm"
-                : "bg-white text-carbon/70 hover:bg-gray-200"
-            }`}
-          >
-            <span>🟢</span> WhatsApp Chat
-          </button>
-
-          <button
-            onClick={() => setPlataformaActiva("mautic")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              plataformaActiva === "mautic"
-                ? "bg-[#FF6A00] text-white shadow-sm"
-                : "bg-white text-carbon/70 hover:bg-gray-200"
-            }`}
-          >
-            <span>🟠</span> Mautic / Correo
-          </button>
+              <span className="ml-auto text-[10px] font-medium text-carbon/50 hidden md:inline">
+                📐 Formato Cuadrado 1:1
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Contenedor del Mockup Móvil */}
@@ -307,7 +341,7 @@ export default function PrevisualizadorRedSocial({
                         alt="Facebook Post Media"
                         referrerPolicy="no-referrer"
                         onError={handleImgError}
-                        className="w-full max-h-[380px] object-cover"
+                        className="w-full max-h-[420px] object-top object-cover"
                       />
                     )}
                   </div>
@@ -417,7 +451,7 @@ export default function PrevisualizadorRedSocial({
                         alt="Instagram Post Media"
                         referrerPolicy="no-referrer"
                         onError={handleImgError}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-top object-cover"
                       />
                     )}
                   </div>

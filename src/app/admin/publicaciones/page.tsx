@@ -43,6 +43,7 @@ export default function PaginaPublicaciones() {
   const [fechaIA, setFechaIA] = useState(obtenerManana());
 
   const [temaIA, setTemaIA] = useState<string>("todos");
+  const [canalIA, setCanalIA] = useState<string>("todas");
 
   const [isPending, startTransition] = useTransition();
   const [cargandoLista, setCargandoLista] = useState(true);
@@ -597,7 +598,7 @@ notify pgrst, 'reload schema';`;
   const triggerGeneracionIA = () => {
     setMensajeCarga("Conectando con el Agente de Marketing IA...");
     startTransition(async () => {
-      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA, temaIA);
+      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA, temaIA, canalIA);
       if (res.success) {
         setMostrarModalIA(false);
         setErrorBd(null);
@@ -1317,6 +1318,32 @@ notify pgrst, 'reload schema';`;
                   <option value="Remodelaciones y ampliaciones de viviendas en León Gto">🏗️ Remodelación y Ampliación de Hogares</option>
                   <option value="Gestión y armado de expediente INFONAVIT para trato directo">📂 Armado de Expediente INFONAVIT (Solo Trámite)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">
+                  Red Social / Canal y Formato Destino
+                </label>
+                <select
+                  value={canalIA}
+                  onChange={(e) => setCanalIA(e.target.value)}
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer font-medium"
+                >
+                  <option value="todas">🔀 Multicanal (Facebook, Instagram y TikTok variados)</option>
+                  <option value="facebook">🔵 Facebook Feed (Post Cuadrado 1:1)</option>
+                  <option value="instagram_post">🟣 Instagram Post (Feed Cuadrado 1:1)</option>
+                  <option value="instagram_reel">📱 Instagram Reels (Vertical 9:16)</option>
+                  <option value="tiktok">⚫ TikTok (Video/Vertical 9:16)</option>
+                  <option value="whatsapp">🟢 WhatsApp (Mensaje Directo + Foto 1:1)</option>
+                  <option value="mautic">🟠 Mautic / Correo (Boletín / Banner)</option>
+                </select>
+                <p className="text-[11px] text-carbon/50 mt-1">
+                  {canalIA === "instagram_reel" || canalIA === "tiktok"
+                    ? "📐 Se generará en resolución vertical 9:16 (1080×1920) óptima para reels y videos móviles."
+                    : canalIA === "todas"
+                    ? "📐 Cada publicación adoptará la resolución y formato nativo de su red social asignada."
+                    : "📐 Se generará en resolución cuadrada 1:1 (1024×1024) óptima para publicaciones en muros y feeds."}
+                </p>
               </div>
 
               <div>
