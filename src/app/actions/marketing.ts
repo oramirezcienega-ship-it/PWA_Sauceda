@@ -1364,13 +1364,28 @@ export async function ejecutarPublicacionMeta(
 
     if (!resultadoMeta && errores.length > 0) {
       const errorMsg = errores.join(" | ");
-      await sb
-        .from("publicaciones_programadas")
-        .update({
-          error_publicacion: errorMsg,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", idPublicacion);
+      try {
+        const { error: errUpdate } = await sb
+          .from("publicaciones_programadas")
+          .update({
+            error_publicacion: errorMsg,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", idPublicacion);
+
+        if (errUpdate && errUpdate.message?.includes("schema cache")) {
+          // Si la columna error_publicacion aún no existe en BD, guardar como notas_revision para no bloquear
+          await sb
+            .from("publicaciones_programadas")
+            .update({
+              notas_revision: `[Error Meta]: ${errorMsg}`.slice(0, 1000),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", idPublicacion);
+        }
+      } catch (logErr) {
+        console.warn("No se pudo registrar error_publicacion en BD:", logErr);
+      }
 
       return {
         success: false,
@@ -1389,14 +1404,34 @@ export async function ejecutarPublicacionMeta(
       updated_at: ahoraIso,
     };
 
-    const { data: pubActualizada, error: updateErr } = await sb
+    let pubActualizada: any = null;
+    const { data: dataActualizada, error: updateErr } = await sb
       .from("publicaciones_programadas")
       .update(updateData)
       .eq("id", idPublicacion)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (updateErr) throw updateErr;
+    if (updateErr && updateErr.message?.includes("schema cache")) {
+      // Resiliencia: si la BD aún no cuenta con las columnas de tracking de Meta (migración 0087)
+      console.warn("Columnas de migración 0087 no encontradas en schema cache. Actualizando campos base...", updateErr.message);
+      const { data: pubFallback, error: errFallback } = await sb
+        .from("publicaciones_programadas")
+        .update({
+          estado: "publicado",
+          updated_at: ahoraIso,
+        })
+        .eq("id", idPublicacion)
+        .select()
+        .maybeSingle();
+
+      if (errFallback) throw errFallback;
+      pubActualizada = pubFallback || { ...pub, estado: "publicado" };
+    } else if (updateErr) {
+      throw updateErr;
+    } else {
+      pubActualizada = dataActualizada || { ...pub, estado: "publicado" };
+    }
 
     // 4. Disparar sincronización con n8n
     const wh = await dispararWebhookN8N(pubActualizada as PublicacionProgramada, "publicar");
