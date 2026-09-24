@@ -5,6 +5,7 @@ import {
   PublicacionProgramada,
   obtenerPublicacionPorId,
   ejecutarPublicacionMeta,
+  ejecutarEnvioMautic,
 } from "@/app/actions/marketing";
 
 interface PrevisualizadorRedSocialProps {
@@ -217,6 +218,45 @@ export default function PrevisualizadorRedSocial({
       setMensajeFeedback({
         tipo: "error",
         texto: err?.message || `Error al intentar publicar en ${nombreRed}.`,
+      });
+    } finally {
+      setPublicandoMeta(false);
+    }
+  };
+
+  const handleDispararMauticModal = async () => {
+    if (!pubActual?.id) return;
+    if (
+      !confirm(
+        "¿Deseas disparar esta campaña en Mautic ahora?\n\nSe enviará a todos los contactos activos y excluirá automáticamente a los prospectos inhabilitados del CRM."
+      )
+    ) {
+      return;
+    }
+
+    setPublicandoMeta(true);
+    setMensajeFeedback(null);
+    try {
+      const res = await ejecutarEnvioMautic(pubActual.id);
+      if (res.success && res.data) {
+        setPubActual(res.data);
+        setMensajeFeedback({
+          tipo: "exito",
+          texto: res.aviso || "¡Campaña disparada exitosamente en Mautic!",
+          url: res.data.url_publicacion,
+        });
+        if (onPublicado) onPublicado(res.data);
+        if (onEditar) onEditar(res.data);
+      } else {
+        setMensajeFeedback({
+          tipo: "error",
+          texto: res.error || "No se pudo disparar la campaña en Mautic.",
+        });
+      }
+    } catch (err: any) {
+      setMensajeFeedback({
+        tipo: "error",
+        texto: err?.message || "Error al disparar campaña en Mautic.",
       });
     } finally {
       setPublicandoMeta(false);
@@ -1148,6 +1188,31 @@ export default function PrevisualizadorRedSocial({
                       {publicandoMeta
                         ? "Publicando en Meta..."
                         : `Publicar en ${(plataformaActiva === "instagram" || pubActual.plataforma === "instagram") ? "Instagram" : "Facebook"}`}
+                    </span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Botón de Disparo de Campaña en Mautic */}
+            {(pubActual.plataforma === "mautic" || pubActual.plataforma === "email") && (
+              <>
+                {pubActual.estado === "publicado" ? (
+                  <span className="bg-orange-50 text-orange-700 border border-orange-200 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs">
+                    <span>✓</span> Campaña Enviada en Mautic
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleDispararMauticModal}
+                    disabled={publicandoMeta}
+                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                    title="Disparar campaña masiva en Mautic excluyendo contactos inhabilitados"
+                  >
+                    <span>{publicandoMeta ? "⏳" : "🚀"}</span>
+                    <span>
+                      {publicandoMeta
+                        ? "Disparando en Mautic..."
+                        : "Disparar Campaña Mautic Ahora"}
                     </span>
                   </button>
                 )}

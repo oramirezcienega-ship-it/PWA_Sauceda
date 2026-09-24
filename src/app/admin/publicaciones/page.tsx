@@ -19,6 +19,7 @@ import {
   actualizarImagenManual,
   restaurarFotoLimpia,
   ejecutarPublicacionMeta,
+  ejecutarEnvioMautic,
   procesarPublicacionesProgramadasVencidas,
 } from "@/app/actions/marketing";
 
@@ -26,6 +27,7 @@ export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
   const [mostrarModalMeta, setMostrarModalMeta] = useState(false);
   const [publicandoMetaId, setPublicandoMetaId] = useState<string | null>(null);
+  const [disparandoMauticId, setDisparandoMauticId] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
   const [filtroFormato, setFiltroFormato] = useState<string>("todos");
@@ -42,7 +44,7 @@ export default function PaginaPublicaciones() {
   const [temaIA, setTemaIA] = useState<string>("Servicios de impermeabilización profesional con garantía de 5 a 10 años");
   const [usarTemaPersonalizado, setUsarTemaPersonalizado] = useState(false);
   const [temaPersonalizado, setTemaPersonalizado] = useState("");
-  const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp">>([
+  const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
     "instagram",
     "facebook",
     "tiktok",
@@ -58,7 +60,7 @@ export default function PaginaPublicaciones() {
 
   // Estados para Replicar / Adaptar publicación existente a otras redes
   const [pubParaReplicar, setPubParaReplicar] = useState<PublicacionProgramada | null>(null);
-  const [canalesParaReplicar, setCanalesParaReplicar] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp">>([
+  const [canalesParaReplicar, setCanalesParaReplicar] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
     "facebook",
   ]);
   const [instruccionesReplicar, setInstruccionesReplicar] = useState("");
@@ -274,6 +276,13 @@ notify pgrst, 'reload schema';`;
               alert(`¡Publicado de inmediato con éxito en ${pubProgramar.plataforma === "instagram" ? "Instagram" : "Facebook"}!`);
             } else {
               alert(`Guardado como publicado en base de datos. Aviso de Meta: ${metaRes.error}`);
+            }
+          } else if (pubProgramar.plataforma === "mautic" || pubProgramar.plataforma === "email") {
+            const mauticRes = await ejecutarEnvioMautic(pubProgramar.id);
+            if (mauticRes.success) {
+              alert(mauticRes.aviso || "¡Campaña disparada de inmediato en Mautic excluyendo contactos inhabilitados!");
+            } else {
+              alert(`Guardado como publicado en base de datos. Aviso de Mautic: ${mauticRes.error}`);
             }
           } else {
             alert("¡Publicación marcada como publicada!");
@@ -658,6 +667,34 @@ notify pgrst, 'reload schema';`;
       alert(`Error al intentar publicar en Meta: ${err?.message || String(err)}`);
     } finally {
       setPublicandoMetaId(null);
+    }
+  };
+
+  const handleDispararMautic = async (id: string) => {
+    if (
+      !confirm(
+        "¿Deseas disparar esta campaña en Mautic ahora?\n\nSe enviará a todos los contactos activos y excluirá automáticamente a los prospectos inhabilitados del CRM."
+      )
+    ) {
+      return;
+    }
+
+    setDisparandoMauticId(id);
+    try {
+      const res = await ejecutarEnvioMautic(id);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        await cargarDatos();
+        alert(res.aviso || "¡Campaña disparada exitosamente en Mautic!");
+      } else {
+        alert(`Aviso de Mautic: ${res.error || "No se pudo disparar la campaña."}`);
+      }
+    } catch (err: any) {
+      alert(`Error al disparar campaña en Mautic: ${err?.message || String(err)}`);
+    } finally {
+      setDisparandoMauticId(null);
     }
   };
 
@@ -1382,6 +1419,22 @@ notify pgrst, 'reload schema';`;
                             </span>
                           </button>
                         )}
+                        {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                          <button
+                            type="button"
+                            onClick={() => handleDispararMautic(pub.id!)}
+                            disabled={disparandoMauticId === pub.id}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+                            title="Disparar campaña masiva en Mautic excluyendo contactos inhabilitados"
+                          >
+                            <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
+                            <span>
+                              {disparandoMauticId === pub.id
+                                ? "Disparando..."
+                                : "Disparar Campaña Mautic"}
+                            </span>
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePublicar(pub.id!)}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
@@ -1393,7 +1446,7 @@ notify pgrst, 'reload schema';`;
 
                     {pub.estado === "publicado" && (
                       <>
-                        {pub.url_publicacion && (
+                        {pub.url_publicacion && pub.plataforma !== "mautic" && pub.plataforma !== "email" && (
                           <a
                             href={pub.url_publicacion}
                             target="_blank"
@@ -1402,6 +1455,11 @@ notify pgrst, 'reload schema';`;
                           >
                             <span>🔗</span> Ver en {pub.plataforma === "instagram" ? "Instagram" : "Facebook"} ↗
                           </a>
+                        )}
+                        {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                          <span className="bg-orange-50 text-orange-700 border border-orange-200 font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-2xs">
+                            <span>✓</span> Campaña Enviada en Mautic
+                          </span>
                         )}
                         <button
                           onClick={() => handleReconsiderar(pub.id!)}
@@ -1546,10 +1604,10 @@ notify pgrst, 'reload schema';`;
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook", "tiktok", "whatsapp"])}
+                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook", "tiktok", "whatsapp", "mautic"])}
                       className="text-[10px] text-dorado font-bold hover:underline cursor-pointer"
                     >
-                      Todas (4)
+                      Todas (5)
                     </button>
                   </div>
                 </div>
@@ -1560,6 +1618,7 @@ notify pgrst, 'reload schema';`;
                     { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed + Enlace" },
                     { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video Corto" },
                     { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje Difusión + Link" },
+                    { id: "mautic", nombre: "Mautic / Correo", icono: "🟠", detalle: "Boletín / Campaña Masiva" },
                   ].map((canal) => {
                     const seleccionado = canalesSeleccionadosIA.includes(canal.id as any);
                     return (
@@ -1710,6 +1769,7 @@ notify pgrst, 'reload schema';`;
                     { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed con enlace" },
                     { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video" },
                     { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje de Difusión" },
+                    { id: "mautic", nombre: "Mautic / Correo", icono: "🟠", detalle: "Boletín / Campaña Masiva" },
                   ]
                     .filter((canal) => canal.id !== pubParaReplicar.plataforma)
                     .map((canal) => {

@@ -379,7 +379,8 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
  */
 async function dispararWebhookN8N(
   pub: PublicacionProgramada,
-  accion: "aprobar" | "publicar"
+  accion: "aprobar" | "publicar" | "disparar_campana_mautic",
+  payloadExtra?: Record<string, any>
 ): Promise<{ enviado: boolean; aviso?: string }> {
   // URL por defecto para n8n staging si no está configurada en el entorno
   const defaultWebhookUrl = "https://n8n-staging.saucedamx.com/webhook/publicar-contenido";
@@ -425,6 +426,7 @@ async function dispararWebhookN8N(
         accion_evento: accion,
         fuente: "CRM Sauceda IA",
         callback_url: callbackUrl,
+        ...(payloadExtra || {}),
       }),
       signal: controller.signal,
     });
@@ -1478,6 +1480,130 @@ export async function guardarCredencialesMeta(config: {
 }
 
 /**
+ * Dispara una campaña de difusión masiva en Mautic (vía n8n o webhook Mautic).
+ * Consulta la base de datos del CRM para extraer los prospectos inhabilitados (estatus no_viable, sin_contacto, o ia_pausada = true)
+ * y pasa la lista de exclusión (correos y teléfonos) a Mautic para garantizar que nunca reciban el mensaje.
+ */
+export async function ejecutarEnvioMautic(
+  idPublicacion: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    // 1. Obtener la publicación
+    const { data: pub, error: fetchErr } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", idPublicacion)
+      .single();
+
+    if (fetchErr || !pub) throw fetchErr || new Error("Publicación no encontrada");
+
+    // 2. Extraer prospectos inhabilitados del CRM para control estricto de exclusiones
+    // Criterio de inhabilitados / DNC: estatus 'no_viable', 'sin_contacto', o ia_pausada = true
+    const { data: prospectosInhabilitados, error: errInhab } = await sb
+      .from("prospectos")
+      .select("id, nombre, correo, telefono, estatus, calificacion, ia_pausada")
+      .or("estatus.in.(no_viable,sin_contacto),ia_pausada.eq.true");
+
+    if (errInhab) {
+      console.warn("[Envío Mautic] Advertencia al consultar inhabilitados:", errInhab.message);
+    }
+
+    const { count: totalActivos } = await sb
+      .from("prospectos")
+      .select("id", { count: "exact", head: true })
+      .not("estatus", "in", '("no_viable","sin_contacto")')
+      .eq("ia_pausada", false);
+
+    // Mapear correos y teléfonos inhabilitados
+    const correosExcluidos: string[] = [];
+    const telefonosExcluidos: string[] = [];
+
+    if (prospectosInhabilitados && prospectosInhabilitados.length > 0) {
+      for (const p of prospectosInhabilitados) {
+        if (p.correo && p.correo.includes("@")) {
+          correosExcluidos.push(p.correo.trim().toLowerCase());
+        }
+        if (p.telefono && p.telefono.length >= 10) {
+          telefonosExcluidos.push(p.telefono.trim());
+        }
+      }
+    }
+
+    const ahoraIso = new Date().toISOString();
+
+    // 3. Disparar el webhook hacia n8n / Mautic con las exclusiones y el contenido enriquecido
+    const payloadMautic = {
+      canal_difusion: "mautic",
+      campana_id: pub.id,
+      asunto: pub.titulo || "Boletín Informativo Sauceda",
+      contenido_mensaje: pub.contenido,
+      url_imagen_aprobada: pub.url_imagen || null,
+      tipo_formato: pub.tipo_formato,
+      audiencia: {
+        total_activos_estimados: totalActivos || 0,
+        exclusiones: {
+          total_excluidos: prospectosInhabilitados?.length || 0,
+          correos: Array.from(new Set(correosExcluidos)),
+          telefonos: Array.from(new Set(telefonosExcluidos)),
+        },
+      },
+      fecha_disparo: ahoraIso,
+    };
+
+    console.log(`[Envío Mautic] Disparando campaña para post ${pub.id}. Activos: ${totalActivos || 0}, Excluidos: ${prospectosInhabilitados?.length || 0}`);
+
+    const wh = await dispararWebhookN8N(pub, "disparar_campana_mautic", payloadMautic);
+
+    // 4. Actualizar estado de la publicación a 'publicado' en la base de datos
+    const metaPostId = `mautic_${pub.id}_${Date.now()}`;
+    const urlMautic = process.env.MAUTIC_URL || "https://mautic.saucedamx.com";
+
+    const { data: pubActualizada, error: errUpdate } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        estado: "publicado",
+        publicado_en: ahoraIso,
+        fecha_programacion: ahoraIso,
+        meta_post_id: metaPostId,
+        url_publicacion: urlMautic,
+        error_publicacion: null,
+        updated_at: ahoraIso,
+      })
+      .eq("id", idPublicacion)
+      .select()
+      .maybeSingle();
+
+    if (errUpdate) {
+      console.warn("[Envío Mautic] Aviso al actualizar publicación en BD:", errUpdate.message);
+    }
+
+    const resultadoPub = pubActualizada || {
+      ...pub,
+      estado: "publicado",
+      publicado_en: ahoraIso,
+      fecha_programacion: ahoraIso,
+      meta_post_id: metaPostId,
+      url_publicacion: urlMautic,
+    };
+
+    return {
+      success: true,
+      data: resultadoPub as PublicacionProgramada,
+      aviso: `¡Campaña disparada exitosamente en Mautic! Se excluyeron automáticamente ${prospectosInhabilitados?.length || 0} contactos inhabilitados del CRM. ${wh.aviso || ""}`,
+    };
+  } catch (err: any) {
+    console.error("Error en ejecutarEnvioMautic:", err);
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
+  }
+}
+
+/**
  * Ejecuta la publicación directa a Meta (Página de Facebook y/o Instagram) vía Graph API.
  * Actualiza el estado a 'publicado', almacena el permalink y notifica a n8n.
  */
@@ -1497,6 +1623,11 @@ export async function ejecutarPublicacionMeta(
       .single();
 
     if (fetchErr || !pub) throw fetchErr || new Error("Publicación no encontrada");
+
+    // Si la publicación está destinada a Mautic o Correo, derivar al ejecutor de Mautic
+    if (pub.plataforma === "mautic" || pub.plataforma === "email") {
+      return await ejecutarEnvioMautic(idPublicacion);
+    }
 
     const plataforma = pub.plataforma;
     const destinoFinal =
@@ -1777,6 +1908,26 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
           } else {
             fallidas++;
             detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: res.error });
+          }
+        } catch (postErr: any) {
+          fallidas++;
+          detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: postErr.message });
+        }
+      } else if (pub.plataforma === "mautic" || pub.plataforma === "email") {
+        // Para Mautic: disparar campaña de difusión masiva excluyendo prospectos inhabilitados del CRM
+        try {
+          const resMautic = await ejecutarEnvioMautic(pub.id!);
+          if (resMautic.success) {
+            exitosas++;
+            detalles.push({
+              id: pub.id!,
+              plataforma: pub.plataforma,
+              status: "publicado",
+              mensaje: resMautic.aviso || "Campaña Mautic disparada automáticamente por agenda programada (excluyendo inhabilitados)",
+            });
+          } else {
+            fallidas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: resMautic.error });
           }
         } catch (postErr: any) {
           fallidas++;
