@@ -11,6 +11,7 @@ import {
   guardarMensajeEntrante,
   triggerResponderBackground
 } from "@/features/captacion/whatsapp";
+import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
 
 /**
  * MÓDULO: CAPTACIÓN · Facebook Messenger e Instagram DMs (Meta Graph API)
@@ -156,7 +157,7 @@ async function registrarLeadSocial(
     lead.mensaje ?? "",
     [lead.campaign_name, lead.adset_name, lead.ad_name].filter(Boolean).join(" ")
   );
-  await sb.from("expedientes").insert({
+  await insertarExpedienteSeguro(sb, {
     id,
     cliente: lead.nombre?.trim() || `Lead ${canalLabel} ${lead.senderId}`,
     fraccionamiento: "Por definir",
