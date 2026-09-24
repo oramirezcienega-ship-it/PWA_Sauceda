@@ -494,7 +494,7 @@ export async function publicarEnInstagram(params: {
     // PASO 1.5: Esperar activamente a que Instagram termine de procesar el medio (imagen o video)
     let listo = false;
     let intentos = 0;
-    const maxIntentos = esReelOVideo ? 12 : 8; // Hasta 24s para video, hasta 16s para imagen
+    const maxIntentos = esReelOVideo ? 25 : 12; // Hasta 50s para video/reel, hasta 24s para imagen
     const intervaloMs = 2000; // 2 segundos
 
     while (!listo && intentos < maxIntentos) {
@@ -504,22 +504,33 @@ export async function publicarEnInstagram(params: {
           `${META_GRAPH_BASE}/${creationId}?fields=status_code,status&access_token=${creds.pageAccessToken}`
         );
         const statusData = await statusRes.json();
-        console.log(`[Meta Instagram] Contenedor ${creationId} status: ${statusData?.status_code} (intento ${intentos + 1})`);
+        console.log(`[Meta Instagram] Contenedor ${creationId} status: ${statusData?.status_code} (intento ${intentos + 1}/${maxIntentos})`);
 
         if (statusData?.status_code === "FINISHED") {
           listo = true;
           break;
         } else if (statusData?.status_code === "ERROR") {
+          console.error(`[Meta Instagram] Contenedor ${creationId} reportó ERROR:`, JSON.stringify(statusData));
+          const detalle = statusData.status || statusData.error_message || statusData.error?.message || "";
           return {
             ok: false,
             plataforma: "instagram",
-            error: "Instagram reportó un fallo al procesar el archivo multimedia (revisa la relación de aspecto o formato).",
+            error: `Instagram reportó un fallo al procesar el archivo multimedia${detalle ? `: ${detalle}` : " (revisa la relación de aspecto o formato)"}.`,
           };
         }
       } catch (pollErr) {
         console.warn("[Meta Instagram] Error al consultar status_code:", pollErr);
       }
       intentos++;
+    }
+
+    if (!listo) {
+      console.warn(`[Meta Instagram] Contenedor ${creationId} no alcanzó FINISHED tras ${maxIntentos} intentos.`);
+      return {
+        ok: false,
+        plataforma: "instagram",
+        error: "Instagram aún se encuentra procesando el archivo multimedia en sus servidores. Por favor espera unos momentos y vuelve a hacer clic en 'Publicar en Instagram'.",
+      };
     }
 
     // PASO 2: Publicar el Contenedor (Media Publish) con reintento si aún está finalizando

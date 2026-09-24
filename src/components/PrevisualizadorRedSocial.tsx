@@ -179,7 +179,7 @@ export default function PrevisualizadorRedSocial({
 
   const handlePublicarEnMeta = async () => {
     if (!pubActual?.id) return;
-    const destino = pubActual.plataforma === "instagram" ? "instagram" : "facebook";
+    const destino = (plataformaActiva === "instagram" || pubActual.plataforma === "instagram") ? "instagram" : "facebook";
     const nombreRed = destino === "instagram" ? "Instagram" : "Facebook";
 
     if (!confirm(`¿Deseas publicar este contenido de inmediato en la cuenta oficial de ${nombreRed}?`)) {
@@ -1055,7 +1055,7 @@ export default function PrevisualizadorRedSocial({
                     onClick={handlePublicarEnMeta}
                     disabled={publicandoMeta}
                     className={`${
-                      pubActual.plataforma === "instagram"
+                      (plataformaActiva === "instagram" || pubActual.plataforma === "instagram")
                         ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
                         : "bg-[#1877F2] hover:bg-[#166FE5]"
                     } text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60`}
@@ -1065,7 +1065,7 @@ export default function PrevisualizadorRedSocial({
                     <span>
                       {publicandoMeta
                         ? "Publicando en Meta..."
-                        : `Publicar en ${pubActual.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                        : `Publicar en ${(plataformaActiva === "instagram" || pubActual.plataforma === "instagram") ? "Instagram" : "Facebook"}`}
                     </span>
                   </button>
                 )}

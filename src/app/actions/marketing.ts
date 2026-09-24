@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
 import {
@@ -1254,18 +1255,63 @@ export async function ejecutarPublicacionMeta(
 
     // Resolver URLs de medios
     let urlImg = pub.url_imagen || "";
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+    let baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.SITE_URL || "").replace(/\/$/, "");
+
+    try {
+      const headerList = await headers();
+      const host = headerList.get("x-forwarded-host") || headerList.get("host");
+      const proto = headerList.get("x-forwarded-proto") || "https";
+      if (host && !host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes("192.168.")) {
+        baseUrl = `${proto}://${host}`;
+      }
+    } catch {
+      // Ignorar si headers() no está disponible
+    }
+
+    if (!baseUrl) {
+      baseUrl = "https://crm.saucedamx.com";
+    }
 
     // Si la imagen es una URL relativa interna o contiene parámetros de render
     if (urlImg.startsWith("/")) {
       urlImg = `${baseUrl}${urlImg}`;
     }
 
-    // Para Instagram: Instagram exige JPEG obligatorio.
-    // Si la imagen no termina en .jpg/.jpeg o proviene de servicios en WebP, enrutarla por el proxy con sharp
+    // Para Instagram: Instagram exige JPEG obligatorio y relación de aspecto 4:5 a 1.91:1.
     let urlImagenInstagram = urlImg;
-    if (urlImg && (!urlImg.toLowerCase().endsWith(".jpg") && !urlImg.toLowerCase().endsWith(".jpeg"))) {
-      urlImagenInstagram = `${baseUrl}/api/marketing/imagen/${pub.id}.jpg`;
+    if (urlImg) {
+      if (urlImg.includes("images.unsplash.com")) {
+        // En Unsplash forzamos fm=jpg para entrega directa en JPEG a Meta
+        try {
+          const u = new URL(urlImg);
+          u.searchParams.set("fm", "jpg");
+          u.searchParams.delete("auto");
+          urlImagenInstagram = u.toString();
+        } catch {
+          urlImagenInstagram = urlImg;
+        }
+      } else if (urlImg.startsWith("data:")) {
+        // Si es un data URI en base64, enrutar por el proxy con el ID
+        urlImagenInstagram = `${baseUrl}/api/marketing/imagen/${pub.id}.jpg`;
+      } else {
+        // Comprobar si es un archivo que termina directamente en .jpg o .jpeg (sin contar query params)
+        let esJpgDirecto = false;
+        try {
+          const u = new URL(urlImg);
+          const p = u.pathname.toLowerCase();
+          if ((p.endsWith(".jpg") || p.endsWith(".jpeg")) && !urlImg.includes("generar-banner")) {
+            esJpgDirecto = true;
+          }
+        } catch {}
+
+        if (esJpgDirecto) {
+          urlImagenInstagram = urlImg;
+        } else {
+          // Si es WebP (Replicate), banner compuesto SVG, o cualquier otro formato:
+          // Pasar al proxy con ?url= para conversión instantánea a JPEG con sharp y auto-ajuste de aspecto
+          urlImagenInstagram = `${baseUrl}/api/marketing/imagen/${pub.id}.jpg?url=${encodeURIComponent(urlImg)}`;
+        }
+      }
     }
 
     // Verificar si la URL de la imagen original está viva antes de detonar en Meta
