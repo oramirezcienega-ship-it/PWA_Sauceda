@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import PrevisualizadorRedSocial from "@/components/PrevisualizadorRedSocial";
 import CalendarioMarketingOmnicanal from "@/components/CalendarioMarketingOmnicanal";
 import ModalConexionMeta from "@/components/ModalConexionMeta";
+import ModalConexionTikTok from "@/components/ModalConexionTikTok";
 import {
   PublicacionProgramada,
   obtenerPublicaciones,
@@ -19,6 +20,7 @@ import {
   actualizarImagenManual,
   restaurarFotoLimpia,
   ejecutarPublicacionMeta,
+  ejecutarPublicacionTikTok,
   ejecutarEnvioMautic,
   procesarPublicacionesProgramadasVencidas,
   desprogramarPublicacion,
@@ -54,11 +56,16 @@ const OPCIONES_FORMATO: OpcionFiltro[] = [
 ];
 
 const OPCIONES_TEMA: OpcionFiltro[] = [
-  { id: "traspasos", label: "Traspasos INFONAVIT", icono: "🏠" },
-  { id: "impermeabilizacion", label: "Impermeabilización", icono: "🌧️" },
-  { id: "compra_directa", label: "Compra Directa de Casas", icono: "💵" },
-  { id: "remodelacion", label: "Remodelaciones", icono: "🏗️" },
-  { id: "gestion", label: "Asesoría / Gestión Legal", icono: "⚖️" },
+  { id: "impermeabilizacion", label: "Impermeabilización con Soplete", icono: "🌧️" },
+  { id: "herreria", label: "Herrería Residencial (Portones y Protecciones)", icono: "⚒️" },
+  { id: "piso_estampado", label: "Concreto y Pisos Estampados", icono: "🧱" },
+  { id: "remodelacion", label: "Remodelaciones y Ampliaciones", icono: "🏗️" },
+  { id: "mantenimiento", label: "Mantenimiento del Hogar / Pintura", icono: "🎨" },
+  { id: "concreto", label: "Concreto Premezclado y Losas", icono: "🚛" },
+  { id: "traspasos", label: "Traspasos INFONAVIT / FOVISSSTE", icono: "🏠" },
+  { id: "compra_directa", label: "Compra Directa de Casas (Contado)", icono: "💵" },
+  { id: "gestion", label: "Armado de Expediente INFONAVIT", icono: "📁" },
+  { id: "venta_casas", label: "Venta de Casas y Bienes Raíces", icono: "🏡" },
 ];
 
 const OPCIONES_FECHA: OpcionFiltro[] = [
@@ -182,7 +189,9 @@ function DropdownFiltroMultiple({
 export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
   const [mostrarModalMeta, setMostrarModalMeta] = useState(false);
+  const [mostrarModalTikTok, setMostrarModalTikTok] = useState(false);
   const [publicandoMetaId, setPublicandoMetaId] = useState<string | null>(null);
+  const [publicandoTikTokId, setPublicandoTikTokId] = useState<string | null>(null);
   const [disparandoMauticId, setDisparandoMauticId] = useState<string | null>(null);
 
   // Estados de Filtros Multiselección
@@ -450,11 +459,16 @@ notify pgrst, 'reload schema';`;
     if (filtrosTema.length > 0) {
       const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
       const coincideTema = filtrosTema.some((tema) => {
-        if (tema === "traspasos") return textoBuscado.includes("traspaso") || textoBuscado.includes("infonavit");
-        if (tema === "impermeabilizacion") return textoBuscado.includes("impermeabiliz");
+        if (tema === "impermeabilizacion") return textoBuscado.includes("impermeabiliz") || textoBuscado.includes("soplete");
+        if (tema === "herreria") return textoBuscado.includes("herr") || textoBuscado.includes("porton") || textoBuscado.includes("protecc") || textoBuscado.includes("barandal");
+        if (tema === "piso_estampado") return textoBuscado.includes("estampad") || textoBuscado.includes("piso") || textoBuscado.includes("adoquin");
+        if (tema === "remodelacion") return textoBuscado.includes("remodela") || textoBuscado.includes("construc") || textoBuscado.includes("amplia");
+        if (tema === "mantenimiento") return textoBuscado.includes("manten") || textoBuscado.includes("pintur") || textoBuscado.includes("hogar");
+        if (tema === "concreto") return textoBuscado.includes("concreto") || textoBuscado.includes("premezclado") || textoBuscado.includes("losa");
+        if (tema === "traspasos") return textoBuscado.includes("traspaso") || textoBuscado.includes("infonavit") || textoBuscado.includes("fovissste");
         if (tema === "compra_directa") return textoBuscado.includes("compra") || textoBuscado.includes("contado") || textoBuscado.includes("deuda");
-        if (tema === "remodelacion") return textoBuscado.includes("remodela") || textoBuscado.includes("construc");
-        if (tema === "gestion") return textoBuscado.includes("gesti") || textoBuscado.includes("legal") || textoBuscado.includes("asesor");
+        if (tema === "gestion") return textoBuscado.includes("gesti") || textoBuscado.includes("legal") || textoBuscado.includes("asesor") || textoBuscado.includes("expediente");
+        if (tema === "venta_casas") return textoBuscado.includes("venta") || textoBuscado.includes("inmobiliari") || textoBuscado.includes("casa") || textoBuscado.includes("propiedad");
         return false;
       });
       if (!coincideTema) return false;
@@ -1026,6 +1040,36 @@ notify pgrst, 'reload schema';`;
     }
   };
 
+  const handlePublicarDirectoTikTok = async (id: string) => {
+    if (!confirm("¿Deseas publicar este contenido de inmediato en la cuenta oficial de TikTok (@saucedamxbr)?")) {
+      return;
+    }
+
+    setPublicandoTikTokId(id);
+    try {
+      const res = await ejecutarPublicacionTikTok(id);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        await cargarDatos();
+        alert(res.aviso || "¡Publicación realizada con éxito en TikTok!");
+      } else {
+        if (res.error?.includes("No hay credenciales")) {
+          if (confirm(`${res.error}\n\n¿Deseas abrir la ventana de Conexión con TikTok ahora para ingresar tus credenciales?`)) {
+            setMostrarModalTikTok(true);
+          }
+        } else {
+          alert(`Aviso de TikTok: ${res.error || "No se pudo completar la publicación."}`);
+        }
+      }
+    } catch (err: any) {
+      alert(`Error al intentar publicar en TikTok: ${err?.message || String(err)}`);
+    } finally {
+      setPublicandoTikTokId(null);
+    }
+  };
+
   const handleDispararMautic = async (id: string) => {
     if (
       !confirm(
@@ -1238,6 +1282,15 @@ notify pgrst, 'reload schema';`;
             >
               <span className="text-base">🔗</span>
               <span>Conexión Meta</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </button>
+            <button
+              onClick={() => setMostrarModalTikTok(true)}
+              className="bg-white hover:bg-gray-50 border border-dorado/30 text-carbon font-semibold px-4 py-3 rounded-xl shadow-xs transition-all flex items-center gap-2 text-sm cursor-pointer"
+              title="Configurar y probar conexión con TikTok Content Posting API"
+            >
+              <span className="text-base">🎵</span>
+              <span>Conexión TikTok</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </button>
             <button
@@ -1937,6 +1990,21 @@ notify pgrst, 'reload schema';`;
                             </button>
                           )}
 
+                          {pub.plataforma === "tiktok" && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublicarDirectoTikTok(pub.id!)}
+                              disabled={publicandoTikTokId === pub.id}
+                              className="flex-1 bg-black hover:bg-neutral-800 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
+                              title="Publicar ahora mismo en TikTok oficial (@saucedamxbr)"
+                            >
+                              <span>{publicandoTikTokId === pub.id ? "⏳" : "🎵"}</span>
+                              <span className="truncate">
+                                {publicandoTikTokId === pub.id ? "Publicando..." : "TikTok"}
+                              </span>
+                            </button>
+                          )}
+
                           {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
                             <button
                               type="button"
@@ -2174,21 +2242,40 @@ notify pgrst, 'reload schema';`;
                     onChange={(e) => setTemaIA(e.target.value)}
                     className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer font-medium"
                   >
-                    <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">
-                      ☔ Impermeabilización Profesional $210/m² con Soplete (Garantía 5-10 años)
-                    </option>
-                    <option value="Traspasos de viviendas con crédito INFONAVIT">
-                      🏠 Traspaso INFONAVIT en León Gto (Explicación y Venta Segura)
-                    </option>
-                    <option value="Compra rápida de casas de contado con adeudos o vandalizadas">
-                      💰 Compra de Casas de Contado (Problemas Legales/Deudas)
-                    </option>
-                    <option value="Remodelaciones y ampliaciones de viviendas en León Gto">
-                      🏗️ Remodelación y Ampliación de Hogares (Diseño y Obra)
-                    </option>
-                    <option value="Gestión y armado de expediente INFONAVIT para trato directo">
-                      📂 Armado de Expediente INFONAVIT (Solo Trámite y Asesoría)
-                    </option>
+                    <optgroup label="🔨 Sauceda Construye">
+                      <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">
+                        ☔ Impermeabilización con Soplete $210/m² (Garantía 5 a 10 años)
+                      </option>
+                      <option value="Herrería residencial moderna, portones automatizados, protecciones y barandales de herrería">
+                        ⚒️ Herrería Residencial (Portones modernos, protecciones y barandales)
+                      </option>
+                      <option value="Concreto y pisos estampados decorativos para cocheras, terrazas y patios con acabado piedra y sellador">
+                        🧱 Concreto y Pisos Estampados (Cocheras, terrazas y patios)
+                      </option>
+                      <option value="Remodelaciones y ampliaciones de viviendas en León Gto">
+                        🏗️ Remodelación y Ampliación de Hogares (Diseño y Obra)
+                      </option>
+                      <option value="Mantenimiento integral del hogar, pintura vinílica y esmalte para fachadas e interiores">
+                        🎨 Mantenimiento del Hogar y Pintura (Fachadas e interiores)
+                      </option>
+                      <option value="Concreto premezclado para losas, zapatas, pisos industriales y colado directo en obra">
+                        🚛 Concreto Premezclado y Colado de Losas (Calidad garantizada)
+                      </option>
+                    </optgroup>
+                    <optgroup label="🏡 Sauceda Bienes Raíces">
+                      <option value="Traspasos de viviendas con crédito INFONAVIT">
+                        🏠 Traspasos INFONAVIT / FOVISSSTE (Venta segura sin deudas)
+                      </option>
+                      <option value="Compra rápida de casas de contado con adeudos o vandalizadas">
+                        💰 Compra Directa de Casas de Contado (Problemas Legales / Deudas)
+                      </option>
+                      <option value="Gestión y armado de expediente INFONAVIT para trato directo">
+                        📂 Armado de Expediente INFONAVIT (Trámite y asesoría directa)
+                      </option>
+                      <option value="Venta de casas en León Gto, catálogo inmobiliario con crédito INFONAVIT, FOVISSSTE o bancario">
+                        🏡 Venta de Casas y Catálogo Inmobiliario (Listas para habitar)
+                      </option>
+                    </optgroup>
                   </select>
                 )}
               </div>
@@ -2982,6 +3069,13 @@ notify pgrst, 'reload schema';`;
       <ModalConexionMeta
         abierto={mostrarModalMeta}
         onCerrar={() => setMostrarModalMeta(false)}
+        onConexionActualizada={cargarDatos}
+      />
+
+      {/* Modal de Conexión y Diagnóstico TikTok */}
+      <ModalConexionTikTok
+        abierto={mostrarModalTikTok}
+        onCerrar={() => setMostrarModalTikTok(false)}
         onConexionActualizada={cargarDatos}
       />
     </main>
