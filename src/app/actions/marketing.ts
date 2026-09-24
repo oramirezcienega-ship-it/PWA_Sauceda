@@ -513,8 +513,11 @@ export async function guardarPublicacion(
 
     let avisoWebhook: string | undefined;
     if (result.estado === "aprobado") {
-      const wh = await dispararWebhookN8N(result, "aprobar");
-      if (wh.aviso) avisoWebhook = wh.aviso;
+      // Solo llamar a n8n si la publicación no tiene imagen previa cargada o heredada
+      if (!result.url_imagen || result.url_imagen.length <= 5) {
+        const wh = await dispararWebhookN8N(result, "aprobar");
+        if (wh.aviso) avisoWebhook = wh.aviso;
+      }
     } else if (result.estado === "publicado") {
       const wh = await dispararWebhookN8N(result, "publicar");
       if (wh.aviso) avisoWebhook = wh.aviso;
@@ -556,8 +559,11 @@ export async function cambiarEstadoPublicacion(
 
     let avisoWebhook: string | undefined;
     if (estado === "aprobado") {
-      const wh = await dispararWebhookN8N(result, "aprobar");
-      if (wh.aviso) avisoWebhook = wh.aviso;
+      // Solo solicitar generación de imagen a n8n si la publicación carece de imagen previa
+      if (!result.url_imagen || result.url_imagen.length <= 5) {
+        const wh = await dispararWebhookN8N(result, "aprobar");
+        if (wh.aviso) avisoWebhook = wh.aviso;
+      }
     } else if (estado === "publicado") {
       const wh = await dispararWebhookN8N(result, "publicar");
       if (wh.aviso) avisoWebhook = wh.aviso;
@@ -602,8 +608,10 @@ export async function reprogramarPublicacion(
     const result = data as PublicacionProgramada;
     let avisoWebhook: string | undefined;
     if (estado === "aprobado") {
-      const wh = await dispararWebhookN8N(result, "aprobar");
-      if (wh.aviso) avisoWebhook = wh.aviso;
+      if (!result.url_imagen || result.url_imagen.length <= 5) {
+        const wh = await dispararWebhookN8N(result, "aprobar");
+        if (wh.aviso) avisoWebhook = wh.aviso;
+      }
     }
 
     return { success: true, data: result, aviso: avisoWebhook };
@@ -740,12 +748,14 @@ export async function cambiarEstadoPublicacionesMasivo(
 
     if (error) throw error;
 
-    // Si se aprueban, disparar webhooks n8n para cada una
+    // Si se aprueban, disparar webhooks n8n solo para aquellas que NO tengan imagen aún
     let avisoWebhook: string | undefined;
     if (estado === "aprobado" && data) {
       for (const pub of data as PublicacionProgramada[]) {
-        const wh = await dispararWebhookN8N(pub, "aprobar");
-        if (!wh.enviado && wh.aviso) avisoWebhook = wh.aviso;
+        if (!pub.url_imagen || pub.url_imagen.length <= 5) {
+          const wh = await dispararWebhookN8N(pub, "aprobar");
+          if (!wh.enviado && wh.aviso) avisoWebhook = wh.aviso;
+        }
       }
     }
 
@@ -1251,8 +1261,11 @@ Formato esperado para cada objeto:
           campana_origen_id: pubOriginal.id,
         },
         fecha_programacion: pubOriginal.fecha_programacion || ahoraIso,
-        estado: "pendiente_revision" as const,
-        notas_revision: `Adaptado con IA desde publicación original en ${pubOriginal.plataforma}`,
+        // Al replicar desde una publicación existente, el creativo ya está producido y aprobado.
+        // Pasa directamente a 'aprobado' (Listo para Publicar / Programar) para no re-entrar a n8n
+        // ni sobreescribir la imagen aprobada.
+        estado: "aprobado" as const,
+        notas_revision: `Adaptado con IA para ${prop.plataforma} desde publicación original aprobada`,
         created_at: ahoraIso,
         updated_at: ahoraIso,
       };
@@ -1644,26 +1657,54 @@ export async function ejecutarPublicacionMeta(
       .select()
       .maybeSingle();
 
-    if (updateErr && updateErr.message?.includes("schema cache")) {
-      // Resiliencia: si la BD aún no cuenta con las columnas de tracking de Meta (migración 0087)
-      console.warn("Columnas de migración 0087 no encontradas en schema cache. Actualizando campos base...", updateErr.message);
-      const { data: pubFallback, error: errFallback } = await sb
+    if (updateErr) {
+      console.warn("Aviso al actualizar con campos Meta extendidos en BD, aplicando fallback resiliente:", updateErr.message);
+      
+      // Intento 2: Sin error_publicacion (manteniendo tracking de URL y Post ID)
+      const { data: fallbackTrack, error: errTrack } = await sb
         .from("publicaciones_programadas")
         .update({
           estado: "publicado",
+          meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || null,
+          url_publicacion: resultadoMeta?.permalink || null,
+          publicado_en: ahoraIso,
           updated_at: ahoraIso,
         })
         .eq("id", idPublicacion)
         .select()
         .maybeSingle();
 
-      if (errFallback) throw errFallback;
-      pubActualizada = pubFallback || { ...pub, estado: "publicado" };
-    } else if (updateErr) {
-      throw updateErr;
+      if (!errTrack && fallbackTrack) {
+        pubActualizada = fallbackTrack;
+      } else {
+        // Intento 3: Actualizar campos mínimos garantizados
+        const { data: pubFallback, error: errFallback } = await sb
+          .from("publicaciones_programadas")
+          .update({
+            estado: "publicado",
+            updated_at: ahoraIso,
+          })
+          .eq("id", idPublicacion)
+          .select()
+          .maybeSingle();
+
+        if (errFallback) {
+          console.error("Error crítico al actualizar estado publicado en BD:", errFallback);
+        }
+        pubActualizada = pubFallback || { ...pub, estado: "publicado" };
+      }
     } else {
       pubActualizada = dataActualizada || { ...pub, estado: "publicado" };
     }
+
+    // Garantizar que el objeto retornado refleje siempre el estado publicado y su enlace
+    pubActualizada = {
+      ...(pubActualizada || pub),
+      estado: "publicado",
+      url_publicacion: resultadoMeta?.permalink || pubActualizada?.url_publicacion || null,
+      meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || pubActualizada?.meta_post_id || null,
+      publicado_en: ahoraIso,
+    };
 
     // 4. Disparar sincronización con n8n
     const wh = await dispararWebhookN8N(pubActualizada as PublicacionProgramada, "publicar");

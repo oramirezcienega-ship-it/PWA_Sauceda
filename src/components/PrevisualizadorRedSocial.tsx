@@ -16,6 +16,7 @@ interface PrevisualizadorRedSocialProps {
   onRegenerarCreativo?: (id: string) => void;
   onReemplazarArte?: (id: string) => void;
   onReplicar?: (pub: PublicacionProgramada) => void;
+  onPublicado?: (pub: PublicacionProgramada) => void;
 }
 
 export default function PrevisualizadorRedSocial({
@@ -27,6 +28,7 @@ export default function PrevisualizadorRedSocial({
   onRegenerarCreativo,
   onReemplazarArte,
   onReplicar,
+  onPublicado,
 }: PrevisualizadorRedSocialProps) {
   const [pubActual, setPubActual] = useState<PublicacionProgramada>(publicacion);
   const [plataformaActiva, setPlataformaActiva] = useState<string>("facebook");
@@ -203,6 +205,7 @@ export default function PrevisualizadorRedSocial({
           texto: `¡Publicado exitosamente en ${nombreRed}!`,
           url: res.data.url_publicacion,
         });
+        if (onPublicado) onPublicado(res.data);
         if (onEditar) onEditar(res.data);
       } else {
         setMensajeFeedback({

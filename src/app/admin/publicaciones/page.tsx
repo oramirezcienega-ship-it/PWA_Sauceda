@@ -214,9 +214,13 @@ notify pgrst, 'reload schema';`;
   });
 
   const handleAprobar = async (id: string) => {
+    const pubTarget = publicaciones.find((p) => p.id === id);
+    const tieneImagen = Boolean(pubTarget?.url_imagen && pubTarget.url_imagen.length > 5);
     const res = await cambiarEstadoPublicacion(id, "aprobado");
     if (res.success) {
-      if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+      if (tieneImagen) {
+        alert("✅ ¡Publicación aprobada y lista para publicar! (El arte visual se conserva intacto)");
+      } else if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
         alert("Publicación aprobada en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
       } else {
         alert("¡Publicación aprobada y enviada a n8n con éxito! (n8n está generando el creativo)");
@@ -628,6 +632,7 @@ notify pgrst, 'reload schema';`;
         setPublicaciones((prev) =>
           prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
         );
+        await cargarDatos();
         alert(`¡Publicación realizada con éxito en ${nombreRed}!`);
       } else {
         alert(`Aviso de Meta: ${res.error || "No se pudo completar la publicación."}`);
@@ -707,7 +712,7 @@ notify pgrst, 'reload schema';`;
       if (res.success && res.data) {
         setPubParaReplicar(null);
         await cargarDatos();
-        alert(`¡Publicación adaptada con éxito a ${res.data.length} canales! Todas comparten la misma imagen aprobada.`);
+        alert(`¡Publicación adaptada con éxito a ${res.data.length} canales! Han quedado aprobadas y listas para publicar con el mismo arte visual.`);
       } else {
         alert("Error al adaptar publicación: " + res.error);
       }
@@ -851,7 +856,7 @@ notify pgrst, 'reload schema';`;
               >
                 <option value="todos">📋 Todos los Estados</option>
                 <option value="pendiente_revision">⏳ Pendientes de Revisión</option>
-                <option value="aprobado">✅ Aprobados (Enviados a n8n)</option>
+                <option value="aprobado">✅ Aprobados (Listos para Publicar)</option>
                 <option value="rechazado">❌ Rechazados</option>
                 <option value="publicado">📲 Publicados</option>
               </select>
@@ -1026,7 +1031,7 @@ notify pgrst, 'reload schema';`;
                         <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Revisión</span>
                       )}
                       {pub.estado === "aprobado" && (
-                        <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded" title="Enviado a n8n">Aprobado</span>
+                        <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded" title="Listo para publicar o programar">Aprobado</span>
                       )}
                       {pub.estado === "rechazado" && (
                         <span className="bg-red-500/10 text-red-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Rechazado</span>
@@ -2133,6 +2138,10 @@ notify pgrst, 'reload schema';`;
           onRegenerarCreativo={(id) => handleRegenerarCreativo(id)}
           onReemplazarArte={(id) => handleReemplazarArte(id)}
           onReplicar={(pub) => handleAbrirReplicar(pub)}
+          onPublicado={async (pub) => {
+            setPublicaciones((prev) => prev.map((p) => (p.id === pub.id ? pub : p)));
+            await cargarDatos();
+          }}
         />
       )}
 
