@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
+import sharp from "sharp";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    if (!id) {
+    const rawId = (await params)?.id || "";
+    const cleanId = rawId.replace(/\.(jpg|jpeg|png|webp)$/i, "");
+    if (!cleanId) {
       return new Response("ID de publicación no proporcionado", { status: 400 });
     }
 
@@ -15,7 +17,7 @@ export async function GET(
     const { data: post, error } = await sb
       .from("publicaciones_programadas")
       .select("url_imagen")
-      .eq("id", id)
+      .eq("id", cleanId)
       .maybeSingle();
 
     if (error || !post || !post.url_imagen) {
@@ -28,16 +30,24 @@ export async function GET(
     if (url.startsWith("data:")) {
       const match = url.match(/^data:([^;]+);base64,(.+)$/);
       if (match) {
-        const mime = match[1];
-        const buffer = Buffer.from(match[2], "base64");
-        return new Response(buffer, {
-          headers: {
-            "Content-Type": mime,
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-          },
-        });
+        const rawBuffer = Buffer.from(match[2], "base64");
+        try {
+          const jpegBuffer = await sharp(rawBuffer).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+          return new Response(jpegBuffer, {
+            headers: {
+              "Content-Type": "image/jpeg",
+              "Cache-Control": "public, max-age=86400",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        } catch {
+          return new Response(rawBuffer, {
+            headers: {
+              "Content-Type": match[1],
+              "Cache-Control": "no-cache",
+            },
+          });
+        }
       }
     }
 
@@ -49,7 +59,7 @@ export async function GET(
       }
     }
 
-    // Intentar servir la imagen directamente (proxy buffer) para garantizar entrega y evitar bloqueos de CSP/CORS/Referer
+    // Intentar servir la imagen convertida a JPEG directamente para Instagram y Meta Graph API
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -62,17 +72,33 @@ export async function GET(
       clearTimeout(timeout);
 
       if (imgRes.ok) {
-        const contentType = imgRes.headers.get("content-type") || "image/webp";
         const arrayBuf = await imgRes.arrayBuffer();
-        return new Response(Buffer.from(arrayBuf), {
-          headers: {
-            "Content-Type": contentType,
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
+        const inputBuffer = Buffer.from(arrayBuf);
+
+        // Convertir automáticamente a JPEG para compatibilidad universal con Meta e Instagram
+        try {
+          const jpegBuffer = await sharp(inputBuffer)
+            .jpeg({ quality: 92, mozjpeg: true })
+            .toBuffer();
+
+          return new Response(jpegBuffer, {
+            headers: {
+              "Content-Type": "image/jpeg",
+              "Cache-Control": "public, max-age=86400, s-maxage=86400",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        } catch (sharpErr) {
+          console.warn("[Proxy Imagen] Falló conversión con sharp, sirviendo buffer original:", sharpErr);
+          const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+          return new Response(inputBuffer, {
+            headers: {
+              "Content-Type": contentType,
+              "Cache-Control": "no-cache",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
       }
     } catch (fetchErr) {
       console.warn("[Proxy Imagen] Falló proxy directo, usando redirect fallback:", fetchErr);
