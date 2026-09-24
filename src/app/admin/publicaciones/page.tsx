@@ -19,6 +19,7 @@ import {
   actualizarImagenManual,
   restaurarFotoLimpia,
   ejecutarPublicacionMeta,
+  procesarPublicacionesProgramadasVencidas,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
@@ -148,6 +149,13 @@ notify pgrst, 'reload schema';`;
     setCargandoLista(true);
     setErrorBd(null);
     try {
+      // Revisar y detonar publicaciones programadas que ya hayan alcanzado su horario establecido
+      try {
+        await procesarPublicacionesProgramadasVencidas();
+      } catch (autoErr) {
+        console.warn("Aviso al verificar publicaciones vencidas:", autoErr);
+      }
+
       const res = await obtenerPublicaciones({
         estado: filtroEstado,
         plataforma: filtroPlataforma,
@@ -258,9 +266,18 @@ notify pgrst, 'reload schema';`;
       const res = await reprogramarPublicacion(pubProgramar.id, fechaIso, nuevoEstado);
       if (res.success) {
         if (nuevoEstado === "aprobado") {
-          alert("¡Publicación aprobada y programada con éxito para la fecha seleccionada!");
+          alert("¡Publicación programada con éxito en la agenda! El sistema la publicará automáticamente al llegar el horario indicado.");
         } else if (nuevoEstado === "publicado") {
-          alert("¡Publicación marcada como publicada!");
+          if (pubProgramar.plataforma === "facebook" || pubProgramar.plataforma === "instagram") {
+            const metaRes = await ejecutarPublicacionMeta(pubProgramar.id, pubProgramar.plataforma);
+            if (metaRes.success) {
+              alert(`¡Publicado de inmediato con éxito en ${pubProgramar.plataforma === "instagram" ? "Instagram" : "Facebook"}!`);
+            } else {
+              alert(`Guardado como publicado en base de datos. Aviso de Meta: ${metaRes.error}`);
+            }
+          } else {
+            alert("¡Publicación marcada como publicada!");
+          }
         } else {
           alert("¡Fecha y hora de programación actualizadas con éxito!");
         }

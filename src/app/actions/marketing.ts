@@ -542,13 +542,20 @@ export async function cambiarEstadoPublicacion(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    const ahoraIso = new Date().toISOString();
+    const updatePayload: any = {
+      estado,
+      notas_revision: notas_revision || "",
+      updated_at: ahoraIso,
+    };
+    if (estado === "publicado") {
+      updatePayload.publicado_en = ahoraIso;
+      updatePayload.fecha_programacion = ahoraIso;
+    }
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
-      .update({
-        estado,
-        notas_revision: notas_revision || "",
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
@@ -1645,6 +1652,7 @@ export async function ejecutarPublicacionMeta(
       meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || null,
       url_publicacion: resultadoMeta?.permalink || null,
       publicado_en: ahoraIso,
+      fecha_programacion: ahoraIso, // Actualizar para que el calendario posicione el post en la fecha exacta de publicación
       error_publicacion: null,
       updated_at: ahoraIso,
     };
@@ -1668,6 +1676,7 @@ export async function ejecutarPublicacionMeta(
           meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || null,
           url_publicacion: resultadoMeta?.permalink || null,
           publicado_en: ahoraIso,
+          fecha_programacion: ahoraIso,
           updated_at: ahoraIso,
         })
         .eq("id", idPublicacion)
@@ -1682,6 +1691,7 @@ export async function ejecutarPublicacionMeta(
           .from("publicaciones_programadas")
           .update({
             estado: "publicado",
+            fecha_programacion: ahoraIso,
             updated_at: ahoraIso,
           })
           .eq("id", idPublicacion)
@@ -1697,10 +1707,11 @@ export async function ejecutarPublicacionMeta(
       pubActualizada = dataActualizada || { ...pub, estado: "publicado" };
     }
 
-    // Garantizar que el objeto retornado refleje siempre el estado publicado y su enlace
+    // Garantizar que el objeto retornado refleje siempre el estado publicado, fecha exacta y enlace
     pubActualizada = {
       ...(pubActualizada || pub),
       estado: "publicado",
+      fecha_programacion: ahoraIso,
       url_publicacion: resultadoMeta?.permalink || pubActualizada?.url_publicacion || null,
       meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || pubActualizada?.meta_post_id || null,
       publicado_en: ahoraIso,
@@ -1720,6 +1731,80 @@ export async function ejecutarPublicacionMeta(
       success: false,
       error: err?.message || String(err),
     };
+  }
+}
+
+/**
+ * Procesa y ejecuta automáticamente las publicaciones programadas cuya fecha y hora ya se cumplieron.
+ * Puede ser ejecutado por un Cron Job (Vercel, Supabase pg_cron, n8n) o al cargar el dashboard de publicaciones.
+ */
+export async function procesarPublicacionesProgramadasVencidas(): Promise<ActionResult<{
+  procesadas: number;
+  exitosas: number;
+  fallidas: number;
+  detalles: Array<{ id: string; plataforma: string; status: "publicado" | "error" | "omitido"; mensaje?: string }>;
+}>> {
+  try {
+    const sb = supabaseServidor();
+    const ahoraIso = new Date().toISOString();
+
+    // 1. Buscar publicaciones aprobadas cuya fecha de programación ya se haya cumplido (<= ahora)
+    const { data: vencidas, error } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("estado", "aprobado")
+      .lte("fecha_programacion", ahoraIso)
+      .order("fecha_programacion", { ascending: true })
+      .limit(10); // Lote de hasta 10 para evitar timeouts
+
+    if (error) throw error;
+    if (!vencidas || vencidas.length === 0) {
+      return { success: true, data: { procesadas: 0, exitosas: 0, fallidas: 0, detalles: [] } };
+    }
+
+    const detalles: Array<{ id: string; plataforma: string; status: "publicado" | "error" | "omitido"; mensaje?: string }> = [];
+    let exitosas = 0;
+    let fallidas = 0;
+
+    for (const pub of vencidas as PublicacionProgramada[]) {
+      // Si es Facebook o Instagram, publicamos automáticamente mediante Meta Graph API
+      if (pub.plataforma === "facebook" || pub.plataforma === "instagram") {
+        try {
+          const res = await ejecutarPublicacionMeta(pub.id!, pub.plataforma);
+          if (res.success) {
+            exitosas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "publicado", mensaje: "Publicado automáticamente en Meta por agenda programada" });
+          } else {
+            fallidas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: res.error });
+          }
+        } catch (postErr: any) {
+          fallidas++;
+          detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: postErr.message });
+        }
+      } else {
+        // Redes como TikTok o WhatsApp requieren despacho asistido desde el dispositivo móvil o webhook
+        detalles.push({
+          id: pub.id!,
+          plataforma: pub.plataforma,
+          status: "omitido",
+          mensaje: `Publicación programada para ${pub.plataforma} lista en agenda (requiere envío manual o webhook)`
+        });
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        procesadas: vencidas.length,
+        exitosas,
+        fallidas,
+        detalles,
+      }
+    };
+  } catch (err: any) {
+    console.error("Error en procesarPublicacionesProgramadasVencidas:", err);
+    return { success: false, error: err?.message || String(err) };
   }
 }
 
