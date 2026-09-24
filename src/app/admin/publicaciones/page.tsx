@@ -158,11 +158,7 @@ notify pgrst, 'reload schema';`;
         console.warn("Aviso al verificar publicaciones vencidas:", autoErr);
       }
 
-      const res = await obtenerPublicaciones({
-        estado: filtroEstado,
-        plataforma: filtroPlataforma,
-        tipo_formato: filtroFormato,
-      });
+      const res = await obtenerPublicaciones();
       if (res.success && res.data) {
         setPublicaciones(res.data);
       } else if (res.error) {
@@ -180,9 +176,24 @@ notify pgrst, 'reload schema';`;
 
   useEffect(() => {
     cargarDatos();
-  }, [filtroEstado, filtroPlataforma, filtroFormato]);
+  }, []);
 
   const publicacionesFiltradas = publicaciones.filter((pub) => {
+    // Filtro por Estado
+    if (filtroEstado !== "todos" && pub.estado !== filtroEstado) return false;
+
+    // Filtro por Canal
+    if (filtroPlataforma !== "todos") {
+      if (filtroPlataforma === "mautic") {
+        if (pub.plataforma !== "mautic" && pub.plataforma !== "email") return false;
+      } else if (pub.plataforma !== filtroPlataforma) {
+        return false;
+      }
+    }
+
+    // Filtro por Formato
+    if (filtroFormato !== "todos" && pub.tipo_formato !== filtroFormato) return false;
+
     // Filtro por Tema / Campaña
     if (filtroTemaFiltro !== "todos") {
       const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
@@ -194,8 +205,12 @@ notify pgrst, 'reload schema';`;
     }
 
     // Filtro por Fecha
-    if (filtroFecha !== "todos" && pub.fecha_programacion) {
-      const dPub = new Date(pub.fecha_programacion);
+    if (filtroFecha !== "todos") {
+      const strFecha = (pub.estado === "publicado" && pub.publicado_en)
+        ? pub.publicado_en
+        : (pub.fecha_programacion || pub.created_at);
+      if (!strFecha) return false;
+      const dPub = new Date(strFecha);
       const fechaPub = dPub.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       const hoyObj = new Date();
       const hoyStr = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
@@ -211,8 +226,7 @@ notify pgrst, 'reload schema';`;
         const hoy = new Date();
         const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
         const finSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6));
-        const pubDate = new Date(pub.fecha_programacion);
-        if (pubDate < inicioSemana || pubDate > finSemana) return false;
+        if (dPub < inicioSemana || dPub > finSemana) return false;
       }
       if (filtroFecha === "este_mes") {
         const mesActual = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" }).slice(0, 7);
@@ -1078,8 +1092,9 @@ notify pgrst, 'reload schema';`;
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-carbon/50 font-mono">
-                        ⏰ {formatFecha(pub.fecha_programacion)}
+                      <span className={`text-[11px] font-mono ${pub.estado === "publicado" ? "text-blue-700 font-bold" : "text-carbon/50"}`}>
+                        {pub.estado === "publicado" ? "📲 Enviada: " : "⏰ "}
+                        {formatFecha((pub.estado === "publicado" && pub.publicado_en) ? pub.publicado_en : pub.fecha_programacion)}
                       </span>
                       {pub.estado === "pendiente_revision" && (
                         <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Revisión</span>
@@ -1091,7 +1106,9 @@ notify pgrst, 'reload schema';`;
                         <span className="bg-red-500/10 text-red-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Rechazado</span>
                       )}
                       {pub.estado === "publicado" && (
-                        <span className="bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Publicado</span>
+                        <span className="bg-blue-600 text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
+                          <span>✓</span> Enviada
+                        </span>
                       )}
                     </div>
                   </div>

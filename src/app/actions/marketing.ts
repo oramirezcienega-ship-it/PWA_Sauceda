@@ -11,6 +11,10 @@ import {
   esArchivoVideoReal,
   type EstadoConexionMeta,
 } from "@/lib/meta-publicador";
+import {
+  enviarWhatsAppTexto,
+  enviarWhatsAppDocumento,
+} from "@/lib/whatsapp";
 
 export interface SelloBanner {
   texto_top: string;
@@ -597,12 +601,17 @@ export async function reprogramarPublicacion(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    const ahoraIso = new Date().toISOString();
     const updatePayload: any = {
       fecha_programacion,
-      updated_at: new Date().toISOString(),
+      updated_at: ahoraIso,
     };
     if (estado) {
       updatePayload.estado = estado;
+      if (estado === "publicado") {
+        updatePayload.publicado_en = ahoraIso;
+        updatePayload.fecha_programacion = ahoraIso;
+      }
     }
 
     const { data, error } = await sb
@@ -746,12 +755,19 @@ export async function cambiarEstadoPublicacionesMasivo(
     if (!ids || ids.length === 0) return { success: true, data: true };
     const sb = supabaseServidor();
 
+    const ahoraIso = new Date().toISOString();
+    const updatePayload: any = {
+      estado,
+      updated_at: ahoraIso,
+    };
+    if (estado === "publicado") {
+      updatePayload.publicado_en = ahoraIso;
+      updatePayload.fecha_programacion = ahoraIso;
+    }
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
-      .update({
-        estado,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .in("id", ids)
       .select();
 
@@ -1485,10 +1501,13 @@ export async function guardarCredencialesMeta(config: {
  * y pasa la lista de exclusión (correos y teléfonos) a Mautic para garantizar que nunca reciban el mensaje.
  */
 export async function ejecutarEnvioMautic(
-  idPublicacion: string
+  idPublicacion: string,
+  saltarAuth: boolean = false
 ): Promise<ActionResult<PublicacionProgramada>> {
   try {
-    await requireAdministrador();
+    if (!saltarAuth) {
+      await requireAdministrador();
+    }
     const sb = supabaseServidor();
 
     // 1. Obtener la publicación
@@ -1609,10 +1628,13 @@ export async function ejecutarEnvioMautic(
  */
 export async function ejecutarPublicacionMeta(
   idPublicacion: string,
-  forzarDestino?: "facebook" | "instagram" | "ambas"
+  forzarDestino?: "facebook" | "instagram" | "ambas",
+  saltarAuth: boolean = false
 ): Promise<ActionResult<PublicacionProgramada>> {
   try {
-    await requireAdministrador();
+    if (!saltarAuth) {
+      await requireAdministrador();
+    }
     const sb = supabaseServidor();
 
     // 1. Obtener la publicación
@@ -1626,7 +1648,7 @@ export async function ejecutarPublicacionMeta(
 
     // Si la publicación está destinada a Mautic o Correo, derivar al ejecutor de Mautic
     if (pub.plataforma === "mautic" || pub.plataforma === "email") {
-      return await ejecutarEnvioMautic(idPublicacion);
+      return await ejecutarEnvioMautic(idPublicacion, saltarAuth);
     }
 
     const plataforma = pub.plataforma;
@@ -1901,7 +1923,7 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
       // Si es Facebook o Instagram, publicamos automáticamente mediante Meta Graph API
       if (pub.plataforma === "facebook" || pub.plataforma === "instagram") {
         try {
-          const res = await ejecutarPublicacionMeta(pub.id!, pub.plataforma);
+          const res = await ejecutarPublicacionMeta(pub.id!, pub.plataforma, true);
           if (res.success) {
             exitosas++;
             detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "publicado", mensaje: "Publicado automáticamente en Meta por agenda programada" });
@@ -1916,7 +1938,7 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
       } else if (pub.plataforma === "mautic" || pub.plataforma === "email") {
         // Para Mautic: disparar campaña de difusión masiva excluyendo prospectos inhabilitados del CRM
         try {
-          const resMautic = await ejecutarEnvioMautic(pub.id!);
+          const resMautic = await ejecutarEnvioMautic(pub.id!, true);
           if (resMautic.success) {
             exitosas++;
             detalles.push({
@@ -1956,6 +1978,117 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
   } catch (err: any) {
     console.error("Error en procesarPublicacionesProgramadasVencidas:", err);
     return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Envía una prueba de WhatsApp para una publicación a un único destinatario.
+ * Permite validar el copy, diseño y formato sin detonar una difusión masiva.
+ * 
+ * Vías soportadas:
+ * 1. 'directo_meta': Envío inmediato usando las credenciales de WhatsApp Cloud API configuradas en el CRM.
+ * 2. 'webhook_mautic': Dispara el webhook hacia n8n/Mautic marcado con 'es_prueba: true' y 'destinatario_prueba'.
+ */
+export async function enviarPruebaWhatsAppMarketing(params: {
+  idPublicacion: string;
+  telefonoDestino: string;
+  via?: "directo_meta" | "webhook_mautic";
+}): Promise<ActionResult<{ messageId?: string; via: string; detalle: string }>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data: pub, error: errPub } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", params.idPublicacion)
+      .single();
+
+    if (errPub || !pub) {
+      throw new Error("Publicación no encontrada");
+    }
+
+    const telLimpio = params.telefonoDestino.replace(/\D/g, "");
+    if (!telLimpio || telLimpio.length < 10) {
+      return {
+        success: false,
+        error: "El número de teléfono debe contener al menos 10 dígitos (ej: 4771234567 o 524771234567).",
+      };
+    }
+
+    const via = params.via || "directo_meta";
+
+    if (via === "directo_meta") {
+      let resWhatsApp: { ok: boolean; error?: string; messageId?: string; errorDetail?: string };
+
+      if (pub.url_imagen && pub.url_imagen.length > 5) {
+        // Enviar imagen con el copy como caption
+        resWhatsApp = await enviarWhatsAppDocumento(
+          telLimpio,
+          pub.url_imagen,
+          "arte_publicacion.jpg",
+          pub.contenido,
+          "image/jpeg"
+        );
+      } else {
+        // Enviar texto libre
+        resWhatsApp = await enviarWhatsAppTexto(telLimpio, pub.contenido);
+      }
+
+      if (!resWhatsApp.ok) {
+        return {
+          success: false,
+          error: resWhatsApp.errorDetail || resWhatsApp.error || "No se pudo entregar el WhatsApp de prueba.",
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          messageId: resWhatsApp.messageId,
+          via: "directo_meta",
+          detalle: `¡Mensaje de prueba enviado exitosamente a WhatsApp (+${telLimpio})!`,
+        },
+      };
+    } else {
+      // Vía Webhook Mautic / n8n en modo prueba unitaria
+      const ahoraIso = new Date().toISOString();
+      const payloadPrueba = {
+        canal_difusion: "whatsapp_mautic_prueba",
+        es_prueba: true,
+        campana_id: pub.id,
+        asunto: pub.titulo,
+        contenido_mensaje: pub.contenido,
+        url_imagen_aprobada: pub.url_imagen || null,
+        audiencia: {
+          total_activos_estimados: 1,
+          es_prueba_individual: true,
+          destinatario_prueba: telLimpio,
+          exclusiones: {
+            total_excluidos: 0,
+            correos: [],
+            telefonos: [],
+          },
+        },
+        fecha_disparo: ahoraIso,
+      };
+
+      const wh = await dispararWebhookN8N(pub, "disparar_campana_mautic", payloadPrueba);
+
+      return {
+        success: true,
+        data: {
+          via: "webhook_mautic",
+          detalle: `Disparo de prueba para 1 solo destinatario (+${telLimpio}) enviado al flujo de n8n / Mautic. ${wh.aviso || ""}`,
+        },
+      };
+    }
+  } catch (err: any) {
+    console.error("Error en enviarPruebaWhatsAppMarketing:", err);
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
   }
 }
 

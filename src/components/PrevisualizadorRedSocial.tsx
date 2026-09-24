@@ -6,6 +6,7 @@ import {
   obtenerPublicacionPorId,
   ejecutarPublicacionMeta,
   ejecutarEnvioMautic,
+  enviarPruebaWhatsAppMarketing,
 } from "@/app/actions/marketing";
 
 interface PrevisualizadorRedSocialProps {
@@ -40,11 +41,40 @@ export default function PrevisualizadorRedSocial({
   const [imgError, setImgError] = useState(false);
   const [refrescando, setRefrescando] = useState(false);
   const [publicandoMeta, setPublicandoMeta] = useState(false);
+  const [mostrarModalPruebaWA, setMostrarModalPruebaWA] = useState(false);
+  const [telefonoPruebaWA, setTelefonoPruebaWA] = useState("");
+  const [viaPruebaWA, setViaPruebaWA] = useState<"directo_meta" | "webhook_mautic">("directo_meta");
+  const [enviandoPruebaWA, setEnviandoPruebaWA] = useState(false);
   const [mensajeFeedback, setMensajeFeedback] = useState<{
     tipo: "exito" | "error";
     texto: string;
     url?: string;
   } | null>(null);
+
+  const handleEnviarPruebaWA = async () => {
+    if (!pubActual?.id || !telefonoPruebaWA.trim()) {
+      alert("Por favor ingresa un número de teléfono de 10 dígitos.");
+      return;
+    }
+    setEnviandoPruebaWA(true);
+    try {
+      const res = await enviarPruebaWhatsAppMarketing({
+        idPublicacion: pubActual.id,
+        telefonoDestino: telefonoPruebaWA.trim(),
+        via: viaPruebaWA,
+      });
+      if (res.success && res.data) {
+        alert(res.data.detalle);
+        setMostrarModalPruebaWA(false);
+      } else {
+        alert("Aviso de WhatsApp: " + (res.error || "No se pudo entregar el mensaje de prueba."));
+      }
+    } catch (e: any) {
+      alert("Error al enviar prueba: " + (e?.message || String(e)));
+    } finally {
+      setEnviandoPruebaWA(false);
+    }
+  };
 
   // Sincronizar estado local si cambia la prop
   useEffect(() => {
@@ -1157,6 +1187,15 @@ export default function PrevisualizadorRedSocial({
             >
               <span>🎨</span> Abrir Canva
             </a>
+
+            <button
+              type="button"
+              onClick={() => setMostrarModalPruebaWA(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Enviar una prueba de esta publicación por WhatsApp a un solo número"
+            >
+              <span>🧪</span> Probar WhatsApp (1 Destinatario)
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1250,6 +1289,106 @@ export default function PrevisualizadorRedSocial({
           </div>
         </div>
       </div>
+
+      {/* Modal de Envío de Prueba de WhatsApp a 1 Destinatario */}
+      {mostrarModalPruebaWA && (
+        <div className="fixed inset-0 z-60 bg-carbon/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-dorado/30 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="font-bold text-base text-verde-profundo flex items-center gap-2">
+                <span>🧪</span> Enviar Prueba de WhatsApp
+              </h3>
+              <button
+                type="button"
+                onClick={() => setMostrarModalPruebaWA(false)}
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-carbon/70 font-bold flex items-center justify-center text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-carbon/70 leading-relaxed">
+              Envía este contenido a tu propio número o a un destinatario específico para validar cómo se recibe el texto, formato e imagen antes de realizar una difusión masiva.
+            </p>
+
+            <div>
+              <label className="text-xs font-bold text-carbon/80 block mb-1">
+                Número de WhatsApp Destino (10 dígitos):
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="bg-gray-100 border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-carbon/70">
+                  🇲🇽 +52
+                </span>
+                <input
+                  type="tel"
+                  placeholder="Ej: 4771234567"
+                  value={telefonoPruebaWA}
+                  onChange={(e) => setTelefonoPruebaWA(e.target.value)}
+                  className="flex-1 bg-white border border-gray-300 rounded-xl px-3.5 py-2 text-sm text-carbon focus:outline-none focus:border-emerald-600 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-carbon/80 block">
+                Canal de Envío de la Prueba:
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                <label className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${viaPruebaWA === "directo_meta" ? "bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
+                  <input
+                    type="radio"
+                    name="via_wa"
+                    checked={viaPruebaWA === "directo_meta"}
+                    onChange={() => setViaPruebaWA("directo_meta")}
+                    className="mt-0.5 text-emerald-600"
+                  />
+                  <div>
+                    <span>📲 WhatsApp Cloud API Directo (Inmediato)</span>
+                    <p className="text-[11px] font-normal text-carbon/60 mt-0.5">
+                      Envía el arte y el texto directamente a tu celular usando las credenciales oficiales de WhatsApp del CRM.
+                    </p>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${viaPruebaWA === "webhook_mautic" ? "bg-orange-50 border-orange-500 text-orange-950 font-bold shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
+                  <input
+                    type="radio"
+                    name="via_wa"
+                    checked={viaPruebaWA === "webhook_mautic"}
+                    onChange={() => setViaPruebaWA("webhook_mautic")}
+                    className="mt-0.5 text-orange-600"
+                  />
+                  <div>
+                    <span>⚙️ Webhook Mautic / n8n (Simular Campaña)</span>
+                    <p className="text-[11px] font-normal text-carbon/60 mt-0.5">
+                      Dispara el evento hacia el flujo de n8n marcado con bandera de prueba para 1 solo destinatario.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setMostrarModalPruebaWA(false)}
+                className="px-4 py-2 text-xs font-semibold text-carbon/70 hover:bg-gray-100 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEnviarPruebaWA}
+                disabled={enviandoPruebaWA || !telefonoPruebaWA.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{enviandoPruebaWA ? "⏳" : "🚀"}</span>
+                <span>{enviandoPruebaWA ? "Enviando Prueba..." : "Enviar Prueba Ahora"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
