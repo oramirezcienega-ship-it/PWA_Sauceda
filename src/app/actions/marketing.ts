@@ -757,11 +757,19 @@ export async function cambiarEstadoPublicacionesMasivo(
 }
 
 
+export interface ParametrosGeneracionOmnicanal {
+  tema: string;
+  canales: Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">;
+  fechaInicio?: string;
+  detallesAdicionales?: string;
+}
+
 /**
  * Invoca a la IA (Claude o Kimi según configuración) para generar propuestas de publicaciones de forma segura.
+ * Soporta tanto el modo legado como el modo de Campaña Omnicanal Unificada (mismo concepto visual, copys adaptados por canal).
  */
 export async function generarPublicacionesAutomaticas(
-  cantidad: number = 3,
+  paramsOCantidad: number | ParametrosGeneracionOmnicanal = 3,
   fechaInicio?: string,
   tema: string = "todos",
   canalDestino: string = "todas"
@@ -770,9 +778,18 @@ export async function generarPublicacionesAutomaticas(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    const esOmnicanal = typeof paramsOCantidad === "object";
+    const canalesOmnicanal = esOmnicanal
+      ? (paramsOCantidad.canales?.length > 0 ? paramsOCantidad.canales : ["instagram", "facebook", "tiktok"])
+      : [];
+    const temaFinal = esOmnicanal ? paramsOCantidad.tema : tema;
+    const fechaBaseStr = (esOmnicanal ? paramsOCantidad.fechaInicio : fechaInicio) ||
+      new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+    const detallesExtra = esOmnicanal ? (paramsOCantidad.detallesAdicionales || "") : "";
+    const cantidadFinal = esOmnicanal ? canalesOmnicanal.length : (typeof paramsOCantidad === "number" ? paramsOCantidad : 3);
+
     const proveedor = process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic");
     let rawText = "";
-    const fechaBaseStr = fechaInicio || new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
     
     const systemPrompt = `Eres el Director Creativo de Marketing Inmobiliario y de Construcción de SAUCEDA en León, Guanajuato, México.
 Tu misión principal es generar ANUNCIOS VENDEDORES DE ALTA CONVERSIÓN (Direct Response Ads) diseñados para generar prospectos calificados al WhatsApp (477 465 4700) y llamadas directas.
@@ -815,7 +832,7 @@ Formato esperado:
 [
   {
     "titulo": "Título vendedor y corto de la publicación",
-    "plataforma": "facebook | instagram | tiktok | whatsapp",
+    "plataforma": "facebook | instagram | tiktok | whatsapp | mautic",
     "tipo_formato": "imagen | carrusel | video | reel",
     "contenido": "Texto/Copy completo con gancho, oferta, viñetas de valor, llamada a la acción al 477 465 4700 y hashtags.",
     "sugerencia_visual": "Descripción escénica en español.",
@@ -836,30 +853,64 @@ Formato esperado:
   }
 ]`;
 
-    let instruccionCanal = "Usa diferentes plataformas (Facebook, Instagram, TikTok).";
-    let reglaComposicionFlux = "Para publicaciones de muro (Facebook e Instagram Post), la composición de imagen debe ser cuadrada 1:1 centrada. Para Reels y TikTok, la composición debe ser vertical 9:16 cinematográfica.";
+    let prompt = "";
 
-    if (canalDestino === "facebook") {
-      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'facebook' y formato 'imagen' (post clásico de muro/feed).";
-      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 centered commercial editorial composition, perfectly framed for Facebook Feed').";
-    } else if (canalDestino === "instagram_post") {
-      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'instagram' y formato 'imagen' (post de feed cuadrado).";
-      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 clean aesthetic composition, perfectly framed for Instagram Feed').";
-    } else if (canalDestino === "instagram_reel") {
-      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'instagram' y formato 'reel' (Reel dinámico con guion de video estructurado).";
-      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición vertical 9:16 ('cinematic vertical 9:16 portrait composition, eye-level framing with safe overhead headroom for Instagram Reel').";
-    } else if (canalDestino === "tiktok") {
-      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'tiktok' y formato 'reel' o 'video' (videos verticales con gancho viral en los primeros 3 segundos).";
-      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición vertical 9:16 ('cinematic vertical 9:16 composition, eye-level framing with safe overhead headroom for TikTok').";
-    } else if (canalDestino === "whatsapp") {
-      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'whatsapp' y formato 'imagen' (mensaje de WhatsApp directo con viñetas y foto limpia).";
-      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 clean commercial composition').";
-    } else if (canalDestino === "mautic") {
-      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'mautic' (email marketing) con formato 'imagen' (estructura de boletín/correo electrónico con asunto atractivo).";
-      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE describir una imagen comercial nítida de alta definición.";
+    if (esOmnicanal) {
+      const listaCanalesTexto = canalesOmnicanal.join(", ");
+      prompt = `Genera una CAMPAÑA OMNICANAL UNIFICADA para SAUCEDA con fecha base de programación ${fechaBaseStr}.
+TEMA O CAMPAÑA CENTRAL: "${temaFinal}".
+${detallesExtra ? `DETALLES / OFERTA ADICIONAL DEL USUARIO: "${detallesExtra}"\n` : ""}
+CANALES DESTINO SOLICITADOS: ${listaCanalesTexto}.
+
+Debes generar EXACTAMENTE ${canalesOmnicanal.length} publicaciones en el arreglo JSON, UNA PARA CADA UNO de los siguientes canales: ${listaCanalesTexto}.
+
+REGLAS DE CAMPAÑA OMNICANAL OBLIGATORIAS:
+1. MISMO CONCEPTO VISUAL Y PROMPT DE FOTO COMPARTIDO:
+   - Todas las publicaciones de la campaña deben tener EXACTAMENTE la misma 'sugerencia_visual' y el mismo 'prompt_imagen_flux' (fotografía comercial y arquitectónica realista en León Gto con luz natural, sin rodillos, sin botellas). De este modo, la misma fotografía profesional representará a la campaña en todas las redes.
+2. ADAPTACIÓN AL LENGUAJE ESPECÍFICO DE CADA RED:
+   - Para cada canal seleccionado, adapta el formato y copy nativo:
+   * 'facebook': Post para el Feed de Facebook. Copy conversacional, persuasivo, historia/dolor/solución (PAS), viñetas de beneficios, llamado al WhatsApp 477 465 4700 y enlace. 'tipo_formato': 'imagen'.
+   * 'instagram': Post para el Feed de Instagram. Gancho potente en primera línea, copy visual y dinámico, viñetas, llamado a comentar o enviar DM/WhatsApp en bio, bloque de hashtags estratégicos (#LeonGto #SaucedaMx). 'tipo_formato': 'imagen'.
+   * 'tiktok': Video corto para TikTok. Título provocador, 'contenido' corto para el pie, y el campo 'guion_video' con estructura paso a paso: [00:00-00:03 Gancho visual], [00:03-00:15 Demostración del problema], [00:15-00:25 Solución Sauceda], [00:25-00:30 CTA a WhatsApp]. 'tipo_formato': 'video'.
+   * 'whatsapp': Mensaje de difusión directa para WhatsApp. Redacción cercana y profesional, con formato de negritas (*texto*), viñetas claras y enlace directo https://wa.me/524774654700. 'tipo_formato': 'imagen'.
+   * 'mautic': Correo electrónico o boletín. Asunto llamativo y cuerpo persuasivo. 'tipo_formato': 'imagen'.
+
+3. FORMATO DE RESPUESTA:
+   - Responde ÚNICAMENTE con el arreglo JSON de ${canalesOmnicanal.length} objetos, uno por cada canal solicitado (${listaCanalesTexto}).`;
+    } else {
+      let instruccionCanal = "Usa diferentes plataformas (Facebook, Instagram, TikTok).";
+      let reglaComposicionFlux = "Para publicaciones de muro (Facebook e Instagram Post), la composición de imagen debe ser cuadrada 1:1 centrada. Para Reels y TikTok, la composición debe ser vertical 9:16 cinematográfica.";
+
+      if (canalDestino === "facebook") {
+        instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'facebook' y formato 'imagen' (post clásico de muro/feed).";
+        reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 centered commercial editorial composition, perfectly framed for Facebook Feed').";
+      } else if (canalDestino === "instagram_post") {
+        instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'instagram' y formato 'imagen' (post de feed cuadrado).";
+        reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 clean aesthetic composition, perfectly framed for Instagram Feed').";
+      } else if (canalDestino === "instagram_reel") {
+        instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'instagram' y formato 'reel' (Reel dinámico con guion de video estructurado).";
+        reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición vertical 9:16 ('cinematic vertical 9:16 portrait composition, eye-level framing with safe overhead headroom for Instagram Reel').";
+      } else if (canalDestino === "tiktok") {
+        instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'tiktok' y formato 'reel' o 'video' (videos verticales con gancho viral en los primeros 3 segundos).";
+        reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición vertical 9:16 ('cinematic vertical 9:16 composition, eye-level framing with safe overhead headroom for TikTok').";
+      } else if (canalDestino === "whatsapp") {
+        instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'whatsapp' y formato 'imagen' (mensaje de WhatsApp directo con viñetas y foto limpia).";
+        reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 clean commercial composition').";
+      } else if (canalDestino === "mautic") {
+        instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'mautic' (email marketing) con formato 'imagen' (estructura de boletín/correo electrónico con asunto atractivo).";
+        reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE describir una imagen comercial nítida de alta definición.";
+      }
+
+      prompt = `Genera exactamente ${cantidadFinal} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.\n${instruccionCanal}\n${reglaComposicionFlux}`;
+
+      if (temaFinal && temaFinal !== "todos") {
+        prompt += `\n\nENFOQUE OBLIGATORIO DE TEMA:
+Todas las publicaciones generadas deben centrarse estrictamente en la siguiente campaña o tema de negocio: "${temaFinal}".
+Adapta este mismo tema a las diferentes plataformas y formatos de forma inteligente para que actúen como una campaña unificada.`;
+      } else {
+        prompt += `\nAlterna entre temas de Bienes Raíces (Traspasos, Compra Directa) e Impermeabilización/Remodelación de Construcción de forma variada en cada publicación.`;
+      }
     }
-
-    let prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.\n${instruccionCanal}\n${reglaComposicionFlux}`;
 
     // Consultar memoria de publicaciones ganadoras históricas (Top ROI / CPL)
     const { data: ganadores } = await sb
@@ -876,21 +927,13 @@ Formato esperado:
         "\nUsa esta experiencia acumulada para formular las nuevas propuestas replicando los enfoques de mayor retorno de inversión.";
     }
 
-    if (tema && tema !== "todos") {
-      prompt += `\n\nENFOQUE OBLIGATORIO DE TEMA:
-Todas las publicaciones generadas deben centrarse estrictamente en la siguiente campaña o tema de negocio: "${tema}".
-Adapta este mismo tema a las diferentes plataformas y formatos de forma inteligente para que actúen como una campaña unificada. Por ejemplo, en Facebook haz un post informativo sobre "${tema}", en Instagram un Reel interactivo enfocado en "${tema}" y en TikTok un video dinámico con gancho sobre "${tema}".`;
-    } else {
-      prompt += `\nAlterna entre temas de Bienes Raíces (Traspasos, Compra Directa) e Impermeabilización/Remodelación de Construcción de forma variada en cada publicación.`;
-    }
-
     if (proveedor === "kimi") {
       const apiKey = process.env.KIMI_API_KEY;
       if (!apiKey) throw new Error("Falta la API Key de Kimi (KIMI_API_KEY) en las variables de entorno.");
       const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
       const model = process.env.KIMI_MODEL || "kimi-k3";
 
-      console.log(`Llamando a Kimi (${model}) para generar ${cantidad} publicaciones...`);
+      console.log(`Llamando a Kimi (${model}) para generar ${cantidadFinal} publicaciones...`);
 
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -904,7 +947,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
           ],
-          temperature: 1,
+          temperature: 0.8,
           max_tokens: 8192
         })
       });
@@ -924,7 +967,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
       }
       const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
 
-      console.log(`Llamando a Claude (${model}) para generar ${cantidad} publicaciones...`);
+      console.log(`Llamando a Claude (${model}) para generar ${cantidadFinal} publicaciones...`);
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -964,34 +1007,41 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
 
     const publicacionesCreadas: PublicacionProgramada[] = [];
     const horarios = ["09:00:00", "14:00:00", "19:00:00"];
+    const campanaId = `campana_${Date.now()}`;
+    const promptFluxUnificado = propuestas[0]?.prompt_imagen_flux || "";
 
     for (let i = 0; i < propuestas.length; i++) {
       const prop = propuestas[i];
       const horarioStr = horarios[i % horarios.length];
       const fechaProg = `${fechaBaseStr}T${horarioStr}-06:00`;
 
-      // Si el usuario eligió un canal específico, forzar plataforma y formato
       let plataformaFinal = prop.plataforma;
-      let formatoFinal = prop.tipo_formato;
+      let formatoFinal = prop.tipo_formato || "imagen";
 
-      if (canalDestino === "facebook") {
-        plataformaFinal = "facebook";
-        formatoFinal = "imagen";
-      } else if (canalDestino === "instagram_post") {
-        plataformaFinal = "instagram";
-        formatoFinal = "imagen";
-      } else if (canalDestino === "instagram_reel") {
-        plataformaFinal = "instagram";
-        formatoFinal = "reel";
-      } else if (canalDestino === "tiktok") {
-        plataformaFinal = "tiktok";
-        formatoFinal = "reel";
-      } else if (canalDestino === "whatsapp") {
-        plataformaFinal = "whatsapp";
-        formatoFinal = "imagen";
-      } else if (canalDestino === "mautic") {
-        plataformaFinal = "mautic";
-        formatoFinal = "imagen";
+      if (prop.plataforma === "tiktok") {
+        formatoFinal = "video";
+      }
+
+      if (!esOmnicanal) {
+        if (canalDestino === "facebook") {
+          plataformaFinal = "facebook";
+          formatoFinal = "imagen";
+        } else if (canalDestino === "instagram_post") {
+          plataformaFinal = "instagram";
+          formatoFinal = "imagen";
+        } else if (canalDestino === "instagram_reel") {
+          plataformaFinal = "instagram";
+          formatoFinal = "reel";
+        } else if (canalDestino === "tiktok") {
+          plataformaFinal = "tiktok";
+          formatoFinal = "reel";
+        } else if (canalDestino === "whatsapp") {
+          plataformaFinal = "whatsapp";
+          formatoFinal = "imagen";
+        } else if (canalDestino === "mautic") {
+          plataformaFinal = "mautic";
+          formatoFinal = "imagen";
+        }
       }
 
       const esVertical =
@@ -1016,11 +1066,14 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         diseno_banner: {
           ...(prop.diseno_banner || {}),
           aspect_ratio: aspectRatio,
-          prompt_imagen_flux: prop.prompt_imagen_flux || construirPromptFluxRobusto(propAjustada),
+          prompt_imagen_flux: (esOmnicanal && promptFluxUnificado)
+            ? promptFluxUnificado
+            : (prop.prompt_imagen_flux || construirPromptFluxRobusto(propAjustada)),
+          ...(esOmnicanal ? { campana_id: campanaId, campana_nombre: temaFinal } : {}),
         },
         fecha_programacion: fechaProg,
         estado: "pendiente_revision" as const,
-        notas_revision: "",
+        notas_revision: esOmnicanal ? `Campaña Omnicanal: ${temaFinal}` : "",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -1038,6 +1091,185 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
     return { success: true, data: publicacionesCreadas };
   } catch (err: any) {
     console.error("Error en generarPublicacionesAutomaticas:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
+
+/**
+ * Adapta una publicación existente (con su imagen ya aprobada) a otros canales y formatos
+ * manteniendo la coherencia de la campaña y el mismo arte visual.
+ */
+export async function adaptarPublicacionAOtrasRedes(params: {
+  idPublicacionOriginal: string;
+  canalesDestino: Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">;
+  instruccionesExtra?: string;
+}): Promise<ActionResult<PublicacionProgramada[]>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data: pubOriginal, error: errPub } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", params.idPublicacionOriginal)
+      .single();
+
+    if (errPub || !pubOriginal) {
+      return { success: false, error: "Publicación original no encontrada." };
+    }
+
+    const canales = (params.canalesDestino || []).filter((c) => c !== pubOriginal.plataforma);
+    if (canales.length === 0) {
+      return {
+        success: false,
+        error: "Por favor selecciona al menos un canal destino diferente al actual.",
+      };
+    }
+
+    const proveedor = process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic");
+    let rawText = "";
+
+    const systemPrompt = `Eres el Director Creativo y Copywriter Senior de SAUCEDA en León, Guanajuato, México.
+Tu tarea es tomar una publicación existente de Sauceda que ya fue creada y aprobada para la red '${pubOriginal.plataforma}' y ADAPTARLA al lenguaje, estilo y formato nativo de las siguientes redes: ${canales.join(", ")}.
+
+REGLAS DE ADAPTACIÓN:
+1. Mismo concepto y oferta: Mantén la propuesta de valor, precios, teléfono de contacto (477 465 4700) y beneficios de Sauceda.
+2. Adaptación por canal:
+   - 'facebook' (tipo_formato: 'imagen'): Copy narrativo, persuasivo, historia/dolor/solución (PAS), viñetas de valor, llamado claro al WhatsApp y enlace.
+   - 'instagram' (tipo_formato: 'imagen'): Gancho potente en primera línea, copy visual y dinámico, espaciado limpio, llamado a comentar o enviar DM/WhatsApp en bio, hashtags relevantes (#LeonGto #SaucedaMx).
+   - 'tiktok' (tipo_formato: 'video'): Título llamativo, 'contenido' corto para pie de video y 'guion_video' con tomas y tiempos estructurados (0-3s gancho, 3-20s desarrollo, 20-30s CTA).
+   - 'whatsapp' (tipo_formato: 'imagen'): Mensaje directo con formato de negritas (*negrita*), viñetas y enlace directo https://wa.me/524774654700.
+   - 'mautic' (tipo_formato: 'imagen'): Asunto atractivo y correo persuasivo.
+
+3. RESPONDE EXCLUSIVAMENTE CON UN ARREGLO JSON DE ${canales.length} ELEMENTOS, exactamente uno por cada canal destino (${canales.join(", ")}).`;
+
+    const promptUser = `PUBLICACIÓN ORIGINAL DE REFERENCIA:
+- Plataforma origen: ${pubOriginal.plataforma}
+- Título: ${pubOriginal.titulo}
+- Contenido original:
+${pubOriginal.contenido}
+- Sugerencia visual: ${pubOriginal.sugerencia_visual || "No especificada"}
+${params.instruccionesExtra ? `\nINSTRUCCIONES EXTRA DEL USUARIO: ${params.instruccionesExtra}` : ""}
+
+CANALES DESTINO A GENERAR: ${canales.join(", ")}.
+
+Genera el arreglo JSON con exactamente ${canales.length} publicaciones adaptadas (una para cada canal en ${canales.join(", ")}).
+Formato esperado para cada objeto:
+{
+  "titulo": "Título adaptado a la red",
+  "plataforma": "facebook | instagram | tiktok | whatsapp | mautic",
+  "tipo_formato": "imagen | video | reel",
+  "contenido": "Texto adaptado a la red",
+  "sugerencia_visual": "${pubOriginal.sugerencia_visual || ""}",
+  "guion_video": "Si es tiktok o video, guion estructurado; si no, cadena vacía"
+}`;
+
+    if (proveedor === "kimi") {
+      const apiKey = process.env.KIMI_API_KEY;
+      if (!apiKey) throw new Error("Falta KIMI_API_KEY en variables de entorno.");
+      const baseUrl = process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1";
+      const model = process.env.KIMI_MODEL || "kimi-k3";
+
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: promptUser },
+          ],
+          temperature: 0.7,
+          max_tokens: 8192,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Kimi API error ${res.status}: ${await res.text()}`);
+      }
+      const json = await res.json();
+      rawText = (json.choices?.[0]?.message?.content || "").trim();
+    } else {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en variables de entorno.");
+      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 8192,
+          messages: [{ role: "user", content: promptUser }],
+          system: systemPrompt,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+      }
+      const resultJson = await res.json();
+      rawText = (resultJson.content ?? [])
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text ?? "")
+        .join("")
+        .trim();
+    }
+
+    const propuestas = parsearJsonResiliente<any[]>(rawText);
+    if (!Array.isArray(propuestas) || propuestas.length === 0) {
+      throw new Error("No se obtuvieron adaptaciones válidas de la IA.");
+    }
+
+    const publicacionesCreadas: PublicacionProgramada[] = [];
+    const ahoraIso = new Date().toISOString();
+
+    for (const prop of propuestas) {
+      const formatoFinal = prop.plataforma === "tiktok" ? "video" : (prop.tipo_formato || "imagen");
+      const esVertical = formatoFinal === "video" || formatoFinal === "reel" || prop.plataforma === "tiktok";
+      const aspectRatio = esVertical ? "9:16" : "1:1";
+
+      const payload = {
+        titulo: prop.titulo || pubOriginal.titulo,
+        contenido: prop.contenido,
+        plataforma: prop.plataforma,
+        tipo_formato: formatoFinal,
+        sugerencia_visual: pubOriginal.sugerencia_visual || prop.sugerencia_visual || "",
+        guion_video: prop.guion_video || "",
+        url_imagen: pubOriginal.url_imagen || null, // ¡Hereda la misma fotografía aprobada!
+        diseno_banner: {
+          ...(pubOriginal.diseno_banner || {}),
+          aspect_ratio: aspectRatio,
+          prompt_imagen_flux: pubOriginal.prompt_imagen_flux || pubOriginal.diseno_banner?.prompt_imagen_flux || "",
+          campana_origen_id: pubOriginal.id,
+        },
+        fecha_programacion: pubOriginal.fecha_programacion || ahoraIso,
+        estado: "pendiente_revision" as const,
+        notas_revision: `Adaptado con IA desde publicación original en ${pubOriginal.plataforma}`,
+        created_at: ahoraIso,
+        updated_at: ahoraIso,
+      };
+
+      const { data, error } = await sb
+        .from("publicaciones_programadas")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) throw error;
+      publicacionesCreadas.push(data as PublicacionProgramada);
+    }
+
+    return { success: true, data: publicacionesCreadas };
+  } catch (err: any) {
+    console.error("Error en adaptarPublicacionAOtrasRedes:", err);
     return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }

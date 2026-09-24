@@ -11,6 +11,7 @@ import {
   cambiarEstadoPublicacion,
   reprogramarPublicacion,
   generarPublicacionesAutomaticas,
+  adaptarPublicacionAOtrasRedes,
   regenerarCreativoPublicacion,
   eliminarPublicacion,
   eliminarPublicacionesMasivo,
@@ -37,7 +38,15 @@ export default function PaginaPublicaciones() {
   const [fechaHoraProgramar, setFechaHoraProgramar] = useState<string>("");
   const [guardandoProgramacion, setGuardandoProgramacion] = useState(false);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
-  const [cantidadIA, setCantidadIA] = useState(1);
+  const [temaIA, setTemaIA] = useState<string>("Servicios de impermeabilización profesional con garantía de 5 a 10 años");
+  const [usarTemaPersonalizado, setUsarTemaPersonalizado] = useState(false);
+  const [temaPersonalizado, setTemaPersonalizado] = useState("");
+  const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp">>([
+    "instagram",
+    "facebook",
+    "tiktok",
+  ]);
+  const [detallesExtraIA, setDetallesExtraIA] = useState("");
   
   const obtenerManana = () => {
     const hoy = new Date();
@@ -46,8 +55,13 @@ export default function PaginaPublicaciones() {
   };
   const [fechaIA, setFechaIA] = useState(obtenerManana());
 
-  const [temaIA, setTemaIA] = useState<string>("todos");
-  const [canalIA, setCanalIA] = useState<string>("todas");
+  // Estados para Replicar / Adaptar publicación existente a otras redes
+  const [pubParaReplicar, setPubParaReplicar] = useState<PublicacionProgramada | null>(null);
+  const [canalesParaReplicar, setCanalesParaReplicar] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp">>([
+    "facebook",
+  ]);
+  const [instruccionesReplicar, setInstruccionesReplicar] = useState("");
+  const [replicando, setReplicando] = useState(false);
 
   const [isPending, startTransition] = useTransition();
   const [cargandoLista, setCargandoLista] = useState(true);
@@ -626,13 +640,29 @@ notify pgrst, 'reload schema';`;
   };
 
   const triggerGeneracionIA = () => {
-    setMensajeCarga("Conectando con el Agente de Marketing IA...");
+    const temaFinal = usarTemaPersonalizado && temaPersonalizado.trim()
+      ? temaPersonalizado.trim()
+      : temaIA;
+
+    if (canalesSeleccionadosIA.length === 0) {
+      alert("Por favor selecciona al menos una red social para la campaña.");
+      return;
+    }
+
+    setMensajeCarga(`Creando Campaña Omnicanal con IA (${canalesSeleccionadosIA.length} redes)...`);
     startTransition(async () => {
-      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA, temaIA, canalIA);
+      const res = await generarPublicacionesAutomaticas({
+        tema: temaFinal,
+        canales: canalesSeleccionadosIA,
+        fechaInicio: fechaIA,
+        detallesAdicionales: detallesExtraIA.trim() || undefined,
+      });
+
       if (res.success) {
         setMostrarModalIA(false);
         setErrorBd(null);
         await cargarDatos();
+        alert(`¡Campaña Omnicanal generada con éxito! Se crearon ${res.data?.length || canalesSeleccionadosIA.length} publicaciones adaptadas con el mismo concepto visual.`);
       } else {
         alert("Ocurrió un error en la generación automática:\n\n" + res.error);
         if (
@@ -644,6 +674,48 @@ notify pgrst, 'reload schema';`;
         }
       }
     });
+  };
+
+  const handleAbrirReplicar = (pub: PublicacionProgramada) => {
+    setPubParaReplicar(pub);
+    const todasLasRedes: Array<"facebook" | "instagram" | "tiktok" | "whatsapp"> = [
+      "facebook",
+      "instagram",
+      "tiktok",
+      "whatsapp",
+    ];
+    setCanalesParaReplicar(todasLasRedes.filter((r) => r !== pub.plataforma));
+    setInstruccionesReplicar("");
+  };
+
+  const handleEjecutarReplicacion = async () => {
+    if (!pubParaReplicar?.id) return;
+    if (canalesParaReplicar.length === 0) {
+      alert("Por favor selecciona al menos un canal destino para replicar.");
+      return;
+    }
+
+    setReplicando(true);
+    setMensajeCarga(`Adaptando contenido con IA para ${canalesParaReplicar.length} redes sociales...`);
+    try {
+      const res = await adaptarPublicacionAOtrasRedes({
+        idPublicacionOriginal: pubParaReplicar.id,
+        canalesDestino: canalesParaReplicar,
+        instruccionesExtra: instruccionesReplicar.trim() || undefined,
+      });
+
+      if (res.success && res.data) {
+        setPubParaReplicar(null);
+        await cargarDatos();
+        alert(`¡Publicación adaptada con éxito a ${res.data.length} canales! Todas comparten la misma imagen aprobada.`);
+      } else {
+        alert("Error al adaptar publicación: " + res.error);
+      }
+    } catch (err: any) {
+      alert("Error inesperado al replicar: " + (err?.message || String(err)));
+    } finally {
+      setReplicando(false);
+    }
   };
 
   const handleGuardarEdicion = async (e: React.FormEvent) => {
@@ -1212,6 +1284,15 @@ notify pgrst, 'reload schema';`;
                     </button>
 
                     <button
+                      type="button"
+                      onClick={() => handleAbrirReplicar(pub)}
+                      className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      title="Adaptar esta publicación a otras redes manteniendo el mismo arte visual"
+                    >
+                      <span>🔄</span> Replicar
+                    </button>
+
+                    <button
                       onClick={() => setPubEditando(pub)}
                       className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/80 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
                     >
@@ -1358,102 +1439,332 @@ notify pgrst, 'reload schema';`;
       )}
 
       {mostrarModalIA && (
-        <div className="fixed inset-0 bg-carbon/60 z-40 flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-dorado/20">
-            <div className="px-6 py-5 bg-verde-profundo text-crema">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <span>✨</span> Generar Propuestas con IA
-              </h3>
-              <p className="text-xs text-crema/70 mt-1">Configura las directrices para el agente de contenido.</p>
+        <div className="fixed inset-0 bg-carbon/60 z-40 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-dorado/20">
+            <div className="px-6 py-5 bg-verde-profundo text-crema flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <span>✨</span> Generar Campaña con IA (Omnicanal)
+                </h3>
+                <p className="text-xs text-crema/70 mt-0.5">
+                  Concepto visual unificado adaptado al lenguaje de cada red.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarModalIA(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="p-6 flex flex-col gap-4">
+            <div className="p-6 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
+              {/* Tema de Campaña */}
               <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Cantidad de Publicaciones</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[1, 2, 3, 5].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setCantidadIA(num)}
-                      className={`py-2 rounded-xl text-sm font-bold border transition ${
-                        cantidadIA === num ? "bg-verde-profundo text-crema border-verde-profundo" : "bg-crema/10 text-carbon border-dorado/30 hover:bg-crema/20"
-                      }`}
-                    >
-                      {num} {num === 1 ? "post" : "posts"}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-carbon/80 uppercase">
+                    Tema o Campaña Central
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setUsarTemaPersonalizado(!usarTemaPersonalizado)}
+                    className="text-[11px] font-bold text-dorado hover:underline cursor-pointer"
+                  >
+                    {usarTemaPersonalizado ? "← Ver temas sugeridos" : "✏️ Tema personalizado"}
+                  </button>
                 </div>
+
+                {usarTemaPersonalizado ? (
+                  <textarea
+                    rows={2}
+                    value={temaPersonalizado}
+                    onChange={(e) => setTemaPersonalizado(e.target.value)}
+                    placeholder="Ej. Promoción de impermeabilización con soplete $210/m² con 10 años de garantía antes del temporal de lluvias..."
+                    className="w-full bg-crema/10 border border-dorado/40 rounded-xl px-3.5 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
+                  />
+                ) : (
+                  <select
+                    value={temaIA}
+                    onChange={(e) => setTemaIA(e.target.value)}
+                    className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer font-medium"
+                  >
+                    <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">
+                      ☔ Impermeabilización Profesional $210/m² con Soplete (Garantía 5-10 años)
+                    </option>
+                    <option value="Traspasos de viviendas con crédito INFONAVIT">
+                      🏠 Traspaso INFONAVIT en León Gto (Explicación y Venta Segura)
+                    </option>
+                    <option value="Compra rápida de casas de contado con adeudos o vandalizadas">
+                      💰 Compra de Casas de Contado (Problemas Legales/Deudas)
+                    </option>
+                    <option value="Remodelaciones y ampliaciones de viviendas en León Gto">
+                      🏗️ Remodelación y Ampliación de Hogares (Diseño y Obra)
+                    </option>
+                    <option value="Gestión y armado de expediente INFONAVIT para trato directo">
+                      📂 Armado de Expediente INFONAVIT (Solo Trámite y Asesoría)
+                    </option>
+                  </select>
+                )}
               </div>
 
+              {/* Redes Sociales Destino (Multiselección) */}
               <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Tema / Campaña de Enfoque</label>
-                <select
-                  value={temaIA}
-                  onChange={(e) => setTemaIA(e.target.value)}
-                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-                >
-                  <option value="todos">🔀 Variado (Todos los pilares mezclados)</option>
-                  <option value="Traspasos de viviendas con crédito INFONAVIT">🏠 Traspaso INFONAVIT (Explicación y Venta)</option>
-                  <option value="Compra rápida de casas de contado con adeudos o vandalizadas">💰 Compra de Casas de Contado (Problemas Legales/Deudas)</option>
-                  <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">☔ Impermeabilización Profesional (Sauceda Construye)</option>
-                  <option value="Remodelaciones y ampliaciones de viviendas en León Gto">🏗️ Remodelación y Ampliación de Hogares</option>
-                  <option value="Gestión y armado de expediente INFONAVIT para trato directo">📂 Armado de Expediente INFONAVIT (Solo Trámite)</option>
-                </select>
-              </div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-carbon/80 uppercase">
+                    Redes Sociales Destino (Se adaptará a cada una)
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook"])}
+                      className="text-[10px] text-carbon/60 hover:text-carbon font-semibold underline cursor-pointer"
+                    >
+                      Meta (FB + IG)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook", "tiktok", "whatsapp"])}
+                      className="text-[10px] text-dorado font-bold hover:underline cursor-pointer"
+                    >
+                      Todas (4)
+                    </button>
+                  </div>
+                </div>
 
-              <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">
-                  Red Social / Canal y Formato Destino
-                </label>
-                <select
-                  value={canalIA}
-                  onChange={(e) => setCanalIA(e.target.value)}
-                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer font-medium"
-                >
-                  <option value="todas">🔀 Multicanal (Facebook, Instagram y TikTok variados)</option>
-                  <option value="facebook">🔵 Facebook Feed (Post Cuadrado 1:1)</option>
-                  <option value="instagram_post">🟣 Instagram Post (Feed Cuadrado 1:1)</option>
-                  <option value="instagram_reel">📱 Instagram Reels (Vertical 9:16)</option>
-                  <option value="tiktok">⚫ TikTok (Video/Vertical 9:16)</option>
-                  <option value="whatsapp">🟢 WhatsApp (Mensaje Directo + Foto 1:1)</option>
-                  <option value="mautic">🟠 Mautic / Correo (Boletín / Banner)</option>
-                </select>
-                <p className="text-[11px] text-carbon/50 mt-1">
-                  {canalIA === "instagram_reel" || canalIA === "tiktok"
-                    ? "📐 Se generará en resolución vertical 9:16 (1080×1920) óptima para reels y videos móviles."
-                    : canalIA === "todas"
-                    ? "📐 Cada publicación adoptará la resolución y formato nativo de su red social asignada."
-                    : "📐 Se generará en resolución cuadrada 1:1 (1024×1024) óptima para publicaciones en muros y feeds."}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "instagram", nombre: "Instagram", icono: "🟣", detalle: "Post Feed + Hashtags" },
+                    { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed + Enlace" },
+                    { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video Corto" },
+                    { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje Difusión + Link" },
+                  ].map((canal) => {
+                    const seleccionado = canalesSeleccionadosIA.includes(canal.id as any);
+                    return (
+                      <button
+                        key={canal.id}
+                        type="button"
+                        onClick={() => {
+                          if (seleccionado) {
+                            if (canalesSeleccionadosIA.length > 1) {
+                              setCanalesSeleccionadosIA(canalesSeleccionadosIA.filter((c) => c !== canal.id));
+                            }
+                          } else {
+                            setCanalesSeleccionadosIA([...canalesSeleccionadosIA, canal.id as any]);
+                          }
+                        }}
+                        className={`p-3 rounded-2xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                          seleccionado
+                            ? "bg-verde-profundo/10 border-verde-profundo text-verde-profundo font-bold shadow-xs"
+                            : "bg-gray-50 border-gray-200 text-carbon/60 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className="text-lg">{canal.icono}</span>
+                        <div>
+                          <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                            <span>{canal.nombre}</span>
+                            {seleccionado && <span className="text-emerald-600 text-xs">✓</span>}
+                          </div>
+                          <span className="text-[10px] font-normal opacity-70 block mt-0.5">{canal.detalle}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-carbon/50 mt-1.5">
+                  📐 Todas las publicaciones compartirán el <strong>mismo concepto visual y prompt de fotografía</strong>, pero la IA redactará copys y guiones adaptados a cada formato.
                 </p>
               </div>
 
+              {/* Detalles adicionales / Oferta (Opcional) */}
               <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Día de Programación</label>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1">
+                  Detalles u Oferta Específica (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={detallesExtraIA}
+                  onChange={(e) => setDetallesExtraIA(e.target.value)}
+                  placeholder="Ej. WhatsApp 477 465 4700, promoción del mes, visita técnica gratuita..."
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-xs text-carbon focus:outline-none focus:border-verde-profundo"
+                />
+              </div>
+
+              {/* Día de Programación */}
+              <div>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1">Día de Programación</label>
                 <input
                   type="date"
                   value={fechaIA}
                   onChange={(e) => setFechaIA(e.target.value)}
-                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
                 />
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <div className="px-6 py-4 bg-gray-50 flex items-center justify-between border-t border-gray-200">
+              <span className="text-xs text-carbon/60 font-medium">
+                {canalesSeleccionadosIA.length} {canalesSeleccionadosIA.length === 1 ? "publicación" : "publicaciones unificadas"}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalIA(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-carbon/60 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={triggerGeneracionIA}
+                  className="px-5 py-2.5 bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>✨</span> Generar Campaña ({canalesSeleccionadosIA.length} Redes)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Replicar / Adaptar publicación existente a otras redes */}
+      {pubParaReplicar && (
+        <div className="fixed inset-0 bg-carbon/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-dorado/30">
+            <div className="px-6 py-5 bg-verde-profundo text-crema flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <span>🔄</span> Replicar en otros Canales
+                </h3>
+                <p className="text-xs text-crema/70 mt-0.5">
+                  Adapta esta publicación manteniendo la misma fotografía ya aprobada.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setMostrarModalIA(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-carbon/60 hover:bg-gray-100 transition"
+                onClick={() => setPubParaReplicar(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition"
               >
-                Cancelar
+                ✕
               </button>
-              <button
-                type="button"
-                onClick={triggerGeneracionIA}
-                className="px-5 py-2.5 bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold rounded-xl shadow transition"
-              >
-                Comenzar Generación
-              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              {/* Tarjeta resumen del post origen */}
+              <div className="bg-dorado/10 border border-dorado/30 rounded-2xl p-3.5 flex items-center gap-3">
+                {pubParaReplicar.url_imagen && pubParaReplicar.url_imagen.length > 5 ? (
+                  <img
+                    src={pubParaReplicar.url_imagen}
+                    alt="Arte aprobado"
+                    className="w-16 h-16 rounded-xl object-cover border border-dorado/40 shadow-xs flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-carbon/10 border border-carbon/20 flex items-center justify-center text-lg flex-shrink-0">
+                    🖼️
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[10px] uppercase font-bold text-dorado">Origen:</span>
+                    {getPlataformaBadge(pubParaReplicar.plataforma)}
+                  </div>
+                  <h4 className="text-xs font-bold text-carbon truncate">
+                    {pubParaReplicar.titulo}
+                  </h4>
+                  <p className="text-[11px] text-carbon/60 line-clamp-1 mt-0.5">
+                    {pubParaReplicar.contenido}
+                  </p>
+                </div>
+              </div>
+
+              {/* Selector de Canales Destino */}
+              <div>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1.5">
+                  ¿A qué redes deseas adaptar este post?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "instagram", nombre: "Instagram", icono: "🟣", detalle: "Post / Feed" },
+                    { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed con enlace" },
+                    { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video" },
+                    { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje de Difusión" },
+                  ]
+                    .filter((canal) => canal.id !== pubParaReplicar.plataforma)
+                    .map((canal) => {
+                      const seleccionado = canalesParaReplicar.includes(canal.id as any);
+                      return (
+                        <button
+                          key={canal.id}
+                          type="button"
+                          onClick={() => {
+                            if (seleccionado) {
+                              setCanalesParaReplicar(canalesParaReplicar.filter((c) => c !== canal.id));
+                            } else {
+                              setCanalesParaReplicar([...canalesParaReplicar, canal.id as any]);
+                            }
+                          }}
+                          className={`p-3 rounded-2xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                            seleccionado
+                              ? "bg-verde-profundo/10 border-verde-profundo text-verde-profundo font-bold shadow-xs"
+                              : "bg-gray-50 border-gray-200 text-carbon/60 hover:bg-gray-100"
+                          }`}
+                        >
+                          <span className="text-lg">{canal.icono}</span>
+                          <div>
+                            <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                              <span>{canal.nombre}</span>
+                              {seleccionado && <span className="text-emerald-600 text-xs">✓</span>}
+                            </div>
+                            <span className="text-[10px] font-normal opacity-70 block mt-0.5">{canal.detalle}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Instrucciones opcionales */}
+              <div>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1">
+                  Instrucciones o enfoque adicional para la IA (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={instruccionesReplicar}
+                  onChange={(e) => setInstruccionesReplicar(e.target.value)}
+                  placeholder="Ej. Enfatizar la cotización gratuita o tono más enérgico..."
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-3.5 py-2 text-xs text-carbon focus:outline-none focus:border-verde-profundo"
+                />
+              </div>
+
+              <div className="text-[11px] bg-emerald-50 text-emerald-800 p-3 rounded-xl border border-emerald-200">
+                ✅ <strong>Misma Fotografía Garantizada:</strong> Las nuevas publicaciones conservarán automáticamente la fotografía aprobada de la publicación original.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex items-center justify-between border-t border-gray-200">
+              <span className="text-xs text-carbon/60 font-medium">
+                {canalesParaReplicar.length} {canalesParaReplicar.length === 1 ? "red seleccionada" : "redes seleccionadas"}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={replicando}
+                  onClick={() => setPubParaReplicar(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-carbon/60 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={replicando || canalesParaReplicar.length === 0}
+                  onClick={handleEjecutarReplicacion}
+                  className="px-5 py-2.5 bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold rounded-xl shadow-md transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{replicando ? "⏳" : "✨"}</span>
+                  <span>{replicando ? "Adaptando..." : `Adaptar a ${canalesParaReplicar.length} Redes`}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1821,6 +2132,7 @@ notify pgrst, 'reload schema';`;
           onProgramar={(pub) => handleAbrirProgramar(pub)}
           onRegenerarCreativo={(id) => handleRegenerarCreativo(id)}
           onReemplazarArte={(id) => handleReemplazarArte(id)}
+          onReplicar={(pub) => handleAbrirReplicar(pub)}
         />
       )}
 
