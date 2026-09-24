@@ -1254,10 +1254,33 @@ export async function ejecutarPublicacionMeta(
 
     // Resolver URLs de medios
     let urlImg = pub.url_imagen || "";
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+
     // Si la imagen es una URL relativa interna o contiene parámetros de render
     if (urlImg.startsWith("/")) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://crm.sauceda.mx";
-      urlImg = `${baseUrl.replace(/\/$/, "")}${urlImg}`;
+      urlImg = `${baseUrl}${urlImg}`;
+    }
+
+    // Para Instagram: Instagram exige JPEG obligatorio.
+    // Si la imagen no termina en .jpg/.jpeg o proviene de servicios en WebP, enrutarla por el proxy con sharp
+    let urlImagenInstagram = urlImg;
+    if (urlImg && (!urlImg.toLowerCase().endsWith(".jpg") && !urlImg.toLowerCase().endsWith(".jpeg"))) {
+      urlImagenInstagram = `${baseUrl}/api/marketing/imagen/${pub.id}.jpg`;
+    }
+
+    // Verificar si la URL de la imagen original está viva antes de detonar en Meta
+    if (urlImg && urlImg.startsWith("http") && !urlImg.includes("/api/marketing/imagen/")) {
+      try {
+        const checkRes = await fetch(urlImg, { method: "HEAD" });
+        if (checkRes.status === 404) {
+          return {
+            success: false,
+            error: "La imagen de esta publicación ya expiró o no está disponible en el servidor (código 404). Por favor haz clic en '👁️ Previsualizar' -> '🎨 Regenerar Imagen' (o sube una foto nueva) para actualizar el arte antes de publicar en Instagram.",
+          };
+        }
+      } catch (checkErr) {
+        console.warn("Fallo en comprobación preliminar de imagen:", checkErr);
+      }
     }
 
     const payloadPub = {
@@ -1277,9 +1300,12 @@ export async function ejecutarPublicacionMeta(
       }
     }
 
-    // Publicar en Instagram si corresponde
+    // Publicar en Instagram si corresponde (con URL garantizada en JPEG)
     if (destinoFinal === "instagram" || destinoFinal === "ambas") {
-      const resIg = await publicarEnInstagram(payloadPub);
+      const resIg = await publicarEnInstagram({
+        ...payloadPub,
+        urlImagen: urlImagenInstagram,
+      });
       if (resIg.ok) {
         resultadoMeta = resIg;
       } else {
