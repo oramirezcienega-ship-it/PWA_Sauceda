@@ -48,10 +48,15 @@ export default function PrevisualizadorRedSocial({
   }, [abierto, publicacion?.id]);
 
   // Identificar el formato nativo de la publicación para restringir previsualizaciones incompatibles
-  const esReelOTikTok =
+  const esInstagramReel =
+    pubActual?.plataforma === "instagram" &&
+    (pubActual?.tipo_formato === "reel" || pubActual?.tipo_formato === "video");
+  const esTikTok = pubActual?.plataforma === "tiktok";
+  const esFormatoVertical =
+    esInstagramReel ||
+    esTikTok ||
     pubActual?.tipo_formato === "reel" ||
-    pubActual?.tipo_formato === "video" ||
-    pubActual?.plataforma === "tiktok";
+    pubActual?.tipo_formato === "video";
   const esWhatsApp = pubActual?.plataforma === "whatsapp";
   const esMautic = pubActual?.plataforma === "email" || pubActual?.plataforma === "mautic";
 
@@ -61,9 +66,14 @@ export default function PrevisualizadorRedSocial({
       if (pubActual.plataforma === "email" || pubActual.plataforma === "mautic") {
         setPlataformaActiva("mautic");
       } else if (
+        pubActual.plataforma === "instagram" &&
+        (pubActual.tipo_formato === "reel" || pubActual.tipo_formato === "video")
+      ) {
+        setPlataformaActiva("instagram_reel");
+      } else if (
+        pubActual.plataforma === "tiktok" ||
         pubActual.tipo_formato === "reel" ||
-        pubActual.tipo_formato === "video" ||
-        pubActual.plataforma === "tiktok"
+        pubActual.tipo_formato === "video"
       ) {
         setPlataformaActiva("tiktok");
       } else if (pubActual.plataforma === "whatsapp") {
@@ -199,18 +209,46 @@ export default function PrevisualizadorRedSocial({
 
         {/* Pestañas de Plataforma / Información del Formato */}
         <div className="bg-gray-100 px-4 py-2.5 flex items-center justify-between border-b border-gray-200 shrink-0">
-          {esReelOTikTok ? (
+          {esInstagramReel ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span className="bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
+                  <span>🎬</span> Formato Vertical 9:16 (Instagram Reel)
+                </span>
+                <span className="text-[11px] text-carbon/60 hidden sm:inline">
+                  Simulación nativa de Instagram Reels
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold bg-pink-100 text-pink-800 px-2.5 py-1 rounded-lg border border-pink-200">
+                🟣 Instagram Reel
+              </span>
+            </div>
+          ) : esTikTok ? (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <span className="bg-black text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
-                  <span>📱</span> Formato Vertical 9:16 (Reel / TikTok)
+                  <span>📱</span> Formato Vertical 9:16 (TikTok Video)
                 </span>
                 <span className="text-[11px] text-carbon/60 hidden sm:inline">
-                  Simulación móvil a pantalla completa
+                  Simulación nativa de TikTok
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold bg-gray-200 text-gray-800 px-2.5 py-1 rounded-lg border border-gray-300">
+                ⚫ TikTok Video
+              </span>
+            </div>
+          ) : esFormatoVertical ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span className="bg-black text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5">
+                  <span>📱</span> Formato Vertical 9:16
+                </span>
+                <span className="text-[11px] text-carbon/60 hidden sm:inline">
+                  Simulación móvil vertical a pantalla completa
                 </span>
               </div>
               <span className="text-[10px] uppercase font-bold bg-purple-100 text-purple-800 px-2.5 py-1 rounded-lg border border-purple-200">
-                {pubActual.plataforma === "tiktok" ? "⚫ TikTok Video" : "🟣 Instagram Reel"}
+                Reel / Video
               </span>
             </div>
           ) : esWhatsApp ? (
@@ -510,7 +548,153 @@ export default function PrevisualizadorRedSocial({
             )}
 
             {/* ============================================================== */}
-            {/* 3. MOCKUP TIKTOK / REEL 9:16 VERTICAL */}
+            {/* 3.A MOCKUP INSTAGRAM REELS 9:16 VERTICAL */}
+            {/* ============================================================== */}
+            {plataformaActiva === "instagram_reel" && (
+              <div className="bg-black text-white rounded-3xl shadow-2xl overflow-hidden aspect-[9/16] relative flex flex-col justify-between border-4 border-gray-900 animate-in zoom-in-95 duration-150 select-none">
+                {/* Media de Fondo */}
+                {imgSrc && !imgError ? (
+                  <div className="absolute inset-0 z-0">
+                    {esVideo ? (
+                      <video
+                        src={imgSrc}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={imgSrc}
+                        alt="Instagram Reel Media"
+                        referrerPolicy="no-referrer"
+                        onError={handleImgError}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/85"></div>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#833AB4]/30 via-black to-black flex flex-col items-center justify-center p-6 text-center z-0">
+                    <span className="text-5xl mb-3">🎬</span>
+                    <span className="text-sm font-bold">Instagram Reel (9:16)</span>
+                    <span className="text-xs text-white/60 mt-1">Generando fotografía vertical en n8n...</span>
+                  </div>
+                )}
+
+                {/* Cabecera Superior Instagram Reels */}
+                <div className="relative z-10 pt-4 px-4 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 cursor-pointer">
+                    <span className="font-bold text-lg tracking-tight">Reels</span>
+                    <svg className="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </div>
+                  <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition cursor-pointer">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Columna Derecha de Acciones Nativas de Instagram Reels */}
+                <div className="absolute right-3 bottom-14 z-10 flex flex-col items-center gap-5 text-xs">
+                  {/* Like */}
+                  <button
+                    onClick={() => setLiked(!liked)}
+                    className="flex flex-col items-center gap-1 cursor-pointer group"
+                  >
+                    <div className={`transition-transform active:scale-125 ${liked ? "text-[#FF3040]" : "text-white"}`}>
+                      {liked ? (
+                        <svg className="w-7 h-7 drop-shadow-md" viewBox="0 0 24 24" fill="#FF3040">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                      ) : (
+                        <svg className="w-7 h-7 drop-shadow-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-[11px] font-semibold drop-shadow-md">{liked ? "1,241" : "1,240"}</span>
+                  </button>
+
+                  {/* Comentarios */}
+                  <div className="flex flex-col items-center gap-1 cursor-pointer">
+                    <svg className="w-7 h-7 drop-shadow-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                    </svg>
+                    <span className="text-[11px] font-semibold drop-shadow-md">36</span>
+                  </div>
+
+                  {/* Compartir / Enviar (Paper Plane) */}
+                  <div className="flex flex-col items-center gap-1 cursor-pointer">
+                    <svg className="w-7 h-7 drop-shadow-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                    <span className="text-[11px] font-semibold drop-shadow-md">84</span>
+                  </div>
+
+                  {/* Más opciones (...) */}
+                  <div className="cursor-pointer py-1">
+                    <svg className="w-6 h-6 drop-shadow-md" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="6" cy="12" r="1.5" />
+                      <circle cx="18" cy="12" r="1.5" />
+                    </svg>
+                  </div>
+
+                  {/* Carátula Cuadrada de Audio Instagram */}
+                  <div className="w-7 h-7 rounded-lg border-2 border-white/80 overflow-hidden bg-black flex items-center justify-center shadow-lg mt-1">
+                    <span className="text-[11px]">🎵</span>
+                  </div>
+                </div>
+
+                {/* Pie Inferior: Perfil + Seguir, Caption expandible y Audio */}
+                <div className="relative z-10 p-4 pb-5 max-w-[82%] space-y-2">
+                  {/* Fila de Perfil y Botón Seguir */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-verde-profundo border border-white/70 flex items-center justify-center font-bold text-xs text-white shadow-sm shrink-0">
+                      S
+                    </div>
+                    <span className="font-bold text-xs tracking-tight drop-shadow-md">saucedamx</span>
+                    <button className="border border-white/70 bg-black/20 hover:bg-white/20 text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-lg transition backdrop-blur-xs cursor-pointer">
+                      Seguir
+                    </button>
+                  </div>
+
+                  {/* Copy / Descripción con Ver más */}
+                  <div className="text-[12px] leading-snug drop-shadow-md">
+                    <p className="line-clamp-2 text-white/95">
+                      {expandirTexto || publicacion.contenido.length < 120
+                        ? publicacion.contenido
+                        : `${publicacion.contenido.slice(0, 120)}...`}
+                    </p>
+                    {publicacion.contenido.length >= 120 && (
+                      <button
+                        onClick={() => setExpandirTexto(!expandirTexto)}
+                        className="text-white/70 font-semibold text-[11px] hover:text-white cursor-pointer mt-0.5"
+                      >
+                        {expandirTexto ? "menos" : "... más"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Track de Audio Instagram */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-white/90 drop-shadow-md pt-0.5">
+                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                    </svg>
+                    <span className="truncate">saucedamx • Audio original</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* 3.B MOCKUP TIKTOK 9:16 VERTICAL */}
             {/* ============================================================== */}
             {plataformaActiva === "tiktok" && (
               <div className="bg-black text-white rounded-3xl shadow-2xl overflow-hidden aspect-[9/16] relative flex flex-col justify-between border-4 border-gray-900 animate-in zoom-in-95 duration-150">
