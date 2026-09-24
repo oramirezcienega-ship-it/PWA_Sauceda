@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { PublicacionProgramada, reprogramarPublicacion } from "@/app/actions/marketing";
+import { PublicacionProgramada, reprogramarPublicacion, desprogramarPublicacion } from "@/app/actions/marketing";
 
 interface CalendarioMarketingOmnicanalProps {
   publicaciones: PublicacionProgramada[];
@@ -569,6 +569,27 @@ export default function CalendarioMarketingOmnicanal({
     setNuevaFechaHora(localISOTime);
   };
 
+  // Desprogramar publicación desde el calendario
+  const handleDesprogramarEnCalendario = async () => {
+    if (!pubSeleccionada?.id) return;
+    if (!confirm("¿Deseas desprogramar esta publicación? Se quitará de la agenda y del envío automático, regresando a Pendientes de Revisión (sin eliminar su contenido ni arte).")) return;
+    setGuardandoFecha(true);
+    try {
+      const res = await desprogramarPublicacion(pubSeleccionada.id);
+      if (res.success) {
+        alert("¡Publicación desprogramada con éxito! Ya no se enviará automáticamente.");
+        setPubSeleccionada(null);
+        await onRecargar();
+      } else {
+        alert("Error al desprogramar: " + res.error);
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setGuardandoFecha(false);
+    }
+  };
+
   return (
     <section className="bg-white rounded-3xl border border-dorado/30 shadow-md overflow-hidden mt-10">
       {/* Cabecera del Calendario */}
@@ -923,12 +944,19 @@ export default function CalendarioMarketingOmnicanal({
                               {pub.url_imagen && (
                                 <div className="relative mb-2 rounded-xl overflow-hidden border border-black/10 bg-black aspect-video">
                                   <img
-                                    src={pub.url_imagen}
+                                    src={
+                                      pub.id
+                                        ? `/api/marketing/imagen/${pub.id}.jpg?url=${encodeURIComponent(pub.url_imagen)}`
+                                        : pub.url_imagen
+                                    }
                                     alt={pub.titulo}
                                     referrerPolicy="no-referrer"
+                                    loading="lazy"
                                     onError={(e) => {
-                                      if (pub.id) {
-                                        (e.target as HTMLImageElement).src = `/api/marketing/imagen/${pub.id}`;
+                                      const target = e.currentTarget;
+                                      if (!target.dataset.fallback && pub.url_imagen) {
+                                        target.dataset.fallback = "true";
+                                        target.src = pub.url_imagen;
                                       }
                                     }}
                                     className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
@@ -1134,15 +1162,22 @@ export default function CalendarioMarketingOmnicanal({
                             <div className="flex items-start gap-2">
                               {pub.url_imagen && (
                                 <img
-                                  src={pub.url_imagen}
+                                  src={
+                                    pub.id
+                                      ? `/api/marketing/imagen/${pub.id}.jpg?url=${encodeURIComponent(pub.url_imagen)}`
+                                      : pub.url_imagen
+                                  }
                                   alt={pub.titulo}
                                   referrerPolicy="no-referrer"
+                                  loading="lazy"
                                   onError={(e) => {
-                                    if (pub.id) {
-                                      (e.target as HTMLImageElement).src = `/api/marketing/imagen/${pub.id}`;
+                                    const target = e.currentTarget;
+                                    if (!target.dataset.fallback && pub.url_imagen) {
+                                      target.dataset.fallback = "true";
+                                      target.src = pub.url_imagen;
                                     }
                                   }}
-                                  className="w-12 h-12 rounded-lg object-cover border border-gray-300 shrink-0 bg-black"
+                                  className="w-12 h-12 rounded-lg object-cover border border-gray-300 shrink-0 bg-neutral-900"
                                 />
                               )}
                               <div className="flex-1 min-w-0">
@@ -1504,15 +1539,22 @@ export default function CalendarioMarketingOmnicanal({
               <div className="bg-gray-50 rounded-2xl p-3 border border-gray-200 flex gap-3 items-start">
                 {pubSeleccionada.url_imagen && (
                   <img
-                    src={pubSeleccionada.url_imagen}
+                    src={
+                      pubSeleccionada.id
+                        ? `/api/marketing/imagen/${pubSeleccionada.id}.jpg?url=${encodeURIComponent(pubSeleccionada.url_imagen)}`
+                        : pubSeleccionada.url_imagen
+                    }
                     alt="Arte"
                     referrerPolicy="no-referrer"
+                    loading="lazy"
                     onError={(e) => {
-                      if (pubSeleccionada.id) {
-                        (e.target as HTMLImageElement).src = `/api/marketing/imagen/${pubSeleccionada.id}`;
+                      const target = e.currentTarget;
+                      if (!target.dataset.fallback && pubSeleccionada.url_imagen) {
+                        target.dataset.fallback = "true";
+                        target.src = pubSeleccionada.url_imagen;
                       }
                     }}
-                    className="w-16 h-16 rounded-xl object-cover border border-gray-300 shrink-0 bg-black"
+                    className="w-16 h-16 rounded-xl object-cover border border-gray-300 shrink-0 bg-neutral-900"
                   />
                 )}
                 <p className="text-xs text-carbon/80 leading-relaxed line-clamp-3">
@@ -1607,6 +1649,19 @@ export default function CalendarioMarketingOmnicanal({
               >
                 <span>👁️</span> Previsualizar en Red Social
               </button>
+
+              {/* Botón para Desprogramar de la agenda */}
+              {pubSeleccionada.estado === "aprobado" && (
+                <button
+                  type="button"
+                  disabled={guardandoFecha}
+                  onClick={handleDesprogramarEnCalendario}
+                  className="w-full bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Quitar esta publicación del calendario y de la agenda de envíos automáticos"
+                >
+                  <span>⏸️</span> Desprogramar (Quitar de la Agenda)
+                </button>
+              )}
             </div>
 
             {/* Pie del Detalle */}

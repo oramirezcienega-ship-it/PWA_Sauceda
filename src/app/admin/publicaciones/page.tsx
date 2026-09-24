@@ -21,6 +21,8 @@ import {
   ejecutarPublicacionMeta,
   ejecutarEnvioMautic,
   procesarPublicacionesProgramadasVencidas,
+  desprogramarPublicacion,
+  desprogramarPublicacionesMasivo,
 } from "@/app/actions/marketing";
 
 interface OpcionFiltro {
@@ -959,6 +961,39 @@ notify pgrst, 'reload schema';`;
     });
   };
 
+  const handleDesprogramar = async (id: string) => {
+    if (!confirm("¿Deseas desprogramar esta publicación? Se quitará de la agenda y del envío automático, regresando a Pendientes de Revisión (sin eliminar su contenido ni imagen).")) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await desprogramarPublicacion(id);
+      if (res.success) {
+        alert("¡Publicación desprogramada con éxito! Ya no se enviará automáticamente y ha regresado a Revisión.");
+        await cargarDatos();
+      } else {
+        alert("Error al desprogramar publicación: " + res.error);
+      }
+    });
+  };
+
+  const handleDesprogramarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    if (!confirm(`¿Desprogramar las ${seleccionados.length} publicaciones seleccionadas? Se quitarán de la agenda y regresarán a Revisión sin eliminar nada.`)) {
+      return;
+    }
+    setMensajeCarga(`Desprogramando ${seleccionados.length} publicaciones...`);
+    startTransition(async () => {
+      const res = await desprogramarPublicacionesMasivo(seleccionados);
+      if (res.success) {
+        alert(`¡${seleccionados.length} publicaciones desprogramadas con éxito!`);
+        setSeleccionados([]);
+        await cargarDatos();
+      } else {
+        alert("Error al desprogramar publicaciones: " + res.error);
+      }
+    });
+  };
+
   const handleCopiarTexto = (texto: string) => {
     navigator.clipboard.writeText(texto);
     alert("¡Texto copiado al portapapeles con éxito!");
@@ -1499,6 +1534,13 @@ notify pgrst, 'reload schema';`;
                 <span>✓</span> Aprobar Seleccionadas ({seleccionados.length})
               </button>
               <button
+                onClick={handleDesprogramarMasivo}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Quitar de la agenda automática y regresar a Pendientes de Revisión"
+              >
+                <span>⏸️</span> Desprogramar ({seleccionados.length})
+              </button>
+              <button
                 onClick={handleRechazarMasivo}
                 className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
@@ -1652,10 +1694,22 @@ notify pgrst, 'reload schema';`;
                         />
                       ) : (
                         <img
-                          src={mediaUrl}
+                          src={
+                            pub.id
+                              ? `/api/marketing/imagen/${pub.id}.jpg?url=${encodeURIComponent(mediaUrl)}`
+                              : mediaUrl
+                          }
                           alt={pub.titulo}
                           referrerPolicy="no-referrer"
+                          loading="lazy"
                           className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.dataset.fallback && mediaUrl) {
+                              target.dataset.fallback = "true";
+                              target.src = mediaUrl;
+                            }
+                          }}
                         />
                       )}
                       <div className="absolute top-1.5 right-1.5 bg-carbon/80 backdrop-blur-md text-crema text-[8px] font-bold px-1.5 py-0.5 rounded-full border border-white/20 flex items-center gap-1 shadow-xs">
@@ -1842,75 +1896,92 @@ notify pgrst, 'reload schema';`;
                         <button
                           type="button"
                           onClick={() => handleAprobar(pub.id!)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          title="Aprobar para salir en el horario agendado y generar arte con IA si falta"
                         >
-                          <span>✓</span> Aprobar
+                          <span>✓</span> Aprobar y Programar
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAbrirProgramar(pub)}
-                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          title="Elegir o modificar la fecha y hora de publicación programada"
                         >
-                          <span>⏰</span> Programar
+                          <span>⏰</span> Cambiar Horario
                         </button>
                       </div>
                     )}
 
                     {pub.estado === "aprobado" && (
-                      <div className="flex items-center gap-1.5">
-                        {(pub.plataforma === "facebook" || pub.plataforma === "instagram") && (
+                      <div className="flex flex-col gap-1.5">
+                        {/* Fila 1: Publicación Inmediata */}
+                        <div className="flex items-center gap-1.5">
+                          {(pub.plataforma === "facebook" || pub.plataforma === "instagram") && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublicarDirectoMeta(pub.id!, pub.plataforma)}
+                              disabled={publicandoMetaId === pub.id}
+                              className={`flex-1 ${
+                                pub.plataforma === "instagram"
+                                  ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
+                                  : "bg-[#1877F2] hover:bg-[#166FE5]"
+                              } text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60`}
+                              title={`Publicar ahora mismo en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                            >
+                              <span>{publicandoMetaId === pub.id ? "⏳" : "🚀"}</span>
+                              <span className="truncate">
+                                {publicandoMetaId === pub.id
+                                  ? "Publicando..."
+                                  : `Publicar ${pub.plataforma === "instagram" ? "IG" : "FB"}`}
+                              </span>
+                            </button>
+                          )}
+
+                          {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                            <button
+                              type="button"
+                              onClick={() => handleDispararMautic(pub.id!)}
+                              disabled={disparandoMauticId === pub.id}
+                              className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
+                              title="Disparar campaña masiva en Mautic"
+                            >
+                              <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
+                              <span className="truncate">
+                                {disparandoMauticId === pub.id ? "Enviando..." : "Mautic"}
+                              </span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
-                            onClick={() => handlePublicarDirectoMeta(pub.id!, pub.plataforma)}
-                            disabled={publicandoMetaId === pub.id}
-                            className={`flex-1 ${
-                              pub.plataforma === "instagram"
-                                ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
-                                : "bg-[#1877F2] hover:bg-[#166FE5]"
-                            } text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60`}
-                            title={`Publicar directamente en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                            onClick={() => handlePublicar(pub.id!)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                            title="Marcar como publicado manualmente"
                           >
-                            <span>{publicandoMetaId === pub.id ? "⏳" : "🚀"}</span>
-                            <span className="truncate">
-                              {publicandoMetaId === pub.id
-                                ? "Publicando..."
-                                : `Publicar ${pub.plataforma === "instagram" ? "IG" : "FB"}`}
-                            </span>
+                            <span>📲</span> Publicar
                           </button>
-                        )}
+                        </div>
 
-                        {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                        {/* Fila 2: Gestión de la Programación */}
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleDispararMautic(pub.id!)}
-                            disabled={disparandoMauticId === pub.id}
-                            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
-                            title="Disparar campaña masiva en Mautic"
+                            onClick={() => handleAbrirProgramar(pub)}
+                            className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold py-1 px-2 transition cursor-pointer flex items-center justify-center gap-1"
+                            title="Cambiar fecha y hora programada"
                           >
-                            <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
-                            <span className="truncate">
-                              {disparandoMauticId === pub.id ? "Enviando..." : "Mautic"}
-                            </span>
+                            <span>⏰</span> Reagendar
                           </button>
-                        )}
 
-                        <button
-                          type="button"
-                          onClick={() => handlePublicar(pub.id!)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
-                          title="Marcar como publicado manualmente"
-                        >
-                          <span>📲</span> Publicar
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirProgramar(pub)}
-                          className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
-                          title="Reagendar fecha/hora"
-                        >
-                          ⏰
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDesprogramar(pub.id!)}
+                            className="flex-1 bg-gray-100 hover:bg-amber-50 text-carbon/80 hover:text-amber-800 border border-gray-200 hover:border-amber-300 rounded-lg text-xs font-bold py-1 px-2 transition cursor-pointer flex items-center justify-center gap-1"
+                            title="Quitar de la agenda y del envío automático (regresa a Revisión sin eliminar)"
+                          >
+                            <span>⏸️</span> Desprogramar
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -2874,6 +2945,22 @@ notify pgrst, 'reload schema';`;
                     <span>📲</span> Publicar Ahora
                   </button>
                 </div>
+
+                {pubProgramar.estado === "aprobado" && (
+                  <button
+                    type="button"
+                    disabled={guardandoProgramacion}
+                    onClick={async () => {
+                      const idTarget = pubProgramar.id!;
+                      setPubProgramar(null);
+                      await handleDesprogramar(idTarget);
+                    }}
+                    className="w-full bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                    title="Quitar esta publicación de la agenda programada (regresa a Pendientes de Revisión)"
+                  >
+                    <span>⏸️</span> Desprogramar (Quitar de la Agenda)
+                  </button>
+                )}
               </div>
             </div>
 

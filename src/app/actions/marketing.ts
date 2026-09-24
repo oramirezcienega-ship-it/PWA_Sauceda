@@ -641,6 +641,63 @@ export async function reprogramarPublicacion(
 }
 
 /**
+ * Desprograma una publicación: la retira de la agenda y del cron automático
+ * pasándola a estado "pendiente_revision", manteniendo todo su contenido, imágenes y prompts intactos.
+ */
+export async function desprogramarPublicacion(
+  id: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const ahoraIso = new Date().toISOString();
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        estado: "pendiente_revision",
+        updated_at: ahoraIso,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data: data as PublicacionProgramada };
+  } catch (err: any) {
+    console.error("Error en desprogramarPublicacion:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
+
+/**
+ * Desprograma múltiples publicaciones simultáneamente.
+ */
+export async function desprogramarPublicacionesMasivo(
+  ids: string[]
+): Promise<ActionResult<number>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const ahoraIso = new Date().toISOString();
+    const { error, count } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        estado: "pendiente_revision",
+        updated_at: ahoraIso,
+      })
+      .in("id", ids);
+
+    if (error) throw error;
+    return { success: true, data: count || ids.length };
+  } catch (err: any) {
+    console.error("Error en desprogramarPublicacionesMasivo:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
+
+/**
  * Limpia la URL de la imagen previa y vuelve a disparar n8n para regenerar el creativo con IA.
  */
 export async function regenerarCreativoPublicacion(
