@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import PrevisualizadorRedSocial from "@/components/PrevisualizadorRedSocial";
 import CalendarioMarketingOmnicanal from "@/components/CalendarioMarketingOmnicanal";
 import ModalConexionMeta from "@/components/ModalConexionMeta";
@@ -191,6 +191,14 @@ export default function PaginaPublicaciones() {
   const [filtrosFecha, setFiltrosFecha] = useState<string[]>([]);
   const [filtrosCargados, setFiltrosCargados] = useState(false);
 
+  // Densidad de visualización: número de columnas (3, 4 o 5 por fila)
+  const [numColumnas, setNumColumnas] = useState<number>(4);
+  const [textosExpandidos, setTextosExpandidos] = useState<Record<string, boolean>>({});
+
+  const toggleTextoExpandido = (id: string) => {
+    setTextosExpandidos((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   // Restaurar filtros guardados en localStorage al iniciar
   useEffect(() => {
     try {
@@ -202,6 +210,11 @@ export default function PaginaPublicaciones() {
         if (Array.isArray(parsed.formatos)) setFiltrosFormato(parsed.formatos);
         if (Array.isArray(parsed.temas)) setFiltrosTema(parsed.temas);
         if (Array.isArray(parsed.fechas)) setFiltrosFecha(parsed.fechas);
+      }
+      const colsGuardadas = localStorage.getItem("crm_sauceda_publicaciones_cols");
+      if (colsGuardadas) {
+        const n = parseInt(colsGuardadas, 10);
+        if (n === 3 || n === 4 || n === 5) setNumColumnas(n);
       }
     } catch (e) {
       console.warn("Aviso al restaurar filtros de publicaciones:", e);
@@ -224,10 +237,11 @@ export default function PaginaPublicaciones() {
           fechas: filtrosFecha,
         })
       );
+      localStorage.setItem("crm_sauceda_publicaciones_cols", String(numColumnas));
     } catch (e) {
       console.warn("Aviso al guardar filtros de publicaciones:", e);
     }
-  }, [filtrosEstado, filtrosPlataforma, filtrosFormato, filtrosTema, filtrosFecha, filtrosCargados]);
+  }, [filtrosEstado, filtrosPlataforma, filtrosFormato, filtrosTema, filtrosFecha, numColumnas, filtrosCargados]);
 
   // Handlers para togglear filtros
   const handleToggleFiltro = (
@@ -249,6 +263,16 @@ export default function PaginaPublicaciones() {
       localStorage.removeItem("crm_sauceda_publicaciones_filtros_v2");
     } catch {}
   };
+
+  const gridColsClass = useMemo(() => {
+    if (numColumnas === 3) {
+      return "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5";
+    }
+    if (numColumnas === 5) {
+      return "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5";
+    }
+    return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4";
+  }, [numColumnas]);
 
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
   
@@ -1035,15 +1059,19 @@ notify pgrst, 'reload schema';`;
   };
 
   const formatFecha = (fechaStr: string) => {
-    const d = new Date(fechaStr);
-    return d.toLocaleString("es-MX", {
-      timeZone: "America/Mexico_City",
-      weekday: "long",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    try {
+      const d = new Date(fechaStr);
+      return d.toLocaleString("es-MX", {
+        timeZone: "America/Mexico_City",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return fechaStr;
+    }
   };
 
   const getPlataformaBadge = (plataforma: string) => {
@@ -1194,8 +1222,49 @@ notify pgrst, 'reload schema';`;
               />
             </div>
 
-            {/* Contador y Selección masiva */}
-            <div className="flex flex-wrap items-center gap-4 ml-auto">
+            {/* Densidad de Columnas (3, 4 o 5) + Contador + Selección masiva */}
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 ml-auto">
+              {/* Selector de Densidad de Columnas */}
+              <div className="flex items-center bg-gray-100/90 p-0.5 rounded-xl border border-gray-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-carbon/50 px-2 uppercase hidden md:inline">Columnas:</span>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(3)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 3
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="3 columnas por fila (tarjetas amplias)"
+                >
+                  3 cols
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(4)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 4
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="4 columnas por fila (balance óptimo)"
+                >
+                  4 cols
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(5)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 5
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="5 columnas por fila (máxima densidad)"
+                >
+                  5 cols
+                </button>
+              </div>
+
               <div className="text-xs text-carbon/60 font-medium">
                 Mostrando:{" "}
                 <span className="font-bold text-verde-profundo text-sm">
@@ -1407,67 +1476,224 @@ notify pgrst, 'reload schema';`;
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className={gridColsClass}>
             {publicacionesFiltradas.map((pub) => {
               const guionActivo = guionesExpandidos[pub.id!] || false;
               const estaSeleccionado = seleccionados.includes(pub.id!);
+              const estaExpandido = textosExpandidos[pub.id!] || false;
+              const mediaUrl = pub.url_imagen && pub.url_imagen.length > 5
+                ? (pub.url_imagen.startsWith("http") || pub.url_imagen.startsWith("data:")
+                    ? pub.url_imagen
+                    : `https://${pub.url_imagen}`)
+                : null;
+              const esVideo = mediaUrl ? Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i)) : false;
+              const esBannerSvg = mediaUrl ? Boolean(mediaUrl.includes("generar-banner")) : false;
+
               return (
                 <div
                   key={pub.id}
-                  className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col shadow-xs ${
-                    estaSeleccionado ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-md" :
-                    pub.estado === "pendiente_revision" ? "border-dorado/30 hover:border-dorado/60 hover:shadow-md" :
-                    pub.estado === "aprobado" ? "border-emerald-500/30 hover:border-emerald-500/60" :
-                    pub.estado === "rechazado" ? "border-red-500/20 opacity-90" : "border-carbon/10 bg-gray-50/50"
+                  className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col shadow-xs overflow-hidden ${
+                    estaSeleccionado
+                      ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-md"
+                      : pub.estado === "pendiente_revision"
+                      ? "border-dorado/30 hover:border-dorado/60 hover:shadow-md"
+                      : pub.estado === "aprobado"
+                      ? "border-emerald-500/30 hover:border-emerald-500/60 hover:shadow-md"
+                      : pub.estado === "rechazado"
+                      ? "border-red-500/20 opacity-90"
+                      : "border-carbon/10 bg-gray-50/30 hover:shadow-sm"
                   }`}
                 >
-                  <div className="px-6 py-4 border-b border-carbon/5 flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3">
+                  {/* Cabecera compacta de la Tarjeta */}
+                  <div className="px-3.5 py-2.5 border-b border-carbon/5 flex items-center justify-between gap-1.5 bg-gray-50/50">
+                    <div className="flex items-center gap-2 min-w-0">
                       <input
                         type="checkbox"
                         checked={estaSeleccionado}
                         onChange={() => handleToggleSeleccion(pub.id!)}
-                        className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                        className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer shrink-0"
                         title="Seleccionar para acciones masivas"
                       />
-                      {getPlataformaBadge(pub.plataforma)}
-                      <span className="text-xs bg-carbon/5 text-carbon/70 font-semibold px-2 py-0.5 rounded-md">
+                      <div className="shrink-0 scale-95 origin-left">
+                        {getPlataformaBadge(pub.plataforma)}
+                      </div>
+                      <span className="text-[11px] bg-carbon/5 text-carbon/70 font-semibold px-1.5 py-0.5 rounded shrink-0">
                         {getFormatoIcon(pub.tipo_formato)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[11px] font-mono ${pub.estado === "publicado" ? "text-blue-700 font-bold" : "text-carbon/50"}`}>
-                        {pub.estado === "publicado" ? "📲 Enviada: " : "⏰ "}
-                        {formatFecha((pub.estado === "publicado" && pub.publicado_en) ? pub.publicado_en : pub.fecha_programacion)}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span
+                        className={`text-[10px] font-mono truncate max-w-[125px] ${
+                          pub.estado === "publicado" ? "text-blue-700 font-bold" : "text-carbon/60"
+                        }`}
+                        title={formatFecha(
+                          (pub.estado === "publicado" && pub.publicado_en)
+                            ? pub.publicado_en
+                            : pub.fecha_programacion
+                        )}
+                      >
+                        {formatFecha(
+                          (pub.estado === "publicado" && pub.publicado_en)
+                            ? pub.publicado_en
+                            : pub.fecha_programacion
+                        )}
                       </span>
+
                       {pub.estado === "pendiente_revision" && (
-                        <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Revisión</span>
+                        <span className="bg-amber-500/15 text-amber-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0">
+                          Revisión
+                        </span>
                       )}
                       {pub.estado === "aprobado" && (
-                        <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded" title="Listo para publicar o programar">Aprobado</span>
+                        <span
+                          className="bg-emerald-500/15 text-emerald-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0"
+                          title="Listo para publicar o programar"
+                        >
+                          Aprobado
+                        </span>
                       )}
                       {pub.estado === "rechazado" && (
-                        <span className="bg-red-500/10 text-red-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Rechazado</span>
+                        <span className="bg-red-500/15 text-red-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0">
+                          Rechazado
+                        </span>
                       )}
                       {pub.estado === "publicado" && (
-                        <span className="bg-blue-600 text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
-                          <span>✓</span> Enviada
+                        <span className="bg-blue-600 text-white text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-2xs shrink-0 flex items-center gap-0.5">
+                          ✓ Enviada
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="p-6 flex-1 flex flex-col gap-5">
+                  {/* Imagen / Visual / Placeholder */}
+                  {mediaUrl ? (
+                    <div className="relative aspect-[16/10] bg-black overflow-hidden group">
+                      {regenerandoIds[pub.id!] && (
+                        <div className="absolute inset-0 bg-carbon/85 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20 p-2 text-center animate-in fade-in">
+                          <div className="w-7 h-7 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
+                          <span className="text-[11px] font-bold text-dorado">Generando arte Flux...</span>
+                        </div>
+                      )}
+                      {esVideo ? (
+                        <video
+                          src={mediaUrl}
+                          controls
+                          preload="metadata"
+                          className="w-full h-full object-contain mx-auto"
+                        />
+                      ) : (
+                        <img
+                          src={mediaUrl}
+                          alt={pub.titulo}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      )}
+                      <div className="absolute top-2 right-2 bg-carbon/80 backdrop-blur-md text-crema text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 flex items-center gap-1 shadow-sm">
+                        <span>{esVideo ? "🎬" : "🎨"}</span>
+                        <span>{esVideo ? "Video IA" : esBannerSvg ? "Banner SVG" : "Flux"}</span>
+                      </div>
+                      {/* Botones rápidos en hover sobre la foto */}
+                      <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <a
+                          href={CANVA_DESIGN_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => handleCopiarYNotificar(pub)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          title="Abrir en Canva"
+                        >
+                          🎨 Canva
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          title="Copiar foto"
+                        >
+                          📋 Copiar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReemplazarArte(pub.id!)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          title="Subir Arte de Canva"
+                        >
+                          📁 Arte
+                        </button>
+                        <button
+                          type="button"
+                          disabled={regenerandoIds[pub.id!]}
+                          onClick={() => handleRegenerarCreativo(pub.id!)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                          title="Regenerar con IA"
+                        >
+                          🔄
+                        </button>
+                        <a
+                          href={mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-white/90 hover:bg-white text-carbon text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all"
+                          title="Ver en HD"
+                        >
+                          🔍
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative aspect-[16/10] border-b border-dashed border-dorado/30 bg-dorado/5 flex flex-col items-center justify-center p-3 text-center">
+                      {regenerandoIds[pub.id!] ? (
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="w-7 h-7 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
+                          <span className="text-[11px] font-bold text-dorado">Generando arte con IA...</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-carbon/50">
+                          <span className="text-2xl mb-1">🖼️</span>
+                          <span className="text-[11px] font-medium">Sin imagen</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRegenerarCreativo(pub.id!)}
+                            className="mt-1.5 bg-verde-profundo text-crema text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
+                          >
+                            <span>✨</span> Generar con IA (Flux)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cuerpo de la publicación */}
+                  <div className="p-3.5 flex-1 flex flex-col gap-2.5">
                     <div>
-                      <h3 className="font-bold text-verde-profundo text-lg mb-2">{pub.titulo}</h3>
-                      <div className="bg-crema/10 border border-dorado/20 rounded-xl p-4 relative group">
-                        <p className="text-sm text-carbon whitespace-pre-wrap leading-relaxed font-cuerpo pr-8">
+                      <h3
+                        className="font-bold text-verde-profundo text-xs sm:text-sm leading-snug line-clamp-2"
+                        title={pub.titulo}
+                      >
+                        {pub.titulo}
+                      </h3>
+                      <div className="mt-1.5 bg-crema/10 border border-dorado/20 rounded-xl p-2.5 relative group">
+                        <p
+                          className={`text-xs text-carbon whitespace-pre-wrap leading-relaxed font-cuerpo pr-5 ${
+                            estaExpandido ? "" : "line-clamp-3"
+                          }`}
+                        >
                           {pub.contenido}
                         </p>
+                        {pub.contenido && pub.contenido.length > 120 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTextoExpandido(pub.id!)}
+                            className="mt-1 text-[10px] font-bold text-verde-profundo hover:underline cursor-pointer block"
+                          >
+                            {estaExpandido ? "▲ Ver menos" : "▼ Ver más texto"}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleCopiarTexto(pub.contenido)}
-                          className="absolute right-3 top-3 p-1.5 rounded-lg bg-white/80 hover:bg-white text-carbon/50 hover:text-verde-profundo border border-carbon/10 shadow-xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          className="absolute right-2 top-2 p-1 rounded bg-white/80 hover:bg-white text-carbon/50 hover:text-verde-profundo border border-carbon/10 shadow-2xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                           title="Copiar Copy"
                         >
                           📋
@@ -1475,140 +1701,19 @@ notify pgrst, 'reload schema';`;
                       </div>
                     </div>
 
-                    {pub.url_imagen && pub.url_imagen.length > 5 && (() => {
-                      const mediaUrl = pub.url_imagen.startsWith("http") || pub.url_imagen.startsWith("data:")
-                        ? pub.url_imagen
-                        : `https://${pub.url_imagen}`;
-                      const esVideo = Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i));
-                      const esBannerSvg = Boolean(mediaUrl.includes("generar-banner"));
-
-                      return (
-                        <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group bg-black">
-                          {regenerandoIds[pub.id!] && (
-                            <div className="absolute inset-0 bg-carbon/85 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20 p-4 text-center animate-in fade-in">
-                              <div className="w-9 h-9 border-3 border-dorado border-t-transparent rounded-full animate-spin mb-2" />
-                              <span className="text-xs font-bold text-dorado">Generando nuevo arte con IA...</span>
-                              <span className="text-[10px] text-white/70 mt-1">El modelo Flux está renderizando la foto fotorrealista en n8n</span>
-                            </div>
-                          )}
-                          {esVideo ? (
-                            <video
-                              src={mediaUrl}
-                              controls
-                              preload="metadata"
-                              className="w-full h-64 object-contain mx-auto"
-                            />
-                          ) : (
-                            <img
-                              src={mediaUrl}
-                              alt={pub.titulo}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                          )}
-                          <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
-                            <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : (esBannerSvg ? "Banner Compuesto SVG" : "Fotografía Limpia (Flux)")}
-                          </div>
-                          <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                            <a
-                              href={CANVA_DESIGN_URL}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => handleCopiarYNotificar(pub)}
-                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                              title="Copiar contenido y abrir tu plantilla en Canva"
-                            >
-                              🎨 Canva
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                              title="Copiar foto al portapapeles para pegarla en Canva con Ctrl + V"
-                            >
-                              📋 Copiar Foto
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReemplazarArte(pub.id!)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                              title="Subir archivo (.png/.jpg) descargado de Canva a este post"
-                            >
-                              📁 Subir Arte
-                            </button>
-                            {esBannerSvg && (
-                              <button
-                                type="button"
-                                onClick={() => handleRestaurarFotoLimpia(pub.id!)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                                title="Remover banner SVG y restaurar la foto original limpia de Flux"
-                              >
-                                🧹 Foto Limpia
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              disabled={regenerandoIds[pub.id!]}
-                              onClick={() => handleRegenerarCreativo(pub.id!)}
-                              className={`text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer ${
-                                regenerandoIds[pub.id!]
-                                  ? "bg-amber-800 opacity-60 cursor-not-allowed"
-                                  : "bg-amber-600/90 hover:bg-amber-600"
-                              }`}
-                              title="Generar otra variante de imagen/video"
-                            >
-                              <span className={regenerandoIds[pub.id!] ? "animate-spin" : ""}>🔄</span>
-                              {regenerandoIds[pub.id!] ? "Generando..." : "Regenerar"}
-                            </button>
-                            <a
-                              href={mediaUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
-                            >
-                              🔍 HD
-                            </a>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {(!pub.url_imagen || pub.url_imagen.length <= 5) && (
-                      <div className="relative rounded-2xl border-2 border-dashed border-dorado/40 p-6 flex flex-col items-center justify-center text-center bg-dorado/5 min-h-[140px]">
-                        {regenerandoIds[pub.id!] ? (
-                          <div className="flex flex-col items-center justify-center">
-                            <div className="w-9 h-9 border-3 border-dorado border-t-transparent rounded-full animate-spin mb-2" />
-                            <span className="text-xs font-bold text-dorado">Generando nuevo arte con IA...</span>
-                            <span className="text-[10px] text-carbon/60 mt-1">El modelo Flux está renderizando la foto fotorrealista en n8n</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-carbon/50">
-                            <span className="text-3xl mb-1">🖼️</span>
-                            <span className="text-xs font-semibold">Sin imagen cargada</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRegenerarCreativo(pub.id!)}
-                              className="mt-2 bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 rounded-lg shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
-                            >
-                              <span>✨</span> Generar con IA (Flux)
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
+                    {/* Guion de Video (si existe) */}
                     {pub.guion_video && (
-                      <div className="border border-carbon/10 rounded-xl overflow-hidden">
+                      <div className="border border-carbon/10 rounded-lg overflow-hidden">
                         <button
                           onClick={() => toggleGuion(pub.id!)}
-                          className="w-full bg-carbon/5 hover:bg-carbon/10 px-4 py-2.5 flex items-center justify-between text-xs font-bold text-carbon/70 transition-all cursor-pointer"
+                          className="w-full bg-carbon/5 hover:bg-carbon/10 px-2.5 py-1.5 flex items-center justify-between text-[11px] font-bold text-carbon/70 transition-all cursor-pointer"
                         >
-                          <span>🎥 {guionActivo ? "Ocultar Guion" : "Ver Guion de Video (Reel/TikTok)"}</span>
+                          <span>🎥 {guionActivo ? "Ocultar Guion" : "Ver Guion Video"}</span>
                           <span>{guionActivo ? "▲" : "▼"}</span>
                         </button>
                         {guionActivo && (
-                          <div className="p-4 bg-gray-50 border-t border-carbon/10">
-                            <p className="text-xs text-carbon/80 whitespace-pre-wrap leading-relaxed font-mono">
+                          <div className="p-2.5 bg-gray-50 border-t border-carbon/10 max-h-40 overflow-y-auto">
+                            <p className="text-[11px] text-carbon/80 whitespace-pre-wrap leading-relaxed font-mono">
                               {pub.guion_video}
                             </p>
                           </div>
@@ -1616,230 +1721,220 @@ notify pgrst, 'reload schema';`;
                       </div>
                     )}
 
+                    {/* Sugerencia Visual (Prompt / Canva) */}
                     {pub.sugerencia_visual && (
-                      <div className="text-xs bg-amber-500/5 border border-amber-500/10 rounded-xl p-3">
-                        <span className="font-bold text-amber-800 block mb-1">💡 Sugerencia Visual (Prompt / Canva):</span>
-                        <p className="text-carbon/70 italic leading-snug">{pub.sugerencia_visual}</p>
+                      <div className="text-[11px] bg-amber-500/5 border border-amber-500/10 rounded-lg p-2">
+                        <span className="font-bold text-amber-800 block text-[10px] uppercase">
+                          💡 Prompt Visual:
+                        </span>
+                        <p className="text-carbon/70 italic leading-snug line-clamp-2" title={pub.sugerencia_visual}>
+                          {pub.sugerencia_visual}
+                        </p>
                       </div>
                     )}
 
-                    {((pub.leads_generados !== undefined && pub.leads_generados > 0) || (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
-                      <div className="text-xs bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <span className="font-bold text-emerald-800 block mb-1">📊 Rendimiento de Campaña (API Sincronizado):</span>
-                          <div className="flex flex-wrap gap-3 text-carbon/80 font-mono text-[11px]">
-                            <span>💵 Inversión: <strong>${pub.inversion_ads || 0} MXN</strong></span>
-                            <span>👥 Prospectos: <strong>{pub.leads_generados || 0}</strong></span>
-                            <span>🎯 CPL: <strong>${pub.cpl || 0} MXN</strong></span>
-                          </div>
+                    {/* Métricas Ads si existen */}
+                    {((pub.leads_generados !== undefined && pub.leads_generados > 0) ||
+                      (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
+                      <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex items-center justify-between gap-1">
+                        <div className="flex flex-wrap gap-2 text-carbon/80 font-mono">
+                          <span>${pub.inversion_ads || 0}</span>
+                          <span>👥 {pub.leads_generados || 0}</span>
+                          <span>CPL ${pub.cpl || 0}</span>
                         </div>
-                        <div className="bg-emerald-600 text-white font-bold px-2.5 py-1 rounded-lg text-[10px]">
-                          ⭐ Score: {pub.roi_score || 0}/100
-                        </div>
+                        <span className="bg-emerald-600 text-white font-bold px-1.5 py-0.5 rounded text-[9px]">
+                          ⭐ {pub.roi_score || 0}
+                        </span>
                       </div>
                     )}
 
+                    {/* Observaciones de Rechazo si existen */}
                     {pub.estado === "rechazado" && pub.notas_revision && (
-                      <div className="text-xs bg-red-500/5 border border-red-500/10 rounded-xl p-3">
-                        <span className="font-bold text-red-800 block mb-1">❌ Observaciones de Rechazo:</span>
-                        <p className="text-carbon/70 leading-snug">{pub.notas_revision}</p>
+                      <div className="text-[11px] bg-red-500/5 border border-red-500/10 rounded-lg p-2">
+                        <span className="font-bold text-red-800 block text-[10px]">❌ Motivo de Rechazo:</span>
+                        <p className="text-carbon/70 leading-snug line-clamp-2">{pub.notas_revision}</p>
                       </div>
                     )}
                   </div>
 
-                  <div className="px-6 py-4 bg-gray-50/50 border-t border-carbon/5 flex flex-wrap gap-2 justify-end items-center rounded-b-2xl">
-                    <button
-                      onClick={() => handleEliminarIndividual(pub.id!)}
-                      className="bg-white hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 font-semibold text-xs px-3 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                      title="Eliminar esta publicación permanentemente"
-                    >
-                      🗑️ Eliminar
-                    </button>
-
-                    <a
-                      href={CANVA_DESIGN_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => handleCopiarYNotificar(pub)}
-                      className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-                      title="Copiar contenido de este post y abrir tu plantilla en Canva"
-                    >
-                      <span>🎨</span> Canva
-                      {copiadoId === pub.id && (
-                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold animate-in fade-in">
-                          ¡Copiado!
-                        </span>
-                      )}
-                    </a>
-
-                    {pub.url_imagen && (
-                      <button
-                        type="button"
-                        onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
-                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-                        title="Copiar foto al portapapeles para pegarla en Canva con Ctrl + V"
-                      >
-                        <span>📋</span> {copiandoFotoId === pub.id ? "Copiando..." : "Copiar Foto"}
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleReemplazarArte(pub.id!)}
-                      className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-                      title="Subir archivo (.png/.jpg) descargado de Canva a este post"
-                    >
-                      <span>📁</span> Subir Arte
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const actual = publicaciones.find((p) => p.id === pub.id) || pub;
-                        setPubPrevisualizar(actual);
-                      }}
-                      className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                      title="Previsualizar cómo se verá en la red social"
-                    >
-                      <span>👁️</span> Previsualizar
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleAbrirReplicar(pub)}
-                      className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                      title="Adaptar esta publicación a otras redes manteniendo el mismo arte visual"
-                    >
-                      <span>🔄</span> Replicar
-                    </button>
-
-                    <button
-                      onClick={() => setPubEditando(pub)}
-                      className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/80 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
-                    >
-                      ✏️ Editar
-                    </button>
-
+                  {/* Pie de la tarjeta y Botonera Optimizada */}
+                  <div className="px-3.5 py-2.5 bg-gray-50/70 border-t border-carbon/5 flex flex-col gap-2 rounded-b-2xl mt-auto">
+                    {/* Fila 1: Acciones Principales según Estado */}
                     {pub.estado === "pendiente_revision" && (
-                      <>
+                      <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => handleRechazar(pub.id!)}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
+                          type="button"
+                          onClick={() => handleAprobar(pub.id!)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
                         >
-                          ✕ Rechazar
+                          <span>✓</span> Aprobar
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAbrirProgramar(pub)}
-                          className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                          title="Elegir fecha y hora exacta para este post"
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
                         >
                           <span>⏰</span> Programar
                         </button>
-                        <button
-                          onClick={() => handleAprobar(pub.id!)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
-                        >
-                          ✓ Aprobar
-                        </button>
-                      </>
+                      </div>
                     )}
 
                     {pub.estado === "aprobado" && (
-                      <>
-                        <button
-                          onClick={() => handleRechazar(pub.id!)}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
-                        >
-                          ✕ Rechazar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirProgramar(pub)}
-                          className="bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                          title="Reagendar fecha y hora de publicación"
-                        >
-                          <span>⏰</span> Reagendar
-                        </button>
+                      <div className="flex items-center gap-1.5">
                         {(pub.plataforma === "facebook" || pub.plataforma === "instagram") && (
                           <button
                             type="button"
                             onClick={() => handlePublicarDirectoMeta(pub.id!, pub.plataforma)}
                             disabled={publicandoMetaId === pub.id}
-                            className={`${
+                            className={`flex-1 ${
                               pub.plataforma === "instagram"
                                 ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
                                 : "bg-[#1877F2] hover:bg-[#166FE5]"
-                            } text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60`}
-                            title="Publicar directamente en la red social usando Meta Graph API"
+                            } text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60`}
+                            title={`Publicar directamente en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
                           >
                             <span>{publicandoMetaId === pub.id ? "⏳" : "🚀"}</span>
-                            <span>
+                            <span className="truncate">
                               {publicandoMetaId === pub.id
                                 ? "Publicando..."
-                                : `Publicar en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                                : `Publicar ${pub.plataforma === "instagram" ? "IG" : "FB"}`}
                             </span>
                           </button>
                         )}
+
                         {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
                           <button
                             type="button"
                             onClick={() => handleDispararMautic(pub.id!)}
                             disabled={disparandoMauticId === pub.id}
-                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
-                            title="Disparar campaña masiva en Mautic excluyendo contactos inhabilitados"
+                            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
+                            title="Disparar campaña masiva en Mautic"
                           >
                             <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
-                            <span>
-                              {disparandoMauticId === pub.id
-                                ? "Disparando..."
-                                : "Disparar Campaña Mautic"}
+                            <span className="truncate">
+                              {disparandoMauticId === pub.id ? "Enviando..." : "Mautic"}
                             </span>
                           </button>
                         )}
+
                         <button
+                          type="button"
                           onClick={() => handlePublicar(pub.id!)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          title="Marcar como publicado manualmente"
                         >
-                          📲 Marcar Publicado
+                          <span>📲</span> Publicar
                         </button>
-                      </>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirProgramar(pub)}
+                          className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
+                          title="Reagendar fecha/hora"
+                        >
+                          ⏰
+                        </button>
+                      </div>
                     )}
 
                     {pub.estado === "publicado" && (
-                      <>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-xs font-bold text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+                          <span>✓</span> Enviada
+                        </span>
                         {pub.url_publicacion && pub.plataforma !== "mautic" && pub.plataforma !== "email" && (
                           <a
                             href={pub.url_publicacion}
                             target="_blank"
                             rel="noreferrer"
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                            className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 truncate"
                           >
-                            <span>🔗</span> Ver en {pub.plataforma === "instagram" ? "Instagram" : "Facebook"} ↗
+                            <span>🔗</span> Ver post ↗
                           </a>
                         )}
-                        {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
-                          <span className="bg-orange-50 text-orange-700 border border-orange-200 font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-2xs">
-                            <span>✓</span> Campaña Enviada en Mautic
-                          </span>
-                        )}
                         <button
+                          type="button"
                           onClick={() => handleReconsiderar(pub.id!)}
-                          className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/70 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
+                          className="text-[11px] text-carbon/60 hover:text-carbon hover:underline cursor-pointer ml-auto"
+                          title="Regresar a revisión"
                         >
-                          🔄 Regresar a Revisión
+                          Regresar
                         </button>
-                      </>
+                      </div>
                     )}
 
-                    {pub.estado === "rechazado" && (
+                    {/* Fila 2: Barra de Acciones Utilitarias Compactas */}
+                    <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-gray-200/60 text-xs">
                       <button
-                        onClick={() => handleReconsiderar(pub.id!)}
-                        className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/70 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
+                        type="button"
+                        onClick={() => {
+                          const actual = publicaciones.find((p) => p.id === pub.id) || pub;
+                          setPubPrevisualizar(actual);
+                        }}
+                        className="px-2 py-1 text-emerald-800 hover:bg-emerald-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        title="Previsualizar en simulador móvil"
                       >
-                        🔄 Regresar a Revisión
+                        <span>👁️</span> <span className="hidden sm:inline">Previs.</span>
                       </button>
-                    )}
+
+                      <button
+                        type="button"
+                        onClick={() => setPubEditando(pub)}
+                        className="px-2 py-1 text-carbon/80 hover:bg-gray-200/60 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        title="Editar publicación"
+                      >
+                        <span>✏️</span> <span className="hidden sm:inline">Editar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirReplicar(pub)}
+                        className="px-2 py-1 text-amber-800 hover:bg-amber-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        title="Replicar a otras redes"
+                      >
+                        <span>🔄</span> <span className="hidden sm:inline">Replicar</span>
+                      </button>
+
+                      <a
+                        href={CANVA_DESIGN_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleCopiarYNotificar(pub)}
+                        className="px-2 py-1 text-purple-700 hover:bg-purple-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        title="Abrir en Canva"
+                      >
+                        <span>🎨</span> <span className="hidden sm:inline">Canva</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => handleReemplazarArte(pub.id!)}
+                        className="px-2 py-1 text-blue-700 hover:bg-blue-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        title="Subir archivo (.png/.jpg) descargado de Canva"
+                      >
+                        <span>📁</span> <span className="hidden sm:inline">Arte</span>
+                      </button>
+
+                      {pub.estado !== "publicado" && (
+                        <button
+                          type="button"
+                          onClick={() => handleRechazar(pub.id!)}
+                          className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-md font-semibold transition cursor-pointer"
+                          title="Rechazar publicación"
+                        >
+                          ✕
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarIndividual(pub.id!)}
+                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-md font-semibold transition cursor-pointer ml-auto"
+                        title="Eliminar publicación"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
