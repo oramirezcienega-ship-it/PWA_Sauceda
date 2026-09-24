@@ -38,7 +38,7 @@ export default function PaginaPublicaciones() {
   const obtenerManana = () => {
     const hoy = new Date();
     hoy.setDate(hoy.getDate() + 1);
-    return hoy.toISOString().split("T")[0];
+    return hoy.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
   };
   const [fechaIA, setFechaIA] = useState(obtenerManana());
 
@@ -166,26 +166,27 @@ notify pgrst, 'reload schema';`;
 
     // Filtro por Fecha
     if (filtroFecha !== "todos" && pub.fecha_programacion) {
-      const fechaPub = pub.fecha_programacion.split("T")[0];
+      const dPub = new Date(pub.fecha_programacion);
+      const fechaPub = dPub.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       const hoyObj = new Date();
-      const hoyStr = hoyObj.toISOString().split("T")[0];
+      const hoyStr = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       
       if (filtroFecha === "hoy" && fechaPub !== hoyStr) return false;
       if (filtroFecha === "manana") {
         const mananaObj = new Date();
         mananaObj.setDate(mananaObj.getDate() + 1);
-        const mananaStr = mananaObj.toISOString().split("T")[0];
+        const mananaStr = mananaObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
         if (fechaPub !== mananaStr) return false;
       }
       if (filtroFecha === "esta_semana") {
         const hoy = new Date();
         const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
         const finSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6));
-        const pubDate = new Date(fechaPub);
+        const pubDate = new Date(pub.fecha_programacion);
         if (pubDate < inicioSemana || pubDate > finSemana) return false;
       }
       if (filtroFecha === "este_mes") {
-        const mesActual = new Date().toISOString().slice(0, 7);
+        const mesActual = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" }).slice(0, 7);
         if (!fechaPub.startsWith(mesActual)) return false;
       }
     }
@@ -210,7 +211,13 @@ notify pgrst, 'reload schema';`;
   const handleAbrirProgramar = (pub: PublicacionProgramada) => {
     setPubProgramar(pub);
     if (pub.fecha_programacion) {
-      setFechaHoraProgramar(pub.fecha_programacion.substring(0, 16));
+      const d = new Date(pub.fecha_programacion);
+      if (isNaN(d.getTime())) {
+        setFechaHoraProgramar("");
+      } else {
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        setFechaHoraProgramar(new Date(d.getTime() - tzOffset).toISOString().slice(0, 16));
+      }
     } else {
       const manana = new Date();
       manana.setDate(manana.getDate() + 1);
@@ -631,6 +638,7 @@ notify pgrst, 'reload schema';`;
   const formatFecha = (fechaStr: string) => {
     const d = new Date(fechaStr);
     return d.toLocaleString("es-MX", {
+      timeZone: "America/Mexico_City",
       weekday: "long",
       day: "numeric",
       month: "short",
@@ -1451,7 +1459,16 @@ notify pgrst, 'reload schema';`;
                   <input
                     type="datetime-local"
                     required
-                    value={pubEditando.fecha_programacion ? pubEditando.fecha_programacion.substring(0, 16) : ""}
+                    value={
+                      pubEditando.fecha_programacion
+                        ? (() => {
+                            const d = new Date(pubEditando.fecha_programacion);
+                            if (isNaN(d.getTime())) return "";
+                            const tzOffset = d.getTimezoneOffset() * 60000;
+                            return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+                          })()
+                        : ""
+                    }
                     onChange={(e) => setPubEditando({ ...pubEditando, fecha_programacion: e.target.value })}
                     className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
                   />

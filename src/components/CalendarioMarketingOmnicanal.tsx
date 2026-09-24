@@ -87,7 +87,10 @@ export default function CalendarioMarketingOmnicanal({
     publicaciones.forEach((pub) => {
       if (!pub.fecha_programacion) return;
       const f = new Date(pub.fecha_programacion);
-      if (f.getMonth() === mesActual && f.getFullYear() === anioActual) {
+      // Extraer año y mes en la zona horaria de México
+      const fechaLocalStr = f.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+      const [anio, mes] = fechaLocalStr.split("-").map(Number);
+      if (mes - 1 === mesActual && anio === anioActual) {
         conteos.todos = (conteos.todos || 0) + 1;
         if (pub.plataforma === "email" || pub.plataforma === "mautic") {
           conteos.mautic = (conteos.mautic || 0) + 1;
@@ -100,13 +103,15 @@ export default function CalendarioMarketingOmnicanal({
     return conteos;
   }, [publicaciones, mesActual, anioActual]);
 
-  // Agrupar publicaciones por fecha (formato YYYY-MM-DD)
+  // Agrupar publicaciones por fecha (formato YYYY-MM-DD en hora de México)
   const publicacionesPorDia = useMemo(() => {
     const mapa = new Map<string, PublicacionProgramada[]>();
 
     publicacionesFiltradas.forEach((pub) => {
       if (!pub.fecha_programacion) return;
-      const clave = pub.fecha_programacion.split("T")[0];
+      // Convertir siempre a la fecha local de México para no desfasar por UTC
+      const f = new Date(pub.fecha_programacion);
+      const clave = f.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       if (!mapa.has(clave)) {
         mapa.set(clave, []);
       }
@@ -139,14 +144,16 @@ export default function CalendarioMarketingOmnicanal({
       publicaciones: PublicacionProgramada[];
     }> = [];
 
-    const hoyStr = new Date().toISOString().split("T")[0];
+    // Fecha de hoy en formato YYYY-MM-DD en la zona horaria de México (evita desfase UTC de +6 hrs después de las 6 PM)
+    const hoyStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
 
     // Días del mes anterior para rellenar la primera fila
     const ultimoDiaMesAnterior = new Date(anioActual, mesActual, 0).getDate();
+    const mesPrev = mesActual === 0 ? 12 : mesActual;
+    const anioPrev = mesActual === 0 ? anioActual - 1 : anioActual;
     for (let i = diaInicioSemana - 1; i >= 0; i--) {
       const diaNum = ultimoDiaMesAnterior - i;
-      const d = new Date(anioActual, mesActual - 1, diaNum);
-      const fechaStr = d.toISOString().split("T")[0];
+      const fechaStr = `${anioPrev}-${String(mesPrev).padStart(2, "0")}-${String(diaNum).padStart(2, "0")}`;
       celdas.push({
         fechaStr,
         diaNumero: diaNum,
@@ -158,8 +165,7 @@ export default function CalendarioMarketingOmnicanal({
 
     // Días del mes actual
     for (let dia = 1; dia <= totalDias; dia++) {
-      const d = new Date(anioActual, mesActual, dia);
-      const fechaStr = d.toISOString().split("T")[0];
+      const fechaStr = `${anioActual}-${String(mesActual + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
       celdas.push({
         fechaStr,
         diaNumero: dia,
@@ -171,9 +177,10 @@ export default function CalendarioMarketingOmnicanal({
 
     // Días del siguiente mes para completar la cuadrícula de 7 columnas
     const celdasRestantes = (7 - (celdas.length % 7)) % 7;
+    const mesNext = mesActual === 11 ? 1 : mesActual + 2;
+    const anioNext = mesActual === 11 ? anioActual + 1 : anioActual;
     for (let dia = 1; dia <= celdasRestantes; dia++) {
-      const d = new Date(anioActual, mesActual + 1, dia);
-      const fechaStr = d.toISOString().split("T")[0];
+      const fechaStr = `${anioNext}-${String(mesNext).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
       celdas.push({
         fechaStr,
         diaNumero: dia,
@@ -223,7 +230,12 @@ export default function CalendarioMarketingOmnicanal({
   const formatHora = (fechaIso: string) => {
     try {
       const d = new Date(fechaIso);
-      return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: true });
+      return d.toLocaleTimeString("es-MX", {
+        timeZone: "America/Mexico_City",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
     } catch {
       return "";
     }
@@ -233,7 +245,13 @@ export default function CalendarioMarketingOmnicanal({
   const handleAbrirDetalle = (pub: PublicacionProgramada) => {
     setPubSeleccionada(pub);
     if (pub.fecha_programacion) {
-      setNuevaFechaHora(pub.fecha_programacion.substring(0, 16));
+      const d = new Date(pub.fecha_programacion);
+      if (isNaN(d.getTime())) {
+        setNuevaFechaHora("");
+      } else {
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        setNuevaFechaHora(new Date(d.getTime() - tzOffset).toISOString().slice(0, 16));
+      }
     } else {
       setNuevaFechaHora("");
     }
@@ -552,7 +570,8 @@ export default function CalendarioMarketingOmnicanal({
           ) : (
             Array.from(publicacionesPorDia.entries()).map(([fechaStr, listaPubs]) => {
               const fechaObj = new Date(fechaStr + "T12:00:00");
-              const esHoy = fechaStr === new Date().toISOString().split("T")[0];
+              const hoyStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+              const esHoy = fechaStr === hoyStr;
 
               return (
                 <div key={fechaStr} className="border border-gray-200 rounded-2xl overflow-hidden shadow-2xs">
