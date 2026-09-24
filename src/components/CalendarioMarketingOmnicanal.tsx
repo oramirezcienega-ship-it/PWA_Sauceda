@@ -11,6 +11,24 @@ interface CalendarioMarketingOmnicanalProps {
   onNuevaPublicacionParaFecha?: (fechaIso: string) => void;
 }
 
+interface CeldaCalendario {
+  fechaStr: string;
+  diaNumero: number;
+  nombreDia: string;
+  nombreMes: string;
+  esMesActual: boolean;
+  esHoy: boolean;
+  publicaciones: PublicacionProgramada[];
+}
+
+function obtenerLunesDeSemana(fecha: Date): Date {
+  const f = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate(), 12, 0, 0);
+  const diaSemana = f.getDay();
+  const diasDesdeLunes = diaSemana === 0 ? 6 : diaSemana - 1;
+  f.setDate(f.getDate() - diasDesdeLunes);
+  return f;
+}
+
 export default function CalendarioMarketingOmnicanal({
   publicaciones,
   onRecargar,
@@ -21,7 +39,7 @@ export default function CalendarioMarketingOmnicanal({
   const [fechaActual, setFechaActual] = useState<Date>(() => new Date());
   const [canalFiltro, setCanalFiltro] = useState<string>("todos");
   const [estadoFiltro, setEstadoFiltro] = useState<string>("todos");
-  const [vista, setVista] = useState<"mes" | "agenda">("mes");
+  const [vista, setVista] = useState<"semana" | "quincena" | "mes" | "agenda">("semana");
 
   // Publicación seleccionada para el modal de inspección y reprogramación rápida
   const [pubSeleccionada, setPubSeleccionada] = useState<PublicacionProgramada | null>(null);
@@ -35,20 +53,97 @@ export default function CalendarioMarketingOmnicanal({
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
   ];
+  const mesesNombresCortos = [
+    "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+    "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
+  ];
   const diasSemana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-  // Navegación de mes
-  const handleMesAnterior = () => {
-    setFechaActual(new Date(anioActual, mesActual - 1, 1));
+  // Navegación adaptable al nivel de zoom
+  const handleAnterior = () => {
+    if (vista === "semana") {
+      const f = new Date(fechaActual);
+      f.setDate(f.getDate() - 7);
+      setFechaActual(f);
+    } else if (vista === "quincena") {
+      const f = new Date(fechaActual);
+      f.setDate(f.getDate() - 14);
+      setFechaActual(f);
+    } else {
+      setFechaActual(new Date(anioActual, mesActual - 1, 1));
+    }
   };
 
-  const handleMesSiguiente = () => {
-    setFechaActual(new Date(anioActual, mesActual + 1, 1));
+  const handleSiguiente = () => {
+    if (vista === "semana") {
+      const f = new Date(fechaActual);
+      f.setDate(f.getDate() + 7);
+      setFechaActual(f);
+    } else if (vista === "quincena") {
+      const f = new Date(fechaActual);
+      f.setDate(f.getDate() + 14);
+      setFechaActual(f);
+    } else {
+      setFechaActual(new Date(anioActual, mesActual + 1, 1));
+    }
   };
 
   const handleHoy = () => {
     setFechaActual(new Date());
   };
+
+  // Título dinámico para la barra de navegación según el zoom
+  const tituloNavegacion = useMemo(() => {
+    if (vista === "mes" || vista === "agenda") {
+      return `${mesesNombres[mesActual]} ${anioActual}`;
+    }
+
+    const lunes = obtenerLunesDeSemana(fechaActual);
+
+    if (vista === "semana") {
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+
+      const dLunes = lunes.getDate();
+      const mLunes = mesesNombresCortos[lunes.getMonth()];
+      const aLunes = lunes.getFullYear();
+
+      const dDom = domingo.getDate();
+      const mDom = mesesNombresCortos[domingo.getMonth()];
+      const aDom = domingo.getFullYear();
+
+      if (lunes.getMonth() === domingo.getMonth()) {
+        return `Semana: ${dLunes} - ${dDom} ${mLunes} ${aDom}`;
+      } else if (aLunes === aDom) {
+        return `Semana: ${dLunes} ${mLunes} - ${dDom} ${mDom} ${aDom}`;
+      } else {
+        return `Semana: ${dLunes} ${mLunes} ${aLunes} - ${dDom} ${mDom} ${aDom}`;
+      }
+    }
+
+    if (vista === "quincena") {
+      const finQuincena = new Date(lunes);
+      finQuincena.setDate(lunes.getDate() + 13);
+
+      const dInicio = lunes.getDate();
+      const mInicio = mesesNombresCortos[lunes.getMonth()];
+      const aInicio = lunes.getFullYear();
+
+      const dFin = finQuincena.getDate();
+      const mFin = mesesNombresCortos[finQuincena.getMonth()];
+      const aFin = finQuincena.getFullYear();
+
+      if (lunes.getMonth() === finQuincena.getMonth()) {
+        return `15 Días: ${dInicio} - ${dFin} ${mInicio} ${aFin}`;
+      } else if (aInicio === aFin) {
+        return `15 Días: ${dInicio} ${mInicio} - ${dFin} ${mFin} ${aFin}`;
+      } else {
+        return `15 Días: ${dInicio} ${mInicio} ${aInicio} - ${dFin} ${mFin} ${aFin}`;
+      }
+    }
+
+    return `${mesesNombres[mesActual]} ${anioActual}`;
+  }, [vista, fechaActual, mesActual, anioActual]);
 
   // Filtrado de publicaciones para el calendario
   const publicacionesFiltradas = useMemo(() => {
@@ -72,42 +167,6 @@ export default function CalendarioMarketingOmnicanal({
       return true;
     });
   }, [publicaciones, canalFiltro, estadoFiltro]);
-
-  // Contadores por canal en el mes visible
-  const conteosCanalMes = useMemo(() => {
-    const conteos: Record<string, number> = {
-      todos: 0,
-      facebook: 0,
-      instagram: 0,
-      tiktok: 0,
-      whatsapp: 0,
-      mautic: 0,
-    };
-
-    publicaciones.forEach((pub) => {
-      // Priorizar fecha real de publicación si ya fue mandada, o fecha de programación
-      const strFecha = (pub.estado === "publicado" && pub.publicado_en)
-        ? pub.publicado_en
-        : (pub.fecha_programacion || pub.publicado_en || pub.created_at);
-      if (!strFecha) return;
-      const f = new Date(strFecha);
-      if (isNaN(f.getTime())) return;
-
-      // Extraer año y mes en la zona horaria de México
-      const fechaLocalStr = f.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
-      const [anio, mes] = fechaLocalStr.split("-").map(Number);
-      if (mes - 1 === mesActual && anio === anioActual) {
-        conteos.todos = (conteos.todos || 0) + 1;
-        if (pub.plataforma === "email" || pub.plataforma === "mautic") {
-          conteos.mautic = (conteos.mautic || 0) + 1;
-        } else if (conteos[pub.plataforma] !== undefined) {
-          conteos[pub.plataforma] = (conteos[pub.plataforma] || 0) + 1;
-        }
-      }
-    });
-
-    return conteos;
-  }, [publicaciones, mesActual, anioActual]);
 
   // Agrupar publicaciones por fecha (formato YYYY-MM-DD en hora de México)
   const publicacionesPorDia = useMemo(() => {
@@ -152,6 +211,62 @@ export default function CalendarioMarketingOmnicanal({
     return Array.from(publicacionesPorDia.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [publicacionesPorDia]);
 
+  // Generación de celdas para el Zoom Semanal (7 días)
+  const celdasSemana = useMemo(() => {
+    const lunes = obtenerLunesDeSemana(fechaActual);
+    const hoyStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+    const celdas: CeldaCalendario[] = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(lunes);
+      d.setDate(lunes.getDate() + i);
+      const fechaStr = d.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+      const diaNumero = d.getDate();
+      const nombreDia = d.toLocaleDateString("es-MX", { weekday: "short" });
+      const nombreMes = mesesNombresCortos[d.getMonth()];
+
+      celdas.push({
+        fechaStr,
+        diaNumero,
+        nombreDia,
+        nombreMes,
+        esMesActual: d.getMonth() === mesActual,
+        esHoy: fechaStr === hoyStr,
+        publicaciones: publicacionesPorDia.get(fechaStr) || [],
+      });
+    }
+
+    return celdas;
+  }, [fechaActual, mesActual, publicacionesPorDia]);
+
+  // Generación de celdas para el Zoom 15 Días (2 semanas completas = 14 días)
+  const celdasQuincena = useMemo(() => {
+    const lunes = obtenerLunesDeSemana(fechaActual);
+    const hoyStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+    const celdas: CeldaCalendario[] = [];
+
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(lunes);
+      d.setDate(lunes.getDate() + i);
+      const fechaStr = d.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+      const diaNumero = d.getDate();
+      const nombreDia = d.toLocaleDateString("es-MX", { weekday: "short" });
+      const nombreMes = mesesNombresCortos[d.getMonth()];
+
+      celdas.push({
+        fechaStr,
+        diaNumero,
+        nombreDia,
+        nombreMes,
+        esMesActual: d.getMonth() === mesActual,
+        esHoy: fechaStr === hoyStr,
+        publicaciones: publicacionesPorDia.get(fechaStr) || [],
+      });
+    }
+
+    return celdas;
+  }, [fechaActual, mesActual, publicacionesPorDia]);
+
   // Generación de celdas para la cuadrícula mensual
   const celdasCalendario = useMemo(() => {
     const primerDiaDelMes = new Date(anioActual, mesActual, 1);
@@ -162,13 +277,7 @@ export default function CalendarioMarketingOmnicanal({
     if (diaInicioSemana === -1) diaInicioSemana = 6;
 
     const totalDias = ultimoDiaDelMes.getDate();
-    const celdas: Array<{
-      fechaStr: string;
-      diaNumero: number;
-      esMesActual: boolean;
-      esHoy: boolean;
-      publicaciones: PublicacionProgramada[];
-    }> = [];
+    const celdas: CeldaCalendario[] = [];
 
     // Fecha de hoy en formato YYYY-MM-DD en la zona horaria de México (evita desfase UTC de +6 hrs después de las 6 PM)
     const hoyStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
@@ -183,6 +292,8 @@ export default function CalendarioMarketingOmnicanal({
       celdas.push({
         fechaStr,
         diaNumero: diaNum,
+        nombreDia: "",
+        nombreMes: mesesNombresCortos[mesPrev - 1],
         esMesActual: false,
         esHoy: fechaStr === hoyStr,
         publicaciones: publicacionesPorDia.get(fechaStr) || [],
@@ -195,6 +306,8 @@ export default function CalendarioMarketingOmnicanal({
       celdas.push({
         fechaStr,
         diaNumero: dia,
+        nombreDia: "",
+        nombreMes: mesesNombresCortos[mesActual],
         esMesActual: true,
         esHoy: fechaStr === hoyStr,
         publicaciones: publicacionesPorDia.get(fechaStr) || [],
@@ -210,6 +323,8 @@ export default function CalendarioMarketingOmnicanal({
       celdas.push({
         fechaStr,
         diaNumero: dia,
+        nombreDia: "",
+        nombreMes: mesesNombresCortos[mesNext - 1],
         esMesActual: false,
         esHoy: fechaStr === hoyStr,
         publicaciones: publicacionesPorDia.get(fechaStr) || [],
@@ -218,6 +333,52 @@ export default function CalendarioMarketingOmnicanal({
 
     return celdas;
   }, [anioActual, mesActual, publicacionesPorDia]);
+
+  // Contadores dinámicos por canal según el nivel de zoom y fechas visibles
+  const conteosCanal = useMemo(() => {
+    const conteos: Record<string, number> = {
+      todos: 0,
+      facebook: 0,
+      instagram: 0,
+      tiktok: 0,
+      whatsapp: 0,
+      mautic: 0,
+    };
+
+    let fechasVisibles: Set<string> | null = null;
+    if (vista === "semana") {
+      fechasVisibles = new Set(celdasSemana.map((c) => c.fechaStr));
+    } else if (vista === "quincena") {
+      fechasVisibles = new Set(celdasQuincena.map((c) => c.fechaStr));
+    }
+
+    publicaciones.forEach((pub) => {
+      const strFecha = (pub.estado === "publicado" && pub.publicado_en)
+        ? pub.publicado_en
+        : (pub.fecha_programacion || pub.publicado_en || pub.created_at);
+      if (!strFecha) return;
+      const f = new Date(strFecha);
+      if (isNaN(f.getTime())) return;
+
+      const fechaLocalStr = f.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+
+      if (fechasVisibles) {
+        if (!fechasVisibles.has(fechaLocalStr)) return;
+      } else {
+        const [anio, mes] = fechaLocalStr.split("-").map(Number);
+        if (mes - 1 !== mesActual || anio !== anioActual) return;
+      }
+
+      conteos.todos = (conteos.todos || 0) + 1;
+      if (pub.plataforma === "email" || pub.plataforma === "mautic") {
+        conteos.mautic = (conteos.mautic || 0) + 1;
+      } else if (conteos[pub.plataforma] !== undefined) {
+        conteos[pub.plataforma] = (conteos[pub.plataforma] || 0) + 1;
+      }
+    });
+
+    return conteos;
+  }, [publicaciones, vista, celdasSemana, celdasQuincena, mesActual, anioActual]);
 
   // Helpers de badges de plataforma
   const getBadgeCanal = (plataforma: string) => {
@@ -360,52 +521,79 @@ export default function CalendarioMarketingOmnicanal({
             </p>
           </div>
 
-          {/* Navegación de Mes */}
-          <div className="flex items-center gap-3">
+          {/* Navegación adaptable al Zoom */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <div className="flex items-center bg-white/10 rounded-2xl p-1 border border-white/20">
               <button
-                onClick={handleMesAnterior}
+                type="button"
+                onClick={handleAnterior}
                 className="w-8 h-8 rounded-xl hover:bg-white/20 flex items-center justify-center text-sm font-bold transition cursor-pointer"
-                title="Mes anterior"
+                title={vista === "semana" ? "Semana anterior" : vista === "quincena" ? "15 días anteriores" : "Mes anterior"}
               >
                 ◀
               </button>
-              <span className="px-4 text-sm font-bold min-w-[150px] text-center">
-                {mesesNombres[mesActual]} {anioActual}
+              <span className="px-3 sm:px-4 text-xs sm:text-sm font-bold min-w-[140px] sm:min-w-[175px] text-center tracking-tight">
+                {tituloNavegacion}
               </span>
               <button
-                onClick={handleMesSiguiente}
+                type="button"
+                onClick={handleSiguiente}
                 className="w-8 h-8 rounded-xl hover:bg-white/20 flex items-center justify-center text-sm font-bold transition cursor-pointer"
-                title="Mes siguiente"
+                title={vista === "semana" ? "Semana siguiente" : vista === "quincena" ? "Próximos 15 días" : "Mes siguiente"}
               >
                 ▶
               </button>
             </div>
 
             <button
+              type="button"
               onClick={handleHoy}
               className="bg-dorado hover:bg-dorado/90 text-verde-profundo font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer shadow-xs"
             >
               Hoy
             </button>
 
-            {/* Alternador Mes / Agenda */}
-            <div className="flex bg-white/10 rounded-xl p-0.5 border border-white/20">
+            {/* Selector de Zoom / Vista (Semana, 15 Días, Mes, Agenda) */}
+            <div className="flex bg-white/10 rounded-xl p-0.5 border border-white/20 items-center">
               <button
-                onClick={() => setVista("mes")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  vista === "mes" ? "bg-white text-verde-profundo shadow-xs" : "text-crema hover:text-white"
+                type="button"
+                onClick={() => setVista("semana")}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  vista === "semana" ? "bg-white text-verde-profundo shadow-xs" : "text-crema hover:text-white"
                 }`}
+                title="Zoom Semanal: Ver solo 7 días con tarjetas grandes y legibles"
               >
-                Cuadrícula
+                <span>🔍 Semana</span>
               </button>
               <button
+                type="button"
+                onClick={() => setVista("quincena")}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  vista === "quincena" ? "bg-white text-verde-profundo shadow-xs" : "text-crema hover:text-white"
+                }`}
+                title="Zoom 15 Días: Ver 2 semanas con mayor espacio"
+              >
+                <span>🗓️ 15 Días</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setVista("mes")}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  vista === "mes" ? "bg-white text-verde-profundo shadow-xs" : "text-crema hover:text-white"
+                }`}
+                title="Vista Mensual completa (30 días)"
+              >
+                <span>📅 Mes</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setVista("agenda")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                   vista === "agenda" ? "bg-white text-verde-profundo shadow-xs" : "text-crema hover:text-white"
                 }`}
+                title="Lista cronológica de publicaciones"
               >
-                Agenda
+                <span>📋 Agenda</span>
               </button>
             </div>
           </div>
@@ -413,7 +601,7 @@ export default function CalendarioMarketingOmnicanal({
 
         {/* Barra de Filtros Omnicanal */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-white/10">
-          {/* Chips de Canales con Conteo */}
+          {/* Chips de Canales con Conteo dinámico según el zoom */}
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setCanalFiltro("todos")}
@@ -423,7 +611,7 @@ export default function CalendarioMarketingOmnicanal({
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
             >
-              <span>🌐</span> Todos ({conteosCanalMes.todos})
+              <span>🌐</span> Todos ({conteosCanal.todos})
             </button>
 
             <button
@@ -434,7 +622,7 @@ export default function CalendarioMarketingOmnicanal({
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
             >
-              <span>🔵</span> Facebook ({conteosCanalMes.facebook})
+              <span>🔵</span> Facebook ({conteosCanal.facebook})
             </button>
 
             <button
@@ -445,7 +633,7 @@ export default function CalendarioMarketingOmnicanal({
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
             >
-              <span>🟣</span> Instagram ({conteosCanalMes.instagram})
+              <span>🟣</span> Instagram ({conteosCanal.instagram})
             </button>
 
             <button
@@ -456,7 +644,7 @@ export default function CalendarioMarketingOmnicanal({
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
             >
-              <span>⚫</span> TikTok ({conteosCanalMes.tiktok})
+              <span>⚫</span> TikTok ({conteosCanal.tiktok})
             </button>
 
             <button
@@ -467,7 +655,7 @@ export default function CalendarioMarketingOmnicanal({
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
             >
-              <span>🟢</span> WhatsApp ({conteosCanalMes.whatsapp})
+              <span>🟢</span> WhatsApp ({conteosCanal.whatsapp})
             </button>
 
             <button
@@ -478,7 +666,7 @@ export default function CalendarioMarketingOmnicanal({
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
             >
-              <span>🟠</span> Mautic / Correo ({conteosCanalMes.mautic})
+              <span>🟠</span> Mautic / Correo ({conteosCanal.mautic})
             </button>
           </div>
 
@@ -500,7 +688,381 @@ export default function CalendarioMarketingOmnicanal({
       </div>
 
       {/* ============================================================== */}
-      {/* CUADRÍCULA MENSUAL */}
+      {/* 1. ZOOM SEMANAL (7 DÍAS EN GRANDE)                             */}
+      {/* ============================================================== */}
+      {vista === "semana" && (
+        <div className="p-3 sm:p-5 overflow-x-auto">
+          <div className="min-w-[860px]">
+            {/* Encabezado Días de la Semana con fecha grande */}
+            <div className="grid grid-cols-7 gap-2 mb-3 text-center">
+              {celdasSemana.map((celda, idx) => (
+                <div
+                  key={celda.fechaStr}
+                  className={`py-2 px-1 rounded-2xl border transition-all ${
+                    celda.esHoy
+                      ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                      : idx >= 5
+                      ? "bg-amber-50/80 border-amber-200/80 text-amber-900"
+                      : "bg-gray-50 border-gray-200 text-carbon"
+                  }`}
+                >
+                  <div className="text-[11px] font-bold uppercase tracking-wider opacity-80">
+                    {diasSemana[idx]}
+                  </div>
+                  <div className="text-lg font-black leading-tight">
+                    {celda.diaNumero} <span className="text-[10px] font-semibold uppercase">{celda.nombreMes}</span>
+                  </div>
+                  {celda.esHoy && (
+                    <span className="inline-block bg-white text-emerald-800 text-[9px] font-black px-2 py-0.2 rounded-full uppercase mt-0.5 shadow-2xs">
+                      HOY
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Columnas de los 7 Días con tarjetas amplias */}
+            <div className="grid grid-cols-7 gap-2">
+              {celdasSemana.map((celda) => {
+                const tienePubs = celda.publicaciones.length > 0;
+
+                return (
+                  <div
+                    key={celda.fechaStr}
+                    className={`min-h-[520px] p-2.5 rounded-2xl border transition-all flex flex-col justify-between ${
+                      celda.esHoy
+                        ? "border-emerald-500 bg-emerald-50/20 ring-2 ring-emerald-500/20 shadow-xs"
+                        : "border-gray-200 bg-white hover:border-dorado/40"
+                    }`}
+                  >
+                    {/* Encabezado del Día */}
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                            celda.esHoy
+                              ? "bg-emerald-600 text-white"
+                              : "bg-gray-100 text-carbon"
+                          }`}
+                        >
+                          {celda.diaNumero}
+                        </span>
+                        <span className="text-[10px] font-semibold text-carbon/50">
+                          {celda.publicaciones.length} {celda.publicaciones.length === 1 ? "post" : "posts"}
+                        </span>
+                      </div>
+
+                      {onNuevaPublicacionParaFecha && (
+                        <button
+                          type="button"
+                          onClick={() => onNuevaPublicacionParaFecha(celda.fechaStr)}
+                          className="hover:bg-emerald-100 text-emerald-700 bg-emerald-50 rounded-lg px-1.5 py-0.5 text-xs font-bold transition cursor-pointer flex items-center gap-0.5"
+                          title="Programar publicación para este día"
+                        >
+                          + Post
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Contenido / Tarjetas de Publicaciones en Grande */}
+                    <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[680px] pr-1">
+                      {tienePubs ? (
+                        celda.publicaciones.map((pub) => {
+                          const canalBadge = getBadgeCanal(pub.plataforma);
+                          const esPublicado = pub.estado === "publicado";
+                          const esAprobado = pub.estado === "aprobado";
+
+                          return (
+                            <div
+                              key={pub.id}
+                              className={`p-3 rounded-2xl border transition-all hover:shadow-md text-xs relative group ${
+                                esPublicado
+                                  ? "bg-blue-50/90 border-blue-300 text-blue-950"
+                                  : esAprobado
+                                  ? "bg-emerald-50/80 border-emerald-300 text-emerald-950"
+                                  : canalBadge.bg
+                              }`}
+                            >
+                              {/* Imagen del Arte si existe */}
+                              {pub.url_imagen && (
+                                <div className="relative mb-2 rounded-xl overflow-hidden border border-black/10 bg-black aspect-video">
+                                  <img
+                                    src={pub.url_imagen}
+                                    alt={pub.titulo}
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      if (pub.id) {
+                                        (e.target as HTMLImageElement).src = `/api/marketing/imagen/${pub.id}`;
+                                      }
+                                    }}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                                  />
+                                  <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-black/70 backdrop-blur-xs text-white px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                    <span>{canalBadge.icon}</span>
+                                    <span>{canalBadge.label}</span>
+                                  </div>
+                                  <div className="absolute top-1.5 right-1.5">
+                                    <span
+                                      className={`text-[9px] font-bold px-2 py-0.5 rounded-md text-white shadow-xs ${
+                                        esPublicado ? "bg-blue-600" : esAprobado ? "bg-emerald-600" : "bg-amber-600"
+                                      }`}
+                                    >
+                                      {esPublicado ? "✓ Enviada" : esAprobado ? "⏰ Programada" : "Borrador"}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Cabecera si no hay imagen */}
+                              {!pub.url_imagen && (
+                                <div className="flex items-center justify-between gap-1 mb-1.5">
+                                  <span className="font-bold flex items-center gap-1.5">
+                                    <span>{canalBadge.icon}</span>
+                                    <span className="text-[11px] uppercase font-bold tracking-tight text-carbon/80">
+                                      {canalBadge.label}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={`text-[9px] font-bold px-2 py-0.5 rounded-md text-white ${
+                                      esPublicado ? "bg-blue-600" : esAprobado ? "bg-emerald-600" : "bg-amber-600"
+                                    }`}
+                                  >
+                                    {esPublicado ? "✓ Enviada" : esAprobado ? "⏰ Programada" : "Borrador"}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Título */}
+                              <h4 className="font-bold text-xs sm:text-sm text-carbon line-clamp-2 leading-snug">
+                                {pub.titulo}
+                              </h4>
+
+                              {/* Contenido / Copy */}
+                              {pub.contenido && (
+                                <p className="text-[11px] text-carbon/70 line-clamp-2 mt-1 leading-relaxed">
+                                  {pub.contenido}
+                                </p>
+                              )}
+
+                              {/* Hora y Enlace */}
+                              <div className="flex items-center justify-between text-[11px] text-carbon/70 mt-2.5 pt-2 border-t border-black/5 font-mono">
+                                <span className="flex items-center gap-1 font-semibold">
+                                  <span>{esPublicado ? "📲" : "⏰"}</span>
+                                  <span>{formatHoraPub(pub)}</span>
+                                </span>
+                                {esPublicado && pub.url_publicacion && (
+                                  <a
+                                    href={pub.url_publicacion}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold underline"
+                                  >
+                                    Ver post ↗
+                                  </a>
+                                )}
+                              </div>
+
+                              {/* Botones de acción rápida en la tarjeta semanal */}
+                              <div className="flex items-center gap-1.5 mt-2.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => onPrevisualizar(pub)}
+                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] py-1.5 rounded-lg transition shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <span>👁️</span> Previsualizar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAbrirDetalle(pub)}
+                                  className="bg-white hover:bg-gray-100 border border-gray-300 text-carbon font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                                  title="Ver detalles o reagendar"
+                                >
+                                  <span>⏰</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-gray-200 rounded-xl text-carbon/40">
+                          <span className="text-2xl mb-1 opacity-60">🏖️</span>
+                          <span className="text-[11px] font-medium">Sin publicaciones</span>
+                          {onNuevaPublicacionParaFecha && (
+                            <button
+                              type="button"
+                              onClick={() => onNuevaPublicacionParaFecha(celda.fechaStr)}
+                              className="mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg transition cursor-pointer"
+                            >
+                              + Programar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 2. ZOOM 15 DÍAS (2 SEMANAS COMPLETAS = 14 DÍAS)                */}
+      {/* ============================================================== */}
+      {vista === "quincena" && (
+        <div className="p-3 sm:p-5 overflow-x-auto">
+          <div className="min-w-[860px]">
+            {/* Encabezado Días de la Semana */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2 text-center">
+              {diasSemana.map((dia, idx) => (
+                <div
+                  key={dia}
+                  className={`py-2 text-xs font-bold uppercase tracking-wider rounded-xl ${
+                    idx >= 5 ? "text-amber-800 bg-amber-50/50" : "text-carbon/60 bg-gray-50"
+                  }`}
+                >
+                  {dia}
+                </div>
+              ))}
+            </div>
+
+            {/* Cuadrícula de 14 Días (2 Filas x 7 Columnas) */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {celdasQuincena.map((celda) => {
+                return (
+                  <div
+                    key={celda.fechaStr}
+                    className={`min-h-[250px] sm:min-h-[290px] p-2.5 rounded-2xl border transition-all flex flex-col justify-between ${
+                      celda.esHoy
+                        ? "border-emerald-500 bg-emerald-50/30 ring-2 ring-emerald-500/20 shadow-xs"
+                        : "border-gray-200 bg-white hover:border-dorado/50 hover:shadow-xs"
+                    }`}
+                  >
+                    {/* Número de Día y Nombre de Mes */}
+                    <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-gray-100">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                            celda.esHoy
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-gray-100 text-carbon"
+                          }`}
+                        >
+                          {celda.diaNumero}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase text-carbon/60">
+                          {celda.nombreMes}
+                        </span>
+                      </div>
+
+                      {celda.esHoy && (
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                          HOY
+                        </span>
+                      )}
+
+                      {onNuevaPublicacionParaFecha && (
+                        <button
+                          type="button"
+                          onClick={() => onNuevaPublicacionParaFecha(celda.fechaStr)}
+                          className="hover:bg-gray-200 text-carbon/60 rounded p-0.5 text-xs transition cursor-pointer"
+                          title="Programar para este día"
+                        >
+                          +
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Lista de Publicaciones del Día */}
+                    <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[220px] pr-0.5">
+                      {celda.publicaciones.map((pub) => {
+                        const canalBadge = getBadgeCanal(pub.plataforma);
+                        const esPublicado = pub.estado === "publicado";
+                        const esAprobado = pub.estado === "aprobado";
+
+                        return (
+                          <div
+                            key={pub.id}
+                            onClick={() => handleAbrirDetalle(pub)}
+                            className={`p-2 rounded-xl border text-[11px] leading-tight cursor-pointer transition hover:scale-[1.01] hover:shadow-xs group ${
+                              esPublicado
+                                ? "bg-blue-50/90 border-blue-300 text-blue-950 hover:border-blue-500"
+                                : esAprobado
+                                ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 hover:border-emerald-500"
+                                : canalBadge.bg
+                            }`}
+                            title={`${pub.titulo} (${pub.plataforma.toUpperCase()})`}
+                          >
+                            <div className="flex items-start gap-2">
+                              {pub.url_imagen && (
+                                <img
+                                  src={pub.url_imagen}
+                                  alt={pub.titulo}
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    if (pub.id) {
+                                      (e.target as HTMLImageElement).src = `/api/marketing/imagen/${pub.id}`;
+                                    }
+                                  }}
+                                  className="w-12 h-12 rounded-lg object-cover border border-gray-300 shrink-0 bg-black"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1 mb-0.5">
+                                  <span className="font-bold flex items-center gap-1 text-[10px] uppercase text-carbon/70">
+                                    <span>{canalBadge.icon}</span>
+                                    <span>{canalBadge.label}</span>
+                                  </span>
+                                  <span
+                                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full text-white shrink-0 ${
+                                      esPublicado
+                                        ? "bg-blue-600 shadow-xs"
+                                        : esAprobado
+                                        ? "bg-emerald-600 shadow-xs"
+                                        : "bg-amber-600 shadow-xs"
+                                    }`}
+                                  >
+                                    {esPublicado ? "✓ Enviada" : esAprobado ? "⏰ Prog" : "Borrador"}
+                                  </span>
+                                </div>
+                                <div className="font-bold text-carbon text-xs line-clamp-1">
+                                  {pub.titulo}
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] text-carbon/60 mt-1 font-mono">
+                                  <span className="flex items-center gap-1">
+                                    <span>{esPublicado ? "📲" : "⏰"}</span>
+                                    <span>{formatHoraPub(pub)}</span>
+                                  </span>
+                                  {esPublicado && pub.url_publicacion && (
+                                    <a
+                                      href={pub.url_publicacion}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-blue-600 hover:text-blue-800 font-bold underline"
+                                    >
+                                      Ver ↗
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 3. CUADRÍCULA MENSUAL COMPLETA (30/31 DÍAS)                     */}
       {/* ============================================================== */}
       {vista === "mes" && (
         <div className="p-3 sm:p-5">
