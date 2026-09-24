@@ -2,6 +2,13 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import {
+  publicarEnFacebook,
+  publicarEnInstagram,
+  probarConexionMeta,
+  obtenerCredencialesMeta,
+  type EstadoConexionMeta,
+} from "@/lib/meta-publicador";
 
 export interface SelloBanner {
   texto_top: string;
@@ -37,6 +44,10 @@ export interface PublicacionProgramada {
   cpl?: number;
   roi_score?: number;
   meta_ad_id?: string;
+  meta_post_id?: string;
+  url_publicacion?: string;
+  publicado_en?: string;
+  error_publicacion?: string;
   fecha_programacion: string;
   estado: "pendiente_revision" | "aprobado" | "rechazado" | "publicado";
   notas_revision?: string;
@@ -1111,4 +1122,179 @@ export async function restaurarFotoLimpia(
     return { success: false, error: formatearErrorBDMarketing(err) };
   }
 }
+
+/**
+ * Consulta el estado y diagnóstico de la conexión con Meta (Página de Facebook e Instagram).
+ */
+export async function consultarEstadoConexionMeta(
+  tokenManual?: string,
+  pageIdManual?: string
+): Promise<ActionResult<EstadoConexionMeta>> {
+  try {
+    await requireAdministrador();
+    const estado = await probarConexionMeta(tokenManual, pageIdManual);
+    return { success: estado.ok, data: estado, error: estado.error };
+  } catch (err: any) {
+    console.error("Error al consultar estado de conexión Meta:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Guarda las credenciales de Meta (Page ID, Instagram ID, Token de Acceso) en la BD.
+ */
+export async function guardarCredencialesMeta(config: {
+  pageId?: string;
+  pageAccessToken?: string;
+  instagramId?: string;
+}): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const updates: { clave: string; valor: string; updated_at: string }[] = [];
+    const ahora = new Date().toISOString();
+
+    if (config.pageId !== undefined) {
+      updates.push({ clave: "meta_page_id", valor: config.pageId.trim(), updated_at: ahora });
+    }
+    if (config.pageAccessToken !== undefined) {
+      updates.push({ clave: "meta_page_access_token", valor: config.pageAccessToken.trim(), updated_at: ahora });
+    }
+    if (config.instagramId !== undefined) {
+      updates.push({ clave: "meta_instagram_id", valor: config.instagramId.trim(), updated_at: ahora });
+    }
+
+    if (updates.length > 0) {
+      const { error } = await sb
+        .from("configuracion_agente")
+        .upsert(updates, { onConflict: "clave" });
+
+      if (error) throw error;
+    }
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error al guardar credenciales Meta:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Ejecuta la publicación directa a Meta (Página de Facebook y/o Instagram) vía Graph API.
+ * Actualiza el estado a 'publicado', almacena el permalink y notifica a n8n.
+ */
+export async function ejecutarPublicacionMeta(
+  idPublicacion: string,
+  forzarDestino?: "facebook" | "instagram" | "ambas"
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    // 1. Obtener la publicación
+    const { data: pub, error: fetchErr } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", idPublicacion)
+      .single();
+
+    if (fetchErr || !pub) throw fetchErr || new Error("Publicación no encontrada");
+
+    const plataforma = pub.plataforma;
+    const destinoFinal =
+      forzarDestino ||
+      (plataforma === "instagram" ? "instagram" : "facebook");
+
+    let resultadoMeta: any = null;
+    const errores: string[] = [];
+
+    // Resolver URLs de medios
+    let urlImg = pub.url_imagen || "";
+    // Si la imagen es una URL relativa interna o contiene parámetros de render
+    if (urlImg.startsWith("/")) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://crm.sauceda.mx";
+      urlImg = `${baseUrl.replace(/\/$/, "")}${urlImg}`;
+    }
+
+    const payloadPub = {
+      contenido: pub.contenido,
+      urlImagen: urlImg,
+      urlVideo: (pub.tipo_formato === "video" || pub.tipo_formato === "reel") ? urlImg : undefined,
+      tipoFormato: pub.tipo_formato as any,
+    };
+
+    // Publicar en Facebook si corresponde
+    if (destinoFinal === "facebook" || destinoFinal === "ambas") {
+      const resFb = await publicarEnFacebook(payloadPub);
+      if (resFb.ok) {
+        resultadoMeta = resFb;
+      } else {
+        errores.push(`Facebook: ${resFb.error}`);
+      }
+    }
+
+    // Publicar en Instagram si corresponde
+    if (destinoFinal === "instagram" || destinoFinal === "ambas") {
+      const resIg = await publicarEnInstagram(payloadPub);
+      if (resIg.ok) {
+        resultadoMeta = resIg;
+      } else {
+        errores.push(`Instagram: ${resIg.error}`);
+      }
+    }
+
+    if (!resultadoMeta && errores.length > 0) {
+      const errorMsg = errores.join(" | ");
+      await sb
+        .from("publicaciones_programadas")
+        .update({
+          error_publicacion: errorMsg,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", idPublicacion);
+
+      return {
+        success: false,
+        error: errorMsg,
+      };
+    }
+
+    // 3. Actualizar la publicación como publicada en la base de datos
+    const ahoraIso = new Date().toISOString();
+    const updateData: any = {
+      estado: "publicado",
+      meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || null,
+      url_publicacion: resultadoMeta?.permalink || null,
+      publicado_en: ahoraIso,
+      error_publicacion: null,
+      updated_at: ahoraIso,
+    };
+
+    const { data: pubActualizada, error: updateErr } = await sb
+      .from("publicaciones_programadas")
+      .update(updateData)
+      .eq("id", idPublicacion)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // 4. Disparar sincronización con n8n
+    const wh = await dispararWebhookN8N(pubActualizada as PublicacionProgramada, "publicar");
+
+    return {
+      success: true,
+      data: pubActualizada as PublicacionProgramada,
+      aviso: wh.aviso || `Publicado exitosamente en Meta (${resultadoMeta?.plataforma}).`,
+    };
+  } catch (err: any) {
+    console.error("Error en ejecutarPublicacionMeta:", err);
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
+  }
+}
+
 

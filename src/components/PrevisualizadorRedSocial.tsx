@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PublicacionProgramada, obtenerPublicacionPorId } from "@/app/actions/marketing";
+import {
+  PublicacionProgramada,
+  obtenerPublicacionPorId,
+  ejecutarPublicacionMeta,
+} from "@/app/actions/marketing";
 
 interface PrevisualizadorRedSocialProps {
   publicacion: PublicacionProgramada;
@@ -26,6 +30,12 @@ export default function PrevisualizadorRedSocial({
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
   const [refrescando, setRefrescando] = useState(false);
+  const [publicandoMeta, setPublicandoMeta] = useState(false);
+  const [mensajeFeedback, setMensajeFeedback] = useState<{
+    tipo: "exito" | "error";
+    texto: string;
+    url?: string;
+  } | null>(null);
 
   // Sincronizar estado local si cambia la prop
   useEffect(() => {
@@ -165,6 +175,43 @@ export default function PrevisualizadorRedSocial({
     navigator.clipboard.writeText(pubActual.contenido);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 3000);
+  };
+
+  const handlePublicarEnMeta = async () => {
+    if (!pubActual?.id) return;
+    const destino = pubActual.plataforma === "instagram" ? "instagram" : "facebook";
+    const nombreRed = destino === "instagram" ? "Instagram" : "Facebook";
+
+    if (!confirm(`¿Deseas publicar este contenido de inmediato en la cuenta oficial de ${nombreRed}?`)) {
+      return;
+    }
+
+    setPublicandoMeta(true);
+    setMensajeFeedback(null);
+    try {
+      const res = await ejecutarPublicacionMeta(pubActual.id, destino);
+      if (res.success && res.data) {
+        setPubActual(res.data);
+        setMensajeFeedback({
+          tipo: "exito",
+          texto: `¡Publicado exitosamente en ${nombreRed}!`,
+          url: res.data.url_publicacion,
+        });
+        if (onEditar) onEditar(res.data);
+      } else {
+        setMensajeFeedback({
+          tipo: "error",
+          texto: res.error || `No se pudo publicar en ${nombreRed}. Revisa las credenciales de Meta.`,
+        });
+      }
+    } catch (err: any) {
+      setMensajeFeedback({
+        tipo: "error",
+        texto: err?.message || `Error al intentar publicar en ${nombreRed}.`,
+      });
+    } finally {
+      setPublicandoMeta(false);
+    }
   };
 
   return (
@@ -945,6 +992,32 @@ export default function PrevisualizadorRedSocial({
           </div>
         </div>
 
+        {/* Banner de Feedback de Publicación en Meta */}
+        {mensajeFeedback && (
+          <div
+            className={`px-6 py-2.5 flex items-center justify-between text-xs border-t shrink-0 ${
+              mensajeFeedback.tipo === "exito"
+                ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                : "bg-red-50 text-red-900 border-red-200"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span>{mensajeFeedback.tipo === "exito" ? "✅" : "⚠️"}</span>
+              <span className="font-semibold">{mensajeFeedback.texto}</span>
+            </div>
+            {mensajeFeedback.url && (
+              <a
+                href={mensajeFeedback.url}
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold underline hover:opacity-80"
+              >
+                Abrir Publicación en Vivo ↗
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Pie del Modal con Acciones Rápidas */}
         <div className="bg-white px-6 py-4 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
@@ -965,6 +1038,40 @@ export default function PrevisualizadorRedSocial({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Botón de Publicación Directa en Meta (Facebook o Instagram) */}
+            {(pubActual.plataforma === "facebook" || pubActual.plataforma === "instagram") && (
+              <>
+                {pubActual.estado === "publicado" && pubActual.url_publicacion ? (
+                  <a
+                    href={pubActual.url_publicacion}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <span>🔗</span> Ver en {pubActual.plataforma === "instagram" ? "Instagram" : "Facebook"} ↗
+                  </a>
+                ) : (
+                  <button
+                    onClick={handlePublicarEnMeta}
+                    disabled={publicandoMeta}
+                    className={`${
+                      pubActual.plataforma === "instagram"
+                        ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
+                        : "bg-[#1877F2] hover:bg-[#166FE5]"
+                    } text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60`}
+                    title="Publicar directamente en la red social usando Meta Graph API"
+                  >
+                    <span>{publicandoMeta ? "⏳" : "🚀"}</span>
+                    <span>
+                      {publicandoMeta
+                        ? "Publicando en Meta..."
+                        : `Publicar en ${pubActual.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                    </span>
+                  </button>
+                )}
+              </>
+            )}
+
             {onEditar && (
               <button
                 onClick={() => {
