@@ -42,6 +42,7 @@ export interface EstadoConexionTikTok {
   };
   tokenConfigurado: boolean;
   tokenValido: boolean;
+  clientKey?: string;
   error?: string;
 }
 
@@ -134,7 +135,8 @@ export async function probarConexionTikTok(
       ok: false,
       tokenConfigurado: false,
       tokenValido: false,
-      error: "No se ha configurado ningún Token de Acceso para TikTok.",
+      clientKey: creds?.clientKey,
+      error: "No se ha configurado ningún Token de Acceso para TikTok. Usa el botón de autorización o ingresa un token.",
     };
   }
 
