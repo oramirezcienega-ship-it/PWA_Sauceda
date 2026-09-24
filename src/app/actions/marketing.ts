@@ -12,6 +12,13 @@ import {
   type EstadoConexionMeta,
 } from "@/lib/meta-publicador";
 import {
+  publicarEnTikTok,
+  probarConexionTikTok,
+  obtenerCredencialesTikTok,
+  type EstadoConexionTikTok,
+  type ResultadoPublicacionTikTok,
+} from "@/lib/tiktok-publicador";
+import {
   enviarWhatsAppTexto,
   enviarWhatsAppDocumento,
   enviarWhatsAppPlantilla,
@@ -369,6 +376,53 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
       : "Cinematic architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato";
 
     return `${prefijoCamara}. Clean geometric architecture, warm sand-colored stucco, natural wood accents, contemporary steel beams, sunny day, clear blue sky, sharp realistic textures of stone and smooth concrete, shot on 35mm lens, f/4, pristine luxury home editorial.`;
+  }
+
+  // 5. Herrería Residencial e Industrial: Portones, protecciones, barandales, techumbres
+  if (
+    texto.includes("herreria") ||
+    texto.includes("herrería") ||
+    texto.includes("porton") ||
+    texto.includes("portón") ||
+    texto.includes("proteccion") ||
+    texto.includes("protección") ||
+    texto.includes("barandal") ||
+    texto.includes("techumbre") ||
+    texto.includes("estructura metálica") ||
+    texto.includes("estructura metalica")
+  ) {
+    const prefijoCamara = esVertical
+      ? "Architectural 9:16 vertical luxury editorial photography of a modern Mexican residential home entrance in León Guanajuato"
+      : "Architectural luxury editorial photography of a modern Mexican residential home entrance in León Guanajuato";
+
+    return `${prefijoCamara}. A bespoke custom-fabricated matte dark charcoal gray steel automatic garage gate with minimalist horizontal louvers and integrated warm LED accent lights. Beautiful matching black steel security window grilles and balcony railings. Clean travertine stone cladding, landscaped succulent planters, bright natural daylight, shot on Hasselblad H6D-100c, 35mm f/4, crisp realistic metal craftsmanship, 8k resolution.`;
+  }
+
+  // 6. Concreto Estampado / Pisos Decorativos
+  if (
+    texto.includes("estampado") ||
+    texto.includes("piso estampado") ||
+    texto.includes("concreto estampado") ||
+    texto.includes("molde")
+  ) {
+    const prefijoCamara = esVertical
+      ? "Award-winning 9:16 vertical commercial architectural photography of a luxury residential driveway in sunny León Guanajuato"
+      : "Award-winning commercial architectural photography of a luxury residential driveway in sunny León Guanajuato";
+
+    return `${prefijoCamara}. A pristine, newly poured stamped concrete driveway featuring rich natural slate stone ashlar texture with subtle charcoal and warm terracotta highlights. Semi-gloss wet-look protective sealer reflecting brilliant afternoon sunlight. Flanked by modern Mexican architecture, manicured ornamental palms, crisp realistic textures of embossed stone patterns, shot on 35mm lens, f/4, authentic craftsmanship, 8k resolution.`;
+  }
+
+  // 7. Mantenimiento del Hogar / Pintura
+  if (
+    texto.includes("mantenimiento") ||
+    texto.includes("pintura") ||
+    texto.includes("resane")
+  ) {
+    const prefijoCamara = esVertical
+      ? "Fresh, vibrant 9:16 vertical architectural editorial photography of a residential home in sunny León Guanajuato"
+      : "Fresh, vibrant architectural editorial photography of a residential home in sunny León Guanajuato";
+
+    return `${prefijoCamara}. Professional Mexican painters in clean white and navy work uniforms applying premium exterior paint with precise roller and edge technique to a modern home facade. Freshly painted immaculate crisp warm-white walls, clean drop cloths on floor, professional scaffolding, bright sunny daylight, razor-sharp details, shot on Sony A7R V, 35mm lens, f/4.`;
   }
 
   // Fallback por defecto: Arquitectura residencial moderna mexicana limpia
@@ -1554,6 +1608,177 @@ export async function guardarCredencialesMeta(config: {
 }
 
 /**
+ * Consulta el estado de conexión con la TikTok Content Posting API.
+ */
+export async function consultarEstadoConexionTikTok(
+  tokenTest?: string,
+  openIdTest?: string
+): Promise<ActionResult<EstadoConexionTikTok>> {
+  try {
+    await requireAdministrador();
+    const estado = await probarConexionTikTok(tokenTest, openIdTest);
+    return { success: true, data: estado };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
+  }
+}
+
+/**
+ * Guarda o actualiza las credenciales de TikTok en la tabla configuracion_agente.
+ */
+export async function guardarCredencialesTikTok(config: {
+  accessToken?: string;
+  openId?: string;
+  clientKey?: string;
+  clientSecret?: string;
+}): Promise<ActionResult<boolean>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+    const updates: { clave: string; valor: string; updated_at: string }[] = [];
+    const ahora = new Date().toISOString();
+
+    if (config.accessToken !== undefined) {
+      updates.push({ clave: "tiktok_access_token", valor: config.accessToken.trim(), updated_at: ahora });
+    }
+    if (config.openId !== undefined) {
+      updates.push({ clave: "tiktok_open_id", valor: config.openId.trim(), updated_at: ahora });
+    }
+    if (config.clientKey !== undefined) {
+      updates.push({ clave: "tiktok_client_key", valor: config.clientKey.trim(), updated_at: ahora });
+    }
+    if (config.clientSecret !== undefined) {
+      updates.push({ clave: "tiktok_client_secret", valor: config.clientSecret.trim(), updated_at: ahora });
+    }
+
+    if (updates.length > 0) {
+      const { error } = await sb
+        .from("configuracion_agente")
+        .upsert(updates, { onConflict: "clave" });
+
+      if (error) throw error;
+    }
+
+    return { success: true, data: true };
+  } catch (err: any) {
+    console.error("Error al guardar credenciales TikTok:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Ejecuta la publicación directa en TikTok (Video o Foto/Carrusel vertical) vía TikTok Content Posting API v2.
+ */
+export async function ejecutarPublicacionTikTok(
+  idPublicacion: string,
+  saltarAuth: boolean = false
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    if (!saltarAuth) {
+      await requireAdministrador();
+    }
+    const sb = supabaseServidor();
+
+    // 1. Obtener la publicación
+    const { data: pub, error: fetchErr } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", idPublicacion)
+      .single();
+
+    if (fetchErr || !pub) throw fetchErr || new Error("Publicación no encontrada");
+
+    // 2. Resolver URL del medio
+    let urlMedia = pub.url_imagen || "";
+    let baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.SITE_URL || "").replace(/\/$/, "");
+    try {
+      const headerList = await headers();
+      const host = headerList.get("x-forwarded-host") || headerList.get("host");
+      const proto = headerList.get("x-forwarded-proto") || "https";
+      if (host && !host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes("192.168.")) {
+        baseUrl = `${proto}://${host}`;
+      }
+    } catch {}
+
+    if (!baseUrl) {
+      baseUrl = "https://crm.saucedamx.com";
+    }
+
+    if (urlMedia.startsWith("/")) {
+      urlMedia = `${baseUrl}${urlMedia}`;
+    }
+
+    const esVideo = esArchivoVideoReal(urlMedia) || pub.tipo_formato === "video" || pub.tipo_formato === "reel";
+
+    // 3. Ejecutar publicación en TikTok
+    const resTikTok = await publicarEnTikTok({
+      titulo: pub.titulo,
+      contenido: pub.contenido,
+      urlMedia,
+      esVideo,
+    });
+
+    if (!resTikTok.ok) {
+      await sb
+        .from("publicaciones_programadas")
+        .update({
+          error_publicacion: resTikTok.error,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", idPublicacion);
+
+      return {
+        success: false,
+        error: resTikTok.error || "Fallo al publicar en TikTok.",
+      };
+    }
+
+    // 4. Actualizar estado a publicado en la base de datos
+    const ahoraIso = new Date().toISOString();
+    const permalinkFinal = resTikTok.permalink || "https://www.tiktok.com/@saucedamxbr";
+    const updatePayload: any = {
+      estado: "publicado",
+      publicado_en: ahoraIso,
+      url_publicacion: permalinkFinal,
+      meta_post_id: resTikTok.publishId || null,
+      error_publicacion: null,
+      updated_at: ahoraIso,
+    };
+
+    const { data: pubActualizada, error: updateErr } = await sb
+      .from("publicaciones_programadas")
+      .update(updatePayload)
+      .eq("id", idPublicacion)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // 5. Notificar a n8n
+    try {
+      await dispararWebhookN8N(pubActualizada, "publicar");
+    } catch (whErr) {
+      console.warn("Aviso al notificar a n8n tras publicar en TikTok:", whErr);
+    }
+
+    return {
+      success: true,
+      data: pubActualizada as PublicacionProgramada,
+      aviso: `¡Contenido publicado con éxito en TikTok! (${resTikTok.publishId ? `ID: ${resTikTok.publishId}` : "Directo"})`,
+    };
+  } catch (err: any) {
+    console.error("Error en ejecutarPublicacionTikTok:", err);
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
+  }
+}
+
+/**
  * Dispara una campaña de difusión masiva en Mautic (vía n8n o webhook Mautic).
  * Consulta la base de datos del CRM para extraer los prospectos inhabilitados (estatus no_viable, sin_contacto, o ia_pausada = true)
  * y pasa la lista de exclusión (correos y teléfonos) a Mautic para garantizar que nunca reciban el mensaje.
@@ -2013,8 +2238,28 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
           fallidas++;
           detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: postErr.message });
         }
+      } else if (pub.plataforma === "tiktok") {
+        // Para TikTok: publicar automáticamente en TikTok vía TikTok Content Posting API v2
+        try {
+          const resTikTok = await ejecutarPublicacionTikTok(pub.id!, true);
+          if (resTikTok.success) {
+            exitosas++;
+            detalles.push({
+              id: pub.id!,
+              plataforma: pub.plataforma,
+              status: "publicado",
+              mensaje: "Publicado automáticamente en TikTok por agenda programada",
+            });
+          } else {
+            fallidas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: resTikTok.error });
+          }
+        } catch (postErr: any) {
+          fallidas++;
+          detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: postErr.message });
+        }
       } else {
-        // Redes como TikTok o WhatsApp requieren despacho asistido desde el dispositivo móvil o webhook
+        // Redes como WhatsApp requieren despacho asistido desde el dispositivo móvil o webhook
         detalles.push({
           id: pub.id!,
           plataforma: pub.plataforma,
