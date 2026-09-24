@@ -8,6 +8,7 @@ import {
   publicarEnInstagram,
   probarConexionMeta,
   obtenerCredencialesMeta,
+  esArchivoVideoReal,
   type EstadoConexionMeta,
 } from "@/lib/meta-publicador";
 
@@ -1277,9 +1278,11 @@ export async function ejecutarPublicacionMeta(
       urlImg = `${baseUrl}${urlImg}`;
     }
 
-    // Para Instagram: Instagram exige JPEG obligatorio y relación de aspecto 4:5 a 1.91:1.
+    const esVideoReal = esArchivoVideoReal(urlImg);
+
+    // Para Instagram: Instagram exige JPEG obligatorio y relación de aspecto 4:5 a 1.91:1 para imágenes.
     let urlImagenInstagram = urlImg;
-    if (urlImg) {
+    if (urlImg && !esVideoReal) {
       if (urlImg.includes("images.unsplash.com")) {
         // En Unsplash forzamos fm=jpg para entrega directa en JPEG a Meta
         try {
@@ -1331,9 +1334,9 @@ export async function ejecutarPublicacionMeta(
 
     const payloadPub = {
       contenido: pub.contenido,
-      urlImagen: urlImg,
-      urlVideo: (pub.tipo_formato === "video" || pub.tipo_formato === "reel") ? urlImg : undefined,
-      tipoFormato: pub.tipo_formato as any,
+      urlImagen: esVideoReal ? undefined : urlImg,
+      urlVideo: esVideoReal ? urlImg : undefined,
+      tipoFormato: (esVideoReal ? pub.tipo_formato : "imagen") as any,
     };
 
     // Publicar en Facebook si corresponde
@@ -1346,11 +1349,11 @@ export async function ejecutarPublicacionMeta(
       }
     }
 
-    // Publicar en Instagram si corresponde (con URL garantizada en JPEG)
+    // Publicar en Instagram si corresponde (con URL garantizada en JPEG para imágenes)
     if (destinoFinal === "instagram" || destinoFinal === "ambas") {
       const resIg = await publicarEnInstagram({
         ...payloadPub,
-        urlImagen: urlImagenInstagram,
+        urlImagen: esVideoReal ? undefined : urlImagenInstagram,
       });
       if (resIg.ok) {
         resultadoMeta = resIg;
