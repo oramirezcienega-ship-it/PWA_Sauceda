@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { PublicacionProgramada, reprogramarPublicacion } from "@/app/actions/marketing";
 
 interface CalendarioMarketingOmnicanalProps {
@@ -37,9 +37,67 @@ export default function CalendarioMarketingOmnicanal({
   onNuevaPublicacionParaFecha,
 }: CalendarioMarketingOmnicanalProps) {
   const [fechaActual, setFechaActual] = useState<Date>(() => new Date());
-  const [canalFiltro, setCanalFiltro] = useState<string>("todos");
-  const [estadoFiltro, setEstadoFiltro] = useState<string>("todos");
+  const [canalesFiltro, setCanalesFiltro] = useState<string[]>([]);
+  const [estadosFiltro, setEstadosFiltro] = useState<string[]>([]);
   const [vista, setVista] = useState<"semana" | "quincena" | "mes" | "agenda">("semana");
+  const [filtrosCargados, setFiltrosCargados] = useState(false);
+
+  // Restaurar filtros y vista guardados en localStorage al iniciar
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem("crm_sauceda_calendario_filtros_v2");
+      if (guardado) {
+        const parsed = JSON.parse(guardado);
+        if (Array.isArray(parsed.canales)) setCanalesFiltro(parsed.canales);
+        if (Array.isArray(parsed.estados)) setEstadosFiltro(parsed.estados);
+        if (["semana", "quincena", "mes", "agenda"].includes(parsed.vista)) {
+          setVista(parsed.vista);
+        }
+      }
+    } catch (e) {
+      console.warn("Aviso al restaurar filtros del calendario:", e);
+    } finally {
+      setFiltrosCargados(true);
+    }
+  }, []);
+
+  // Guardar filtros y vista en localStorage al cambiar
+  useEffect(() => {
+    if (!filtrosCargados) return;
+    try {
+      localStorage.setItem(
+        "crm_sauceda_calendario_filtros_v2",
+        JSON.stringify({
+          canales: canalesFiltro,
+          estados: estadosFiltro,
+          vista,
+        })
+      );
+    } catch (e) {
+      console.warn("Aviso al guardar filtros del calendario:", e);
+    }
+  }, [canalesFiltro, estadosFiltro, vista, filtrosCargados]);
+
+  // Handlers para togglear filtros múltiples
+  const handleToggleCanal = (canal: string) => {
+    if (canal === "todos") {
+      setCanalesFiltro([]);
+      return;
+    }
+    setCanalesFiltro((prev) =>
+      prev.includes(canal) ? prev.filter((c) => c !== canal) : [...prev, canal]
+    );
+  };
+
+  const handleToggleEstado = (estado: string) => {
+    if (estado === "todos") {
+      setEstadosFiltro([]);
+      return;
+    }
+    setEstadosFiltro((prev) =>
+      prev.includes(estado) ? prev.filter((e) => e !== estado) : [...prev, estado]
+    );
+  };
 
   // Publicación seleccionada para el modal de inspección y reprogramación rápida
   const [pubSeleccionada, setPubSeleccionada] = useState<PublicacionProgramada | null>(null);
@@ -145,28 +203,35 @@ export default function CalendarioMarketingOmnicanal({
     return `${mesesNombres[mesActual]} ${anioActual}`;
   }, [vista, fechaActual, mesActual, anioActual]);
 
-  // Filtrado de publicaciones para el calendario
+  // Filtrado de publicaciones para el calendario (Multiselección)
   const publicacionesFiltradas = useMemo(() => {
     return publicaciones.filter((pub) => {
-      // Filtro de canal
-      if (canalFiltro !== "todos") {
-        if (canalFiltro === "mautic") {
-          if (pub.plataforma !== "mautic" && pub.plataforma !== "email") return false;
-        } else if (pub.plataforma !== canalFiltro) {
-          return false;
-        }
+      // Filtro de canal múltiple
+      if (canalesFiltro.length > 0) {
+        const coincideCanal = canalesFiltro.some((canal) => {
+          if (canal === "mautic") {
+            return pub.plataforma === "mautic" || pub.plataforma === "email";
+          }
+          return pub.plataforma === canal;
+        });
+        if (!coincideCanal) return false;
       }
 
-      // Filtro de estado
-      if (estadoFiltro !== "todos") {
-        if (estadoFiltro === "aprobados" && pub.estado !== "aprobado") return false;
-        if (estadoFiltro === "pendientes" && pub.estado !== "pendiente_revision") return false;
-        if (estadoFiltro === "publicados" && pub.estado !== "publicado") return false;
+      // Filtro de estado múltiple
+      if (estadosFiltro.length > 0) {
+        const coincideEstado = estadosFiltro.some((est) => {
+          if (est === "pendientes") return pub.estado === "pendiente_revision";
+          if (est === "aprobados") return pub.estado === "aprobado";
+          if (est === "publicados") return pub.estado === "publicado";
+          if (est === "rechazados") return pub.estado === "rechazado";
+          return pub.estado === est;
+        });
+        if (!coincideEstado) return false;
       }
 
       return true;
     });
-  }, [publicaciones, canalFiltro, estadoFiltro]);
+  }, [publicaciones, canalesFiltro, estadosFiltro]);
 
   // Agrupar publicaciones por fecha (formato YYYY-MM-DD en hora de México)
   const publicacionesPorDia = useMemo(() => {
@@ -599,90 +664,161 @@ export default function CalendarioMarketingOmnicanal({
           </div>
         </div>
 
-        {/* Barra de Filtros Omnicanal */}
+        {/* Barra de Filtros Omnicanal con Selección Múltiple */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-white/10">
-          {/* Chips de Canales con Conteo dinámico según el zoom */}
+          {/* Chips de Canales con Conteo dinámico y Multiselección */}
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
-              onClick={() => setCanalFiltro("todos")}
+              type="button"
+              onClick={() => handleToggleCanal("todos")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                canalFiltro === "todos"
+                canalesFiltro.length === 0
                   ? "bg-white text-verde-profundo shadow-sm"
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
+              title="Mostrar todos los canales"
             >
               <span>🌐</span> Todos ({conteosCanal.todos})
             </button>
 
             <button
-              onClick={() => setCanalFiltro("facebook")}
+              type="button"
+              onClick={() => handleToggleCanal("facebook")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                canalFiltro === "facebook"
-                  ? "bg-[#1877F2] text-white shadow-sm"
+                canalesFiltro.includes("facebook")
+                  ? "bg-[#1877F2] text-white shadow-sm ring-2 ring-white/50"
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
+              title="Filtrar Facebook (clic para activar/desactivar)"
             >
               <span>🔵</span> Facebook ({conteosCanal.facebook})
+              {canalesFiltro.includes("facebook") && <span className="text-[10px] ml-0.5">✓</span>}
             </button>
 
             <button
-              onClick={() => setCanalFiltro("instagram")}
+              type="button"
+              onClick={() => handleToggleCanal("instagram")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                canalFiltro === "instagram"
-                  ? "bg-gradient-to-r from-[#833AB4] to-[#FD1D1D] text-white shadow-sm"
+                canalesFiltro.includes("instagram")
+                  ? "bg-gradient-to-r from-[#833AB4] to-[#FD1D1D] text-white shadow-sm ring-2 ring-white/50"
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
+              title="Filtrar Instagram (clic para activar/desactivar)"
             >
               <span>🟣</span> Instagram ({conteosCanal.instagram})
+              {canalesFiltro.includes("instagram") && <span className="text-[10px] ml-0.5">✓</span>}
             </button>
 
             <button
-              onClick={() => setCanalFiltro("tiktok")}
+              type="button"
+              onClick={() => handleToggleCanal("tiktok")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                canalFiltro === "tiktok"
-                  ? "bg-black text-white shadow-sm"
+                canalesFiltro.includes("tiktok")
+                  ? "bg-black text-white shadow-sm ring-2 ring-white/50"
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
+              title="Filtrar TikTok (clic para activar/desactivar)"
             >
               <span>⚫</span> TikTok ({conteosCanal.tiktok})
+              {canalesFiltro.includes("tiktok") && <span className="text-[10px] ml-0.5">✓</span>}
             </button>
 
             <button
-              onClick={() => setCanalFiltro("whatsapp")}
+              type="button"
+              onClick={() => handleToggleCanal("whatsapp")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                canalFiltro === "whatsapp"
-                  ? "bg-[#25D366] text-white shadow-sm"
+                canalesFiltro.includes("whatsapp")
+                  ? "bg-[#25D366] text-white shadow-sm ring-2 ring-white/50"
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
+              title="Filtrar WhatsApp (clic para activar/desactivar)"
             >
               <span>🟢</span> WhatsApp ({conteosCanal.whatsapp})
+              {canalesFiltro.includes("whatsapp") && <span className="text-[10px] ml-0.5">✓</span>}
             </button>
 
             <button
-              onClick={() => setCanalFiltro("mautic")}
+              type="button"
+              onClick={() => handleToggleCanal("mautic")}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                canalFiltro === "mautic"
-                  ? "bg-[#FF6A00] text-white shadow-sm"
+                canalesFiltro.includes("mautic")
+                  ? "bg-[#FF6A00] text-white shadow-sm ring-2 ring-white/50"
                   : "bg-white/10 text-crema/80 hover:bg-white/20"
               }`}
+              title="Filtrar Mautic / Correo (clic para activar/desactivar)"
             >
               <span>🟠</span> Mautic / Correo ({conteosCanal.mautic})
+              {canalesFiltro.includes("mautic") && <span className="text-[10px] ml-0.5">✓</span>}
             </button>
           </div>
 
-          {/* Filtro de Estado */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-crema/60 uppercase">Estado:</span>
-            <select
-              value={estadoFiltro}
-              onChange={(e) => setEstadoFiltro(e.target.value)}
-              className="bg-white/10 border border-white/20 rounded-xl px-3 py-1 text-xs text-crema focus:outline-none focus:bg-verde-profundo cursor-pointer"
+          {/* Filtros de Estado Multiselección y Limpiar */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="text-[11px] font-bold text-crema/60 uppercase mr-1">Estado:</span>
+            <button
+              type="button"
+              onClick={() => handleToggleEstado("todos")}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                estadosFiltro.length === 0
+                  ? "bg-white text-verde-profundo shadow-sm"
+                  : "bg-white/10 text-crema/80 hover:bg-white/20"
+              }`}
             >
-              <option value="todos" className="text-carbon">Todos los Estados</option>
-              <option value="pendientes" className="text-carbon">⏳ Pendientes de Revisión</option>
-              <option value="aprobados" className="text-carbon">⏰ Programadas</option>
-              <option value="publicados" className="text-carbon">✓ Enviadas / Publicadas</option>
-            </select>
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleEstado("pendientes")}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                estadosFiltro.includes("pendientes")
+                  ? "bg-amber-500 text-white shadow-sm ring-2 ring-white/50"
+                  : "bg-white/10 text-crema/80 hover:bg-white/20"
+              }`}
+              title="Borradores o pendientes de revisión"
+            >
+              <span>⏳ Borradores</span>
+              {estadosFiltro.includes("pendientes") && <span className="text-[10px]">✓</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleEstado("aprobados")}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                estadosFiltro.includes("aprobados")
+                  ? "bg-emerald-500 text-white shadow-sm ring-2 ring-white/50"
+                  : "bg-white/10 text-crema/80 hover:bg-white/20"
+              }`}
+              title="Publicaciones programadas aprobadas"
+            >
+              <span>⏰ Programadas</span>
+              {estadosFiltro.includes("aprobados") && <span className="text-[10px]">✓</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleEstado("publicados")}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                estadosFiltro.includes("publicados")
+                  ? "bg-blue-500 text-white shadow-sm ring-2 ring-white/50"
+                  : "bg-white/10 text-crema/80 hover:bg-white/20"
+              }`}
+              title="Publicaciones ya enviadas o publicadas"
+            >
+              <span>✓ Enviadas</span>
+              {estadosFiltro.includes("publicados") && <span className="text-[10px]">✓</span>}
+            </button>
+
+            {(canalesFiltro.length > 0 || estadosFiltro.length > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCanalesFiltro([]);
+                  setEstadosFiltro([]);
+                }}
+                className="bg-red-500/20 hover:bg-red-500/30 text-crema hover:text-white px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1 transition cursor-pointer border border-red-400/30 ml-1"
+                title="Limpiar todos los filtros aplicados en el calendario"
+              >
+                <span>✕</span> Limpiar
+              </button>
+            )}
           </div>
         </div>
       </div>
