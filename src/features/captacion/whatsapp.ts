@@ -8,6 +8,7 @@ import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { detectarTipoNegocio } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
+import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
 
 // Semáforo en memoria para consolidar mensajes consecutivos en ráfaga
 const debounceMap = new Map<string, number>();
@@ -486,7 +487,7 @@ export async function registrarLeadWhatsApp(
     lead.mensaje ?? "",
     [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
   );
-  await sb.from("expedientes").insert({
+  await insertarExpedienteSeguro(sb, {
     id,
     cliente: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
     fraccionamiento: "Por definir",

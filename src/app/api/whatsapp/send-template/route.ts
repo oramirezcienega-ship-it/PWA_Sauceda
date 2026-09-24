@@ -5,6 +5,7 @@ import { enviarWhatsAppPlantillaCompleta } from "@/lib/whatsapp";
 import { siguienteId, siguienteIdProspecto, hoyISO } from "@/features/captacion/whatsapp";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { detectarTipoNegocio } from "@/lib/types";
+import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
 
 export const dynamic = "force-dynamic";
 
@@ -182,7 +183,7 @@ export async function POST(request: NextRequest) {
     } else {
       expedienteId = await siguienteId(sb);
       const asesorId = await obtenerIdAsesorGerardo(sb);
-      await sb.from("expedientes").insert({
+      await insertarExpedienteSeguro(sb, {
         id: expedienteId,
         cliente: nombreLead || `Lead Campaña ${tel}`,
         fraccionamiento: "Por definir",
