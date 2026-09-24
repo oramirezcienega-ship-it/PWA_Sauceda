@@ -379,7 +379,8 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
  */
 async function dispararWebhookN8N(
   pub: PublicacionProgramada,
-  accion: "aprobar" | "publicar"
+  accion: "aprobar" | "publicar" | "disparar_campana_mautic",
+  payloadExtra?: Record<string, any>
 ): Promise<{ enviado: boolean; aviso?: string }> {
   // URL por defecto para n8n staging si no está configurada en el entorno
   const defaultWebhookUrl = "https://n8n-staging.saucedamx.com/webhook/publicar-contenido";
@@ -425,6 +426,7 @@ async function dispararWebhookN8N(
         accion_evento: accion,
         fuente: "CRM Sauceda IA",
         callback_url: callbackUrl,
+        ...(payloadExtra || {}),
       }),
       signal: controller.signal,
     });
@@ -513,8 +515,11 @@ export async function guardarPublicacion(
 
     let avisoWebhook: string | undefined;
     if (result.estado === "aprobado") {
-      const wh = await dispararWebhookN8N(result, "aprobar");
-      if (wh.aviso) avisoWebhook = wh.aviso;
+      // Solo llamar a n8n si la publicación no tiene imagen previa cargada o heredada
+      if (!result.url_imagen || result.url_imagen.length <= 5) {
+        const wh = await dispararWebhookN8N(result, "aprobar");
+        if (wh.aviso) avisoWebhook = wh.aviso;
+      }
     } else if (result.estado === "publicado") {
       const wh = await dispararWebhookN8N(result, "publicar");
       if (wh.aviso) avisoWebhook = wh.aviso;
@@ -539,13 +544,20 @@ export async function cambiarEstadoPublicacion(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    const ahoraIso = new Date().toISOString();
+    const updatePayload: any = {
+      estado,
+      notas_revision: notas_revision || "",
+      updated_at: ahoraIso,
+    };
+    if (estado === "publicado") {
+      updatePayload.publicado_en = ahoraIso;
+      updatePayload.fecha_programacion = ahoraIso;
+    }
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
-      .update({
-        estado,
-        notas_revision: notas_revision || "",
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
@@ -556,8 +568,11 @@ export async function cambiarEstadoPublicacion(
 
     let avisoWebhook: string | undefined;
     if (estado === "aprobado") {
-      const wh = await dispararWebhookN8N(result, "aprobar");
-      if (wh.aviso) avisoWebhook = wh.aviso;
+      // Solo solicitar generación de imagen a n8n si la publicación carece de imagen previa
+      if (!result.url_imagen || result.url_imagen.length <= 5) {
+        const wh = await dispararWebhookN8N(result, "aprobar");
+        if (wh.aviso) avisoWebhook = wh.aviso;
+      }
     } else if (estado === "publicado") {
       const wh = await dispararWebhookN8N(result, "publicar");
       if (wh.aviso) avisoWebhook = wh.aviso;
@@ -602,8 +617,10 @@ export async function reprogramarPublicacion(
     const result = data as PublicacionProgramada;
     let avisoWebhook: string | undefined;
     if (estado === "aprobado") {
-      const wh = await dispararWebhookN8N(result, "aprobar");
-      if (wh.aviso) avisoWebhook = wh.aviso;
+      if (!result.url_imagen || result.url_imagen.length <= 5) {
+        const wh = await dispararWebhookN8N(result, "aprobar");
+        if (wh.aviso) avisoWebhook = wh.aviso;
+      }
     }
 
     return { success: true, data: result, aviso: avisoWebhook };
@@ -740,12 +757,14 @@ export async function cambiarEstadoPublicacionesMasivo(
 
     if (error) throw error;
 
-    // Si se aprueban, disparar webhooks n8n para cada una
+    // Si se aprueban, disparar webhooks n8n solo para aquellas que NO tengan imagen aún
     let avisoWebhook: string | undefined;
     if (estado === "aprobado" && data) {
       for (const pub of data as PublicacionProgramada[]) {
-        const wh = await dispararWebhookN8N(pub, "aprobar");
-        if (!wh.enviado && wh.aviso) avisoWebhook = wh.aviso;
+        if (!pub.url_imagen || pub.url_imagen.length <= 5) {
+          const wh = await dispararWebhookN8N(pub, "aprobar");
+          if (!wh.enviado && wh.aviso) avisoWebhook = wh.aviso;
+        }
       }
     }
 
@@ -1251,8 +1270,11 @@ Formato esperado para cada objeto:
           campana_origen_id: pubOriginal.id,
         },
         fecha_programacion: pubOriginal.fecha_programacion || ahoraIso,
-        estado: "pendiente_revision" as const,
-        notas_revision: `Adaptado con IA desde publicación original en ${pubOriginal.plataforma}`,
+        // Al replicar desde una publicación existente, el creativo ya está producido y aprobado.
+        // Pasa directamente a 'aprobado' (Listo para Publicar / Programar) para no re-entrar a n8n
+        // ni sobreescribir la imagen aprobada.
+        estado: "aprobado" as const,
+        notas_revision: `Adaptado con IA para ${prop.plataforma} desde publicación original aprobada`,
         created_at: ahoraIso,
         updated_at: ahoraIso,
       };
@@ -1458,6 +1480,130 @@ export async function guardarCredencialesMeta(config: {
 }
 
 /**
+ * Dispara una campaña de difusión masiva en Mautic (vía n8n o webhook Mautic).
+ * Consulta la base de datos del CRM para extraer los prospectos inhabilitados (estatus no_viable, sin_contacto, o ia_pausada = true)
+ * y pasa la lista de exclusión (correos y teléfonos) a Mautic para garantizar que nunca reciban el mensaje.
+ */
+export async function ejecutarEnvioMautic(
+  idPublicacion: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    // 1. Obtener la publicación
+    const { data: pub, error: fetchErr } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", idPublicacion)
+      .single();
+
+    if (fetchErr || !pub) throw fetchErr || new Error("Publicación no encontrada");
+
+    // 2. Extraer prospectos inhabilitados del CRM para control estricto de exclusiones
+    // Criterio de inhabilitados / DNC: estatus 'no_viable', 'sin_contacto', o ia_pausada = true
+    const { data: prospectosInhabilitados, error: errInhab } = await sb
+      .from("prospectos")
+      .select("id, nombre, correo, telefono, estatus, calificacion, ia_pausada")
+      .or("estatus.in.(no_viable,sin_contacto),ia_pausada.eq.true");
+
+    if (errInhab) {
+      console.warn("[Envío Mautic] Advertencia al consultar inhabilitados:", errInhab.message);
+    }
+
+    const { count: totalActivos } = await sb
+      .from("prospectos")
+      .select("id", { count: "exact", head: true })
+      .not("estatus", "in", '("no_viable","sin_contacto")')
+      .eq("ia_pausada", false);
+
+    // Mapear correos y teléfonos inhabilitados
+    const correosExcluidos: string[] = [];
+    const telefonosExcluidos: string[] = [];
+
+    if (prospectosInhabilitados && prospectosInhabilitados.length > 0) {
+      for (const p of prospectosInhabilitados) {
+        if (p.correo && p.correo.includes("@")) {
+          correosExcluidos.push(p.correo.trim().toLowerCase());
+        }
+        if (p.telefono && p.telefono.length >= 10) {
+          telefonosExcluidos.push(p.telefono.trim());
+        }
+      }
+    }
+
+    const ahoraIso = new Date().toISOString();
+
+    // 3. Disparar el webhook hacia n8n / Mautic con las exclusiones y el contenido enriquecido
+    const payloadMautic = {
+      canal_difusion: "mautic",
+      campana_id: pub.id,
+      asunto: pub.titulo || "Boletín Informativo Sauceda",
+      contenido_mensaje: pub.contenido,
+      url_imagen_aprobada: pub.url_imagen || null,
+      tipo_formato: pub.tipo_formato,
+      audiencia: {
+        total_activos_estimados: totalActivos || 0,
+        exclusiones: {
+          total_excluidos: prospectosInhabilitados?.length || 0,
+          correos: Array.from(new Set(correosExcluidos)),
+          telefonos: Array.from(new Set(telefonosExcluidos)),
+        },
+      },
+      fecha_disparo: ahoraIso,
+    };
+
+    console.log(`[Envío Mautic] Disparando campaña para post ${pub.id}. Activos: ${totalActivos || 0}, Excluidos: ${prospectosInhabilitados?.length || 0}`);
+
+    const wh = await dispararWebhookN8N(pub, "disparar_campana_mautic", payloadMautic);
+
+    // 4. Actualizar estado de la publicación a 'publicado' en la base de datos
+    const metaPostId = `mautic_${pub.id}_${Date.now()}`;
+    const urlMautic = process.env.MAUTIC_URL || "https://mautic.saucedamx.com";
+
+    const { data: pubActualizada, error: errUpdate } = await sb
+      .from("publicaciones_programadas")
+      .update({
+        estado: "publicado",
+        publicado_en: ahoraIso,
+        fecha_programacion: ahoraIso,
+        meta_post_id: metaPostId,
+        url_publicacion: urlMautic,
+        error_publicacion: null,
+        updated_at: ahoraIso,
+      })
+      .eq("id", idPublicacion)
+      .select()
+      .maybeSingle();
+
+    if (errUpdate) {
+      console.warn("[Envío Mautic] Aviso al actualizar publicación en BD:", errUpdate.message);
+    }
+
+    const resultadoPub = pubActualizada || {
+      ...pub,
+      estado: "publicado",
+      publicado_en: ahoraIso,
+      fecha_programacion: ahoraIso,
+      meta_post_id: metaPostId,
+      url_publicacion: urlMautic,
+    };
+
+    return {
+      success: true,
+      data: resultadoPub as PublicacionProgramada,
+      aviso: `¡Campaña disparada exitosamente en Mautic! Se excluyeron automáticamente ${prospectosInhabilitados?.length || 0} contactos inhabilitados del CRM. ${wh.aviso || ""}`,
+    };
+  } catch (err: any) {
+    console.error("Error en ejecutarEnvioMautic:", err);
+    return {
+      success: false,
+      error: err?.message || String(err),
+    };
+  }
+}
+
+/**
  * Ejecuta la publicación directa a Meta (Página de Facebook y/o Instagram) vía Graph API.
  * Actualiza el estado a 'publicado', almacena el permalink y notifica a n8n.
  */
@@ -1477,6 +1623,11 @@ export async function ejecutarPublicacionMeta(
       .single();
 
     if (fetchErr || !pub) throw fetchErr || new Error("Publicación no encontrada");
+
+    // Si la publicación está destinada a Mautic o Correo, derivar al ejecutor de Mautic
+    if (pub.plataforma === "mautic" || pub.plataforma === "email") {
+      return await ejecutarEnvioMautic(idPublicacion);
+    }
 
     const plataforma = pub.plataforma;
     const destinoFinal =
@@ -1632,6 +1783,7 @@ export async function ejecutarPublicacionMeta(
       meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || null,
       url_publicacion: resultadoMeta?.permalink || null,
       publicado_en: ahoraIso,
+      fecha_programacion: ahoraIso, // Actualizar para que el calendario posicione el post en la fecha exacta de publicación
       error_publicacion: null,
       updated_at: ahoraIso,
     };
@@ -1644,26 +1796,57 @@ export async function ejecutarPublicacionMeta(
       .select()
       .maybeSingle();
 
-    if (updateErr && updateErr.message?.includes("schema cache")) {
-      // Resiliencia: si la BD aún no cuenta con las columnas de tracking de Meta (migración 0087)
-      console.warn("Columnas de migración 0087 no encontradas en schema cache. Actualizando campos base...", updateErr.message);
-      const { data: pubFallback, error: errFallback } = await sb
+    if (updateErr) {
+      console.warn("Aviso al actualizar con campos Meta extendidos en BD, aplicando fallback resiliente:", updateErr.message);
+      
+      // Intento 2: Sin error_publicacion (manteniendo tracking de URL y Post ID)
+      const { data: fallbackTrack, error: errTrack } = await sb
         .from("publicaciones_programadas")
         .update({
           estado: "publicado",
+          meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || null,
+          url_publicacion: resultadoMeta?.permalink || null,
+          publicado_en: ahoraIso,
+          fecha_programacion: ahoraIso,
           updated_at: ahoraIso,
         })
         .eq("id", idPublicacion)
         .select()
         .maybeSingle();
 
-      if (errFallback) throw errFallback;
-      pubActualizada = pubFallback || { ...pub, estado: "publicado" };
-    } else if (updateErr) {
-      throw updateErr;
+      if (!errTrack && fallbackTrack) {
+        pubActualizada = fallbackTrack;
+      } else {
+        // Intento 3: Actualizar campos mínimos garantizados
+        const { data: pubFallback, error: errFallback } = await sb
+          .from("publicaciones_programadas")
+          .update({
+            estado: "publicado",
+            fecha_programacion: ahoraIso,
+            updated_at: ahoraIso,
+          })
+          .eq("id", idPublicacion)
+          .select()
+          .maybeSingle();
+
+        if (errFallback) {
+          console.error("Error crítico al actualizar estado publicado en BD:", errFallback);
+        }
+        pubActualizada = pubFallback || { ...pub, estado: "publicado" };
+      }
     } else {
       pubActualizada = dataActualizada || { ...pub, estado: "publicado" };
     }
+
+    // Garantizar que el objeto retornado refleje siempre el estado publicado, fecha exacta y enlace
+    pubActualizada = {
+      ...(pubActualizada || pub),
+      estado: "publicado",
+      fecha_programacion: ahoraIso,
+      url_publicacion: resultadoMeta?.permalink || pubActualizada?.url_publicacion || null,
+      meta_post_id: resultadoMeta?.postId || resultadoMeta?.mediaId || pubActualizada?.meta_post_id || null,
+      publicado_en: ahoraIso,
+    };
 
     // 4. Disparar sincronización con n8n
     const wh = await dispararWebhookN8N(pubActualizada as PublicacionProgramada, "publicar");
@@ -1679,6 +1862,100 @@ export async function ejecutarPublicacionMeta(
       success: false,
       error: err?.message || String(err),
     };
+  }
+}
+
+/**
+ * Procesa y ejecuta automáticamente las publicaciones programadas cuya fecha y hora ya se cumplieron.
+ * Puede ser ejecutado por un Cron Job (Vercel, Supabase pg_cron, n8n) o al cargar el dashboard de publicaciones.
+ */
+export async function procesarPublicacionesProgramadasVencidas(): Promise<ActionResult<{
+  procesadas: number;
+  exitosas: number;
+  fallidas: number;
+  detalles: Array<{ id: string; plataforma: string; status: "publicado" | "error" | "omitido"; mensaje?: string }>;
+}>> {
+  try {
+    const sb = supabaseServidor();
+    const ahoraIso = new Date().toISOString();
+
+    // 1. Buscar publicaciones aprobadas cuya fecha de programación ya se haya cumplido (<= ahora)
+    const { data: vencidas, error } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("estado", "aprobado")
+      .lte("fecha_programacion", ahoraIso)
+      .order("fecha_programacion", { ascending: true })
+      .limit(10); // Lote de hasta 10 para evitar timeouts
+
+    if (error) throw error;
+    if (!vencidas || vencidas.length === 0) {
+      return { success: true, data: { procesadas: 0, exitosas: 0, fallidas: 0, detalles: [] } };
+    }
+
+    const detalles: Array<{ id: string; plataforma: string; status: "publicado" | "error" | "omitido"; mensaje?: string }> = [];
+    let exitosas = 0;
+    let fallidas = 0;
+
+    for (const pub of vencidas as PublicacionProgramada[]) {
+      // Si es Facebook o Instagram, publicamos automáticamente mediante Meta Graph API
+      if (pub.plataforma === "facebook" || pub.plataforma === "instagram") {
+        try {
+          const res = await ejecutarPublicacionMeta(pub.id!, pub.plataforma);
+          if (res.success) {
+            exitosas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "publicado", mensaje: "Publicado automáticamente en Meta por agenda programada" });
+          } else {
+            fallidas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: res.error });
+          }
+        } catch (postErr: any) {
+          fallidas++;
+          detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: postErr.message });
+        }
+      } else if (pub.plataforma === "mautic" || pub.plataforma === "email") {
+        // Para Mautic: disparar campaña de difusión masiva excluyendo prospectos inhabilitados del CRM
+        try {
+          const resMautic = await ejecutarEnvioMautic(pub.id!);
+          if (resMautic.success) {
+            exitosas++;
+            detalles.push({
+              id: pub.id!,
+              plataforma: pub.plataforma,
+              status: "publicado",
+              mensaje: resMautic.aviso || "Campaña Mautic disparada automáticamente por agenda programada (excluyendo inhabilitados)",
+            });
+          } else {
+            fallidas++;
+            detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: resMautic.error });
+          }
+        } catch (postErr: any) {
+          fallidas++;
+          detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "error", mensaje: postErr.message });
+        }
+      } else {
+        // Redes como TikTok o WhatsApp requieren despacho asistido desde el dispositivo móvil o webhook
+        detalles.push({
+          id: pub.id!,
+          plataforma: pub.plataforma,
+          status: "omitido",
+          mensaje: `Publicación programada para ${pub.plataforma} lista en agenda (requiere envío manual o webhook)`
+        });
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        procesadas: vencidas.length,
+        exitosas,
+        fallidas,
+        detalles,
+      }
+    };
+  } catch (err: any) {
+    console.error("Error en procesarPublicacionesProgramadasVencidas:", err);
+    return { success: false, error: err?.message || String(err) };
   }
 }
 

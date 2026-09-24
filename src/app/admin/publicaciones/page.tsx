@@ -19,12 +19,15 @@ import {
   actualizarImagenManual,
   restaurarFotoLimpia,
   ejecutarPublicacionMeta,
+  ejecutarEnvioMautic,
+  procesarPublicacionesProgramadasVencidas,
 } from "@/app/actions/marketing";
 
 export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
   const [mostrarModalMeta, setMostrarModalMeta] = useState(false);
   const [publicandoMetaId, setPublicandoMetaId] = useState<string | null>(null);
+  const [disparandoMauticId, setDisparandoMauticId] = useState<string | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
   const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
   const [filtroFormato, setFiltroFormato] = useState<string>("todos");
@@ -41,7 +44,7 @@ export default function PaginaPublicaciones() {
   const [temaIA, setTemaIA] = useState<string>("Servicios de impermeabilización profesional con garantía de 5 a 10 años");
   const [usarTemaPersonalizado, setUsarTemaPersonalizado] = useState(false);
   const [temaPersonalizado, setTemaPersonalizado] = useState("");
-  const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp">>([
+  const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
     "instagram",
     "facebook",
     "tiktok",
@@ -57,7 +60,7 @@ export default function PaginaPublicaciones() {
 
   // Estados para Replicar / Adaptar publicación existente a otras redes
   const [pubParaReplicar, setPubParaReplicar] = useState<PublicacionProgramada | null>(null);
-  const [canalesParaReplicar, setCanalesParaReplicar] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp">>([
+  const [canalesParaReplicar, setCanalesParaReplicar] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
     "facebook",
   ]);
   const [instruccionesReplicar, setInstruccionesReplicar] = useState("");
@@ -148,6 +151,13 @@ notify pgrst, 'reload schema';`;
     setCargandoLista(true);
     setErrorBd(null);
     try {
+      // Revisar y detonar publicaciones programadas que ya hayan alcanzado su horario establecido
+      try {
+        await procesarPublicacionesProgramadasVencidas();
+      } catch (autoErr) {
+        console.warn("Aviso al verificar publicaciones vencidas:", autoErr);
+      }
+
       const res = await obtenerPublicaciones({
         estado: filtroEstado,
         plataforma: filtroPlataforma,
@@ -214,9 +224,13 @@ notify pgrst, 'reload schema';`;
   });
 
   const handleAprobar = async (id: string) => {
+    const pubTarget = publicaciones.find((p) => p.id === id);
+    const tieneImagen = Boolean(pubTarget?.url_imagen && pubTarget.url_imagen.length > 5);
     const res = await cambiarEstadoPublicacion(id, "aprobado");
     if (res.success) {
-      if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+      if (tieneImagen) {
+        alert("✅ ¡Publicación aprobada y lista para publicar! (El arte visual se conserva intacto)");
+      } else if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
         alert("Publicación aprobada en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
       } else {
         alert("¡Publicación aprobada y enviada a n8n con éxito! (n8n está generando el creativo)");
@@ -254,9 +268,25 @@ notify pgrst, 'reload schema';`;
       const res = await reprogramarPublicacion(pubProgramar.id, fechaIso, nuevoEstado);
       if (res.success) {
         if (nuevoEstado === "aprobado") {
-          alert("¡Publicación aprobada y programada con éxito para la fecha seleccionada!");
+          alert("¡Publicación programada con éxito en la agenda! El sistema la publicará automáticamente al llegar el horario indicado.");
         } else if (nuevoEstado === "publicado") {
-          alert("¡Publicación marcada como publicada!");
+          if (pubProgramar.plataforma === "facebook" || pubProgramar.plataforma === "instagram") {
+            const metaRes = await ejecutarPublicacionMeta(pubProgramar.id, pubProgramar.plataforma);
+            if (metaRes.success) {
+              alert(`¡Publicado de inmediato con éxito en ${pubProgramar.plataforma === "instagram" ? "Instagram" : "Facebook"}!`);
+            } else {
+              alert(`Guardado como publicado en base de datos. Aviso de Meta: ${metaRes.error}`);
+            }
+          } else if (pubProgramar.plataforma === "mautic" || pubProgramar.plataforma === "email") {
+            const mauticRes = await ejecutarEnvioMautic(pubProgramar.id);
+            if (mauticRes.success) {
+              alert(mauticRes.aviso || "¡Campaña disparada de inmediato en Mautic excluyendo contactos inhabilitados!");
+            } else {
+              alert(`Guardado como publicado en base de datos. Aviso de Mautic: ${mauticRes.error}`);
+            }
+          } else {
+            alert("¡Publicación marcada como publicada!");
+          }
         } else {
           alert("¡Fecha y hora de programación actualizadas con éxito!");
         }
@@ -628,6 +658,7 @@ notify pgrst, 'reload schema';`;
         setPublicaciones((prev) =>
           prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
         );
+        await cargarDatos();
         alert(`¡Publicación realizada con éxito en ${nombreRed}!`);
       } else {
         alert(`Aviso de Meta: ${res.error || "No se pudo completar la publicación."}`);
@@ -636,6 +667,34 @@ notify pgrst, 'reload schema';`;
       alert(`Error al intentar publicar en Meta: ${err?.message || String(err)}`);
     } finally {
       setPublicandoMetaId(null);
+    }
+  };
+
+  const handleDispararMautic = async (id: string) => {
+    if (
+      !confirm(
+        "¿Deseas disparar esta campaña en Mautic ahora?\n\nSe enviará a todos los contactos activos y excluirá automáticamente a los prospectos inhabilitados del CRM."
+      )
+    ) {
+      return;
+    }
+
+    setDisparandoMauticId(id);
+    try {
+      const res = await ejecutarEnvioMautic(id);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        await cargarDatos();
+        alert(res.aviso || "¡Campaña disparada exitosamente en Mautic!");
+      } else {
+        alert(`Aviso de Mautic: ${res.error || "No se pudo disparar la campaña."}`);
+      }
+    } catch (err: any) {
+      alert(`Error al disparar campaña en Mautic: ${err?.message || String(err)}`);
+    } finally {
+      setDisparandoMauticId(null);
     }
   };
 
@@ -707,7 +766,7 @@ notify pgrst, 'reload schema';`;
       if (res.success && res.data) {
         setPubParaReplicar(null);
         await cargarDatos();
-        alert(`¡Publicación adaptada con éxito a ${res.data.length} canales! Todas comparten la misma imagen aprobada.`);
+        alert(`¡Publicación adaptada con éxito a ${res.data.length} canales! Han quedado aprobadas y listas para publicar con el mismo arte visual.`);
       } else {
         alert("Error al adaptar publicación: " + res.error);
       }
@@ -851,7 +910,7 @@ notify pgrst, 'reload schema';`;
               >
                 <option value="todos">📋 Todos los Estados</option>
                 <option value="pendiente_revision">⏳ Pendientes de Revisión</option>
-                <option value="aprobado">✅ Aprobados (Enviados a n8n)</option>
+                <option value="aprobado">✅ Aprobados (Listos para Publicar)</option>
                 <option value="rechazado">❌ Rechazados</option>
                 <option value="publicado">📲 Publicados</option>
               </select>
@@ -1026,7 +1085,7 @@ notify pgrst, 'reload schema';`;
                         <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Revisión</span>
                       )}
                       {pub.estado === "aprobado" && (
-                        <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded" title="Enviado a n8n">Aprobado</span>
+                        <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded" title="Listo para publicar o programar">Aprobado</span>
                       )}
                       {pub.estado === "rechazado" && (
                         <span className="bg-red-500/10 text-red-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Rechazado</span>
@@ -1360,6 +1419,22 @@ notify pgrst, 'reload schema';`;
                             </span>
                           </button>
                         )}
+                        {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                          <button
+                            type="button"
+                            onClick={() => handleDispararMautic(pub.id!)}
+                            disabled={disparandoMauticId === pub.id}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+                            title="Disparar campaña masiva en Mautic excluyendo contactos inhabilitados"
+                          >
+                            <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
+                            <span>
+                              {disparandoMauticId === pub.id
+                                ? "Disparando..."
+                                : "Disparar Campaña Mautic"}
+                            </span>
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePublicar(pub.id!)}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
@@ -1371,7 +1446,7 @@ notify pgrst, 'reload schema';`;
 
                     {pub.estado === "publicado" && (
                       <>
-                        {pub.url_publicacion && (
+                        {pub.url_publicacion && pub.plataforma !== "mautic" && pub.plataforma !== "email" && (
                           <a
                             href={pub.url_publicacion}
                             target="_blank"
@@ -1380,6 +1455,11 @@ notify pgrst, 'reload schema';`;
                           >
                             <span>🔗</span> Ver en {pub.plataforma === "instagram" ? "Instagram" : "Facebook"} ↗
                           </a>
+                        )}
+                        {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                          <span className="bg-orange-50 text-orange-700 border border-orange-200 font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-2xs">
+                            <span>✓</span> Campaña Enviada en Mautic
+                          </span>
                         )}
                         <button
                           onClick={() => handleReconsiderar(pub.id!)}
@@ -1524,10 +1604,10 @@ notify pgrst, 'reload schema';`;
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook", "tiktok", "whatsapp"])}
+                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook", "tiktok", "whatsapp", "mautic"])}
                       className="text-[10px] text-dorado font-bold hover:underline cursor-pointer"
                     >
-                      Todas (4)
+                      Todas (5)
                     </button>
                   </div>
                 </div>
@@ -1538,6 +1618,7 @@ notify pgrst, 'reload schema';`;
                     { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed + Enlace" },
                     { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video Corto" },
                     { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje Difusión + Link" },
+                    { id: "mautic", nombre: "Mautic / Correo", icono: "🟠", detalle: "Boletín / Campaña Masiva" },
                   ].map((canal) => {
                     const seleccionado = canalesSeleccionadosIA.includes(canal.id as any);
                     return (
@@ -1688,6 +1769,7 @@ notify pgrst, 'reload schema';`;
                     { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed con enlace" },
                     { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video" },
                     { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje de Difusión" },
+                    { id: "mautic", nombre: "Mautic / Correo", icono: "🟠", detalle: "Boletín / Campaña Masiva" },
                   ]
                     .filter((canal) => canal.id !== pubParaReplicar.plataforma)
                     .map((canal) => {
@@ -2133,6 +2215,10 @@ notify pgrst, 'reload schema';`;
           onRegenerarCreativo={(id) => handleRegenerarCreativo(id)}
           onReemplazarArte={(id) => handleReemplazarArte(id)}
           onReplicar={(pub) => handleAbrirReplicar(pub)}
+          onPublicado={async (pub) => {
+            setPublicaciones((prev) => prev.map((p) => (p.id === pub.id ? pub : p)));
+            await cargarDatos();
+          }}
         />
       )}
 

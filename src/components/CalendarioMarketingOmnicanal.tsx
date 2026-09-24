@@ -85,8 +85,14 @@ export default function CalendarioMarketingOmnicanal({
     };
 
     publicaciones.forEach((pub) => {
-      if (!pub.fecha_programacion) return;
-      const f = new Date(pub.fecha_programacion);
+      // Priorizar fecha real de publicación si ya fue mandada, o fecha de programación
+      const strFecha = (pub.estado === "publicado" && pub.publicado_en)
+        ? pub.publicado_en
+        : (pub.fecha_programacion || pub.publicado_en || pub.created_at);
+      if (!strFecha) return;
+      const f = new Date(strFecha);
+      if (isNaN(f.getTime())) return;
+
       // Extraer año y mes en la zona horaria de México
       const fechaLocalStr = f.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       const [anio, mes] = fechaLocalStr.split("-").map(Number);
@@ -108,9 +114,14 @@ export default function CalendarioMarketingOmnicanal({
     const mapa = new Map<string, PublicacionProgramada[]>();
 
     publicacionesFiltradas.forEach((pub) => {
-      if (!pub.fecha_programacion) return;
+      const strFecha = (pub.estado === "publicado" && pub.publicado_en)
+        ? pub.publicado_en
+        : (pub.fecha_programacion || pub.publicado_en || pub.created_at);
+      if (!strFecha) return;
+      const f = new Date(strFecha);
+      if (isNaN(f.getTime())) return;
+
       // Convertir siempre a la fecha local de México para no desfasar por UTC
-      const f = new Date(pub.fecha_programacion);
       const clave = f.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       if (!mapa.has(clave)) {
         mapa.set(clave, []);
@@ -118,9 +129,13 @@ export default function CalendarioMarketingOmnicanal({
       mapa.get(clave)!.push(pub);
     });
 
-    // Ordenar cada día por hora
+    // Ordenar cada día por hora cronológica
     mapa.forEach((lista) => {
-      lista.sort((a, b) => (a.fecha_programacion > b.fecha_programacion ? 1 : -1));
+      lista.sort((a, b) => {
+        const da = new Date((a.estado === "publicado" && a.publicado_en) ? a.publicado_en : a.fecha_programacion).getTime();
+        const db = new Date((b.estado === "publicado" && b.publicado_en) ? b.publicado_en : b.fecha_programacion).getTime();
+        return da - db;
+      });
     });
 
     return mapa;
@@ -230,6 +245,24 @@ export default function CalendarioMarketingOmnicanal({
   const formatHora = (fechaIso: string) => {
     try {
       const d = new Date(fechaIso);
+      return d.toLocaleTimeString("es-MX", {
+        timeZone: "America/Mexico_City",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return "";
+    }
+  };
+
+  const formatHoraPub = (pub: PublicacionProgramada) => {
+    try {
+      const str = (pub.estado === "publicado" && pub.publicado_en)
+        ? pub.publicado_en
+        : (pub.fecha_programacion || pub.publicado_en || pub.created_at);
+      if (!str) return "";
+      const d = new Date(str);
       return d.toLocaleTimeString("es-MX", {
         timeZone: "America/Mexico_City",
         hour: "2-digit",
@@ -523,28 +556,56 @@ export default function CalendarioMarketingOmnicanal({
                   <div className="flex-1 space-y-1 overflow-y-auto max-h-[90px] pr-0.5">
                     {celda.publicaciones.map((pub) => {
                       const canalBadge = getBadgeCanal(pub.plataforma);
-                      const punto = getPuntoEstado(pub.estado);
+                      const esPublicado = pub.estado === "publicado";
+                      const esAprobado = pub.estado === "aprobado";
 
                       return (
                         <div
                           key={pub.id}
                           onClick={() => handleAbrirDetalle(pub)}
-                          className={`p-1.5 rounded-lg border text-[11px] leading-tight cursor-pointer transition hover:scale-[1.02] shadow-2xs group relative ${canalBadge.bg}`}
-                          title={`${pub.titulo} (${pub.plataforma})`}
+                          className={`p-1.5 rounded-xl border text-[11px] leading-tight cursor-pointer transition hover:scale-[1.02] shadow-2xs group relative ${
+                            esPublicado
+                              ? "bg-blue-50/90 border-blue-300 text-blue-950 hover:border-blue-500 hover:shadow-xs"
+                              : esAprobado
+                              ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 hover:border-emerald-500 hover:shadow-xs"
+                              : canalBadge.bg
+                          }`}
+                          title={`${pub.titulo} (${pub.plataforma.toUpperCase()} • ${esPublicado ? "Publicado" : esAprobado ? "Aprobado" : "Borrador"})`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="font-bold flex items-center gap-1 truncate">
+                            <span className="font-bold flex items-center gap-1.5 truncate">
                               <span>{canalBadge.icon}</span>
-                              <span className="truncate">{pub.titulo}</span>
+                              <span className="text-[10px] uppercase font-bold tracking-tight text-carbon/70">
+                                {canalBadge.label}
+                              </span>
                             </span>
                             <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${punto.color}`}
-                              title={punto.label}
-                            />
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full text-white shrink-0 ${
+                                esPublicado
+                                  ? "bg-blue-600"
+                                  : esAprobado
+                                  ? "bg-emerald-600"
+                                  : "bg-amber-600"
+                              }`}
+                            >
+                              {esPublicado ? "✓ Publicado" : esAprobado ? "Listo" : "Borrador"}
+                            </span>
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-carbon/60 mt-0.5 font-mono">
-                            <span>⏰ {formatHora(pub.fecha_programacion)}</span>
-                            <span className="text-[9px] uppercase font-bold">{canalBadge.label}</span>
+
+                          <div className="text-[11px] font-medium text-carbon truncate mt-0.5">
+                            {pub.titulo}
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-carbon/60 mt-1 font-mono pt-0.5 border-t border-black/5">
+                            <span className="flex items-center gap-1">
+                              <span>{esPublicado ? "📲" : "⏰"}</span>
+                              <span>{formatHoraPub(pub)}</span>
+                            </span>
+                            {esPublicado && pub.url_publicacion && (
+                              <span className="text-[9px] text-blue-600 font-bold underline">
+                                Ver ↗
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -619,15 +680,31 @@ export default function CalendarioMarketingOmnicanal({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span className="font-mono text-xs text-carbon/70 font-semibold bg-gray-100 px-2.5 py-1 rounded-lg">
-                              ⏰ {formatHora(pub.fecha_programacion)}
+                              {pub.estado === "publicado" ? "📲 Enviado:" : "⏰"} {formatHoraPub(pub)}
                             </span>
                             <span
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg text-white ${punto.color}`}
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg text-white ${
+                                pub.estado === "publicado"
+                                  ? "bg-blue-600"
+                                  : pub.estado === "aprobado"
+                                  ? "bg-emerald-600"
+                                  : "bg-amber-600"
+                              }`}
                             >
-                              {punto.label}
+                              {pub.estado === "publicado" ? "Publicado" : pub.estado === "aprobado" ? "Listo" : "Borrador"}
                             </span>
+                            {pub.url_publicacion && (
+                              <a
+                                href={pub.url_publicacion}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold px-2.5 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+                              >
+                                <span>🔗</span> Ver ↗
+                              </a>
+                            )}
                             <button
                               onClick={() => onPrevisualizar(pub)}
                               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
@@ -638,7 +715,7 @@ export default function CalendarioMarketingOmnicanal({
                               onClick={() => handleAbrirDetalle(pub)}
                               className="bg-white hover:bg-gray-100 border border-gray-200 text-carbon text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
                             >
-                              ⏰ Reagendar
+                              {pub.estado === "publicado" ? "ℹ️ Detalle" : "⏰ Reagendar"}
                             </button>
                           </div>
                         </div>
@@ -710,6 +787,25 @@ export default function CalendarioMarketingOmnicanal({
                   {pubSeleccionada.contenido}
                 </p>
               </div>
+
+              {pubSeleccionada.estado === "publicado" && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2 text-blue-950 font-bold text-xs">
+                    <span className="text-base">📲</span>
+                    <span>Publicado en {pubSeleccionada.plataforma.toUpperCase()} • {formatHoraPub(pubSeleccionada)}</span>
+                  </div>
+                  {pubSeleccionada.url_publicacion && (
+                    <a
+                      href={pubSeleccionada.url_publicacion}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-white border border-blue-200 px-3 py-1.5 rounded-xl shadow-2xs hover:bg-blue-100 transition shrink-0"
+                    >
+                      <span>🔗</span> Ver en {pubSeleccionada.plataforma === "instagram" ? "Instagram" : "Facebook"} ↗
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* Selector de Reprogramación */}
               <div className="border border-dorado/30 rounded-2xl p-4 bg-dorado/5 space-y-3">
