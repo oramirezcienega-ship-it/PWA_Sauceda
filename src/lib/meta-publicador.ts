@@ -62,6 +62,9 @@ export function interpretarErrorGraphApi(errorObj: any): string {
   if (code === 190) {
     return "El Token de Acceso de Meta ha expirado o fue revocado. Genera un nuevo Page Access Token o System User Token en Meta Business Suite.";
   }
+  if (message.includes("Media ID is not available") || code === 9007 || subcode === 2207052) {
+    return "Instagram aún estaba procesando la imagen o video en sus servidores. Por favor intenta hacer clic en 'Publicar' nuevamente en unos momentos.";
+  }
   if (code === 200 || code === 294) {
     return `Permisos insuficientes en Meta: Se requiere que el token tenga concedido el permiso 'pages_manage_posts' e 'instagram_content_publish'. (${message})`;
   }
@@ -96,13 +99,14 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
       .in("clave", [
         "meta_page_id",
         "meta_page_access_token",
+        "meta_system_user_token",
         "meta_instagram_id",
       ]);
 
     if (configs && configs.length > 0) {
       const mapa = new Map(configs.map((c) => [c.clave, c.valor]));
       const dbPageId = mapa.get("meta_page_id");
-      const dbToken = mapa.get("meta_page_access_token");
+      const dbToken = mapa.get("meta_page_access_token") || mapa.get("meta_system_user_token");
       const dbIgId = mapa.get("meta_instagram_id");
 
       if (dbPageId) pageId = dbPageId.trim();
@@ -117,12 +121,12 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
     console.warn("No se pudo leer credenciales Meta desde BD, recurriendo a variables de entorno:", err);
   }
 
-  // Fallback a variables de entorno
+  // Fallback a variables de entorno con IDs reales de Sauceda
   if (!pageId) {
     pageId = (
       process.env.META_PAGE_ID ||
       process.env.FACEBOOK_PAGE_ID ||
-      "61589957630232" // ID oficial de la página Sauceda
+      "1198618089992233" // ID oficial de la página Sauceda
     ).trim();
   }
 
@@ -139,7 +143,7 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
     instagramAccountId = (
       process.env.META_INSTAGRAM_ACCOUNT_ID ||
       process.env.INSTAGRAM_ACCOUNT_ID ||
-      ""
+      "17841427222516604" // ID oficial de la cuenta @saucedamx_
     ).trim();
   }
 
@@ -157,8 +161,8 @@ export async function obtenerCredencialesMeta(): Promise<CredencialesMeta> {
  */
 export async function probarConexionMeta(tokenManual?: string, pageIdManual?: string): Promise<EstadoConexionMeta> {
   const creds = await obtenerCredencialesMeta();
-  const token = (tokenManual || creds.pageAccessToken).trim();
-  const pageId = (pageIdManual || creds.pageId).trim();
+  let token = (tokenManual || creds.pageAccessToken).trim();
+  let pageId = (pageIdManual || creds.pageId).trim();
 
   if (!token) {
     return {
@@ -169,17 +173,38 @@ export async function probarConexionMeta(tokenManual?: string, pageIdManual?: st
     };
   }
 
-  if (!pageId) {
-    return {
-      ok: false,
-      tokenConfigurado: true,
-      tokenValido: false,
-      error: "No se ha configurado el ID de la Página de Facebook.",
-    };
-  }
-
   try {
-    const url = `${META_GRAPH_BASE}/${encodeURIComponent(pageId)}?fields=id,name,link,fan_count,instagram_business_account{id,username,name,profile_picture_url}&access_token=${encodeURIComponent(token)}`;
+    // Si se trata de un System User Token o User Token, consultar /me/accounts para auto-resolver la Página y su Token
+    try {
+      const accountsRes = await fetch(`${META_GRAPH_BASE}/me/accounts?access_token=${encodeURIComponent(token)}`);
+      const accountsData = await accountsRes.json();
+      if (accountsRes.ok && accountsData?.data && accountsData.data.length > 0) {
+        // Encontrar la página Sauceda o la especificada
+        const paginaEncontrada = pageId
+          ? accountsData.data.find((p: any) => p.id === pageId) || accountsData.data[0]
+          : accountsData.data[0];
+
+        if (paginaEncontrada) {
+          pageId = paginaEncontrada.id;
+          if (paginaEncontrada.access_token) {
+            token = paginaEncontrada.access_token;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("No fue necesario resolver /me/accounts o token ya es de página directa:", e);
+    }
+
+    if (!pageId) {
+      return {
+        ok: false,
+        tokenConfigurado: true,
+        tokenValido: false,
+        error: "No se ha configurado el ID de la Página de Facebook.",
+      };
+    }
+
+    const url = `${META_GRAPH_BASE}/${encodeURIComponent(pageId)}?fields=id,name,link,fan_count,instagram_business_account{id,username,name,profile_picture_url},connected_instagram_account{id,username,name,profile_picture_url}&access_token=${encodeURIComponent(token)}`;
     const res = await fetch(url, { method: "GET" });
     const data = await res.json();
 
@@ -204,13 +229,31 @@ export async function probarConexionMeta(tokenManual?: string, pageIdManual?: st
       },
     };
 
-    if (data.instagram_business_account) {
+    const cuentaIg = data.instagram_business_account || data.connected_instagram_account;
+    if (cuentaIg) {
       resultado.instagram = {
-        id: data.instagram_business_account.id,
-        usuario: data.instagram_business_account.username,
-        nombre: data.instagram_business_account.name,
-        fotoPerfil: data.instagram_business_account.profile_picture_url,
+        id: cuentaIg.id,
+        usuario: cuentaIg.username,
+        nombre: cuentaIg.name,
+        fotoPerfil: cuentaIg.profile_picture_url,
       };
+    } else if (creds.instagramAccountId) {
+      // Si no viene en la página pero el usuario configuró un ID manual de Instagram
+      try {
+        const igDirectUrl = `${META_GRAPH_BASE}/${encodeURIComponent(creds.instagramAccountId)}?fields=id,username,name,profile_picture_url&access_token=${encodeURIComponent(token)}`;
+        const igRes = await fetch(igDirectUrl, { method: "GET" });
+        const igData = await igRes.json();
+        if (igRes.ok && !igData.error && igData.id) {
+          resultado.instagram = {
+            id: igData.id,
+            usuario: igData.username,
+            nombre: igData.name,
+            fotoPerfil: igData.profile_picture_url,
+          };
+        }
+      } catch (e) {
+        console.warn("Fallo al verificar ID manual de Instagram:", e);
+      }
     }
 
     return resultado;
@@ -366,13 +409,20 @@ export async function publicarEnInstagram(params: {
   let instagramId = creds.instagramAccountId;
   if (!instagramId) {
     const estado = await probarConexionMeta(creds.pageAccessToken, creds.pageId);
-    if (estado.ok && estado.instagram?.id) {
+    if (!estado.ok) {
+      return {
+        ok: false,
+        plataforma: "instagram",
+        error: `Fallo de autenticación con Meta: ${estado.error || "Token inválido o expirado"}. Por favor abre el botón 'Conexión Meta' en la parte superior para ingresar o renovar tu Token de Acceso.`,
+      };
+    }
+    if (estado.instagram?.id) {
       instagramId = estado.instagram.id;
     } else {
       return {
         ok: false,
         plataforma: "instagram",
-        error: "No se encontró una cuenta de Instagram Business vinculada a la Página de Facebook de Sauceda.",
+        error: "No se detectó una cuenta de Instagram Business vinculada a tu Página de Facebook en Meta Business Suite. Puedes vincularla en la Configuración de tu Página de Facebook -> Cuentas Vinculadas -> Instagram, o ingresar directamente tu ID de Instagram en el modal 'Conexión Meta'.",
       };
     }
   }
@@ -441,51 +491,80 @@ export async function publicarEnInstagram(params: {
       };
     }
 
-    // PASO 1.5: Si es Video / Reel, esperar brevemente a que Instagram termine de procesar el video
-    if (esReelOVideo) {
-      let listo = false;
-      let intentos = 0;
-      while (!listo && intentos < 6) {
-        await new Promise((r) => setTimeout(r, 4000));
+    // PASO 1.5: Esperar activamente a que Instagram termine de procesar el medio (imagen o video)
+    let listo = false;
+    let intentos = 0;
+    const maxIntentos = esReelOVideo ? 12 : 8; // Hasta 24s para video, hasta 16s para imagen
+    const intervaloMs = 2000; // 2 segundos
+
+    while (!listo && intentos < maxIntentos) {
+      await new Promise((r) => setTimeout(r, intervaloMs));
+      try {
         const statusRes = await fetch(
-          `${META_GRAPH_BASE}/${creationId}?fields=status_code&access_token=${creds.pageAccessToken}`
+          `${META_GRAPH_BASE}/${creationId}?fields=status_code,status&access_token=${creds.pageAccessToken}`
         );
         const statusData = await statusRes.json();
-        if (statusData.status_code === "FINISHED") {
+        console.log(`[Meta Instagram] Contenedor ${creationId} status: ${statusData?.status_code} (intento ${intentos + 1})`);
+
+        if (statusData?.status_code === "FINISHED") {
           listo = true;
           break;
-        } else if (statusData.status_code === "ERROR") {
+        } else if (statusData?.status_code === "ERROR") {
           return {
             ok: false,
             plataforma: "instagram",
-            error: "Instagram reportó un fallo al procesar el archivo de video/reel.",
+            error: "Instagram reportó un fallo al procesar el archivo multimedia (revisa la relación de aspecto o formato).",
           };
         }
-        intentos++;
+      } catch (pollErr) {
+        console.warn("[Meta Instagram] Error al consultar status_code:", pollErr);
       }
-    } else {
-      // Breve pausa de 1 segundo para asegurar disponibilidad de la imagen en los servidores de Meta
-      await new Promise((r) => setTimeout(r, 1000));
+      intentos++;
     }
 
-    // PASO 2: Publicar el Contenedor (Media Publish)
+    // PASO 2: Publicar el Contenedor (Media Publish) con reintento si aún está finalizando
     console.log(`[Meta Instagram] Publicando contenedor ${creationId}...`);
     const publishEndpoint = `${META_GRAPH_BASE}/${instagramId}/media_publish`;
-    const publishRes = await fetch(publishEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        creation_id: creationId,
-        access_token: creds.pageAccessToken,
-      }),
-    });
-    const publishData = await publishRes.json();
 
-    if (!publishRes.ok || publishData.error) {
+    let publishData: any = null;
+    let publishOk = false;
+    let intentosPublish = 0;
+
+    while (!publishOk && intentosPublish < 3) {
+      if (intentosPublish > 0) {
+        console.log(`[Meta Instagram] Reintentando publicación en 3 segundos (intento ${intentosPublish + 1})...`);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+
+      const publishRes = await fetch(publishEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creation_id: creationId,
+          access_token: creds.pageAccessToken,
+        }),
+      });
+      publishData = await publishRes.json();
+
+      if (publishRes.ok && !publishData.error && publishData.id) {
+        publishOk = true;
+        break;
+      }
+
+      // Si el error es "Media ID is not available", reintentar tras breve pausa
+      const msg = publishData?.error?.message || "";
+      if (msg.includes("Media ID is not available") || publishData?.error?.code === 9007) {
+        intentosPublish++;
+      } else {
+        break;
+      }
+    }
+
+    if (!publishOk || publishData?.error) {
       return {
         ok: false,
         plataforma: "instagram",
-        error: interpretarErrorGraphApi(publishData.error),
+        error: interpretarErrorGraphApi(publishData?.error),
       };
     }
 

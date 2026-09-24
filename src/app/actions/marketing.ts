@@ -1155,14 +1155,57 @@ export async function guardarCredencialesMeta(config: {
     const updates: { clave: string; valor: string; updated_at: string }[] = [];
     const ahora = new Date().toISOString();
 
-    if (config.pageId !== undefined) {
-      updates.push({ clave: "meta_page_id", valor: config.pageId.trim(), updated_at: ahora });
+    let pageIdToSave = config.pageId ? config.pageId.trim() : "";
+    let pageTokenToSave = config.pageAccessToken ? config.pageAccessToken.trim() : "";
+    let instagramIdToSave = config.instagramId ? config.instagramId.trim() : "";
+
+    // Si nos pasaron un token, intentar auto-descubrir la Página y su Token específico via /me/accounts
+    if (pageTokenToSave) {
+      try {
+        const accountsRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${encodeURIComponent(pageTokenToSave)}`);
+        const accountsData = await accountsRes.json();
+        if (accountsRes.ok && accountsData?.data && accountsData.data.length > 0) {
+          const pagina = pageIdToSave
+            ? accountsData.data.find((p: any) => p.id === pageIdToSave) || accountsData.data[0]
+            : accountsData.data[0];
+
+          if (pagina) {
+            if (!pageIdToSave || pageIdToSave === "61589957630232") {
+              pageIdToSave = pagina.id;
+            }
+            // Guardar el System User Token original y el Page Token específico
+            updates.push({ clave: "meta_system_user_token", valor: pageTokenToSave, updated_at: ahora });
+            if (pagina.access_token) {
+              pageTokenToSave = pagina.access_token;
+            }
+
+            // Consultar Instagram vinculado a la página si aún no lo tenemos
+            if (!instagramIdToSave || instagramIdToSave === "17841427222951604") {
+              try {
+                const igRes = await fetch(`https://graph.facebook.com/v21.0/${pagina.id}?fields=instagram_business_account&access_token=${encodeURIComponent(pageTokenToSave)}`);
+                const igData = await igRes.json();
+                if (igData?.instagram_business_account?.id) {
+                  instagramIdToSave = igData.instagram_business_account.id;
+                }
+              } catch (igErr) {
+                console.warn("No se pudo auto-descubrir Instagram:", igErr);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Fallo en auto-descubrimiento de cuentas:", e);
+      }
     }
-    if (config.pageAccessToken !== undefined) {
-      updates.push({ clave: "meta_page_access_token", valor: config.pageAccessToken.trim(), updated_at: ahora });
+
+    if (pageIdToSave) {
+      updates.push({ clave: "meta_page_id", valor: pageIdToSave, updated_at: ahora });
     }
-    if (config.instagramId !== undefined) {
-      updates.push({ clave: "meta_instagram_id", valor: config.instagramId.trim(), updated_at: ahora });
+    if (pageTokenToSave) {
+      updates.push({ clave: "meta_page_access_token", valor: pageTokenToSave, updated_at: ahora });
+    }
+    if (instagramIdToSave) {
+      updates.push({ clave: "meta_instagram_id", valor: instagramIdToSave, updated_at: ahora });
     }
 
     if (updates.length > 0) {

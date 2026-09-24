@@ -24,9 +24,9 @@ export default function ModalConexionMeta({
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
 
-  const [pageId, setPageId] = useState("61589957630232");
+  const [pageId, setPageId] = useState("1198618089992233");
   const [token, setToken] = useState("");
-  const [instagramId, setInstagramId] = useState("");
+  const [instagramId, setInstagramId] = useState("17841427222516604");
   const [mostrarToken, setMostrarToken] = useState(false);
 
   const [estado, setEstado] = useState<EstadoConexionMeta | null>(null);
@@ -43,6 +43,11 @@ export default function ModalConexionMeta({
             setEstado(res.data);
             if (res.data.pagina?.id) setPageId(res.data.pagina.id);
             if (res.data.instagram?.id) setInstagramId(res.data.instagram.id);
+            if (!res.data.ok && res.data.error) {
+              setMensajeError(res.data.error);
+            }
+          } else if (res.error) {
+            setMensajeError(res.error);
           }
         })
         .catch((err) => {
@@ -236,7 +241,7 @@ export default function ModalConexionMeta({
                 type="text"
                 value={pageId}
                 onChange={(e) => setPageId(e.target.value)}
-                placeholder="61589957630232"
+                placeholder="1198618089992233"
                 className="w-full text-xs font-mono px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-verde-profundo/30 bg-white"
               />
               <span className="text-[10px] text-carbon/50 mt-1 block">
@@ -279,7 +284,7 @@ export default function ModalConexionMeta({
                 type="text"
                 value={instagramId}
                 onChange={(e) => setInstagramId(e.target.value)}
-                placeholder="178414..."
+                placeholder="17841427222516604"
                 className="w-full text-xs font-mono px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-verde-profundo/30 bg-white"
               />
               <span className="text-[10px] text-carbon/50 mt-1 block">
