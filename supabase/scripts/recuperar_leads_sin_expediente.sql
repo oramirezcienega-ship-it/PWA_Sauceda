@@ -118,7 +118,7 @@ select
   0,
   0,
   'Expediente recuperado automáticamente: el alta original falló por la restricción de tipo de negocio.',
-  current_date::text,
+  current_date,
   prospecto_id,
   campaign_name,
   adset_name,
