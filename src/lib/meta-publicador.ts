@@ -62,6 +62,9 @@ export function interpretarErrorGraphApi(errorObj: any): string {
   if (code === 190) {
     return "El Token de Acceso de Meta ha expirado o fue revocado. Genera un nuevo Page Access Token o System User Token en Meta Business Suite.";
   }
+  if (message.includes("Media ID is not available") || code === 9007 || subcode === 2207052) {
+    return "Instagram aún estaba procesando la imagen o video en sus servidores. Por favor intenta hacer clic en 'Publicar' nuevamente en unos momentos.";
+  }
   if (code === 200 || code === 294) {
     return `Permisos insuficientes en Meta: Se requiere que el token tenga concedido el permiso 'pages_manage_posts' e 'instagram_content_publish'. (${message})`;
   }
@@ -488,51 +491,80 @@ export async function publicarEnInstagram(params: {
       };
     }
 
-    // PASO 1.5: Si es Video / Reel, esperar brevemente a que Instagram termine de procesar el video
-    if (esReelOVideo) {
-      let listo = false;
-      let intentos = 0;
-      while (!listo && intentos < 6) {
-        await new Promise((r) => setTimeout(r, 4000));
+    // PASO 1.5: Esperar activamente a que Instagram termine de procesar el medio (imagen o video)
+    let listo = false;
+    let intentos = 0;
+    const maxIntentos = esReelOVideo ? 12 : 8; // Hasta 24s para video, hasta 16s para imagen
+    const intervaloMs = 2000; // 2 segundos
+
+    while (!listo && intentos < maxIntentos) {
+      await new Promise((r) => setTimeout(r, intervaloMs));
+      try {
         const statusRes = await fetch(
-          `${META_GRAPH_BASE}/${creationId}?fields=status_code&access_token=${creds.pageAccessToken}`
+          `${META_GRAPH_BASE}/${creationId}?fields=status_code,status&access_token=${creds.pageAccessToken}`
         );
         const statusData = await statusRes.json();
-        if (statusData.status_code === "FINISHED") {
+        console.log(`[Meta Instagram] Contenedor ${creationId} status: ${statusData?.status_code} (intento ${intentos + 1})`);
+
+        if (statusData?.status_code === "FINISHED") {
           listo = true;
           break;
-        } else if (statusData.status_code === "ERROR") {
+        } else if (statusData?.status_code === "ERROR") {
           return {
             ok: false,
             plataforma: "instagram",
-            error: "Instagram reportó un fallo al procesar el archivo de video/reel.",
+            error: "Instagram reportó un fallo al procesar el archivo multimedia (revisa la relación de aspecto o formato).",
           };
         }
-        intentos++;
+      } catch (pollErr) {
+        console.warn("[Meta Instagram] Error al consultar status_code:", pollErr);
       }
-    } else {
-      // Breve pausa de 1 segundo para asegurar disponibilidad de la imagen en los servidores de Meta
-      await new Promise((r) => setTimeout(r, 1000));
+      intentos++;
     }
 
-    // PASO 2: Publicar el Contenedor (Media Publish)
+    // PASO 2: Publicar el Contenedor (Media Publish) con reintento si aún está finalizando
     console.log(`[Meta Instagram] Publicando contenedor ${creationId}...`);
     const publishEndpoint = `${META_GRAPH_BASE}/${instagramId}/media_publish`;
-    const publishRes = await fetch(publishEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        creation_id: creationId,
-        access_token: creds.pageAccessToken,
-      }),
-    });
-    const publishData = await publishRes.json();
 
-    if (!publishRes.ok || publishData.error) {
+    let publishData: any = null;
+    let publishOk = false;
+    let intentosPublish = 0;
+
+    while (!publishOk && intentosPublish < 3) {
+      if (intentosPublish > 0) {
+        console.log(`[Meta Instagram] Reintentando publicación en 3 segundos (intento ${intentosPublish + 1})...`);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+
+      const publishRes = await fetch(publishEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creation_id: creationId,
+          access_token: creds.pageAccessToken,
+        }),
+      });
+      publishData = await publishRes.json();
+
+      if (publishRes.ok && !publishData.error && publishData.id) {
+        publishOk = true;
+        break;
+      }
+
+      // Si el error es "Media ID is not available", reintentar tras breve pausa
+      const msg = publishData?.error?.message || "";
+      if (msg.includes("Media ID is not available") || publishData?.error?.code === 9007) {
+        intentosPublish++;
+      } else {
+        break;
+      }
+    }
+
+    if (!publishOk || publishData?.error) {
       return {
         ok: false,
         plataforma: "instagram",
-        error: interpretarErrorGraphApi(publishData.error),
+        error: interpretarErrorGraphApi(publishData?.error),
       };
     }
 
