@@ -394,6 +394,12 @@ async function dispararWebhookN8N(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+    const esVertical =
+      pub.tipo_formato === "reel" ||
+      pub.tipo_formato === "video" ||
+      pub.plataforma === "tiktok";
+    const aspectRatio = esVertical ? "9:16" : "1:1";
+
     const res = await fetch(effectiveUrl, {
       method: "POST",
       headers: {
@@ -401,6 +407,7 @@ async function dispararWebhookN8N(
       },
       body: JSON.stringify({
         ...pub,
+        aspect_ratio: aspectRatio,
         prompt_imagen_flux: promptFluxOptimizado,
         accion_evento: accion,
         fuente: "CRM Sauceda IA",
@@ -743,7 +750,8 @@ export async function cambiarEstadoPublicacionesMasivo(
 export async function generarPublicacionesAutomaticas(
   cantidad: number = 3,
   fechaInicio?: string,
-  tema: string = "todos"
+  tema: string = "todos",
+  canalDestino: string = "todas"
 ): Promise<ActionResult<PublicacionProgramada[]>> {
   try {
     await requireAdministrador();
@@ -815,8 +823,30 @@ Formato esperado:
   }
 ]`;
 
-    let prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.
-Usa diferentes plataformas (Facebook, Instagram, TikTok).`;
+    let instruccionCanal = "Usa diferentes plataformas (Facebook, Instagram, TikTok).";
+    let reglaComposicionFlux = "Para publicaciones de muro (Facebook e Instagram Post), la composición de imagen debe ser cuadrada 1:1 centrada. Para Reels y TikTok, la composición debe ser vertical 9:16 cinematográfica.";
+
+    if (canalDestino === "facebook") {
+      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'facebook' y formato 'imagen' (post clásico de muro/feed).";
+      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 centered commercial editorial composition, perfectly framed for Facebook Feed').";
+    } else if (canalDestino === "instagram_post") {
+      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'instagram' y formato 'imagen' (post de feed cuadrado).";
+      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 clean aesthetic composition, perfectly framed for Instagram Feed').";
+    } else if (canalDestino === "instagram_reel") {
+      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'instagram' y formato 'reel' (Reel dinámico con guion de video estructurado).";
+      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición vertical 9:16 ('cinematic vertical 9:16 portrait composition, eye-level framing with safe overhead headroom for Instagram Reel').";
+    } else if (canalDestino === "tiktok") {
+      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'tiktok' y formato 'reel' o 'video' (videos verticales con gancho viral en los primeros 3 segundos).";
+      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición vertical 9:16 ('cinematic vertical 9:16 composition, eye-level framing with safe overhead headroom for TikTok').";
+    } else if (canalDestino === "whatsapp") {
+      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'whatsapp' y formato 'imagen' (mensaje de WhatsApp directo con viñetas y foto limpia).";
+      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE especificar una composición cuadrada 1:1 ('square 1:1 clean commercial composition').";
+    } else if (canalDestino === "mautic") {
+      instruccionCanal = "OBLIGATORIO: Todas las propuestas deben ser EXCLUSIVAMENTE para la plataforma 'mautic' (email marketing) con formato 'imagen' (estructura de boletín/correo electrónico con asunto atractivo).";
+      reglaComposicionFlux = "OBLIGATORIO PARA FLUX: El campo 'prompt_imagen_flux' DEBE describir una imagen comercial nítida de alta definición.";
+    }
+
+    let prompt = `Genera exactamente ${cantidad} propuestas de publicaciones de marketing para el día ${fechaBaseStr}.\n${instruccionCanal}\n${reglaComposicionFlux}`;
 
     // Consultar memoria de publicaciones ganadoras históricas (Top ROI / CPL)
     const { data: ganadores } = await sb
@@ -927,16 +957,53 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
       const horarioStr = horarios[i % horarios.length];
       const fechaProg = `${fechaBaseStr}T${horarioStr}-06:00`;
 
+      // Si el usuario eligió un canal específico, forzar plataforma y formato
+      let plataformaFinal = prop.plataforma;
+      let formatoFinal = prop.tipo_formato;
+
+      if (canalDestino === "facebook") {
+        plataformaFinal = "facebook";
+        formatoFinal = "imagen";
+      } else if (canalDestino === "instagram_post") {
+        plataformaFinal = "instagram";
+        formatoFinal = "imagen";
+      } else if (canalDestino === "instagram_reel") {
+        plataformaFinal = "instagram";
+        formatoFinal = "reel";
+      } else if (canalDestino === "tiktok") {
+        plataformaFinal = "tiktok";
+        formatoFinal = "reel";
+      } else if (canalDestino === "whatsapp") {
+        plataformaFinal = "whatsapp";
+        formatoFinal = "imagen";
+      } else if (canalDestino === "mautic") {
+        plataformaFinal = "mautic";
+        formatoFinal = "imagen";
+      }
+
+      const esVertical =
+        formatoFinal === "reel" ||
+        formatoFinal === "video" ||
+        plataformaFinal === "tiktok";
+      const aspectRatio = esVertical ? "9:16" : "1:1";
+
+      const propAjustada: PublicacionProgramada = {
+        ...prop,
+        plataforma: plataformaFinal,
+        tipo_formato: formatoFinal,
+      };
+
       const payload = {
         titulo: prop.titulo,
         contenido: prop.contenido,
-        plataforma: prop.plataforma,
-        tipo_formato: prop.tipo_formato,
+        plataforma: plataformaFinal,
+        tipo_formato: formatoFinal,
         sugerencia_visual: prop.sugerencia_visual || "",
         guion_video: prop.guion_video || "",
         diseno_banner: {
           ...(prop.diseno_banner || {}),
-          prompt_imagen_flux: prop.prompt_imagen_flux || construirPromptFluxRobusto(prop),
+          aspect_ratio: aspectRatio,
+          prompt_imagen_flux: prop.prompt_imagen_flux || construirPromptFluxRobusto(propAjustada),
         },
         fecha_programacion: fechaProg,
         estado: "pendiente_revision" as const,
