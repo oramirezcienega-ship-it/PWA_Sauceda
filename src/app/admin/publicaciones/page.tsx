@@ -1819,6 +1819,8 @@ notify pgrst, 'reload schema';`;
           onCerrar={() => setPubPrevisualizar(null)}
           onEditar={(pub) => setPubEditando(pub)}
           onProgramar={(pub) => handleAbrirProgramar(pub)}
+          onRegenerarCreativo={(id) => handleRegenerarCreativo(id)}
+          onReemplazarArte={(id) => handleReemplazarArte(id)}
         />
       )}
 

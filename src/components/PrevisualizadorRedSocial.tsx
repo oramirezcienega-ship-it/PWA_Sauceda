@@ -13,6 +13,8 @@ interface PrevisualizadorRedSocialProps {
   onCerrar: () => void;
   onEditar?: (pub: PublicacionProgramada) => void;
   onProgramar?: (pub: PublicacionProgramada) => void;
+  onRegenerarCreativo?: (id: string) => void;
+  onReemplazarArte?: (id: string) => void;
 }
 
 export default function PrevisualizadorRedSocial({
@@ -21,6 +23,8 @@ export default function PrevisualizadorRedSocial({
   onCerrar,
   onEditar,
   onProgramar,
+  onRegenerarCreativo,
+  onReemplazarArte,
 }: PrevisualizadorRedSocialProps) {
   const [pubActual, setPubActual] = useState<PublicacionProgramada>(publicacion);
   const [plataformaActiva, setPlataformaActiva] = useState<string>("facebook");
@@ -543,8 +547,28 @@ export default function PrevisualizadorRedSocial({
                 ) : (
                   <div className="aspect-square bg-gradient-to-tr from-purple-100 via-pink-50 to-amber-50 flex flex-col items-center justify-center text-carbon/60 p-6 text-center">
                     <span className="text-4xl mb-2">📸</span>
-                    <span className="text-xs font-bold text-carbon/80">Vista Previa Instagram (1:1)</span>
-                    <span className="text-[10px] text-carbon/50 mt-1">Sube el arte editado de Canva o espera a que n8n genere la foto</span>
+                    <span className="text-xs font-bold text-carbon/80">Sin Imagen Cargada (1:1)</span>
+                    <span className="text-[10px] text-carbon/50 mt-1 max-w-xs">Puedes generar una foto fotorrealista con IA o cargar tu diseño de Canva</span>
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-3 z-10">
+                      {onRegenerarCreativo && (
+                        <button
+                          type="button"
+                          onClick={() => onRegenerarCreativo(pubActual.id!)}
+                          className="bg-verde-profundo text-crema font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs hover:bg-verde-profundo/90 transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>✨</span> Generar con IA (Flux)
+                        </button>
+                      )}
+                      {onReemplazarArte && (
+                        <button
+                          type="button"
+                          onClick={() => onReemplazarArte(pubActual.id!)}
+                          className="bg-white border border-dorado/40 text-carbon font-bold text-xs px-3 py-1.5 rounded-xl shadow-2xs hover:bg-gray-50 transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>📁</span> Cargar Foto
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -626,7 +650,27 @@ export default function PrevisualizadorRedSocial({
                   <div className="absolute inset-0 bg-gradient-to-b from-[#833AB4]/30 via-black to-black flex flex-col items-center justify-center p-6 text-center z-0">
                     <span className="text-5xl mb-3">🎬</span>
                     <span className="text-sm font-bold">Instagram Reel (9:16)</span>
-                    <span className="text-xs text-white/60 mt-1">Generando fotografía vertical en n8n...</span>
+                    <span className="text-xs text-white/60 mt-1 max-w-xs">Aún no se ha asignado una foto o video para este Reel</span>
+                    <div className="flex flex-col items-center gap-2 mt-4 z-10">
+                      {onRegenerarCreativo && (
+                        <button
+                          type="button"
+                          onClick={() => onRegenerarCreativo(pubActual.id!)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>✨</span> Generar con IA (Flux)
+                        </button>
+                      )}
+                      {onReemplazarArte && (
+                        <button
+                          type="button"
+                          onClick={() => onReemplazarArte(pubActual.id!)}
+                          className="bg-white/10 hover:bg-white/20 text-white font-medium text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>📁</span> Subir Foto de Canva / PC
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -772,7 +816,27 @@ export default function PrevisualizadorRedSocial({
                   <div className="absolute inset-0 bg-gradient-to-b from-gray-900 via-gray-800 to-black flex flex-col items-center justify-center p-6 text-center z-0">
                     <span className="text-5xl mb-3">📱</span>
                     <span className="text-sm font-bold">Formato Vertical 9:16</span>
-                    <span className="text-xs text-white/60 mt-1">Generando fotografía o procesando creativo en n8n...</span>
+                    <span className="text-xs text-white/60 mt-1 max-w-xs">Aún no se ha generado una fotografía o video para esta publicación</span>
+                    <div className="flex flex-col items-center gap-2 mt-4 z-10">
+                      {onRegenerarCreativo && (
+                        <button
+                          type="button"
+                          onClick={() => onRegenerarCreativo(pubActual.id!)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>✨</span> Generar con IA (Flux)
+                        </button>
+                      )}
+                      {onReemplazarArte && (
+                        <button
+                          type="button"
+                          onClick={() => onReemplazarArte(pubActual.id!)}
+                          className="bg-white/10 hover:bg-white/20 text-white font-medium text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>📁</span> Subir Foto de Canva / PC
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
