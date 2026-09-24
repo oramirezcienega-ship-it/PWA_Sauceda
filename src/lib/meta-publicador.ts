@@ -51,18 +51,38 @@ export interface EstadoConexionMeta {
 }
 
 /**
+ * Determina si una URL apunta a un archivo de video real basándose en su extensión.
+ */
+export function esArchivoVideoReal(url?: string): boolean {
+  if (!url) return false;
+  const limpio = url.toLowerCase().split("?")[0].trim();
+  return (
+    limpio.endsWith(".mp4") ||
+    limpio.endsWith(".mov") ||
+    limpio.endsWith(".webm") ||
+    limpio.endsWith(".avi") ||
+    limpio.endsWith(".m4v")
+  );
+}
+
+/**
  * Traduce códigos de error frecuentes de la Graph API de Meta a explicaciones claras en español.
  */
 export function interpretarErrorGraphApi(errorObj: any): string {
   if (!errorObj) return "Error desconocido al comunicar con Meta.";
   const code = errorObj.code;
   const subcode = errorObj.error_subcode;
-  const message = errorObj.message || "";
+  const userMsg = errorObj.error_user_msg || errorObj.error_user_title;
+  const rawMsg = errorObj.message || "";
+  const message = userMsg || rawMsg;
 
   if (code === 190) {
     return "El Token de Acceso de Meta ha expirado o fue revocado. Genera un nuevo Page Access Token o System User Token en Meta Business Suite.";
   }
-  if (message.includes("Media ID is not available") || code === 9007 || subcode === 2207052) {
+  if (subcode === 2207082 || rawMsg.includes("Invalid video duration") || message.includes("Video Transcoding")) {
+    return "Fallo en procesamiento de video de Meta: El archivo multimedia asignado no es un video con duración válida (es una imagen estática). Para publicar imágenes en Instagram o Facebook, la publicación se procesará automáticamente como post de imagen.";
+  }
+  if (rawMsg.includes("Media ID is not available") || code === 9007 || subcode === 2207052) {
     return "Instagram aún estaba procesando la imagen o video en sus servidores. Por favor intenta hacer clic en 'Publicar' nuevamente en unos momentos.";
   }
   if (code === 200 || code === 294) {
@@ -289,8 +309,9 @@ export async function publicarEnFacebook(params: {
   const { contenido, urlImagen, urlVideo, tipoFormato } = params;
 
   try {
-    // 1. Publicación de Video
-    if ((tipoFormato === "video" || tipoFormato === "reel") && urlVideo) {
+    const esVideoReal = esArchivoVideoReal(urlVideo);
+    // 1. Publicación de Video (solo si es un video real con extensión compatible)
+    if ((tipoFormato === "video" || tipoFormato === "reel") && urlVideo && esVideoReal) {
       const endpoint = `${META_GRAPH_BASE}/${creds.pageId}/videos`;
       const res = await fetch(endpoint, {
         method: "POST",
@@ -319,14 +340,15 @@ export async function publicarEnFacebook(params: {
       };
     }
 
-    // 2. Publicación con Fotografía / Imagen
-    if (urlImagen && urlImagen.length > 5 && !urlImagen.includes("placeholder")) {
+    // 2. Publicación con Fotografía / Imagen (incluye fotos en posts etiquetados como reel/video)
+    const urlFoto = urlImagen || (!esVideoReal ? urlVideo : undefined);
+    if (urlFoto && urlFoto.length > 5 && !urlFoto.includes("placeholder")) {
       const endpoint = `${META_GRAPH_BASE}/${creds.pageId}/photos`;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: urlImagen,
+          url: urlFoto,
           caption: contenido,
           access_token: creds.pageAccessToken,
         }),
@@ -428,9 +450,11 @@ export async function publicarEnInstagram(params: {
   }
 
   const { contenido, urlImagen, urlVideo, tipoFormato } = params;
-  const esReelOVideo = tipoFormato === "reel" || tipoFormato === "video";
+  const esVideoReal = esArchivoVideoReal(urlVideo);
+  const esReelOVideoEfectivo = (tipoFormato === "reel" || tipoFormato === "video") && esVideoReal;
+  const urlFotoEfectiva = urlImagen || (!esVideoReal ? urlVideo : undefined);
 
-  if (!urlImagen && !urlVideo) {
+  if (!esReelOVideoEfectivo && !urlFotoEfectiva) {
     return {
       ok: false,
       plataforma: "instagram",
@@ -446,17 +470,17 @@ export async function publicarEnInstagram(params: {
       access_token: creds.pageAccessToken,
     };
 
-    if (esReelOVideo && urlVideo) {
+    if (esReelOVideoEfectivo && urlVideo) {
       containerPayload = {
         ...containerPayload,
         media_type: "REELS",
         video_url: urlVideo,
         share_to_feed: true,
       };
-    } else if (urlImagen) {
+    } else if (urlFotoEfectiva) {
       containerPayload = {
         ...containerPayload,
-        image_url: urlImagen,
+        image_url: urlFotoEfectiva,
       };
     } else {
       return {
@@ -494,7 +518,7 @@ export async function publicarEnInstagram(params: {
     // PASO 1.5: Esperar activamente a que Instagram termine de procesar el medio (imagen o video)
     let listo = false;
     let intentos = 0;
-    const maxIntentos = esReelOVideo ? 25 : 12; // Hasta 50s para video/reel, hasta 24s para imagen
+    const maxIntentos = esReelOVideoEfectivo ? 25 : 12; // Hasta 50s para video/reel, hasta 24s para imagen
     const intervaloMs = 2000; // 2 segundos
 
     while (!listo && intentos < maxIntentos) {
@@ -511,11 +535,15 @@ export async function publicarEnInstagram(params: {
           break;
         } else if (statusData?.status_code === "ERROR") {
           console.error(`[Meta Instagram] Contenedor ${creationId} reportó ERROR:`, JSON.stringify(statusData));
-          const detalle = statusData.status || statusData.error_message || statusData.error?.message || "";
+          const errObj = statusData.error || statusData;
+          const errorTraducido = interpretarErrorGraphApi(errObj);
+          const detalle = statusData.status || statusData.error_message || "";
           return {
             ok: false,
             plataforma: "instagram",
-            error: `Instagram reportó un fallo al procesar el archivo multimedia${detalle ? `: ${detalle}` : " (revisa la relación de aspecto o formato)"}.`,
+            error: errorTraducido.startsWith("Meta Graph API")
+              ? `Instagram reportó un fallo al procesar el archivo multimedia${detalle ? `: ${detalle}` : " (revisa la relación de aspecto o formato)"}.`
+              : errorTraducido,
           };
         }
       } catch (pollErr) {

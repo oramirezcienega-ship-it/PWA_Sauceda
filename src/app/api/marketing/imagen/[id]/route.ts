@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
-import sharp from "sharp";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Procesa un buffer de imagen para garantizar cumplimiento estricto con Meta Instagram API:
@@ -9,6 +10,7 @@ import sharp from "sharp";
  * 3. Convierte a JPEG de alta fidelidad (calidad 92 con mozjpeg).
  */
 async function procesarBufferParaInstagram(buf: Buffer): Promise<Buffer> {
+  const sharp = (await import("sharp")).default;
   let pipeline = sharp(buf);
   const meta = await pipeline.metadata();
 
