@@ -47,14 +47,53 @@ export function interpretarErrorMeta(code?: number, message?: string): string {
   return message || (code ? `Error de Meta (código ${code})` : "Error de entrega");
 }
 
+import { createClient } from "@supabase/supabase-js";
+
+/**
+ * Obtiene las credenciales de WhatsApp activas:
+ * Primero consulta en configuracion_agente (donde reside el token OAuth renovado y Phone ID);
+ * si no están o fallan, recurre a las variables de entorno.
+ */
+export async function obtenerCredencialesWhatsApp(): Promise<{ token: string; phoneId: string; wabaId: string }> {
+  let token = (process.env.WHATSAPP_TOKEN || "").trim();
+  let phoneId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim();
+  let wabaId = (process.env.WHATSAPP_WABA_ID || "").trim();
+
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (supabaseUrl && supabaseKey) {
+      const sb = createClient(supabaseUrl, supabaseKey);
+      const { data: configs } = await sb
+        .from("configuracion_agente")
+        .select("clave, valor")
+        .in("clave", ["whatsapp_oauth_token", "whatsapp_phone_number_id", "whatsapp_waba_id"]);
+
+      if (configs && configs.length > 0) {
+        const mapa = new Map(configs.map((c) => [c.clave, c.valor]));
+        const dbToken = mapa.get("whatsapp_oauth_token");
+        const dbPhoneId = mapa.get("whatsapp_phone_number_id");
+        const dbWabaId = mapa.get("whatsapp_waba_id");
+
+        if (dbToken && dbToken.trim()) token = dbToken.trim();
+        if (dbPhoneId && dbPhoneId.trim()) phoneId = dbPhoneId.trim();
+        if (dbWabaId && dbWabaId.trim()) wabaId = dbWabaId.trim();
+      }
+    }
+  } catch (err) {
+    // Continuar con variables de entorno si falla la BD
+  }
+
+  return { token, phoneId, wabaId };
+}
+
 /** Envía un mensaje de texto por WhatsApp. Devuelve el resultado. */
 export async function enviarWhatsAppTexto(
   telefono: string,
   texto: string,
 ): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const { token, phoneId } = await obtenerCredencialesWhatsApp();
     const to = normalizarTelefono(telefono);
     if (!token || !phoneId) {
       return {
@@ -128,9 +167,8 @@ export async function enviarWhatsAppDocumento(
 ): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   const tel = normalizarTelefono(telefono);
   if (!tel) return { ok: false, error: "Teléfono inválido." };
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return { ok: false, error: "WhatsApp no configurado." };
+  const { token, phoneId } = await obtenerCredencialesWhatsApp();
+  if (!token || !phoneId) return { ok: false, error: "WhatsApp no configurado (faltan credenciales)." };
 
   const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
 
@@ -196,8 +234,7 @@ export async function enviarWhatsAppPlantilla(
   urlBotonParam?: string,
 ): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const { token, phoneId } = await obtenerCredencialesWhatsApp();
     const to = normalizarTelefono(telefono);
     if (!token || !phoneId) {
       return {
@@ -295,8 +332,7 @@ export async function enviarWhatsAppPlantillaCompleta(
   components: Record<string, unknown>[] = [],
 ): Promise<{ ok: boolean; error?: string; messageId?: string; errorCode?: number; errorDetail?: string }> {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const { token, phoneId } = await obtenerCredencialesWhatsApp();
     const to = normalizarTelefono(telefono);
     if (!token || !phoneId) {
       return {
@@ -406,12 +442,11 @@ export async function listarPlantillasAprobadas(): Promise<{
   plantillas: PlantillaWhatsApp[];
 }> {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const waba = process.env.WHATSAPP_WABA_ID;
+    const { token, wabaId: waba } = await obtenerCredencialesWhatsApp();
     if (!token || !waba) {
       return {
         ok: false,
-        error: "Faltan WHATSAPP_TOKEN o WHATSAPP_WABA_ID en la configuración.",
+        error: "Faltan credenciales de WhatsApp (token o WABA ID) en la configuración.",
         plantillas: [],
       };
     }
@@ -512,8 +547,7 @@ export async function subirMediaMeta(
   filename: string,
   _category?: "image" | "sticker" | "document" | "audio" | "video"
 ): Promise<{ mediaId?: string; error?: string }> {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const { token, phoneId } = await obtenerCredencialesWhatsApp();
 
   if (!token || !phoneId) {
     console.error("[Meta Upload] Credenciales de WhatsApp incompletas.");
@@ -571,8 +605,7 @@ export async function enviarWhatsAppSticker(
   mediaId: string
 ): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const { token, phoneId } = await obtenerCredencialesWhatsApp();
     const to = normalizarTelefono(telefono);
 
     if (!token || !phoneId) {

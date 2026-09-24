@@ -23,16 +23,233 @@ import {
   procesarPublicacionesProgramadasVencidas,
 } from "@/app/actions/marketing";
 
+interface OpcionFiltro {
+  id: string;
+  label: string;
+  icono?: string;
+}
+
+const OPCIONES_ESTADO: OpcionFiltro[] = [
+  { id: "pendiente_revision", label: "Pendientes de Revisión", icono: "⏳" },
+  { id: "aprobado", label: "Aprobados (Listos)", icono: "✅" },
+  { id: "publicado", label: "Publicados / Enviados", icono: "📲" },
+  { id: "rechazado", label: "Rechazados", icono: "❌" },
+];
+
+const OPCIONES_CANAL: OpcionFiltro[] = [
+  { id: "facebook", label: "Facebook", icono: "🔵" },
+  { id: "instagram", label: "Instagram", icono: "🟣" },
+  { id: "tiktok", label: "TikTok", icono: "⚫" },
+  { id: "whatsapp", label: "WhatsApp", icono: "🟢" },
+  { id: "mautic", label: "Mautic / Correo", icono: "🟠" },
+];
+
+const OPCIONES_FORMATO: OpcionFiltro[] = [
+  { id: "imagen", label: "Imagen Estática", icono: "🖼️" },
+  { id: "carrusel", label: "Carrusel", icono: "🖼️" },
+  { id: "video", label: "Video", icono: "🎥" },
+  { id: "reel", label: "Reel / TikTok", icono: "📱" },
+];
+
+const OPCIONES_TEMA: OpcionFiltro[] = [
+  { id: "traspasos", label: "Traspasos INFONAVIT", icono: "🏠" },
+  { id: "impermeabilizacion", label: "Impermeabilización", icono: "🌧️" },
+  { id: "compra_directa", label: "Compra Directa de Casas", icono: "💵" },
+  { id: "remodelacion", label: "Remodelaciones", icono: "🏗️" },
+  { id: "gestion", label: "Asesoría / Gestión Legal", icono: "⚖️" },
+];
+
+const OPCIONES_FECHA: OpcionFiltro[] = [
+  { id: "hoy", label: "Programadas para Hoy", icono: "📌" },
+  { id: "manana", label: "Programadas para Mañana", icono: "📌" },
+  { id: "esta_semana", label: "Esta Semana", icono: "📆" },
+  { id: "este_mes", label: "Este Mes", icono: "🗓️" },
+];
+
+function DropdownFiltroMultiple({
+  titulo,
+  icono,
+  opciones,
+  valoresSeleccionados,
+  onToggle,
+  onLimpiar,
+}: {
+  titulo: string;
+  icono: string;
+  opciones: OpcionFiltro[];
+  valoresSeleccionados: string[];
+  onToggle: (id: string) => void;
+  onLimpiar: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickAfuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+      }
+    }
+    if (abierto) {
+      document.addEventListener("mousedown", handleClickAfuera);
+      return () => document.removeEventListener("mousedown", handleClickAfuera);
+    }
+  }, [abierto]);
+
+  const cantSeleccionados = valoresSeleccionados.length;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setAbierto((prev) => !prev)}
+        className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer ${
+          cantSeleccionados > 0
+            ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+            : "bg-crema/10 border-dorado/30 text-carbon/80 hover:border-dorado/60 hover:bg-white"
+        }`}
+      >
+        <span>{icono}</span>
+        <span>{titulo}</span>
+        {cantSeleccionados > 0 ? (
+          <span className="bg-dorado text-verde-profundo text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-[18px] text-center">
+            {cantSeleccionados}
+          </span>
+        ) : (
+          <span className="text-carbon/40 text-[10px]">Todos</span>
+        )}
+        <span className={`text-[9px] transition-transform duration-200 ${abierto ? "rotate-180" : ""}`}>
+          ▼
+        </span>
+      </button>
+
+      {abierto && (
+        <div className="absolute top-full left-0 mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-dorado/30 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-3 pb-2 mb-1 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-[11px] font-bold text-carbon/60 uppercase tracking-wider">
+              {titulo}
+            </span>
+            {cantSeleccionados > 0 && (
+              <button
+                type="button"
+                onClick={onLimpiar}
+                className="text-[10px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
+              >
+                Desmarcar todos
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-60 overflow-y-auto px-1.5 space-y-0.5">
+            {opciones.map((opc) => {
+              const estaActivo = valoresSeleccionados.includes(opc.id);
+              return (
+                <button
+                  key={opc.id}
+                  type="button"
+                  onClick={() => onToggle(opc.id)}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition cursor-pointer text-left ${
+                    estaActivo
+                      ? "bg-verde-profundo/10 text-verde-profundo font-bold"
+                      : "text-carbon/80 hover:bg-gray-100"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    {opc.icono && <span>{opc.icono}</span>}
+                    <span>{opc.label}</span>
+                  </span>
+                  <span
+                    className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] font-black transition-colors ${
+                      estaActivo
+                        ? "bg-verde-profundo text-white border-verde-profundo"
+                        : "border-gray-300 bg-white"
+                    }`}
+                  >
+                    {estaActivo && "✓"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
   const [mostrarModalMeta, setMostrarModalMeta] = useState(false);
   const [publicandoMetaId, setPublicandoMetaId] = useState<string | null>(null);
   const [disparandoMauticId, setDisparandoMauticId] = useState<string | null>(null);
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
-  const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
-  const [filtroFormato, setFiltroFormato] = useState<string>("todos");
-  const [filtroTemaFiltro, setFiltroTemaFiltro] = useState<string>("todos");
-  const [filtroFecha, setFiltroFecha] = useState<string>("todos");
+
+  // Estados de Filtros Multiselección
+  const [filtrosEstado, setFiltrosEstado] = useState<string[]>([]);
+  const [filtrosPlataforma, setFiltrosPlataforma] = useState<string[]>([]);
+  const [filtrosFormato, setFiltrosFormato] = useState<string[]>([]);
+  const [filtrosTema, setFiltrosTema] = useState<string[]>([]);
+  const [filtrosFecha, setFiltrosFecha] = useState<string[]>([]);
+  const [filtrosCargados, setFiltrosCargados] = useState(false);
+
+  // Restaurar filtros guardados en localStorage al iniciar
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem("crm_sauceda_publicaciones_filtros_v2");
+      if (guardado) {
+        const parsed = JSON.parse(guardado);
+        if (Array.isArray(parsed.estados)) setFiltrosEstado(parsed.estados);
+        if (Array.isArray(parsed.plataformas)) setFiltrosPlataforma(parsed.plataformas);
+        if (Array.isArray(parsed.formatos)) setFiltrosFormato(parsed.formatos);
+        if (Array.isArray(parsed.temas)) setFiltrosTema(parsed.temas);
+        if (Array.isArray(parsed.fechas)) setFiltrosFecha(parsed.fechas);
+      }
+    } catch (e) {
+      console.warn("Aviso al restaurar filtros de publicaciones:", e);
+    } finally {
+      setFiltrosCargados(true);
+    }
+  }, []);
+
+  // Guardar filtros en localStorage al cambiar
+  useEffect(() => {
+    if (!filtrosCargados) return;
+    try {
+      localStorage.setItem(
+        "crm_sauceda_publicaciones_filtros_v2",
+        JSON.stringify({
+          estados: filtrosEstado,
+          plataformas: filtrosPlataforma,
+          formatos: filtrosFormato,
+          temas: filtrosTema,
+          fechas: filtrosFecha,
+        })
+      );
+    } catch (e) {
+      console.warn("Aviso al guardar filtros de publicaciones:", e);
+    }
+  }, [filtrosEstado, filtrosPlataforma, filtrosFormato, filtrosTema, filtrosFecha, filtrosCargados]);
+
+  // Handlers para togglear filtros
+  const handleToggleFiltro = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    valor: string
+  ) => {
+    setter((prev) =>
+      prev.includes(valor) ? prev.filter((v) => v !== valor) : [...prev, valor]
+    );
+  };
+
+  const handleLimpiarTodosFiltros = () => {
+    setFiltrosEstado([]);
+    setFiltrosPlataforma([]);
+    setFiltrosFormato([]);
+    setFiltrosTema([]);
+    setFiltrosFecha([]);
+    try {
+      localStorage.removeItem("crm_sauceda_publicaciones_filtros_v2");
+    } catch {}
+  };
+
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
@@ -179,33 +396,43 @@ notify pgrst, 'reload schema';`;
   }, []);
 
   const publicacionesFiltradas = publicaciones.filter((pub) => {
-    // Filtro por Estado
-    if (filtroEstado !== "todos" && pub.estado !== filtroEstado) return false;
-
-    // Filtro por Canal
-    if (filtroPlataforma !== "todos") {
-      if (filtroPlataforma === "mautic") {
-        if (pub.plataforma !== "mautic" && pub.plataforma !== "email") return false;
-      } else if (pub.plataforma !== filtroPlataforma) {
-        return false;
-      }
+    // Filtro por Estado múltiple
+    if (filtrosEstado.length > 0 && !filtrosEstado.includes(pub.estado)) {
+      return false;
     }
 
-    // Filtro por Formato
-    if (filtroFormato !== "todos" && pub.tipo_formato !== filtroFormato) return false;
+    // Filtro por Canal múltiple
+    if (filtrosPlataforma.length > 0) {
+      const coincideCanal = filtrosPlataforma.some((plat) => {
+        if (plat === "mautic") {
+          return pub.plataforma === "mautic" || pub.plataforma === "email";
+        }
+        return pub.plataforma === plat;
+      });
+      if (!coincideCanal) return false;
+    }
 
-    // Filtro por Tema / Campaña
-    if (filtroTemaFiltro !== "todos") {
+    // Filtro por Formato múltiple
+    if (filtrosFormato.length > 0 && !filtrosFormato.includes(pub.tipo_formato)) {
+      return false;
+    }
+
+    // Filtro por Tema / Campaña múltiple
+    if (filtrosTema.length > 0) {
       const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
-      if (filtroTemaFiltro === "traspasos" && !textoBuscado.includes("traspaso") && !textoBuscado.includes("infonavit")) return false;
-      if (filtroTemaFiltro === "impermeabilizacion" && !textoBuscado.includes("impermeabiliz")) return false;
-      if (filtroTemaFiltro === "compra_directa" && !textoBuscado.includes("compra") && !textoBuscado.includes("contado") && !textoBuscado.includes("deuda")) return false;
-      if (filtroTemaFiltro === "remodelacion" && !textoBuscado.includes("remodela") && !textoBuscado.includes("construc")) return false;
-      if (filtroTemaFiltro === "gestion" && !textoBuscado.includes("gesti") && !textoBuscado.includes("legal") && !textoBuscado.includes("asesor")) return false;
+      const coincideTema = filtrosTema.some((tema) => {
+        if (tema === "traspasos") return textoBuscado.includes("traspaso") || textoBuscado.includes("infonavit");
+        if (tema === "impermeabilizacion") return textoBuscado.includes("impermeabiliz");
+        if (tema === "compra_directa") return textoBuscado.includes("compra") || textoBuscado.includes("contado") || textoBuscado.includes("deuda");
+        if (tema === "remodelacion") return textoBuscado.includes("remodela") || textoBuscado.includes("construc");
+        if (tema === "gestion") return textoBuscado.includes("gesti") || textoBuscado.includes("legal") || textoBuscado.includes("asesor");
+        return false;
+      });
+      if (!coincideTema) return false;
     }
 
-    // Filtro por Fecha
-    if (filtroFecha !== "todos") {
+    // Filtro por Fecha múltiple
+    if (filtrosFecha.length > 0) {
       const strFecha = (pub.estado === "publicado" && pub.publicado_en)
         ? pub.publicado_en
         : (pub.fecha_programacion || pub.created_at);
@@ -214,24 +441,24 @@ notify pgrst, 'reload schema';`;
       const fechaPub = dPub.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       const hoyObj = new Date();
       const hoyStr = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
-      
-      if (filtroFecha === "hoy" && fechaPub !== hoyStr) return false;
-      if (filtroFecha === "manana") {
-        const mananaObj = new Date();
-        mananaObj.setDate(mananaObj.getDate() + 1);
-        const mananaStr = mananaObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
-        if (fechaPub !== mananaStr) return false;
-      }
-      if (filtroFecha === "esta_semana") {
-        const hoy = new Date();
-        const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
-        const finSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6));
-        if (dPub < inicioSemana || dPub > finSemana) return false;
-      }
-      if (filtroFecha === "este_mes") {
-        const mesActual = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" }).slice(0, 7);
-        if (!fechaPub.startsWith(mesActual)) return false;
-      }
+
+      const mananaObj = new Date();
+      mananaObj.setDate(mananaObj.getDate() + 1);
+      const mananaStr = mananaObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+
+      const hoyD = new Date();
+      const inicioSemana = new Date(hoyD.setDate(hoyD.getDate() - hoyD.getDay()));
+      const finSemana = new Date(hoyD.setDate(hoyD.getDate() - hoyD.getDay() + 6));
+      const mesActual = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" }).slice(0, 7);
+
+      const coincideFecha = filtrosFecha.some((tipoFecha) => {
+        if (tipoFecha === "hoy") return fechaPub === hoyStr;
+        if (tipoFecha === "manana") return fechaPub === mananaStr;
+        if (tipoFecha === "esta_semana") return dPub >= inicioSemana && dPub <= finSemana;
+        if (tipoFecha === "este_mes") return fechaPub.startsWith(mesActual);
+        return false;
+      });
+      if (!coincideFecha) return false;
     }
 
     return true;
@@ -402,11 +629,7 @@ notify pgrst, 'reload schema';`;
       const interval = setInterval(async () => {
         intentos++;
         try {
-          const resPubs = await obtenerPublicaciones({
-            estado: filtroEstado,
-            plataforma: filtroPlataforma,
-            tipo_formato: filtroFormato,
-          });
+          const resPubs = await obtenerPublicaciones();
 
           if (resPubs.success && resPubs.data) {
             setPublicaciones(resPubs.data);
@@ -851,6 +1074,13 @@ notify pgrst, 'reload schema';`;
     }
   };
 
+  const hayFiltrosActivos =
+    filtrosEstado.length > 0 ||
+    filtrosPlataforma.length > 0 ||
+    filtrosFormato.length > 0 ||
+    filtrosTema.length > 0 ||
+    filtrosFecha.length > 0;
+
   return (
     <main className="min-h-screen pb-16 bg-crema/20">
       <input
@@ -913,101 +1143,207 @@ notify pgrst, 'reload schema';`;
           </div>
         )}
 
-        <div className="flex flex-wrap gap-4 items-center justify-between mb-8 bg-white p-4 rounded-2xl border border-dorado/20 shadow-xs">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Estado</label>
-              <select
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">📋 Todos los Estados</option>
-                <option value="pendiente_revision">⏳ Pendientes de Revisión</option>
-                <option value="aprobado">✅ Aprobados (Listos para Publicar)</option>
-                <option value="rechazado">❌ Rechazados</option>
-                <option value="publicado">📲 Publicados</option>
-              </select>
+        {/* Tarjeta de Filtros Omnicanal con Selección Múltiple y Persistencia */}
+        <div className="mb-8 bg-white p-5 rounded-2xl border border-dorado/20 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* 5 Dropdowns de Selección Múltiple */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <DropdownFiltroMultiple
+                titulo="Estado"
+                icono="📋"
+                opciones={OPCIONES_ESTADO}
+                valoresSeleccionados={filtrosEstado}
+                onToggle={(id) => handleToggleFiltro(setFiltrosEstado, id)}
+                onLimpiar={() => setFiltrosEstado([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Canal"
+                icono="🌐"
+                opciones={OPCIONES_CANAL}
+                valoresSeleccionados={filtrosPlataforma}
+                onToggle={(id) => handleToggleFiltro(setFiltrosPlataforma, id)}
+                onLimpiar={() => setFiltrosPlataforma([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Formato"
+                icono="🎨"
+                opciones={OPCIONES_FORMATO}
+                valoresSeleccionados={filtrosFormato}
+                onToggle={(id) => handleToggleFiltro(setFiltrosFormato, id)}
+                onLimpiar={() => setFiltrosFormato([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Campaña / Tema"
+                icono="🎯"
+                opciones={OPCIONES_TEMA}
+                valoresSeleccionados={filtrosTema}
+                onToggle={(id) => handleToggleFiltro(setFiltrosTema, id)}
+                onLimpiar={() => setFiltrosTema([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Fecha"
+                icono="📅"
+                opciones={OPCIONES_FECHA}
+                valoresSeleccionados={filtrosFecha}
+                onToggle={(id) => handleToggleFiltro(setFiltrosFecha, id)}
+                onLimpiar={() => setFiltrosFecha([])}
+              />
             </div>
 
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Canal</label>
-              <select
-                value={filtroPlataforma}
-                onChange={(e) => setFiltroPlataforma(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">🌐 Todos los Canales</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-                <option value="tiktok">TikTok</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="mautic">Mautic / Correo</option>
-              </select>
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Formato</label>
-              <select
-                value={filtroFormato}
-                onChange={(e) => setFiltroFormato(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">🎨 Todos los Formatos</option>
-                <option value="imagen">🖼️ Imagen Estática</option>
-                <option value="carrusel">🖼️ Carrusel</option>
-                <option value="video">🎥 Video</option>
-                <option value="reel">📱 Reel / TikTok</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Campaña / Tema</label>
-              <select
-                value={filtroTemaFiltro}
-                onChange={(e) => setFiltroTemaFiltro(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">🎯 Todos los Temas</option>
-                <option value="traspasos">🏠 Traspasos INFONAVIT</option>
-                <option value="impermeabilizacion">🌧️ Impermeabilización</option>
-                <option value="compra_directa">💵 Compra Directa de Casas</option>
-                <option value="remodelacion">🏗️ Remodelaciones</option>
-                <option value="gestion">⚖️ Asesoría / Gestión Legal</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Fecha</label>
-              <select
-                value={filtroFecha}
-                onChange={(e) => setFiltroFecha(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">📅 Todas las Fechas</option>
-                <option value="hoy">📌 Programadas para Hoy</option>
-                <option value="manana">📌 Programadas para Mañana</option>
-                <option value="esta_semana">📆 Esta Semana</option>
-                <option value="este_mes">🗓️ Este Mes</option>
-              </select>
+            {/* Contador y Selección masiva */}
+            <div className="flex flex-wrap items-center gap-4 ml-auto">
+              <div className="text-xs text-carbon/60 font-medium">
+                Mostrando:{" "}
+                <span className="font-bold text-verde-profundo text-sm">
+                  {publicacionesFiltradas.length}
+                </span>{" "}
+                de <span className="font-bold text-carbon/80">{publicaciones.length}</span>
+              </div>
+              {publicacionesFiltradas.length > 0 && (
+                <label className="flex items-center gap-2 text-xs font-bold text-verde-profundo bg-verde-profundo/5 hover:bg-verde-profundo/10 px-3 py-1.5 rounded-lg border border-verde-profundo/20 cursor-pointer transition-all">
+                  <input
+                    type="checkbox"
+                    checked={
+                      seleccionados.length === publicacionesFiltradas.length &&
+                      publicacionesFiltradas.length > 0
+                    }
+                    onChange={handleToggleSeleccionarTodos}
+                    className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                  />
+                  <span>
+                    Seleccionar todas ({seleccionados.length}/{publicacionesFiltradas.length})
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="text-xs text-carbon/50 font-medium">
-              Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicacionesFiltradas.length}</span>
+          {/* Fila de Chips de Filtros Activos con eliminación rápida (✕) y Botón de Limpiar */}
+          {hayFiltrosActivos && (
+            <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2 animate-in fade-in duration-150">
+              <span className="text-[11px] font-bold text-carbon/50 uppercase tracking-wider mr-1">
+                Filtros activos:
+              </span>
+
+              {filtrosEstado.map((id) => {
+                const opc = OPCIONES_ESTADO.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`st-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosEstado, id)}
+                      className="hover:bg-emerald-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosPlataforma.map((id) => {
+                const opc = OPCIONES_CANAL.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`pl-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-800 border border-blue-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosPlataforma, id)}
+                      className="hover:bg-blue-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosFormato.map((id) => {
+                const opc = OPCIONES_FORMATO.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`fo-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-800 border border-purple-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosFormato, id)}
+                      className="hover:bg-purple-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosTema.map((id) => {
+                const opc = OPCIONES_TEMA.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`te-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosTema, id)}
+                      className="hover:bg-amber-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosFecha.map((id) => {
+                const opc = OPCIONES_FECHA.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`fe-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-800 border border-rose-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosFecha, id)}
+                      className="hover:bg-rose-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={handleLimpiarTodosFiltros}
+                className="ml-auto inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-bold px-3 py-1 rounded-xl bg-red-50 hover:bg-red-100 transition cursor-pointer"
+                title="Limpiar todos los filtros"
+              >
+                <span>✕</span> Limpiar todos los filtros
+              </button>
             </div>
-            {publicacionesFiltradas.length > 0 && (
-              <label className="flex items-center gap-2 text-xs font-bold text-verde-profundo bg-verde-profundo/5 hover:bg-verde-profundo/10 px-3 py-1.5 rounded-lg border border-verde-profundo/20 cursor-pointer transition-all">
-                <input
-                  type="checkbox"
-                  checked={seleccionados.length === publicacionesFiltradas.length && publicacionesFiltradas.length > 0}
-                  onChange={handleToggleSeleccionarTodos}
-                  className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
-                />
-                <span>Seleccionar todas ({seleccionados.length}/{publicacionesFiltradas.length})</span>
-              </label>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Barra de Acciones Masivas Flotante cuando hay elementos seleccionados */}
@@ -1060,6 +1396,15 @@ notify pgrst, 'reload schema';`;
             <p className="mt-2 text-sm text-carbon/60 max-w-md">
               Prueba cambiando o limpiando los filtros seleccionados para ver más publicaciones.
             </p>
+            {hayFiltrosActivos && (
+              <button
+                type="button"
+                onClick={handleLimpiarTodosFiltros}
+                className="mt-4 bg-verde-profundo text-crema hover:bg-verde-profundo/90 px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <span>✕</span> Limpiar filtros aplicados
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

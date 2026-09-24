@@ -103,7 +103,7 @@ export async function GET(
         const rawBuffer = Buffer.from(match[2], "base64");
         try {
           const jpegBuffer = await procesarBufferParaInstagram(rawBuffer);
-          return new Response(jpegBuffer, {
+          return new Response(new Uint8Array(jpegBuffer), {
             headers: {
               "Content-Type": "image/jpeg",
               "Cache-Control": "public, max-age=86400, s-maxage=86400",
@@ -111,7 +111,7 @@ export async function GET(
             },
           });
         } catch {
-          return new Response(rawBuffer, {
+          return new Response(new Uint8Array(rawBuffer), {
             headers: {
               "Content-Type": match[1],
               "Cache-Control": "no-cache",
@@ -160,7 +160,7 @@ export async function GET(
 
         try {
           const jpegBuffer = await procesarBufferParaInstagram(inputBuffer);
-          return new Response(jpegBuffer, {
+          return new Response(new Uint8Array(jpegBuffer), {
             headers: {
               "Content-Type": "image/jpeg",
               "Cache-Control": "public, max-age=86400, s-maxage=86400",
@@ -170,7 +170,7 @@ export async function GET(
         } catch (sharpErr) {
           console.warn("[Proxy Imagen] Falló conversión con sharp, sirviendo buffer original:", sharpErr);
           const contentType = imgRes.headers.get("content-type") || "image/jpeg";
-          return new Response(inputBuffer, {
+          return new Response(new Uint8Array(inputBuffer), {
             headers: {
               "Content-Type": contentType,
               "Cache-Control": "no-cache",

@@ -27,7 +27,6 @@ async function manejarCron(request: NextRequest) {
 
     const resultado = await procesarPublicacionesProgramadasVencidas();
     return NextResponse.json({
-      success: true,
       timestamp: new Date().toISOString(),
       ...resultado,
     });
