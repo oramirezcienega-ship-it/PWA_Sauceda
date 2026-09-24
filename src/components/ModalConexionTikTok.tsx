@@ -43,6 +43,7 @@ export default function ModalConexionTikTok({
           if (res.data) {
             setEstado(res.data);
             if (res.data.usuario?.openId) setOpenId(res.data.usuario.openId);
+            if (res.data.clientKey) setClientKey(res.data.clientKey);
             if (!res.data.ok && res.data.error) {
               setMensajeError(res.data.error);
             }
@@ -228,6 +229,49 @@ export default function ModalConexionTikTok({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Botón de Conexión en 1 Clic con OAuth */}
+          <div className="p-4 bg-gradient-to-r from-neutral-900 to-black text-white rounded-2xl border border-cyan-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+            <div>
+              <h4 className="text-sm font-bold flex items-center gap-1.5 text-white">
+                <span>🎵</span> Conectar Cuenta Oficial (@saucedamxbr)
+              </h4>
+              <p className="text-[11px] text-gray-300 mt-0.5">
+                Autoriza a la app en TikTok con 1 solo clic sin copiar tokens manualmente.
+              </p>
+            </div>
+            <a
+              href="/api/tiktok/auth"
+              className="shrink-0 bg-gradient-to-r from-[#00f2fe] to-[#4facfe] hover:opacity-95 text-black font-extrabold text-xs px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5"
+            >
+              <span>🚀</span> Conectar con TikTok
+            </a>
+          </div>
+
+          {/* Redirect URI para configurar en la App de TikTok */}
+          <div className="p-3 bg-gray-50 border border-dorado/20 rounded-xl space-y-1">
+            <span className="text-[11px] font-bold text-carbon/80 block">
+              📋 Redirect URI para tu App de TikTok (copia y pega en tu app de TikTok en <em>Platforms &gt; Web</em>):
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value="https://app.saucedamx.com/api/tiktok/callback"
+                className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-carbon select-all"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText("https://app.saucedamx.com/api/tiktok/callback");
+                  alert("Copiado al portapapeles: https://app.saucedamx.com/api/tiktok/callback");
+                }}
+                className="bg-white hover:bg-gray-100 border border-gray-300 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 cursor-pointer"
+              >
+                Copiar
+              </button>
+            </div>
           </div>
 
           {/* Formulario de Configuración de Credenciales */}
