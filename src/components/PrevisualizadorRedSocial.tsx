@@ -15,6 +15,7 @@ interface PrevisualizadorRedSocialProps {
   onProgramar?: (pub: PublicacionProgramada) => void;
   onRegenerarCreativo?: (id: string) => void;
   onReemplazarArte?: (id: string) => void;
+  onReplicar?: (pub: PublicacionProgramada) => void;
 }
 
 export default function PrevisualizadorRedSocial({
@@ -25,6 +26,7 @@ export default function PrevisualizadorRedSocial({
   onProgramar,
   onRegenerarCreativo,
   onReemplazarArte,
+  onReplicar,
 }: PrevisualizadorRedSocialProps) {
   const [pubActual, setPubActual] = useState<PublicacionProgramada>(publicacion);
   const [plataformaActiva, setPlataformaActiva] = useState<string>("facebook");
@@ -1091,6 +1093,19 @@ export default function PrevisualizadorRedSocial({
             >
               <span>📋</span> {copiado ? "¡Copiado!" : "Copiar Copy"}
             </button>
+            {onReplicar && (
+              <button
+                type="button"
+                onClick={() => {
+                  onCerrar();
+                  onReplicar(pubActual);
+                }}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Generar versiones adaptadas de esta misma publicación para otras redes sociales"
+              >
+                <span>🔄</span> Replicar en otras Redes
+              </button>
+            )}
             <a
               href="https://www.canva.com/design?create=true&template=EAHWDrq_iM8"
               target="_blank"
