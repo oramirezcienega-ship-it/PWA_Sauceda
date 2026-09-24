@@ -43,6 +43,11 @@ export default function ModalConexionMeta({
             setEstado(res.data);
             if (res.data.pagina?.id) setPageId(res.data.pagina.id);
             if (res.data.instagram?.id) setInstagramId(res.data.instagram.id);
+            if (!res.data.ok && res.data.error) {
+              setMensajeError(res.data.error);
+            }
+          } else if (res.error) {
+            setMensajeError(res.error);
           }
         })
         .catch((err) => {

@@ -179,7 +179,7 @@ export async function probarConexionMeta(tokenManual?: string, pageIdManual?: st
   }
 
   try {
-    const url = `${META_GRAPH_BASE}/${encodeURIComponent(pageId)}?fields=id,name,link,fan_count,instagram_business_account{id,username,name,profile_picture_url}&access_token=${encodeURIComponent(token)}`;
+    const url = `${META_GRAPH_BASE}/${encodeURIComponent(pageId)}?fields=id,name,link,fan_count,instagram_business_account{id,username,name,profile_picture_url},connected_instagram_account{id,username,name,profile_picture_url}&access_token=${encodeURIComponent(token)}`;
     const res = await fetch(url, { method: "GET" });
     const data = await res.json();
 
@@ -204,13 +204,31 @@ export async function probarConexionMeta(tokenManual?: string, pageIdManual?: st
       },
     };
 
-    if (data.instagram_business_account) {
+    const cuentaIg = data.instagram_business_account || data.connected_instagram_account;
+    if (cuentaIg) {
       resultado.instagram = {
-        id: data.instagram_business_account.id,
-        usuario: data.instagram_business_account.username,
-        nombre: data.instagram_business_account.name,
-        fotoPerfil: data.instagram_business_account.profile_picture_url,
+        id: cuentaIg.id,
+        usuario: cuentaIg.username,
+        nombre: cuentaIg.name,
+        fotoPerfil: cuentaIg.profile_picture_url,
       };
+    } else if (creds.instagramAccountId) {
+      // Si no viene en la página pero el usuario configuró un ID manual de Instagram
+      try {
+        const igDirectUrl = `${META_GRAPH_BASE}/${encodeURIComponent(creds.instagramAccountId)}?fields=id,username,name,profile_picture_url&access_token=${encodeURIComponent(token)}`;
+        const igRes = await fetch(igDirectUrl, { method: "GET" });
+        const igData = await igRes.json();
+        if (igRes.ok && !igData.error && igData.id) {
+          resultado.instagram = {
+            id: igData.id,
+            usuario: igData.username,
+            nombre: igData.name,
+            fotoPerfil: igData.profile_picture_url,
+          };
+        }
+      } catch (e) {
+        console.warn("Fallo al verificar ID manual de Instagram:", e);
+      }
     }
 
     return resultado;
@@ -366,13 +384,20 @@ export async function publicarEnInstagram(params: {
   let instagramId = creds.instagramAccountId;
   if (!instagramId) {
     const estado = await probarConexionMeta(creds.pageAccessToken, creds.pageId);
-    if (estado.ok && estado.instagram?.id) {
+    if (!estado.ok) {
+      return {
+        ok: false,
+        plataforma: "instagram",
+        error: `Fallo de autenticación con Meta: ${estado.error || "Token inválido o expirado"}. Por favor abre el botón 'Conexión Meta' en la parte superior para ingresar o renovar tu Token de Acceso.`,
+      };
+    }
+    if (estado.instagram?.id) {
       instagramId = estado.instagram.id;
     } else {
       return {
         ok: false,
         plataforma: "instagram",
-        error: "No se encontró una cuenta de Instagram Business vinculada a la Página de Facebook de Sauceda.",
+        error: "No se detectó una cuenta de Instagram Business vinculada a tu Página de Facebook en Meta Business Suite. Puedes vincularla en la Configuración de tu Página de Facebook -> Cuentas Vinculadas -> Instagram, o ingresar directamente tu ID de Instagram en el modal 'Conexión Meta'.",
       };
     }
   }
