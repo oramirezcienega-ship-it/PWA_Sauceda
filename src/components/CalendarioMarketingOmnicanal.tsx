@@ -132,14 +132,25 @@ export default function CalendarioMarketingOmnicanal({
     // Ordenar cada día por hora cronológica
     mapa.forEach((lista) => {
       lista.sort((a, b) => {
-        const da = new Date((a.estado === "publicado" && a.publicado_en) ? a.publicado_en : a.fecha_programacion).getTime();
-        const db = new Date((b.estado === "publicado" && b.publicado_en) ? b.publicado_en : b.fecha_programacion).getTime();
+        const strA = (a.estado === "publicado" && a.publicado_en)
+          ? a.publicado_en
+          : (a.fecha_programacion || a.publicado_en || a.created_at || "");
+        const strB = (b.estado === "publicado" && b.publicado_en)
+          ? b.publicado_en
+          : (b.fecha_programacion || b.publicado_en || b.created_at || "");
+        const da = new Date(strA).getTime() || 0;
+        const db = new Date(strB).getTime() || 0;
         return da - db;
       });
     });
 
     return mapa;
   }, [publicacionesFiltradas]);
+
+  // Lista de días ordenados cronológicamente para la vista de Agenda
+  const diasAgenda = useMemo(() => {
+    return Array.from(publicacionesPorDia.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [publicacionesPorDia]);
 
   // Generación de celdas para la cuadrícula mensual
   const celdasCalendario = useMemo(() => {
@@ -230,11 +241,11 @@ export default function CalendarioMarketingOmnicanal({
   const getPuntoEstado = (estado: string) => {
     switch (estado) {
       case "pendiente_revision":
-        return { color: "bg-amber-500", label: "Revisión" };
+        return { color: "bg-amber-500", label: "Borrador" };
       case "aprobado":
-        return { color: "bg-emerald-500", label: "Aprobado" };
+        return { color: "bg-emerald-500", label: "Programada" };
       case "publicado":
-        return { color: "bg-blue-500", label: "Publicado" };
+        return { color: "bg-blue-500", label: "✓ Enviada" };
       case "rechazado":
         return { color: "bg-red-500", label: "Rechazado" };
       default:
@@ -379,7 +390,7 @@ export default function CalendarioMarketingOmnicanal({
             </button>
 
             {/* Alternador Mes / Agenda */}
-            <div className="hidden sm:flex bg-white/10 rounded-xl p-0.5 border border-white/20">
+            <div className="flex bg-white/10 rounded-xl p-0.5 border border-white/20">
               <button
                 onClick={() => setVista("mes")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
@@ -481,8 +492,8 @@ export default function CalendarioMarketingOmnicanal({
             >
               <option value="todos" className="text-carbon">Todos los Estados</option>
               <option value="pendientes" className="text-carbon">⏳ Pendientes de Revisión</option>
-              <option value="aprobados" className="text-carbon">✅ Aprobados / Programados</option>
-              <option value="publicados" className="text-carbon">📲 Publicados</option>
+              <option value="aprobados" className="text-carbon">⏰ Programadas</option>
+              <option value="publicados" className="text-carbon">✓ Enviadas / Publicadas</option>
             </select>
           </div>
         </div>
@@ -570,7 +581,7 @@ export default function CalendarioMarketingOmnicanal({
                               ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 hover:border-emerald-500 hover:shadow-xs"
                               : canalBadge.bg
                           }`}
-                          title={`${pub.titulo} (${pub.plataforma.toUpperCase()} • ${esPublicado ? "Publicado" : esAprobado ? "Aprobado" : "Borrador"})`}
+                          title={`${pub.titulo} (${pub.plataforma.toUpperCase()} • ${esPublicado ? "Enviada / Publicada" : esAprobado ? "Programada" : "Borrador"})`}
                         >
                           <div className="flex items-center justify-between gap-1">
                             <span className="font-bold flex items-center gap-1.5 truncate">
@@ -582,13 +593,13 @@ export default function CalendarioMarketingOmnicanal({
                             <span
                               className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full text-white shrink-0 ${
                                 esPublicado
-                                  ? "bg-blue-600"
+                                  ? "bg-blue-600 shadow-xs"
                                   : esAprobado
-                                  ? "bg-emerald-600"
-                                  : "bg-amber-600"
+                                  ? "bg-emerald-600 shadow-xs"
+                                  : "bg-amber-600 shadow-xs"
                               }`}
                             >
-                              {esPublicado ? "✓ Publicado" : esAprobado ? "Listo" : "Borrador"}
+                              {esPublicado ? "✓ Enviada" : esAprobado ? "⏰ Programada" : "Borrador"}
                             </span>
                           </div>
 
@@ -600,11 +611,20 @@ export default function CalendarioMarketingOmnicanal({
                             <span className="flex items-center gap-1">
                               <span>{esPublicado ? "📲" : "⏰"}</span>
                               <span>{formatHoraPub(pub)}</span>
+                              {esPublicado && (
+                                <span className="text-[9px] text-blue-700 font-bold ml-0.5">Enviada</span>
+                              )}
                             </span>
                             {esPublicado && pub.url_publicacion && (
-                              <span className="text-[9px] text-blue-600 font-bold underline">
+                              <a
+                                href={pub.url_publicacion}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[9px] text-blue-600 hover:text-blue-800 font-bold underline"
+                              >
                                 Ver ↗
-                              </span>
+                              </a>
                             )}
                           </div>
                         </div>
@@ -623,14 +643,15 @@ export default function CalendarioMarketingOmnicanal({
       {/* ============================================================== */}
       {vista === "agenda" && (
         <div className="p-4 sm:p-6 space-y-4">
-          {Array.from(publicacionesPorDia.entries()).length === 0 ? (
+          {diasAgenda.length === 0 ? (
             <div className="text-center py-12 text-carbon/50">
               <span className="text-4xl">📭</span>
               <p className="mt-2 text-sm font-semibold">No hay publicaciones con los filtros seleccionados</p>
             </div>
           ) : (
-            Array.from(publicacionesPorDia.entries()).map(([fechaStr, listaPubs]) => {
-              const fechaObj = new Date(fechaStr + "T12:00:00");
+            diasAgenda.map(([fechaStr, listaPubs]) => {
+              const [anioStr, mesStr, diaStr] = fechaStr.split("-");
+              const fechaObj = new Date(Number(anioStr), Number(mesStr) - 1, Number(diaStr), 12, 0, 0);
               const hoyStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
               const esHoy = fechaStr === hoyStr;
 
@@ -650,13 +671,19 @@ export default function CalendarioMarketingOmnicanal({
                         year: "numeric",
                       })}
                     </span>
-                    {esHoy && <span className="bg-white/20 px-2 py-0.5 rounded text-[10px]">HOY</span>}
+                    <div className="flex items-center gap-2">
+                      {esHoy && <span className="bg-white/20 px-2 py-0.5 rounded text-[10px]">HOY</span>}
+                      <span className="text-[10px] font-normal opacity-80">
+                        {listaPubs.length} {listaPubs.length === 1 ? "publicación" : "publicaciones"}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="p-3 divide-y divide-gray-100 bg-white">
                     {listaPubs.map((pub) => {
                       const canalBadge = getBadgeCanal(pub.plataforma);
-                      const punto = getPuntoEstado(pub.estado);
+                      const esPublicado = pub.estado === "publicado";
+                      const esAprobado = pub.estado === "aprobado";
 
                       return (
                         <div
@@ -664,14 +691,14 @@ export default function CalendarioMarketingOmnicanal({
                           className="py-3 flex flex-wrap items-center justify-between gap-3 hover:bg-gray-50/80 px-2 rounded-xl transition"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <span className="text-lg">{canalBadge.icon}</span>
+                            <span className="text-xl">{canalBadge.icon}</span>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <h4 className="font-bold text-sm text-carbon truncate">
                                   {pub.titulo}
                                 </h4>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${canalBadge.bg}`}>
-                                  {pub.plataforma}
+                                  {canalBadge.label}
                                 </span>
                               </div>
                               <p className="text-xs text-carbon/60 line-clamp-1 mt-0.5">
@@ -681,19 +708,26 @@ export default function CalendarioMarketingOmnicanal({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-mono text-xs text-carbon/70 font-semibold bg-gray-100 px-2.5 py-1 rounded-lg">
-                              {pub.estado === "publicado" ? "📲 Enviado:" : "⏰"} {formatHoraPub(pub)}
-                            </span>
                             <span
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg text-white ${
-                                pub.estado === "publicado"
-                                  ? "bg-blue-600"
-                                  : pub.estado === "aprobado"
-                                  ? "bg-emerald-600"
-                                  : "bg-amber-600"
+                              className={`font-mono text-xs font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+                                esPublicado
+                                  ? "bg-blue-50 text-blue-800 border border-blue-200"
+                                  : "bg-gray-100 text-carbon/70"
                               }`}
                             >
-                              {pub.estado === "publicado" ? "Publicado" : pub.estado === "aprobado" ? "Listo" : "Borrador"}
+                              <span>{esPublicado ? "📲 Enviada a las:" : "⏰"}</span>
+                              <span>{formatHoraPub(pub)}</span>
+                            </span>
+                            <span
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg text-white flex items-center gap-1 ${
+                                esPublicado
+                                  ? "bg-blue-600 shadow-xs"
+                                  : esAprobado
+                                  ? "bg-emerald-600 shadow-xs"
+                                  : "bg-amber-600 shadow-xs"
+                              }`}
+                            >
+                              {esPublicado ? "✓ Enviada" : esAprobado ? "⏰ Programada" : "⏳ Borrador"}
                             </span>
                             {pub.url_publicacion && (
                               <a
@@ -702,7 +736,7 @@ export default function CalendarioMarketingOmnicanal({
                                 rel="noreferrer"
                                 className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold px-2.5 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1"
                               >
-                                <span>🔗</span> Ver ↗
+                                <span>🔗</span> Ver en {canalBadge.label} ↗
                               </a>
                             )}
                             <button
@@ -715,7 +749,7 @@ export default function CalendarioMarketingOmnicanal({
                               onClick={() => handleAbrirDetalle(pub)}
                               className="bg-white hover:bg-gray-100 border border-gray-200 text-carbon text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
                             >
-                              {pub.estado === "publicado" ? "ℹ️ Detalle" : "⏰ Reagendar"}
+                              {esPublicado ? "ℹ️ Detalle" : "⏰ Reagendar"}
                             </button>
                           </div>
                         </div>
@@ -792,7 +826,7 @@ export default function CalendarioMarketingOmnicanal({
                 <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <div className="flex items-center gap-2 text-blue-950 font-bold text-xs">
                     <span className="text-base">📲</span>
-                    <span>Publicado en {pubSeleccionada.plataforma.toUpperCase()} • {formatHoraPub(pubSeleccionada)}</span>
+                    <span>Enviada y Publicada en {pubSeleccionada.plataforma.toUpperCase()} • {formatHoraPub(pubSeleccionada)}</span>
                   </div>
                   {pubSeleccionada.url_publicacion && (
                     <a

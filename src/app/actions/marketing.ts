@@ -597,12 +597,17 @@ export async function reprogramarPublicacion(
     await requireAdministrador();
     const sb = supabaseServidor();
 
+    const ahoraIso = new Date().toISOString();
     const updatePayload: any = {
       fecha_programacion,
-      updated_at: new Date().toISOString(),
+      updated_at: ahoraIso,
     };
     if (estado) {
       updatePayload.estado = estado;
+      if (estado === "publicado") {
+        updatePayload.publicado_en = ahoraIso;
+        updatePayload.fecha_programacion = ahoraIso;
+      }
     }
 
     const { data, error } = await sb
@@ -746,12 +751,19 @@ export async function cambiarEstadoPublicacionesMasivo(
     if (!ids || ids.length === 0) return { success: true, data: true };
     const sb = supabaseServidor();
 
+    const ahoraIso = new Date().toISOString();
+    const updatePayload: any = {
+      estado,
+      updated_at: ahoraIso,
+    };
+    if (estado === "publicado") {
+      updatePayload.publicado_en = ahoraIso;
+      updatePayload.fecha_programacion = ahoraIso;
+    }
+
     const { data, error } = await sb
       .from("publicaciones_programadas")
-      .update({
-        estado,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .in("id", ids)
       .select();
 
@@ -1485,10 +1497,13 @@ export async function guardarCredencialesMeta(config: {
  * y pasa la lista de exclusión (correos y teléfonos) a Mautic para garantizar que nunca reciban el mensaje.
  */
 export async function ejecutarEnvioMautic(
-  idPublicacion: string
+  idPublicacion: string,
+  saltarAuth: boolean = false
 ): Promise<ActionResult<PublicacionProgramada>> {
   try {
-    await requireAdministrador();
+    if (!saltarAuth) {
+      await requireAdministrador();
+    }
     const sb = supabaseServidor();
 
     // 1. Obtener la publicación
@@ -1609,10 +1624,13 @@ export async function ejecutarEnvioMautic(
  */
 export async function ejecutarPublicacionMeta(
   idPublicacion: string,
-  forzarDestino?: "facebook" | "instagram" | "ambas"
+  forzarDestino?: "facebook" | "instagram" | "ambas",
+  saltarAuth: boolean = false
 ): Promise<ActionResult<PublicacionProgramada>> {
   try {
-    await requireAdministrador();
+    if (!saltarAuth) {
+      await requireAdministrador();
+    }
     const sb = supabaseServidor();
 
     // 1. Obtener la publicación
@@ -1626,7 +1644,7 @@ export async function ejecutarPublicacionMeta(
 
     // Si la publicación está destinada a Mautic o Correo, derivar al ejecutor de Mautic
     if (pub.plataforma === "mautic" || pub.plataforma === "email") {
-      return await ejecutarEnvioMautic(idPublicacion);
+      return await ejecutarEnvioMautic(idPublicacion, saltarAuth);
     }
 
     const plataforma = pub.plataforma;
@@ -1901,7 +1919,7 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
       // Si es Facebook o Instagram, publicamos automáticamente mediante Meta Graph API
       if (pub.plataforma === "facebook" || pub.plataforma === "instagram") {
         try {
-          const res = await ejecutarPublicacionMeta(pub.id!, pub.plataforma);
+          const res = await ejecutarPublicacionMeta(pub.id!, pub.plataforma, true);
           if (res.success) {
             exitosas++;
             detalles.push({ id: pub.id!, plataforma: pub.plataforma, status: "publicado", mensaje: "Publicado automáticamente en Meta por agenda programada" });
@@ -1916,7 +1934,7 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
       } else if (pub.plataforma === "mautic" || pub.plataforma === "email") {
         // Para Mautic: disparar campaña de difusión masiva excluyendo prospectos inhabilitados del CRM
         try {
-          const resMautic = await ejecutarEnvioMautic(pub.id!);
+          const resMautic = await ejecutarEnvioMautic(pub.id!, true);
           if (resMautic.success) {
             exitosas++;
             detalles.push({
