@@ -212,6 +212,37 @@ export async function obtenerPublicaciones(filtros?: {
 }
 
 /**
+ * Obtiene una publicación específica por su ID directamente desde la BD para refrescar estados en tiempo real.
+ */
+export async function obtenerPublicacionPorId(
+  id: string
+): Promise<ActionResult<PublicacionProgramada>> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+
+    const { data, error } = await sb
+      .from("publicaciones_programadas")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return { success: false, error: "Publicación no encontrada" };
+
+    const pub: PublicacionProgramada = {
+      ...data,
+      prompt_imagen_flux: data.prompt_imagen_flux || data.diseno_banner?.prompt_imagen_flux || undefined,
+    };
+
+    return { success: true, data: pub };
+  } catch (err: any) {
+    console.error("Error en obtenerPublicacionPorId:", err);
+    return { success: false, error: formatearErrorBDMarketing(err) };
+  }
+}
+
+/**
  * Construye un prompt fotográfico profesional en inglés altamente detallado y optimizado
  * para el modelo Flux de Replicate, con exactitud técnica para construcción y bienes raíces en México.
  */
@@ -423,7 +454,9 @@ export async function guardarPublicacion(
       sugerencia_visual: pub.sugerencia_visual || "",
       guion_video: pub.guion_video || "",
       diseno_banner: disenoBannerFinal,
-      fecha_programacion: pub.fecha_programacion,
+      fecha_programacion: pub.fecha_programacion
+        ? new Date(pub.fecha_programacion).toISOString()
+        : pub.fecha_programacion,
       estado: pub.estado,
       notas_revision: pub.notas_revision || "",
       updated_at: new Date().toISOString(),
@@ -718,7 +751,7 @@ export async function generarPublicacionesAutomaticas(
 
     const proveedor = process.env.IA_PROVEEDOR || (process.env.KIMI_API_KEY ? "kimi" : "anthropic");
     let rawText = "";
-    const fechaBaseStr = fechaInicio || new Date().toISOString().split("T")[0];
+    const fechaBaseStr = fechaInicio || new Date().toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
     
     const systemPrompt = `Eres el Director Creativo de Marketing Inmobiliario y de Construcción de SAUCEDA en León, Guanajuato, México.
 Tu misión principal es generar ANUNCIOS VENDEDORES DE ALTA CONVERSIÓN (Direct Response Ads) diseñados para generar prospectos calificados al WhatsApp (477 465 4700) y llamadas directas.

@@ -33,7 +33,9 @@ export async function GET(
         return new Response(buffer, {
           headers: {
             "Content-Type": mime,
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
           },
         });
       }
@@ -65,7 +67,9 @@ export async function GET(
         return new Response(Buffer.from(arrayBuf), {
           headers: {
             "Content-Type": contentType,
-            "Cache-Control": "public, max-age=86400, immutable",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
             "Access-Control-Allow-Origin": "*",
           },
         });
