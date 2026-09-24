@@ -191,7 +191,7 @@ export default function PaginaPublicaciones() {
   const [filtrosFecha, setFiltrosFecha] = useState<string[]>([]);
   const [filtrosCargados, setFiltrosCargados] = useState(false);
 
-  // Densidad de visualización: número de columnas (3, 4 o 5 por fila)
+  // Densidad de visualización: número de columnas (2, 3 o 4 máximo por fila)
   const [numColumnas, setNumColumnas] = useState<number>(4);
   const [textosExpandidos, setTextosExpandidos] = useState<Record<string, boolean>>({});
 
@@ -214,7 +214,8 @@ export default function PaginaPublicaciones() {
       const colsGuardadas = localStorage.getItem("crm_sauceda_publicaciones_cols");
       if (colsGuardadas) {
         const n = parseInt(colsGuardadas, 10);
-        if (n === 3 || n === 4 || n === 5) setNumColumnas(n);
+        if (n === 2 || n === 3 || n === 4) setNumColumnas(n);
+        else setNumColumnas(4);
       }
     } catch (e) {
       console.warn("Aviso al restaurar filtros de publicaciones:", e);
@@ -265,13 +266,14 @@ export default function PaginaPublicaciones() {
   };
 
   const gridColsClass = useMemo(() => {
+    if (numColumnas === 2) {
+      return "grid grid-cols-1 md:grid-cols-2 gap-4";
+    }
     if (numColumnas === 3) {
-      return "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5";
+      return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
     }
-    if (numColumnas === 5) {
-      return "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5";
-    }
-    return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4";
+    // Default: 4 columnas máximo (nunca excede 4 por fila)
+    return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5";
   }, [numColumnas]);
 
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
@@ -311,6 +313,7 @@ export default function PaginaPublicaciones() {
   const [cargandoLista, setCargandoLista] = useState(true);
   const [mensajeCarga, setMensajeCarga] = useState("Generando contenido...");
   const [guionesExpandidos, setGuionesExpandidos] = useState<Record<string, boolean>>({});
+  const [promptsExpandidos, setPromptsExpandidos] = useState<Record<string, boolean>>({});
   const [regenerandoIds, setRegenerandoIds] = useState<Record<string, boolean>>({});
   const [errorBd, setErrorBd] = useState<string | null>(null);
 
@@ -1058,6 +1061,13 @@ notify pgrst, 'reload schema';`;
     }));
   };
 
+  const togglePrompt = (id: string) => {
+    setPromptsExpandidos(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   const formatFecha = (fechaStr: string) => {
     try {
       const d = new Date(fechaStr);
@@ -1222,11 +1232,23 @@ notify pgrst, 'reload schema';`;
               />
             </div>
 
-            {/* Densidad de Columnas (3, 4 o 5) + Contador + Selección masiva */}
+            {/* Densidad de Columnas (2, 3 o 4 máximo por fila) + Contador + Selección masiva */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-4 ml-auto">
               {/* Selector de Densidad de Columnas */}
               <div className="flex items-center bg-gray-100/90 p-0.5 rounded-xl border border-gray-200 shadow-2xs">
                 <span className="text-[10px] font-bold text-carbon/50 px-2 uppercase hidden md:inline">Columnas:</span>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(2)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 2
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="2 columnas por fila"
+                >
+                  2 cols
+                </button>
                 <button
                   type="button"
                   onClick={() => setNumColumnas(3)}
@@ -1235,7 +1257,7 @@ notify pgrst, 'reload schema';`;
                       ? "bg-white text-verde-profundo shadow-2xs"
                       : "text-carbon/60 hover:text-carbon"
                   }`}
-                  title="3 columnas por fila (tarjetas amplias)"
+                  title="3 columnas por fila"
                 >
                   3 cols
                 </button>
@@ -1247,21 +1269,9 @@ notify pgrst, 'reload schema';`;
                       ? "bg-white text-verde-profundo shadow-2xs"
                       : "text-carbon/60 hover:text-carbon"
                   }`}
-                  title="4 columnas por fila (balance óptimo)"
+                  title="4 columnas por fila (máximo 4 por fila)"
                 >
-                  4 cols
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNumColumnas(5)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    numColumnas === 5
-                      ? "bg-white text-verde-profundo shadow-2xs"
-                      : "text-carbon/60 hover:text-carbon"
-                  }`}
-                  title="5 columnas por fila (máxima densidad)"
-                >
-                  5 cols
+                  4 cols (Máx)
                 </button>
               </div>
 
@@ -1479,6 +1489,7 @@ notify pgrst, 'reload schema';`;
           <div className={gridColsClass}>
             {publicacionesFiltradas.map((pub) => {
               const guionActivo = guionesExpandidos[pub.id!] || false;
+              const promptActivo = promptsExpandidos[pub.id!] || false;
               const estaSeleccionado = seleccionados.includes(pub.id!);
               const estaExpandido = textosExpandidos[pub.id!] || false;
               const mediaUrl = pub.url_imagen && pub.url_imagen.length > 5
@@ -1492,39 +1503,39 @@ notify pgrst, 'reload schema';`;
               return (
                 <div
                   key={pub.id}
-                  className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col shadow-xs overflow-hidden ${
+                  className={`bg-white rounded-xl border transition-all duration-200 flex flex-col shadow-xs overflow-hidden ${
                     estaSeleccionado
-                      ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-md"
+                      ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-sm"
                       : pub.estado === "pendiente_revision"
-                      ? "border-dorado/30 hover:border-dorado/60 hover:shadow-md"
+                      ? "border-dorado/30 hover:border-dorado/60 hover:shadow-sm"
                       : pub.estado === "aprobado"
-                      ? "border-emerald-500/30 hover:border-emerald-500/60 hover:shadow-md"
+                      ? "border-emerald-500/30 hover:border-emerald-500/60 hover:shadow-sm"
                       : pub.estado === "rechazado"
                       ? "border-red-500/20 opacity-90"
-                      : "border-carbon/10 bg-gray-50/30 hover:shadow-sm"
+                      : "border-carbon/10 bg-gray-50/30 hover:shadow-xs"
                   }`}
                 >
-                  {/* Cabecera compacta de la Tarjeta */}
-                  <div className="px-3.5 py-2.5 border-b border-carbon/5 flex items-center justify-between gap-1.5 bg-gray-50/50">
-                    <div className="flex items-center gap-2 min-w-0">
+                  {/* Cabecera ultra-compacta de la Tarjeta */}
+                  <div className="px-3 py-2 border-b border-carbon/5 flex items-center justify-between gap-1.5 bg-gray-50/60">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <input
                         type="checkbox"
                         checked={estaSeleccionado}
                         onChange={() => handleToggleSeleccion(pub.id!)}
-                        className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer shrink-0"
+                        className="w-3.5 h-3.5 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer shrink-0"
                         title="Seleccionar para acciones masivas"
                       />
-                      <div className="shrink-0 scale-95 origin-left">
+                      <div className="shrink-0 scale-90 origin-left">
                         {getPlataformaBadge(pub.plataforma)}
                       </div>
-                      <span className="text-[11px] bg-carbon/5 text-carbon/70 font-semibold px-1.5 py-0.5 rounded shrink-0">
+                      <span className="text-[10px] bg-carbon/5 text-carbon/70 font-semibold px-1 py-0.5 rounded shrink-0">
                         {getFormatoIcon(pub.tipo_formato)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       <span
-                        className={`text-[10px] font-mono truncate max-w-[125px] ${
+                        className={`text-[10px] font-mono truncate max-w-[110px] ${
                           pub.estado === "publicado" ? "text-blue-700 font-bold" : "text-carbon/60"
                         }`}
                         title={formatFecha(
@@ -1571,8 +1582,8 @@ notify pgrst, 'reload schema';`;
                     <div className="relative aspect-[16/10] bg-black overflow-hidden group">
                       {regenerandoIds[pub.id!] && (
                         <div className="absolute inset-0 bg-carbon/85 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20 p-2 text-center animate-in fade-in">
-                          <div className="w-7 h-7 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
-                          <span className="text-[11px] font-bold text-dorado">Generando arte Flux...</span>
+                          <div className="w-6 h-6 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
+                          <span className="text-[10px] font-bold text-dorado">Generando arte Flux...</span>
                         </div>
                       )}
                       {esVideo ? (
@@ -1587,21 +1598,21 @@ notify pgrst, 'reload schema';`;
                           src={mediaUrl}
                           alt={pub.titulo}
                           referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                         />
                       )}
-                      <div className="absolute top-2 right-2 bg-carbon/80 backdrop-blur-md text-crema text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 flex items-center gap-1 shadow-sm">
+                      <div className="absolute top-1.5 right-1.5 bg-carbon/80 backdrop-blur-md text-crema text-[8px] font-bold px-1.5 py-0.5 rounded-full border border-white/20 flex items-center gap-1 shadow-xs">
                         <span>{esVideo ? "🎬" : "🎨"}</span>
-                        <span>{esVideo ? "Video IA" : esBannerSvg ? "Banner SVG" : "Flux"}</span>
+                        <span>{esVideo ? "Video IA" : esBannerSvg ? "Banner" : "Flux"}</span>
                       </div>
                       {/* Botones rápidos en hover sobre la foto */}
-                      <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                         <a
                           href={CANVA_DESIGN_URL}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => handleCopiarYNotificar(pub)}
-                          className="bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
                           title="Abrir en Canva"
                         >
                           🎨 Canva
@@ -1609,15 +1620,15 @@ notify pgrst, 'reload schema';`;
                         <button
                           type="button"
                           onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
                           title="Copiar foto"
                         >
-                          📋 Copiar
+                          📋 Foto
                         </button>
                         <button
                           type="button"
                           onClick={() => handleReemplazarArte(pub.id!)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
                           title="Subir Arte de Canva"
                         >
                           📁 Arte
@@ -1626,7 +1637,7 @@ notify pgrst, 'reload schema';`;
                           type="button"
                           disabled={regenerandoIds[pub.id!]}
                           onClick={() => handleRegenerarCreativo(pub.id!)}
-                          className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60"
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer disabled:opacity-60"
                           title="Regenerar con IA"
                         >
                           🔄
@@ -1635,7 +1646,7 @@ notify pgrst, 'reload schema';`;
                           href={mediaUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-white/90 hover:bg-white text-carbon text-[10px] font-bold px-2 py-1 rounded shadow-md transition-all"
+                          className="bg-white/90 hover:bg-white text-carbon text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition"
                           title="Ver en HD"
                         >
                           🔍
@@ -1643,57 +1654,57 @@ notify pgrst, 'reload schema';`;
                       </div>
                     </div>
                   ) : (
-                    <div className="relative aspect-[16/10] border-b border-dashed border-dorado/30 bg-dorado/5 flex flex-col items-center justify-center p-3 text-center">
+                    <div className="relative aspect-[16/10] border-b border-dashed border-dorado/30 bg-dorado/5 flex flex-col items-center justify-center p-2.5 text-center">
                       {regenerandoIds[pub.id!] ? (
                         <div className="flex flex-col items-center justify-center">
-                          <div className="w-7 h-7 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
-                          <span className="text-[11px] font-bold text-dorado">Generando arte con IA...</span>
+                          <div className="w-6 h-6 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
+                          <span className="text-[10px] font-bold text-dorado">Generando arte con IA...</span>
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center text-carbon/50">
-                          <span className="text-2xl mb-1">🖼️</span>
-                          <span className="text-[11px] font-medium">Sin imagen</span>
+                          <span className="text-xl mb-0.5">🖼️</span>
+                          <span className="text-[10px] font-medium">Sin imagen</span>
                           <button
                             type="button"
                             onClick={() => handleRegenerarCreativo(pub.id!)}
-                            className="mt-1.5 bg-verde-profundo text-crema text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
+                            className="mt-1 bg-verde-profundo text-crema text-[10px] font-bold px-2 py-0.5 rounded shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
                           >
-                            <span>✨</span> Generar con IA (Flux)
+                            <span>✨</span> Generar Flux
                           </button>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {/* Cuerpo de la publicación */}
-                  <div className="p-3.5 flex-1 flex flex-col gap-2.5">
+                  {/* Cuerpo compacto de la publicación */}
+                  <div className="p-2.5 flex-1 flex flex-col gap-2">
                     <div>
                       <h3
-                        className="font-bold text-verde-profundo text-xs sm:text-sm leading-snug line-clamp-2"
+                        className="font-bold text-verde-profundo text-xs leading-snug line-clamp-1"
                         title={pub.titulo}
                       >
                         {pub.titulo}
                       </h3>
-                      <div className="mt-1.5 bg-crema/10 border border-dorado/20 rounded-xl p-2.5 relative group">
+                      <div className="mt-1 bg-crema/10 border border-dorado/15 rounded-lg p-2 relative group">
                         <p
-                          className={`text-xs text-carbon whitespace-pre-wrap leading-relaxed font-cuerpo pr-5 ${
-                            estaExpandido ? "" : "line-clamp-3"
+                          className={`text-[11px] text-carbon whitespace-pre-wrap leading-relaxed font-cuerpo pr-4 ${
+                            estaExpandido ? "" : "line-clamp-2"
                           }`}
                         >
                           {pub.contenido}
                         </p>
-                        {pub.contenido && pub.contenido.length > 120 && (
+                        {pub.contenido && pub.contenido.length > 80 && (
                           <button
                             type="button"
                             onClick={() => toggleTextoExpandido(pub.id!)}
-                            className="mt-1 text-[10px] font-bold text-verde-profundo hover:underline cursor-pointer block"
+                            className="mt-0.5 text-[9px] font-bold text-verde-profundo hover:underline cursor-pointer block"
                           >
                             {estaExpandido ? "▲ Ver menos" : "▼ Ver más texto"}
                           </button>
                         )}
                         <button
                           onClick={() => handleCopiarTexto(pub.contenido)}
-                          className="absolute right-2 top-2 p-1 rounded bg-white/80 hover:bg-white text-carbon/50 hover:text-verde-profundo border border-carbon/10 shadow-2xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          className="absolute right-1.5 top-1.5 p-0.5 rounded bg-white/80 hover:bg-white text-carbon/50 hover:text-verde-profundo border border-carbon/10 shadow-2xs opacity-0 group-hover:opacity-100 transition cursor-pointer text-[10px]"
                           title="Copiar Copy"
                         >
                           📋
@@ -1701,19 +1712,19 @@ notify pgrst, 'reload schema';`;
                       </div>
                     </div>
 
-                    {/* Guion de Video (si existe) */}
+                    {/* Guion de Video (si existe, colapsable) */}
                     {pub.guion_video && (
                       <div className="border border-carbon/10 rounded-lg overflow-hidden">
                         <button
                           onClick={() => toggleGuion(pub.id!)}
-                          className="w-full bg-carbon/5 hover:bg-carbon/10 px-2.5 py-1.5 flex items-center justify-between text-[11px] font-bold text-carbon/70 transition-all cursor-pointer"
+                          className="w-full bg-carbon/5 hover:bg-carbon/10 px-2 py-1 flex items-center justify-between text-[10px] font-bold text-carbon/70 transition cursor-pointer"
                         >
                           <span>🎥 {guionActivo ? "Ocultar Guion" : "Ver Guion Video"}</span>
-                          <span>{guionActivo ? "▲" : "▼"}</span>
+                          <span className="text-[9px]">{guionActivo ? "▲" : "▼"}</span>
                         </button>
                         {guionActivo && (
-                          <div className="p-2.5 bg-gray-50 border-t border-carbon/10 max-h-40 overflow-y-auto">
-                            <p className="text-[11px] text-carbon/80 whitespace-pre-wrap leading-relaxed font-mono">
+                          <div className="p-2 bg-gray-50 border-t border-carbon/10 max-h-36 overflow-y-auto">
+                            <p className="text-[10px] text-carbon/80 whitespace-pre-wrap leading-relaxed font-mono">
                               {pub.guion_video}
                             </p>
                           </div>
@@ -1721,28 +1732,37 @@ notify pgrst, 'reload schema';`;
                       </div>
                     )}
 
-                    {/* Sugerencia Visual (Prompt / Canva) */}
+                    {/* Sugerencia Visual (Prompt / Canva, colapsable) */}
                     {pub.sugerencia_visual && (
-                      <div className="text-[11px] bg-amber-500/5 border border-amber-500/10 rounded-lg p-2">
-                        <span className="font-bold text-amber-800 block text-[10px] uppercase">
-                          💡 Prompt Visual:
-                        </span>
-                        <p className="text-carbon/70 italic leading-snug line-clamp-2" title={pub.sugerencia_visual}>
-                          {pub.sugerencia_visual}
-                        </p>
+                      <div className="border border-amber-500/20 rounded-lg overflow-hidden bg-amber-50/20">
+                        <button
+                          type="button"
+                          onClick={() => togglePrompt(pub.id!)}
+                          className="w-full px-2 py-1 flex items-center justify-between text-[10px] font-bold text-amber-900 hover:bg-amber-100/50 transition cursor-pointer"
+                        >
+                          <span className="truncate">💡 {promptActivo ? "Ocultar Prompt" : "Ver Prompt Visual"}</span>
+                          <span className="text-[9px] shrink-0 ml-1">{promptActivo ? "▲" : "▼"}</span>
+                        </button>
+                        {promptActivo && (
+                          <div className="p-2 border-t border-amber-200/50 bg-white/70 max-h-32 overflow-y-auto">
+                            <p className="text-[10px] text-carbon/80 italic leading-snug">
+                              {pub.sugerencia_visual}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Métricas Ads si existen */}
                     {((pub.leads_generados !== undefined && pub.leads_generados > 0) ||
                       (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
-                      <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex items-center justify-between gap-1">
-                        <div className="flex flex-wrap gap-2 text-carbon/80 font-mono">
+                      <div className="text-[9px] bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-1.5 flex items-center justify-between gap-1">
+                        <div className="flex flex-wrap gap-1.5 text-carbon/80 font-mono">
                           <span>${pub.inversion_ads || 0}</span>
                           <span>👥 {pub.leads_generados || 0}</span>
                           <span>CPL ${pub.cpl || 0}</span>
                         </div>
-                        <span className="bg-emerald-600 text-white font-bold px-1.5 py-0.5 rounded text-[9px]">
+                        <span className="bg-emerald-600 text-white font-bold px-1 py-0.5 rounded text-[8px]">
                           ⭐ {pub.roi_score || 0}
                         </span>
                       </div>
@@ -1750,29 +1770,29 @@ notify pgrst, 'reload schema';`;
 
                     {/* Observaciones de Rechazo si existen */}
                     {pub.estado === "rechazado" && pub.notas_revision && (
-                      <div className="text-[11px] bg-red-500/5 border border-red-500/10 rounded-lg p-2">
-                        <span className="font-bold text-red-800 block text-[10px]">❌ Motivo de Rechazo:</span>
+                      <div className="text-[10px] bg-red-500/5 border border-red-500/10 rounded-lg p-1.5">
+                        <span className="font-bold text-red-800 block text-[9px]">❌ Motivo de Rechazo:</span>
                         <p className="text-carbon/70 leading-snug line-clamp-2">{pub.notas_revision}</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Pie de la tarjeta y Botonera Optimizada */}
-                  <div className="px-3.5 py-2.5 bg-gray-50/70 border-t border-carbon/5 flex flex-col gap-2 rounded-b-2xl mt-auto">
+                  {/* Pie de la tarjeta y Botonera Ultra-Compacta */}
+                  <div className="px-2.5 py-2 bg-gray-50/70 border-t border-carbon/5 flex flex-col gap-1.5 rounded-b-xl mt-auto">
                     {/* Fila 1: Acciones Principales según Estado */}
                     {pub.estado === "pendiente_revision" && (
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleAprobar(pub.id!)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
                         >
                           <span>✓</span> Aprobar
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAbrirProgramar(pub)}
-                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
                         >
                           <span>⏰</span> Programar
                         </button>
@@ -1790,7 +1810,7 @@ notify pgrst, 'reload schema';`;
                               pub.plataforma === "instagram"
                                 ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
                                 : "bg-[#1877F2] hover:bg-[#166FE5]"
-                            } text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60`}
+                            } text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60`}
                             title={`Publicar directamente en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
                           >
                             <span>{publicandoMetaId === pub.id ? "⏳" : "🚀"}</span>
@@ -1807,7 +1827,7 @@ notify pgrst, 'reload schema';`;
                             type="button"
                             onClick={() => handleDispararMautic(pub.id!)}
                             disabled={disparandoMauticId === pub.id}
-                            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
+                            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
                             title="Disparar campaña masiva en Mautic"
                           >
                             <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
@@ -1820,7 +1840,7 @@ notify pgrst, 'reload schema';`;
                         <button
                           type="button"
                           onClick={() => handlePublicar(pub.id!)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1 px-1.5 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
                           title="Marcar como publicado manualmente"
                         >
                           <span>📲</span> Publicar
@@ -1829,7 +1849,7 @@ notify pgrst, 'reload schema';`;
                         <button
                           type="button"
                           onClick={() => handleAbrirProgramar(pub)}
-                          className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
+                          className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
                           title="Reagendar fecha/hora"
                         >
                           ⏰
@@ -1838,8 +1858,8 @@ notify pgrst, 'reload schema';`;
                     )}
 
                     {pub.estado === "publicado" && (
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="text-xs font-bold text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
                           <span>✓</span> Enviada
                         </span>
                         {pub.url_publicacion && pub.plataforma !== "mautic" && pub.plataforma !== "email" && (
@@ -1847,7 +1867,7 @@ notify pgrst, 'reload schema';`;
                             href={pub.url_publicacion}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 truncate"
+                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-0.5 truncate"
                           >
                             <span>🔗</span> Ver post ↗
                           </a>
@@ -1855,7 +1875,7 @@ notify pgrst, 'reload schema';`;
                         <button
                           type="button"
                           onClick={() => handleReconsiderar(pub.id!)}
-                          className="text-[11px] text-carbon/60 hover:text-carbon hover:underline cursor-pointer ml-auto"
+                          className="text-[10px] text-carbon/60 hover:text-carbon hover:underline cursor-pointer ml-auto"
                           title="Regresar a revisión"
                         >
                           Regresar
@@ -1871,7 +1891,7 @@ notify pgrst, 'reload schema';`;
                           const actual = publicaciones.find((p) => p.id === pub.id) || pub;
                           setPubPrevisualizar(actual);
                         }}
-                        className="px-2 py-1 text-emerald-800 hover:bg-emerald-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        className="px-1.5 py-0.5 text-emerald-800 hover:bg-emerald-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
                         title="Previsualizar en simulador móvil"
                       >
                         <span>👁️</span> <span className="hidden sm:inline">Previs.</span>
@@ -1880,7 +1900,7 @@ notify pgrst, 'reload schema';`;
                       <button
                         type="button"
                         onClick={() => setPubEditando(pub)}
-                        className="px-2 py-1 text-carbon/80 hover:bg-gray-200/60 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        className="px-1.5 py-0.5 text-carbon/80 hover:bg-gray-200/60 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
                         title="Editar publicación"
                       >
                         <span>✏️</span> <span className="hidden sm:inline">Editar</span>
@@ -1889,7 +1909,7 @@ notify pgrst, 'reload schema';`;
                       <button
                         type="button"
                         onClick={() => handleAbrirReplicar(pub)}
-                        className="px-2 py-1 text-amber-800 hover:bg-amber-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        className="px-1.5 py-0.5 text-amber-800 hover:bg-amber-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
                         title="Replicar a otras redes"
                       >
                         <span>🔄</span> <span className="hidden sm:inline">Replicar</span>
@@ -1900,7 +1920,7 @@ notify pgrst, 'reload schema';`;
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => handleCopiarYNotificar(pub)}
-                        className="px-2 py-1 text-purple-700 hover:bg-purple-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        className="px-1.5 py-0.5 text-purple-700 hover:bg-purple-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
                         title="Abrir en Canva"
                       >
                         <span>🎨</span> <span className="hidden sm:inline">Canva</span>
@@ -1909,7 +1929,7 @@ notify pgrst, 'reload schema';`;
                       <button
                         type="button"
                         onClick={() => handleReemplazarArte(pub.id!)}
-                        className="px-2 py-1 text-blue-700 hover:bg-blue-50 rounded-md font-semibold transition cursor-pointer flex items-center gap-1"
+                        className="px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
                         title="Subir archivo (.png/.jpg) descargado de Canva"
                       >
                         <span>📁</span> <span className="hidden sm:inline">Arte</span>
@@ -1919,7 +1939,7 @@ notify pgrst, 'reload schema';`;
                         <button
                           type="button"
                           onClick={() => handleRechazar(pub.id!)}
-                          className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-md font-semibold transition cursor-pointer"
+                          className="px-1.5 py-0.5 text-red-500 hover:bg-red-50 rounded font-semibold transition cursor-pointer text-[11px]"
                           title="Rechazar publicación"
                         >
                           ✕
@@ -1929,7 +1949,7 @@ notify pgrst, 'reload schema';`;
                       <button
                         type="button"
                         onClick={() => handleEliminarIndividual(pub.id!)}
-                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-md font-semibold transition cursor-pointer ml-auto"
+                        className="px-1.5 py-0.5 text-red-600 hover:bg-red-50 rounded font-semibold transition cursor-pointer ml-auto text-[11px]"
                         title="Eliminar publicación"
                       >
                         🗑️
