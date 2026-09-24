@@ -14,6 +14,7 @@ import {
 import {
   enviarWhatsAppTexto,
   enviarWhatsAppDocumento,
+  enviarWhatsAppPlantilla,
 } from "@/lib/whatsapp";
 
 export interface SelloBanner {
@@ -1986,13 +1987,17 @@ export async function procesarPublicacionesProgramadasVencidas(): Promise<Action
  * Permite validar el copy, diseño y formato sin detonar una difusión masiva.
  * 
  * Vías soportadas:
- * 1. 'directo_meta': Envío inmediato usando las credenciales de WhatsApp Cloud API configuradas en el CRM.
- * 2. 'webhook_mautic': Dispara el webhook hacia n8n/Mautic marcado con 'es_prueba: true' y 'destinatario_prueba'.
+ * 1. 'plantilla_meta': Envío garantizado de una Plantilla Oficial Aprobada por Meta (ignora la ventana de 24 horas y se entrega de inmediato).
+ * 2. 'directo_meta': Envío de texto libre / arte de la publicación directo a Meta Cloud API (requiere que el destinatario haya escrito en las últimas 24h).
+ * 3. 'webhook_mautic': Dispara el webhook hacia n8n/Mautic marcado con 'es_prueba: true' y 'destinatario_prueba'.
  */
 export async function enviarPruebaWhatsAppMarketing(params: {
   idPublicacion: string;
   telefonoDestino: string;
-  via?: "directo_meta" | "webhook_mautic";
+  via?: "plantilla_meta" | "directo_meta" | "webhook_mautic";
+  nombrePlantilla?: string;
+  idiomaPlantilla?: string;
+  nombreDestinatario?: string;
 }): Promise<ActionResult<{ messageId?: string; via: string; detalle: string }>> {
   try {
     await requireAdministrador();
@@ -2016,9 +2021,37 @@ export async function enviarPruebaWhatsAppMarketing(params: {
       };
     }
 
-    const via = params.via || "directo_meta";
+    const via = params.via || "plantilla_meta";
 
-    if (via === "directo_meta") {
+    if (via === "plantilla_meta") {
+      // Envío de plantilla oficial aprobada por Meta (Garantiza entrega inmediata fuera de la ventana de 24 horas)
+      const nombrePlantilla = params.nombrePlantilla || "reactivacion_impermeabilizacio";
+      const idioma = params.idiomaPlantilla || (nombrePlantilla.includes("solo_tramite") || nombrePlantilla.includes("inspeccion_gratuita") || nombrePlantilla.includes("satisfaccion") ? "en" : "es_MX");
+      const param1 = params.nombreDestinatario?.trim() || "Cliente";
+
+      const resPlantilla = await enviarWhatsAppPlantilla(
+        telLimpio,
+        nombrePlantilla,
+        idioma,
+        [param1]
+      );
+
+      if (!resPlantilla.ok) {
+        return {
+          success: false,
+          error: resPlantilla.errorDetail || resPlantilla.error || "No se pudo entregar la plantilla oficial de WhatsApp.",
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          messageId: resPlantilla.messageId,
+          via: "plantilla_meta",
+          detalle: `¡Plantilla oficial "${nombrePlantilla}" entregada exitosamente a WhatsApp (+${telLimpio})! Al ser una plantilla pre-aprobada por Meta, se entrega de inmediato sin importar cuándo fue la última interacción.`,
+        },
+      };
+    } else if (via === "directo_meta") {
       let resWhatsApp: { ok: boolean; error?: string; messageId?: string; errorDetail?: string };
 
       if (pub.url_imagen && pub.url_imagen.length > 5) {
@@ -2047,7 +2080,7 @@ export async function enviarPruebaWhatsAppMarketing(params: {
         data: {
           messageId: resWhatsApp.messageId,
           via: "directo_meta",
-          detalle: `¡Mensaje de prueba enviado exitosamente a WhatsApp (+${telLimpio})!`,
+          detalle: `¡Mensaje enviado a Meta Cloud API (+${telLimpio})! NOTA IMPORTANTE: Si tu número no envió un mensaje a este WhatsApp oficial en las últimas 24 horas, Meta no lo entregará en tu teléfono (código 131047: ventana cerrada para mensajes libres). Envía un "Hola" a tu WhatsApp de Sauceda o selecciona "Plantilla Aprobada" para entrega garantizada.`,
         },
       };
     } else {

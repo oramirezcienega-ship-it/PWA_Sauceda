@@ -8,6 +8,8 @@ import {
   ejecutarEnvioMautic,
   enviarPruebaWhatsAppMarketing,
 } from "@/app/actions/marketing";
+import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
+import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 
 interface PrevisualizadorRedSocialProps {
   publicacion: PublicacionProgramada;
@@ -43,13 +45,48 @@ export default function PrevisualizadorRedSocial({
   const [publicandoMeta, setPublicandoMeta] = useState(false);
   const [mostrarModalPruebaWA, setMostrarModalPruebaWA] = useState(false);
   const [telefonoPruebaWA, setTelefonoPruebaWA] = useState("");
-  const [viaPruebaWA, setViaPruebaWA] = useState<"directo_meta" | "webhook_mautic">("directo_meta");
+  const [viaPruebaWA, setViaPruebaWA] = useState<"plantilla_meta" | "directo_meta" | "webhook_mautic">("plantilla_meta");
+  const [plantillasWA, setPlantillasWA] = useState<PlantillaWhatsApp[]>([]);
+  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string>("reactivacion_impermeabilizacio");
+  const [nombreDestinatarioPrueba, setNombreDestinatarioPrueba] = useState<string>("Oscar");
+  const [cargandoPlantillasWA, setCargandoPlantillasWA] = useState(false);
   const [enviandoPruebaWA, setEnviandoPruebaWA] = useState(false);
   const [mensajeFeedback, setMensajeFeedback] = useState<{
     tipo: "exito" | "error";
     texto: string;
     url?: string;
   } | null>(null);
+
+  // Cargar plantillas de WhatsApp aprobadas cuando se abre el modal de prueba
+  useEffect(() => {
+    if (mostrarModalPruebaWA && plantillasWA.length === 0) {
+      setCargandoPlantillasWA(true);
+      listarPlantillasWhatsApp()
+        .then((res) => {
+          if (res.ok && res.plantillas && res.plantillas.length > 0) {
+            const aprobadas = res.plantillas.filter(
+              (p) => p.estado === "APPROVED" && p.nombre !== "hello_world"
+            );
+            setPlantillasWA(aprobadas);
+            // Preseleccionar plantilla según el contenido del post
+            const contenidoLower = ((pubActual?.contenido || "") + " " + (pubActual?.titulo || "")).toLowerCase();
+            if (contenidoLower.includes("impermea") || contenidoLower.includes("gotera") || contenidoLower.includes("techo") || contenidoLower.includes("lluvia")) {
+              setPlantillaSeleccionada("reactivacion_impermeabilizacio");
+            } else if (contenidoLower.includes("compram") || contenidoLower.includes("contado") || contenidoLower.includes("liquida")) {
+              setPlantillaSeleccionada("reactivacion_compra_directa");
+            } else if (contenidoLower.includes("vend") || contenidoLower.includes("propiedad")) {
+              setPlantillaSeleccionada("reactivacion_promocion_venta");
+            } else if (contenidoLower.includes("infonavit") || contenidoLower.includes("tramite") || contenidoLower.includes("credito")) {
+              setPlantillaSeleccionada("reactivacion_solo_tramite");
+            } else if (aprobadas.length > 0) {
+              setPlantillaSeleccionada(aprobadas[0].nombre);
+            }
+          }
+        })
+        .catch((err) => console.warn("Error cargando plantillas de WhatsApp:", err))
+        .finally(() => setCargandoPlantillasWA(false));
+    }
+  }, [mostrarModalPruebaWA, plantillasWA.length, pubActual]);
 
   const handleEnviarPruebaWA = async () => {
     if (!pubActual?.id || !telefonoPruebaWA.trim()) {
@@ -62,6 +99,8 @@ export default function PrevisualizadorRedSocial({
         idPublicacion: pubActual.id,
         telefonoDestino: telefonoPruebaWA.trim(),
         via: viaPruebaWA,
+        nombrePlantilla: plantillaSeleccionada,
+        nombreDestinatario: nombreDestinatarioPrueba,
       });
       if (res.success && res.data) {
         alert(res.data.detalle);
@@ -1293,7 +1332,7 @@ export default function PrevisualizadorRedSocial({
       {/* Modal de Envío de Prueba de WhatsApp a 1 Destinatario */}
       {mostrarModalPruebaWA && (
         <div className="fixed inset-0 z-60 bg-carbon/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-dorado/30 space-y-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-dorado/30 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h3 className="font-bold text-base text-verde-profundo flex items-center gap-2">
                 <span>🧪</span> Enviar Prueba de WhatsApp
@@ -1307,9 +1346,15 @@ export default function PrevisualizadorRedSocial({
               </button>
             </div>
 
-            <p className="text-xs text-carbon/70 leading-relaxed">
-              Envía este contenido a tu propio número o a un destinatario específico para validar cómo se recibe el texto, formato e imagen antes de realizar una difusión masiva.
-            </p>
+            {/* Aviso sobre la Regla de las 24 horas de Meta */}
+            <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-950 leading-relaxed space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                <span>⚠️</span> Regla de 24 Horas de Meta (WhatsApp Cloud API):
+              </div>
+              <p>
+                Meta <strong>bloquea estrictamente</strong> mensajes libres (texto/imágenes) a números que no han escrito en las últimas 24h. Para iniciar contacto frío o campañas de difusión masiva se requiere una <strong>Plantilla Oficial Aprobada</strong>.
+              </p>
+            </div>
 
             <div>
               <label className="text-xs font-bold text-carbon/80 block mb-1">
@@ -1331,26 +1376,128 @@ export default function PrevisualizadorRedSocial({
 
             <div className="space-y-2">
               <label className="text-xs font-bold text-carbon/80 block">
-                Canal de Envío de la Prueba:
+                Modalidad de Envío de la Prueba:
               </label>
-              <div className="grid grid-cols-1 gap-2">
-                <label className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${viaPruebaWA === "directo_meta" ? "bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
+              <div className="grid grid-cols-1 gap-2.5">
+                {/* Opción 1: Plantilla Aprobada por Meta */}
+                <label className={`flex flex-col gap-2 p-3.5 rounded-2xl border text-xs cursor-pointer transition ${viaPruebaWA === "plantilla_meta" ? "bg-emerald-50/90 border-emerald-500 shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="radio"
+                      name="via_wa"
+                      checked={viaPruebaWA === "plantilla_meta"}
+                      onChange={() => setViaPruebaWA("plantilla_meta")}
+                      className="mt-0.5 text-emerald-600"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-emerald-950">📋 Plantilla Oficial Aprobada por Meta</span>
+                        <span className="bg-emerald-200 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          ⭐ Entrega Inmediata Garantizada
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-normal text-carbon/70 mt-0.5">
+                        Ignora la ventana de 24 horas y Meta la entrega al segundo a tu celular.
+                      </p>
+                    </div>
+                  </div>
+
+                  {viaPruebaWA === "plantilla_meta" && (
+                    <div className="mt-2 pt-2.5 border-t border-emerald-200/80 space-y-2.5 pl-6">
+                      <div>
+                        <label className="text-[11px] font-bold text-emerald-950 block mb-1">
+                          Seleccionar Plantilla de Meta:
+                        </label>
+                        {cargandoPlantillasWA ? (
+                          <div className="text-[11px] text-carbon/60 py-1">Cargando plantillas de Meta...</div>
+                        ) : (
+                          <select
+                            value={plantillaSeleccionada}
+                            onChange={(e) => setPlantillaSeleccionada(e.target.value)}
+                            className="w-full bg-white border border-emerald-300 rounded-xl px-2.5 py-1.5 text-xs text-carbon focus:outline-none focus:border-emerald-600"
+                          >
+                            {plantillasWA.length > 0 ? (
+                              plantillasWA.map((p) => (
+                                <option key={p.nombre} value={p.nombre}>
+                                  {p.nombre === "reactivacion_impermeabilizacio" ? "🛠️ reactivacion_impermeabilizacio (Inspección Gratuita)" :
+                                   p.nombre === "reactivacion_compra_directa" ? "🏡 reactivacion_compra_directa (Compra al Contado)" :
+                                   p.nombre === "reactivacion_promocion_venta" ? "📈 reactivacion_promocion_venta (Venta de Casas)" :
+                                   p.nombre === "reactivacion_solo_tramite" ? "⚖️ reactivacion_solo_tramite (Trámites Infonavit)" :
+                                   p.nombre === "reactivar_inspeccion_gratuita" ? "🔍 reactivar_inspeccion_gratuita (Agenda Visita)" :
+                                   p.nombre === "dudas_seguimiento_llamada" ? "📞 dudas_seguimiento_llamada (Aclaración Presupuesto)" :
+                                   p.nombre === "encuesta_satisfaccion_servicio_instalacion" ? "⭐ encuesta_satisfaccion (Calidad de Servicio)" :
+                                   p.nombre === "entrega_documentos_remision_garantia" ? "📄 entrega_documentos (Garantía y Remisión)" :
+                                   p.nombre}
+                                </option>
+                              ))
+                            ) : (
+                              <>
+                                <option value="reactivacion_impermeabilizacio">🛠️ reactivacion_impermeabilizacio</option>
+                                <option value="reactivacion_compra_directa">🏡 reactivacion_compra_directa</option>
+                                <option value="reactivacion_promocion_venta">📈 reactivacion_promocion_venta</option>
+                                <option value="reactivacion_solo_tramite">⚖️ reactivacion_solo_tramite</option>
+                              </>
+                            )}
+                          </select>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-emerald-950 block mb-1">
+                          Nombre para la variable {"{{1}}"} (ej: tu nombre):
+                        </label>
+                        <input
+                          type="text"
+                          value={nombreDestinatarioPrueba}
+                          onChange={(e) => setNombreDestinatarioPrueba(e.target.value)}
+                          placeholder="Ej: Oscar"
+                          className="w-full bg-white border border-emerald-300 rounded-xl px-2.5 py-1.5 text-xs text-carbon focus:outline-none focus:border-emerald-600"
+                        />
+                      </div>
+
+                      {/* Vista previa del mensaje de la plantilla */}
+                      {plantillasWA.find((p) => p.nombre === plantillaSeleccionada)?.cuerpo && (
+                        <div className="bg-white/90 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-carbon/80 leading-relaxed shadow-2xs">
+                          <span className="font-bold text-emerald-900 block text-[10px] mb-1 uppercase tracking-wide">
+                            Mensaje que recibirás en WhatsApp:
+                          </span>
+                          <p className="whitespace-pre-line italic">
+                            &quot;{plantillasWA
+                              .find((p) => p.nombre === plantillaSeleccionada)
+                              ?.cuerpo.replace(/\{\{1\}\}/g, nombreDestinatarioPrueba || "Cliente")}&quot;
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </label>
+
+                {/* Opción 2: Texto Libre e Imagen (Requiere 24h) */}
+                <label className={`flex items-start gap-2.5 p-3 rounded-2xl border text-xs cursor-pointer transition ${viaPruebaWA === "directo_meta" ? "bg-amber-50/90 border-amber-500 shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
                   <input
                     type="radio"
                     name="via_wa"
                     checked={viaPruebaWA === "directo_meta"}
                     onChange={() => setViaPruebaWA("directo_meta")}
-                    className="mt-0.5 text-emerald-600"
+                    className="mt-0.5 text-amber-600"
                   />
                   <div>
-                    <span>📲 WhatsApp Cloud API Directo (Inmediato)</span>
-                    <p className="text-[11px] font-normal text-carbon/60 mt-0.5">
-                      Envía el arte y el texto directamente a tu celular usando las credenciales oficiales de WhatsApp del CRM.
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-amber-950">🖼️ Copy y Arte Libre de la Publicación</span>
+                    </div>
+                    <p className="text-[11px] font-normal text-carbon/70 mt-0.5 leading-relaxed">
+                      Envía la imagen generada y el copy libre tal como están en este modal.
                     </p>
+                    {viaPruebaWA === "directo_meta" && (
+                      <p className="text-[11px] text-amber-900 bg-amber-100/70 border border-amber-300/60 rounded-lg p-2 mt-2 font-medium">
+                        ⚠️ <strong>Requisito Indispensable:</strong> Debes enviar primero un mensaje (ej: <em>&quot;Hola&quot;</em>) desde tu celular al WhatsApp oficial de Sauceda (+52 477 465 4700) para abrir tu ventana de 24 horas antes de presionar Enviar.
+                      </p>
+                    )}
                   </div>
                 </label>
 
-                <label className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${viaPruebaWA === "webhook_mautic" ? "bg-orange-50 border-orange-500 text-orange-950 font-bold shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
+                {/* Opción 3: Webhook Mautic / n8n */}
+                <label className={`flex items-start gap-2.5 p-3 rounded-2xl border text-xs cursor-pointer transition ${viaPruebaWA === "webhook_mautic" ? "bg-orange-50 border-orange-500 text-orange-950 font-bold shadow-2xs" : "border-gray-200 hover:bg-gray-50 text-carbon/80"}`}>
                   <input
                     type="radio"
                     name="via_wa"
