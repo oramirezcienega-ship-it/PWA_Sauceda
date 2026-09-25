@@ -727,80 +727,107 @@ async function idsDeTelefono(
 export async function responderConversacion(
   telefono: string,
   texto: string,
+  agenteOverride?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
-  if (!texto.trim()) return { ok: false, error: "El mensaje está vacío." };
-  const usuario = await usuarioActual();
-  if (!usuario) return { ok: false, error: "No autorizado." };
-  const { rol } = await rolDe(usuario.id);
-  const sb = supabaseServidor();
+  try {
+    await requireAdmin();
+    if (!texto.trim()) return { ok: false, error: "El mensaje está vacío." };
+    const usuario = await usuarioActual();
+    if (!usuario) return { ok: false, error: "No autorizado." };
+    const { rol } = await rolDe(usuario.id);
+    const sb = supabaseServidor();
 
-  if (rol === "asesor" || rol === "operaciones") {
-    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
-    const autorizado = await verificarAccesoConversacion(sb, usuario, rol, telefono, expedienteId, prospectoId);
-    if (!autorizado) {
-      return { ok: false, error: "No tienes autorización para responder en esta conversación." };
+    if (rol === "asesor" || rol === "operaciones") {
+      const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+      const autorizado = await verificarAccesoConversacion(sb, usuario, rol, telefono, expedienteId, prospectoId);
+      if (!autorizado) {
+        return { ok: false, error: "No tienes autorización para responder en esta conversación." };
+      }
     }
-  }
 
-  const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
-  const agente = await nombreAgenteActual(sb);
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const nombreUsuario = await nombreAgenteActual(sb);
+    const agente = (agenteOverride && agenteOverride.trim() && rol === "admin")
+      ? agenteOverride.trim()
+      : (agenteOverride && agenteOverride.trim()) || nombreUsuario;
 
-  let r: { ok: boolean; error?: string; messageId?: string } = { ok: false };
-  let canalLabel = "WhatsApp";
+    let r: { ok: boolean; error?: string; messageId?: string } = { ok: false };
+    let canalLabel = "WhatsApp";
 
-  if (telefono.startsWith("messenger:")) {
-    const psid = telefono.slice(10);
-    const res = await enviarMessengerTexto(psid, texto);
-    r = { ok: res.ok, error: res.error };
-    canalLabel = "Messenger";
-  } else if (telefono.startsWith("instagram:")) {
-    const igsid = telefono.slice(10);
-    const res = await enviarInstagramTexto(igsid, texto);
-    r = { ok: res.ok, error: res.error };
-    canalLabel = "Instagram";
-  } else {
-    r = await enviarWhatsAppTexto(telefono, texto);
-  }
+    if (telefono.startsWith("messenger:")) {
+      const psid = telefono.slice(10);
+      const res = await enviarMessengerTexto(psid, texto);
+      r = { ok: res.ok, error: res.error };
+      canalLabel = "Messenger";
+    } else if (telefono.startsWith("instagram:")) {
+      const igsid = telefono.slice(10);
+      const res = await enviarInstagramTexto(igsid, texto);
+      r = { ok: res.ok, error: res.error };
+      canalLabel = "Instagram";
+    } else {
+      r = await enviarWhatsAppTexto(telefono, texto);
+    }
 
-  const estadoFinal = r.ok
-    ? "enviado"
-    : (r as any).errorDetail
-    ? `error:${(r as any).errorDetail}`
-    : r.error
-    ? `error:${r.error}`
-    : "error";
+    const estadoFinal = r.ok
+      ? "enviado"
+      : (r as any).errorDetail
+      ? `error:${(r as any).errorDetail}`
+      : r.error
+      ? `error:${r.error}`
+      : "error";
 
-  const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
-    telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
-    texto,
-    direccion: "out",
-    expediente_id: expedienteId,
-    prospecto_id: prospectoId,
-    estado: estadoFinal,
-    agente,
-    wa_message_id: (r as any).messageId || null,
-  });
-
-  if (insertErr) {
-    console.error("Error al insertar mensaje WhatsApp en DB:", insertErr);
-  }
-
-  if (r.ok) {
-    // Cuando el asesor humano responde manualmente, pausar temporalmente a Sofía
-    // para evitar que se cruce mientras el asesor atiende la conversación en vivo
-    await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId);
-  }
-
-  if (r.ok && expedienteId) {
-    await registrarActividad(sb, {
-      expedienteId,
-      tipo: "mensaje",
-      titulo: `Respuesta por ${canalLabel}`,
-      detalle: texto,
+    const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
+      telefono: esCanalSocial(telefono) ? telefono : normalizarTelefono(telefono),
+      texto,
+      direccion: "out",
+      expediente_id: expedienteId,
+      prospecto_id: prospectoId,
+      estado: estadoFinal,
+      agente,
+      wa_message_id: (r as any).messageId || null,
     });
+
+    if (insertErr) {
+      console.error("Error al insertar mensaje WhatsApp en DB:", insertErr);
+    }
+
+    if (r.ok) {
+      // Cuando el asesor humano responde manualmente, pausar temporalmente a Sofía
+      // para evitar que se cruce mientras el asesor atiende la conversación en vivo
+      await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId);
+
+      // Si se envía con un asesor humano específico, sincronizar también el prospecto/expediente
+      if (agente && agente !== "IA") {
+        const { data: perfil } = await sb
+          .from("perfiles")
+          .select("id")
+          .ilike("nombre", agente)
+          .maybeSingle();
+
+        if (perfil?.id) {
+          if (prospectoId) {
+            await sb.from("prospectos").update({ asesor_id: perfil.id }).eq("id", prospectoId);
+          }
+          if (expedienteId) {
+            await sb.from("expedientes").update({ asesor_id: perfil.id }).eq("id", expedienteId);
+          }
+        }
+      }
+    }
+
+    if (r.ok && expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: "mensaje",
+        titulo: `Respuesta por ${canalLabel}`,
+        detalle: texto,
+      });
+    }
+    return r.ok ? { ok: true } : { ok: false, error: (r as any).errorDetail || r.error };
+  } catch (err: any) {
+    console.error("Error al responder conversación:", err);
+    return { ok: false, error: err?.message || "Error al responder conversación." };
   }
-  return r.ok ? { ok: true } : { ok: false, error: (r as any).errorDetail || r.error };
 }
 
 /** Prueba el agente de IA (configuración + ping real a Claude). Solo admin. */
@@ -889,45 +916,75 @@ export async function finalizarConversacion(
   telefono: string,
   finalizado: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
 
-  // Actualizar el estado finalizado para todos los mensajes de todas las variantes de este teléfono
-  const { error } = await sb
-    .from("mensajes_whatsapp")
-    .update({ finalizado })
-    .in("telefono", variantesId(telefono));
+    // Actualizar el estado finalizado para todos los mensajes de todas las variantes de este teléfono
+    const { error } = await sb
+      .from("mensajes_whatsapp")
+      .update({ finalizado })
+      .in("telefono", variantesId(telefono));
 
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al finalizar conversación:", err);
+    return { ok: false, error: err?.message || "Error al cambiar estado de la conversación." };
+  }
 }
 
-/** Asigna un asesor/agente a la conversación actualizando el último mensaje. */
+/** Asigna un asesor/agente a la conversación actualizando el último mensaje y prospecto/expediente. */
 export async function asignarAgente(
   telefono: string,
   agente: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-  const { data: ultimo } = await sb
-    .from("mensajes_whatsapp")
-    .select("id")
-    .in("telefono", variantesId(telefono))
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: ultimo } = await sb
+      .from("mensajes_whatsapp")
+      .select("id")
+      .in("telefono", variantesId(telefono))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (!ultimo) {
-    return { ok: false, error: "No hay mensajes en esta conversación." };
+    if (!ultimo) {
+      return { ok: false, error: "No hay mensajes en esta conversación." };
+    }
+
+    const { error } = await sb
+      .from("mensajes_whatsapp")
+      .update({ agente })
+      .eq("id", ultimo.id);
+
+    if (error) return { ok: false, error: error.message };
+
+    // Sincronizar asesor_id en prospectos y expedientes si el agente asignado es un asesor real
+    if (agente && agente !== "IA") {
+      const { data: perfil } = await sb
+        .from("perfiles")
+        .select("id")
+        .ilike("nombre", agente)
+        .maybeSingle();
+
+      if (perfil?.id) {
+        const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+        if (prospectoId) {
+          await sb.from("prospectos").update({ asesor_id: perfil.id }).eq("id", prospectoId);
+        }
+        if (expedienteId) {
+          await sb.from("expedientes").update({ asesor_id: perfil.id }).eq("id", expedienteId);
+        }
+      }
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al asignar agente:", err);
+    return { ok: false, error: err?.message || "Error al reasignar agente." };
   }
-
-  const { error } = await sb
-    .from("mensajes_whatsapp")
-    .update({ agente })
-    .eq("id", ultimo.id);
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
 }
 
 /** Alterna o define el estado de pausa de la IA Sofía para una conversación. */
@@ -935,25 +992,30 @@ export async function alternarPausaIA(
   telefono: string,
   pausar?: boolean,
 ): Promise<{ ok: boolean; pausada: boolean; error?: string }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-  const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
 
-  let nuevoEstado = pausar;
-  if (nuevoEstado === undefined) {
-    const actual = await esConversacionPausada(sb, telefono, expedienteId);
-    nuevoEstado = !actual;
+    let nuevoEstado = pausar;
+    if (nuevoEstado === undefined) {
+      const actual = await esConversacionPausada(sb, telefono, expedienteId);
+      nuevoEstado = !actual;
+    }
+
+    const res = await setConversacionPausada(sb, telefono, nuevoEstado, expedienteId, prospectoId);
+
+    // Si se reactiva Sofía (nuevoEstado === false), aseguramos que el último mensaje tenga agente "IA"
+    // para que el UI muestre inmediatamente que Sofía atiende
+    if (!nuevoEstado) {
+      await asignarAgente(telefono, "IA");
+    }
+
+    return res;
+  } catch (err: any) {
+    console.error("Error al alternar pausa de IA:", err);
+    return { ok: false, pausada: false, error: err?.message || "Error al cambiar estado de Sofía." };
   }
-
-  const res = await setConversacionPausada(sb, telefono, nuevoEstado, expedienteId, prospectoId);
-
-  // Si se reactiva Sofía (nuevoEstado === false), aseguramos que el último mensaje tenga agente "IA"
-  // para que el UI muestre inmediatamente que Sofía atiende
-  if (!nuevoEstado) {
-    await asignarAgente(telefono, "IA");
-  }
-
-  return res;
 }
 
 
