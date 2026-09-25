@@ -64,6 +64,7 @@ const OPCIONES_FORMATO: OpcionFiltro[] = [
 
 const OPCIONES_TEMA: OpcionFiltro[] = [
   { id: "impermeabilizacion", label: "Impermeabilización con Soplete", icono: "🌧️" },
+  { id: "cisternas", label: "Mantenimiento y Lavado de Cisternas / Tinacos", icono: "💧" },
   { id: "herreria", label: "Herrería Residencial (Portones y Protecciones)", icono: "⚒️" },
   { id: "piso_estampado", label: "Concreto y Pisos Estampados", icono: "🧱" },
   { id: "remodelacion", label: "Remodelaciones y Ampliaciones", icono: "🏗️" },
@@ -478,6 +479,7 @@ notify pgrst, 'reload schema';`;
       const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
       const coincideTema = filtrosTema.some((tema) => {
         if (tema === "impermeabilizacion") return textoBuscado.includes("impermeabiliz") || textoBuscado.includes("soplete");
+        if (tema === "cisternas") return textoBuscado.includes("cisterna") || textoBuscado.includes("aljibe") || textoBuscado.includes("tinaco") || textoBuscado.includes("agua");
         if (tema === "herreria") return textoBuscado.includes("herr") || textoBuscado.includes("porton") || textoBuscado.includes("protecc") || textoBuscado.includes("barandal");
         if (tema === "piso_estampado") return textoBuscado.includes("estampad") || textoBuscado.includes("piso") || textoBuscado.includes("adoquin");
         if (tema === "remodelacion") return textoBuscado.includes("remodela") || textoBuscado.includes("construc") || textoBuscado.includes("amplia");
