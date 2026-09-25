@@ -7,7 +7,7 @@ import { registrarActividad } from "@/lib/actividades";
 import { enviarCorreo } from "@/lib/email";
 import { MARCA } from "@/lib/marca";
 import { formatoPesos } from "@/lib/formato";
-import { normalizarTelefono } from "@/lib/telefono";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { generarPdfCotizacion } from "@/lib/cotizacionPdf";
 import { aCotizacion, aVisitaReporte, aCotizacionConcepto } from "@/lib/cotizacionesMappers";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento, CotizacionModalidad, CotizacionModularData, OpcionesSeleccionadasModular } from "@/lib/types";
@@ -2536,6 +2536,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   telefono: string;
   mensajePersonalizado?: string;
   enviarComoDocumentoPdf?: boolean;
+  forzarPlantilla?: boolean;
 }): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -2569,6 +2570,8 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     remodelacion: "Remodelación Integral",
     herreria: "Herrería Residencial e Industrial",
     piso_estampado: "Piso Estampado",
+    mantenimiento_cisternas: "Mantenimiento de Cisternas y Aljibes",
+    cisternas: "Mantenimiento de Cisternas y Tinacos",
   };
   const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
 
@@ -2590,10 +2593,101 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
   }
 
   const telNormalizado = normalizarTelefono(datos.telefono);
+  const nombreDestinoPlantilla = cotizacion.contactoNombre || cotizacion.empresaNombre || primerNombre;
+  const inversionTexto = formatoPesos(totalMonto);
 
-  // Opción 1: Si se solicitó explícitamente enviar como documento PDF directo
-  let resDoc: { ok: boolean; error?: string; errorDetail?: string; messageId?: string } | null = null;
+  // 1. Determinar si la ventana de 24 horas del cliente está activa en WhatsApp
+  // Meta Cloud API rechaza mensajes de texto libre o archivos PDF con error 131047
+  // si el cliente no ha enviado un mensaje al negocio en las últimas 24 horas.
+  const hace24Horas = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: ultimosEntrantes } = await sb
+    .from("mensajes_whatsapp")
+    .select("id")
+    .in("telefono", variantesTelefono(datos.telefono))
+    .eq("direccion", "in")
+    .gte("created_at", hace24Horas)
+    .limit(1);
+
+  const ventana24hAbierta = Boolean(ultimosEntrantes && ultimosEntrantes.length > 0);
+
+  // Helper para enviar y registrar la plantilla oficial aprobada en Meta
+  const enviarPlantillaOficial = async () => {
+    // La plantilla registrada y aprobada en Meta es "envio_cotizacion_cliente"
+    // Idioma aprobado en Meta: "es" (NO "es_MX")
+    // Parámetros del cuerpo aprobados: exactamente 2 -> {{1}}: Nombre, {{2}}: Proyecto o Servicio
+    const resMeta = await enviarWhatsAppPlantilla(
+      datos.telefono,
+      "envio_cotizacion_cliente",
+      "es",
+      [
+        nombreDestinoPlantilla, // {{1}}
+        servicioNombre,         // {{2}}
+      ]
+    );
+
+    if (resMeta.ok) {
+      if (cotFila.estatus === "aprobada") {
+        await sb
+          .from("cotizaciones")
+          .update({ estatus: "enviada", updated_at: new Date().toISOString() })
+          .eq("id", datos.cotizacionId);
+      }
+
+      const textoPlantilla = `📄 *[Plantilla Oficial Meta · Cotización]*\n\nHola ${nombreDestinoPlantilla}, le escribimos de SAUCEDA Bienes Raíces. Le informamos que su cotización personalizada para el proyecto de ${servicioNombre} ya está lista y disponible para su revisión.\n\n📄 *Folio:* ${cotizacion.id}\n💰 *Inversión:* ${inversionTexto}\n🔗 *Portal:* ${urlPortal}\n\nPuede ver el detalle completo en el enlace o responder directamente a este mensaje si tiene alguna duda.`;
+
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: telNormalizado,
+        texto: textoPlantilla,
+        direccion: "out",
+        expediente_id: cotFila.expediente_id || null,
+        prospecto_id: cotFila.prospecto_id || null,
+        estado: "enviado",
+        agente: nombreAgente,
+        wa_message_id: resMeta.messageId || null,
+      });
+
+      await registrarActividad(sb, {
+        prospectoId: cotFila.prospecto_id,
+        expedienteId: cotFila.expediente_id,
+        tipo: "envio_cotizacion_whatsapp",
+        titulo: `📲 Cotización enviada por WhatsApp (Plantilla Oficial Meta)`,
+        detalle: `Se envió la plantilla oficial autorizada 'envio_cotizacion_cliente' a ${datos.telefono} para el folio ${cotizacion.id}. Portal: ${urlPortal}`,
+      });
+
+      revalidatePath("/conversaciones");
+      revalidatePath(`/construccion/${datos.cotizacionId}`);
+
+      return {
+        ok: true,
+        mensaje: `Plantilla oficial de WhatsApp ('envio_cotizacion_cliente') enviada con éxito a ${datos.telefono} y registrada en el historial.`,
+      };
+    }
+
+    return {
+      ok: false,
+      error: resMeta.errorDetail || resMeta.error || "Meta Cloud API no pudo entregar la plantilla oficial.",
+    };
+  };
+
+  // CASO 1: Si la ventana de 24 horas está cerrada, Meta prohíbe texto libre y exige plantilla aprobada
+  if (!ventana24hAbierta || datos.forzarPlantilla) {
+    const resPl = await enviarPlantillaOficial();
+    if (resPl.ok) {
+      return {
+        ok: true,
+        mensaje: `Se envió la plantilla oficial autorizada por Meta ('envio_cotizacion_cliente') a ${datos.telefono}, ya que la ventana de 24 horas del cliente no estaba activa.`,
+      };
+    }
+    return {
+      ok: false,
+      error: `${resPl.error}. La ventana de 24 horas del cliente está cerrada y Meta rechazó el envío de la plantilla. Puedes usar 'Abrir WhatsApp Web' para contactar directamente al cliente.`,
+    };
+  }
+
+  // CASO 2: La ventana de 24 horas está ABIERTA (< 24h desde el último mensaje del cliente)
+  // Subcaso 2A: Enviar con PDF adjunto si se solicitó explícitamente
   if (datos.enviarComoDocumentoPdf) {
+    let resDoc: { ok: boolean; error?: string; errorDetail?: string; messageId?: string } | null = null;
     try {
       const { data: concFilas } = await sb
         .from("cotizacion_conceptos")
@@ -2641,7 +2735,6 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
           .eq("id", datos.cotizacionId);
       }
 
-      // Guardar en la conversación de WhatsApp para que aparezca en el chat
       await sb.from("mensajes_whatsapp").insert({
         telefono: telNormalizado,
         texto: textoMensaje,
@@ -2671,7 +2764,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     }
   }
 
-  // Opción 2: Enviar como texto directo personalizado
+  // Subcaso 2B: Enviar texto directo personalizado
   const resTxt = await enviarWhatsAppTexto(datos.telefono, textoMensaje);
   if (resTxt.ok) {
     if (cotFila.estatus === "aprobada") {
@@ -2681,7 +2774,6 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
         .eq("id", datos.cotizacionId);
     }
 
-    // Guardar en la conversación de WhatsApp para que aparezca en el chat
     await sb.from("mensajes_whatsapp").insert({
       telefono: telNormalizado,
       texto: textoMensaje,
@@ -2710,76 +2802,18 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     };
   }
 
-  // Opción 3: Intentar enviar la plantilla oficial de Meta `envio_cotizacion_cliente`
-  const nombreDestinoPlantilla = cotizacion.contactoNombre || cotizacion.empresaNombre || primerNombre;
-
-  let ubicacionPlantilla = "tu domicilio";
-  if (cotizacion.empresaNombre) {
-    const matriz = cotizacion.empresaMatrizNombre || cotizacion.empresaNombre;
-    ubicacionPlantilla = cotizacion.sucursalNombre
-      ? `${matriz} 📍 Sucursal / Sede: ${cotizacion.sucursalNombre}`
-      : matriz;
-  }
-
-  const inversionTexto = formatoPesos(totalMonto);
-
-  const resMeta = await enviarWhatsAppPlantilla(
-    datos.telefono,
-    "envio_cotizacion_cliente",
-    "es_MX",
-    [
-      nombreDestinoPlantilla, // {{1}}
-      servicioNombre,         // {{2}}
-      ubicacionPlantilla,     // {{3}}
-      cotizacion.id,          // {{4}}
-      inversionTexto,         // {{5}}
-      urlPortal               // {{6}}
-    ]
-  );
-
-  if (resMeta.ok) {
-    if (cotFila.estatus === "aprobada") {
-      await sb
-        .from("cotizaciones")
-        .update({ estatus: "enviada", updated_at: new Date().toISOString() })
-        .eq("id", datos.cotizacionId);
-    }
-
-    const textoPlantilla = `¡Hola ${nombreDestinoPlantilla}! 👋 Te compartimos la propuesta comercial y cotización para el servicio de *${servicioNombre}* en ${ubicacionPlantilla}\n\n📄 *Folio:* ${cotizacion.id}\n💰 *Inversión:* ${inversionTexto}\n\nEn el siguiente enlace puedes revisar a detalle el desglose de conceptos, garantías y autorizarla en línea por sistema:\n👉 ${urlPortal}\n\nQuedamos a tus órdenes para cualquier duda o ajuste. ¡Excelente día! 💚`;
-    await sb.from("mensajes_whatsapp").insert({
-      telefono: telNormalizado,
-      texto: textoPlantilla,
-      direccion: "out",
-      expediente_id: cotFila.expediente_id || null,
-      prospecto_id: cotFila.prospecto_id || null,
-      estado: "enviado",
-      agente: nombreAgente,
-      wa_message_id: resMeta.messageId || null,
-    });
-
-    await registrarActividad(sb, {
-      prospectoId: cotFila.prospecto_id,
-      expedienteId: cotFila.expediente_id,
-      tipo: "envio_cotizacion_whatsapp",
-      titulo: `📲 Cotización enviada por WhatsApp (Plantilla Oficial Meta)`,
-      detalle: `Se envió la plantilla de WhatsApp (envio_cotizacion_cliente) a ${datos.telefono} para la propuesta ${cotizacion.id}. Portal: ${urlPortal}`,
-    });
-
-    revalidatePath("/conversaciones");
-    revalidatePath(`/construccion/${datos.cotizacionId}`);
-
+  // Si falló el texto a pesar de suponer la ventana abierta, reintentar con la plantilla oficial
+  const resPlFallback = await enviarPlantillaOficial();
+  if (resPlFallback.ok) {
     return {
       ok: true,
-      mensaje: `Plantilla oficial de WhatsApp enviada con éxito a ${datos.telefono} y registrada en el historial.`,
+      mensaje: `Cotización enviada mediante plantilla oficial autorizada por Meta a ${datos.telefono}.`,
     };
   }
 
-  const motivoError = resDoc?.error || resTxt?.error || resMeta?.error || "Meta Cloud API no pudo entregar el mensaje automáticamente.";
-  const detalleInterpretado = resDoc?.errorDetail || resTxt?.errorDetail || resMeta?.errorDetail || "";
-
   return {
     ok: false,
-    error: `${motivoError}${detalleInterpretado ? ` (${detalleInterpretado})` : ""}. Puedes usar 'Abrir WhatsApp Web' para enviarla directamente sin restricciones de ventana de 24 horas de Meta.`,
+    error: `Error al enviar WhatsApp: ${resTxt.error || resPlFallback.error}. Puedes usar 'Abrir WhatsApp Web' para enviarla directamente.`,
   };
 }
 
