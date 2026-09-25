@@ -599,6 +599,21 @@ function renderizarContenidoMensaje(
   return <span>{texto}</span>;
 }
 
+function humanizarError(error: any): string {
+  if (!error) return "Ocurrió un error inesperado.";
+  const msg = typeof error === "string" ? error : error?.message || String(error);
+  if (/failed to fetch/i.test(msg) || /network\s*error/i.test(msg) || /fetch\s*failed/i.test(msg)) {
+    return "Error de conexión con el servidor. Por favor verifica tu conexión a internet o intenta nuevamente.";
+  }
+  if (/timeout/i.test(msg) || /timed\s*out/i.test(msg)) {
+    return "La solicitud tardó demasiado tiempo en responder. Por favor intenta nuevamente.";
+  }
+  if (/no autorizado/i.test(msg) || /unauthorized/i.test(msg) || /401/i.test(msg)) {
+    return "Tu sesión ha expirado o no tienes permisos suficientes. Por favor recarga la página.";
+  }
+  return msg;
+}
+
 /** Bandeja de conversaciones de WhatsApp (lista + hilo + responder). */
 export function Conversaciones() {
   const [tab, setTab] = useState<TabPrincipal>("bandeja");
@@ -617,6 +632,7 @@ export function Conversaciones() {
   const [cargandoDocs, setCargandoDocs] = useState(false);
   const [plantillas, setPlantillas] = useState<PlantillaWhatsApp[]>([]);
   const [texto, setTexto] = useState("");
+  const [agenteFirma, setAgenteFirma] = useState<string>("");
   const [plantillaSel, setPlantillaSel] = useState("");
   const [params, setParams] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -627,6 +643,15 @@ export function Conversaciones() {
     caption?: string;
     rotacion?: number;
   } | null>(null);
+
+  // Sincronizar agente de firma con el asesor asignado a la conversación
+  useEffect(() => {
+    if (detalle?.atiende && detalle.atiende !== "IA") {
+      setAgenteFirma(detalle.atiende);
+    } else if (usuario?.nombre) {
+      setAgenteFirma(usuario.nombre);
+    }
+  }, [detalle?.telefono, detalle?.atiende, usuario?.nombre]);
 
   // Cerrar visor de imagen ampliada con tecla Escape
   useEffect(() => {
@@ -825,23 +850,30 @@ export function Conversaciones() {
       marcarComoLeida(telefono, d?.ultimoInboundFecha);
     } catch (err: any) {
       console.error("Error al abrir conversación:", err);
-      setAviso(err.message || "Error al cargar los mensajes de la conversación.");
+      setAviso(humanizarError(err || "Error al cargar los mensajes de la conversación."));
     }
   }
 
   async function enviarTexto() {
-    if (!sel || !texto.trim()) return;
+    if (!sel || !texto.trim() || enviando) return;
     setEnviando(true);
     setAviso(null);
-    const r = await responderConversacion(sel, texto.trim());
-    setEnviando(false);
-    if (!r.ok) {
-      setAviso(r.error ?? "No se pudo enviar.");
-    } else {
-      setTexto("");
-      marcarComoLeida(sel, new Date().toISOString());
+    try {
+      const firma = agenteFirma?.trim() || usuario?.nombre || undefined;
+      const r = await responderConversacion(sel, texto.trim(), firma);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo enviar el mensaje."));
+      } else {
+        setTexto("");
+        marcarComoLeida(sel, new Date().toISOString());
+      }
+      await refrescar(sel);
+    } catch (err: any) {
+      console.error("Error al enviar mensaje:", err);
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviando(false);
     }
-    await refrescar(sel);
   }
 
   async function borrarConversacion() {
@@ -853,15 +885,20 @@ export function Conversaciones() {
     if (!ok) return;
     setEnviando(true);
     setAviso(null);
-    const r = await eliminarConversacion(sel);
-    setEnviando(false);
-    if (!r.ok) {
-      setAviso(r.error ?? "No se pudo borrar.");
-      return;
+    try {
+      const r = await eliminarConversacion(sel);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo borrar."));
+        return;
+      }
+      setSel(null);
+      setDetalle(null);
+      await refrescar(null);
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviando(false);
     }
-    setSel(null);
-    setDetalle(null);
-    await refrescar(null);
   }
 
   async function borrarMensaje(mensajeId: string) {
@@ -869,12 +906,17 @@ export function Conversaciones() {
     if (!ok) return;
     setEnviando(true);
     setAviso(null);
-    const r = await eliminarMensajeIndividual(mensajeId);
-    setEnviando(false);
-    if (!r.ok) {
-      setAviso(r.error ?? "No se pudo eliminar el mensaje.");
-    } else {
-      if (sel) await refrescar(sel);
+    try {
+      const r = await eliminarMensajeIndividual(mensajeId);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo eliminar el mensaje."));
+      } else {
+        if (sel) await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -887,12 +929,17 @@ export function Conversaciones() {
     }
     setEnviando(true);
     setAviso(null);
-    const r = await editarMensajeIndividual(mensajeId, nuevoTexto.trim());
-    setEnviando(false);
-    if (!r.ok) {
-      setAviso(r.error ?? "No se pudo editar el mensaje.");
-    } else {
-      if (sel) await refrescar(sel);
+    try {
+      const r = await editarMensajeIndividual(mensajeId, nuevoTexto.trim());
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo editar el mensaje."));
+      } else {
+        if (sel) await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -970,10 +1017,10 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           textareaRef.current.focus();
         }
       } else if (res.error) {
-        setAviso(res.error);
+        setAviso(humanizarError(res.error));
       }
     } catch (err: any) {
-      setAviso(err.message || "Error al revisar ortografía.");
+      setAviso(humanizarError(err || "Error al revisar ortografía."));
     } finally {
       setCorrigiendoOrtografia(false);
     }
@@ -985,19 +1032,24 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     if (!sel || !plantillaSel) return;
     setEnviando(true);
     setAviso(null);
-    const r = await responderConPlantilla(
-      sel,
-      plantillaSel,
-      plantilla?.idioma ?? "es_MX",
-      params,
-    );
-    setEnviando(false);
-    if (!r.ok) setAviso(r.error ?? "No se pudo enviar la plantilla.");
-    else {
-      setPlantillaSel("");
-      setParams([]);
+    try {
+      const r = await responderConPlantilla(
+        sel,
+        plantillaSel,
+        plantilla?.idioma ?? "es_MX",
+        params,
+      );
+      if (!r.ok) setAviso(humanizarError(r.error ?? "No se pudo enviar la plantilla."));
+      else {
+        setPlantillaSel("");
+        setParams([]);
+      }
+      await refrescar(sel);
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviando(false);
     }
-    await refrescar(sel);
   }
 
   const conversacionesFiltradas = conversaciones.filter((c) => {
@@ -1103,12 +1155,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     if (!sel) return;
     setEnviandoDoc(true);
     setMostrarAdjuntar(false);
-    const r = await enviarDocumentoConversacion(sel, doc.id);
-    setEnviandoDoc(false);
-    if (!r.ok) {
-      setAviso(r.error ?? "No se pudo enviar el documento.");
-    } else {
-      await refrescar(sel);
+    setAviso(null);
+    try {
+      const r = await enviarDocumentoConversacion(sel, doc.id);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo enviar el documento."));
+      } else {
+        await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviandoDoc(false);
     }
   }
 
@@ -1134,13 +1192,17 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           return;
         }
 
-        const r = await enviarStickerConversacion(sel, base64, file.name, file.type || "image/webp");
-        setEnviandoSticker(false);
-
-        if (!r.ok) {
-          setAviso(r.error ?? "No se pudo enviar el sticker.");
-        } else {
-          await refrescar(sel);
+        try {
+          const r = await enviarStickerConversacion(sel, base64, file.name, file.type || "image/webp");
+          if (!r.ok) {
+            setAviso(humanizarError(r.error ?? "No se pudo enviar el sticker."));
+          } else {
+            await refrescar(sel);
+          }
+        } catch (innerErr: any) {
+          setAviso(humanizarError(innerErr));
+        } finally {
+          setEnviandoSticker(false);
         }
       };
       reader.onerror = () => {
@@ -1149,7 +1211,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      setAviso(err.message || "Error al enviar el sticker.");
+      setAviso(humanizarError(err || "Error al enviar el sticker."));
       setEnviandoSticker(false);
     }
   }
@@ -1167,25 +1229,25 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       if (caption) fd.append("caption", caption);
 
       const r = await enviarArchivoDirectoConversacion(fd);
-      setEnviandoArchivoDirecto(false);
-
       if (!r.ok) {
-        setAviso(r.error ?? "No se pudo enviar el archivo.");
+        setAviso(humanizarError(r.error ?? "No se pudo enviar el archivo."));
         return false;
       } else {
         await refrescar(sel);
         return true;
       }
     } catch (err: any) {
-      setAviso(err.message || "Error al enviar el archivo.");
-      setEnviandoArchivoDirecto(false);
+      setAviso(humanizarError(err || "Error al enviar el archivo."));
       return false;
+    } finally {
+      setEnviandoArchivoDirecto(false);
     }
   }
 
   function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value;
     setTexto(val);
+    if (aviso) setAviso(null);
 
     const cursor = e.target.selectionStart || 0;
     const textBeforeCursor = val.slice(0, cursor);
@@ -1677,12 +1739,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         const val = e.target.value;
                         if (!val) return;
                         setCambiandoTipoNegocio(true);
-                        const res = await actualizarTipoNegocioConversacion(detalle.telefono, val);
-                        setCambiandoTipoNegocio(false);
-                        if (!res.ok) {
-                          setAviso(res.error ?? "No se pudo actualizar el tipo de negocio.");
-                        } else {
-                          await refrescar(detalle.telefono);
+                        setAviso(null);
+                        try {
+                          const res = await actualizarTipoNegocioConversacion(detalle.telefono, val);
+                          if (!res.ok) {
+                            setAviso(humanizarError(res.error ?? "No se pudo actualizar el tipo de negocio."));
+                          } else {
+                            await refrescar(detalle.telefono);
+                          }
+                        } catch (err: any) {
+                          setAviso(humanizarError(err));
+                        } finally {
+                          setCambiandoTipoNegocio(false);
                         }
                       }}
                       className="bg-white border border-carbon/15 hover:border-sauce rounded px-1.5 py-0.5 text-[10px] text-carbon/70 hover:text-carbon focus:outline-none cursor-pointer"
@@ -1712,12 +1780,21 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       onChange={async (e) => {
                         const nuevoAgente = e.target.value;
                         setAsignando(true);
-                        const res = await asignarAgente(detalle.telefono, nuevoAgente);
-                        setAsignando(false);
-                        if (!res.ok) {
-                          setAviso(res.error ?? "No se pudo reasignar.");
-                        } else {
-                          await refrescar(detalle.telefono);
+                        setAviso(null);
+                        try {
+                          const res = await asignarAgente(detalle.telefono, nuevoAgente);
+                          if (!res.ok) {
+                            setAviso(humanizarError(res.error ?? "No se pudo reasignar."));
+                          } else {
+                            if (nuevoAgente && nuevoAgente !== "IA") {
+                              setAgenteFirma(nuevoAgente);
+                            }
+                            await refrescar(detalle.telefono);
+                          }
+                        } catch (err: any) {
+                          setAviso(humanizarError(err));
+                        } finally {
+                          setAsignando(false);
                         }
                       }}
                       disabled={asignando || enviando}
@@ -1737,12 +1814,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         type="button"
                         onClick={async () => {
                           setAsignando(true);
-                          const res = await asignarAgente(detalle.telefono, usuario.nombre);
-                          setAsignando(false);
-                          if (!res.ok) {
-                            setAviso(res.error ?? "No se pudo tomar la conversación.");
-                          } else {
-                            await refrescar(detalle.telefono);
+                          setAviso(null);
+                          try {
+                            const res = await asignarAgente(detalle.telefono, usuario.nombre);
+                            if (!res.ok) {
+                              setAviso(humanizarError(res.error ?? "No se pudo tomar la conversación."));
+                            } else {
+                              setAgenteFirma(usuario.nombre);
+                              await refrescar(detalle.telefono);
+                            }
+                          } catch (err: any) {
+                            setAviso(humanizarError(err));
+                          } finally {
+                            setAsignando(false);
                           }
                         }}
                         disabled={asignando || enviando}
@@ -1757,12 +1841,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       type="button"
                       onClick={async () => {
                         setAlternandoIA(true);
-                        const res = await alternarPausaIA(detalle.telefono);
-                        setAlternandoIA(false);
-                        if (!res.ok) {
-                          setAviso(res.error ?? "No se pudo cambiar el estado de Sofía.");
-                        } else {
-                          await refrescar(detalle.telefono);
+                        setAviso(null);
+                        try {
+                          const res = await alternarPausaIA(detalle.telefono);
+                          if (!res.ok) {
+                            setAviso(humanizarError(res.error ?? "No se pudo cambiar el estado de Sofía."));
+                          } else {
+                            await refrescar(detalle.telefono);
+                          }
+                        } catch (err: any) {
+                          setAviso(humanizarError(err));
+                        } finally {
+                          setAlternandoIA(false);
                         }
                       }}
                       disabled={alternandoIA || enviando}
@@ -1796,18 +1886,24 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       onClick={async () => {
                         const seVaACerrar = !detalle.finalizado;
                         setEnviando(true);
-                        const res = await finalizarConversacion(detalle.telefono, seVaACerrar);
-                        setEnviando(false);
-                        if (!res.ok) {
-                          setAviso(res.error ?? "Error al cambiar estado.");
-                        } else if (seVaACerrar) {
-                          // Al CERRAR: quitar la selección para que desaparezca de "Abiertas"
-                          setSel(null);
-                          setDetalle(null);
-                          await refrescar(null);
-                        } else {
-                          // Al REABRIR: mantener seleccionada para seguir viendo el chat
-                          await refrescar(detalle.telefono);
+                        setAviso(null);
+                        try {
+                          const res = await finalizarConversacion(detalle.telefono, seVaACerrar);
+                          if (!res.ok) {
+                            setAviso(humanizarError(res.error ?? "Error al cambiar estado."));
+                          } else if (seVaACerrar) {
+                            // Al CERRAR: quitar la selección para que desaparezca de "Abiertas"
+                            setSel(null);
+                            setDetalle(null);
+                            await refrescar(null);
+                          } else {
+                            // Al REABRIR: mantener seleccionada para seguir viendo el chat
+                            await refrescar(detalle.telefono);
+                          }
+                        } catch (err: any) {
+                          setAviso(humanizarError(err));
+                        } finally {
+                          setEnviando(false);
                         }
                       }}
                       disabled={enviando}
@@ -1936,9 +2032,20 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               {/* Responder */}
               <div className="border-t border-carbon/10 p-3 bg-white">
                 {aviso && (
-                  <p className="mb-2 rounded-md border border-rojo/30 bg-rojo/10 px-3 py-2 text-xs text-rojo">
-                    {aviso}
-                  </p>
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-rojo/30 bg-rojo/10 px-3 py-2 text-xs text-rojo">
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-sm">⚠️</span>
+                      <span className="font-medium">{aviso}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAviso(null)}
+                      className="ml-auto shrink-0 rounded p-0.5 text-rojo/70 hover:bg-rojo/20 hover:text-rojo transition font-bold text-xs"
+                      title="Cerrar aviso"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 )}
 
                 {/* Banner de chat finalizado */}
@@ -2080,7 +2187,29 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
                   {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
                   <div className="flex flex-wrap items-center justify-between gap-y-1.5 text-[11px] text-carbon/40 px-1">
-                    <span>Escribe <strong className="text-sauce">#</strong> para respuestas rápidas</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>Escribe <strong className="text-sauce">#</strong> para respuestas rápidas</span>
+                      {asesores.length > 0 && (
+                        <div className="inline-flex items-center gap-1 bg-carbon/5 px-2 py-0.5 rounded border border-carbon/10 text-[10px]">
+                          <span className="text-carbon/60 font-medium">Firmar como:</span>
+                          <select
+                            value={agenteFirma}
+                            onChange={(e) => setAgenteFirma(e.target.value)}
+                            className="bg-transparent font-bold text-verde-profundo focus:outline-none cursor-pointer"
+                            title="Selecciona con qué nombre de asesor saldrá firmado tu mensaje"
+                          >
+                            {usuario?.nombre && !asesores.some((a) => a.nombre === usuario.nombre) && (
+                              <option value={usuario.nombre}>{usuario.nombre}</option>
+                            )}
+                            {asesores.map((as) => (
+                              <option key={as.id} value={as.nombre}>
+                                {as.nombre}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
                     
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       {/* Control de Sofía rápido */}
@@ -2088,12 +2217,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         type="button"
                         onClick={async () => {
                           setAlternandoIA(true);
-                          const res = await alternarPausaIA(detalle.telefono);
-                          setAlternandoIA(false);
-                          if (!res.ok) {
-                            setAviso(res.error ?? "No se pudo cambiar el estado de Sofía.");
-                          } else {
-                            await refrescar(detalle.telefono);
+                          setAviso(null);
+                          try {
+                            const res = await alternarPausaIA(detalle.telefono);
+                            if (!res.ok) {
+                              setAviso(humanizarError(res.error ?? "No se pudo cambiar el estado de Sofía."));
+                            } else {
+                              await refrescar(detalle.telefono);
+                            }
+                          } catch (err: any) {
+                            setAviso(humanizarError(err));
+                          } finally {
+                            setAlternandoIA(false);
                           }
                         }}
                         disabled={alternandoIA || enviando}
