@@ -1897,7 +1897,7 @@ notify pgrst, 'reload schema';`;
                     )}
 
                     {/* Sugerencia Visual (Prompt / Canva, colapsable) */}
-                    {pub.sugerencia_visual && (
+                    {(pub.sugerencia_visual || pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (
                       <div className="border border-amber-500/20 rounded-lg overflow-hidden bg-amber-50/20">
                         <button
                           type="button"
@@ -1908,10 +1908,18 @@ notify pgrst, 'reload schema';`;
                           <span className="text-[9px] shrink-0 ml-1">{promptActivo ? "▲" : "▼"}</span>
                         </button>
                         {promptActivo && (
-                          <div className="p-2 border-t border-amber-200/50 bg-white/70 max-h-32 overflow-y-auto">
-                            <p className="text-[10px] text-carbon/80 italic leading-snug">
-                              {pub.sugerencia_visual}
-                            </p>
+                          <div className="p-2 border-t border-amber-200/50 bg-white/70 max-h-40 overflow-y-auto space-y-1.5">
+                            {pub.sugerencia_visual && (
+                              <p className="text-[10px] text-carbon/80 italic leading-snug">
+                                {pub.sugerencia_visual}
+                              </p>
+                            )}
+                            {(pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (
+                              <div className="text-[9px] font-mono text-carbon/70 bg-amber-50/70 p-1.5 rounded border border-amber-200/40 leading-tight">
+                                <span className="font-bold text-amber-900 block mb-0.5">Prompt Flux (IA):</span>
+                                <span>{pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux}</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
