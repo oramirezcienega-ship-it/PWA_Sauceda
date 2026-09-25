@@ -2572,8 +2572,9 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     piso_estampado: "Piso Estampado",
     mantenimiento_cisternas: "Mantenimiento de Cisternas y Aljibes",
     cisternas: "Mantenimiento de Cisternas y Tinacos",
+    otro: "Construcción y Mantenimiento",
   };
-  const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
+  const servicioNombre = cotizacion.servicioTipo === "otro" ? "Construcción y Mantenimiento" : (servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción");
 
   const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
   const urlPortal = `${siteUrl}/cotizacion/${cotizacion.token}`;
