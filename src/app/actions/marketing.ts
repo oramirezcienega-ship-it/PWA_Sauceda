@@ -286,7 +286,7 @@ export async function obtenerCatalogoMarketing(): Promise<ActionResult<Record<st
  * Detecta la categoría de negocio principal de la publicación de forma precisa y robusta,
  * utilizando el catálogo parametrizado de marketing de Sauceda.
  */
-export function detectarCategoriaPublicacion(pub: PublicacionProgramada): string {
+function detectarCategoriaPublicacion(pub: PublicacionProgramada): string {
   const campana = (pub.diseno_banner as any)?.campana_nombre || "";
   const titulo = pub.titulo || "";
   const contenido = pub.contenido || "";
@@ -369,7 +369,7 @@ function esPromptCoherenteConCategoria(prompt: string, categoria: string): boole
  * para el modelo Flux de Replicate, con exactitud técnica para construcción y bienes raíces en México.
  * Utiliza el catálogo maestro parametrizado para garantizar coherencia temática absoluta y variaciones escénicas.
  */
-export function construirPromptFluxRobusto(
+function construirPromptFluxRobusto(
   pub: PublicacionProgramada,
   variacionIndex: number = 0
 ): string {
