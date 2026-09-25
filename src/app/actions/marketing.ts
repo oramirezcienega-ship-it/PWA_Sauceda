@@ -44,6 +44,8 @@ export interface DisenoBannerParams {
   telefono_contacto?: string;
   color_destacado?: string;
   prompt_imagen_flux?: string;
+  campana_nombre?: string;
+  video_metadata?: any;
 }
 
 export interface PublicacionProgramada {
