@@ -23,6 +23,12 @@ import {
   enviarWhatsAppDocumento,
   enviarWhatsAppPlantilla,
 } from "@/lib/whatsapp";
+import {
+  CATALOGO_CATEGORIAS_MARKETING,
+  resolverCategoriaMarketing,
+  generarPromptFluxParametrizado,
+  type CategoriaMarketingParametrizada,
+} from "@/lib/marketing-prompts";
 
 export interface SelloBanner {
   texto_top: string;
@@ -268,10 +274,17 @@ export async function obtenerPublicacionPorId(
 }
 
 /**
- * Detecta la categoría de negocio principal de la publicación de forma precisa y robusta,
- * priorizando títulos y nombres de campaña para evitar falsos positivos con palabras genéricas.
+ * Obtiene el catálogo completo de categorías de marketing con sus parámetros y variaciones escénicas.
  */
-function detectarCategoriaPublicacion(pub: PublicacionProgramada): string {
+export async function obtenerCatalogoMarketing(): Promise<ActionResult<Record<string, CategoriaMarketingParametrizada>>> {
+  return { success: true, data: CATALOGO_CATEGORIAS_MARKETING };
+}
+
+/**
+ * Detecta la categoría de negocio principal de la publicación de forma precisa y robusta,
+ * utilizando el catálogo parametrizado de marketing de Sauceda.
+ */
+export function detectarCategoriaPublicacion(pub: PublicacionProgramada): string {
   const campana = (pub.diseno_banner as any)?.campana_nombre || "";
   const titulo = pub.titulo || "";
   const contenido = pub.contenido || "";
@@ -279,76 +292,10 @@ function detectarCategoriaPublicacion(pub: PublicacionProgramada): string {
   const notas = pub.notas_revision || "";
 
   // Priorizar encabezado (campaña + título) sobre el cuerpo del copy
-  const encabezado = `${campana} ${titulo}`.toLowerCase();
-  const textoCompleto = `${campana} ${titulo} ${contenido} ${sugerencia} ${notas}`.toLowerCase();
+  const encabezado = `${campana} ${titulo}`.trim();
+  const query = `${encabezado} ${contenido} ${sugerencia} ${notas}`.trim();
 
-  // 1. Pintura y Acabados / Mantenimiento del Hogar (Máxima prioridad para evitar que "fachada" o "techo" lo desvíen)
-  if (
-    encabezado.match(/pintur|esmalte|vin[ií]lic|brocha|mantenimiento/) ||
-    textoCompleto.match(/pintur|esmalte|vin[ií]lic|brocha|rodillo de pintar/)
-  ) {
-    return "pintura";
-  }
-
-  // 2. Herrería Residencial (portones, protecciones, barandales, herrería)
-  if (
-    encabezado.match(/herrer[ií]a|port[oó]n|barandal|protecci[oó]n|zagua|reja|techumbre/) ||
-    textoCompleto.match(/herrer[ií]a|port[oó]n|barandal|protecci[oó]n|zagua|estructura met[aá]lica/)
-  ) {
-    return "herreria";
-  }
-
-  // 3. Concreto y Pisos Estampados (cocheras, terrazas, patios con molde o piedra)
-  if (
-    encabezado.match(/estampad|molde|piso decorativo/) ||
-    textoCompleto.match(/piso estampado|concreto estampado|acabado estampado|estampad/)
-  ) {
-    return "concreto_estampado";
-  }
-
-  // 4. Concreto Premezclado y Colados (losas, zapatas, revolvedora/trompo)
-  if (
-    encabezado.match(/premezclado|colado|trompo|revolvedora|losa/) ||
-    textoCompleto.match(/concreto premezclado|colado de losa|suministro de concreto|cami[oó]n de concreto/)
-  ) {
-    return "concreto_premezclado";
-  }
-
-  // 5. Impermeabilización (soplete, manto asfáltico, membrana prefabricada, gravilla blanca)
-  // Solo clasifica si explícitamente trata de impermeabilizar o techos con gotera SIN ser de pintura
-  if (
-    encabezado.match(/impermea|manto|asf[aá]lt|soplete|gotera|filtraci[oó]n|azotea/) ||
-    textoCompleto.match(/impermea|manto prefabricado|membrana asf[aá]ltica|termofusi[oó]n|soplete/) ||
-    (textoCompleto.match(/gotera|filtraci[oó]n|humedad en techo/) && !textoCompleto.match(/pintur/))
-  ) {
-    return "impermeabilizacion";
-  }
-
-  // 6. Bienes Raíces - Traspasos, Compra Rápida de Casas de Contado, Expediente INFONAVIT
-  if (
-    encabezado.match(/traspaso|infonavit|fovissste|expediente|compra directa|compra r[aá]pida|agiotista|deuda/) ||
-    textoCompleto.match(/traspaso|infonavit|fovissste|armado de expediente|compra directa|comprar casa de contado|agiotista|adeudo hipotecario/)
-  ) {
-    return "bienes_raices_traspasos";
-  }
-
-  // 7. Bienes Raíces - Venta de Casas / Catálogo Inmobiliario
-  if (
-    encabezado.match(/venta de casa|casas en venta|cat[aá]logo|inmobiliari/) ||
-    textoCompleto.match(/casas en venta|venta de casas|cat[aá]logo inmobiliario|estrena casa/)
-  ) {
-    return "bienes_raices_catalogo";
-  }
-
-  // 8. Remodelaciones y Ampliaciones arquitectónicas
-  if (
-    encabezado.match(/remodela|amplia|arquitect|obra civil/) ||
-    textoCompleto.match(/remodela|amplia|ampliaci[oó]n|diseño arquitect[oó]nico|diseno arquitectonico/)
-  ) {
-    return "remodelacion";
-  }
-
-  return "general";
+  return resolverCategoriaMarketing(query || "general").id;
 }
 
 /**
@@ -396,11 +343,14 @@ function esPromptCoherenteConCategoria(prompt: string, categoria: string): boole
       );
     case "concreto_premezclado":
       return p.includes("mixer") || p.includes("concrete") || p.includes("slab");
+    case "traspasos_infonavit":
+    case "expediente_infonavit":
     case "bienes_raices_traspasos":
       return (
-        (p.includes("advisor") || p.includes("consulting") || p.includes("office") || p.includes("living room") || p.includes("couple")) &&
+        (p.includes("advisor") || p.includes("consulting") || p.includes("office") || p.includes("living room") || p.includes("couple") || p.includes("desk")) &&
         !esDeImpermeabilizacion
       );
+    case "catalogo_inmuebles":
     case "bienes_raices_catalogo":
     case "remodelacion":
       return (
@@ -415,14 +365,18 @@ function esPromptCoherenteConCategoria(prompt: string, categoria: string): boole
 /**
  * Construye un prompt fotográfico profesional en inglés altamente detallado y optimizado
  * para el modelo Flux de Replicate, con exactitud técnica para construcción y bienes raíces en México.
+ * Utiliza el catálogo maestro parametrizado para garantizar coherencia temática absoluta y variaciones escénicas.
  */
-function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
+export function construirPromptFluxRobusto(
+  pub: PublicacionProgramada,
+  variacionIndex: number = 0
+): string {
   const esVertical =
     pub.tipo_formato === "video" ||
     pub.tipo_formato === "reel" ||
     pub.plataforma === "tiktok";
 
-  const categoria = detectarCategoriaPublicacion(pub);
+  const categoriaId = detectarCategoriaPublicacion(pub);
 
   const promptExistente = (
     pub.prompt_imagen_flux ||
@@ -434,89 +388,16 @@ function construirPromptFluxRobusto(pub: PublicacionProgramada): string {
   if (
     promptExistente.length > 40 &&
     !promptExistente.match(/antes|despu[eé]s|transici[oó]n|gotera|reel|machine|lawn|pool|alberca|botella|bottle/i) &&
-    esPromptCoherenteConCategoria(promptExistente, categoria)
+    esPromptCoherenteConCategoria(promptExistente, categoriaId)
   ) {
     return promptExistente;
   }
 
-  // 1. Mantenimiento del Hogar / Pintura Vinílica y Esmalte para Fachadas e Interiores
-  if (categoria === "pintura") {
-    const prefijoCamara = esVertical
-      ? "Award-winning 9:16 vertical commercial architectural editorial photography of a modern Mexican residential home facade in sunny León Guanajuato"
-      : "Award-winning commercial architectural editorial photography of a modern Mexican residential home facade in sunny León Guanajuato";
-
-    return `${prefijoCamara}. Two skilled Mexican house painters in clean white and navy work uniforms meticulously applying premium satin exterior architectural paint in warm contemporary neutral tones (sand-white and subtle terracotta accent) to the exterior smooth stucco walls. One painter skillfully uses a professional paint roller with an extension pole, and the other does crisp edge cutting with a precision trim brush. Clean drop cloths neatly protecting the walkway, professional aluminum ladder standing steadily. Crisp architectural lines, bright natural morning sunlight, crystal clear blue sky, shot on Hasselblad H6D-100c, 35mm lens, f/4, pristine craftsmanship, authentic textures of fresh smooth paint and fine stucco, 8k resolution.`;
-  }
-
-  // 2. Herrería Residencial e Industrial: Portones automatizados, protecciones, barandales
-  if (categoria === "herreria") {
-    const prefijoCamara = esVertical
-      ? "Architectural 9:16 vertical luxury editorial photography of a modern Mexican residential home entrance in León Guanajuato"
-      : "Architectural luxury editorial photography of a modern Mexican residential home entrance in León Guanajuato";
-
-    return `${prefijoCamara}. A bespoke custom-fabricated matte dark charcoal gray steel automatic garage gate with minimalist horizontal louvers and integrated warm LED accent lights. Beautiful matching black steel security window grilles and balcony railings. Clean travertine stone cladding, landscaped succulent planters, bright natural daylight, shot on Hasselblad H6D-100c, 35mm f/4, crisp realistic metal craftsmanship, razor-sharp details, 8k resolution.`;
-  }
-
-  // 3. Concreto Estampado / Pisos Decorativos
-  if (categoria === "concreto_estampado") {
-    const prefijoCamara = esVertical
-      ? "Award-winning 9:16 vertical commercial architectural photography of a luxury residential driveway in sunny León Guanajuato"
-      : "Award-winning commercial architectural photography of a luxury residential driveway in sunny León Guanajuato";
-
-    return `${prefijoCamara}. A pristine, newly poured stamped concrete driveway featuring rich natural slate stone ashlar texture with subtle charcoal and warm terracotta highlights. Semi-gloss wet-look protective sealer reflecting brilliant afternoon sunlight. Flanked by modern Mexican architecture, manicured ornamental palms, crisp realistic textures of embossed stone patterns, shot on Hasselblad H6D-100c, 35mm lens, f/4, authentic craftsmanship, 8k resolution.`;
-  }
-
-  // 4. Concreto Premezclado / Losas / Firmes
-  if (categoria === "concreto_premezclado") {
-    const prefijoCamara = esVertical
-      ? "Dynamic 9:16 vertical crisp industrial architectural photography of a modern residential construction site in sunny León Guanajuato"
-      : "Dynamic, crisp industrial architectural photography of a modern residential construction site in sunny León Guanajuato";
-
-    return `${prefijoCamara}. A clean modern concrete mixer truck chute delivering smooth, high-grade ready-mixed concrete onto a reinforced foundation slab, Mexican builders in high-vis vests and helmets leveling the surface smoothly with screed boards and floats. Bright daylight, sharp realistic textures of aggregate and wet concrete, shot on Hasselblad H6D-100c, 35mm lens, f/4, authentic craftsmanship, 8k resolution.`;
-  }
-
-  // 5. Impermeabilización Profesional de Azoteas con Manto Asfáltico y Soplete
-  if (categoria === "impermeabilizacion") {
-    const prefijoCamara = esVertical
-      ? "Award-winning 9:16 vertical commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato"
-      : "Award-winning commercial architectural editorial photography of a modern Mexican residential flat rooftop in sunny León Guanajuato";
-
-    return `${prefijoCamara}. A skilled Mexican roofing technician in clean navy blue workwear, protective heat-resistant gloves, and safety helmet, precisely applying a heavy roll of torch-on prefabricated waterproofing membrane finished with reflective white mineral granules. He operates a long propane gas blowtorch wand with a bright controlled orange and blue flame, heating and melting the bottom asphalt layer as the roll unrolls seamlessly onto the primed flat concrete roof deck. Visible red propane cylinder tank with hose nearby. In the background, the pristine finished roof surface is covered in clean, neat parallel sheets of white mineral granules reflecting bright natural sunlight. Clear blue sky, crisp architectural lines, shot on Hasselblad H6D-100c, 35mm lens, f/4, authentic craftsmanship, crisp realistic textures, 8k resolution.`;
-  }
-
-  // 6. Infonavit / Bienes Raíces / Traspasos / Armado de Expediente / Deudas
-  if (categoria === "bienes_raices_traspasos") {
-    const prefijoCamara = esVertical
-      ? "High-end 9:16 vertical interior architectural photography of a sunny, contemporary Mexican residential living room in León Guanajuato"
-      : "High-end interior architectural photography of a sunny, contemporary Mexican residential living room in León Guanajuato";
-
-    return `${prefijoCamara}. A professional Mexican real estate advisor in clean business casual attire warmly consulting with a smiling young couple over an executive property folder on a polished wood table. Natural daylight streaming through floor-to-ceiling glass windows, minimalist modern Mexican decor, lush courtyard in background, shot on Sony A7R V, 35mm f/2.8, magazine editorial quality, trustworthy and welcoming atmosphere, 8k resolution.`;
-  }
-
-  // 7. Bienes Raíces - Venta de Casas / Catálogo Inmobiliario
-  if (categoria === "bienes_raices_catalogo") {
-    const prefijoCamara = esVertical
-      ? "High-end 9:16 vertical architectural photography of an exquisite modern Mexican residential home exterior in León Guanajuato"
-      : "High-end architectural photography of an exquisite modern Mexican residential home exterior in León Guanajuato";
-
-    return `${prefijoCamara}. Contemporary two-story house facade with clean geometric lines, warm sand stucco, natural oak wood slats, black framed picture windows, landscaped front entrance with desert agave and warm recessed exterior lighting. Pristine paved driveway, bright sunny morning light, clear azure sky, shot on Hasselblad H6D-100c, 35mm lens, f/4, luxury real estate catalog editorial, 8k resolution.`;
-  }
-
-  // 8. Remodelaciones / Ampliaciones / Fachadas
-  if (categoria === "remodelacion") {
-    const prefijoCamara = esVertical
-      ? "Cinematic 9:16 vertical architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato"
-      : "Cinematic architectural photography of a newly remodeled modern Mexican residential facade in León Guanajuato";
-
-    return `${prefijoCamara}. Clean geometric architecture, warm sand-colored stucco, natural wood accents, contemporary steel beams, sunny day, clear blue sky, sharp realistic textures of stone and smooth concrete, shot on Hasselblad H6D-100c, 35mm lens, f/4, pristine luxury home editorial, 8k resolution.`;
-  }
-
-  // Fallback por defecto: Arquitectura residencial moderna mexicana limpia
-  const prefijoCamara = esVertical
-    ? "Award-winning 9:16 vertical commercial architectural editorial photography of a modern Mexican residential home in sunny León Guanajuato"
-    : "Award-winning commercial architectural editorial photography of a modern Mexican residential home in sunny León Guanajuato";
-
-  return `${prefijoCamara}, warm natural sunlight, clear blue sky, Hasselblad H6D-100c, 35mm lens, f/4, crisp realistic composition, 8k resolution.`;
+  // Generar prompt fotográfico parametrizado desde el catálogo maestro
+  return generarPromptFluxParametrizado(categoriaId, {
+    variacionIndex,
+    esVertical,
+  });
 }
 
 /**
@@ -840,13 +721,15 @@ export async function desprogramarPublicacionesMasivo(
  * Limpia la URL de la imagen previa y vuelve a disparar n8n para regenerar el creativo con IA.
  */
 export async function regenerarCreativoPublicacion(
-  id: string
+  id: string,
+  forzarNuevoPrompt: boolean = false,
+  variacionIndex?: number
 ): Promise<ActionResult<PublicacionProgramada>> {
   try {
     await requireAdministrador();
     const sb = supabaseServidor();
 
-    // Obtener la publicación actual para regenerar su prompt si contenía términos obsoletos
+    // Obtener la publicación actual para regenerar su prompt si contenía términos obsoletos o se fuerza nuevo prompt
     const { data: pubActual } = await sb
       .from("publicaciones_programadas")
       .select("*")
@@ -857,7 +740,14 @@ export async function regenerarCreativoPublicacion(
     let nuevoDisenoBanner = (pubActual?.diseno_banner as any) || {};
 
     if (pubActual) {
-      nuevoPrompt = construirPromptFluxRobusto(pubActual as PublicacionProgramada);
+      const pubObj = { ...pubActual } as PublicacionProgramada;
+      if (forzarNuevoPrompt) {
+        pubObj.prompt_imagen_flux = "";
+        if (pubObj.diseno_banner) {
+          (pubObj.diseno_banner as any).prompt_imagen_flux = "";
+        }
+      }
+      nuevoPrompt = construirPromptFluxRobusto(pubObj, variacionIndex ?? 0);
       nuevoDisenoBanner = {
         ...nuevoDisenoBanner,
         prompt_imagen_flux: nuevoPrompt,
@@ -869,6 +759,7 @@ export async function regenerarCreativoPublicacion(
       .update({
         url_imagen: null,
         estado: "aprobado",
+        prompt_imagen_flux: nuevoPrompt,
         diseno_banner: nuevoDisenoBanner,
         updated_at: new Date().toISOString(),
       })
@@ -1306,13 +1197,16 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         ? promptFluxUnificado
         : (prop.prompt_imagen_flux || "");
 
-      const promptDefinitivo = construirPromptFluxRobusto({
-        ...propAjustada,
-        prompt_imagen_flux: promptCandidato,
-        diseno_banner: {
-          campana_nombre: temaFinal,
+      const promptDefinitivo = construirPromptFluxRobusto(
+        {
+          ...propAjustada,
+          prompt_imagen_flux: promptCandidato,
+          diseno_banner: {
+            campana_nombre: temaFinal,
+          },
         },
-      });
+        i
+      );
 
       const payload = {
         titulo: prop.titulo,
@@ -1320,6 +1214,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         plataforma: plataformaFinal,
         tipo_formato: formatoFinal,
         sugerencia_visual: prop.sugerencia_visual || "",
+        prompt_imagen_flux: promptDefinitivo,
         guion_video: prop.guion_video || "",
         diseno_banner: {
           ...(prop.diseno_banner || {}),

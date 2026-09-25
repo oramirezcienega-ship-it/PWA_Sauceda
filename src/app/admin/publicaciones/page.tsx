@@ -26,6 +26,11 @@ import {
   desprogramarPublicacion,
   desprogramarPublicacionesMasivo,
 } from "@/app/actions/marketing";
+import {
+  CATALOGO_CATEGORIAS_MARKETING,
+  resolverCategoriaMarketing,
+  generarPromptFluxParametrizado,
+} from "@/lib/marketing-prompts";
 
 interface OpcionFiltro {
   id: string;
@@ -295,7 +300,9 @@ export default function PaginaPublicaciones() {
   const [fechaHoraProgramar, setFechaHoraProgramar] = useState<string>("");
   const [guardandoProgramacion, setGuardandoProgramacion] = useState(false);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
-  const [temaIA, setTemaIA] = useState<string>("Servicios de impermeabilización profesional con garantía de 5 a 10 años");
+  const [temaIA, setTemaIA] = useState<string>(
+    `${CATALOGO_CATEGORIAS_MARKETING.pintura.nombre}: ${CATALOGO_CATEGORIAS_MARKETING.pintura.ofertaPrincipal}`
+  );
   const [usarTemaPersonalizado, setUsarTemaPersonalizado] = useState(false);
   const [temaPersonalizado, setTemaPersonalizado] = useState("");
   const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
@@ -668,7 +675,7 @@ notify pgrst, 'reload schema';`;
     setMensajeCarga("Solicitando un nuevo creativo fotorrealista a n8n...");
 
     startTransition(async () => {
-      const res = await regenerarCreativoPublicacion(id);
+      const res = await regenerarCreativoPublicacion(id, true);
       if (!res.success) {
         alert("Error al solicitar regeneración de creativo: " + res.error);
         setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
@@ -1843,6 +1850,25 @@ notify pgrst, 'reload schema';`;
                   {/* Cuerpo compacto de la publicación */}
                   <div className="p-2.5 flex-1 flex flex-col gap-2">
                     <div>
+                      {(() => {
+                        const catDetectada = resolverCategoriaMarketing(
+                          `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`
+                        );
+                        return (
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span
+                              className="text-[9px] font-bold text-carbon/75 bg-carbon/5 border border-carbon/10 px-1.5 py-0.5 rounded flex items-center gap-1 max-w-[170px] truncate"
+                              title={`${catDetectada.icono} ${catDetectada.nombre} (${catDetectada.lineaNegocio})`}
+                            >
+                              <span>{catDetectada.icono}</span>
+                              <span className="truncate">{catDetectada.nombre.split("(")[0].trim()}</span>
+                            </span>
+                            <span className="text-[9px] text-carbon/40 font-mono shrink-0">
+                              {pub.tipo_formato === "reel" || pub.tipo_formato === "video" ? "9:16" : "1:1"}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       <h3
                         className="font-bold text-verde-profundo text-xs leading-snug line-clamp-1"
                         title={pub.titulo}
@@ -1897,33 +1923,58 @@ notify pgrst, 'reload schema';`;
                     )}
 
                     {/* Sugerencia Visual (Prompt / Canva, colapsable) */}
-                    {(pub.sugerencia_visual || pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (
-                      <div className="border border-amber-500/20 rounded-lg overflow-hidden bg-amber-50/20">
-                        <button
-                          type="button"
-                          onClick={() => togglePrompt(pub.id!)}
-                          className="w-full px-2 py-1 flex items-center justify-between text-[10px] font-bold text-amber-900 hover:bg-amber-100/50 transition cursor-pointer"
-                        >
-                          <span className="truncate">💡 {promptActivo ? "Ocultar Prompt" : "Ver Prompt Visual"}</span>
-                          <span className="text-[9px] shrink-0 ml-1">{promptActivo ? "▲" : "▼"}</span>
-                        </button>
-                        {promptActivo && (
-                          <div className="p-2 border-t border-amber-200/50 bg-white/70 max-h-40 overflow-y-auto space-y-1.5">
-                            {pub.sugerencia_visual && (
-                              <p className="text-[10px] text-carbon/80 italic leading-snug">
-                                {pub.sugerencia_visual}
-                              </p>
-                            )}
-                            {(pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (
-                              <div className="text-[9px] font-mono text-carbon/70 bg-amber-50/70 p-1.5 rounded border border-amber-200/40 leading-tight">
-                                <span className="font-bold text-amber-900 block mb-0.5">Prompt Flux (IA):</span>
-                                <span>{pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux}</span>
+                    {(pub.sugerencia_visual || pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (() => {
+                      const catDetectada = resolverCategoriaMarketing(
+                        `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`
+                      );
+                      return (
+                        <div className="border border-amber-500/20 rounded-lg overflow-hidden bg-amber-50/20">
+                          <button
+                            type="button"
+                            onClick={() => togglePrompt(pub.id!)}
+                            className="w-full px-2 py-1 flex items-center justify-between text-[10px] font-bold text-amber-900 hover:bg-amber-100/50 transition cursor-pointer"
+                          >
+                            <span className="truncate flex items-center gap-1">
+                              <span>💡</span>
+                              <span>{promptActivo ? "Ocultar Prompt" : "Ver Prompt Visual"}</span>
+                              <span className="text-[8px] font-normal text-amber-800 bg-amber-200/60 px-1 rounded ml-1">
+                                {catDetectada.icono} {catDetectada.id}
+                              </span>
+                            </span>
+                            <span className="text-[9px] shrink-0 ml-1">{promptActivo ? "▲" : "▼"}</span>
+                          </button>
+                          {promptActivo && (
+                            <div className="p-2 border-t border-amber-200/50 bg-white/70 max-h-48 overflow-y-auto space-y-1.5">
+                              <div className="flex items-center justify-between text-[9px] text-amber-900 font-semibold pb-1 border-b border-amber-200/40">
+                                <span className="truncate max-w-[160px]">Línea: {catDetectada.nombre.split("(")[0].trim()}</span>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await handleRegenerarCreativo(pub.id!);
+                                  }}
+                                  className="text-[9px] text-dorado hover:underline font-bold cursor-pointer shrink-0 ml-1"
+                                  title="Forzar regeneración con prompt parametrizado de esta categoría"
+                                >
+                                  🔄 Regenerar Foto
+                                </button>
                               </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                              {pub.sugerencia_visual && (
+                                <p className="text-[10px] text-carbon/80 italic leading-snug">
+                                  {pub.sugerencia_visual}
+                                </p>
+                              )}
+                              {(pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (
+                                <div className="text-[9px] font-mono text-carbon/70 bg-amber-50/70 p-1.5 rounded border border-amber-200/40 leading-tight">
+                                  <span className="font-bold text-amber-900 block mb-0.5">Prompt Flux (IA):</span>
+                                  <span>{pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Métricas Ads si existen */}
                     {((pub.leads_generados !== undefined && pub.leads_generados > 0) ||
@@ -2251,38 +2302,22 @@ notify pgrst, 'reload schema';`;
                     className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer font-medium"
                   >
                     <optgroup label="🔨 Sauceda Construye">
-                      <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">
-                        ☔ Impermeabilización con Soplete $210/m² (Garantía 5 a 10 años)
-                      </option>
-                      <option value="Herrería residencial moderna, portones automatizados, protecciones y barandales de herrería">
-                        ⚒️ Herrería Residencial (Portones modernos, protecciones y barandales)
-                      </option>
-                      <option value="Concreto y pisos estampados decorativos para cocheras, terrazas y patios con acabado piedra y sellador">
-                        🧱 Concreto y Pisos Estampados (Cocheras, terrazas y patios)
-                      </option>
-                      <option value="Remodelaciones y ampliaciones de viviendas en León Gto">
-                        🏗️ Remodelación y Ampliación de Hogares (Diseño y Obra)
-                      </option>
-                      <option value="Mantenimiento integral del hogar, pintura vinílica y esmalte para fachadas e interiores">
-                        🎨 Mantenimiento del Hogar y Pintura (Fachadas e interiores)
-                      </option>
-                      <option value="Concreto premezclado para losas, zapatas, pisos industriales y colado directo en obra">
-                        🚛 Concreto Premezclado y Colado de Losas (Calidad garantizada)
-                      </option>
+                      {Object.values(CATALOGO_CATEGORIAS_MARKETING)
+                        .filter((c) => c.lineaNegocio === "Sauceda Construye")
+                        .map((cat) => (
+                          <option key={cat.id} value={`${cat.nombre}: ${cat.ofertaPrincipal}`}>
+                            {cat.icono} {cat.nombre}
+                          </option>
+                        ))}
                     </optgroup>
                     <optgroup label="🏡 Sauceda Bienes Raíces">
-                      <option value="Traspasos de viviendas con crédito INFONAVIT">
-                        🏠 Traspasos INFONAVIT / FOVISSSTE (Venta segura sin deudas)
-                      </option>
-                      <option value="Compra rápida de casas de contado con adeudos o vandalizadas">
-                        💰 Compra Directa de Casas de Contado (Problemas Legales / Deudas)
-                      </option>
-                      <option value="Gestión y armado de expediente INFONAVIT para trato directo">
-                        📂 Armado de Expediente INFONAVIT (Trámite y asesoría directa)
-                      </option>
-                      <option value="Venta de casas en León Gto, catálogo inmobiliario con crédito INFONAVIT, FOVISSSTE o bancario">
-                        🏡 Venta de Casas y Catálogo Inmobiliario (Listas para habitar)
-                      </option>
+                      {Object.values(CATALOGO_CATEGORIAS_MARKETING)
+                        .filter((c) => c.lineaNegocio === "Sauceda Bienes Raíces")
+                        .map((cat) => (
+                          <option key={cat.id} value={`${cat.nombre}: ${cat.ofertaPrincipal}`}>
+                            {cat.icono} {cat.nombre}
+                          </option>
+                        ))}
                     </optgroup>
                   </select>
                 )}
@@ -2634,9 +2669,37 @@ notify pgrst, 'reload schema';`;
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-xs font-bold text-carbon/60 block mb-1">
-                    Prompt Fotográfico IA (Flux / Replicate en Inglés)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-carbon/60 block">
+                      Prompt Fotográfico IA (Flux / Replicate en Inglés)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nuevo = generarPromptFluxParametrizado(
+                          `${pubEditando.titulo || ""} ${pubEditando.contenido || ""} ${pubEditando.sugerencia_visual || ""}`,
+                          {
+                            esVertical:
+                              pubEditando.tipo_formato === "reel" ||
+                              pubEditando.tipo_formato === "video" ||
+                              pubEditando.plataforma === "tiktok",
+                          }
+                        );
+                        setPubEditando({
+                          ...pubEditando,
+                          prompt_imagen_flux: nuevo,
+                          diseno_banner: {
+                            ...(pubEditando.diseno_banner || {}),
+                            prompt_imagen_flux: nuevo,
+                          },
+                        });
+                      }}
+                      className="text-[11px] font-bold text-dorado hover:underline cursor-pointer flex items-center gap-1"
+                      title="Generar prompt fotorrealista basado en la categoría de negocio detectada"
+                    >
+                      <span>✨ Auto-generar según contenido</span>
+                    </button>
+                  </div>
                   <textarea
                     rows={3}
                     placeholder="Award-winning commercial architectural editorial photography of a modern Mexican residential..."
