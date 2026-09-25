@@ -5,6 +5,8 @@ import PrevisualizadorRedSocial from "@/components/PrevisualizadorRedSocial";
 import CalendarioMarketingOmnicanal from "@/components/CalendarioMarketingOmnicanal";
 import ModalConexionMeta from "@/components/ModalConexionMeta";
 import ModalConexionTikTok from "@/components/ModalConexionTikTok";
+import ModalSubirVideo from "@/components/ModalSubirVideo";
+import { esArchivoVideoReal } from "@/lib/meta-publicador";
 import {
   PublicacionProgramada,
   obtenerPublicaciones,
@@ -327,6 +329,15 @@ export default function PaginaPublicaciones() {
   const [instruccionesReplicar, setInstruccionesReplicar] = useState("");
   const [replicando, setReplicando] = useState(false);
 
+  // Estados para Modal de Carga y Prevalidación de Video
+  const [pubParaSubirVideo, setPubParaSubirVideo] = useState<PublicacionProgramada | null>(null);
+  const [mostrarModalVideo, setMostrarModalVideo] = useState(false);
+
+  const handleAbrirSubirVideo = (pub: PublicacionProgramada) => {
+    setPubParaSubirVideo(pub);
+    setMostrarModalVideo(true);
+  };
+
   const [isPending, startTransition] = useTransition();
   const [cargandoLista, setCargandoLista] = useState(true);
   const [mensajeCarga, setMensajeCarga] = useState("Generando contenido...");
@@ -516,6 +527,22 @@ notify pgrst, 'reload schema';`;
 
   const handleAprobar = async (id: string) => {
     const pubTarget = publicaciones.find((p) => p.id === id);
+    const esVideoOReel =
+      pubTarget?.tipo_formato === "video" ||
+      pubTarget?.tipo_formato === "reel" ||
+      pubTarget?.plataforma === "tiktok";
+    const tieneVideoReal = Boolean(pubTarget?.url_imagen && esArchivoVideoReal(pubTarget.url_imagen));
+
+    if (pubTarget && esVideoOReel && !tieneVideoReal && (!pubTarget.url_imagen || pubTarget.url_imagen.length <= 5)) {
+      const deseaSubir = confirm(
+        `Esta publicación está configurada como ${pubTarget.tipo_formato === "reel" ? "Reel" : "Video"} para ${pubTarget.plataforma.toUpperCase()}.\n\nPara que la plataforma acepte el anuncio y no lo rechace por falta de video, se requiere un archivo multimedia compatible.\n\n¿Deseas subir y pre-validar el video ahora mismo?`
+      );
+      if (deseaSubir) {
+        handleAbrirSubirVideo(pubTarget);
+        return;
+      }
+    }
+
     const tieneImagen = Boolean(pubTarget?.url_imagen && pubTarget.url_imagen.length > 5);
     const res = await cambiarEstadoPublicacion(id, "aprobado");
     if (res.success) {
@@ -1798,6 +1825,14 @@ notify pgrst, 'reload schema';`;
                         </button>
                         <button
                           type="button"
+                          onClick={() => handleAbrirSubirVideo(pub)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
+                          title="Subir y pre-validar video para esta publicación"
+                        >
+                          🎬 Video
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleReemplazarArte(pub.id!)}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
                           title="Subir Arte de Canva"
@@ -1833,15 +1868,32 @@ notify pgrst, 'reload schema';`;
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center text-carbon/50">
-                          <span className="text-xl mb-0.5">🖼️</span>
-                          <span className="text-[10px] font-medium">Sin imagen</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRegenerarCreativo(pub.id!)}
-                            className="mt-1 bg-verde-profundo text-crema text-[10px] font-bold px-2 py-0.5 rounded shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
-                          >
-                            <span>✨</span> Generar Flux
-                          </button>
+                          <span className="text-xl mb-0.5">
+                            {pub.tipo_formato === "video" || pub.tipo_formato === "reel" ? "🎬" : "🖼️"}
+                          </span>
+                          <span className="text-[10px] font-medium">
+                            {pub.tipo_formato === "video" || pub.tipo_formato === "reel"
+                              ? "Sin video asignado"
+                              : "Sin imagen asignada"}
+                          </span>
+                          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirSubirVideo(pub)}
+                              className="bg-purple-700 hover:bg-purple-800 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-xs transition cursor-pointer flex items-center gap-1"
+                              title="Subir y pre-validar video para esta publicación"
+                            >
+                              <span>🎬</span> Subir Video
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerarCreativo(pub.id!)}
+                              className="bg-verde-profundo text-crema text-[10px] font-bold px-2 py-0.5 rounded shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
+                              title="Generar imagen fotográfica con IA (Flux)"
+                            >
+                              <span>✨</span> Generar Flux
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2180,6 +2232,15 @@ notify pgrst, 'reload schema';`;
                       >
                         <span>🎨</span> <span className="hidden sm:inline">Canva</span>
                       </a>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirSubirVideo(pub)}
+                        className="px-1.5 py-0.5 text-purple-700 hover:bg-purple-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Subir y pre-validar video para esta publicación"
+                      >
+                        <span>🎬</span> <span className="hidden sm:inline">Video</span>
+                      </button>
 
                       <button
                         type="button"
@@ -2773,19 +2834,35 @@ notify pgrst, 'reload schema';`;
                   <div className="bg-crema/10 border border-dorado/30 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center">
                     {pubEditando.url_imagen && pubEditando.url_imagen.length > 5 ? (
                       <div className="w-24 h-24 rounded-xl overflow-hidden border border-dorado/30 relative flex-shrink-0 bg-black shadow-xs">
-                        <img
-                          src={pubEditando.url_imagen}
-                          alt="Vista previa"
-                          className="w-full h-full object-cover"
-                        />
+                        {esArchivoVideoReal(pubEditando.url_imagen) ? (
+                          <video
+                            src={pubEditando.url_imagen}
+                            controls
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <img
+                            src={pubEditando.url_imagen}
+                            alt="Vista previa"
+                            className="w-full h-full object-cover"
+                          />
+                        )}
                       </div>
                     ) : (
                       <div className="w-24 h-24 rounded-xl border border-dashed border-dorado/40 flex items-center justify-center text-xs text-carbon/40 flex-shrink-0">
-                        Sin imagen
+                        {pubEditando.tipo_formato === "video" || pubEditando.tipo_formato === "reel" ? "Sin video" : "Sin imagen"}
                       </div>
                     )}
                     <div className="flex-1 w-full space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirSubirVideo(pubEditando)}
+                          className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          title="Subir y pre-validar video para esta publicación"
+                        >
+                          <span>🎬</span> Subir / Validar Video
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -2977,6 +3054,7 @@ notify pgrst, 'reload schema';`;
           onProgramar={(pub) => handleAbrirProgramar(pub)}
           onRegenerarCreativo={(id) => handleRegenerarCreativo(id)}
           onReemplazarArte={(id) => handleReemplazarArte(id)}
+          onSubirVideo={(pub) => handleAbrirSubirVideo(pub)}
           onReplicar={(pub) => handleAbrirReplicar(pub)}
           onPublicado={async (pub) => {
             setPublicaciones((prev) => prev.map((p) => (p.id === pub.id ? pub : p)));
@@ -3148,6 +3226,23 @@ notify pgrst, 'reload schema';`;
         abierto={mostrarModalTikTok}
         onCerrar={() => setMostrarModalTikTok(false)}
         onConexionActualizada={cargarDatos}
+      />
+
+      {/* Modal para Subir y Pre-validar Video Técnico para Redes Sociales */}
+      <ModalSubirVideo
+        isOpen={mostrarModalVideo}
+        publicacion={pubParaSubirVideo}
+        onClose={() => {
+          setMostrarModalVideo(false);
+          setPubParaSubirVideo(null);
+        }}
+        onVideoSubido={async (pubActualizada) => {
+          await cargarDatos();
+          if (pubEditando && pubEditando.id === pubActualizada.id) {
+            setPubEditando(pubActualizada);
+          }
+          alert("🎉 ¡Video verificado y asignado exitosamente a la publicación!");
+        }}
       />
     </main>
   );

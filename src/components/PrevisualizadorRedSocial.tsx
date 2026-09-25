@@ -19,6 +19,7 @@ interface PrevisualizadorRedSocialProps {
   onProgramar?: (pub: PublicacionProgramada) => void;
   onRegenerarCreativo?: (id: string) => void;
   onReemplazarArte?: (id: string) => void;
+  onSubirVideo?: (pub: PublicacionProgramada) => void;
   onReplicar?: (pub: PublicacionProgramada) => void;
   onPublicado?: (pub: PublicacionProgramada) => void;
 }
@@ -31,6 +32,7 @@ export default function PrevisualizadorRedSocial({
   onProgramar,
   onRegenerarCreativo,
   onReemplazarArte,
+  onSubirVideo,
   onReplicar,
   onPublicado,
 }: PrevisualizadorRedSocialProps) {
@@ -784,6 +786,18 @@ export default function PrevisualizadorRedSocial({
                           <span>📁</span> Subir Foto de Canva / PC
                         </button>
                       )}
+                      {onSubirVideo && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onCerrar();
+                            onSubirVideo(pubActual);
+                          }}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <span>🎬</span> Subir Video (Reel)
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -948,6 +962,18 @@ export default function PrevisualizadorRedSocial({
                           className="bg-white/10 hover:bg-white/20 text-white font-medium text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                         >
                           <span>📁</span> Subir Foto de Canva / PC
+                        </button>
+                      )}
+                      {onSubirVideo && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onCerrar();
+                            onSubirVideo(pubActual);
+                          }}
+                          className="bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <span>🎬</span> Subir Video (TikTok)
                         </button>
                       )}
                     </div>
@@ -1235,6 +1261,20 @@ export default function PrevisualizadorRedSocial({
             >
               <span>🧪</span> Probar WhatsApp (1 Destinatario)
             </button>
+
+            {onSubirVideo && (
+              <button
+                type="button"
+                onClick={() => {
+                  onCerrar();
+                  onSubirVideo(pubActual);
+                }}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Subir video y pre-validar formato técnico para Instagram Reels, Facebook o TikTok"
+              >
+                <span>🎬</span> Subir / Validar Video
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
