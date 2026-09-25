@@ -2612,18 +2612,49 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
 
   // Helper para enviar y registrar la plantilla oficial aprobada en Meta
   const enviarPlantillaOficial = async () => {
-    // La plantilla registrada y aprobada en Meta es "envio_cotizacion_cliente"
-    // Idioma aprobado en Meta: "es" (NO "es_MX")
-    // Parámetros del cuerpo aprobados: exactamente 2 -> {{1}}: Nombre, {{2}}: Proyecto o Servicio
-    const resMeta = await enviarWhatsAppPlantilla(
+    // 1. Intentar primero con la plantilla completa detallada "envio_propuesta_cotizacion" (5 parámetros: nombre, servicio, folio, inversión, enlace)
+    let plantillaUsada = "envio_propuesta_cotizacion";
+    let resMeta = await enviarWhatsAppPlantilla(
       datos.telefono,
-      "envio_cotizacion_cliente",
-      "es",
+      "envio_propuesta_cotizacion",
+      "es_MX",
       [
         nombreDestinoPlantilla, // {{1}}
         servicioNombre,         // {{2}}
+        cotizacion.id,          // {{3}}
+        inversionTexto,         // {{4}}
+        urlPortal,              // {{5}}
       ]
     );
+
+    if (!resMeta.ok) {
+      resMeta = await enviarWhatsAppPlantilla(
+        datos.telefono,
+        "envio_propuesta_cotizacion",
+        "es",
+        [
+          nombreDestinoPlantilla,
+          servicioNombre,
+          cotizacion.id,
+          inversionTexto,
+          urlPortal,
+        ]
+      );
+    }
+
+    // 2. Si la nueva plantilla detallada aún no entra en vigor (PENDING en Meta), usar de respaldo la plantilla aprobada "envio_cotizacion_cliente"
+    if (!resMeta.ok) {
+      plantillaUsada = "envio_cotizacion_cliente";
+      resMeta = await enviarWhatsAppPlantilla(
+        datos.telefono,
+        "envio_cotizacion_cliente",
+        "es",
+        [
+          nombreDestinoPlantilla, // {{1}}
+          servicioNombre,         // {{2}}
+        ]
+      );
+    }
 
     if (resMeta.ok) {
       if (cotFila.estatus === "aprobada") {
@@ -2633,7 +2664,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
           .eq("id", datos.cotizacionId);
       }
 
-      const textoPlantilla = `📄 *[Plantilla Oficial Meta · Cotización]*\n\nHola ${nombreDestinoPlantilla}, le escribimos de SAUCEDA Bienes Raíces. Le informamos que su cotización personalizada para el proyecto de ${servicioNombre} ya está lista y disponible para su revisión.\n\n📄 *Folio:* ${cotizacion.id}\n💰 *Inversión:* ${inversionTexto}\n🔗 *Portal:* ${urlPortal}\n\nPuede ver el detalle completo en el enlace o responder directamente a este mensaje si tiene alguna duda.`;
+      const textoPlantilla = `📄 *[Plantilla Oficial Meta · Cotización (${plantillaUsada})]*\n\nHola ${nombreDestinoPlantilla}, le escribimos de SAUCEDA Bienes Raíces. Le informamos que su cotización personalizada para el proyecto de ${servicioNombre} ya está lista y disponible para su revisión.\n\n📄 *Folio:* ${cotizacion.id}\n💰 *Inversión:* ${inversionTexto}\n🔗 *Portal:* ${urlPortal}\n\nPuede ver el detalle completo en el enlace o responder directamente a este mensaje si tiene alguna duda.`;
 
       await sb.from("mensajes_whatsapp").insert({
         telefono: telNormalizado,
@@ -2651,7 +2682,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
         expedienteId: cotFila.expediente_id,
         tipo: "envio_cotizacion_whatsapp",
         titulo: `📲 Cotización enviada por WhatsApp (Plantilla Oficial Meta)`,
-        detalle: `Se envió la plantilla oficial autorizada 'envio_cotizacion_cliente' a ${datos.telefono} para el folio ${cotizacion.id}. Portal: ${urlPortal}`,
+        detalle: `Se envió la plantilla oficial autorizada '${plantillaUsada}' a ${datos.telefono} para el folio ${cotizacion.id}. Portal: ${urlPortal}`,
       });
 
       revalidatePath("/conversaciones");
@@ -2659,7 +2690,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
 
       return {
         ok: true,
-        mensaje: `Plantilla oficial de WhatsApp ('envio_cotizacion_cliente') enviada con éxito a ${datos.telefono} y registrada en el historial.`,
+        mensaje: `Plantilla oficial de WhatsApp ('${plantillaUsada}') enviada con éxito a ${datos.telefono} y registrada en el historial.`,
       };
     }
 
@@ -2675,7 +2706,7 @@ export async function enviarCotizacionPorWhatsAppAction(datos: {
     if (resPl.ok) {
       return {
         ok: true,
-        mensaje: `Se envió la plantilla oficial autorizada por Meta ('envio_cotizacion_cliente') a ${datos.telefono}, ya que la ventana de 24 horas del cliente no estaba activa.`,
+        mensaje: resPl.mensaje || `Se envió la cotización mediante plantilla oficial autorizada por Meta a ${datos.telefono}.`,
       };
     }
     return {
