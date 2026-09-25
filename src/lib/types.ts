@@ -42,6 +42,7 @@ export type TipoNegocioId =
   | "construccion-remodelacion"
   | "construccion-piso-estampado"
   | "construccion-mantenimiento-postventa"
+  | "construccion-mantenimiento-cisternas"
   | "construccion-herreria"
   | "otro";
 
@@ -63,6 +64,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Piso Estampado)";
     case "construccion-mantenimiento-postventa":
       return "Sauceda Construye (Mantenimiento Postventa)";
+    case "construccion-mantenimiento-cisternas":
+      return "Sauceda Construye (Mantenimiento Cisternas)";
     case "construccion-herreria":
       return "Sauceda Construye (Herrería)";
     case "otro":
@@ -109,7 +112,38 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     return "construccion-piso-estampado";
   }
 
-  // 3. Mantenimiento Postventa (Campaña de Facebook/Meta o palabras clave de Mantenimiento de tu Hogar / Postventa)
+  // 3. Mantenimiento de Cisternas, Aljibes y Tinacos (Alta prioridad por Campaña de Meta / Lead Ads / Palabras Clave)
+  if (
+    campLower.includes("cisterna") ||
+    campLower.includes("aljibe") ||
+    campLower.includes("tinaco") ||
+    texto.includes("cisterna") ||
+    texto.includes("cisternas") ||
+    texto.includes("aljibe") ||
+    texto.includes("aljibes") ||
+    texto.includes("tinaco") ||
+    texto.includes("tinacos") ||
+    texto.includes("lavado de cisterna") ||
+    texto.includes("lavado de aljibe") ||
+    texto.includes("lavado de tinaco") ||
+    texto.includes("limpieza de cisterna") ||
+    texto.includes("limpieza de aljibe") ||
+    texto.includes("limpieza de tinaco") ||
+    texto.includes("mantenimiento de cisterna") ||
+    texto.includes("mantenimiento de aljibe") ||
+    texto.includes("mantenimiento de tinaco") ||
+    texto.includes("desinfeccion de cisterna") ||
+    texto.includes("desinfección de cisterna") ||
+    texto.includes("fuga en cisterna") ||
+    texto.includes("filtracion en cisterna") ||
+    texto.includes("filtración en cisterna") ||
+    texto.includes("grieta en cisterna") ||
+    texto.includes("bomba de cisterna")
+  ) {
+    return "construccion-mantenimiento-cisternas";
+  }
+
+  // 4. Mantenimiento Postventa (Campaña de Facebook/Meta o palabras clave de Mantenimiento de tu Hogar / Postventa)
   if (
     campLower.includes("mantenimiento") ||
     campLower.includes("postventa") ||

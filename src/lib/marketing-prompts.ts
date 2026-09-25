@@ -222,6 +222,56 @@ export const CATALOGO_CATEGORIAS_MARKETING: Record<string, CategoriaMarketingPar
     ]
   },
 
+  mantenimiento_cisternas: {
+    id: "mantenimiento_cisternas",
+    nombre: "Mantenimiento, Lavado y Desinfección de Cisternas y Tinacos",
+    lineaNegocio: "Sauceda Construye",
+    icono: "💧",
+    palabrasClave: [
+      "cisterna", "cisternas", "aljibe", "aljibes", "tinaco", "tinacos",
+      "lavado de cisterna", "limpieza de cisterna", "desinfeccion de cisterna",
+      "desinfección de cisterna", "lavado de aljibe", "limpieza de aljibe",
+      "lavado de tinaco", "limpieza de tinaco", "agua limpia", "sarro en cisterna",
+      "fuga en cisterna", "bomba de agua", "deposito de agua", "depósito de agua"
+    ],
+    ofertaPrincipal: "Lavado profundo con hidrolavadora, desinfección bactericida de grado alimenticio y sellado impermeable para cisternas, aljibes y tinacos.",
+    ganchosComerciales: [
+      "¿Cuándo fue la última vez que lavaste tu cisterna? Protege la salud de tu familia con agua 100% limpia y desinfectada.",
+      "Elimina sarro, sedimentos y bacterias con nuestro servicio profesional de lavado profundo y desinfección de cisternas y aljibes.",
+      "Mantenimiento preventivo, sellado de fugas y revisión de bombas en depósitos de agua en León, Gto."
+    ],
+    elementosPermitidos: [
+      "Spotless clean concrete cistern interior with crystal clear water reflections",
+      "Professional service technician in protective clean white suit and waterproof boots",
+      "High-pressure wash equipment and specialized eco-friendly sanitizing tools",
+      "Bright task illumination inside clean cistern or rooftop modern water storage tank",
+      "Sunny rooftop or clean modern patio in León Guanajuato"
+    ],
+    elementosProhibidos: [
+      "dirty muddy sludge", "contaminants", "toxic smoke", "blowtorch", "flames", "text", "watermarks", "logos"
+    ],
+    variaciones: [
+      {
+        id: "cisterna_limpia_cristalina",
+        nombre: "Cisterna Residencial Profundamente Limpia con Agua Cristalina",
+        descripcionEsp: "Interior de cisterna o aljibe de concreto impecablemente limpio y desinfectado, con agua cristalina y luz cenital cálida.",
+        promptIngles: "Award-winning commercial architectural photography of a pristine, freshly sanitized and sealed residential underground concrete cistern in León Guanajuato. Crystal-clear pure water with gentle ripples reflecting clean bright LED inspection light. Impeccable smooth sealed concrete walls with zero algae, zero sediment, pure pristine hygiene and safety. Flawless craftsmanship, shot on Hasselblad H6D-100c, 28mm lens, f/4, editorial magazine quality, 8k resolution."
+      },
+      {
+        id: "tecnico_lavado_hidrolavadora",
+        nombre: "Técnico Profesional Realizando Lavado y Desinfección",
+        descripcionEsp: "Técnico calificado con equipo de protección y bota impermeable realizando hidrolavado a presión en aljibe residencial.",
+        promptIngles: "Dynamic commercial photography of a professional Mexican service technician in a clean protective work jumpsuit, waterproof rubber boots, and safety eyewear, skillfully operating high-pressure washing equipment to sanitize the clean walls of a residential water storage cistern. Fine water mist catch in bright warm sunlight, pristine clean environment, high safety standards, shot on Sony A7R V, 35mm f/2.8, authentic craftsmanship, 8k resolution."
+      },
+      {
+        id: "tinaco_azotea_moderno",
+        nombre: "Mantenimiento y Conexiones de Tinaco en Azotea Residencial",
+        descripcionEsp: "Mantenimiento integral de tinaco y sistema de bombeo en azotea limpia y moderna bajo el cielo azul de León Gto.",
+        promptIngles: "Commercial architectural editorial photography of a modern, clean rooftop residential water storage tank (tinaco) with brand-new brass valves, pristine hydraulic PVC plumbing, and pump system in León Guanajuato. Clean waterproofed rooftop surface, bright morning sun, azure sky, pristine residential neighborhood, crisp clean craftsmanship, shot on Hasselblad H6D-100c, 35mm lens, f/4, 8k resolution."
+      }
+    ]
+  },
+
   impermeabilizacion: {
     id: "impermeabilizacion",
     nombre: "Impermeabilización Profesional con Soplete y Manto Asfáltico",
@@ -451,6 +501,7 @@ export function resolverCategoriaMarketing(textoOCategoria: string): CategoriaMa
   const categoriasOrdenadas: Array<keyof typeof CATALOGO_CATEGORIAS_MARKETING> = [
     "pintura",
     "herreria",
+    "mantenimiento_cisternas",
     "concreto_estampado",
     "concreto_premezclado",
     "impermeabilizacion",
