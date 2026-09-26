@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import {
+  despacharPropuestaInspeccionTelegram,
+  notificarConfirmacionFinalTelegram,
+} from "@/lib/telegram";
 
 /**
  * MOTOR UNIVERSAL DE COORDINACIÓN DE INSPECCIONES TÉCNICAS Y CONTROL DE SLA
@@ -844,6 +848,23 @@ export async function iniciarPropuestaCoordinacion(
       }
     }
 
+    // Despacho a Telegram (Bot y Grupo Operativo con botones interactivos)
+    try {
+      await despacharPropuestaInspeccionTelegram(sb, {
+        coordinacionId,
+        servicioNombre: input.servicioNombre,
+        ubicacion: input.ubicacion,
+        clienteNombre: input.clienteNombre,
+        clienteTelefono: input.clienteTelefono,
+        detallesTecnicos: input.detallesTecnicos,
+        asesoresIds: input.asesoresIds,
+        opciones: input.opcionesHorarios,
+        slaMinutos,
+      });
+    } catch (errTg) {
+      console.warn("[Coordinación] Error despachando a Telegram:", errTg);
+    }
+
     return { ok: true, coordinacionId };
   } catch (err: any) {
     console.error("[Coordinación] Error inesperado en iniciarPropuestaCoordinacion:", err);
@@ -1054,6 +1075,23 @@ export async function confirmarCitaFinalCoordinacion(
       } catch (errAsesorWsp) {
         console.warn(`[Coordinación] Error al notificar cita confirmada a ${asesor.nombre}:`, errAsesorWsp);
       }
+    }
+
+    // Notificación de retorno a Telegram (Grupo Operativo y Asesores)
+    try {
+      await notificarConfirmacionFinalTelegram(sb, {
+        coordinacionId,
+        servicioNombre: coord.servicio_nombre,
+        ubicacion: coord.ubicacion,
+        clienteNombre: coord.cliente_nombre,
+        clienteTelefono: coord.cliente_telefono,
+        detallesTecnicos: coord.detalles_tecnicos,
+        asesoresNombres: nombresEquipo,
+        horarioConfirmado: opcionSeleccionada.label,
+        asesoresIds: coord.asesores_ids,
+      });
+    } catch (errTg) {
+      console.warn("[Coordinación] Error notificando retorno a Telegram:", errTg);
     }
 
     // 5. Actualizar coordinaciones_inspeccion

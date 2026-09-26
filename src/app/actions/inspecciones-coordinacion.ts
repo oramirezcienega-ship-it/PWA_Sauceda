@@ -248,3 +248,38 @@ export async function cancelarCoordinacionActivaAction(
     return { ok: false };
   }
 }
+
+/**
+ * 12. Obtiene la configuración actual de Telegram
+ */
+export async function obtenerConfiguracionTelegramAction(): Promise<{
+  ok: boolean;
+  botToken: string;
+  chatIdGrupo: string;
+}> {
+  try {
+    const sb = supabaseServidor();
+    const { obtenerConfiguracionTelegram } = await import("@/lib/telegram");
+    const config = await obtenerConfiguracionTelegram(sb);
+    return { ok: true, ...config };
+  } catch (err: any) {
+    return { ok: false, botToken: "", chatIdGrupo: "" };
+  }
+}
+
+/**
+ * 13. Guarda las credenciales de Telegram
+ */
+export async function guardarConfiguracionTelegramAction(
+  botToken: string,
+  chatIdGrupo: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+    const { guardarConfiguracionTelegram } = await import("@/lib/telegram");
+    return await guardarConfiguracionTelegram(sb, botToken.trim(), chatIdGrupo.trim());
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
