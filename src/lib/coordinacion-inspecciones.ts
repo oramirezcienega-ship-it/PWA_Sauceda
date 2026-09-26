@@ -687,3 +687,466 @@ export async function obtenerCitasInspeccionSLA(
     };
   });
 }
+
+/**
+ * ============================================================================
+ * CABINA DE COORDINACIÓN MULTI-OPCIÓN (VALIDACIÓN ASESORES -> CLIENTE -> CIERRE)
+ * ============================================================================
+ */
+
+export interface OpcionHorarioPropuesta {
+  id: string; // "A", "B", "C"
+  fecha: string; // "YYYY-MM-DD"
+  horaInicio: string; // "11:00"
+  horaFin: string; // "12:00"
+  label: string; // "Viernes 26 Sep · 11:00 AM"
+}
+
+export interface IniciarPropuestaInput {
+  prospectoId: string;
+  expedienteId?: string | null;
+  clienteNombre: string;
+  clienteTelefono: string;
+  servicioTipo: string;
+  servicioNombre: string;
+  ubicacion: string;
+  fraccionamiento?: string | null;
+  detallesTecnicos?: string;
+  asesoresIds: string[];
+  opcionesHorarios: OpcionHorarioPropuesta[];
+  slaMinutos?: number;
+  canalNotificacion?: "whatsapp" | "telegram";
+}
+
+export interface CoordinacionInspeccionDetalle {
+  id: string;
+  prospectoId: string;
+  expedienteId: string | null;
+  citaId: string | null;
+  clienteNombre: string;
+  clienteTelefono: string;
+  servicioTipo: string;
+  servicioNombre: string;
+  ubicacion: string;
+  fraccionamiento: string | null;
+  detallesTecnicos: string | null;
+  asesoresIds: string[];
+  opcionesHorarios: OpcionHorarioPropuesta[];
+  respuestasAsesores: Record<
+    string,
+    {
+      nombre: string;
+      telefono?: string;
+      votos: Record<string, boolean>;
+      respondidoAt: string | null;
+      notas?: string;
+    }
+  >;
+  opcionesValidadas: string[];
+  opcionSeleccionadaId: string | null;
+  estado: "propuesta_enviada" | "evaluando" | "enviado_cliente" | "confirmada" | "cancelada";
+  slaMinutos: number;
+  slaLimiteAt: string;
+  slaEstado: string;
+  createdAt: string;
+  minutosRestantes: number;
+  segundosRestantes: number;
+  estaVencido: boolean;
+}
+
+/**
+ * 1. Inicia una nueva propuesta de coordinación con opciones tentativas y alerta a los asesores
+ */
+export async function iniciarPropuestaCoordinacion(
+  sb: SupabaseClient,
+  input: IniciarPropuestaInput
+): Promise<{ ok: boolean; coordinacionId?: string; error?: string }> {
+  try {
+    const slaMinutos = input.slaMinutos || 15;
+    const slaLimiteAt = new Date(Date.now() + slaMinutos * 60 * 1000).toISOString();
+
+    const { data: perfiles = [] } = await sb
+      .from("perfiles")
+      .select("id, nombre, telefono, telefono_whatsapp")
+      .in("id", input.asesoresIds);
+
+    const perfilesMap = new Map((perfiles || []).map((p) => [p.id, p]));
+
+    const respuestasIniciales: Record<string, any> = {};
+    for (const aId of input.asesoresIds) {
+      const p = perfilesMap.get(aId);
+      respuestasIniciales[aId] = {
+        nombre: p?.nombre || "Asesor",
+        telefono: p?.telefono_whatsapp || p?.telefono,
+        votos: {},
+        respondidoAt: null,
+      };
+    }
+
+    const { data: nuevaCoord, error: errInsert } = await sb
+      .from("coordinaciones_inspeccion")
+      .insert({
+        prospecto_id: input.prospectoId,
+        expediente_id: input.expedienteId || null,
+        cliente_nombre: input.clienteNombre,
+        cliente_telefono: normalizarTelefono(input.clienteTelefono),
+        servicio_tipo: input.servicioTipo,
+        servicio_nombre: input.servicioNombre,
+        ubicacion: input.ubicacion,
+        fraccionamiento: input.fraccionamiento || input.ubicacion,
+        detalles_tecnicos: input.detallesTecnicos || null,
+        asesores_ids: input.asesoresIds,
+        opciones_horarios: input.opcionesHorarios,
+        respuestas_asesores: respuestasIniciales,
+        opciones_validadas: [],
+        estado: "evaluando",
+        sla_minutos: slaMinutos,
+        sla_limite_at: slaLimiteAt,
+        sla_estado: "en_tiempo",
+        canal_notificacion: input.canalNotificacion || "whatsapp",
+      })
+      .select("id")
+      .single();
+
+    if (errInsert || !nuevaCoord) {
+      console.error("[Coordinación] Error al insertar coordinación:", errInsert);
+      return { ok: false, error: errInsert?.message || "No se pudo registrar la coordinación." };
+    }
+
+    const coordinacionId = nuevaCoord.id;
+
+    // Registrar en bitácora
+    await registrarActividad(sb, {
+      prospectoId: input.prospectoId,
+      expedienteId: input.expedienteId,
+      tipo: "coordinacion_propuesta_iniciada",
+      titulo: `⚡ Propuesta de inspección enviada a ${input.asesoresIds.length} asesores`,
+      detalle: `Servicio: ${input.servicioNombre} en ${input.ubicacion}. Opciones propuestas: ${input.opcionesHorarios.map((o) => o.label).join(", ")}. SLA: ${slaMinutos} min.`,
+    });
+
+    // Despachar alertas a los asesores
+    const nombresEquipo = (perfiles || []).map((p) => p.nombre).join(" y ");
+    for (const asesor of perfiles || []) {
+      const telDestino = normalizarTelefono(asesor.telefono_whatsapp || asesor.telefono || "");
+      if (!telDestino) continue;
+
+      const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+      const listaOpcionesTexto = input.opcionesHorarios
+        .map((opc) => `👉 *Opción ${opc.id}:* ${opc.label}`)
+        .join("\n");
+
+      const msgAsesor = `🚨 *PROPUESTA DE INSPECCIÓN TÉCNICA*\n\nHola ${primerNombre}, necesitamos validar tu disponibilidad para una inspección presencial junto con *${nombresEquipo}*:\n\n🛠️ *Servicio / Negocio:* ${input.servicioNombre}\n📍 *Ubicación:* ${input.ubicacion}\n👤 *Cliente:* ${input.clienteNombre}\n📝 *Detalle:* ${input.detallesTecnicos || "Revisión técnica en sitio"}\n\n📅 *Opciones tentativas propuestas:*\n${listaOpcionesTexto}\n\n⏱️ *SLA:* Tienen *${slaMinutos} minutos* para responder.\nFavor de responder indicando las opciones que tienes libres (ej. "puedo A y C" o "todas").`;
+
+      try {
+        await enviarWhatsAppTexto(telDestino, msgAsesor);
+      } catch (errWsp) {
+        console.warn(`[Coordinación] Error enviando WhatsApp al asesor ${asesor.nombre}:`, errWsp);
+      }
+    }
+
+    return { ok: true, coordinacionId };
+  } catch (err: any) {
+    console.error("[Coordinación] Error inesperado en iniciarPropuestaCoordinacion:", err);
+    return { ok: false, error: err.message || "Error al iniciar propuesta de coordinación." };
+  }
+}
+
+/**
+ * 2. Registra los votos (Sí/No) de un asesor para cada opción y recalcula opciones validadas
+ */
+export async function registrarVotosAsesorCoordinacion(
+  sb: SupabaseClient,
+  coordinacionId: string,
+  asesorId: string,
+  votos: Record<string, boolean>,
+  notas?: string
+): Promise<{ ok: boolean; opcionesValidadas: string[]; error?: string }> {
+  try {
+    const { data: coord, error: errCoord } = await sb
+      .from("coordinaciones_inspeccion")
+      .select("*")
+      .eq("id", coordinacionId)
+      .single();
+
+    if (errCoord || !coord) {
+      return { ok: false, opcionesValidadas: [], error: "Coordinación no encontrada." };
+    }
+
+    const respuestas = (coord.respuestas_asesores as Record<string, any>) || {};
+    const asesorData = respuestas[asesorId] || {};
+    asesorData.votos = { ...(asesorData.votos || {}), ...votos };
+    asesorData.respondidoAt = new Date().toISOString();
+    if (notas) asesorData.notas = notas;
+    respuestas[asesorId] = asesorData;
+
+    // Calcular opciones donde TODOS los asesores votaron true
+    const asesoresIds: string[] = coord.asesores_ids || [];
+    const opciones: OpcionHorarioPropuesta[] = (coord.opciones_horarios as any[]) || [];
+    const opcionesValidadas: string[] = [];
+
+    for (const opc of opciones) {
+      const todosAceptaron = asesoresIds.every((aId) => respuestas[aId]?.votos?.[opc.id] === true);
+      if (todosAceptaron) {
+        opcionesValidadas.push(opc.id);
+      }
+    }
+
+    await sb
+      .from("coordinaciones_inspeccion")
+      .update({
+        respuestas_asesores: respuestas,
+        opciones_validadas: opcionesValidadas,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", coordinacionId);
+
+    return { ok: true, opcionesValidadas };
+  } catch (err: any) {
+    console.error("[Coordinación] Error en registrarVotosAsesorCoordinacion:", err);
+    return { ok: false, opcionesValidadas: [], error: err.message };
+  }
+}
+
+/**
+ * 3. Envía las opciones aprobadas al cliente por WhatsApp (1 clic del Administrador)
+ */
+export async function enviarOpcionesAClienteCoordinacion(
+  sb: SupabaseClient,
+  coordinacionId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { data: coord, error: errCoord } = await sb
+      .from("coordinaciones_inspeccion")
+      .select("*")
+      .eq("id", coordinacionId)
+      .single();
+
+    if (errCoord || !coord) {
+      return { ok: false, error: "Coordinación no encontrada." };
+    }
+
+    const opciones: OpcionHorarioPropuesta[] = coord.opciones_horarios || [];
+    const validadas: string[] = coord.opciones_validadas || [];
+
+    const opcionesParaCliente = opciones.filter((o) => validadas.includes(o.id));
+    if (opcionesParaCliente.length === 0) {
+      return { ok: false, error: "Aún no hay opciones coincidentes aprobadas por ambos asesores." };
+    }
+
+    const primerNombre = coord.cliente_nombre.split(" ")[0] || coord.cliente_nombre;
+    const listaOpcionesCliente = opcionesParaCliente
+      .map((opc, idx) => `${idx + 1}️⃣ ${opc.label}`)
+      .join("\n");
+
+    const msgCliente = `¡Hola ${primerNombre}! 🏡 Con gusto te apoyamos con la inspección de ${coord.servicio_nombre} en ${coord.ubicacion}.\n\nNuestros técnicos especializados tienen disponibles las siguientes opciones para realizar tu levantamiento técnico sin compromiso:\n\n${listaOpcionesCliente}\n\n¿Cuál de estas opciones te queda mejor para confirmar tu visita?`;
+
+    const resWsp = await enviarWhatsAppTexto(coord.cliente_telefono, msgCliente);
+    if (!resWsp.ok) {
+      console.warn("[Coordinación] No se pudo enviar WhatsApp texto al cliente:", resWsp.error);
+    }
+
+    await sb
+      .from("coordinaciones_inspeccion")
+      .update({
+        estado: "enviado_cliente",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", coordinacionId);
+
+    await registrarActividad(sb, {
+      prospectoId: coord.prospecto_id,
+      expedienteId: coord.expediente_id,
+      tipo: "coordinacion_opciones_enviadas_cliente",
+      titulo: `💬 Opciones validadas enviadas a ${primerNombre} por WhatsApp`,
+      detalle: `Opciones ofrecidas:\n${opcionesParaCliente.map((o) => o.label).join(", ")}`,
+    });
+
+    return { ok: true };
+  } catch (err: any) {
+    console.error("[Coordinación] Error en enviarOpcionesAClienteCoordinacion:", err);
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * 4. El cliente eligió una opción: Confirma la cita definitiva y notifica de vuelta a los asesores
+ */
+export async function confirmarCitaFinalCoordinacion(
+  sb: SupabaseClient,
+  coordinacionId: string,
+  opcionId: string
+): Promise<{ ok: boolean; citaId?: string; error?: string }> {
+  try {
+    const { data: coord, error: errCoord } = await sb
+      .from("coordinaciones_inspeccion")
+      .select("*")
+      .eq("id", coordinacionId)
+      .single();
+
+    if (errCoord || !coord) {
+      return { ok: false, error: "Coordinación no encontrada." };
+    }
+
+    const opciones: OpcionHorarioPropuesta[] = coord.opciones_horarios || [];
+    const opcionSeleccionada = opciones.find((o) => o.id === opcionId);
+    if (!opcionSeleccionada) {
+      return { ok: false, error: `Opción ${opcionId} no encontrada en la propuesta.` };
+    }
+
+    // 1. Insertar en agenda_citas
+    const primerAsesorId = coord.asesores_ids[0] || null;
+    const { data: nuevaCita, error: errCita } = await sb
+      .from("agenda_citas")
+      .insert({
+        perfil_id: primerAsesorId,
+        asignados_ids: coord.asesores_ids,
+        prospecto_id: coord.prospecto_id,
+        expediente_id: coord.expediente_id,
+        cliente_nombre: coord.cliente_nombre,
+        cliente_telefono: coord.cliente_telefono,
+        tipo_cita: "inspeccion",
+        fecha: opcionSeleccionada.fecha,
+        hora_inicio: opcionSeleccionada.horaInicio,
+        hora_fin: opcionSeleccionada.horaFin,
+        notas: `Inspección de ${coord.servicio_nombre}. ${coord.detalles_tecnicos || ""}`,
+        estado: "confirmada",
+        fraccionamiento: coord.fraccionamiento || coord.ubicacion,
+        servicio_tipo: coord.servicio_tipo,
+        sla_estado: "cumplido",
+      })
+      .select("id")
+      .single();
+
+    if (errCita || !nuevaCita) {
+      console.error("[Coordinación] Error al crear cita final:", errCita);
+      return { ok: false, error: errCita?.message || "No se pudo agendar la cita definitiva." };
+    }
+
+    const citaId = nuevaCita.id;
+
+    // 2. Obtener nombres de los asesores
+    const { data: perfiles = [] } = await sb
+      .from("perfiles")
+      .select("id, nombre, telefono, telefono_whatsapp")
+      .in("id", coord.asesores_ids);
+
+    const nombresEquipo = (perfiles || []).map((p) => p.nombre).join(" y ");
+    const primerNombreCliente = coord.cliente_nombre.split(" ")[0] || coord.cliente_nombre;
+
+    // 3. WhatsApp de confirmación al cliente
+    const msgCliente = `¡Excelente ${primerNombreCliente}! 📅 Tu inspección técnica ha quedado programada:\n\n🗓️ *Fecha:* ${opcionSeleccionada.label}\n📍 *Ubicación:* ${coord.ubicacion}\n🛠️ *Servicio:* ${coord.servicio_nombre}\n👷 *Técnicos asignados:* ${nombresEquipo}\n\nEstaremos muy puntuales en tu domicilio. ¡Gracias por confiar en SAUCEDA! 🏡`;
+    try {
+      await enviarWhatsAppTexto(coord.cliente_telefono, msgCliente);
+    } catch (errWsp) {
+      console.warn("[Coordinación] Error al enviar confirmación WhatsApp al cliente:", errWsp);
+    }
+
+    // 4. WhatsApp de retorno a AMBOS asesores
+    for (const asesor of perfiles || []) {
+      const telDestino = normalizarTelefono(asesor.telefono_whatsapp || asesor.telefono || "");
+      if (!telDestino) continue;
+
+      const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
+      const msgRetorno = `✅ *INSPECCIÓN TÉCNICA CONFIRMADA*\n\nHola ${primerNombre}, el cliente *${coord.cliente_nombre}* eligió el siguiente horario:\n\n🗓️ *Horario:* ${opcionSeleccionada.label}\n🛠️ *Servicio / Negocio:* ${coord.servicio_nombre}\n📍 *Ubicación:* ${coord.ubicacion}\n👤 *Cliente:* ${coord.cliente_nombre} (${coord.cliente_telefono})\n👷 *Equipo asignado:* ${nombresEquipo}\n📝 *Detalles:* ${coord.detalles_tecnicos || "Levantamiento técnico"}\n\nLa cita ya quedó agendada en el sistema. Favor de presentarse puntuales con su equipo y herramientas.`;
+
+      try {
+        await enviarWhatsAppTexto(telDestino, msgRetorno);
+      } catch (errAsesorWsp) {
+        console.warn(`[Coordinación] Error al notificar cita confirmada a ${asesor.nombre}:`, errAsesorWsp);
+      }
+    }
+
+    // 5. Actualizar coordinaciones_inspeccion
+    await sb
+      .from("coordinaciones_inspeccion")
+      .update({
+        estado: "confirmada",
+        cita_id: citaId,
+        opcion_seleccionada_id: opcionId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", coordinacionId);
+
+    // 6. Registrar en bitácora
+    await registrarActividad(sb, {
+      prospectoId: coord.prospecto_id,
+      expedienteId: coord.expediente_id,
+      tipo: "coordinacion_inspeccion_confirmada",
+      titulo: `✅ Inspección confirmada para ${opcionSeleccionada.label}`,
+      detalle: `Horario: ${opcionSeleccionada.label}. Asesores: ${nombresEquipo}. Cliente notificado y equipo confirmado.`,
+    });
+
+    return { ok: true, citaId };
+  } catch (err: any) {
+    console.error("[Coordinación] Error en confirmarCitaFinalCoordinacion:", err);
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * 5. Obtiene la coordinación activa de un prospecto
+ */
+export async function obtenerCoordinacionActivaProspecto(
+  sb: SupabaseClient,
+  prospectoId: string
+): Promise<CoordinacionInspeccionDetalle | null> {
+  const { data: coord, error } = await sb
+    .from("coordinaciones_inspeccion")
+    .select("*")
+    .eq("prospecto_id", prospectoId)
+    .neq("estado", "cancelada")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !coord) return null;
+
+  const ahora = Date.now();
+  const limiteMs = coord.sla_limite_at ? new Date(coord.sla_limite_at).getTime() : ahora;
+  const difMs = Math.max(0, limiteMs - ahora);
+  const segundosTotal = Math.floor(difMs / 1000);
+  const minutosRestantes = Math.floor(segundosTotal / 60);
+  const segundosRestantes = segundosTotal % 60;
+  const estaVencido = coord.estado === "evaluando" && limiteMs < ahora;
+
+  return {
+    id: coord.id,
+    prospectoId: coord.prospecto_id,
+    expedienteId: coord.expediente_id,
+    citaId: coord.cita_id,
+    clienteNombre: coord.cliente_nombre,
+    clienteTelefono: coord.cliente_telefono,
+    servicioTipo: coord.servicio_tipo,
+    servicioNombre: coord.servicio_nombre,
+    ubicacion: coord.ubicacion,
+    fraccionamiento: coord.fraccionamiento,
+    detallesTecnicos: coord.detalles_tecnicos,
+    asesoresIds: coord.asesores_ids || [],
+    opcionesHorarios: coord.opciones_horarios || [],
+    respuestasAsesores: coord.respuestas_asesores || {},
+    opcionesValidadas: coord.opciones_validadas || [],
+    opcionSeleccionadaId: coord.opcion_seleccionada_id,
+    estado: coord.estado,
+    slaMinutos: coord.sla_minutos || 15,
+    slaLimiteAt: coord.sla_limite_at || "",
+    slaEstado: coord.sla_estado || "en_tiempo",
+    createdAt: coord.created_at,
+    minutosRestantes,
+    segundosRestantes,
+    estaVencido,
+  };
+}
+
+/**
+ * 6. Cancela una propuesta de coordinación activa
+ */
+export async function cancelarCoordinacionAction(
+  sb: SupabaseClient,
+  coordinacionId: string
+): Promise<{ ok: boolean }> {
+  await sb
+    .from("coordinaciones_inspeccion")
+    .update({ estado: "cancelada", updated_at: new Date().toISOString() })
+    .eq("id", coordinacionId);
+  return { ok: true };
+}
