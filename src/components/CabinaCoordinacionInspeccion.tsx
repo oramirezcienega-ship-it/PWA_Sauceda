@@ -8,6 +8,8 @@ import {
   confirmarCitaFinalCoordinacionAction,
   obtenerCoordinacionActivaProspectoAction,
   cancelarCoordinacionActivaAction,
+  obtenerConfiguracionTelegramAction,
+  guardarConfiguracionTelegramAction,
 } from "@/app/actions/inspecciones-coordinacion";
 import type {
   OpcionHorarioPropuesta,
@@ -105,6 +107,13 @@ export function CabinaCoordinacionInspeccion({
   const [opcionesPropuestas, setOpcionesPropuestas] = useState<OpcionHorarioPropuesta[]>(generarOpcionesPorDefecto());
   const [opcionSeleccionadaFinal, setOpcionSeleccionadaFinal] = useState<string>("A");
 
+  // Configuración y Canal Telegram
+  const [canalNotif, setCanalNotif] = useState<"telegram" | "whatsapp">("telegram");
+  const [mostrarConfigTelegram, setMostrarConfigTelegram] = useState(false);
+  const [telegramToken, setTelegramToken] = useState("");
+  const [telegramChatIdGrupo, setTelegramChatIdGrupo] = useState("");
+  const [telegramGuardado, setTelegramGuardado] = useState(false);
+
   // Timer para SLA
   const [segundosRestantes, setSegundosRestantes] = useState<number>(0);
 
@@ -130,7 +139,33 @@ export function CabinaCoordinacionInspeccion({
 
   useEffect(() => {
     cargarCoordinacion();
+    obtenerConfiguracionTelegramAction().then((cfg) => {
+      if (cfg.ok) {
+        setTelegramToken(cfg.botToken || "");
+        setTelegramChatIdGrupo(cfg.chatIdGrupo || "");
+      }
+    });
   }, [prospectoId]);
+
+  const handleGuardarConfigTelegram = () => {
+    startTransition(async () => {
+      const res = await guardarConfiguracionTelegramAction(telegramToken, telegramChatIdGrupo);
+      if (res.ok) {
+        setTelegramGuardado(true);
+        setTimeout(() => setTelegramGuardado(false), 3000);
+      } else {
+        alert("Error al guardar configuración de Telegram: " + res.error);
+      }
+    });
+  };
+
+  const generarUrlWhatsAppWeb = (tel: string, nombreAsesor: string) => {
+    const listaOpciones = opcionesPropuestas.map((o) => `• Opción ${o.id}: ${o.label}`).join("\n");
+    const texto = `🚨 *PROPUESTA DE INSPECCIÓN TÉCNICA*\n\nHola ${nombreAsesor}, requerimos validar tu disponibilidad para una inspección:\n\n🛠️ *Servicio:* ${servicioNombre}\n📍 *Ubicación:* ${ubicacion}\n👤 *Cliente:* ${clienteNombre}\n📝 *Detalle:* ${detalles}\n\n📅 *Opciones tentativas:*\n${listaOpciones}\n\nFavor de confirmar cuáles de estos horarios puedes cubrir.`;
+    const cleanTel = tel.replace(/\D/g, "");
+    const telInt = cleanTel.startsWith("52") ? cleanTel : `52${cleanTel}`;
+    return `https://wa.me/${telInt}?text=${encodeURIComponent(texto)}`;
+  };
 
   // Preseleccionar 2 asesores si no hay coordinación activa
   useEffect(() => {
@@ -206,12 +241,16 @@ export function CabinaCoordinacionInspeccion({
         asesoresIds: asesoresSeleccionados,
         opcionesHorarios: opcionesPropuestas,
         slaMinutos: 15,
+        canalNotificacion: canalNotif,
       });
 
       if (res.ok) {
         setMensaje({
           tipo: "ok",
-          texto: "🚨 ¡Propuesta enviada por WhatsApp a los 2 asesores! Corre el reloj de SLA (15 min).",
+          texto:
+            canalNotif === "telegram"
+              ? "🚨 ¡Propuesta enviada por Telegram Bot con botones interactivos a los asesores! Corre el reloj de SLA (15 min)."
+              : "🚨 ¡Propuesta enviada a los asesores! Corre el reloj de SLA (15 min).",
         });
         await cargarCoordinacion();
       } else {
@@ -382,6 +421,92 @@ export function CabinaCoordinacionInspeccion({
       {/* ========================================================================= */}
       {!coordinacion && (
         <div className="space-y-4">
+          {/* Selector de Canal Operativo */}
+          <div className="rounded-xl border border-indigo-100 bg-white p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">Canal para Asesores:</span>
+                <button
+                  type="button"
+                  onClick={() => setCanalNotif("telegram")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                    canalNotif === "telegram"
+                      ? "bg-sky-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  <span>✈️</span>
+                  <span>Telegram Bot ($0 Costo · Botones)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCanalNotif("whatsapp")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                    canalNotif === "whatsapp"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  <span>💬</span>
+                  <span>WhatsApp</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMostrarConfigTelegram(!mostrarConfigTelegram)}
+                className="text-[11px] text-sky-700 hover:text-sky-900 font-semibold underline flex items-center gap-1 cursor-pointer"
+              >
+                ⚙️ {mostrarConfigTelegram ? "Cerrar Configuración" : "Configurar Bot de Telegram"}
+              </button>
+            </div>
+
+            {/* Panel de Configuración Telegram */}
+            {mostrarConfigTelegram && (
+              <div className="mt-2 p-3 rounded-lg border border-sky-200 bg-sky-50/50 space-y-2 text-xs">
+                <div className="font-bold text-sky-900 flex items-center justify-between">
+                  <span>🤖 Credenciales del Bot de Telegram:</span>
+                  {telegramGuardado && <span className="text-emerald-700 font-bold">✓ Guardado</span>}
+                </div>
+                <p className="text-[11px] text-sky-800">
+                  Crea tu bot en 30 segundos con <strong>@BotFather</strong> en Telegram y pega aquí su Token. Para el grupo de técnicos, agrega el bot y pega el Chat ID (ej. <code>-100...</code>).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">TELEGRAM BOT TOKEN:</label>
+                    <input
+                      type="text"
+                      value={telegramToken}
+                      onChange={(e) => setTelegramToken(e.target.value)}
+                      placeholder="123456789:ABCdefGHIjkl..."
+                      className="w-full text-xs font-mono rounded border border-slate-300 bg-white px-2.5 py-1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">CHAT ID GRUPO TÉCNICO (Opcional):</label>
+                    <input
+                      type="text"
+                      value={telegramChatIdGrupo}
+                      onChange={(e) => setTelegramChatIdGrupo(e.target.value)}
+                      placeholder="-1001234567890 o ID personal"
+                      className="w-full text-xs font-mono rounded border border-slate-300 bg-white px-2.5 py-1.5"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleGuardarConfigTelegram}
+                    disabled={isPending || !telegramToken.trim()}
+                    className="px-3 py-1 rounded bg-sky-700 hover:bg-sky-800 text-white font-bold text-xs transition disabled:opacity-50 cursor-pointer"
+                  >
+                    Guardar Configuración
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -435,22 +560,36 @@ export function CabinaCoordinacionInspeccion({
               {perfiles.map((p) => {
                 const sel = asesoresSeleccionados.includes(p.id);
                 return (
-                  <button
+                  <div
                     key={p.id}
-                    type="button"
                     onClick={() => toggleAsesor(p.id)}
-                    className={`p-2.5 rounded-xl border text-left text-xs transition flex items-center justify-between ${
+                    className={`p-2.5 rounded-xl border text-left text-xs transition cursor-pointer ${
                       sel
                         ? "bg-indigo-50 border-indigo-400 text-indigo-900 font-semibold ring-1 ring-indigo-400"
                         : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
                     }`}
                   >
-                    <div>
-                      <div className="font-medium">{p.nombre}</div>
-                      <div className="text-[10px] text-slate-400 capitalize">{p.rol}</div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{p.nombre}</div>
+                        <div className="text-[10px] text-slate-400 capitalize">{p.rol}</div>
+                      </div>
+                      <span>{sel ? "✅" : "➕"}</span>
                     </div>
-                    <span>{sel ? "✅" : "➕"}</span>
-                  </button>
+
+                    {p.telefono && (
+                      <a
+                        href={generarUrlWhatsAppWeb(p.telefono, p.nombre)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1.5 text-[10px] text-emerald-700 hover:text-emerald-900 font-medium block underline"
+                        title="Abrir WhatsApp Web con la propuesta preparada para este asesor"
+                      >
+                        💬 Enviar por WhatsApp Web →
+                      </a>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -492,17 +631,25 @@ export function CabinaCoordinacionInspeccion({
               type="button"
               onClick={handleIniciarPropuesta}
               disabled={isPending || asesoresSeleccionados.length < 2}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-titular text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              className={`w-full py-3 px-4 rounded-xl text-white font-titular text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed ${
+                canalNotif === "telegram"
+                  ? "bg-gradient-to-r from-sky-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800"
+                  : "bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800"
+              }`}
             >
-              <span>📲</span>
+              <span>{canalNotif === "telegram" ? "✈️" : "📲"}</span>
               <span>
                 {isPending
                   ? "Despachando consulta..."
-                  : "Consultar Opciones a los 2 Asesores vía WhatsApp (SLA 15 min)"}
+                  : canalNotif === "telegram"
+                  ? "Consultar Opciones por Telegram Bot (Costo $0 · SLA 15 min)"
+                  : "Consultar Opciones por WhatsApp (SLA 15 min)"}
               </span>
             </button>
             <p className="text-[11px] text-slate-500 text-center mt-1.5">
-              Disparará un WhatsApp a ambos asesores con la ubicación, servicio y las 3 opciones tentativas.
+              {canalNotif === "telegram"
+                ? "Disparará una alerta a Telegram con botones interactivos a los dos asesores con negocio, ubicación y opciones."
+                : "Disparará el mensaje de consulta a ambos asesores con negocio, ubicación y opciones."}
             </p>
           </div>
         </div>
