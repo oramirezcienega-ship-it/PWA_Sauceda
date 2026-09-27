@@ -22,6 +22,7 @@ import { WidgetAgendaCitas } from "@/components/WidgetAgendaCitas";
 import { BotonDuplicarCotizacion } from "@/components/BotonDuplicarCotizacion";
 import { EmpresaSelector } from "@/components/EmpresaSelector";
 import { CabinaCoordinacionInspeccion } from "@/components/CabinaCoordinacionInspeccion";
+import { ModuloOrdenesTrabajo } from "@/components/ModuloOrdenesTrabajo";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 
 export const dynamic = "force-dynamic";
@@ -388,6 +389,17 @@ export default async function PaginaProspecto({
               ))}
             </div>
           )}
+        </div>
+
+        {/* Órdenes de Trabajo y Documentos de Entrega (OT, Recibos y Garantías) */}
+        <div className="mt-6">
+          <ModuloOrdenesTrabajo
+            prospectoId={prospecto.id}
+            expedienteId={expedientes[0]?.id ?? null}
+            clienteNombreDefault={prospecto.nombreCompleto}
+            clienteTelefonoDefault={prospecto.telefono || ""}
+            tipoNegocioDefault={prospecto.tipoNegocioPrincipal || expedientes[0]?.tipoNegocio || "construccion"}
+          />
         </div>
 
         {/* Expedientes relacionados */}

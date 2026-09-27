@@ -1,0 +1,962 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import crypto from "crypto";
+import { supabaseServidor } from "@/lib/supabase/server";
+import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { numeroALetras } from "@/lib/numero-a-letras";
+
+export interface EvidenciaFoto {
+  url: string;
+  descripcion?: string;
+  fecha: string;
+  etapa: "inicio" | "proceso" | "entrega";
+}
+
+export interface OrdenTrabajo {
+  id: string;
+  folio: string;
+  expedienteId: string | null;
+  cotizacionId: string | null;
+  prospectoId: string | null;
+  tipoNegocio: string;
+  estatus: "pendiente" | "en_proceso" | "completada" | "cancelada";
+  titulo: string;
+  descripcion: string | null;
+  fechaProgramada: string | null;
+  fechaInicio: string | null;
+  fechaConclusion: string | null;
+  asesorResponsableId: string | null;
+  asesorEjecutorId: string | null;
+  creadoPor: string | null;
+  notasConclusion: string | null;
+  fotosEvidencia: EvidenciaFoto[];
+  createdAt: string;
+  updatedAt: string;
+  // Enriquecidos
+  asesorEjecutorNombre?: string;
+  asesorResponsableNombre?: string;
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  clienteDireccion?: string;
+  totalCotizado?: number;
+  totalPagado?: number;
+  saldoRestante?: number;
+}
+
+export interface ReciboPago {
+  id: string;
+  folio: string;
+  ordenTrabajoId: string;
+  expedienteId: string | null;
+  cotizacionId: string | null;
+  clienteNombre: string;
+  clienteTelefono: string | null;
+  clienteDireccion: string | null;
+  monto: number;
+  montoLetra: string | null;
+  metodoPago: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  referenciaPago: string | null;
+  concepto: string;
+  saldoAnterior: number;
+  saldoRestante: number;
+  recibidoPor: string | null;
+  recibidoPorNombre: string | null;
+  fechaPago: string;
+  notas: string | null;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CartaGarantiaOT {
+  id: string;
+  ordenTrabajoId: string;
+  cotizacionId: string | null;
+  titulo: string;
+  contenido: string;
+  token: string | null;
+  anosGarantia: number;
+  fechaInicio: string | null;
+  fechaVencimiento: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Genera folio correlativo anual para Orden de Trabajo: OT-2026-0001 */
+async function generarFolioOT(sb: any): Promise<string> {
+  const anio = new Date().getFullYear();
+  const prefijo = `OT-${anio}-`;
+
+  const { data } = await sb
+    .from("ordenes_trabajo")
+    .select("folio")
+    .ilike("folio", `${prefijo}%`)
+    .order("folio", { ascending: false })
+    .limit(1);
+
+  let siguienteNum = 1;
+  if (data && data.length > 0 && data[0]?.folio) {
+    const ultimo = data[0].folio.replace(prefijo, "");
+    const parsed = parseInt(ultimo, 10);
+    if (!isNaN(parsed)) {
+      siguienteNum = parsed + 1;
+    }
+  }
+
+  return `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
+}
+
+/** Genera folio correlativo anual para Recibo de Pago: REC-2026-0001 */
+async function generarFolioRecibo(sb: any): Promise<string> {
+  const anio = new Date().getFullYear();
+  const prefijo = `REC-${anio}-`;
+
+  const { data } = await sb
+    .from("recibos_pago")
+    .select("folio")
+    .ilike("folio", `${prefijo}%`)
+    .order("folio", { ascending: false })
+    .limit(1);
+
+  let siguienteNum = 1;
+  if (data && data.length > 0 && data[0]?.folio) {
+    const ultimo = data[0].folio.replace(prefijo, "");
+    const parsed = parseInt(ultimo, 10);
+    if (!isNaN(parsed)) {
+      siguienteNum = parsed + 1;
+    }
+  }
+
+  return `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
+}
+
+/** 1. Crear Orden de Trabajo */
+export async function crearOrdenTrabajo(datos: {
+  expedienteId?: string | null;
+  cotizacionId?: string | null;
+  prospectoId?: string | null;
+  tipoNegocio?: string;
+  titulo: string;
+  descripcion?: string;
+  fechaProgramada?: string;
+  asesorEjecutorId?: string | null;
+}): Promise<{ ok: boolean; id?: string; folio?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const usuario = await usuarioActual();
+
+    let {
+      expedienteId = null,
+      cotizacionId = null,
+      prospectoId = null,
+      tipoNegocio = "construccion",
+      titulo,
+      descripcion = "",
+      fechaProgramada = null,
+      asesorEjecutorId = null,
+    } = datos;
+
+    // Si viene de una cotización y faltan datos, resolverlos automáticamente
+    if (cotizacionId && (!prospectoId || !expedienteId)) {
+      const { data: cot } = await sb
+        .from("cotizaciones")
+        .select("prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre)")
+        .eq("id", cotizacionId)
+        .maybeSingle();
+
+      if (cot) {
+        prospectoId = prospectoId || cot.prospecto_id;
+        expedienteId = expedienteId || cot.expediente_id;
+        if (!tipoNegocio || tipoNegocio === "construccion") {
+          tipoNegocio = cot.servicio_tipo || "construccion";
+        }
+      }
+    }
+
+    // Si viene con expedienteId y no prospectoId, resolver prospecto
+    if (expedienteId && !prospectoId) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("prospecto_id, tipo_negocio")
+        .eq("id", expedienteId)
+        .maybeSingle();
+      if (exp) {
+        prospectoId = exp.prospecto_id;
+        if (exp.tipo_negocio) tipoNegocio = exp.tipo_negocio;
+      }
+    }
+
+    const folio = await generarFolioOT(sb);
+
+    const { data: nuevaOT, error } = await sb
+      .from("ordenes_trabajo")
+      .insert({
+        folio,
+        expediente_id: expedienteId || null,
+        cotizacion_id: cotizacionId || null,
+        prospecto_id: prospectoId || null,
+        tipo_negocio: tipoNegocio || "construccion",
+        estatus: "pendiente",
+        titulo: titulo.trim(),
+        descripcion: descripcion?.trim() || null,
+        fecha_programada: fechaProgramada || null,
+        fecha_inicio: null,
+        fecha_conclusion: null,
+        asesor_responsable_id: usuario?.id || null,
+        asesor_ejecutor_id: asesorEjecutorId || null,
+        creado_por: usuario?.id || null,
+        fotos_evidencia: [],
+      })
+      .select("id, folio")
+      .single();
+
+    if (error) {
+      console.error("Error al crear orden de trabajo:", error);
+      return { ok: false, error: error.message };
+    }
+
+    // Revalidaciones
+    revalidatePath("/ordenes-trabajo");
+    if (expedienteId) revalidatePath(`/expediente/${expedienteId}`);
+    if (prospectoId) revalidatePath(`/prospectos/${prospectoId}`);
+    if (cotizacionId) revalidatePath(`/cotizacion/${cotizacionId}`);
+
+    return { ok: true, id: nuevaOT.id, folio: nuevaOT.folio };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al crear la orden de trabajo." };
+  }
+}
+
+/** 2. Listar Órdenes de Trabajo con filtros */
+export async function obtenerOrdenesTrabajo(filtros?: {
+  expedienteId?: string;
+  cotizacionId?: string;
+  prospectoId?: string;
+  estatus?: string;
+  tipoNegocio?: string;
+  asesorEjecutorId?: string;
+  busqueda?: string;
+}): Promise<OrdenTrabajo[]> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    let query = sb
+      .from("ordenes_trabajo")
+      .select(`
+        *,
+        asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
+        asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
+        prospectos(id, nombre, telefono),
+        cotizaciones(id, precio_final, condiciones_pago)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (filtros?.expedienteId) {
+      query = query.eq("expediente_id", filtros.expedienteId);
+    }
+    if (filtros?.cotizacionId) {
+      query = query.eq("cotizacion_id", filtros.cotizacionId);
+    }
+    if (filtros?.prospectoId) {
+      query = query.eq("prospecto_id", filtros.prospectoId);
+    }
+    if (filtros?.estatus && filtros.estatus !== "todos") {
+      query = query.eq("estatus", filtros.estatus);
+    }
+    if (filtros?.tipoNegocio && filtros.tipoNegocio !== "todos") {
+      query = query.eq("tipo_negocio", filtros.tipoNegocio);
+    }
+    if (filtros?.asesorEjecutorId) {
+      query = query.eq("asesor_ejecutor_id", filtros.asesorEjecutorId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error al obtener ordenes de trabajo:", error);
+      return [];
+    }
+
+    if (!data || data.length === 0) return [];
+
+    // Obtener acumulados de pagos por orden de trabajo
+    const otIds = data.map((d: any) => d.id);
+    const { data: recibos } = await sb
+      .from("recibos_pago")
+      .select("orden_trabajo_id, monto")
+      .in("orden_trabajo_id", otIds);
+
+    const pagosPorOT = new Map<string, number>();
+    (recibos || []).forEach((r: any) => {
+      const prev = pagosPorOT.get(r.orden_trabajo_id) || 0;
+      pagosPorOT.set(r.orden_trabajo_id, prev + Number(r.monto || 0));
+    });
+
+    return data.map((d: any) => {
+      const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
+      const totalPagado = pagosPorOT.get(d.id) || 0;
+      const saldoRestante = Math.max(0, totalCotizado - totalPagado);
+
+      return {
+        id: d.id,
+        folio: d.folio,
+        expedienteId: d.expediente_id,
+        cotizacionId: d.cotizacion_id,
+        prospectoId: d.prospecto_id,
+        tipoNegocio: d.tipo_negocio,
+        estatus: d.estatus,
+        titulo: d.titulo,
+        descripcion: d.descripcion,
+        fechaProgramada: d.fecha_programada,
+        fechaInicio: d.fecha_inicio,
+        fechaConclusion: d.fecha_conclusion,
+        asesorResponsableId: d.asesor_responsable_id,
+        asesorEjecutorId: d.asesor_ejecutor_id,
+        creadoPor: d.creado_por,
+        notasConclusion: d.notas_conclusion,
+        fotosEvidencia: Array.isArray(d.fotos_evidencia) ? d.fotos_evidencia : [],
+        createdAt: d.created_at,
+        updatedAt: d.updated_at,
+        asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
+        asesorResponsableNombre: d.asesor_responsable?.nombre || "",
+        clienteNombre: d.prospectos?.nombre || "Cliente General",
+        clienteTelefono: d.prospectos?.telefono || "",
+        totalCotizado,
+        totalPagado,
+        saldoRestante,
+      };
+    });
+  } catch (err) {
+    console.error("Error en obtenerOrdenesTrabajo:", err);
+    return [];
+  }
+}
+
+/** 3. Obtener Orden de Trabajo por ID con recibos y garantía */
+export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
+  orden: OrdenTrabajo | null;
+  recibos: ReciboPago[];
+  garantia: CartaGarantiaOT | null;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: d, error } = await sb
+      .from("ordenes_trabajo")
+      .select(`
+        *,
+        asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
+        asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
+        prospectos(id, nombre, telefono),
+        cotizaciones(id, precio_final, condiciones_pago, token)
+      `)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error || !d) return { orden: null, recibos: [], garantia: null };
+
+    // Recibos asociados
+    const { data: recs } = await sb
+      .from("recibos_pago")
+      .select("*")
+      .eq("orden_trabajo_id", id)
+      .order("created_at", { ascending: false });
+
+    // Garantía asociada
+    const { data: gar } = await sb
+      .from("garantias_documentos")
+      .select("*")
+      .eq("orden_trabajo_id", id)
+      .maybeSingle();
+
+    const recibos: ReciboPago[] = (recs || []).map((r: any) => ({
+      id: r.id,
+      folio: r.folio,
+      ordenTrabajoId: r.orden_trabajo_id,
+      expedienteId: r.expediente_id,
+      cotizacionId: r.cotizacion_id,
+      clienteNombre: r.cliente_nombre,
+      clienteTelefono: r.cliente_telefono,
+      clienteDireccion: r.cliente_direccion,
+      monto: Number(r.monto || 0),
+      montoLetra: r.monto_letra,
+      metodoPago: r.metodo_pago,
+      referenciaPago: r.referencia_pago,
+      concepto: r.concepto,
+      saldoAnterior: Number(r.saldo_anterior || 0),
+      saldoRestante: Number(r.saldo_restante || 0),
+      recibidoPor: r.recibido_por,
+      recibidoPorNombre: r.recibido_por_nombre,
+      fechaPago: r.fecha_pago,
+      notas: r.notas,
+      token: r.token,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+
+    const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
+    const totalPagado = recibos.reduce((acc, curr) => acc + curr.monto, 0);
+    const saldoRestante = Math.max(0, totalCotizado - totalPagado);
+
+    const garantia: CartaGarantiaOT | null = gar
+      ? {
+          id: gar.id,
+          ordenTrabajoId: gar.orden_trabajo_id,
+          cotizacionId: gar.cotizacion_id,
+          titulo: gar.titulo,
+          contenido: gar.contenido,
+          token: gar.token,
+          anosGarantia: Number(gar.anos_garantia || 3),
+          fechaInicio: gar.fecha_inicio,
+          fechaVencimiento: gar.fecha_vencimiento,
+          createdAt: gar.created_at,
+          updatedAt: gar.updated_at,
+        }
+      : null;
+
+    const orden: OrdenTrabajo = {
+      id: d.id,
+      folio: d.folio,
+      expedienteId: d.expediente_id,
+      cotizacionId: d.cotizacion_id,
+      prospectoId: d.prospecto_id,
+      tipoNegocio: d.tipo_negocio,
+      estatus: d.estatus,
+      titulo: d.titulo,
+      descripcion: d.descripcion,
+      fechaProgramada: d.fecha_programada,
+      fechaInicio: d.fecha_inicio,
+      fechaConclusion: d.fecha_conclusion,
+      asesorResponsableId: d.asesor_responsable_id,
+      asesorEjecutorId: d.asesor_ejecutor_id,
+      creadoPor: d.creado_por,
+      notasConclusion: d.notas_conclusion,
+      fotosEvidencia: Array.isArray(d.fotos_evidencia) ? d.fotos_evidencia : [],
+      createdAt: d.created_at,
+      updatedAt: d.updated_at,
+      asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
+      asesorResponsableNombre: d.asesor_responsable?.nombre || "",
+      clienteNombre: d.prospectos?.nombre || "Cliente General",
+      clienteTelefono: d.prospectos?.telefono || "",
+      totalCotizado,
+      totalPagado,
+      saldoRestante,
+    };
+
+    return { orden, recibos, garantia };
+  } catch (err) {
+    console.error("Error en obtenerOrdenTrabajoPorId:", err);
+    return { orden: null, recibos: [], garantia: null };
+  }
+}
+
+/** 4. Actualizar Estatus de Orden de Trabajo */
+export async function actualizarEstatusOrdenTrabajo(
+  ordenId: string,
+  nuevoEstatus: "pendiente" | "en_proceso" | "completada" | "cancelada",
+  extras?: { notasConclusion?: string }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const actualizacion: Record<string, any> = {
+      estatus: nuevoEstatus,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (nuevoEstatus === "en_proceso") {
+      actualizacion.fecha_inicio = new Date().toISOString().split("T")[0];
+    } else if (nuevoEstatus === "completada") {
+      actualizacion.fecha_conclusion = new Date().toISOString();
+      if (extras?.notasConclusion) {
+        actualizacion.notas_conclusion = extras.notasConclusion.trim();
+      }
+    }
+
+    const { error } = await sb
+      .from("ordenes_trabajo")
+      .update(actualizacion)
+      .eq("id", ordenId);
+
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/ordenes-trabajo");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al actualizar estatus." };
+  }
+}
+
+/** 5. Asignar Asesor Ejecutor */
+export async function asignarAsesorEjecutor(
+  ordenId: string,
+  asesorEjecutorId: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { error } = await sb
+      .from("ordenes_trabajo")
+      .update({
+        asesor_ejecutor_id: asesorEjecutorId || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ordenId);
+
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/ordenes-trabajo");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al asignar asesor ejecutor." };
+  }
+}
+
+/** 6. Subir Evidencia Fotográfica a la Orden de Trabajo */
+export async function agregarEvidenciaFotoOT(
+  ordenId: string,
+  formData: FormData
+): Promise<{ ok: boolean; foto?: EvidenciaFoto; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const archivo = formData.get("foto") as File | null;
+    const etapa = (formData.get("etapa") as "inicio" | "proceso" | "entrega") || "proceso";
+    const descripcion = (formData.get("descripcion") as string) || "";
+
+    if (!archivo || archivo.size === 0) {
+      return { ok: false, error: "No se seleccionó ninguna imagen válida." };
+    }
+
+    const cleanName = archivo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `ordenes/${ordenId}/${Date.now()}-${cleanName}`;
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+
+    let publicUrl = "";
+    let { data: uploadData, error: uploadError } = await sb.storage
+      .from("expedientes-fotos")
+      .upload(path, buffer, {
+        contentType: archivo.type || "image/jpeg",
+        upsert: true,
+      });
+
+    if (uploadError && uploadError.message.toLowerCase().includes("not found")) {
+      try {
+        await sb.storage.createBucket("expedientes-fotos", { public: true });
+        const retry = await sb.storage
+          .from("expedientes-fotos")
+          .upload(path, buffer, {
+            contentType: archivo.type || "image/jpeg",
+            upsert: true,
+          });
+        uploadData = retry.data;
+        uploadError = retry.error;
+      } catch (e) {
+        console.warn("Bucket fallback warning:", e);
+      }
+    }
+
+    if (!uploadError && uploadData) {
+      const { data: urlData } = sb.storage
+        .from("expedientes-fotos")
+        .getPublicUrl(uploadData.path);
+      publicUrl = urlData.publicUrl;
+    } else {
+      const base64 = buffer.toString("base64");
+      publicUrl = `data:${archivo.type || "image/jpeg"};base64,${base64}`;
+    }
+
+    // Traer fotos existentes
+    const { data: otData } = await sb
+      .from("ordenes_trabajo")
+      .select("fotos_evidencia")
+      .eq("id", ordenId)
+      .single();
+
+    const existentes: EvidenciaFoto[] = Array.isArray(otData?.fotos_evidencia)
+      ? otData.fotos_evidencia
+      : [];
+
+    const nuevaFoto: EvidenciaFoto = {
+      url: publicUrl,
+      descripcion: descripcion.trim() || undefined,
+      fecha: new Date().toISOString(),
+      etapa,
+    };
+
+    existentes.push(nuevaFoto);
+
+    const { error: updateError } = await sb
+      .from("ordenes_trabajo")
+      .update({
+        fotos_evidencia: existentes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ordenId);
+
+    if (updateError) return { ok: false, error: updateError.message };
+
+    revalidatePath("/ordenes-trabajo");
+    return { ok: true, foto: nuevaFoto };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al subir evidencia fotográfica." };
+  }
+}
+
+/** 7. Crear Recibo de Pago (Anticipo / Liquidación) */
+export async function crearReciboPago(datos: {
+  ordenTrabajoId: string;
+  monto: number;
+  metodoPago: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  referenciaPago?: string;
+  concepto: string;
+  fechaPago?: string;
+  notas?: string;
+}): Promise<{ ok: boolean; recibo?: ReciboPago; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const usuario = await usuarioActual();
+
+    // Obtener orden y cotización vinculada para calcular saldos
+    const { data: ot, error: otErr } = await sb
+      .from("ordenes_trabajo")
+      .select(`
+        id,
+        expediente_id,
+        cotizacion_id,
+        prospecto_id,
+        titulo,
+        prospectos(nombre, telefono),
+        cotizaciones(precio_final)
+      `)
+      .eq("id", datos.ordenTrabajoId)
+      .single();
+
+    if (otErr || !ot) return { ok: false, error: "Orden de trabajo no encontrada." };
+
+    // Obtener recibos previos para saldo anterior
+    const { data: recibosPrevios } = await sb
+      .from("recibos_pago")
+      .select("monto")
+      .eq("orden_trabajo_id", datos.ordenTrabajoId);
+
+    const totalCotizado = Number(ot.cotizaciones?.precio_final || 0);
+    const pagadoHastaAhora = (recibosPrevios || []).reduce(
+      (acc: number, curr: any) => acc + Number(curr.monto || 0),
+      0
+    );
+
+    const saldoAnterior = totalCotizado > 0 ? Math.max(0, totalCotizado - pagadoHastaAhora) : 0;
+    const monto = Number(datos.monto || 0);
+    const saldoRestante = Math.max(0, saldoAnterior - monto);
+
+    const folio = await generarFolioRecibo(sb);
+    const token = crypto.randomBytes(24).toString("hex");
+    const montoLetra = numeroALetras(monto);
+
+    // Obtener nombre del perfil que recibe el pago
+    let recibidoPorNombre = "Asesor Sauceda";
+    if (usuario?.id) {
+      const { data: perf } = await sb
+        .from("perfiles")
+        .select("nombre")
+        .eq("id", usuario.id)
+        .maybeSingle();
+      if (perf?.nombre) recibidoPorNombre = perf.nombre;
+    }
+
+    const { data: nuevo, error: insertError } = await sb
+      .from("recibos_pago")
+      .insert({
+        folio,
+        orden_trabajo_id: datos.ordenTrabajoId,
+        expediente_id: ot.expediente_id,
+        cotizacion_id: ot.cotizacion_id,
+        cliente_nombre: ot.prospectos?.nombre || "Cliente Sauceda",
+        cliente_telefono: ot.prospectos?.telefono || null,
+        cliente_direccion: null,
+        monto,
+        monto_letra: montoLetra,
+        metodo_pago: datos.metodoPago || "transferencia",
+        referencia_pago: datos.referenciaPago?.trim() || null,
+        concepto: datos.concepto.trim(),
+        saldo_anterior: saldoAnterior,
+        saldo_restante: saldoRestante,
+        recibido_por: usuario?.id || null,
+        recibido_por_nombre: recibidoPorNombre,
+        fecha_pago: datos.fechaPago || new Date().toISOString().split("T")[0],
+        notas: datos.notas?.trim() || null,
+        token,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) return { ok: false, error: insertError.message };
+
+    revalidatePath("/ordenes-trabajo");
+    if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
+    if (ot.prospecto_id) revalidatePath(`/prospectos/${ot.prospecto_id}`);
+
+    return {
+      ok: true,
+      recibo: {
+        id: nuevo.id,
+        folio: nuevo.folio,
+        ordenTrabajoId: nuevo.orden_trabajo_id,
+        expedienteId: nuevo.expediente_id,
+        cotizacionId: nuevo.cotizacion_id,
+        clienteNombre: nuevo.cliente_nombre,
+        clienteTelefono: nuevo.cliente_telefono,
+        clienteDireccion: nuevo.cliente_direccion,
+        monto: Number(nuevo.monto),
+        montoLetra: nuevo.monto_letra,
+        metodoPago: nuevo.metodo_pago,
+        referenciaPago: nuevo.referencia_pago,
+        concepto: nuevo.concepto,
+        saldoAnterior: Number(nuevo.saldo_anterior),
+        saldoRestante: Number(nuevo.saldo_restante),
+        recibidoPor: nuevo.recibido_por,
+        recibidoPorNombre: nuevo.recibido_por_nombre,
+        fechaPago: nuevo.fecha_pago,
+        notas: nuevo.notas,
+        token: nuevo.token,
+        createdAt: nuevo.created_at,
+        updatedAt: nuevo.updated_at,
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al registrar recibo de pago." };
+  }
+}
+
+/** 8. Obtener Recibo de Pago de forma pública por Token (para cliente / PDF) */
+export async function obtenerReciboPorToken(token: string): Promise<ReciboPago | null> {
+  try {
+    const sb = supabaseServidor();
+    const { data: r, error } = await sb
+      .from("recibos_pago")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+
+    if (error || !r) return null;
+
+    return {
+      id: r.id,
+      folio: r.folio,
+      ordenTrabajoId: r.orden_trabajo_id,
+      expedienteId: r.expediente_id,
+      cotizacionId: r.cotizacion_id,
+      clienteNombre: r.cliente_nombre,
+      clienteTelefono: r.cliente_telefono,
+      clienteDireccion: r.cliente_direccion,
+      monto: Number(r.monto),
+      montoLetra: r.monto_letra,
+      metodoPago: r.metodo_pago,
+      referenciaPago: r.referencia_pago,
+      concepto: r.concepto,
+      saldoAnterior: Number(r.saldo_anterior),
+      saldoRestante: Number(r.saldo_restante),
+      recibidoPor: r.recibido_por,
+      recibidoPorNombre: r.recibido_por_nombre,
+      fechaPago: r.fecha_pago,
+      notas: r.notas,
+      token: r.token,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    };
+  } catch (err) {
+    console.error("Error en obtenerReciboPorToken:", err);
+    return null;
+  }
+}
+
+/** 9. Guardar o Emitir Póliza de Garantía de la Orden de Trabajo */
+export async function guardarGarantiaOT(datos: {
+  ordenTrabajoId: string;
+  titulo?: string;
+  contenido: string;
+  anosGarantia?: number;
+  fechaInicio?: string;
+}): Promise<{ ok: boolean; garantia?: CartaGarantiaOT; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const anos = Number(datos.anosGarantia || 3);
+    const fechaInicioStr = datos.fechaInicio || new Date().toISOString().split("T")[0];
+    const fechaInicioDate = new Date(fechaInicioStr);
+    const fechaVencimientoDate = new Date(fechaInicioDate);
+    fechaVencimientoDate.setFullYear(fechaVencimientoDate.getFullYear() + Math.floor(anos));
+    const fechaVencimientoStr = fechaVencimientoDate.toISOString().split("T")[0];
+
+    // Verificar si ya existe garantía para la OT
+    const { data: existente } = await sb
+      .from("garantias_documentos")
+      .select("id, token")
+      .eq("orden_trabajo_id", datos.ordenTrabajoId)
+      .maybeSingle();
+
+    const token = existente?.token || crypto.randomBytes(24).toString("hex");
+
+    if (existente?.id) {
+      const { data: actualizada, error: upErr } = await sb
+        .from("garantias_documentos")
+        .update({
+          titulo: datos.titulo || "Póliza de Garantía por Servicio",
+          contenido: datos.contenido.trim(),
+          anos_garantia: anos,
+          fecha_inicio: fechaInicioStr,
+          fecha_vencimiento: fechaVencimientoStr,
+          token,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existente.id)
+        .select("*")
+        .single();
+
+      if (upErr) return { ok: false, error: upErr.message };
+
+      revalidatePath("/ordenes-trabajo");
+      return {
+        ok: true,
+        garantia: {
+          id: actualizada.id,
+          ordenTrabajoId: actualizada.orden_trabajo_id,
+          cotizacionId: actualizada.cotizacion_id,
+          titulo: actualizada.titulo,
+          contenido: actualizada.contenido,
+          token: actualizada.token,
+          anosGarantia: Number(actualizada.anos_garantia),
+          fechaInicio: actualizada.fecha_inicio,
+          fechaVencimiento: actualizada.fecha_vencimiento,
+          createdAt: actualizada.created_at,
+          updatedAt: actualizada.updated_at,
+        },
+      };
+    } else {
+      // Buscar cotización vinculada para registrar cotizacion_id si existe
+      const { data: ot } = await sb
+        .from("ordenes_trabajo")
+        .select("cotizacion_id")
+        .eq("id", datos.ordenTrabajoId)
+        .single();
+
+      const { data: nueva, error: inErr } = await sb
+        .from("garantias_documentos")
+        .insert({
+          orden_trabajo_id: datos.ordenTrabajoId,
+          cotizacion_id: ot?.cotizacion_id || null,
+          titulo: datos.titulo || "Póliza de Garantía por Servicio",
+          contenido: datos.contenido.trim(),
+          anos_garantia: anos,
+          fecha_inicio: fechaInicioStr,
+          fecha_vencimiento: fechaVencimientoStr,
+          token,
+        })
+        .select("*")
+        .single();
+
+      if (inErr) return { ok: false, error: inErr.message };
+
+      revalidatePath("/ordenes-trabajo");
+      return {
+        ok: true,
+        garantia: {
+          id: nueva.id,
+          ordenTrabajoId: nueva.orden_trabajo_id,
+          cotizacionId: nueva.cotizacion_id,
+          titulo: nueva.titulo,
+          contenido: nueva.contenido,
+          token: nueva.token,
+          anosGarantia: Number(nueva.anos_garantia),
+          fechaInicio: nueva.fecha_inicio,
+          fechaVencimiento: nueva.fecha_vencimiento,
+          createdAt: nueva.created_at,
+          updatedAt: nueva.updated_at,
+        },
+      };
+    }
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al guardar póliza de garantía." };
+  }
+}
+
+/** 10. Obtener Garantía por Token (público para cliente / WhatsApp) */
+export async function obtenerGarantiaOTPorToken(
+  token: string
+): Promise<{ garantia: CartaGarantiaOT; orden: OrdenTrabajo } | null> {
+  try {
+    const sb = supabaseServidor();
+
+    const { data: gar, error: garErr } = await sb
+      .from("garantias_documentos")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+
+    if (garErr || !gar || !gar.orden_trabajo_id) return null;
+
+    const { data: ot, error: otErr } = await sb
+      .from("ordenes_trabajo")
+      .select(`
+        *,
+        asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
+        prospectos(nombre, telefono)
+      `)
+      .eq("id", gar.orden_trabajo_id)
+      .maybeSingle();
+
+    if (otErr || !ot) return null;
+
+    return {
+      garantia: {
+        id: gar.id,
+        ordenTrabajoId: gar.orden_trabajo_id,
+        cotizacionId: gar.cotizacion_id,
+        titulo: gar.titulo,
+        contenido: gar.contenido,
+        token: gar.token,
+        anosGarantia: Number(gar.anos_garantia || 3),
+        fechaInicio: gar.fecha_inicio,
+        fechaVencimiento: gar.fecha_vencimiento,
+        createdAt: gar.created_at,
+        updatedAt: gar.updated_at,
+      },
+      orden: {
+        id: ot.id,
+        folio: ot.folio,
+        expedienteId: ot.expediente_id,
+        cotizacionId: ot.cotizacion_id,
+        prospectoId: ot.prospecto_id,
+        tipoNegocio: ot.tipo_negocio,
+        estatus: ot.estatus,
+        titulo: ot.titulo,
+        descripcion: ot.descripcion,
+        fechaProgramada: ot.fecha_programada,
+        fechaInicio: ot.fecha_inicio,
+        fechaConclusion: ot.fecha_conclusion,
+        asesorResponsableId: ot.asesor_responsable_id,
+        asesorEjecutorId: ot.asesor_ejecutor_id,
+        creadoPor: ot.creado_por,
+        notasConclusion: ot.notas_conclusion,
+        fotosEvidencia: Array.isArray(ot.fotos_evidencia) ? ot.fotos_evidencia : [],
+        createdAt: ot.created_at,
+        updatedAt: ot.updated_at,
+        asesorEjecutorNombre: ot.asesor_ejecutor?.nombre || "Sauceda Construye",
+        clienteNombre: ot.prospectos?.nombre || "Cliente Sauceda",
+        clienteTelefono: ot.prospectos?.telefono || "",
+      },
+    };
+  } catch (err) {
+    console.error("Error en obtenerGarantiaOTPorToken:", err);
+    return null;
+  }
+}
