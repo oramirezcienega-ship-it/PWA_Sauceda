@@ -33,6 +33,7 @@ import { listarEmpresasMin } from "@/app/actions/empresas";
 import { formatoPesos } from "@/lib/formato";
 import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
+import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -53,7 +54,7 @@ export function DetalleCotizacionAdmin({
   const [conceptos, setConceptos] = useState<CotizacionConcepto[]>(conceptosIniciales);
   const [reporteVisita, setReporteVisita] = useState<VisitaReporte | null>(reporteVisitaInicial);
 
-  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion">("resumen");
+  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion" | "orden_trabajo">("resumen");
 
   // --- State para Remisión & Factura ---
   const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
@@ -1215,6 +1216,14 @@ export function DetalleCotizacionAdmin({
             Facturación & Ventas
           </button>
         )}
+        <button
+          onClick={() => setPestaña("orden_trabajo")}
+          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+            pestaña === "orden_trabajo" ? "border-sauce text-sauce bg-white" : "border-transparent text-carbon/60 hover:text-carbon"
+          }`}
+        >
+          🛠️ Orden de Trabajo & Entrega
+        </button>
       </div>
 
       {/* Contenido Pestañas */}
@@ -2875,6 +2884,20 @@ export function DetalleCotizacionAdmin({
                 </div>
               </form>
             )}
+          </div>
+        )}
+
+        {/* --- PESTAÑA ORDEN DE TRABAJO & ENTREGA --- */}
+        {pestaña === "orden_trabajo" && (
+          <div className="space-y-4">
+            <ModuloOrdenesTrabajo
+              cotizacionId={cotizacion.id}
+              prospectoId={cotizacion.prospectoId}
+              expedienteId={cotizacion.expedienteId}
+              clienteNombreDefault={cotizacion.prospectoNombre}
+              clienteTelefonoDefault={cotizacion.prospectoTelefono || ""}
+              tipoNegocioDefault={cotizacion.servicioTipo}
+            />
           </div>
         )}
 

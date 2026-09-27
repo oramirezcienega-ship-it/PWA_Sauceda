@@ -34,6 +34,7 @@ const ENLACES = [
   { href: "/empresas", label: "Empresas" },
   { href: "/prospectos", label: "Prospectos" },
   { href: "/prospectos/pipeline", label: "Pipeline" },
+  { href: "/ordenes-trabajo", label: "Órdenes de Trabajo (Nuevo)" },
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/construccion", label: "Construcción" },
   { href: "/agenda", label: "Agenda" },
@@ -50,7 +51,9 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/privacidad") ||
     path.startsWith("/cotizacion") ||
     path.startsWith("/reporte-visita") ||
-    path.startsWith("/agenda/")
+    path.startsWith("/agenda/") ||
+    path.startsWith("/recibo/") ||
+    path.startsWith("/garantia/")
   );
 }
 

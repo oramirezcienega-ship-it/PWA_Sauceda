@@ -28,6 +28,7 @@ import { PromocionVentaWidget } from "./PromocionVentaWidget";
 import { WidgetAgendaCitas } from "./WidgetAgendaCitas";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { EmpresaSelector } from "./EmpresaSelector";
+import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 
 /**
  * Vista de detalle de un expediente.
@@ -1100,6 +1101,17 @@ export function DetalleExpediente({ id }: { id: string }) {
 
           {/* Bitácora de actividades */}
           <Actividades expedienteId={expediente.id} />
+
+          {/* Órdenes de Trabajo y Documentos de Entrega (OT, Recibos y Garantías) */}
+          <div className="mt-2">
+            <ModuloOrdenesTrabajo
+              expedienteId={expediente.id}
+              prospectoId={expediente.prospectoId}
+              clienteNombreDefault={[expediente.cliente, expediente.primerApellido, expediente.segundoApellido].filter(Boolean).join(" ")}
+              clienteTelefonoDefault={expediente.telefono || ""}
+              tipoNegocioDefault={expediente.tipoNegocio || "construccion"}
+            />
+          </div>
 
           {/* Checklist de Flujo de Trabajo Operativo (BPM) — Último widget del expediente, contraído por defecto */}
           <WidgetBpmTareas 
