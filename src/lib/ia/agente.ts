@@ -152,7 +152,9 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
     }
     const cuerpo = (await res.text()).slice(0, 200);
     const pista =
-      res.status === 401
+      /credit balance/i.test(cuerpo)
+        ? " (SIN CRÉDITO: recarga en console.anthropic.com → Plans & Billing)"
+        : res.status === 401
         ? " (key inválida)"
         : res.status === 404
           ? " (modelo no encontrado: revisa ANTHROPIC_MODEL)"
