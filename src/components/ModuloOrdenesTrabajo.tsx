@@ -16,6 +16,7 @@ import { ModalCrearOrdenTrabajo } from "./ModalCrearOrdenTrabajo";
 import { ModalRegistrarRecibo } from "./ModalRegistrarRecibo";
 import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
+import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import type { RemisionFactura } from "@/lib/types";
 
 interface ModuloOrdenesTrabajoProps {
@@ -49,6 +50,7 @@ export function ModuloOrdenesTrabajo({
     garantia: CartaGarantiaOT | null;
   } | null>(null);
   const [ordenParaRemision, setOrdenParaRemision] = useState<OrdenTrabajo | null>(null);
+  const [ordenParaNotificar, setOrdenParaNotificar] = useState<OrdenTrabajo | null>(null);
 
   // Foto en proceso de subida
   const [subiendoFotoOrdenId, setSubiendoFotoOrdenId] = useState<string | null>(null);
@@ -155,10 +157,14 @@ export function ModuloOrdenesTrabajo({
       );
       setOrdenParaConcluir(null);
 
-      // Si tiene cotización y aún no tiene remisión generada, abrir modal para sugerir generarla
+      // Si tiene cotización y aún no tiene remisión generada, sugerir generarla; de lo contrario sugerir notificar
       if (!otConcluida.remisionFactura && otConcluida.cotizacionId) {
         setTimeout(() => {
           setOrdenParaRemision(otConcluida);
+        }, 250);
+      } else {
+        setTimeout(() => {
+          setOrdenParaNotificar(otConcluida);
         }, 250);
       }
     } catch (e) {
@@ -427,6 +433,22 @@ export function ModuloOrdenesTrabajo({
                         )}
                       </span>
                     </div>
+
+                    <div>
+                      <span className="text-[10px] text-carbon/40 uppercase block font-semibold">
+                        Aviso al Cliente
+                      </span>
+                      <span className="font-mono text-xs mt-0.5 block">
+                        {ot.notificadoClienteAt ? (
+                          <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
+                            <span>✓</span>
+                            <span>{ot.canalNotificacion || "Enviado"} ({new Date(ot.notificadoClienteAt).toLocaleDateString()})</span>
+                          </span>
+                        ) : (
+                          <span className="text-amber-700/70 italic text-[11px]">Sin notificar</span>
+                        )}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Barra Financiera de Cobranza */}
@@ -507,6 +529,23 @@ export function ModuloOrdenesTrabajo({
                           <span>🛡️</span> Póliza de Garantía
                         </button>
                       )}
+
+                      {!soloLectura && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!estaExpandida) cargarDetalle(ot.id);
+                            setOrdenParaNotificar(ot);
+                          }}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1 shadow-2xs ${
+                            ot.estatus === "completada"
+                              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                              : "bg-white border border-carbon/20 text-carbon hover:bg-carbon/5"
+                          }`}
+                        >
+                          <span>📢</span> {ot.notificadoClienteAt ? "Re-notificar" : "Notificar Entrega"}
+                        </button>
+                      )}
                     </div>
 
                     {/* Subida rápida de fotos */}
@@ -550,6 +589,41 @@ export function ModuloOrdenesTrabajo({
                       </p>
                     ) : (
                       <>
+                        {/* Enlace al Portal Público de Entrega del Cliente */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-carbon/10 shadow-2xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xl">🌐</span>
+                            <div>
+                              <p className="text-xs font-bold text-carbon">
+                                Portal de Entrega del Cliente ({ot.folio})
+                              </p>
+                              <p className="text-[11px] text-carbon/50">
+                                Enlace público único con reporte técnico, evidencias fotográficas y descarga de documentos.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`/orden-trabajo/entrega/${ot.token}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-xl bg-white border border-carbon/20 px-3.5 py-1.5 text-xs font-bold text-verde-profundo hover:bg-carbon/5 transition shadow-2xs inline-flex items-center gap-1"
+                            >
+                              <span>Abrir Portal</span>
+                              <span>↗</span>
+                            </a>
+                            {!soloLectura && (
+                              <button
+                                type="button"
+                                onClick={() => setOrdenParaNotificar(ot)}
+                                className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold transition shadow-2xs inline-flex items-center gap-1"
+                              >
+                                <span>📢 Enviar al Cliente</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
                         {/* 1. Recibos de Pago Emitidos */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
@@ -1000,6 +1074,21 @@ export function ModuloOrdenesTrabajo({
           clienteNombre={ordenParaRemision.clienteNombre || clienteNombreDefault}
           clienteTelefono={ordenParaRemision.clienteTelefono || clienteTelefonoDefault}
           remisionExistente={detalleOT.remisionFactura}
+        />
+      )}
+
+      {/* Modal Notificar Entrega al Cliente (WhatsApp API, Web y Correo) */}
+      {ordenParaNotificar && (
+        <ModalNotificarEntregaOT
+          abierto={!!ordenParaNotificar}
+          alCerrar={() => setOrdenParaNotificar(null)}
+          alNotificar={() => {
+            cargarDatos();
+            if (otExpandidaId) cargarDetalle(otExpandidaId);
+          }}
+          orden={ordenParaNotificar}
+          garantia={detalleOT.garantia}
+          remisionFactura={detalleOT.remisionFactura}
         />
       )}
     </div>

@@ -53,7 +53,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/reporte-visita") ||
     path.startsWith("/agenda/") ||
     path.startsWith("/recibo/") ||
-    path.startsWith("/garantia/")
+    path.startsWith("/garantia/") ||
+    path.startsWith("/orden-trabajo/entrega/")
   );
 }
 

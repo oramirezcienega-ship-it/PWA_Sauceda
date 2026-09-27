@@ -5,6 +5,10 @@ import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { numeroALetras } from "@/lib/numero-a-letras";
+import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { enviarCorreo } from "@/lib/email";
+import { PLANTILLA_ENTREGA_SERVICIO } from "@/lib/meta-plantillas";
+import { MARCA } from "@/lib/marca";
 import type { RemisionFactura } from "@/lib/types";
 
 export interface EvidenciaFoto {
@@ -35,10 +39,14 @@ export interface OrdenTrabajo {
   createdAt: string;
   updatedAt: string;
   // Enriquecidos
+  token: string;
+  notificadoClienteAt?: string | null;
+  canalNotificacion?: string | null;
   asesorEjecutorNombre?: string;
   asesorResponsableNombre?: string;
   clienteNombre?: string;
   clienteTelefono?: string;
+  clienteCorreo?: string;
   clienteDireccion?: string;
   totalCotizado?: number;
   totalPagado?: number;
@@ -192,11 +200,13 @@ export async function crearOrdenTrabajo(datos: {
     }
 
     const folio = await generarFolioOT(sb);
+    const token = crypto.randomBytes(16).toString("hex");
 
     const { data: nuevaOT, error } = await sb
       .from("ordenes_trabajo")
       .insert({
         folio,
+        token,
         expediente_id: expedienteId || null,
         cotizacion_id: cotizacionId || null,
         prospecto_id: prospectoId || null,
@@ -212,7 +222,7 @@ export async function crearOrdenTrabajo(datos: {
         creado_por: usuario?.id || null,
         fotos_evidencia: [],
       })
-      .select("id, folio")
+      .select("id, folio, token")
       .single();
 
     if (error) {
@@ -252,7 +262,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         *,
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
-        prospectos(id, nombre, telefono),
+        prospectos(id, nombre, telefono, correo, direccion),
         cotizaciones(id, precio_final, condiciones_pago, token)
       `)
       .order("created_at", { ascending: false });
@@ -342,6 +352,9 @@ export async function obtenerOrdenesTrabajo(filtros?: {
       return {
         id: d.id,
         folio: d.folio,
+        token: d.token || "",
+        notificadoClienteAt: d.notificado_cliente_at,
+        canalNotificacion: d.canal_notificacion,
         expedienteId: d.expediente_id,
         cotizacionId: d.cotizacion_id,
         prospectoId: d.prospecto_id,
@@ -363,6 +376,8 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         asesorResponsableNombre: d.asesor_responsable?.nombre || "",
         clienteNombre: d.prospectos?.nombre || "Cliente General",
         clienteTelefono: d.prospectos?.telefono || "",
+        clienteCorreo: d.prospectos?.correo || "",
+        clienteDireccion: d.prospectos?.direccion || "",
         totalCotizado,
         totalPagado,
         saldoRestante,
@@ -393,7 +408,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         *,
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
-        prospectos(id, nombre, telefono),
+        prospectos(id, nombre, telefono, correo, direccion),
         cotizaciones(id, precio_final, condiciones_pago, token)
       `)
       .eq("id", id)
@@ -493,6 +508,9 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
     const orden: OrdenTrabajo = {
       id: d.id,
       folio: d.folio,
+      token: d.token || "",
+      notificadoClienteAt: d.notificado_cliente_at,
+      canalNotificacion: d.canal_notificacion,
       expedienteId: d.expediente_id,
       cotizacionId: d.cotizacion_id,
       prospectoId: d.prospecto_id,
@@ -514,6 +532,8 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
       clienteNombre: d.prospectos?.nombre || "Cliente General",
       clienteTelefono: d.prospectos?.telefono || "",
+      clienteCorreo: d.prospectos?.correo || "",
+      clienteDireccion: d.prospectos?.direccion || "",
       totalCotizado,
       totalPagado,
       saldoRestante,
@@ -1225,12 +1245,14 @@ export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): 
     }
 
     const folio = await generarFolioOT(sb);
+    const token = crypto.randomBytes(16).toString("hex");
     const clienteNombre = (cot.prospectos as any)?.nombre || "Cliente";
 
     const { data: nuevaOT, error: errIns } = await sb
       .from("ordenes_trabajo")
       .insert({
         folio,
+        token,
         expediente_id: cot.expediente_id || null,
         cotizacion_id: cot.id,
         prospecto_id: cot.prospecto_id || null,
@@ -1256,6 +1278,385 @@ export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): 
   } catch (err: any) {
     console.error("Error en asegurarOrdenTrabajoParaCotizacion:", err);
     return { ok: false, error: err?.message || "Error al asegurar orden de trabajo." };
+  }
+}
+
+/**
+ * 13. Obtener entrega pública de Orden de Trabajo por Token.
+ * Usado por el portal del cliente (/orden-trabajo/entrega/[token]). No requiere login de admin.
+ */
+export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise<{
+  ok: boolean;
+  error?: string;
+  orden?: OrdenTrabajo;
+  recibos?: ReciboPago[];
+  garantia?: CartaGarantiaOT | null;
+  remisionFactura?: RemisionFactura | null;
+}> {
+  try {
+    const sb = supabaseServidor();
+
+    const { data: d, error } = await sb
+      .from("ordenes_trabajo")
+      .select(`
+        *,
+        asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre, telefono),
+        asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre, telefono),
+        prospectos(id, nombre, telefono, correo, direccion),
+        cotizaciones(id, precio_final, condiciones_pago, token)
+      `)
+      .eq("token", token)
+      .maybeSingle();
+
+    if (error || !d) {
+      return { ok: false, error: "Orden de trabajo no encontrada o enlace caducado." };
+    }
+
+    // Recibos
+    const { data: recs } = await sb
+      .from("recibos_pago")
+      .select("*")
+      .eq("orden_trabajo_id", d.id)
+      .order("created_at", { ascending: false });
+
+    // Garantía
+    let queryGar = sb.from("garantias_documentos").select("*");
+    if (d.cotizacion_id) {
+      queryGar = queryGar.or(`orden_trabajo_id.eq.${d.id},cotizacion_id.eq.${d.cotizacion_id}`);
+    } else {
+      queryGar = queryGar.eq("orden_trabajo_id", d.id);
+    }
+    const { data: gar } = await queryGar.maybeSingle();
+
+    // Remisión / Factura
+    let queryRem = sb.from("remisiones_facturas").select("*");
+    if (d.cotizacion_id) {
+      queryRem = queryRem.or(`orden_trabajo_id.eq.${d.id},cotizacion_id.eq.${d.cotizacion_id}`);
+    } else {
+      queryRem = queryRem.eq("orden_trabajo_id", d.id);
+    }
+    const { data: remData } = await queryRem.order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+    const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
+    const totalPagado = (recs || []).reduce((acc: number, r: any) => acc + Number(r.monto || 0), 0);
+    const saldoRestante = Math.max(0, totalCotizado - totalPagado);
+
+    const remisionFactura: RemisionFactura | null = remData
+      ? {
+          id: remData.id,
+          cotizacionId: remData.cotizacion_id,
+          ordenTrabajoId: remData.orden_trabajo_id,
+          expedienteId: remData.expediente_id,
+          tipo: remData.tipo,
+          folio: remData.folio,
+          fecha: remData.fecha,
+          tipoCambio: Number(remData.tipo_cambio || 1.0),
+          datosDocumento: remData.datos_documento || {},
+          serviciosExtra: Number(remData.servicios_extra || 0),
+          costoFinanciero: Number(remData.costo_financiero || 0),
+          otrosGastos: Number(remData.otros_gastos || 0),
+          montoSubtotal: Number(remData.monto_subtotal || 0),
+          montoTotal: Number(remData.monto_total || 0),
+          createdAt: remData.created_at,
+          updatedAt: remData.updated_at,
+        }
+      : null;
+
+    const garantiaObj: CartaGarantiaOT | null = gar
+      ? {
+          id: gar.id,
+          ordenTrabajoId: gar.orden_trabajo_id || d.id,
+          cotizacionId: gar.cotizacion_id,
+          titulo: gar.titulo || "Póliza de Garantía Oficial",
+          contenido: gar.contenido || "",
+          token: gar.token,
+          anosGarantia: gar.anos_garantia || 1,
+          fechaInicio: gar.fecha_inicio,
+          fechaVencimiento: gar.fecha_vencimiento,
+          createdAt: gar.created_at,
+          updatedAt: gar.updated_at,
+        }
+      : null;
+
+    const recibos: ReciboPago[] = (recs || []).map((r: any) => ({
+      id: r.id,
+      folio: r.folio,
+      ordenTrabajoId: r.orden_trabajo_id,
+      expedienteId: r.expediente_id,
+      cotizacionId: r.cotizacion_id,
+      clienteNombre: r.cliente_nombre,
+      clienteTelefono: r.cliente_telefono,
+      clienteDireccion: r.cliente_direccion,
+      monto: Number(r.monto || 0),
+      montoLetra: r.monto_letra,
+      metodoPago: r.metodo_pago,
+      referenciaPago: r.referencia_pago,
+      concepto: r.concepto,
+      saldoAnterior: Number(r.saldo_anterior || 0),
+      saldoRestante: Number(r.saldo_restante || 0),
+      recibidoPor: r.recibido_por,
+      recibidoPorNombre: r.recibido_por_nombre,
+      fechaPago: r.fecha_pago,
+      notas: r.notas,
+      token: r.token,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+
+    const orden: OrdenTrabajo = {
+      id: d.id,
+      folio: d.folio,
+      token: d.token || token,
+      notificadoClienteAt: d.notificado_cliente_at,
+      canalNotificacion: d.canal_notificacion,
+      expedienteId: d.expediente_id,
+      cotizacionId: d.cotizacion_id,
+      prospectoId: d.prospecto_id,
+      tipoNegocio: d.tipo_negocio,
+      estatus: d.estatus,
+      titulo: d.titulo,
+      descripcion: d.descripcion,
+      fechaProgramada: d.fecha_programada,
+      fechaInicio: d.fecha_inicio,
+      fechaConclusion: d.fecha_conclusion,
+      asesorResponsableId: d.asesor_responsable_id,
+      asesorEjecutorId: d.asesor_ejecutor_id,
+      creadoPor: d.creado_por,
+      notasConclusion: d.notas_conclusion,
+      fotosEvidencia: Array.isArray(d.fotos_evidencia) ? d.fotos_evidencia : [],
+      createdAt: d.created_at,
+      updatedAt: d.updated_at,
+      asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Técnico Asignado",
+      asesorResponsableNombre: d.asesor_responsable?.nombre || "",
+      clienteNombre: d.prospectos?.nombre || "Cliente General",
+      clienteTelefono: d.prospectos?.telefono || "",
+      clienteCorreo: d.prospectos?.correo || "",
+      clienteDireccion: d.prospectos?.direccion || "",
+      totalCotizado,
+      totalPagado,
+      saldoRestante,
+      cotizacionToken: d.cotizaciones?.token,
+      remisionFactura,
+    };
+
+    return {
+      ok: true,
+      orden,
+      recibos,
+      garantia: garantiaObj,
+      remisionFactura,
+    };
+  } catch (err: any) {
+    console.error("Error en obtenerEntregaOrdenTrabajoPorToken:", err);
+    return { ok: false, error: err?.message || "Error al consultar entrega de orden de trabajo." };
+  }
+}
+
+/**
+ * 14. Enviar Notificación de Conclusión y Entrega al Cliente (Multicanal).
+ * Puede enviarse vía Meta Cloud API (Plantilla UTILITY oficial) o Correo Corporativo (Resend).
+ */
+export async function enviarNotificacionEntregaCliente(params: {
+  ordenTrabajoId: string;
+  canal: "whatsapp_plantilla" | "whatsapp_directo" | "email";
+  correoDestino?: string;
+  telefonoDestino?: string;
+  mensajePersonalizado?: string;
+}): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { orden, garantia, remisionFactura } = await obtenerOrdenTrabajoPorId(params.ordenTrabajoId);
+    if (!orden) {
+      return { ok: false, error: "Orden de trabajo no encontrada." };
+    }
+
+    const SITE_URL = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://crm.saucedamx.com";
+    const clienteNombre = orden.clienteNombre || "Estimado(a) Cliente";
+    const telefono = params.telefonoDestino || orden.clienteTelefono;
+    const correo = params.correoDestino || orden.clienteCorreo;
+    const fechaEntrega = orden.fechaConclusion
+      ? new Date(orden.fechaConclusion).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+      : new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+
+    let messageId: string | undefined;
+
+    if (params.canal === "whatsapp_plantilla") {
+      if (!telefono) {
+        return { ok: false, error: "El cliente no cuenta con teléfono registrado para WhatsApp." };
+      }
+
+      // Parámetros de la plantilla UTILITY de Meta:
+      // {{1}}: Nombre cliente
+      // {{2}}: Folio OT
+      // {{3}}: Título proyecto
+      // {{4}}: Fecha entrega
+      // Botón URL dinámico: token de la OT
+      const resWhatsApp = await enviarWhatsAppPlantilla(
+        telefono,
+        PLANTILLA_ENTREGA_SERVICIO.nombre,
+        PLANTILLA_ENTREGA_SERVICIO.idioma,
+        [clienteNombre, orden.folio, orden.titulo, fechaEntrega],
+        orden.token
+      );
+
+      if (!resWhatsApp.ok) {
+        return {
+          ok: false,
+          error: resWhatsApp.error || "No se pudo entregar el mensaje por WhatsApp Cloud API de Meta.",
+        };
+      }
+      messageId = resWhatsApp.messageId;
+    } else if (params.canal === "email") {
+      if (!correo) {
+        return { ok: false, error: "El cliente no tiene correo electrónico registrado." };
+      }
+
+      const urlEntrega = `${SITE_URL}/orden-trabajo/entrega/${orden.token}`;
+      const urlRemision = orden.cotizacionToken ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}` : null;
+      const urlGarantia = garantia?.token ? `${SITE_URL}/garantia/${garantia.token}` : null;
+
+      const fotosEntrega = (orden.fotosEvidencia || [])
+        .filter((f) => f.etapa === "entrega" || f.etapa === "proceso")
+        .slice(0, 4);
+
+      const htmlFotos =
+        fotosEntrega.length > 0
+          ? `<div style="margin-top:20px;margin-bottom:20px;">
+              <p style="font-size:12px;font-weight:bold;color:#2D4A2B;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Evidencias de Entrega Técnica</p>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                ${fotosEntrega
+                  .map(
+                    (f) =>
+                      `<a href="${f.url}" target="_blank" style="text-decoration:none;"><img src="${f.url}" width="115" height="115" style="object-fit:cover;border-radius:10px;border:1px solid #ddd;" alt="Evidencia de entrega" /></a>`
+                  )
+                  .join("")}
+              </div>
+            </div>`
+          : "";
+
+      const html = `
+        <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#FDFCFA;border-radius:16px;overflow:hidden;border:1px solid #E6E1D8;box-shadow:0 4px 16px rgba(0,0,0,0.05);">
+          <!-- Header Corporativo -->
+          <div style="background:#2D4A2B;padding:26px 20px;text-align:center;">
+            <img src="${SITE_URL}/logo.svg" width="48" height="48" alt="SAUCEDA" style="display:block;margin:0 auto 8px;" />
+            <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
+            <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">CONSTRUCCIÓN & BIENES RAÍCES</div>
+          </div>
+
+          <!-- Contenido Principal -->
+          <div style="padding:28px 24px;color:#1A1A1A;background:#ffffff;">
+            <div style="display:inline-block;background:#E7F3E5;color:#2D4A2B;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:bold;margin-bottom:14px;">
+              ✓ Servicio Concluido & Entregado
+            </div>
+
+            <h2 style="color:#2D4A2B;margin-top:0;margin-bottom:8px;font-size:20px;">
+              Entrega Oficial de Trabajos · ${orden.folio}
+            </h2>
+            <p style="font-size:14px;color:#4A4A4A;line-height:1.5;margin-bottom:18px;">
+              Estimado/a <strong>${clienteNombre}</strong>, le informamos que los trabajos correspondientes a <strong>"${orden.titulo}"</strong> han finalizado a entera satisfacción el día <strong>${fechaEntrega}</strong>.
+            </p>
+
+            ${
+              orden.notasConclusion
+                ? `
+              <div style="background:#F5F1E8;border-left:4px solid #C9A961;padding:14px;border-radius:6px;margin-bottom:20px;font-size:13px;color:#333;font-style:italic;">
+                "${orden.notasConclusion}"
+              </div>
+            `
+                : ""
+            }
+
+            ${htmlFotos}
+
+            <!-- Botón Principal al Portal de Entrega -->
+            <div style="text-align:center;margin:28px 0;">
+              <a href="${urlEntrega}" style="display:inline-block;background:#2D4A2B;color:#FFFFFF;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:14px;box-shadow:0 3px 8px rgba(45,74,43,0.3);">
+                📂 Ver Reporte Digital & Evidencias
+              </a>
+            </div>
+
+            <!-- Accesos a Documentos Oficiales -->
+            <div style="border-top:1px solid #EFECE6;padding-top:20px;margin-top:20px;">
+              <p style="font-size:12px;font-weight:bold;color:#666;text-transform:uppercase;margin-bottom:12px;">Documentos Oficiales Disponibles</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                ${
+                  urlRemision
+                    ? `
+                  <tr>
+                    <td style="padding:8px 0;font-size:13px;color:#2D4A2B;font-weight:bold;">🧾 Remisión de Entrega / Factura Fiscal</td>
+                    <td style="text-align:right;padding:8px 0;"><a href="${urlRemision}" style="color:#C9A961;font-weight:bold;font-size:12px;text-decoration:none;">Consultar →</a></td>
+                  </tr>
+                `
+                    : ""
+                }
+                ${
+                  urlGarantia && garantia
+                    ? `
+                  <tr>
+                    <td style="padding:8px 0;font-size:13px;color:#2D4A2B;font-weight:bold;">🛡️ Póliza de Garantía Oficial (${garantia.anosGarantia} Años)</td>
+                    <td style="text-align:right;padding:8px 0;"><a href="${urlGarantia}" style="color:#C9A961;font-weight:bold;font-size:12px;text-decoration:none;">Descargar →</a></td>
+                  </tr>
+                `
+                    : ""
+                }
+              </table>
+            </div>
+          </div>
+
+          <!-- Footer con Redes y WhatsApp -->
+          <div style="padding:20px;background:#2D4A2B;color:#F5F1E8;text-align:center;font-size:12px;">
+            <p style="margin:0 0 8px 0;color:#C9A961;font-weight:bold;">Atención Personalizada:</p>
+            <p style="margin:0 0 14px 0;">WhatsApp: ${MARCA.whatsappTexto} · ${MARCA.web.replace("https://", "")}</p>
+            <div style="font-size:11px;color:#9bb38f;">SAUCEDA · Tradición con tecnología.</div>
+          </div>
+        </div>
+      `;
+
+      await enviarCorreo(
+        correo,
+        `✅ Entrega Oficial de Obra / Servicio Concluido · ${orden.folio} - SAUCEDA`,
+        html
+      );
+    }
+
+    // Actualizar campos de notificación en la orden
+    const canalUsado = params.canal.includes("whatsapp") ? "whatsapp" : "email";
+    const nuevoCanal = orden.canalNotificacion
+      ? orden.canalNotificacion === canalUsado
+        ? canalUsado
+        : "ambos"
+      : canalUsado;
+
+    await sb
+      .from("ordenes_trabajo")
+      .update({
+        notificado_cliente_at: new Date().toISOString(),
+        canal_notificacion: nuevoCanal,
+      })
+      .eq("id", params.ordenTrabajoId);
+
+    // Registrar en actividades
+    if (orden.prospectoId || orden.expedienteId) {
+      await sb.from("actividades").insert({
+        prospecto_id: orden.prospectoId || null,
+        expediente_id: orden.expedienteId || null,
+        tipo: "orden_trabajo",
+        titulo: `Aviso de Entrega Concluida al Cliente (${orden.folio})`,
+        detalle: `Se notificó la conclusión de la orden por canal ${params.canal} a ${
+          params.canal === "email" ? correo : telefono
+        }.`,
+      });
+    }
+
+    revalidatePath("/ordenes-trabajo");
+    if (orden.expedienteId) revalidatePath(`/expediente/${orden.expedienteId}`);
+
+    return { ok: true, messageId };
+  } catch (err: any) {
+    console.error("Error en enviarNotificacionEntregaCliente:", err);
+    return { ok: false, error: err?.message || "Error al enviar la notificación de entrega." };
   }
 }
 

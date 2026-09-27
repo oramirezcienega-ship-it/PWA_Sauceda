@@ -64,6 +64,9 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/cotizacion") ||
     path.startsWith("/reporte-visita") ||
     path.startsWith("/agenda/") ||
+    path.startsWith("/recibo/") ||
+    path.startsWith("/garantia/") ||
+    path.startsWith("/orden-trabajo/entrega/") ||
     path.startsWith("/c/") ||
     path.startsWith("/a/");
 
