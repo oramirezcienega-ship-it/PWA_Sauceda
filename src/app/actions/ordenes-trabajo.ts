@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { numeroALetras } from "@/lib/numero-a-letras";
+import type { RemisionFactura } from "@/lib/types";
 
 export interface EvidenciaFoto {
   url: string;
@@ -42,6 +43,8 @@ export interface OrdenTrabajo {
   totalCotizado?: number;
   totalPagado?: number;
   saldoRestante?: number;
+  cotizacionToken?: string;
+  remisionFactura?: RemisionFactura | null;
 }
 
 export interface ReciboPago {
@@ -250,7 +253,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono),
-        cotizaciones(id, precio_final, condiciones_pago)
+        cotizaciones(id, precio_final, condiciones_pago, token)
       `)
       .order("created_at", { ascending: false });
 
@@ -294,6 +297,43 @@ export async function obtenerOrdenesTrabajo(filtros?: {
       pagosPorOT.set(r.orden_trabajo_id, prev + Number(r.monto || 0));
     });
 
+    // Obtener remisiones vinculadas
+    const cotIds = data.map((d: any) => d.cotizacion_id).filter(Boolean);
+    const { data: remisionesList } = await sb
+      .from("remisiones_facturas")
+      .select("*")
+      .or(`orden_trabajo_id.in.(${otIds.join(",")})${cotIds.length > 0 ? `,cotizacion_id.in.(${cotIds.join(",")})` : ""}`);
+
+    const remisionPorOT = new Map<string, RemisionFactura>();
+    (remisionesList || []).forEach((rem: any) => {
+      const obj: RemisionFactura = {
+        id: rem.id,
+        cotizacionId: rem.cotizacion_id,
+        ordenTrabajoId: rem.orden_trabajo_id,
+        expedienteId: rem.expediente_id,
+        tipo: rem.tipo,
+        folio: rem.folio,
+        fecha: rem.fecha,
+        tipoCambio: Number(rem.tipo_cambio || 1.0),
+        datosDocumento: rem.datos_documento || {},
+        serviciosExtra: Number(rem.servicios_extra || 0),
+        costoFinanciero: Number(rem.costo_financiero || 0),
+        otrosGastos: Number(rem.otros_gastos || 0),
+        montoSubtotal: Number(rem.monto_subtotal || 0),
+        montoTotal: Number(rem.monto_total || 0),
+        createdAt: rem.created_at,
+        updatedAt: rem.updated_at,
+      };
+      if (rem.orden_trabajo_id) remisionPorOT.set(rem.orden_trabajo_id, obj);
+      if (rem.cotizacion_id) {
+        data.forEach((d: any) => {
+          if (d.cotizacion_id === rem.cotizacion_id && !remisionPorOT.has(d.id)) {
+            remisionPorOT.set(d.id, obj);
+          }
+        });
+      }
+    });
+
     return data.map((d: any) => {
       const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
       const totalPagado = pagosPorOT.get(d.id) || 0;
@@ -326,6 +366,8 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         totalCotizado,
         totalPagado,
         saldoRestante,
+        cotizacionToken: d.cotizaciones?.token,
+        remisionFactura: remisionPorOT.get(d.id) || null,
       };
     });
   } catch (err) {
@@ -334,11 +376,12 @@ export async function obtenerOrdenesTrabajo(filtros?: {
   }
 }
 
-/** 3. Obtener Orden de Trabajo por ID con recibos y garantía */
+/** 3. Obtener Orden de Trabajo por ID con recibos, garantía y remisión */
 export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
   orden: OrdenTrabajo | null;
   recibos: ReciboPago[];
   garantia: CartaGarantiaOT | null;
+  remisionFactura: RemisionFactura | null;
 }> {
   try {
     await requireAdmin();
@@ -356,7 +399,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       .eq("id", id)
       .maybeSingle();
 
-    if (error || !d) return { orden: null, recibos: [], garantia: null };
+    if (error || !d) return { orden: null, recibos: [], garantia: null, remisionFactura: null };
 
     // Recibos asociados
     const { data: recs } = await sb
@@ -371,6 +414,36 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       .select("*")
       .eq("orden_trabajo_id", id)
       .maybeSingle();
+
+    // Remisión / Factura asociada
+    let queryRem = sb.from("remisiones_facturas").select("*");
+    if (d.cotizacion_id) {
+      queryRem = queryRem.or(`orden_trabajo_id.eq.${id},cotizacion_id.eq.${d.cotizacion_id}`);
+    } else {
+      queryRem = queryRem.eq("orden_trabajo_id", id);
+    }
+    const { data: remData } = await queryRem.order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+    const remisionFactura: RemisionFactura | null = remData
+      ? {
+          id: remData.id,
+          cotizacionId: remData.cotizacion_id,
+          ordenTrabajoId: remData.orden_trabajo_id,
+          expedienteId: remData.expediente_id,
+          tipo: remData.tipo,
+          folio: remData.folio,
+          fecha: remData.fecha,
+          tipoCambio: Number(remData.tipo_cambio || 1.0),
+          datosDocumento: remData.datos_documento || {},
+          serviciosExtra: Number(remData.servicios_extra || 0),
+          costoFinanciero: Number(remData.costo_financiero || 0),
+          otrosGastos: Number(remData.otros_gastos || 0),
+          montoSubtotal: Number(remData.monto_subtotal || 0),
+          montoTotal: Number(remData.monto_total || 0),
+          createdAt: remData.created_at,
+          updatedAt: remData.updated_at,
+        }
+      : null;
 
     const recibos: ReciboPago[] = (recs || []).map((r: any) => ({
       id: r.id,
@@ -444,12 +517,14 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       totalCotizado,
       totalPagado,
       saldoRestante,
+      cotizacionToken: d.cotizaciones?.token,
+      remisionFactura,
     };
 
-    return { orden, recibos, garantia };
+    return { orden, recibos, garantia, remisionFactura };
   } catch (err) {
     console.error("Error en obtenerOrdenTrabajoPorId:", err);
-    return { orden: null, recibos: [], garantia: null };
+    return { orden: null, recibos: [], garantia: null, remisionFactura: null };
   }
 }
 
@@ -960,3 +1035,228 @@ export async function obtenerGarantiaOTPorToken(
     return null;
   }
 }
+
+/** 11. Generar Remisión de Entrega o Factura directamente desde la Orden de Trabajo */
+export async function generarRemisionDesdeOrdenTrabajo(datos: {
+  ordenTrabajoId: string;
+  tipo: "remision" | "factura";
+  fecha?: string;
+  direccionEntrega?: string;
+  personaRecibe?: string;
+  rfc?: string;
+  razonSocial?: string;
+  regimenFiscal?: string;
+  usoCfdi?: string;
+}): Promise<{ ok: boolean; remision?: RemisionFactura; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    // 1. Obtener orden de trabajo y cotización vinculada
+    const { data: ot, error: otErr } = await sb
+      .from("ordenes_trabajo")
+      .select(`
+        id,
+        folio,
+        expediente_id,
+        cotizacion_id,
+        prospecto_id,
+        titulo,
+        fecha_conclusion,
+        fecha_programada,
+        prospectos(nombre, telefono, direccion),
+        cotizaciones(id, precio_final, token, expediente_id)
+      `)
+      .eq("id", datos.ordenTrabajoId)
+      .single();
+
+    if (otErr || !ot) return { ok: false, error: "Orden de trabajo no encontrada." };
+
+    // Verificar si ya existe una remisión/factura vinculada
+    let queryEx = sb.from("remisiones_facturas").select("id, folio, tipo");
+    if (ot.cotizacion_id) {
+      queryEx = queryEx.or(`orden_trabajo_id.eq.${ot.id},cotizacion_id.eq.${ot.cotizacion_id}`);
+    } else {
+      queryEx = queryEx.eq("orden_trabajo_id", ot.id);
+    }
+    const { data: existente } = await queryEx.limit(1).maybeSingle();
+
+    if (existente) {
+      return {
+        ok: false,
+        error: `Ya existe un documento de venta generado (${existente.tipo.toUpperCase()} ${existente.folio}) para esta orden.`,
+      };
+    }
+
+    // 2. Generar Folio
+    const anio = new Date().getFullYear();
+    const prefijo = datos.tipo === "remision" ? `REM-${anio}-` : `FAC-${anio}-`;
+    const { data: ultimos } = await sb
+      .from("remisiones_facturas")
+      .select("folio")
+      .ilike("folio", `${prefijo}%`)
+      .order("folio", { ascending: false })
+      .limit(1);
+
+    let siguienteNum = 1;
+    if (ultimos && ultimos.length > 0 && ultimos[0]?.folio) {
+      const numPart = ultimos[0].folio.replace(prefijo, "");
+      const parsed = parseInt(numPart, 10);
+      if (!isNaN(parsed)) siguienteNum = parsed + 1;
+    }
+    const folio = `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
+
+    const montoBase = Number(ot.cotizaciones?.precio_final || 0);
+
+    const datosDoc: Record<string, any> =
+      datos.tipo === "factura"
+        ? {
+            rfc: datos.rfc?.trim().toUpperCase() || "XAXX010101000",
+            razonSocial: datos.razonSocial?.trim() || ot.prospectos?.nombre || "Público en General",
+            regimenFiscal: datos.regimenFiscal || "601",
+            usoCfdi: datos.usoCfdi || "G03",
+          }
+        : {
+            direccionEntrega:
+              datos.direccionEntrega?.trim() || ot.prospectos?.direccion || "León, Guanajuato",
+            personaRecibe: datos.personaRecibe?.trim() || ot.prospectos?.nombre || "",
+            fechaInstalacion:
+              datos.fecha ||
+              ot.fecha_conclusion ||
+              ot.fecha_programada ||
+              new Date().toISOString().split("T")[0],
+          };
+
+    const { data: nuevaRem, error: insErr } = await sb
+      .from("remisiones_facturas")
+      .insert({
+        orden_trabajo_id: ot.id,
+        cotizacion_id: ot.cotizacion_id,
+        expediente_id: ot.expediente_id,
+        tipo: datos.tipo,
+        folio,
+        fecha: datos.fecha || new Date().toISOString().split("T")[0],
+        tipo_cambio: 1.0,
+        datos_documento: datosDoc,
+        servicios_extra: 0.0,
+        costo_financiero: 0.0,
+        otros_gastos: 0.0,
+        monto_subtotal: montoBase,
+        monto_total: montoBase,
+      })
+      .select("*")
+      .single();
+
+    if (insErr) return { ok: false, error: insErr.message };
+
+    // Si tiene cotización, asegurar que pase a 'instalacion'
+    if (ot.cotizacion_id) {
+      await sb
+        .from("cotizaciones")
+        .update({ estatus: "instalacion", updated_at: new Date().toISOString() })
+        .eq("id", ot.cotizacion_id);
+    }
+
+    revalidatePath("/ordenes-trabajo");
+    if (ot.cotizacion_id) revalidatePath(`/cotizacion/${ot.cotizacion_id}`);
+    if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
+    if (ot.prospecto_id) revalidatePath(`/prospectos/${ot.prospecto_id}`);
+
+    return {
+      ok: true,
+      remision: {
+        id: nuevaRem.id,
+        cotizacionId: nuevaRem.cotizacion_id,
+        ordenTrabajoId: nuevaRem.orden_trabajo_id,
+        expedienteId: nuevaRem.expediente_id,
+        tipo: nuevaRem.tipo,
+        folio: nuevaRem.folio,
+        fecha: nuevaRem.fecha,
+        tipoCambio: Number(nuevaRem.tipo_cambio),
+        datosDocumento: nuevaRem.datos_documento || {},
+        serviciosExtra: Number(nuevaRem.servicios_extra || 0),
+        costoFinanciero: Number(nuevaRem.costo_financiero || 0),
+        otrosGastos: Number(nuevaRem.otros_gastos || 0),
+        montoSubtotal: Number(nuevaRem.monto_subtotal || 0),
+        montoTotal: Number(nuevaRem.monto_total || 0),
+        createdAt: nuevaRem.created_at,
+        updatedAt: nuevaRem.updated_at,
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al generar remisión/factura." };
+  }
+}
+
+/**
+ * 12. Asegurar Orden de Trabajo para una cotización aceptada.
+ * Se ejecuta automáticamente al aceptar una cotización (ya sea por el cliente en portal web o por el asesor).
+ * Es idempotente: si ya existe una orden ligada a la cotización, devuelve la existente.
+ */
+export async function asegurarOrdenTrabajoParaCotizacion(cotizacionId: string): Promise<{
+  ok: boolean;
+  ordenId?: string;
+  folio?: string;
+  error?: string;
+}> {
+  try {
+    const sb = supabaseServidor();
+
+    // 1. Verificar si ya existe
+    const { data: existente } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio")
+      .eq("cotizacion_id", cotizacionId)
+      .maybeSingle();
+
+    if (existente) {
+      return { ok: true, ordenId: existente.id, folio: existente.folio };
+    }
+
+    // 2. Obtener datos de la cotización
+    const { data: cot, error: errCot } = await sb
+      .from("cotizaciones")
+      .select("id, prospecto_id, expediente_id, servicio_tipo, precio_final, prospectos(nombre)")
+      .eq("id", cotizacionId)
+      .maybeSingle();
+
+    if (errCot || !cot) {
+      return { ok: false, error: "Cotización no encontrada para generar orden de trabajo." };
+    }
+
+    const folio = await generarFolioOT(sb);
+    const clienteNombre = (cot.prospectos as any)?.nombre || "Cliente";
+
+    const { data: nuevaOT, error: errIns } = await sb
+      .from("ordenes_trabajo")
+      .insert({
+        folio,
+        expediente_id: cot.expediente_id || null,
+        cotizacion_id: cot.id,
+        prospecto_id: cot.prospecto_id || null,
+        tipo_negocio: cot.servicio_tipo || "construccion",
+        estatus: "pendiente",
+        titulo: `Ejecución de Obra / Servicio · ${clienteNombre}`,
+        descripcion: `Orden generada automáticamente por aceptación de cotización ${cot.id}.`,
+        fotos_evidencia: [],
+      })
+      .select()
+      .single();
+
+    if (errIns || !nuevaOT) {
+      return { ok: false, error: errIns?.message || "No se pudo crear la orden de trabajo." };
+    }
+
+    revalidatePath("/ordenes-trabajo");
+    if (cot.id) revalidatePath(`/cotizacion/${cot.id}`);
+    if (cot.expediente_id) revalidatePath(`/expediente/${cot.expediente_id}`);
+    if (cot.prospecto_id) revalidatePath(`/prospectos/${cot.prospecto_id}`);
+
+    return { ok: true, ordenId: nuevaOT.id, folio: nuevaOT.folio };
+  } catch (err: any) {
+    console.error("Error en asegurarOrdenTrabajoParaCotizacion:", err);
+    return { ok: false, error: err?.message || "Error al asegurar orden de trabajo." };
+  }
+}
+
+

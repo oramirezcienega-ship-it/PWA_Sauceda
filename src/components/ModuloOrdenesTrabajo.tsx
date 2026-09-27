@@ -15,6 +15,8 @@ import { listarAsesoresActivos } from "@/app/actions/usuarios";
 import { ModalCrearOrdenTrabajo } from "./ModalCrearOrdenTrabajo";
 import { ModalRegistrarRecibo } from "./ModalRegistrarRecibo";
 import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
+import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
+import type { RemisionFactura } from "@/lib/types";
 
 interface ModuloOrdenesTrabajoProps {
   expedienteId?: string | null;
@@ -46,6 +48,7 @@ export function ModuloOrdenesTrabajo({
     orden: OrdenTrabajo;
     garantia: CartaGarantiaOT | null;
   } | null>(null);
+  const [ordenParaRemision, setOrdenParaRemision] = useState<OrdenTrabajo | null>(null);
 
   // Foto en proceso de subida
   const [subiendoFotoOrdenId, setSubiendoFotoOrdenId] = useState<string | null>(null);
@@ -56,7 +59,8 @@ export function ModuloOrdenesTrabajo({
   const [detalleOT, setDetalleOT] = useState<{
     recibos: ReciboPago[];
     garantia: CartaGarantiaOT | null;
-  }>({ recibos: [], garantia: null });
+    remisionFactura: RemisionFactura | null;
+  }>({ recibos: [], garantia: null, remisionFactura: null });
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   // Modal para concluir orden
@@ -100,6 +104,7 @@ export function ModuloOrdenesTrabajo({
       setDetalleOT({
         recibos: res.recibos,
         garantia: res.garantia,
+        remisionFactura: res.remisionFactura,
       });
     } catch (e) {
       console.error("Error al cargar detalle de OT:", e);
@@ -135,9 +140,10 @@ export function ModuloOrdenesTrabajo({
       await actualizarEstatusOrdenTrabajo(ordenParaConcluir.id, "completada", {
         notasConclusion,
       });
+      const otConcluida = ordenParaConcluir;
       setOrdenes((prev) =>
         prev.map((o) =>
-          o.id === ordenParaConcluir.id
+          o.id === otConcluida.id
             ? {
                 ...o,
                 estatus: "completada",
@@ -148,6 +154,13 @@ export function ModuloOrdenesTrabajo({
         )
       );
       setOrdenParaConcluir(null);
+
+      // Si tiene cotización y aún no tiene remisión generada, abrir modal para sugerir generarla
+      if (!otConcluida.remisionFactura && otConcluida.cotizacionId) {
+        setTimeout(() => {
+          setOrdenParaRemision(otConcluida);
+        }, 250);
+      }
     } catch (e) {
       alert("Error al concluir la orden.");
     } finally {
@@ -703,7 +716,95 @@ export function ModuloOrdenesTrabajo({
                           )}
                         </div>
 
-                        {/* 3. Galería de Evidencia Fotográfica */}
+                        {/* 3. Remisión de Entrega / Factura Fiscal */}
+                        <div className="border-t border-carbon/10 pt-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-titular text-xs font-bold uppercase tracking-wider text-verde-profundo flex items-center gap-1.5">
+                              <span>🧾</span> Remisión de Entrega / Factura Fiscal
+                            </h4>
+                            {!soloLectura && ot.cotizacionId && (
+                              <button
+                                type="button"
+                                onClick={() => setOrdenParaRemision(ot)}
+                                className="text-[11px] text-sauce hover:underline font-bold"
+                              >
+                                {detalleOT.remisionFactura ? "✏️ Editar / Refacturar" : "+ Generar Remisión / Factura"}
+                              </button>
+                            )}
+                          </div>
+
+                          {detalleOT.remisionFactura ? (
+                            <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-xs text-blue-950 font-mono">
+                                    {detalleOT.remisionFactura.folio}
+                                  </span>
+                                  <span className="bg-blue-200 text-blue-900 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                    {detalleOT.remisionFactura.tipo}
+                                  </span>
+                                  <span className="text-xs font-bold text-blue-900">
+                                    ${detalleOT.remisionFactura.montoTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-carbon/60 font-mono mt-1">
+                                  Fecha de emisión: {detalleOT.remisionFactura.fecha || "N/A"}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {ot.cotizacionToken && (
+                                  <a
+                                    href={`/cotizacion/remision/${ot.cotizacionToken}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="rounded-lg bg-white border border-carbon/20 px-3 py-1.5 text-xs font-bold text-carbon hover:bg-carbon/5 transition shadow-2xs"
+                                  >
+                                    🖨️ Ver Remisión
+                                  </a>
+                                )}
+                                {ot.cotizacionToken && ot.clienteTelefono && (
+                                  <a
+                                    href={`https://wa.me/${ot.clienteTelefono.replace(
+                                      /[^0-9]/g,
+                                      ""
+                                    )}?text=${encodeURIComponent(
+                                      `¡Hola ${ot.clienteNombre}! 📦 Le compartimos su *${detalleOT.remisionFactura.tipo === 'factura' ? 'Factura Fiscal' : 'Remisión Oficial de Entrega'}* con folio *${detalleOT.remisionFactura.folio}* correspondiente a los trabajos concluidos en su orden *${ot.folio}*.\n\nPuede consultarla y descargarla en el siguiente enlace:\n${
+                                        typeof window !== "undefined"
+                                          ? window.location.origin
+                                          : ""
+                                      }/cotizacion/remision/${ot.cotizacionToken}`
+                                    )}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold transition shadow-2xs"
+                                  >
+                                    📲 WhatsApp
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between py-1 bg-amber-50/50 border border-dashed border-amber-200 rounded-xl px-3">
+                              <p className="text-xs text-amber-900/80 italic">
+                                {ot.estatus === "completada"
+                                  ? "Orden concluida: Lista para generar remisión de entrega y cierre fiscal."
+                                  : "Sin remisión generada. Puede emitirse en cualquier momento antes o después de la entrega."}
+                              </p>
+                              {!soloLectura && ot.cotizacionId && (
+                                <button
+                                  type="button"
+                                  onClick={() => setOrdenParaRemision(ot)}
+                                  className="text-xs font-bold text-sauce hover:underline ml-2"
+                                >
+                                  Generar ahora
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 4. Galería de Evidencia Fotográfica */}
                         <div className="border-t border-carbon/10 pt-4">
                           <h4 className="font-titular text-xs font-bold uppercase tracking-wider text-verde-profundo mb-2 flex items-center gap-1.5">
                             <span>📷</span> Evidencias Fotográficas de Ejecución ({ot.fotosEvidencia?.length || 0})
@@ -868,6 +969,38 @@ export function ModuloOrdenesTrabajo({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Generar Remisión / Factura */}
+      {ordenParaRemision && (
+        <ModalGenerarRemisionOT
+          abierto={!!ordenParaRemision}
+          alCerrar={() => {
+            setOrdenParaRemision(null);
+            if (otExpandidaId) cargarDetalle(otExpandidaId);
+            cargarDatos();
+          }}
+          alGenerar={(nuevaRemision) => {
+            setDetalleOT((prev) => ({
+              ...prev,
+              remisionFactura: nuevaRemision,
+            }));
+            setOrdenes((prev) =>
+              prev.map((o) =>
+                o.id === ordenParaRemision.id
+                  ? { ...o, remisionFactura: nuevaRemision }
+                  : o
+              )
+            );
+          }}
+          ordenId={ordenParaRemision.id}
+          ordenFolio={ordenParaRemision.folio}
+          cotizacionId={ordenParaRemision.cotizacionId}
+          cotizacionToken={ordenParaRemision.cotizacionToken}
+          clienteNombre={ordenParaRemision.clienteNombre || clienteNombreDefault}
+          clienteTelefono={ordenParaRemision.clienteTelefono || clienteTelefonoDefault}
+          remisionExistente={detalleOT.remisionFactura}
+        />
       )}
     </div>
   );
