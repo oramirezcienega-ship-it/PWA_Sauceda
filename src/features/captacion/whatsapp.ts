@@ -558,15 +558,20 @@ export async function registrarLeadWhatsApp(
   // así que el WhatsApp puede ir como texto libre. Si la IA está activa, ella
   // dará la bienvenida por WhatsApp (se omite el mensaje fijo para no duplicar).
   const iaOn = iaAgenteActivo();
-  await enviarBienvenida(sb, id, {
-    ventanaWhatsAppAbierta: true,
-    omitirWhatsApp: iaOn,
-  });
-  // Automatizaciones: expediente nuevo captado por WhatsApp.
-  await dispararEvento(sb, "nuevo-expediente", {
-    expedienteId: id,
-    prospectoId,
-  });
+  // Best-effort: un fallo aquí no debe impedir que Sofía conteste.
+  try {
+    await enviarBienvenida(sb, id, {
+      ventanaWhatsAppAbierta: true,
+      omitirWhatsApp: iaOn,
+    });
+    // Automatizaciones: expediente nuevo captado por WhatsApp.
+    await dispararEvento(sb, "nuevo-expediente", {
+      expedienteId: id,
+      prospectoId,
+    });
+  } catch (err) {
+    console.error(`[WhatsApp] Bienvenida/automatizaciones fallaron para ${id}:`, err);
+  }
   // Notificar al equipo sobre el nuevo lead
   void notificarNuevoLead(id);
 
