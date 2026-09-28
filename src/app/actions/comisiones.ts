@@ -366,7 +366,7 @@ export async function listarComisiones(filtros?: {
         expedienteId: row.expediente_id,
         ordenTrabajoId: row.orden_trabajo_id,
         ordenTrabajoFolio: ot?.folio || null,
-        clienteNombre,
+        clienteNombre: nombreCliente,
         clienteEmpresa: null,
         servicioTipo: cot?.servicio_tipo || null,
         fecha: row.fecha,
@@ -740,29 +740,10 @@ export async function sincronizarComisionParaRemision(
   try {
     const sb = supabaseServidor();
 
-    // 1. Obtener datos de la remisión
+    // 1. Obtener datos de la remisión (consulta plana, sin joins de PostgREST)
     const { data: rem, error: errRem } = await sb
       .from("remisiones_facturas")
-      .select(`
-        id,
-        folio,
-        tipo,
-        fecha,
-        monto_subtotal,
-        monto_total,
-        cotizacion_id,
-        expediente_id,
-        orden_trabajo_id,
-        cotizaciones(
-          id,
-          servicio_tipo,
-          prospecto_id,
-          expediente_id,
-          prospectos(asesor_id)
-        ),
-        expedientes(asesor_id),
-        ordenes_trabajo(asesor_responsable_id, asesor_ejecutor_id)
-      `)
+      .select("id, folio, tipo, fecha, monto_subtotal, monto_total, cotizacion_id, expediente_id, orden_trabajo_id")
       .eq("id", remisionId)
       .single();
 
@@ -770,13 +751,44 @@ export async function sincronizarComisionParaRemision(
       return { ok: false, error: "Remisión no encontrada." };
     }
 
-    // 2. Determinar Asesor asignado
-    let asesorId: string | null =
-      rem.cotizaciones?.prospectos?.asesor_id ||
-      rem.expedientes?.asesor_id ||
-      rem.ordenes_trabajo?.asesor_responsable_id ||
-      rem.ordenes_trabajo?.asesor_ejecutor_id ||
-      null;
+    // 1.1 Resolver datos relacionados por separado (evita fallos de joins embebidos en PostgREST)
+    let servicioTipoRem: string | null = null;
+    let asesorId: string | null = null;
+
+    if (rem.cotizacion_id) {
+      const { data: cot } = await sb
+        .from("cotizaciones")
+        .select("servicio_tipo, prospecto_id")
+        .eq("id", rem.cotizacion_id)
+        .maybeSingle();
+      servicioTipoRem = cot?.servicio_tipo || null;
+      if (cot?.prospecto_id) {
+        const { data: pros } = await sb
+          .from("prospectos")
+          .select("asesor_id")
+          .eq("id", cot.prospecto_id)
+          .maybeSingle();
+        asesorId = pros?.asesor_id || null;
+      }
+    }
+
+    if (!asesorId && rem.expediente_id) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("asesor_id")
+        .eq("id", rem.expediente_id)
+        .maybeSingle();
+      asesorId = exp?.asesor_id || null;
+    }
+
+    if (!asesorId && rem.orden_trabajo_id) {
+      const { data: ot } = await sb
+        .from("ordenes_trabajo")
+        .select("asesor_responsable_id, asesor_ejecutor_id")
+        .eq("id", rem.orden_trabajo_id)
+        .maybeSingle();
+      asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+    }
 
     if (!asesorId) {
       // Si no hay asesor asignado explícito, buscar el primer asesor activo
@@ -804,7 +816,7 @@ export async function sincronizarComisionParaRemision(
       .maybeSingle();
 
     const montoVenta = Number(rem.monto_total || rem.monto_subtotal || 0);
-    const servicioTipo = rem.cotizaciones?.servicio_tipo || null;
+    const servicioTipo = servicioTipoRem;
 
     if (comisionExistente) {
       // Si ya existe y fue ajustada manualmente, no sobreescribir el monto ajustado
@@ -887,32 +899,10 @@ export async function sincronizarComisionParaRecibo(
   try {
     const sb = supabaseServidor();
 
-    // 1. Obtener datos del recibo
+    // 1. Obtener datos del recibo (consulta plana, sin joins de PostgREST)
     const { data: rec, error: errRec } = await sb
       .from("recibos_pago")
-      .select(`
-        id,
-        folio,
-        monto,
-        concepto,
-        fecha_pago,
-        cotizacion_id,
-        expediente_id,
-        orden_trabajo_id,
-        cliente_nombre,
-        cotizaciones(
-          id,
-          servicio_tipo,
-          prospecto_id,
-          prospectos(asesor_id)
-        ),
-        expedientes(asesor_id),
-        ordenes_trabajo(
-          asesor_responsable_id,
-          asesor_ejecutor_id,
-          prospectos(asesor_id)
-        )
-      `)
+      .select("id, folio, monto, concepto, fecha_pago, cotizacion_id, expediente_id, orden_trabajo_id, cliente_nombre")
       .eq("id", reciboId)
       .single();
 
@@ -920,14 +910,52 @@ export async function sincronizarComisionParaRecibo(
       return { ok: false, error: "Recibo de pago no encontrado." };
     }
 
-    // 2. Determinar Asesor asignado
-    let asesorId: string | null =
-      rec.ordenes_trabajo?.asesor_ejecutor_id ||
-      rec.ordenes_trabajo?.asesor_responsable_id ||
-      rec.ordenes_trabajo?.prospectos?.asesor_id ||
-      rec.cotizaciones?.prospectos?.asesor_id ||
-      rec.expedientes?.asesor_id ||
-      null;
+    // 1.1 Resolver datos relacionados por separado (evita fallos de joins embebidos en PostgREST)
+    let servicioTipoRec: string | null = null;
+    let asesorId: string | null = null;
+
+    if (rec.orden_trabajo_id) {
+      const { data: ot } = await sb
+        .from("ordenes_trabajo")
+        .select("asesor_responsable_id, asesor_ejecutor_id, prospecto_id")
+        .eq("id", rec.orden_trabajo_id)
+        .maybeSingle();
+      asesorId = ot?.asesor_ejecutor_id || ot?.asesor_responsable_id || null;
+      if (!asesorId && ot?.prospecto_id) {
+        const { data: prosOt } = await sb
+          .from("prospectos")
+          .select("asesor_id")
+          .eq("id", ot.prospecto_id)
+          .maybeSingle();
+        asesorId = prosOt?.asesor_id || null;
+      }
+    }
+
+    if (rec.cotizacion_id) {
+      const { data: cot } = await sb
+        .from("cotizaciones")
+        .select("servicio_tipo, prospecto_id")
+        .eq("id", rec.cotizacion_id)
+        .maybeSingle();
+      servicioTipoRec = cot?.servicio_tipo || null;
+      if (!asesorId && cot?.prospecto_id) {
+        const { data: pros } = await sb
+          .from("prospectos")
+          .select("asesor_id")
+          .eq("id", cot.prospecto_id)
+          .maybeSingle();
+        asesorId = pros?.asesor_id || null;
+      }
+    }
+
+    if (!asesorId && rec.expediente_id) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("asesor_id")
+        .eq("id", rec.expediente_id)
+        .maybeSingle();
+      asesorId = exp?.asesor_id || null;
+    }
 
     if (!asesorId) {
       const { data: defaultAsesor } = await sb
@@ -954,7 +982,7 @@ export async function sincronizarComisionParaRecibo(
       .maybeSingle();
 
     const montoVenta = Number(rec.monto || 0);
-    const servicioTipo = rec.cotizaciones?.servicio_tipo || null;
+    const servicioTipo = servicioTipoRec;
 
     if (comisionExistente) {
       if (comisionExistente.es_ajuste_manual) {
