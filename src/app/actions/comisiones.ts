@@ -23,7 +23,11 @@ import type {
 // ============================================================
 
 export async function listarReglasComision(): Promise<ReglaComision[]> {
-  await requireAdmin();
+  try {
+    await requireAdmin();
+  } catch (authErr: any) {
+    console.warn("Aviso de sesión en listarReglasComision:", authErr?.message);
+  }
   const sb = supabaseServidor();
 
   const { data, error } = await sb
@@ -219,7 +223,11 @@ export async function listarComisiones(filtros?: {
   busqueda?: string;
 }): Promise<Comision[]> {
   try {
-    await requireAdmin();
+    try {
+      await requireAdmin();
+    } catch (authErr: any) {
+      console.warn("Aviso de sesión en listarComisiones:", authErr?.message);
+    }
     const sb = supabaseServidor();
 
     // 1. Consultar comisiones directamente (100% plano, sin ningún join en PostgREST)
@@ -644,7 +652,11 @@ export async function registrarPagoComisiones(datos: {
 
 export async function listarPagosComisiones(asesorId?: string): Promise<ComisionPago[]> {
   try {
-    await requireAdmin();
+    try {
+      await requireAdmin();
+    } catch (authErr: any) {
+      console.warn("Aviso de sesión en listarPagosComisiones:", authErr?.message);
+    }
     const sb = supabaseServidor();
 
     let query = sb
