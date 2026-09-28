@@ -35,6 +35,8 @@ export function ModalProgramarInstalacionCotizacion({
   const [proveedorId, setProveedorId] = useState("");
   const [costoProveedor, setCostoProveedor] = useState("");
   const [metodoPago, setMetodoPago] = useState("terminal_tarjeta");
+  const [mesesSinIntereses, setMesesSinIntereses] = useState<string>("");
+  const [comisionBancariaPct, setComisionBancariaPct] = useState<string>("3.5");
   const [montoSaldo, setMontoSaldo] = useState<number>(0);
   const [notas, setNotas] = useState("");
   const [notificarCliente, setNotificarCliente] = useState(true);
@@ -135,6 +137,8 @@ export function ModalProgramarInstalacionCotizacion({
         costoProveedor: costoProveedor ? Number(costoProveedor) : null,
         proveedorConcepto: proveedorId ? `Instalación de ${datosIniciales?.servicioTipo}` : null,
         metodoPagoSaldo: metodoPago,
+        mesesSinIntereses: metodoPago === "meses_sin_intereses" && mesesSinIntereses ? Number(mesesSinIntereses) : null,
+        comisionBancariaPct: comisionBancariaPct ? Number(comisionBancariaPct) : 0,
         montoSaldo,
         notasInstalacion: notas,
         notificarClienteWhatsApp: notificarCliente,
@@ -430,12 +434,19 @@ export function ModalProgramarInstalacionCotizacion({
                   </label>
                   <select
                     value={metodoPago}
-                    onChange={(e) => setMetodoPago(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMetodoPago(val);
+                      if (val === "terminal_tarjeta") setComisionBancariaPct("3.5");
+                      else if (val === "meses_sin_intereses") setComisionBancariaPct("");
+                      else setComisionBancariaPct("0");
+                    }}
                     className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon outline-none focus:border-sauce bg-white font-medium"
                   >
                     <option value="terminal_tarjeta">
                       💳 Terminal Bancaria en Sitio (Llevar Clip / Terminal)
                     </option>
+                    <option value="meses_sin_intereses">🎉 Meses Sin Intereses (mayor comisión bancaria)</option>
                     <option value="transferencia">🏦 Transferencia Bancaria previa</option>
                     <option value="efectivo">💵 Efectivo contra entrega</option>
                     <option value="liquidado">✓ Previamente liquidado</option>
@@ -456,6 +467,74 @@ export function ModalProgramarInstalacionCotizacion({
                   />
                 </div>
               </div>
+
+              {metodoPago === "meses_sin_intereses" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-carbon/60 mb-1">
+                      Número de Meses
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Ej. 3, 6, 9, 12"
+                      value={mesesSinIntereses}
+                      onChange={(e) => setMesesSinIntereses(e.target.value)}
+                      className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs font-mono text-carbon outline-none focus:border-sauce bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-carbon/60 mb-1">
+                      % Comisión Bancaria (revisa la tasa vigente)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Ej. 8.5"
+                      value={comisionBancariaPct}
+                      onChange={(e) => setComisionBancariaPct(e.target.value)}
+                      className="w-full rounded-xl border border-amber-400 px-3 py-2 text-xs font-mono font-bold text-amber-900 outline-none focus:border-sauce bg-white"
+                    />
+                  </div>
+                  <p className="text-[10px] text-amber-700 sm:col-span-2">
+                    Las tasas de Meses Sin Intereses de la pasarela de pago cambian con el tiempo; captura aquí la vigente al momento de la venta.
+                  </p>
+                </div>
+              )}
+
+              {metodoPago === "terminal_tarjeta" && (
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-carbon/60 mb-1">
+                    % Comisión Bancaria (terminal/pasarela)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={comisionBancariaPct}
+                      onChange={(e) => setComisionBancariaPct(e.target.value)}
+                      className="w-32 rounded-xl border border-carbon/20 px-3 py-2 text-xs font-mono font-bold text-carbon outline-none focus:border-sauce bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setComisionBancariaPct("4.18")}
+                      className="rounded-lg border border-carbon/15 bg-white px-2 py-1 text-[10px] font-semibold text-carbon/70 hover:bg-slate-50"
+                      title="3.6% Clip + IVA = 4.18%"
+                    >
+                      Clip 4.18%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setComisionBancariaPct("3.5")}
+                      className="rounded-lg border border-carbon/15 bg-white px-2 py-1 text-[10px] font-semibold text-carbon/70 hover:bg-slate-50"
+                    >
+                      Bancaria 3.5%
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {metodoPago === "terminal_tarjeta" && (
                 <div className="text-[11px] text-amber-800 font-medium flex items-center gap-1.5 bg-amber-100/60 p-2 rounded-lg border border-amber-300/50">
