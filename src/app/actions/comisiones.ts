@@ -218,183 +218,183 @@ export async function listarComisiones(filtros?: {
   fechaHasta?: string;
   busqueda?: string;
 }): Promise<Comision[]> {
-  await requireAdmin();
-  const sb = supabaseServidor();
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
 
-  // 1. Consultar comisiones directamente (100% libre de fallos de joins PostgREST)
-  let query = sb
-    .from("comisiones")
-    .select("*, perfiles:asesor_id(nombre, telefono)")
-    .order("fecha", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  if (filtros?.asesorId && filtros.asesorId !== "todos") {
-    query = query.eq("asesor_id", filtros.asesorId);
-  }
-
-  if (filtros?.estatus && filtros.estatus !== "todas") {
-    query = query.eq("estatus", filtros.estatus);
-  }
-
-  if (filtros?.fechaDesde) {
-    query = query.gte("fecha", filtros.fechaDesde);
-  }
-
-  if (filtros?.fechaHasta) {
-    query = query.lte("fecha", filtros.fechaHasta);
-  }
-
-  let rows: any[] = [];
-  const { data: qRows, error } = await query;
-  if (error) {
-    console.warn("Aviso al consultar comisiones con perfiles:", error.message);
-    const { data: rawRows, error: errRaw } = await sb
+    // 1. Consultar comisiones directamente (100% plano, sin ningún join en PostgREST)
+    let query = sb
       .from("comisiones")
       .select("*")
-      .order("fecha", { ascending: false });
-    if (errRaw) {
-      console.error("Error definitivo al consultar comisiones:", errRaw.message);
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (filtros?.asesorId && filtros.asesorId !== "todos") {
+      query = query.eq("asesor_id", filtros.asesorId);
+    }
+
+    if (filtros?.estatus && filtros.estatus !== "todas") {
+      query = query.eq("estatus", filtros.estatus);
+    }
+
+    if (filtros?.fechaDesde) {
+      query = query.gte("fecha", filtros.fechaDesde);
+    }
+
+    if (filtros?.fechaHasta) {
+      query = query.lte("fecha", filtros.fechaHasta);
+    }
+
+    const { data: rows, error } = await query;
+    if (error) {
+      console.error("Error al consultar comisiones:", error.message);
       return [];
     }
-    rows = rawRows || [];
-  } else {
-    rows = qRows || [];
-  }
 
-  if (!rows || rows.length === 0) {
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    // 2. Extraer IDs vinculados para enriquecer en paralelo sin joins problemáticos
+    const asesorIds = Array.from(new Set(rows.map((r: any) => r.asesor_id).filter(Boolean)));
+    const remisionIds = Array.from(new Set(rows.map((r: any) => r.remision_factura_id).filter(Boolean)));
+    const reciboIds = Array.from(new Set(rows.map((r: any) => r.recibo_pago_id).filter(Boolean)));
+    const cotizacionIds = Array.from(new Set(rows.map((r: any) => r.cotizacion_id).filter(Boolean)));
+    const ordenTrabajoIds = Array.from(new Set(rows.map((r: any) => r.orden_trabajo_id).filter(Boolean)));
+
+    const [resPerfiles, resRemisiones, resRecibos, resCotizaciones, resOrdenes] = await Promise.all([
+      asesorIds.length > 0
+        ? sb.from("perfiles").select("id, nombre, telefono").in("id", asesorIds)
+        : Promise.resolve({ data: [] }),
+      remisionIds.length > 0
+        ? sb.from("remisiones_facturas").select("id, folio, tipo, fecha, monto_subtotal, monto_total").in("id", remisionIds)
+        : Promise.resolve({ data: [] }),
+      reciboIds.length > 0
+        ? sb.from("recibos_pago").select("id, folio, concepto, monto, fecha_pago, cliente_nombre").in("id", reciboIds)
+        : Promise.resolve({ data: [] }),
+      cotizacionIds.length > 0
+        ? sb.from("cotizaciones").select("id, token, servicio_tipo, prospecto_id").in("id", cotizacionIds)
+        : Promise.resolve({ data: [] }),
+      ordenTrabajoIds.length > 0
+        ? sb.from("ordenes_trabajo").select("id, folio, titulo").in("id", ordenTrabajoIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const mapPerf = new Map<string, any>((resPerfiles.data || []).map((p: any) => [p.id, p]));
+    const mapRem = new Map<string, any>((resRemisiones.data || []).map((r: any) => [r.id, r]));
+    const mapRec = new Map<string, any>((resRecibos.data || []).map((r: any) => [r.id, r]));
+    const mapCot = new Map<string, any>((resCotizaciones.data || []).map((r: any) => [r.id, r]));
+    const mapOt = new Map<string, any>((resOrdenes.data || []).map((r: any) => [r.id, r]));
+
+    // Extraer prospectoIds de las cotizaciones
+    const prospectoIds = Array.from(
+      new Set(
+        Array.from(mapCot.values())
+          .map((c: any) => c.prospecto_id)
+          .filter(Boolean)
+      )
+    );
+
+    let mapPros = new Map<string, string>();
+    if (prospectoIds.length > 0) {
+      try {
+        const { data: pros } = await sb
+          .from("prospectos")
+          .select("id, nombre, primer_apellido, segundo_apellido")
+          .in("id", prospectoIds);
+        for (const p of pros || []) {
+          const nom = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
+          if (nom) mapPros.set(p.id, nom);
+        }
+      } catch {
+        // Ignorar fallo de resolución secundaria
+      }
+    }
+
+    // 3. Mapeo final enriquecido
+    const lista: Comision[] = rows.map((row: any) => {
+      const perf = row.asesor_id ? mapPerf.get(row.asesor_id) : null;
+      const rem = row.remision_factura_id ? mapRem.get(row.remision_factura_id) : null;
+      const rec = row.recibo_pago_id ? mapRec.get(row.recibo_pago_id) : null;
+      const cot = row.cotizacion_id ? mapCot.get(row.cotizacion_id) : null;
+      const ot = row.orden_trabajo_id ? mapOt.get(row.orden_trabajo_id) : null;
+
+      let nombreCliente = "";
+      if (cot?.prospecto_id && mapPros.has(cot.prospecto_id)) {
+        nombreCliente = mapPros.get(cot.prospecto_id)!;
+      }
+      if (!nombreCliente && rec?.cliente_nombre) {
+        nombreCliente = rec.cliente_nombre;
+      }
+      if (!nombreCliente && row.detalles_calculo?.clienteNombre) {
+        nombreCliente = row.detalles_calculo.clienteNombre;
+      }
+      if (!nombreCliente) {
+        nombreCliente = "Cliente Sauceda";
+      }
+
+      const folioCalculado =
+        rem?.folio ||
+        rec?.folio ||
+        ot?.folio ||
+        row.detalles_calculo?.folio ||
+        "S/F";
+      const tipoCalculado =
+        rem?.tipo || (row.recibo_pago_id ? "recibo" : "remision");
+      const fechaCalculada = rem?.fecha || rec?.fecha_pago || row.fecha;
+
+      return {
+        id: row.id,
+        remisionFacturaId: row.remision_factura_id,
+        reciboPagoId: row.recibo_pago_id,
+        remisionFolio: folioCalculado,
+        remisionTipo: tipoCalculado,
+        remisionFecha: fechaCalculada,
+        asesorId: row.asesor_id,
+        asesorNombre: perf?.nombre || "Sin Asesor",
+        asesorTelefono: perf?.telefono || null,
+        cotizacionId: row.cotizacion_id,
+        cotizacionToken: cot?.token || null,
+        expedienteId: row.expediente_id,
+        ordenTrabajoId: row.orden_trabajo_id,
+        ordenTrabajoFolio: ot?.folio || null,
+        clienteNombre,
+        clienteEmpresa: null,
+        servicioTipo: cot?.servicio_tipo || null,
+        fecha: row.fecha,
+        montoVenta: Number(row.monto_venta || 0),
+        porcentajeComision: Number(row.porcentaje_comision || 0),
+        montoComision: Number(row.monto_comision || 0),
+        montoPagado: Number(row.monto_pagado || 0),
+        saldoPendiente: Number(row.saldo_pendiente || 0),
+        estatus: row.estatus as EstatusComision,
+        esAjusteManual: Boolean(row.es_ajuste_manual),
+        motivoAjuste: row.motivo_ajuste || "",
+        detallesCalculo: row.detalles_calculo || {},
+        notas: row.notas || "",
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
+
+    // Filtro de búsqueda rápida en memoria por texto si se especifica
+    if (filtros?.busqueda && filtros.busqueda.trim()) {
+      const q = filtros.busqueda.trim().toLowerCase();
+      return lista.filter(
+        (c) =>
+          c.remisionFolio?.toLowerCase().includes(q) ||
+          c.clienteNombre.toLowerCase().includes(q) ||
+          c.asesorNombre.toLowerCase().includes(q) ||
+          (c.clienteEmpresa && c.clienteEmpresa.toLowerCase().includes(q)) ||
+          (c.servicioTipo && c.servicioTipo.toLowerCase().includes(q))
+      );
+    }
+
+    return lista;
+  } catch (err: any) {
+    console.error("Error definitivo en listarComisiones:", err);
     return [];
   }
-
-  // 2. Extraer IDs vinculados para enriquecer en paralelo sin joins problemáticos
-  const remisionIds = Array.from(new Set(rows.map((r: any) => r.remision_factura_id).filter(Boolean)));
-  const reciboIds = Array.from(new Set(rows.map((r: any) => r.recibo_pago_id).filter(Boolean)));
-  const cotizacionIds = Array.from(new Set(rows.map((r: any) => r.cotizacion_id).filter(Boolean)));
-  const ordenTrabajoIds = Array.from(new Set(rows.map((r: any) => r.orden_trabajo_id).filter(Boolean)));
-
-  const [resRemisiones, resRecibos, resCotizaciones, resOrdenes] = await Promise.all([
-    remisionIds.length > 0
-      ? sb.from("remisiones_facturas").select("id, folio, tipo, fecha, monto_subtotal, monto_total").in("id", remisionIds)
-      : Promise.resolve({ data: [] }),
-    reciboIds.length > 0
-      ? sb.from("recibos_pago").select("id, folio, concepto, monto, fecha_pago, cliente_nombre").in("id", reciboIds)
-      : Promise.resolve({ data: [] }),
-    cotizacionIds.length > 0
-      ? sb.from("cotizaciones").select("id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id").in("id", cotizacionIds)
-      : Promise.resolve({ data: [] }),
-    ordenTrabajoIds.length > 0
-      ? sb.from("ordenes_trabajo").select("id, folio, titulo").in("id", ordenTrabajoIds)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const mapRem = new Map<string, any>((resRemisiones.data || []).map((r: any) => [r.id, r]));
-  const mapRec = new Map<string, any>((resRecibos.data || []).map((r: any) => [r.id, r]));
-  const mapCot = new Map<string, any>((resCotizaciones.data || []).map((r: any) => [r.id, r]));
-  const mapOt = new Map<string, any>((resOrdenes.data || []).map((r: any) => [r.id, r]));
-
-  // Extraer prospectoIds de las cotizaciones
-  const prospectoIds = Array.from(
-    new Set(
-      Array.from(mapCot.values())
-        .map((c: any) => c.prospecto_id)
-        .filter(Boolean)
-    )
-  );
-
-  let mapPros = new Map<string, string>();
-  if (prospectoIds.length > 0) {
-    try {
-      const { data: pros } = await sb
-        .from("prospectos")
-        .select("id, nombre, primer_apellido, segundo_apellido")
-        .in("id", prospectoIds);
-      for (const p of pros || []) {
-        const nom = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
-        if (nom) mapPros.set(p.id, nom);
-      }
-    } catch {
-      // Ignorar fallo de resolución secundaria
-    }
-  }
-
-  // 3. Mapeo final enriquecido
-  const lista: Comision[] = rows.map((row: any) => {
-    const rem = row.remision_factura_id ? mapRem.get(row.remision_factura_id) : null;
-    const rec = row.recibo_pago_id ? mapRec.get(row.recibo_pago_id) : null;
-    const cot = row.cotizacion_id ? mapCot.get(row.cotizacion_id) : null;
-    const ot = row.orden_trabajo_id ? mapOt.get(row.orden_trabajo_id) : null;
-
-    let nombreCliente = cot?.cliente_nombre_personalizado?.trim() || "";
-    if (!nombreCliente && cot?.prospecto_id && mapPros.has(cot.prospecto_id)) {
-      nombreCliente = mapPros.get(cot.prospecto_id)!;
-    }
-    if (!nombreCliente && rec?.cliente_nombre) {
-      nombreCliente = rec.cliente_nombre;
-    }
-    if (!nombreCliente && row.detalles_calculo?.clienteNombre) {
-      nombreCliente = row.detalles_calculo.clienteNombre;
-    }
-    if (!nombreCliente) {
-      nombreCliente = "Cliente Sauceda";
-    }
-
-    const folioCalculado =
-      rem?.folio ||
-      rec?.folio ||
-      ot?.folio ||
-      row.detalles_calculo?.folio ||
-      "S/F";
-    const tipoCalculado =
-      rem?.tipo || (row.recibo_pago_id ? "recibo" : "remision");
-    const fechaCalculada = rem?.fecha || rec?.fecha_pago || row.fecha;
-
-    return {
-      id: row.id,
-      remisionFacturaId: row.remision_factura_id,
-      reciboPagoId: row.recibo_pago_id,
-      remisionFolio: folioCalculado,
-      remisionTipo: tipoCalculado,
-      remisionFecha: fechaCalculada,
-      asesorId: row.asesor_id,
-      asesorNombre: row.perfiles?.nombre || "Sin Asesor",
-      asesorTelefono: row.perfiles?.telefono || null,
-      cotizacionId: row.cotizacion_id,
-      cotizacionToken: cot?.token || null,
-      expedienteId: row.expediente_id,
-      ordenTrabajoId: row.orden_trabajo_id,
-      ordenTrabajoFolio: ot?.folio || null,
-      clienteNombre,
-      clienteEmpresa: null,
-      servicioTipo: cot?.servicio_tipo || null,
-      fecha: row.fecha,
-      montoVenta: Number(row.monto_venta || 0),
-      porcentajeComision: Number(row.porcentaje_comision || 0),
-      montoComision: Number(row.monto_comision || 0),
-      montoPagado: Number(row.monto_pagado || 0),
-      saldoPendiente: Number(row.saldo_pendiente || 0),
-      estatus: row.estatus as EstatusComision,
-      esAjusteManual: Boolean(row.es_ajuste_manual),
-      motivoAjuste: row.motivo_ajuste || "",
-      detallesCalculo: row.detalles_calculo || {},
-      notas: row.notas || "",
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  });
-
-  // Filtro de búsqueda rápida en memoria por texto si se especifica
-  if (filtros?.busqueda && filtros.busqueda.trim()) {
-    const q = filtros.busqueda.trim().toLowerCase();
-    return lista.filter(
-      (c) =>
-        c.remisionFolio?.toLowerCase().includes(q) ||
-        c.clienteNombre.toLowerCase().includes(q) ||
-        c.asesorNombre.toLowerCase().includes(q) ||
-        (c.clienteEmpresa && c.clienteEmpresa.toLowerCase().includes(q)) ||
-        (c.servicioTipo && c.servicioTipo.toLowerCase().includes(q))
-    );
-  }
-
-  return lista;
 }
 
 export async function obtenerResumenEstadoCuenta(filtros?: {
@@ -412,66 +412,81 @@ export async function obtenerResumenEstadoCuenta(filtros?: {
   };
   porAsesor: ResumenEstadoCuentaAsesor[];
 }> {
-  const comisiones = await listarComisiones({
-    asesorId: filtros?.asesorId,
-    fechaDesde: filtros?.fechaDesde,
-    fechaHasta: filtros?.fechaHasta,
-  });
+  try {
+    const comisiones = await listarComisiones({
+      asesorId: filtros?.asesorId,
+      fechaDesde: filtros?.fechaDesde,
+      fechaHasta: filtros?.fechaHasta,
+    });
 
-  const general = comisiones.reduce(
-    (acc, c) => {
-      if (c.estatus !== "cancelada") {
-        acc.totalVentas += c.montoVenta;
-        acc.totalComisiones += c.montoComision;
-        acc.totalPagado += c.montoPagado;
-        acc.saldoPendiente += c.saldoPendiente;
-        acc.comisionesCount += 1;
-        if (c.saldoPendiente > 0) acc.pendientesCount += 1;
-      }
-      return acc;
-    },
-    {
-      totalVentas: 0,
-      totalComisiones: 0,
-      totalPagado: 0,
-      saldoPendiente: 0,
-      comisionesCount: 0,
-      pendientesCount: 0,
-    }
-  );
-
-  // Agrupar por Asesor
-  const asesorMap = new Map<string, ResumenEstadoCuentaAsesor>();
-  for (const c of comisiones) {
-    if (c.estatus === "cancelada") continue;
-    let entry = asesorMap.get(c.asesorId);
-    if (!entry) {
-      entry = {
-        asesorId: c.asesorId,
-        asesorNombre: c.asesorNombre,
-        asesorTelefono: c.asesorTelefono,
+    const general = comisiones.reduce(
+      (acc, c) => {
+        if (c.estatus !== "cancelada") {
+          acc.totalVentas += c.montoVenta;
+          acc.totalComisiones += c.montoComision;
+          acc.totalPagado += c.montoPagado;
+          acc.saldoPendiente += c.saldoPendiente;
+          acc.comisionesCount += 1;
+          if (c.saldoPendiente > 0) acc.pendientesCount += 1;
+        }
+        return acc;
+      },
+      {
         totalVentas: 0,
         totalComisiones: 0,
         totalPagado: 0,
         saldoPendiente: 0,
         comisionesCount: 0,
         pendientesCount: 0,
-      };
-      asesorMap.set(c.asesorId, entry);
+      }
+    );
+
+    // Agrupar por Asesor
+    const asesorMap = new Map<string, ResumenEstadoCuentaAsesor>();
+    for (const c of comisiones) {
+      if (c.estatus === "cancelada") continue;
+      let entry = asesorMap.get(c.asesorId);
+      if (!entry) {
+        entry = {
+          asesorId: c.asesorId,
+          asesorNombre: c.asesorNombre,
+          asesorTelefono: c.asesorTelefono,
+          totalVentas: 0,
+          totalComisiones: 0,
+          totalPagado: 0,
+          saldoPendiente: 0,
+          comisionesCount: 0,
+          pendientesCount: 0,
+        };
+        asesorMap.set(c.asesorId, entry);
+      }
+      entry.totalVentas += c.montoVenta;
+      entry.totalComisiones += c.montoComision;
+      entry.totalPagado += c.montoPagado;
+      entry.saldoPendiente += c.saldoPendiente;
+      entry.comisionesCount += 1;
+      if (c.saldoPendiente > 0) entry.pendientesCount += 1;
     }
-    entry.totalVentas += c.montoVenta;
-    entry.totalComisiones += c.montoComision;
-    entry.totalPagado += c.montoPagado;
-    entry.saldoPendiente += c.saldoPendiente;
-    entry.comisionesCount += 1;
-    if (c.saldoPendiente > 0) entry.pendientesCount += 1;
+
+    const porAsesor = Array.from(asesorMap.values()).sort(
+      (a, b) => b.saldoPendiente - a.saldoPendiente
+    );
+
+    return { general, porAsesor };
+  } catch (err: any) {
+    console.error("Error en obtenerResumenEstadoCuenta:", err);
+    return {
+      general: {
+        totalVentas: 0,
+        totalComisiones: 0,
+        totalPagado: 0,
+        saldoPendiente: 0,
+        comisionesCount: 0,
+        pendientesCount: 0,
+      },
+      porAsesor: [],
+    };
   }
-
-  const porAsesor = Array.from(asesorMap.values()).sort(
-    (a, b) => b.saldoPendiente - a.saldoPendiente
-  );
-
-  return { general, porAsesor };
 }
 
 // ============================================================
@@ -628,65 +643,79 @@ export async function registrarPagoComisiones(datos: {
 }
 
 export async function listarPagosComisiones(asesorId?: string): Promise<ComisionPago[]> {
-  await requireAdmin();
-  const sb = supabaseServidor();
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
 
-  let query = sb
-    .from("comisiones_pagos")
-    .select(`
-      id,
-      asesor_id,
-      fecha_pago,
-      monto,
-      metodo_pago,
-      referencia,
-      comprobante_url,
-      notas,
-      created_at,
-      updated_at,
-      perfiles:asesor_id(nombre),
-      detalles:comisiones_pagos_detalle(
-        id,
-        pago_id,
-        comision_id,
-        monto_aplicado,
-        created_at
-      )
-    `)
-    .order("fecha_pago", { ascending: false })
-    .order("created_at", { ascending: false });
+    let query = sb
+      .from("comisiones_pagos")
+      .select("*")
+      .order("fecha_pago", { ascending: false })
+      .order("created_at", { ascending: false });
 
-  if (asesorId && asesorId !== "todos") {
-    query = query.eq("asesor_id", asesorId);
-  }
+    if (asesorId && asesorId !== "todos") {
+      query = query.eq("asesor_id", asesorId);
+    }
 
-  const { data, error } = await query;
-  if (error) {
-    console.warn("Aviso al listar pagos de comisiones:", error.message);
+    const { data: pagosRows, error: errPagos } = await query;
+    if (errPagos) {
+      console.warn("Aviso al listar pagos de comisiones:", errPagos.message);
+      return [];
+    }
+
+    if (!pagosRows || pagosRows.length === 0) {
+      return [];
+    }
+
+    const pagoIds = pagosRows.map((p: any) => p.id);
+    const asesorIds = Array.from(new Set(pagosRows.map((p: any) => p.asesor_id).filter(Boolean)));
+
+    const [resPerfiles, resDetalles] = await Promise.all([
+      asesorIds.length > 0
+        ? sb.from("perfiles").select("id, nombre").in("id", asesorIds)
+        : Promise.resolve({ data: [] }),
+      pagoIds.length > 0
+        ? sb.from("comisiones_pagos_detalle").select("id, pago_id, comision_id, monto_aplicado, created_at").in("pago_id", pagoIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const mapPerfiles = new Map<string, any>((resPerfiles.data || []).map((p: any) => [p.id, p]));
+    const detallesPorPago = new Map<string, any[]>();
+    for (const d of resDetalles.data || []) {
+      const list = detallesPorPago.get(d.pago_id) || [];
+      list.push(d);
+      detallesPorPago.set(d.pago_id, list);
+    }
+
+    return pagosRows.map((row: any) => {
+      const perf = row.asesor_id ? mapPerfiles.get(row.asesor_id) : null;
+      const dets = detallesPorPago.get(row.id) || [];
+      return {
+        id: row.id,
+        asesorId: row.asesor_id,
+        asesorNombre: perf?.nombre || "Asesor Desconocido",
+        fechaPago: row.fecha_pago,
+        monto: Number(row.monto || 0),
+        metodoPago: row.metodo_pago as MetodoPagoComision,
+        referencia: row.referencia || "",
+        comprobanteUrl: row.comprobante_url || "",
+        notas: row.notas || "",
+        detalles: dets.map((d: any) => ({
+          id: d.id,
+          pagoId: d.pago_id,
+          comisionId: d.comision_id,
+          remisionFolio: "S/F",
+          montoAplicado: Number(d.monto_aplicado || 0),
+          createdAt: d.created_at,
+        })),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
+  } catch (err: any) {
+    console.error("Error definitivo en listarPagosComisiones:", err);
     return [];
   }
-
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    asesorId: row.asesor_id,
-    asesorNombre: row.perfiles?.nombre || "Asesor Desconocido",
-    fechaPago: row.fecha_pago,
-    monto: Number(row.monto || 0),
-    metodoPago: row.metodo_pago as MetodoPagoComision,
-    referencia: row.referencia || "",
-    comprobanteUrl: row.comprobante_url || "",
-    notas: row.notas || "",
-    detalles: (row.detalles || []).map((d: any) => ({
-      id: d.id,
-      pagoId: d.pago_id,
-      comisionId: d.comision_id,
-      remisionFolio: "S/F",
-      montoAplicado: Number(d.monto_aplicado || 0),
-      createdAt: d.created_at,
-    })),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
 }
 
 // ============================================================

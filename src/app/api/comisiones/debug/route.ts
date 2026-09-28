@@ -7,51 +7,82 @@ export async function GET() {
   try {
     const sb = supabaseServidor();
 
-    const { data: comisiones, error: errCom, count: countCom } = await sb
+    // 1. Raw comisiones
+    const { data: rawCom, error: errRawCom } = await sb
       .from("comisiones")
-      .select("*", { count: "exact" });
+      .select("*")
+      .order("fecha", { ascending: false });
 
-    const { data: remisiones, error: errRem, count: countRem } = await sb
-      .from("remisiones_facturas")
-      .select("id, folio, tipo, monto_total", { count: "exact" });
+    // 2. Comisiones con perfiles:asesor_id
+    const { data: joinCom, error: errJoinCom } = await sb
+      .from("comisiones")
+      .select("*, perfiles:asesor_id(nombre, telefono)")
+      .order("fecha", { ascending: false });
 
-    const { data: recibos, error: errRec, count: countRec } = await sb
-      .from("recibos_pago")
-      .select("id, folio, monto", { count: "exact" });
+    // 3. Comisiones pagos query
+    const { data: pagos, error: errPagos } = await sb
+      .from("comisiones_pagos")
+      .select(`
+        id,
+        asesor_id,
+        fecha_pago,
+        monto,
+        metodo_pago,
+        referencia,
+        comprobante_url,
+        notas,
+        created_at,
+        updated_at,
+        perfiles:asesor_id(nombre),
+        detalles:comisiones_pagos_detalle(
+          id,
+          pago_id,
+          comision_id,
+          monto_aplicado,
+          created_at
+        )
+      `);
 
-    const { data: reglas, error: errReg, count: countReg } = await sb
-      .from("comisiones_reglas")
-      .select("*", { count: "exact" });
+    // 4. Cotizaciones query
+    const { data: cotizaciones, error: errCot } = await sb
+      .from("cotizaciones")
+      .select("id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id")
+      .limit(5);
 
-    const { data: perfilesAsesores } = await sb
+    // 5. Perfiles query directa
+    const asesorIds = Array.from(new Set((rawCom || []).map((r: any) => r.asesor_id).filter(Boolean)));
+    const { data: perfilesDirectos, error: errPerfiles } = await sb
       .from("perfiles")
-      .select("id, nombre, rol, activo");
+      .select("id, nombre, telefono")
+      .in("id", asesorIds);
 
     return NextResponse.json({
       status: "ok",
-      comisiones: {
-        total: countCom ?? comisiones?.length ?? 0,
-        error: errCom?.message || null,
-        data: comisiones || [],
+      rawComisiones: {
+        count: rawCom?.length || 0,
+        error: errRawCom?.message || null,
+        sample: rawCom?.[0] || null,
       },
-      remisiones: {
-        total: countRem ?? remisiones?.length ?? 0,
-        error: errRem?.message || null,
-        data: remisiones || [],
+      joinComisiones: {
+        count: joinCom?.length || 0,
+        error: errJoinCom?.message || null,
       },
-      recibos: {
-        total: countRec ?? recibos?.length ?? 0,
-        error: errRec?.message || null,
-        data: recibos || [],
+      pagos: {
+        count: pagos?.length || 0,
+        error: errPagos?.message || null,
       },
-      reglas: {
-        total: countReg ?? reglas?.length ?? 0,
-        error: errReg?.message || null,
+      cotizaciones: {
+        count: cotizaciones?.length || 0,
+        error: errCot?.message || null,
       },
-      perfilesAsesores: perfilesAsesores || [],
-      hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      perfilesDirectos: {
+        count: perfilesDirectos?.length || 0,
+        error: errPerfiles?.message || null,
+        data: perfilesDirectos || [],
+      },
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
