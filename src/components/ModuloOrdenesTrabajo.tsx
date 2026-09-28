@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   obtenerOrdenesTrabajo,
   actualizarEstatusOrdenTrabajo,
+  eliminarOrdenTrabajo,
   asignarAsesorEjecutor,
   agregarEvidenciaFotoOT,
   obtenerOrdenTrabajoPorId,
@@ -27,6 +28,12 @@ interface ModuloOrdenesTrabajoProps {
   clienteTelefonoDefault?: string;
   tipoNegocioDefault?: string;
   soloLectura?: boolean;
+  alEliminarOrden?: (ordenId: string) => void;
+  alCrearOrden?: () => void;
+  filtroEstatus?: string;
+  filtroTipo?: string;
+  filtroAsesor?: string;
+  busqueda?: string;
 }
 
 export function ModuloOrdenesTrabajo({
@@ -37,6 +44,12 @@ export function ModuloOrdenesTrabajo({
   clienteTelefonoDefault = "",
   tipoNegocioDefault = "construccion",
   soloLectura = false,
+  alEliminarOrden,
+  alCrearOrden,
+  filtroEstatus,
+  filtroTipo,
+  filtroAsesor,
+  busqueda,
 }: ModuloOrdenesTrabajoProps) {
   const [ordenes, setOrdenes] = useState<OrdenTrabajo[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -51,6 +64,9 @@ export function ModuloOrdenesTrabajo({
   } | null>(null);
   const [ordenParaRemision, setOrdenParaRemision] = useState<OrdenTrabajo | null>(null);
   const [ordenParaNotificar, setOrdenParaNotificar] = useState<OrdenTrabajo | null>(null);
+  const [ordenParaEliminar, setOrdenParaEliminar] = useState<OrdenTrabajo | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
   // Foto en proceso de subida
   const [subiendoFotoOrdenId, setSubiendoFotoOrdenId] = useState<string | null>(null);
@@ -174,6 +190,31 @@ export function ModuloOrdenesTrabajo({
     }
   };
 
+  const handleConfirmarEliminar = async () => {
+    if (!ordenParaEliminar) return;
+    try {
+      setEliminando(true);
+      setErrorEliminar(null);
+      const res = await eliminarOrdenTrabajo(ordenParaEliminar.id);
+      if (!res.ok) {
+        setErrorEliminar(res.error || "No se pudo eliminar la orden de trabajo.");
+        return;
+      }
+      const idEliminado = ordenParaEliminar.id;
+      setOrdenes((prev) => prev.filter((o) => o.id !== idEliminado));
+      if (otExpandidaId === idEliminado) {
+        setOtExpandidaId(null);
+        setDetalleOT({ recibos: [], garantia: null, remisionFactura: null });
+      }
+      setOrdenParaEliminar(null);
+      alEliminarOrden?.(idEliminado);
+    } catch (err: any) {
+      setErrorEliminar(err?.message || "Error al eliminar la orden de trabajo.");
+    } finally {
+      setEliminando(false);
+    }
+  };
+
   const handleCambiarAsesor = async (ordenId: string, nuevoAsesorId: string) => {
     try {
       await asignarAsesorEjecutor(ordenId, nuevoAsesorId || null);
@@ -263,6 +304,28 @@ export function ModuloOrdenesTrabajo({
     }
   };
 
+  const ordenesFiltradas = ordenes.filter((o) => {
+    if (filtroEstatus && filtroEstatus !== "todos" && o.estatus !== filtroEstatus) {
+      return false;
+    }
+    if (filtroTipo && filtroTipo !== "todos" && o.tipoNegocio !== filtroTipo) {
+      return false;
+    }
+    if (filtroAsesor && o.asesorEjecutorId !== filtroAsesor) {
+      return false;
+    }
+    if (busqueda && busqueda.trim()) {
+      const q = busqueda.toLowerCase().trim();
+      const match =
+        o.folio.toLowerCase().includes(q) ||
+        o.titulo.toLowerCase().includes(q) ||
+        (o.clienteNombre && o.clienteNombre.toLowerCase().includes(q)) ||
+        (o.asesorEjecutorNombre && o.asesorEjecutorNombre.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="rounded-2xl border border-carbon/10 bg-white p-5 shadow-sm space-y-5">
       {/* Encabezado del Módulo */}
@@ -319,9 +382,19 @@ export function ModuloOrdenesTrabajo({
             </button>
           )}
         </div>
+      ) : ordenesFiltradas.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-carbon/15 p-8 text-center space-y-2">
+          <span className="text-2xl block">🔍</span>
+          <p className="font-titular font-semibold text-carbon/80 text-sm">
+            No se encontraron órdenes con los filtros seleccionados
+          </p>
+          <p className="text-xs text-carbon/50 max-w-md mx-auto">
+            Intenta cambiar los términos de búsqueda o el filtro de estado/asesor.
+          </p>
+        </div>
       ) : (
         <div className="space-y-4">
-          {ordenes.map((ot) => {
+          {ordenesFiltradas.map((ot) => {
             const estaExpandida = otExpandidaId === ot.id;
             const porcentajeCobrado =
               (ot.totalCotizado || 0) > 0
@@ -360,9 +433,9 @@ export function ModuloOrdenesTrabajo({
                       )}
                     </div>
 
-                    {/* Selector rápido de estatus */}
+                    {/* Selector rápido de estatus y botón de eliminar */}
                     {!soloLectura && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <select
                           value={ot.estatus}
                           onChange={(e) =>
@@ -375,6 +448,26 @@ export function ModuloOrdenesTrabajo({
                           <option value="completada">✓ Completada</option>
                           <option value="cancelada">✕ Cancelada</option>
                         </select>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrdenParaEliminar(ot);
+                            setErrorEliminar(null);
+                          }}
+                          className="p-1 rounded-lg border border-carbon/20 text-carbon/40 hover:text-red-600 hover:bg-red-50 hover:border-red-200 transition shadow-2xs"
+                          title="Eliminar orden de trabajo"
+                          aria-label="Eliminar orden de trabajo"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -923,6 +1016,30 @@ export function ModuloOrdenesTrabajo({
                             </p>
                           </div>
                         )}
+
+                        {/* 5. Acciones de Gestión / Eliminar */}
+                        {!soloLectura && (
+                          <div className="flex justify-end pt-3 border-t border-carbon/10">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrdenParaEliminar(ot);
+                                setErrorEliminar(null);
+                              }}
+                              className="text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1.5 hover:underline py-1 px-2 rounded-lg hover:bg-red-50 transition"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                              <span>Eliminar esta orden de trabajo</span>
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -937,7 +1054,10 @@ export function ModuloOrdenesTrabajo({
       <ModalCrearOrdenTrabajo
         abierto={modalCrearOT}
         alCerrar={() => setModalCrearOT(false)}
-        alCrear={() => cargarDatos()}
+        alCrear={() => {
+          cargarDatos();
+          alCrearOrden?.();
+        }}
         expedienteId={expedienteId}
         prospectoId={prospectoId}
         cotizacionId={cotizacionId}
@@ -1090,6 +1210,67 @@ export function ModuloOrdenesTrabajo({
           garantia={detalleOT.garantia}
           remisionFactura={detalleOT.remisionFactura}
         />
+      )}
+
+      {/* Modal Confirmar Eliminación de Orden */}
+      {ordenParaEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-carbon/10 space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-titular text-lg font-bold text-carbon">
+                  ¿Eliminar Orden de Trabajo?
+                </h3>
+                <p className="text-xs font-mono font-bold text-sauce">
+                  {ordenParaEliminar.folio} · {ordenParaEliminar.titulo}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-carbon/70 leading-relaxed">
+              ¿Estás seguro de que deseas eliminar permanentemente esta orden de trabajo? 
+              Esta acción no se puede deshacer y desvinculará o removerá los recibos de pago y registros asociados a esta orden.
+            </p>
+
+            {errorEliminar && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+                {errorEliminar}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={eliminando}
+                onClick={() => {
+                  setOrdenParaEliminar(null);
+                  setErrorEliminar(null);
+                }}
+                className="rounded-xl border border-carbon/20 px-4 py-2 text-xs font-semibold text-carbon hover:bg-carbon/5 transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={eliminando}
+                onClick={handleConfirmarEliminar}
+                className="rounded-xl bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {eliminando ? "Eliminando..." : "Sí, eliminar orden"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
