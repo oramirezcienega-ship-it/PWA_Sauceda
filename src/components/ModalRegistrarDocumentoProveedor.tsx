@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   registrarDocumentoProveedor,
+  actualizarDocumentoProveedor,
   subirArchivoDocumentoProveedor,
   listarCotizacionesMinParaProveedor,
   listarProveedoresMin,
@@ -19,6 +20,8 @@ interface ModalRegistrarDocumentoProveedorProps {
   /** Si se fija, no se muestra el selector de cotización (orden de trabajo). */
   cotizacionId?: string;
   expedienteId?: string | null;
+  /** Si se pasa, el modal edita este documento existente en lugar de crear uno nuevo. */
+  documentoExistente?: DocumentoProveedor | null;
 }
 
 export function ModalRegistrarDocumentoProveedor({
@@ -29,27 +32,39 @@ export function ModalRegistrarDocumentoProveedor({
   proveedorNombre,
   cotizacionId,
   expedienteId,
+  documentoExistente,
 }: ModalRegistrarDocumentoProveedorProps) {
-  const [proveedorSel, setProveedorSel] = useState(proveedorId || "");
+  const editando = !!documentoExistente;
+
+  const [proveedorSel, setProveedorSel] = useState(proveedorId || documentoExistente?.proveedorId || "");
   const [proveedoresOpciones, setProveedoresOpciones] = useState<{ id: string; nombre: string }[]>([]);
-  const [cotizacionSel, setCotizacionSel] = useState(cotizacionId || "");
+  const [cotizacionSel, setCotizacionSel] = useState(cotizacionId || documentoExistente?.cotizacionId || "");
   const [cotizacionesOpciones, setCotizacionesOpciones] = useState<
     { id: string; prospectoNombre: string; estatus: string }[]
   >([]);
-  const [tipo, setTipo] = useState<TipoDocumentoProveedor>("remision");
-  const [folio, setFolio] = useState("");
-  const [concepto, setConcepto] = useState("");
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
-  const [monto, setMonto] = useState("");
-  const [notas, setNotas] = useState("");
+  const [tipo, setTipo] = useState<TipoDocumentoProveedor>(documentoExistente?.tipo || "remision");
+  const [folioProveedor, setFolioProveedor] = useState(documentoExistente?.folioProveedor || "");
+  const [concepto, setConcepto] = useState(documentoExistente?.concepto || "");
+  const [fecha, setFecha] = useState(
+    documentoExistente?.fecha?.slice(0, 10) || new Date().toISOString().slice(0, 10)
+  );
+  const [monto, setMonto] = useState(documentoExistente ? String(documentoExistente.monto) : "");
+  const [notas, setNotas] = useState(documentoExistente?.notas || "");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!abierto) return;
-    setProveedorSel(proveedorId || "");
-    setCotizacionSel(cotizacionId || "");
+    setProveedorSel(proveedorId || documentoExistente?.proveedorId || "");
+    setCotizacionSel(cotizacionId || documentoExistente?.cotizacionId || "");
+    setTipo(documentoExistente?.tipo || "remision");
+    setFolioProveedor(documentoExistente?.folioProveedor || "");
+    setConcepto(documentoExistente?.concepto || "");
+    setFecha(documentoExistente?.fecha?.slice(0, 10) || new Date().toISOString().slice(0, 10));
+    setMonto(documentoExistente ? String(documentoExistente.monto) : "");
+    setNotas(documentoExistente?.notas || "");
+    setArchivo(null);
     setError(null);
 
     if (!proveedorId) {
@@ -58,7 +73,7 @@ export function ModalRegistrarDocumentoProveedor({
     if (!cotizacionId) {
       listarCotizacionesMinParaProveedor().then(setCotizacionesOpciones).catch(() => setCotizacionesOpciones([]));
     }
-  }, [abierto, proveedorId, cotizacionId]);
+  }, [abierto, proveedorId, cotizacionId, documentoExistente]);
 
   if (!abierto) return null;
 
@@ -79,8 +94,8 @@ export function ModalRegistrarDocumentoProveedor({
 
     setGuardando(true);
     try {
-      let archivoUrl: string | undefined;
-      let archivoNombre: string | undefined;
+      let archivoUrl: string | null | undefined = documentoExistente?.archivoUrl ?? null;
+      let archivoNombre: string | null | undefined = documentoExistente?.archivoNombre ?? null;
 
       if (archivo) {
         const formData = new FormData();
@@ -95,31 +110,53 @@ export function ModalRegistrarDocumentoProveedor({
         archivoNombre = res.nombre;
       }
 
-      const datos: DatosDocumentoProveedor = {
-        proveedorId: provFinal,
-        cotizacionId: cotizacionId || cotizacionSel || null,
-        expedienteId: expedienteId || null,
-        tipo,
-        folio: folio.trim(),
-        concepto: concepto.trim(),
-        fecha,
-        monto: montoNum,
-        archivoUrl: archivoUrl || null,
-        archivoNombre: archivoNombre || null,
-        notas: notas.trim(),
-      };
+      if (editando && documentoExistente) {
+        await actualizarDocumentoProveedor(documentoExistente.id, {
+          cotizacionId: cotizacionId || cotizacionSel || null,
+          expedienteId: expedienteId ?? documentoExistente.expedienteId,
+          tipo,
+          folioProveedor: tipo === "factura" ? folioProveedor.trim() : null,
+          concepto: concepto.trim(),
+          fecha,
+          monto: montoNum,
+          archivoUrl,
+          archivoNombre,
+          notas: notas.trim(),
+        });
+        onRegistrado({
+          ...documentoExistente,
+          tipo,
+          folioProveedor: tipo === "factura" ? folioProveedor.trim() || null : null,
+          concepto: concepto.trim(),
+          fecha,
+          monto: montoNum,
+          archivoUrl: archivoUrl ?? null,
+          archivoNombre: archivoNombre ?? null,
+          notas: notas.trim(),
+        });
+      } else {
+        const datos: DatosDocumentoProveedor = {
+          proveedorId: provFinal,
+          cotizacionId: cotizacionId || cotizacionSel || null,
+          expedienteId: expedienteId || null,
+          ordenTrabajoId: null,
+          tipo,
+          folioProveedor: tipo === "factura" ? folioProveedor.trim() || null : null,
+          concepto: concepto.trim(),
+          fecha,
+          monto: montoNum,
+          archivoUrl: archivoUrl || null,
+          archivoNombre: archivoNombre || null,
+          notas: notas.trim(),
+        };
 
-      const nuevo = await registrarDocumentoProveedor(datos);
-      onRegistrado(nuevo);
+        const nuevo = await registrarDocumentoProveedor(datos);
+        onRegistrado(nuevo);
+      }
+
       onCerrar();
-      // Reset para el siguiente registro
-      setFolio("");
-      setConcepto("");
-      setMonto("");
-      setNotas("");
-      setArchivo(null);
     } catch (err: any) {
-      setError(err?.message || "Ocurrió un error al registrar el documento.");
+      setError(err?.message || "Ocurrió un error al guardar el documento.");
     } finally {
       setGuardando(false);
     }
@@ -133,10 +170,16 @@ export function ModalRegistrarDocumentoProveedor({
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sauce/15 text-lg">📄</span>
             <div>
               <h2 className="font-titular text-lg font-bold text-verde-profundo">
-                Registrar Factura / Remisión de Proveedor
+                {editando ? "Editar Documento de Proveedor" : "Registrar Factura / Remisión de Proveedor"}
               </h2>
               <p className="text-xs text-carbon/60">
-                {proveedorNombre ? `Proveedor: ${proveedorNombre}` : "Captura el costo entregado por el proveedor."}
+                {editando && documentoExistente ? (
+                  <>Folio interno: <span className="font-mono font-semibold">{documentoExistente.folio}</span></>
+                ) : proveedorNombre ? (
+                  `Proveedor: ${proveedorNombre}`
+                ) : (
+                  "Captura el costo entregado por el proveedor. El folio interno se genera automáticamente."
+                )}
                 {cotizacionId ? ` · Orden de trabajo: ${cotizacionId}` : ""}
               </p>
             </div>
@@ -156,7 +199,7 @@ export function ModalRegistrarDocumentoProveedor({
         )}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          {!proveedorId && (
+          {!proveedorId && !editando && (
             <div>
               <label className="block text-xs font-semibold text-carbon/80 mb-1">
                 Proveedor <span className="text-rojo">*</span>
@@ -196,42 +239,45 @@ export function ModalRegistrarDocumentoProveedor({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-carbon/80 mb-1">Tipo de Documento</label>
-              <div className="flex rounded-lg border border-carbon/20 overflow-hidden text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setTipo("remision")}
-                  className={`flex-1 px-3 py-2 transition ${
-                    tipo === "remision" ? "bg-sauce text-white" : "bg-white text-carbon/60 hover:bg-carbon/5"
-                  }`}
-                >
-                  Remisión
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTipo("factura")}
-                  className={`flex-1 px-3 py-2 transition border-l border-carbon/20 ${
-                    tipo === "factura" ? "bg-sauce text-white" : "bg-white text-carbon/60 hover:bg-carbon/5"
-                  }`}
-                >
-                  Factura
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-carbon/80 mb-1">Folio</label>
-              <input
-                type="text"
-                placeholder="Folio del documento (opcional)"
-                value={folio}
-                onChange={(e) => setFolio(e.target.value)}
-                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-1 focus:ring-sauce"
-              />
+          <div>
+            <label className="block text-xs font-semibold text-carbon/80 mb-1">Tipo de Documento</label>
+            <div className="flex rounded-lg border border-carbon/20 overflow-hidden text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTipo("remision")}
+                className={`flex-1 px-3 py-2 transition ${
+                  tipo === "remision" ? "bg-sauce text-white" : "bg-white text-carbon/60 hover:bg-carbon/5"
+                }`}
+              >
+                Remisión
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipo("factura")}
+                className={`flex-1 px-3 py-2 transition border-l border-carbon/20 ${
+                  tipo === "factura" ? "bg-sauce text-white" : "bg-white text-carbon/60 hover:bg-carbon/5"
+                }`}
+              >
+                Factura
+              </button>
             </div>
           </div>
+
+          {tipo === "factura" && (
+            <div>
+              <label className="block text-xs font-semibold text-carbon/80 mb-1">Folio de la Factura del Proveedor</label>
+              <input
+                type="text"
+                placeholder="Folio fiscal que trae la factura del proveedor"
+                value={folioProveedor}
+                onChange={(e) => setFolioProveedor(e.target.value)}
+                className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-1 focus:ring-sauce"
+              />
+              <p className="mt-1 text-[10px] text-carbon/50">
+                Además de este folio, el sistema mantiene su propio consecutivo interno.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -284,6 +330,9 @@ export function ModalRegistrarDocumentoProveedor({
               onChange={(e) => setArchivo(e.target.files?.[0] || null)}
               className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs text-carbon outline-none transition focus:border-sauce file:mr-3 file:rounded file:border-0 file:bg-sauce/10 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-sauce"
             />
+            {editando && documentoExistente?.archivoNombre && !archivo && (
+              <p className="mt-1 text-[10px] text-carbon/50">Archivo actual: {documentoExistente.archivoNombre}</p>
+            )}
           </div>
 
           <div>
@@ -311,7 +360,7 @@ export function ModalRegistrarDocumentoProveedor({
               disabled={guardando}
               className="rounded-lg bg-sauce px-5 py-2 text-xs font-medium text-white shadow-xs hover:bg-verde-profundo transition disabled:opacity-50"
             >
-              {guardando ? "Guardando..." : "Registrar Documento"}
+              {guardando ? "Guardando..." : editando ? "Guardar Cambios" : "Registrar Documento"}
             </button>
           </div>
         </form>

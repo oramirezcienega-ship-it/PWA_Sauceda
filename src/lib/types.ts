@@ -1067,6 +1067,9 @@ export type DatosProveedor = Omit<
 
 export type TipoDocumentoProveedor = "remision" | "factura";
 
+/** Origen del documento: capturado a mano, o generado en automático al concluir una orden de trabajo. */
+export type OrigenDocumentoProveedor = "manual" | "automatico";
+
 export interface DocumentoProveedor {
   id: string;
   proveedorId: string;
@@ -1074,21 +1077,28 @@ export interface DocumentoProveedor {
   cotizacionId: string | null;
   cotizacionFolio?: string | null;
   expedienteId: string | null;
+  /** Orden de trabajo que originó este documento (cuando se generó en automático al concluirla). */
+  ordenTrabajoId: string | null;
+  ordenTrabajoFolio?: string | null;
   tipo: TipoDocumentoProveedor;
+  /** Folio interno consecutivo, generado siempre por el sistema (REM-PROV-#### / FACT-PROV-####). */
   folio: string;
+  /** Folio que el proveedor puso en su factura fiscal. Solo aplica cuando tipo = "factura". */
+  folioProveedor?: string | null;
   concepto: string;
   fecha: string;
   monto: number;
   archivoUrl?: string | null;
   archivoNombre?: string | null;
   notas: string;
+  origen: OrigenDocumentoProveedor;
   createdAt: string;
   updatedAt: string;
 }
 
 export type DatosDocumentoProveedor = Omit<
   DocumentoProveedor,
-  "id" | "proveedorNombre" | "cotizacionFolio" | "createdAt" | "updatedAt"
+  "id" | "proveedorNombre" | "cotizacionFolio" | "ordenTrabajoFolio" | "folio" | "origen" | "createdAt" | "updatedAt"
 >;
 
 export const CATEGORIAS_PROVEEDOR = [

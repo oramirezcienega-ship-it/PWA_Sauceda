@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { crearOrdenTrabajo } from "@/app/actions/ordenes-trabajo";
+import { listarProveedoresMin } from "@/app/actions/proveedores";
 
 interface ModalCrearOrdenTrabajoProps {
   abierto: boolean;
@@ -33,8 +34,16 @@ export function ModalCrearOrdenTrabajo({
     new Date().toISOString().split("T")[0]
   );
   const [descripcion, setDescripcion] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
+  const [proveedoresOpciones, setProveedoresOpciones] = useState<{ id: string; nombre: string }[]>([]);
+  const [costoProveedor, setCostoProveedor] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!abierto) return;
+    listarProveedoresMin().then(setProveedoresOpciones).catch(() => setProveedoresOpciones([]));
+  }, [abierto]);
 
   if (!abierto) return null;
 
@@ -58,6 +67,8 @@ export function ModalCrearOrdenTrabajo({
         descripcion: descripcion.trim(),
         fechaProgramada,
         asesorEjecutorId: asesorEjecutorId || null,
+        proveedorId: proveedorId || null,
+        costoProveedor: costoProveedor ? parseFloat(costoProveedor) : null,
       });
 
       if (res.ok) {
@@ -170,6 +181,44 @@ export function ModalCrearOrdenTrabajo({
             </select>
             <p className="text-[10px] text-carbon/50 mt-1">
               Este asesor recibirá la asignación técnica y liderará la ejecución en sitio.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-carbon/10 bg-carbon/5 p-3 space-y-3">
+            <p className="text-[11px] font-semibold text-carbon/70 uppercase tracking-wide">
+              🧾 Proveedor Asignado (Opcional)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-carbon/80 mb-1">Proveedor</label>
+                <select
+                  value={proveedorId}
+                  onChange={(e) => setProveedorId(e.target.value)}
+                  className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none bg-white"
+                >
+                  <option value="">-- Sin proveedor / Decidir después --</option>
+                  {proveedoresOpciones.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-carbon/80 mb-1">Costo Pactado con el Proveedor</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={costoProveedor}
+                  onChange={(e) => setCostoProveedor(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-sm font-mono text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none"
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-carbon/50">
+              Al concluir la orden, se generará automáticamente la remisión de este costo a nombre del proveedor.
             </p>
           </div>
 
