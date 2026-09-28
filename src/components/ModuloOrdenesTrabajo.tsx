@@ -72,6 +72,7 @@ export function ModuloOrdenesTrabajo({
 
   // Foto en proceso de subida
   const [subiendoFotoOrdenId, setSubiendoFotoOrdenId] = useState<string | null>(null);
+  const [progresoFotos, setProgresoFotos] = useState<{ actual: number; total: number } | null>(null);
   const [fotoEtapa, setFotoEtapa] = useState<"inicio" | "proceso" | "entrega">("proceso");
 
   // Orden expandida para ver detalles/recibos
@@ -258,32 +259,46 @@ export function ModuloOrdenesTrabajo({
   };
 
   const handleSubirFoto = async (ordenId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const archivos = Array.from(e.target.files || []);
+    if (archivos.length === 0) return;
 
     try {
       setSubiendoFotoOrdenId(ordenId);
-      const fd = new FormData();
-      fd.append("foto", file);
-      fd.append("etapa", fotoEtapa);
-      fd.append("descripcion", `Evidencia de etapa ${fotoEtapa}`);
+      const erroresPorArchivo: string[] = [];
 
-      const res = await agregarEvidenciaFotoOT(ordenId, fd);
-      if (res.ok && res.foto) {
-        setOrdenes((prev) =>
-          prev.map((o) =>
-            o.id === ordenId
-              ? { ...o, fotosEvidencia: [...o.fotosEvidencia, res.foto!] }
-              : o
-          )
-        );
-      } else {
-        alert(res.error || "No se pudo subir la foto.");
+      // Se suben en secuencia (no en paralelo) porque cada subida lee y
+      // reescribe el arreglo completo de fotos_evidencia en la orden.
+      for (let i = 0; i < archivos.length; i++) {
+        setProgresoFotos({ actual: i + 1, total: archivos.length });
+
+        const fd = new FormData();
+        fd.append("foto", archivos[i]);
+        fd.append("etapa", fotoEtapa);
+        fd.append("descripcion", `Evidencia de etapa ${fotoEtapa}`);
+
+        const res = await agregarEvidenciaFotoOT(ordenId, fd);
+        if (res.ok && res.foto) {
+          const fotoSubida = res.foto;
+          setOrdenes((prev) =>
+            prev.map((o) =>
+              o.id === ordenId
+                ? { ...o, fotosEvidencia: [...o.fotosEvidencia, fotoSubida] }
+                : o
+            )
+          );
+        } else {
+          erroresPorArchivo.push(archivos[i].name);
+        }
+      }
+
+      if (erroresPorArchivo.length > 0) {
+        alert(`No se pudieron subir ${erroresPorArchivo.length} de ${archivos.length} foto(s): ${erroresPorArchivo.join(", ")}`);
       }
     } catch (err: any) {
-      alert(err?.message || "Error al subir foto.");
+      alert(err?.message || "Error al subir fotos.");
     } finally {
       setSubiendoFotoOrdenId(null);
+      setProgresoFotos(null);
       e.target.value = "";
     }
   };
@@ -708,12 +723,13 @@ export function ModuloOrdenesTrabajo({
                           <span>📷</span>
                           <span>
                             {subiendoFotoOrdenId === ot.id
-                              ? "Subiendo..."
-                              : "+ Foto"}
+                              ? `Subiendo${progresoFotos ? ` ${progresoFotos.actual}/${progresoFotos.total}` : "..."}`
+                              : "+ Fotos"}
                           </span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             disabled={subiendoFotoOrdenId === ot.id}
                             onChange={(e) => handleSubirFoto(ot.id, e)}
                             className="hidden"
