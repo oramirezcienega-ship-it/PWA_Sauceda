@@ -309,7 +309,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono, correo, direccion),
-        cotizaciones(id, precio_final, condiciones_pago, token),
+        cotizaciones(id, precio_final, condiciones_pago, token, expediente_id, prospecto_id),
         proveedores:proveedor_id(id, nombre)
       `)
       .order("created_at", { ascending: false });
@@ -402,9 +402,9 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         token: d.token || "",
         notificadoClienteAt: d.notificado_cliente_at,
         canalNotificacion: d.canal_notificacion,
-        expedienteId: d.expediente_id,
+        expedienteId: d.expediente_id || d.cotizaciones?.expediente_id || null,
         cotizacionId: d.cotizacion_id,
-        prospectoId: d.prospecto_id,
+        prospectoId: d.prospecto_id || d.cotizaciones?.prospecto_id || d.prospectos?.id || null,
         tipoNegocio: d.tipo_negocio || "construccion",
         estatus: d.estatus,
         titulo: d.titulo,
@@ -461,7 +461,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono, correo, direccion),
-        cotizaciones(id, precio_final, condiciones_pago, token),
+        cotizaciones(id, precio_final, condiciones_pago, token, expediente_id, prospecto_id),
         proveedores:proveedor_id(id, nombre)
       `)
       .eq("id", id)
@@ -570,15 +570,38 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         }
       : null;
 
+    let expedienteId = d.expediente_id || d.cotizaciones?.expediente_id || null;
+    let prospectoId = d.prospecto_id || d.cotizaciones?.prospecto_id || d.prospectos?.id || null;
+
+    if (!expedienteId && prospectoId) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("id")
+        .eq("prospecto_id", prospectoId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (exp?.id) expedienteId = exp.id;
+    }
+
+    if (!prospectoId && expedienteId) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("prospecto_id")
+        .eq("id", expedienteId)
+        .maybeSingle();
+      if (exp?.prospecto_id) prospectoId = exp.prospecto_id;
+    }
+
     const orden: OrdenTrabajo = {
       id: d.id,
       folio: d.folio,
       token: d.token || "",
       notificadoClienteAt: d.notificado_cliente_at,
       canalNotificacion: d.canal_notificacion,
-      expedienteId: d.expediente_id,
+      expedienteId,
       cotizacionId: d.cotizacion_id,
-      prospectoId: d.prospecto_id,
+      prospectoId,
       tipoNegocio: d.tipo_negocio || "construccion",
       estatus: d.estatus,
       titulo: d.titulo,

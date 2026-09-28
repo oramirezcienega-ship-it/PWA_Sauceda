@@ -203,6 +203,28 @@ export function TablaOrdenesTrabajo({
                         <span>🧾</span> {ot.proveedorNombre}
                       </div>
                     )}
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {ot.expedienteId && (
+                        <Link
+                          href={`/expediente/${ot.expedienteId}`}
+                          prefetch={false}
+                          className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-sauce hover:underline bg-sauce/10 px-1.5 py-0.5 rounded border border-sauce/20"
+                          title="Ir al expediente completo del cliente"
+                        >
+                          <span>📁</span> Exp
+                        </Link>
+                      )}
+                      {ot.prospectoId && (
+                        <Link
+                          href={`/prospectos/${ot.prospectoId}`}
+                          prefetch={false}
+                          className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-carbon/70 hover:text-carbon hover:underline bg-slate-100 px-1.5 py-0.5 rounded border border-carbon/15"
+                          title="Ir a la ficha del prospecto en CRM"
+                        >
+                          <span>👤</span> Prospecto
+                        </Link>
+                      )}
+                    </div>
                   </td>
 
                   {/* Trabajo / Servicio */}
@@ -341,9 +363,31 @@ export function TablaOrdenesTrabajo({
             </div>
 
             <div className="text-xs text-carbon/80 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-carbon/5">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center gap-2">
                 <span className="text-carbon/50">Cliente:</span>
-                <span className="font-semibold text-carbon">{ot.clienteNombre || "Cliente General"}</span>
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  <span className="font-semibold text-carbon">{ot.clienteNombre || "Cliente General"}</span>
+                  {ot.expedienteId && (
+                    <Link
+                      href={`/expediente/${ot.expedienteId}`}
+                      prefetch={false}
+                      className="text-[10px] font-semibold text-sauce bg-sauce/10 hover:bg-sauce hover:text-white px-1.5 py-0.5 rounded border border-sauce/20 transition"
+                      title="Ir al expediente"
+                    >
+                      📁 Exp
+                    </Link>
+                  )}
+                  {ot.prospectoId && (
+                    <Link
+                      href={`/prospectos/${ot.prospectoId}`}
+                      prefetch={false}
+                      className="text-[10px] font-semibold text-carbon/70 bg-slate-200/70 hover:bg-slate-300 px-1.5 py-0.5 rounded border border-carbon/15 transition"
+                      title="Ir al prospecto"
+                    >
+                      👤 Prospecto
+                    </Link>
+                  )}
+                </div>
               </div>
               {ot.clienteTelefono && (
                 <div className="flex justify-between">
