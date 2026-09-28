@@ -645,10 +645,16 @@ export function ModuloComisiones({
                               className={`text-[9px] uppercase px-1.5 py-0.2 rounded font-bold ${
                                 c.remisionTipo === "factura"
                                   ? "bg-purple-100 text-purple-800"
+                                  : c.remisionTipo === "recibo"
+                                  ? "bg-emerald-100 text-emerald-800"
                                   : "bg-blue-100 text-blue-800"
                               }`}
                             >
-                              {c.remisionTipo === "factura" ? "FAC" : "REM"}
+                              {c.remisionTipo === "factura"
+                                ? "FAC"
+                                : c.remisionTipo === "recibo"
+                                ? "REC"
+                                : "REM"}
                             </span>
                           </div>
                           <span className="text-[10px] text-carbon/50 block font-sans">

@@ -778,7 +778,14 @@ export function ModuloOrdenesTrabajo({
                                       </div>
                                     </div>
 
-                                    <div className="mt-3 pt-2 border-t border-emerald-200/50 flex items-center justify-end gap-2">
+                                    <div className="mt-3 pt-2 border-t border-emerald-200/50 flex items-center justify-end gap-2 flex-wrap">
+                                      <a
+                                        href={`/comisiones?busqueda=${encodeURIComponent(rec.folio)}`}
+                                        className="rounded-md bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 text-amber-900 px-2.5 py-1 text-[11px] font-bold flex items-center gap-1 shadow-2xs"
+                                        title="Ver estado de comisión del asesor en el módulo de comisiones"
+                                      >
+                                        💰 Comisión
+                                      </a>
                                       <a
                                         href={urlRec}
                                         target="_blank"

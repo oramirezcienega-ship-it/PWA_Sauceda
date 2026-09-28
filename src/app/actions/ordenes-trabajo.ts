@@ -10,6 +10,7 @@ import { enviarCorreo } from "@/lib/email";
 import { PLANTILLA_ENTREGA_SERVICIO } from "@/lib/meta-plantillas";
 import { MARCA } from "@/lib/marca";
 import type { RemisionFactura } from "@/lib/types";
+import { sincronizarComisionParaRecibo } from "@/app/actions/comisiones";
 
 export interface EvidenciaFoto {
   url: string;
@@ -859,7 +860,15 @@ export async function crearReciboPago(datos: {
 
     if (insertError) return { ok: false, error: insertError.message };
 
+    // Sincronizar automáticamente la comisión del asesor
+    try {
+      await sincronizarComisionParaRecibo(nuevo.id);
+    } catch (eCom: any) {
+      console.warn("No se pudo sincronizar automáticamente la comisión del recibo:", eCom?.message);
+    }
+
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/comisiones");
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
     if (ot.prospecto_id) revalidatePath(`/prospectos/${ot.prospecto_id}`);
 
