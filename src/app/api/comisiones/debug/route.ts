@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { listarComisiones, obtenerResumenEstadoCuenta } from "@/app/actions/comisiones";
 
 export const dynamic = "force-dynamic";
 
@@ -7,78 +9,87 @@ export async function GET() {
   try {
     const sb = supabaseServidor();
 
-    // 1. Raw comisiones
-    const { data: rawCom, error: errRawCom } = await sb
+    // 1. Probar usuarioActual
+    let usuario = null;
+    let errUser = null;
+    try {
+      usuario = await usuarioActual();
+    } catch (e: any) {
+      errUser = e.message || String(e);
+    }
+
+    // 2. Probar listarComisiones directamente
+    let comisionesAction = null;
+    let errAction = null;
+    try {
+      comisionesAction = await listarComisiones();
+    } catch (e: any) {
+      errAction = e.message || String(e);
+    }
+
+    // 3. Probar obtenerResumenEstadoCuenta directamente
+    let resumenAction = null;
+    let errResumen = null;
+    try {
+      resumenAction = await obtenerResumenEstadoCuenta();
+    } catch (e: any) {
+      errResumen = e.message || String(e);
+    }
+
+    // 4. Probar paso a paso el enriquecimiento interno sin requireAdmin
+    const { data: rows, error: errRows } = await sb
       .from("comisiones")
       .select("*")
-      .order("fecha", { ascending: false });
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
 
-    // 2. Comisiones con perfiles:asesor_id
-    const { data: joinCom, error: errJoinCom } = await sb
-      .from("comisiones")
-      .select("*, perfiles:asesor_id(nombre, telefono)")
-      .order("fecha", { ascending: false });
+    const asesorIds = Array.from(new Set((rows || []).map((r: any) => r.asesor_id).filter(Boolean)));
+    const remisionIds = Array.from(new Set((rows || []).map((r: any) => r.remision_factura_id).filter(Boolean)));
+    const reciboIds = Array.from(new Set((rows || []).map((r: any) => r.recibo_pago_id).filter(Boolean)));
+    const cotizacionIds = Array.from(new Set((rows || []).map((r: any) => r.cotizacion_id).filter(Boolean)));
+    const ordenTrabajoIds = Array.from(new Set((rows || []).map((r: any) => r.orden_trabajo_id).filter(Boolean)));
 
-    // 3. Comisiones pagos query
-    const { data: pagos, error: errPagos } = await sb
-      .from("comisiones_pagos")
-      .select(`
-        id,
-        asesor_id,
-        fecha_pago,
-        monto,
-        metodo_pago,
-        referencia,
-        comprobante_url,
-        notas,
-        created_at,
-        updated_at,
-        perfiles:asesor_id(nombre),
-        detalles:comisiones_pagos_detalle(
-          id,
-          pago_id,
-          comision_id,
-          monto_aplicado,
-          created_at
-        )
-      `);
-
-    // 4. Cotizaciones query
-    const { data: cotizaciones, error: errCot } = await sb
-      .from("cotizaciones")
-      .select("id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id")
-      .limit(5);
-
-    // 5. Perfiles query directa
-    const asesorIds = Array.from(new Set((rawCom || []).map((r: any) => r.asesor_id).filter(Boolean)));
-    const { data: perfilesDirectos, error: errPerfiles } = await sb
-      .from("perfiles")
-      .select("id, nombre, telefono")
-      .in("id", asesorIds);
+    const [resPerfiles, resRemisiones, resRecibos, resCotizaciones, resOrdenes] = await Promise.all([
+      asesorIds.length > 0
+        ? sb.from("perfiles").select("id, nombre, telefono").in("id", asesorIds)
+        : Promise.resolve({ data: [] }),
+      remisionIds.length > 0
+        ? sb.from("remisiones_facturas").select("id, folio, tipo, fecha, monto_subtotal, monto_total").in("id", remisionIds)
+        : Promise.resolve({ data: [] }),
+      reciboIds.length > 0
+        ? sb.from("recibos_pago").select("id, folio, concepto, monto, fecha_pago, cliente_nombre").in("id", reciboIds)
+        : Promise.resolve({ data: [] }),
+      cotizacionIds.length > 0
+        ? sb.from("cotizaciones").select("id, token, servicio_tipo, prospecto_id").in("id", cotizacionIds)
+        : Promise.resolve({ data: [] }),
+      ordenTrabajoIds.length > 0
+        ? sb.from("ordenes_trabajo").select("id, folio, titulo").in("id", ordenTrabajoIds)
+        : Promise.resolve({ data: [] }),
+    ]);
 
     return NextResponse.json({
       status: "ok",
-      rawComisiones: {
-        count: rawCom?.length || 0,
-        error: errRawCom?.message || null,
-        sample: rawCom?.[0] || null,
+      auth: {
+        usuario,
+        error: errUser,
       },
-      joinComisiones: {
-        count: joinCom?.length || 0,
-        error: errJoinCom?.message || null,
+      listarComisionesAction: {
+        count: comisionesAction?.length || 0,
+        error: errAction,
+        data: comisionesAction || [],
       },
-      pagos: {
-        count: pagos?.length || 0,
-        error: errPagos?.message || null,
+      resumenAction: {
+        data: resumenAction,
+        error: errResumen,
       },
-      cotizaciones: {
-        count: cotizaciones?.length || 0,
-        error: errCot?.message || null,
-      },
-      perfilesDirectos: {
-        count: perfilesDirectos?.length || 0,
-        error: errPerfiles?.message || null,
-        data: perfilesDirectos || [],
+      enriquecimientoInterno: {
+        rowsCount: rows?.length || 0,
+        errRows: errRows?.message || null,
+        errPerfiles: (resPerfiles as any)?.error?.message || null,
+        errRemisiones: (resRemisiones as any)?.error?.message || null,
+        errRecibos: (resRecibos as any)?.error?.message || null,
+        errCotizaciones: (resCotizaciones as any)?.error?.message || null,
+        errOrdenes: (resOrdenes as any)?.error?.message || null,
       },
     });
   } catch (err: any) {
