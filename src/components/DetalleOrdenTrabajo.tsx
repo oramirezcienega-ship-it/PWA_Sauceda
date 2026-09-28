@@ -552,16 +552,13 @@ export function DetalleOrdenTrabajo({
           </a>
 
           {orden.clienteTelefono && (
-            <a
-              href={`https://wa.me/${(orden.clienteTelefono || "").replace(/\D/g, "")}?text=${encodeURIComponent(
-                `Hola ${orden.clienteNombre || "Cliente"}, te compartimos el enlace oficial de entrega para tu orden ${orden.folio}: ${urlPortalEntrega}`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => setModalNotificar(true)}
               className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 text-xs transition shadow-2xs inline-flex items-center gap-1.5"
             >
               <span>💬</span> Enviar por WhatsApp
-            </a>
+            </button>
           )}
         </div>
       </div>

@@ -196,6 +196,14 @@ export default async function PaginaEntregaCliente({ params }: PaginaEntregaProp
                     >
                       Consultar Remisión →
                     </Link>
+                  ) : remisionFactura ? (
+                    <Link
+                      href={`/orden-trabajo/remision/${orden.token}`}
+                      target="_blank"
+                      className="block w-full text-center rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 shadow-2xs transition"
+                    >
+                      Consultar Remisión →
+                    </Link>
                   ) : (
                     <span className="text-xs text-carbon/40 italic block text-center">Disponible con su asesor</span>
                   )}

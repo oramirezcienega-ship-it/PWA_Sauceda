@@ -6,6 +6,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { numeroALetras } from "@/lib/numero-a-letras";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { normalizarTelefono } from "@/lib/telefono";
 import { enviarCorreo } from "@/lib/email";
 import { PLANTILLA_ENTREGA_SERVICIO } from "@/lib/meta-plantillas";
 import { MARCA } from "@/lib/marca";
@@ -1664,6 +1665,75 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
 }
 
 /**
+ * Consulta pública de la remisión/factura de una orden de trabajo que NO está
+ * vinculada a una cotización (por eso no tiene cotizacionToken). Se usa el
+ * propio token de la orden de trabajo para localizar el documento generado
+ * con generarRemisionDesdeOrdenTrabajo.
+ */
+export async function obtenerRemisionOrdenTrabajoPorToken(token: string): Promise<{
+  ok: boolean;
+  error?: string;
+  orden?: { folio: string; titulo: string; clienteNombre: string; clienteTelefono: string };
+  remision?: RemisionFactura;
+}> {
+  try {
+    const sb = supabaseServidor();
+
+    const { data: ot, error } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, titulo, prospectos(nombre, telefono)")
+      .eq("token", token)
+      .maybeSingle();
+
+    if (error || !ot) {
+      return { ok: false, error: "Orden de trabajo no encontrada o enlace caducado." };
+    }
+
+    const { data: rem } = await sb
+      .from("remisiones_facturas")
+      .select("*")
+      .eq("orden_trabajo_id", ot.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!rem) {
+      return { ok: false, error: "Aún no se ha generado una remisión/factura para esta orden de trabajo." };
+    }
+
+    return {
+      ok: true,
+      orden: {
+        folio: ot.folio,
+        titulo: ot.titulo,
+        clienteNombre: (ot.prospectos as any)?.nombre || "Cliente General",
+        clienteTelefono: (ot.prospectos as any)?.telefono || "",
+      },
+      remision: {
+        id: rem.id,
+        cotizacionId: rem.cotizacion_id,
+        ordenTrabajoId: rem.orden_trabajo_id,
+        expedienteId: rem.expediente_id,
+        tipo: rem.tipo,
+        folio: rem.folio,
+        fecha: rem.fecha,
+        tipoCambio: Number(rem.tipo_cambio || 1.0),
+        datosDocumento: rem.datos_documento || {},
+        serviciosExtra: Number(rem.servicios_extra || 0),
+        costoFinanciero: Number(rem.costo_financiero || 0),
+        otrosGastos: Number(rem.otros_gastos || 0),
+        montoSubtotal: Number(rem.monto_subtotal || 0),
+        montoTotal: Number(rem.monto_total || 0),
+        createdAt: rem.created_at,
+        updatedAt: rem.updated_at,
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al consultar la remisión de la orden de trabajo." };
+  }
+}
+
+/**
  * 14. Enviar Notificación de Conclusión y Entrega al Cliente (Multicanal).
  * Puede enviarse vía Meta Cloud API (Plantilla UTILITY oficial) o Correo Corporativo (Resend).
  */
@@ -1878,7 +1948,39 @@ export async function enviarNotificacionEntregaCliente(params: {
       });
     }
 
+    // Integrar el envío al historial de conversaciones de WhatsApp, para que
+    // aparezca en la bandeja y el webhook de Meta pueda actualizar su estado
+    // de entregado/leído emparejando por wa_message_id.
+    if (params.canal === "whatsapp_plantilla" && telefono) {
+      const usuario = await usuarioActual();
+      let agente = usuario?.email || "";
+      if (usuario) {
+        const { data: perfil } = await sb
+          .from("perfiles")
+          .select("nombre")
+          .eq("id", usuario.id)
+          .maybeSingle();
+        agente = (perfil as { nombre?: string } | null)?.nombre?.trim() || agente;
+      }
+
+      const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
+        telefono: normalizarTelefono(telefono),
+        texto: `[plantilla: ${params.plantillaNombre || "sauceda_entrega_servicio"}] Aviso de entrega de la orden ${orden.folio}`,
+        direccion: "out",
+        expediente_id: orden.expedienteId,
+        prospecto_id: orden.prospectoId,
+        estado: "enviado",
+        agente,
+        wa_message_id: messageId || null,
+      });
+
+      if (insertErr) {
+        console.error("Error al insertar notificación de entrega en historial de WhatsApp:", insertErr);
+      }
+    }
+
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/conversaciones");
     if (orden.expedienteId) revalidatePath(`/expediente/${orden.expedienteId}`);
 
     return { ok: true, messageId };
