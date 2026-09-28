@@ -221,87 +221,139 @@ export async function listarComisiones(filtros?: {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  let query = sb
-    .from("comisiones")
-    .select(`
-      id,
-      remision_factura_id,
-      recibo_pago_id,
-      asesor_id,
-      cotizacion_id,
-      expediente_id,
-      orden_trabajo_id,
-      fecha,
-      monto_venta,
-      porcentaje_comision,
-      monto_comision,
-      monto_pagado,
-      saldo_pendiente,
-      estatus,
-      es_ajuste_manual,
-      motivo_ajuste,
-      detalles_calculo,
-      notas,
-      created_at,
-      updated_at,
-      perfiles:asesor_id(nombre, telefono),
-      remisiones_facturas:remision_factura_id(id, folio, tipo, fecha, monto_subtotal, monto_total),
-      recibos_pago:recibo_pago_id(id, folio, concepto, monto, fecha_pago, cliente_nombre),
-      cotizaciones:cotizacion_id(id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id, empresa_id, prospectos(nombre, primer_apellido, segundo_apellido, empresa_id), empresas(name)),
-      ordenes_trabajo:orden_trabajo_id(id, folio, titulo, prospectos(nombre, primer_apellido, segundo_apellido))
-    `)
-    .order("fecha", { ascending: false })
-    .order("created_at", { ascending: false });
+  let data: any[] = [];
+  try {
+    let query = sb
+      .from("comisiones")
+      .select(`
+        id,
+        remision_factura_id,
+        recibo_pago_id,
+        asesor_id,
+        cotizacion_id,
+        expediente_id,
+        orden_trabajo_id,
+        fecha,
+        monto_venta,
+        porcentaje_comision,
+        monto_comision,
+        monto_pagado,
+        saldo_pendiente,
+        estatus,
+        es_ajuste_manual,
+        motivo_ajuste,
+        detalles_calculo,
+        notas,
+        created_at,
+        updated_at,
+        perfiles:asesor_id(nombre, telefono),
+        remisiones_facturas:remision_factura_id(id, folio, tipo, fecha, monto_subtotal, monto_total),
+        recibos_pago:recibo_pago_id(id, folio, concepto, monto, fecha_pago, cliente_nombre),
+        cotizaciones:cotizacion_id(id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id),
+        ordenes_trabajo:orden_trabajo_id(id, folio, titulo)
+      `)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
 
-  if (filtros?.asesorId && filtros.asesorId !== "todos") {
-    query = query.eq("asesor_id", filtros.asesorId);
+    if (filtros?.asesorId && filtros.asesorId !== "todos") {
+      query = query.eq("asesor_id", filtros.asesorId);
+    }
+
+    if (filtros?.estatus && filtros.estatus !== "todas") {
+      query = query.eq("estatus", filtros.estatus);
+    }
+
+    if (filtros?.fechaDesde) {
+      query = query.gte("fecha", filtros.fechaDesde);
+    }
+
+    if (filtros?.fechaHasta) {
+      query = query.lte("fecha", filtros.fechaHasta);
+    }
+
+    const res = await query;
+    if (res.error) {
+      console.warn("Aviso en consulta enriquecida de comisiones, usando consulta base:", res.error.message);
+      throw new Error(res.error.message);
+    }
+    data = res.data || [];
+  } catch (errPrimario: any) {
+    // Consulta base a prueba de fallos
+    let fallbackQuery = sb
+      .from("comisiones")
+      .select("*, perfiles:asesor_id(nombre, telefono)")
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (filtros?.asesorId && filtros.asesorId !== "todos") {
+      fallbackQuery = fallbackQuery.eq("asesor_id", filtros.asesorId);
+    }
+
+    if (filtros?.estatus && filtros.estatus !== "todas") {
+      fallbackQuery = fallbackQuery.eq("estatus", filtros.estatus);
+    }
+
+    if (filtros?.fechaDesde) {
+      fallbackQuery = fallbackQuery.gte("fecha", filtros.fechaDesde);
+    }
+
+    if (filtros?.fechaHasta) {
+      fallbackQuery = fallbackQuery.lte("fecha", filtros.fechaHasta);
+    }
+
+    const { data: fallbackData, error: errFallback } = await fallbackQuery;
+    if (errFallback) {
+      console.error("Error al listar comisiones base:", errFallback.message);
+      return [];
+    }
+    data = fallbackData || [];
   }
 
-  if (filtros?.estatus && filtros.estatus !== "todas") {
-    query = query.eq("estatus", filtros.estatus);
+  // Extraer prospectoIds para resolver nombres si no vienen por recibo
+  const prospectoIds = Array.from(
+    new Set(
+      data
+        .map((r: any) => r.cotizaciones?.prospecto_id)
+        .filter(Boolean)
+    )
+  );
+
+  const mapaProspectos = new Map<string, string>();
+  if (prospectoIds.length > 0) {
+    try {
+      const { data: prosData } = await sb
+        .from("prospectos")
+        .select("id, nombre, primer_apellido, segundo_apellido")
+        .in("id", prospectoIds);
+      for (const p of prosData || []) {
+        const nom = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
+        if (nom) mapaProspectos.set(p.id, nom);
+      }
+    } catch {
+      // Ignorar si prospectos no se pudo consultar
+    }
   }
 
-  if (filtros?.fechaDesde) {
-    query = query.gte("fecha", filtros.fechaDesde);
-  }
-
-  if (filtros?.fechaHasta) {
-    query = query.lte("fecha", filtros.fechaHasta);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error("Error al listar comisiones:", error.message);
-    throw new Error(error.message);
-  }
-
-  const lista: Comision[] = (data || []).map((row: any) => {
+  const lista: Comision[] = data.map((row: any) => {
     const rem = row.remisiones_facturas;
     const rec = row.recibos_pago;
     const cot = row.cotizaciones;
-    const pros = cot?.prospectos || row.ordenes_trabajo?.prospectos;
-    const emp = cot?.empresas;
 
     // Nombre del cliente
     let nombreCliente = cot?.cliente_nombre_personalizado?.trim() || "";
-    if (!nombreCliente) {
-      if (pros) {
-        nombreCliente = [pros.nombre, pros.primer_apellido, pros.segundo_apellido]
-          .filter(Boolean)
-          .join(" ");
-      }
+    if (!nombreCliente && cot?.prospecto_id && mapaProspectos.has(cot.prospecto_id)) {
+      nombreCliente = mapaProspectos.get(cot.prospecto_id)!;
     }
     if (!nombreCliente && rec?.cliente_nombre) {
       nombreCliente = rec.cliente_nombre;
     }
-    if (!nombreCliente && emp?.name) {
-      nombreCliente = emp.name;
+    if (!nombreCliente && row.detalles_calculo?.clienteNombre) {
+      nombreCliente = row.detalles_calculo.clienteNombre;
     }
     if (!nombreCliente) {
-      nombreCliente = "Cliente Sin Nombre";
+      nombreCliente = "Cliente Sauceda";
     }
 
-    const empresaNombre = emp?.name || null;
     const folioCalculado =
       rem?.folio ||
       rec?.folio ||
@@ -328,7 +380,7 @@ export async function listarComisiones(filtros?: {
       ordenTrabajoId: row.orden_trabajo_id,
       ordenTrabajoFolio: row.ordenes_trabajo?.folio || null,
       clienteNombre,
-      clienteEmpresa: empresaNombre,
+      clienteEmpresa: null,
       servicioTipo: cot?.servicio_tipo || null,
       fecha: row.fecha,
       montoVenta: Number(row.monto_venta || 0),
