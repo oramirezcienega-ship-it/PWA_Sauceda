@@ -1393,6 +1393,38 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
       console.error("Error al sincronizar comisión tras generar remisión desde OT:", errCom);
     }
 
+    // Reflejar automáticamente la venta en Finanzas (ingresos_ventas). Si ya
+    // se cobró por completo vía recibos_pago se registra como "pagado";
+    // de lo contrario queda como cuenta por cobrar pendiente.
+    try {
+      const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
+      const { data: recibosOt } = await sb
+        .from("recibos_pago")
+        .select("monto, fecha_pago")
+        .eq("orden_trabajo_id", ot.id);
+      const totalCobrado = (recibosOt || []).reduce((acc, r: any) => acc + Number(r.monto || 0), 0);
+      const yaLiquidada = montoBase > 0 && totalCobrado >= montoBase;
+      const ultimaFechaCobro = (recibosOt || [])
+        .map((r: any) => r.fecha_pago)
+        .filter(Boolean)
+        .sort()
+        .pop();
+
+      await registrarMovimientoAutomaticoCRM({
+        tipo: "ingreso",
+        lineaPnl: "ingresos_ventas",
+        monto: montoBase,
+        concepto: `Venta - ${folio} - ${ot.titulo}`,
+        fecha: datos.fecha || new Date().toISOString().split("T")[0],
+        fechaPago: yaLiquidada ? ultimaFechaCobro || undefined : undefined,
+        estado: yaLiquidada ? "pagado" : "pendiente",
+        contraparte: ot.prospectos?.nombre || "Cliente",
+        crmDealId: nuevaRem.id,
+      });
+    } catch (errFin) {
+      console.error("Error al registrar movimiento financiero de venta desde OT:", errFin);
+    }
+
     // Si tiene cotización, asegurar que pase a 'instalacion'
     if (ot.cotizacion_id) {
       await sb
