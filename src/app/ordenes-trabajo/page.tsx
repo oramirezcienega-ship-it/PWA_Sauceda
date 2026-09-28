@@ -233,6 +233,12 @@ export default function PaginaOrdenesTrabajo() {
         <ModuloOrdenesTrabajo
           clienteNombreDefault="General"
           soloLectura={false}
+          filtroEstatus={filtroEstatus}
+          filtroTipo={filtroTipo}
+          filtroAsesor={filtroAsesor}
+          busqueda={busqueda}
+          alEliminarOrden={() => cargarDatos()}
+          alCrearOrden={() => cargarDatos()}
         />
       </div>
 

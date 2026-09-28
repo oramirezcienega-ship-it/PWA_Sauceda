@@ -586,6 +586,70 @@ export async function actualizarEstatusOrdenTrabajo(
   }
 }
 
+/** 5. Eliminar Orden de Trabajo */
+export async function eliminarOrdenTrabajo(
+  ordenId: string
+): Promise<{ ok: boolean; folio?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    // 1. Obtener datos de la orden para saber referencias y folios
+    const { data: orden, error: errOrden } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, expediente_id, cotizacion_id")
+      .eq("id", ordenId)
+      .maybeSingle();
+
+    if (errOrden) return { ok: false, error: errOrden.message };
+    if (!orden) return { ok: false, error: "La orden de trabajo no existe o ya fue eliminada." };
+
+    // 2. Limpiar pólizas de garantía exclusivas de esta OT (sin cotización vinculada)
+    await sb
+      .from("garantias_documentos")
+      .delete()
+      .eq("orden_trabajo_id", ordenId)
+      .is("cotizacion_id", null);
+
+    // Desvincular garantías que sí pertenezcan a una cotización
+    await sb
+      .from("garantias_documentos")
+      .update({ orden_trabajo_id: null })
+      .eq("orden_trabajo_id", ordenId);
+
+    // 3. Limpiar recibos de pago vinculados a esta orden
+    await sb
+      .from("recibos_pago")
+      .delete()
+      .eq("orden_trabajo_id", ordenId);
+
+    // 4. Desvincular remisión o factura asociada a esta OT
+    await sb
+      .from("remisiones_facturas")
+      .update({ orden_trabajo_id: null })
+      .eq("orden_trabajo_id", ordenId);
+
+    // 5. Eliminar la orden de trabajo
+    const { error: errDelete } = await sb
+      .from("ordenes_trabajo")
+      .delete()
+      .eq("id", ordenId);
+
+    if (errDelete) return { ok: false, error: errDelete.message };
+
+    // 6. Revalidar rutas
+    revalidatePath("/ordenes-trabajo");
+    if (orden.cotizacion_id) revalidatePath(`/construccion/${orden.cotizacion_id}`);
+    if (orden.expediente_id) revalidatePath(`/expedientes/${orden.expediente_id}`);
+    revalidatePath("/construccion");
+    revalidatePath("/prospectos");
+
+    return { ok: true, folio: orden.folio };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al eliminar la orden de trabajo." };
+  }
+}
+
 /** 5. Asignar Asesor Ejecutor */
 export async function asignarAsesorEjecutor(
   ordenId: string,
