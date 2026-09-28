@@ -81,6 +81,17 @@ export function DetalleOrdenTrabajo({
     }).format(val);
   };
 
+  const formatearFecha = (fechaStr?: string | null) => {
+    if (!fechaStr) return "—";
+    try {
+      const d = new Date(fechaStr);
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" });
+    } catch {
+      return "—";
+    }
+  };
+
   const recargarDetalle = async () => {
     try {
       setCargando(true);
@@ -261,7 +272,7 @@ export function DetalleOrdenTrabajo({
                 {orden.folio}
               </span>
               <span className="text-xs font-semibold text-carbon/60 uppercase tracking-wider bg-carbon/5 px-2.5 py-0.5 rounded">
-                {orden.tipoNegocio.replace(/_/g, " ")}
+                {(orden.tipoNegocio || "general").replace(/_/g, " ")}
               </span>
               {orden.notificadoClienteAt && (
                 <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -361,7 +372,7 @@ export function DetalleOrdenTrabajo({
             </div>
             {orden.fechaConclusion ? (
               <div className="font-mono text-emerald-700 font-bold mt-0.5">
-                ✓ Concluyó: {new Date(orden.fechaConclusion).toLocaleDateString()}
+                ✓ Concluyó: {formatearFecha(orden.fechaConclusion)}
               </div>
             ) : (
               <div className="text-carbon/40 italic text-[11px] mt-0.5">
@@ -542,8 +553,8 @@ export function DetalleOrdenTrabajo({
 
           {orden.clienteTelefono && (
             <a
-              href={`https://wa.me/${orden.clienteTelefono.replace(/\D/g, "")}?text=${encodeURIComponent(
-                `Hola ${orden.clienteNombre}, te compartimos el enlace oficial de entrega para tu orden ${orden.folio}: ${urlPortalEntrega}`
+              href={`https://wa.me/${(orden.clienteTelefono || "").replace(/\D/g, "")}?text=${encodeURIComponent(
+                `Hola ${orden.clienteNombre || "Cliente"}, te compartimos el enlace oficial de entrega para tu orden ${orden.folio}: ${urlPortalEntrega}`
               )}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -595,7 +606,7 @@ export function DetalleOrdenTrabajo({
                       </span>
                     </div>
                     <div className="text-[11px] text-carbon/50 mt-0.5">
-                      {new Date(r.fecha).toLocaleDateString()} • {r.formaPago.replace(/_/g, " ")} {r.concepto ? `(${r.concepto})` : ""}
+                      {formatearFecha(r.fechaPago || r.createdAt)} • {((r.metodoPago || (r as any).formaPago) || "Pago").replace(/_/g, " ")} {r.concepto ? `(${r.concepto})` : ""}
                     </div>
                   </div>
 
@@ -663,7 +674,7 @@ export function DetalleOrdenTrabajo({
               </div>
               <div className="text-carbon/60 text-[11px]">
                 {garantia.fechaInicio && (
-                  <span>Vigencia: {new Date(garantia.fechaInicio).toLocaleDateString()} hasta {garantia.fechaVencimiento ? new Date(garantia.fechaVencimiento).toLocaleDateString() : "conclusión"}</span>
+                  <span>Vigencia: {formatearFecha(garantia.fechaInicio)} hasta {garantia.fechaVencimiento ? formatearFecha(garantia.fechaVencimiento) : "conclusión"}</span>
                 )}
               </div>
               {garantia.token && (
@@ -858,7 +869,7 @@ export function DetalleOrdenTrabajo({
                 )}
                 {f.fecha && (
                   <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-[9px] font-mono text-white/90">
-                    {new Date(f.fecha).toLocaleDateString()}
+                    {formatearFecha(f.fecha)}
                   </div>
                 )}
               </div>
@@ -999,7 +1010,7 @@ export function DetalleOrdenTrabajo({
         clienteNombre={orden.clienteNombre}
         clienteTelefono={orden.clienteTelefono}
         garantiaActual={garantia}
-        tipoNegocio={orden.tipoNegocio}
+        tipoNegocio={orden.tipoNegocio || "construccion"}
       />
 
       <ModalGenerarRemisionOT

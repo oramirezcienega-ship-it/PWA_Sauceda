@@ -75,12 +75,12 @@ export default function PaginaOrdenesTrabajo() {
   // Filtrado en memoria por búsqueda de texto
   const ordenesFiltradas = ordenes.filter((o) => {
     if (!busqueda.trim()) return true;
-    const q = busqueda.toLowerCase();
+    const q = busqueda.toLowerCase().trim();
     return (
-      o.folio.toLowerCase().includes(q) ||
-      o.titulo.toLowerCase().includes(q) ||
-      (o.clienteNombre && o.clienteNombre.toLowerCase().includes(q)) ||
-      (o.asesorEjecutorNombre && o.asesorEjecutorNombre.toLowerCase().includes(q))
+      (o.folio?.toLowerCase() || "").includes(q) ||
+      (o.titulo?.toLowerCase() || "").includes(q) ||
+      (o.clienteNombre?.toLowerCase() || "").includes(q) ||
+      (o.asesorEjecutorNombre?.toLowerCase() || "").includes(q)
     );
   });
 
