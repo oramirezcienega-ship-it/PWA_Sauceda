@@ -2089,5 +2089,560 @@ export async function enviarReciboPorWhatsApp(reciboId: string): Promise<{
   }
 }
 
+/**
+ * 22. Asegurar que exista una Orden de Trabajo vinculada a una Cotización
+ */
+export async function asegurarOrdenTrabajoParaCotizacion(
+  cotizacionId: string
+): Promise<{ ok: boolean; ordenId?: string; folio?: string; error?: string }> {
+  try {
+    const sb = supabaseServidor();
+
+    // 1. Verificar si ya existe una orden para esta cotización
+    const { data: existente } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio")
+      .eq("cotizacion_id", cotizacionId)
+      .maybeSingle();
+
+    if (existente) {
+      return { ok: true, ordenId: existente.id, folio: existente.folio };
+    }
+
+    // 2. Si no existe, obtener cotización y crearla
+    const { data: cot, error: errCot } = await sb
+      .from("cotizaciones")
+      .select(`
+        id,
+        prospecto_id,
+        expediente_id,
+        servicio_tipo,
+        precio_final,
+        prospectos(nombre, primer_apellido, segundo_apellido, direccion, fraccionamiento)
+      `)
+      .eq("id", cotizacionId)
+      .single();
+
+    if (errCot || !cot) {
+      return { ok: false, error: "Cotización no encontrada para asegurar orden." };
+    }
+
+    const { data: conceptos } = await sb
+      .from("cotizacion_conceptos")
+      .select("descripcion, cantidad, unidad")
+      .eq("cotizacion_id", cotizacionId);
+
+    const desc = (conceptos || [])
+      .map((c: any) => `• ${c.cantidad || 1} ${c.unidad || "servicio"} - ${c.descripcion}`)
+      .join("\n");
+
+    const titulo = cot.servicio_tipo
+      ? `${cot.servicio_tipo.replace(/_/g, " ").toUpperCase()} - Cotización ${cot.id}`
+      : `Trabajo de Instalación - Cotización ${cot.id}`;
+
+    const res = await crearOrdenTrabajo({
+      cotizacionId: cot.id,
+      expedienteId: cot.expediente_id,
+      prospectoId: cot.prospecto_id,
+      tipoNegocio: cot.servicio_tipo || "construccion",
+      titulo,
+      descripcion: desc || "Trabajo de instalación técnica autorizado.",
+    });
+
+    return res;
+  } catch (err: any) {
+    console.error("Error en asegurarOrdenTrabajoParaCotizacion:", err);
+    return { ok: false, error: err?.message || "Error al asegurar orden de trabajo." };
+  }
+}
+
+/**
+ * 23. Obtener datos completos para el formulario de programación de instalación
+ */
+export async function obtenerDatosProgramacionInstalacion(cotizacionId: string): Promise<{
+  ok: boolean;
+  cotizacion?: any;
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  clienteDireccion?: string;
+  servicioTipo?: string;
+  montoTotal?: number;
+  saldoRestante?: number;
+  conceptos?: Array<{ descripcion: string; cantidad: number; unidad: string; importe: number }>;
+  ordenExistente?: any;
+  citaExistente?: any;
+  asesores: Array<{ id: string; nombre: string; telefono?: string }>;
+  proveedores: Array<{ id: string; nombre: string }>;
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    // 1. Obtener cotización con prospecto y expediente
+    const { data: cot, error: cotErr } = await sb
+      .from("cotizaciones")
+      .select(`
+        id,
+        token,
+        folio,
+        estatus,
+        servicio_tipo,
+        precio_final,
+        prospecto_id,
+        expediente_id,
+        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, email, direccion, fraccionamiento),
+        expedientes(id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, fecha_instalacion, operador_id)
+      `)
+      .eq("id", cotizacionId)
+      .maybeSingle();
+
+    if (cotErr || !cot) {
+      return { ok: false, error: "Cotización no encontrada.", asesores: [], proveedores: [] };
+    }
+
+    // 2. Consultar conceptos, orden de trabajo existente, cita de agenda y recibos
+    const [conceptosRes, otRes, citaRes, recsRes, asesores, proveedores] = await Promise.all([
+      sb.from("cotizacion_conceptos").select("descripcion, cantidad, unidad, importe").eq("cotizacion_id", cot.id),
+      sb.from("ordenes_trabajo").select("*").eq("cotizacion_id", cot.id).maybeSingle(),
+      sb.from("agenda_citas").select("*").eq("cotizacion_id", cot.id).eq("tipo_cita", "instalacion").maybeSingle(),
+      sb.from("recibos_pago").select("monto").eq("cotizacion_id", cot.id),
+      import("@/app/actions/usuarios").then((m) => m.listarAsesoresActivos().catch(() => [])),
+      import("@/app/actions/proveedores").then((m) => m.listarProveedoresMin().catch(() => [])),
+    ]);
+
+    // Resolver cliente
+    const p = cot.prospectos as any;
+    const e = cot.expedientes as any;
+    const nombreCliente = [
+      p?.nombre || e?.cliente,
+      p?.primer_apellido || e?.primer_apellido,
+      p?.segundo_apellido || e?.segundo_apellido,
+    ]
+      .filter(Boolean)
+      .join(" ") || "Cliente General";
+
+    const telefonoCliente = p?.telefono || e?.telefono || "";
+    const direccionCliente = p?.direccion || p?.fraccionamiento || e?.fraccionamiento || "";
+
+    const montoTotal = Number(cot.precio_final || 0);
+    const totalPagado = (recsRes.data || []).reduce((acc: number, r: any) => acc + Number(r.monto || 0), 0);
+    const saldoRestante = Math.max(0, montoTotal - totalPagado);
+
+    return {
+      ok: true,
+      cotizacion: {
+        id: cot.id,
+        token: cot.token,
+        folio: cot.folio || cot.id,
+        estatus: cot.estatus,
+        servicioTipo: cot.servicio_tipo || "impermeabilizacion",
+        precioFinal: montoTotal,
+        prospectoId: cot.prospecto_id,
+        expedienteId: cot.expediente_id,
+      },
+      clienteNombre: nombreCliente,
+      clienteTelefono: telefonoCliente,
+      clienteDireccion: direccionCliente,
+      servicioTipo: cot.servicio_tipo || "Servicio General",
+      montoTotal,
+      saldoRestante,
+      conceptos: conceptosRes.data || [],
+      ordenExistente: otRes.data || null,
+      citaExistente: citaRes.data || null,
+      asesores,
+      proveedores,
+    };
+  } catch (err: any) {
+    console.error("Error en obtenerDatosProgramacionInstalacion:", err);
+    return { ok: false, error: err?.message || "Error al obtener datos.", asesores: [], proveedores: [] };
+  }
+}
+
+/**
+ * 24. Programar Instalación, Detonar Orden de Trabajo y Notificar a Proveedor y Cliente
+ */
+export async function programarInstalacionYDetonarOT(datos: {
+  cotizacionId: string;
+  fechaInstalacion: string; // YYYY-MM-DD
+  horaInicio?: string;      // default "09:00"
+  horaFin?: string;         // default "14:00"
+  asesorEjecutorId?: string | null;
+  proveedorId?: string | null;
+  costoProveedor?: number | null;
+  proveedorConcepto?: string | null;
+  metodoPagoSaldo?: string; // "terminal_tarjeta" | "transferencia" | "efectivo" | "liquidado"
+  montoSaldo?: number;
+  notasInstalacion?: string;
+  notificarClienteWhatsApp?: boolean;
+  notificarProveedorWhatsApp?: boolean;
+  notificarAsesorApp?: boolean;
+}): Promise<{
+  ok: boolean;
+  ordenId?: string;
+  ordenFolio?: string;
+  mensajeCliente?: string;
+  mensajeProveedor?: string;
+  urlWhatsAppCliente?: string;
+  urlWhatsAppProveedor?: string;
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const usuario = await usuarioActual();
+
+    // 1. Validar y obtener cotización completa
+    const { data: cot, error: errCot } = await sb
+      .from("cotizaciones")
+      .select(`
+        id,
+        token,
+        folio,
+        estatus,
+        servicio_tipo,
+        precio_final,
+        prospecto_id,
+        expediente_id,
+        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, email, direccion, fraccionamiento),
+        expedientes(id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, operador_id)
+      `)
+      .eq("id", datos.cotizacionId)
+      .single();
+
+    if (errCot || !cot) {
+      return { ok: false, error: "Cotización no encontrada para programar instalación." };
+    }
+
+    // 2. Resolver datos del cliente
+    const p = cot.prospectos as any;
+    const e = cot.expedientes as any;
+    const nombreCliente = [
+      p?.nombre || e?.cliente,
+      p?.primer_apellido || e?.primer_apellido,
+      p?.segundo_apellido || e?.segundo_apellido,
+    ]
+      .filter(Boolean)
+      .join(" ") || "Cliente General";
+
+    const telefonoCliente = p?.telefono || e?.telefono || "";
+    const direccionCliente = p?.direccion || p?.fraccionamiento || e?.fraccionamiento || "Domicilio en Obra";
+    const servicioTipo = (cot.servicio_tipo || "impermeabilizacion").replace(/_/g, " ");
+
+    const horaInicio = datos.horaInicio || "09:00";
+    const horaFin = datos.horaFin || "14:00";
+    const fechaISO = `${datos.fechaInstalacion}T${horaInicio}:00`;
+
+    // 3. Obtener conceptos de la cotización para armar el alcance de la orden
+    const { data: conceptos } = await sb
+      .from("cotizacion_conceptos")
+      .select("descripcion, cantidad, unidad, importe")
+      .eq("cotizacion_id", cot.id);
+
+    const resumenConceptos = (conceptos || [])
+      .map((c: any) => `• ${c.cantidad || 1} ${c.unidad || "serv"} - ${c.descripcion}`)
+      .join("\n") || `• 1 servicio - ${servicioTipo}`;
+
+    // 4. Saldo y método de pago
+    const montoSaldo = datos.montoSaldo !== undefined ? Number(datos.montoSaldo) : Number(cot.precio_final || 0);
+    const metodoPago = datos.metodoPagoSaldo || "terminal_tarjeta";
+    const metodoPagoLabel =
+      metodoPago === "terminal_tarjeta"
+        ? "Terminal Bancaria en Sitio (Tarjeta de Débito / Crédito)"
+        : metodoPago === "transferencia"
+        ? "Transferencia bancaria previa"
+        : metodoPago === "efectivo"
+        ? "Efectivo contra entrega"
+        : "Previamente Liquidado";
+
+    const saldoFormateado = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(montoSaldo);
+
+    // Formatear fecha amigable para mensajes
+    let fechaLegible = datos.fechaInstalacion;
+    try {
+      const fParts = datos.fechaInstalacion.split("-");
+      const d = new Date(Number(fParts[0]), Number(fParts[1]) - 1, Number(fParts[2]));
+      fechaLegible = d.toLocaleDateString("es-MX", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch {}
+
+    // 5. Actualizar estatus de la cotización a 'instalacion'
+    await sb
+      .from("cotizaciones")
+      .update({
+        estatus: "instalacion",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", cot.id);
+
+    // 6. Actualizar expediente si existe
+    if (cot.expediente_id) {
+      await sb
+        .from("expedientes")
+        .update({
+          fecha_instalacion: fechaISO,
+          operador_id: datos.asesorEjecutorId || e?.operador_id || null,
+          etapa: "propuesta-aceptada",
+          ultimo_movimiento: new Date().toISOString().split("T")[0],
+        })
+        .eq("id", cot.expediente_id);
+    }
+
+    // 7. Sincronizar Cita en Agenda (agenda_citas)
+    const { data: citaExistente } = await sb
+      .from("agenda_citas")
+      .select("id")
+      .eq("cotizacion_id", cot.id)
+      .eq("tipo_cita", "instalacion")
+      .maybeSingle();
+
+    const notasCita = [
+      datos.notasInstalacion?.trim(),
+      `Cobro saldo: ${saldoFormateado} (${metodoPagoLabel})`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    if (citaExistente) {
+      await sb
+        .from("agenda_citas")
+        .update({
+          perfil_id: datos.asesorEjecutorId || usuario?.id,
+          fecha: datos.fechaInstalacion,
+          hora_inicio: horaInicio,
+          hora_fin: horaFin,
+          notas: notasCita,
+          estado: "confirmada",
+        })
+        .eq("id", citaExistente.id);
+    } else {
+      await sb.from("agenda_citas").insert({
+        perfil_id: datos.asesorEjecutorId || usuario?.id,
+        prospecto_id: cot.prospecto_id || null,
+        expediente_id: cot.expediente_id || null,
+        cotizacion_id: cot.id,
+        cliente_nombre: nombreCliente,
+        cliente_telefono: telefonoCliente,
+        fraccionamiento: direccionCliente,
+        tipo_cita: "instalacion",
+        fecha: datos.fechaInstalacion,
+        hora_inicio: horaInicio,
+        hora_fin: horaFin,
+        notas: notasCita,
+        estado: "confirmada",
+      });
+    }
+
+    // 8. DETONAR / ASEGURAR ORDEN DE TRABAJO
+    let otId = "";
+    let otFolio = "";
+
+    const { data: otExistente } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, estatus")
+      .eq("cotizacion_id", cot.id)
+      .maybeSingle();
+
+    const descripcionOT = [
+      `INSTALACIÓN TÉCNICA PROGRAMADA PARA: ${fechaLegible} (${horaInicio} a ${horaFin} hrs)`,
+      `\nALCANCE DE TRABAJO:\n${resumenConceptos}`,
+      `\nCONDICIÓN DE COBRO: Saldo por ${saldoFormateado} vía ${metodoPagoLabel}.` +
+        (metodoPago === "terminal_tarjeta" ? " ⚠️ Asegurar llevar terminal bancaria con carga y señal." : ""),
+      datos.notasInstalacion ? `\nINDICACIONES ESPECIALES:\n${datos.notasInstalacion}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (otExistente) {
+      otId = otExistente.id;
+      otFolio = otExistente.folio;
+      await sb
+        .from("ordenes_trabajo")
+        .update({
+          fecha_programada: datos.fechaInstalacion,
+          asesor_ejecutor_id: datos.asesorEjecutorId || null,
+          proveedor_id: datos.proveedorId || null,
+          costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
+          proveedor_concepto: datos.proveedorConcepto || null,
+          descripcion: descripcionOT,
+          estatus: otExistente.estatus === "completada" ? "completada" : "en_proceso",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", otExistente.id);
+    } else {
+      const folioOT = await generarFolioOT(sb);
+      const tokenOT = crypto.randomBytes(16).toString("hex");
+
+      const { data: nuevaOT, error: errNuevaOT } = await sb
+        .from("ordenes_trabajo")
+        .insert({
+          folio: folioOT,
+          token: tokenOT,
+          expediente_id: cot.expediente_id || null,
+          cotizacion_id: cot.id,
+          prospecto_id: cot.prospecto_id || null,
+          tipo_negocio: cot.servicio_tipo || "construccion",
+          estatus: "en_proceso",
+          titulo: `${servicioTipo.toUpperCase()} - ${nombreCliente}`,
+          descripcion: descripcionOT,
+          fecha_programada: datos.fechaInstalacion,
+          asesor_responsable_id: usuario?.id || null,
+          asesor_ejecutor_id: datos.asesorEjecutorId || null,
+          creado_por: usuario?.id || null,
+          fotos_evidencia: [],
+          proveedor_id: datos.proveedorId || null,
+          costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
+          proveedor_concepto: datos.proveedorConcepto || null,
+        })
+        .select("id, folio")
+        .single();
+
+      if (errNuevaOT || !nuevaOT) {
+        throw new Error(errNuevaOT?.message || "No se pudo crear la orden de trabajo automática.");
+      }
+      otId = nuevaOT.id;
+      otFolio = nuevaOT.folio;
+    }
+
+    // Si se asignó proveedor y costo, asegurar documento de proveedor
+    if (datos.proveedorId && datos.costoProveedor && datos.costoProveedor > 0) {
+      try {
+        await generarDocumentoProveedorAutomatico(
+          sb,
+          otId,
+          datos.proveedorId,
+          datos.costoProveedor,
+          datos.proveedorConcepto || `Instalación OT ${otFolio}`
+        );
+      } catch (errProvDoc) {
+        console.warn("Aviso al generar documento proveedor automático:", errProvDoc);
+      }
+    }
+
+    // 9. CONSTRUIR MENSAJES Y NOTIFICACIONES
+    // Mensaje para el Cliente
+    const mensajeCliente =
+      `¡Hola ${nombreCliente}! 🛠️ Te confirmamos que tu instalación con SAUCEDA ha quedado programada:\n\n` +
+      `📅 *Fecha:* ${fechaLegible}\n` +
+      `⏰ *Horario estimado:* ${horaInicio} a ${horaFin} hrs\n` +
+      `📍 *Ubicación:* ${direccionCliente}\n` +
+      `🔨 *Trabajo:* ${servicioTipo}\n` +
+      `💳 *Saldo a liquidar:* ${saldoFormateado} (${metodoPagoLabel})\n\n` +
+      (datos.notasInstalacion ? `📌 *Notas:* ${datos.notasInstalacion}\n\n` : "") +
+      `Por favor asegúrate de tener libre el acceso al área de trabajo. ¡Cualquier duda quedamos a tus órdenes! 💚`;
+
+    // Resolver datos del proveedor si aplica
+    let mensajeProveedor = "";
+    let telefonoProveedor = "";
+    if (datos.proveedorId) {
+      const { data: provData } = await sb
+        .from("proveedores")
+        .select("nombre, telefono")
+        .eq("id", datos.proveedorId)
+        .maybeSingle();
+
+      if (provData) {
+        telefonoProveedor = provData.telefono || "";
+        mensajeProveedor =
+          `🛠️ *NUEVA ASIGNACIÓN DE TRABAJO - SAUCEDA*\n\n` +
+          `📋 *Orden de Trabajo:* ${otFolio} (Cotización ${cot.id})\n` +
+          `📅 *Fecha de Instalación:* ${fechaLegible} (${horaInicio} hrs)\n` +
+          `👤 *Cliente:* ${nombreCliente} (Tel: ${telefonoCliente || "N/A"})\n` +
+          `📍 *Dirección de Obra:* ${direccionCliente}\n` +
+          `🔨 *Especialidad:* ${servicioTipo}\n\n` +
+          `*Trabajos a ejecutar:*\n${resumenConceptos}\n\n` +
+          `💳 *Condición de Cobro:* Saldo de ${saldoFormateado} vía ${metodoPagoLabel}` +
+          (metodoPago === "terminal_tarjeta" ? "\n⚠️ *IMPORTANTE:* Llevar terminal bancaria con batería y señal para el cobro." : "") +
+          (datos.notasInstalacion ? `\n\n📝 *Indicaciones:* ${datos.notasInstalacion}` : "");
+      }
+    }
+
+    // Intentar envíos por Meta WhatsApp API si está habilitado
+    if (datos.notificarClienteWhatsApp && telefonoCliente) {
+      try {
+        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+        await enviarWhatsAppTexto(telefonoCliente, mensajeCliente);
+      } catch (errW) {
+        console.warn("Aviso WhatsApp cliente:", errW);
+      }
+    }
+
+    if (datos.notificarProveedorWhatsApp && telefonoProveedor) {
+      try {
+        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+        await enviarWhatsAppTexto(telefonoProveedor, mensajeProveedor);
+      } catch (errWProv) {
+        console.warn("Aviso WhatsApp proveedor:", errWProv);
+      }
+    }
+
+    // Notificación en la aplicación para el asesor asignado
+    if (datos.notificarAsesorApp && datos.asesorEjecutorId) {
+      try {
+        await sb.from("notificaciones").insert({
+          perfil_id: datos.asesorEjecutorId,
+          titulo: `🛠️ Nueva Orden de Trabajo Programada: ${otFolio}`,
+          cuerpo: `Instalación el ${fechaLegible} para ${nombreCliente}. Trabajo: ${servicioTipo}.`,
+          enlace: `/ordenes-trabajo/${otId}`,
+          leido: false,
+        });
+      } catch (errNotif) {
+        console.warn("Aviso al notificar asesor:", errNotif);
+      }
+    }
+
+    // Registrar en bitácora de actividades
+    try {
+      const { registrarActividad } = await import("@/lib/actividades");
+      await registrarActividad(sb, {
+        expedienteId: cot.expediente_id || undefined,
+        prospectoId: cot.prospecto_id || undefined,
+        tipo: "construccion",
+        titulo: `🛠️ Instalación Programada y OT Generada (${otFolio})`,
+        detalle: `Instalación programada para el ${fechaLegible}. Orden de Trabajo ${otFolio} creada con cobranza esperada vía ${metodoPagoLabel}.`,
+      });
+    } catch (errAct) {
+      console.warn("Aviso al registrar actividad:", errAct);
+    }
+
+    // Revalidaciones
+    revalidatePath(`/construccion/${cot.id}`);
+    revalidatePath("/construccion");
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath(`/ordenes-trabajo/${otId}`);
+    revalidatePath("/remisiones");
+    if (cot.expediente_id) revalidatePath(`/expediente/${cot.expediente_id}`);
+
+    // URLs directas de WhatsApp
+    const telClienteNorm = telefonoCliente ? normalizarTelefono(telefonoCliente) : "";
+    const telProvNorm = telefonoProveedor ? normalizarTelefono(telefonoProveedor) : "";
+
+    const urlWhatsAppCliente = telClienteNorm
+      ? `https://wa.me/${telClienteNorm}?text=${encodeURIComponent(mensajeCliente)}`
+      : undefined;
+
+    const urlWhatsAppProveedor = telProvNorm && mensajeProveedor
+      ? `https://wa.me/${telProvNorm}?text=${encodeURIComponent(mensajeProveedor)}`
+      : undefined;
+
+    return {
+      ok: true,
+      ordenId: otId,
+      ordenFolio: otFolio,
+      mensajeCliente,
+      mensajeProveedor,
+      urlWhatsAppCliente,
+      urlWhatsAppProveedor,
+    };
+  } catch (err: any) {
+    console.error("Error catastrófico en programarInstalacionYDetonarOT:", err);
+    return { ok: false, error: err?.message || "Error al programar instalación." };
+  }
+}
+
 
 
