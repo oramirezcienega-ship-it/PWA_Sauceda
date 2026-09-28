@@ -7,6 +7,7 @@ import {
   listarActividadesDeProspecto,
 } from "@/app/actions/actividades";
 import { obtenerCitasDeEntidad, type Cita } from "@/app/actions/agenda";
+import { marcarInspeccionEjecutada } from "@/app/actions/comisiones";
 import type { Actividad, TipoActividad } from "@/lib/types";
 
 interface ActividadesConExpedienteProps {
@@ -19,6 +20,7 @@ interface ActividadesConExpedienteProps {
 
 export interface ActividadItem {
   id: string;
+  citaId?: string;
   origen: "actividad" | "cita";
   tipo: string;
   titulo: string;
@@ -95,6 +97,23 @@ export function ActividadesConExpediente({
   const [horaProg, setHoraProg] = useState("");
   const [responsableInput, setResponsableInput] = useState(asesorNombreDefault || operadorNombreDefault || "Asesor / Operador");
   const [guardando, setGuardando] = useState(false);
+  const [ejecutandoCitaId, setEjecutandoCitaId] = useState<string | null>(null);
+
+  async function handleEjecutarInspeccion(citaId: string) {
+    if (!confirm("¿Deseas marcar esta inspección técnica como ejecutada? Se generará automáticamente la comisión fija para el asesor asignado.")) {
+      return;
+    }
+    try {
+      setEjecutandoCitaId(citaId);
+      const res = await marcarInspeccionEjecutada({ citaId });
+      if (!res.ok) throw new Error(res.error || "No se pudo marcar la inspección.");
+      await cargar();
+    } catch (err: any) {
+      alert(err.message || "Error al marcar inspección ejecutada.");
+    } finally {
+      setEjecutandoCitaId(null);
+    }
+  }
 
   async function cargar() {
     setCargando(true);
@@ -115,6 +134,7 @@ export function ActividadesConExpediente({
 
           unificadas.push({
             id: `cita-${c.id}`,
+            citaId: c.id,
             origen: "cita",
             tipo: c.tipo_cita || "visita",
             titulo: `${NOMBRES_TIPO[c.tipo_cita] || c.tipo_cita} - ${c.cliente_nombre}`,
@@ -437,6 +457,24 @@ export function ActividadesConExpediente({
                         ? "🔴 Cancelada"
                         : "⏳ Pendiente / Programada"}
                     </span>
+
+                    {item.origen === "cita" && item.tipo === "inspeccion" && item.estatus === "completada" && (
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-100 border border-amber-300 text-amber-900 shadow-xs" title="Comisión fija devengada en comisiones del asesor">
+                        💰 Comisión Acreditada
+                      </span>
+                    )}
+
+                    {item.origen === "cita" && item.tipo === "inspeccion" && item.estatus !== "completada" && item.estatus !== "cancelada" && item.citaId && (
+                      <button
+                        type="button"
+                        onClick={() => handleEjecutarInspeccion(item.citaId!)}
+                        disabled={ejecutandoCitaId === item.citaId}
+                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 text-[10px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Marcar inspección técnica como realizada y generar la comisión fija al asesor"
+                      >
+                        {ejecutandoCitaId === item.citaId ? "Procesando..." : "✓ Marcar Ejecutada"}
+                      </button>
+                    )}
                   </div>
 
                   {item.detalle && (

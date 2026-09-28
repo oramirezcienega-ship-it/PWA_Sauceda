@@ -14,6 +14,7 @@ import {
   ModalPrevisualizarInspeccion, 
   type DatosPrevisualizacionInspeccion 
 } from "./ModalPrevisualizarInspeccion";
+import { marcarInspeccionEjecutada } from "@/app/actions/comisiones";
 
 interface WidgetAgendaCitasProps {
   prospectoId?: string | null;
@@ -60,7 +61,32 @@ export function WidgetAgendaCitas({
 
   const [procesando, setProcesando] = useState(false);
   const [actualizandoEstadoId, setActualizandoEstadoId] = useState<string | null>(null);
+  const [ejecutandoCitaId, setEjecutandoCitaId] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  const handleMarcarEjecutada = async (citaId: string) => {
+    if (!confirm("¿Deseas marcar esta inspección técnica como ejecutada? Se acreditará automáticamente la comisión fija para el asesor asignado.")) {
+      return;
+    }
+    try {
+      setEjecutandoCitaId(citaId);
+      const res = await marcarInspeccionEjecutada({ citaId });
+      if (!res.ok) throw new Error(res.error || "No se pudo marcar la inspección.");
+      setMensaje({
+        tipo: "ok",
+        texto: "¡Inspección técnica marcada como ejecutada! Se acreditó la comisión fija al asesor asignado.",
+      });
+      await cargarDatos();
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setMensaje({
+        tipo: "error",
+        texto: err.message || "Error al marcar inspección.",
+      });
+    } finally {
+      setEjecutandoCitaId(null);
+    }
+  };
 
   // Load appointments
   const cargarDatos = async () => {
@@ -651,16 +677,46 @@ export function WidgetAgendaCitas({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className={`rounded-full text-[10px] font-bold px-2.5 py-0.5 uppercase border ${
                     isCancelada
                       ? "bg-slate-100 border-slate-300 text-slate-600"
-                      : c.estado === "confirmada"
+                      : c.estado === "completada"
                         ? "bg-emerald-100 border-emerald-300 text-emerald-800"
-                        : "bg-amber-100 border-amber-300 text-amber-800"
+                        : c.estado === "confirmada"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                          : "bg-amber-100 border-amber-300 text-amber-800"
                   }`}>
-                    {c.estado}
+                    {c.estado === "completada" ? "✓ Ejecutada" : c.estado}
                   </span>
+
+                  {isInspeccion && c.estado === "completada" && (
+                    <span className="inline-flex items-center gap-1 rounded-full text-[10px] font-bold px-2.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-900 shadow-xs" title="Comisión fija de inspección devengada y acumulada en comisiones del asesor">
+                      💰 Comisión Generada
+                    </span>
+                  )}
+
+                  {!isCancelada && c.estado !== "completada" && isInspeccion && (
+                    <button
+                      type="button"
+                      onClick={() => handleMarcarEjecutada(c.id)}
+                      disabled={ejecutandoCitaId === c.id}
+                      className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      title="Marcar inspección técnica como ejecutada y generar comisión fija para el asesor"
+                    >
+                      {ejecutandoCitaId === c.id ? (
+                        <>
+                          <span className="animate-spin text-xs">⏳</span>
+                          <span>Procesando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>✓</span>
+                          <span>Marcar Ejecutada</span>
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {!isCancelada && (
                     <div className="flex items-center gap-2">
