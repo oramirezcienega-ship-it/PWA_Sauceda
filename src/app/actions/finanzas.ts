@@ -901,6 +901,80 @@ export async function obtenerMovimientosFinanzas(filtros: {
   return { total: count || 0, movimientos };
 }
 
+/**
+ * Registra un movimiento financiero de forma automática desde otro módulo
+ * del CRM (ventas/remisiones, compras a proveedores, comisiones de
+ * asesores) en el momento en que ese registro se crea. No exige sesión de
+ * administrador: la acción que la invoca ya validó permisos por su cuenta;
+ * esta función solo traduce ese evento del CRM a una póliza contable.
+ *
+ * La categoría se resuelve por línea de P&L (ver categorías sembradas en la
+ * migración 0096_modulo_finanzas.sql: "Ventas de Obra / Directas" =
+ * ingresos_ventas, "Costos Directos de Obra y Gestoría" = costo_directo,
+ * "Nómina y Asesores" = opex_nomina). El trigger de base de datos
+ * fn_sync_transaction_journal genera la póliza de partida doble
+ * automáticamente al insertar en `transactions`.
+ */
+export async function registrarMovimientoAutomaticoCRM(datos: {
+  tipo: "ingreso" | "egreso";
+  lineaPnl: LineaPnL;
+  monto: number;
+  concepto: string;
+  fecha: string;
+  fechaPago?: string | null;
+  estado?: "pagado" | "pendiente";
+  contraparte?: string | null;
+  crmDealId?: string | null;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  try {
+    const monto = Number(datos.monto || 0);
+    if (monto <= 0) return { ok: true };
+
+    const sb = supabaseServidor();
+
+    const { data: categoria } = await sb
+      .from("categories")
+      .select("id")
+      .eq("linea_pnl", datos.lineaPnl)
+      .eq("activo", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (!categoria) {
+      console.warn(
+        `registrarMovimientoAutomaticoCRM: no se encontró categoría activa para linea_pnl="${datos.lineaPnl}"; se omite el movimiento financiero.`
+      );
+      return { ok: false, error: `Categoría no configurada para ${datos.lineaPnl}.` };
+    }
+
+    const estado = datos.estado || "pendiente";
+
+    const { data: inserted, error } = await sb
+      .from("transactions")
+      .insert({
+        fecha_operacion: datos.fecha,
+        fecha_pago: estado === "pagado" ? datos.fechaPago || datos.fecha : null,
+        tipo: datos.tipo,
+        categoria_id: categoria.id,
+        monto_total: monto,
+        concepto: datos.concepto,
+        contraparte: datos.contraparte || "",
+        crm_deal_id: datos.crmDealId || null,
+        estado,
+        is_demo: false,
+      })
+      .select("id")
+      .single();
+
+    if (error) throw error;
+
+    return { ok: true, id: inserted?.id };
+  } catch (err: any) {
+    console.error("Error al registrar movimiento financiero automático:", err?.message);
+    return { ok: false, error: err?.message || "Error al registrar movimiento financiero." };
+  }
+}
+
 export async function crearMovimientoFinanzas(data: {
   fecha_operacion: string;
   fecha_pago?: string | null;

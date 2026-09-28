@@ -901,6 +901,24 @@ export async function sincronizarComisionParaRemision(
 
     if (errIns) throw new Error(errIns.message);
 
+    // Reflejar automáticamente la comisión devengada en Finanzas (opex_nomina).
+    try {
+      const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
+      const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
+      await registrarMovimientoAutomaticoCRM({
+        tipo: "egreso",
+        lineaPnl: "opex_nomina",
+        monto: montoComision,
+        concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${rem.folio}`,
+        fecha: rem.fecha || new Date().toISOString().split("T")[0],
+        estado: "pendiente",
+        contraparte: asesor?.nombre || "Asesor",
+        crmDealId: nuevaCom.id,
+      });
+    } catch (errFin) {
+      console.error("Error al registrar movimiento financiero de comisión (remisión):", errFin);
+    }
+
     return { ok: true, comisionId: nuevaCom.id };
   } catch (err: any) {
     console.error("Error al sincronizar comisión de remisión:", err.message);
@@ -1084,6 +1102,24 @@ export async function sincronizarComisionParaRecibo(
       .single();
 
     if (errIns) throw new Error(errIns.message);
+
+    // Reflejar automáticamente la comisión devengada en Finanzas (opex_nomina).
+    try {
+      const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
+      const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
+      await registrarMovimientoAutomaticoCRM({
+        tipo: "egreso",
+        lineaPnl: "opex_nomina",
+        monto: montoComision,
+        concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${rec.folio}`,
+        fecha: rec.fecha_pago || new Date().toISOString().split("T")[0],
+        estado: "pendiente",
+        contraparte: asesor?.nombre || "Asesor",
+        crmDealId: nuevaCom.id,
+      });
+    } catch (errFin) {
+      console.error("Error al registrar movimiento financiero de comisión (recibo):", errFin);
+    }
 
     revalidatePath("/comisiones");
     return { ok: true, comisionId: nuevaCom.id };

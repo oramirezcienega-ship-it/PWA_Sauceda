@@ -313,7 +313,28 @@ export async function registrarDocumentoProveedor(datos: DatosDocumentoProveedor
     });
   }
 
+  await registrarCompraProveedorEnFinanzas(documento);
+
   return documento;
+}
+
+/** Reflejar automáticamente una compra/costo de proveedor en Finanzas (costo_directo). */
+async function registrarCompraProveedorEnFinanzas(documento: DocumentoProveedor): Promise<void> {
+  try {
+    const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
+    await registrarMovimientoAutomaticoCRM({
+      tipo: "egreso",
+      lineaPnl: "costo_directo",
+      monto: documento.monto,
+      concepto: `Compra a Proveedor - ${documento.proveedorNombre || "Proveedor"} - ${documento.folio || "s/folio"}`,
+      fecha: documento.fecha,
+      estado: "pendiente",
+      contraparte: documento.proveedorNombre || "Proveedor",
+      crmDealId: documento.id,
+    });
+  } catch (errFin) {
+    console.error("Error al registrar movimiento financiero de compra a proveedor:", errFin);
+  }
 }
 
 /** Actualiza un documento (factura/remisión) de proveedor existente. */
@@ -468,7 +489,10 @@ export async function generarDocumentoProveedorAutomatico(
     return { ok: false, error: error?.message || "No se pudo generar el documento del proveedor." };
   }
 
-  return { ok: true, documento: aDocumentoProveedor(data as FilaDocumentoProveedor) };
+  const documento = aDocumentoProveedor(data as FilaDocumentoProveedor);
+  await registrarCompraProveedorEnFinanzas(documento);
+
+  return { ok: true, documento };
 }
 
 /** Lista los documentos (facturas/remisiones) de proveedores ligados a una orden de trabajo específica. */
