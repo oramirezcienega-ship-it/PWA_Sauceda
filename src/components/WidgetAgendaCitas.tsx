@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { 
   obtenerCitasDeEntidad, 
   programarCitaManual, 
+  editarCita,
   cancelarCita,
   obtenerEstadoNotificacionCita,
   type Cita 
@@ -17,6 +18,8 @@ import {
 interface WidgetAgendaCitasProps {
   prospectoId?: string | null;
   expedienteId?: string | null;
+  asesorId?: string | null;
+  operadorId?: string | null;
   clienteNombre: string;
   clienteTelefono: string;
   clienteEmail?: string | null;
@@ -26,6 +29,8 @@ interface WidgetAgendaCitasProps {
 export function WidgetAgendaCitas({
   prospectoId,
   expedienteId,
+  asesorId,
+  operadorId,
   clienteNombre,
   clienteTelefono,
   clienteEmail,
@@ -36,6 +41,7 @@ export function WidgetAgendaCitas({
   const [cargando, setCargando] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipoForm, setTipoForm] = useState<"inspeccion" | "instalacion">("inspeccion");
+  const [citaEditando, setCitaEditando] = useState<Cita | null>(null);
 
   // Form states
   const [fecha, setFecha] = useState("");
@@ -75,12 +81,18 @@ export function WidgetAgendaCitas({
       .then((p) => {
         setPerfiles(p);
         if (p.length > 0) {
-          setPerfilId(p[0].id);
-          setAsignadosIds([p[0].id]);
+          // Si viene asesorId o operadorId predefinido, buscarlo
+          const objetivoId = (asesorId && p.find(x => x.id === asesorId)?.id) ||
+                             (operadorId && p.find(x => x.id === operadorId)?.id) ||
+                             p[0].id;
+          setPerfilId(objetivoId);
+          setAsignadosIds([objetivoId]);
         }
       })
-      .catch(console.error);
-  }, [prospectoId, expedienteId]);
+      .catch((err) => {
+        console.error("Error al cargar perfiles activos:", err);
+      });
+  }, [prospectoId, expedienteId, asesorId, operadorId]);
 
   const toggleAsignado = (id: string) => {
     setAsignadosIds((prev) => {
@@ -104,6 +116,7 @@ export function WidgetAgendaCitas({
   // Adjust end time when start time changes (default +1 hour for inspection, +4 hours for installation)
   useEffect(() => {
     if (!horaInicio) return;
+    if (citaEditando) return; // Si se está editando una cita existente, no sobreescribir la hora_fin original
     const [hrs, mins] = horaInicio.split(":").map(Number);
     const date = new Date();
     date.setHours(hrs, mins, 0, 0);
@@ -116,9 +129,35 @@ export function WidgetAgendaCitas({
     
     const formattedEnd = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
     setHoraFin(formattedEnd);
-  }, [horaInicio, tipoForm]);
+  }, [horaInicio, tipoForm, citaEditando]);
 
-  // Disparar la previsualización del mensaje antes de agendar
+  // Manejo de inicio y cancelación de edición
+  const handleIniciarEdicion = (c: Cita) => {
+    setCitaEditando(c);
+    setTipoForm((c.tipo_cita as "inspeccion" | "instalacion") || "inspeccion");
+    setFecha(c.fecha);
+    setHoraInicio(c.hora_inicio ? c.hora_inicio.slice(0, 5) : "09:00");
+    setHoraFin(c.hora_fin ? c.hora_fin.slice(0, 5) : "10:00");
+    const asignados = (c.asignados_ids && c.asignados_ids.length > 0)
+      ? c.asignados_ids
+      : (c.perfil_id ? [c.perfil_id] : []);
+    setAsignadosIds(asignados);
+    setPerfilId(asignados[0] || "");
+    setNotas(c.notas || "");
+    setTelefonoCliente(c.cliente_telefono || clienteTelefono || "");
+    setEmailCliente(c.cliente_email || clienteEmail || "");
+    setMostrarForm(true);
+    setMensaje(null);
+  };
+
+  const handleCerrarForm = () => {
+    setMostrarForm(false);
+    setCitaEditando(null);
+    setFecha("");
+    setNotas("");
+  };
+
+  // Disparar la previsualización del mensaje antes de agendar o guardar edición
   const handleAbrirPrevisualizacion = (e: React.FormEvent) => {
     e.preventDefault();
     const idsFinales = asignadosIds.length > 0 ? asignadosIds : (perfilId ? [perfilId] : []);
@@ -145,13 +184,14 @@ export function WidgetAgendaCitas({
       telefonoContacto: telContacto,
       notas,
       tipoCita: tipoForm,
+      fechaPrevia: citaEditando?.fecha,
     };
 
     setDatosPrevisualizacion(datos);
     setModalPrevisualizar(true);
   };
 
-  // Confirmación y guardado desde el modal
+  // Confirmación y guardado desde el modal (Creación o Edición)
   const handleConfirmarYAgendar = async (opciones: {
     mensajeWhatsApp: string;
     enviarWhatsApp: boolean;
@@ -165,31 +205,54 @@ export function WidgetAgendaCitas({
       setProcesando(true);
       setMensaje(null);
 
-      const res = await programarCitaManual({
-        prospectoId,
-        expedienteId,
-        perfilId: datosPrevisualizacion.perfilId,
-        asignadosIds: datosPrevisualizacion.asignadosIds || [datosPrevisualizacion.perfilId],
-        clienteNombre,
-        clienteTelefono: datosPrevisualizacion.clienteTelefono,
-        clienteEmail: opciones.emailDestino || datosPrevisualizacion.clienteEmail,
-        tipoCita: datosPrevisualizacion.tipoCita || "inspeccion",
-        fecha: datosPrevisualizacion.fecha,
-        horaInicio: datosPrevisualizacion.horaInicio,
-        horaFin: datosPrevisualizacion.horaFin,
-        notas: datosPrevisualizacion.notas,
-        notificarCliente: opciones.enviarWhatsApp,
-        mensajeWhatsAppPersonalizado: opciones.mensajeWhatsApp,
-        enviarEmail: opciones.enviarEmail,
-        telefonoContacto: opciones.telefonoContacto,
-      });
+      let res;
+      if (citaEditando) {
+        res = await editarCita({
+          citaId: citaEditando.id,
+          perfilId: datosPrevisualizacion.perfilId,
+          asignadosIds: datosPrevisualizacion.asignadosIds || [datosPrevisualizacion.perfilId],
+          clienteNombre,
+          clienteTelefono: datosPrevisualizacion.clienteTelefono,
+          clienteEmail: opciones.emailDestino || datosPrevisualizacion.clienteEmail,
+          tipoCita: datosPrevisualizacion.tipoCita || tipoForm,
+          fecha: datosPrevisualizacion.fecha,
+          horaInicio: datosPrevisualizacion.horaInicio,
+          horaFin: datosPrevisualizacion.horaFin,
+          notas: datosPrevisualizacion.notas,
+          notificarCliente: opciones.enviarWhatsApp,
+          mensajeWhatsAppPersonalizado: opciones.mensajeWhatsApp,
+          enviarEmail: opciones.enviarEmail,
+          telefonoContacto: opciones.telefonoContacto,
+        });
+      } else {
+        res = await programarCitaManual({
+          prospectoId,
+          expedienteId,
+          perfilId: datosPrevisualizacion.perfilId,
+          asignadosIds: datosPrevisualizacion.asignadosIds || [datosPrevisualizacion.perfilId],
+          clienteNombre,
+          clienteTelefono: datosPrevisualizacion.clienteTelefono,
+          clienteEmail: opciones.emailDestino || datosPrevisualizacion.clienteEmail,
+          tipoCita: datosPrevisualizacion.tipoCita || "inspeccion",
+          fecha: datosPrevisualizacion.fecha,
+          horaInicio: datosPrevisualizacion.horaInicio,
+          horaFin: datosPrevisualizacion.horaFin,
+          notas: datosPrevisualizacion.notas,
+          notificarCliente: opciones.enviarWhatsApp,
+          mensajeWhatsAppPersonalizado: opciones.mensajeWhatsApp,
+          enviarEmail: opciones.enviarEmail,
+          telefonoContacto: opciones.telefonoContacto,
+        });
+      }
 
       if (res.ok) {
         setModalPrevisualizar(false);
         setMostrarForm(false);
+        const accionTexto = citaEditando ? "actualizada" : "programada";
+        setCitaEditando(null);
         setMensaje({ 
           tipo: "ok", 
-          texto: `¡${tipoForm === "inspeccion" ? "Inspección Técnica" : "Instalación"} programada con éxito! ${
+          texto: `¡${tipoForm === "inspeccion" ? "Inspección Técnica" : "Instalación"} ${accionTexto} con éxito! ${
             opciones.enviarWhatsApp ? "💬 WhatsApp enviado. " : ""
           }${opciones.enviarEmail ? "✉️ Correo enviado." : ""}` 
         });
@@ -201,10 +264,10 @@ export function WidgetAgendaCitas({
         await cargarDatos();
         if (onRefresh) await onRefresh();
       } else {
-        setMensaje({ tipo: "error", texto: res.error || "Ocurrió un error al agendar." });
+        setMensaje({ tipo: "error", texto: res.error || "Ocurrió un error al guardar." });
       }
     } catch (err: any) {
-      setMensaje({ tipo: "error", texto: err.message || "Error al agendar." });
+      setMensaje({ tipo: "error", texto: err.message || "Error al guardar." });
     } finally {
       setProcesando(false);
     }
@@ -305,10 +368,14 @@ export function WidgetAgendaCitas({
         <form onSubmit={handleAbrirPrevisualizacion} className="p-4 rounded-xl border border-carbon/15 bg-slate-50/70 space-y-4 transition-all">
           <div className="flex items-center justify-between border-b pb-2">
             <h4 className="text-xs font-bold text-verde-profundo uppercase tracking-wider flex items-center gap-1.5">
-              <span>{tipoForm === "inspeccion" ? "🔍" : "🛠️"}</span>
-              Programar Nueva {tipoForm === "inspeccion" ? "Inspección Técnica en Sitio" : "Instalación Profesional"}
+              <span>{citaEditando ? "✏️" : (tipoForm === "inspeccion" ? "🔍" : "🛠️")}</span>
+              {citaEditando ? (
+                <span>Editar Evento: {tipoForm === "inspeccion" ? "Inspección Técnica en Sitio" : "Instalación Profesional"}</span>
+              ) : (
+                <span>Programar Nueva {tipoForm === "inspeccion" ? "Inspección Técnica en Sitio" : "Instalación Profesional"}</span>
+              )}
             </h4>
-            <div className="flex gap-1.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setTipoForm(tipoForm === "inspeccion" ? "instalacion" : "inspeccion")}
@@ -359,31 +426,52 @@ export function WidgetAgendaCitas({
                 {asignadosIds.length} {asignadosIds.length === 1 ? "seleccionado" : "seleccionados"}
               </span>
             </label>
-            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-carbon/20 bg-white max-h-36 overflow-y-auto">
-              {perfiles.map((p) => {
-                const isSelected = asignadosIds.includes(p.id);
-                const isPrincipal = asignadosIds[0] === p.id;
-                return (
+            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-carbon/20 bg-white min-h-[46px] max-h-36 overflow-y-auto items-center">
+              {perfiles.length === 0 ? (
+                <div className="flex items-center justify-between w-full px-2 py-1 text-xs text-carbon/40">
+                  <span>Cargando responsables del equipo...</span>
                   <button
-                    key={p.id}
                     type="button"
-                    onClick={() => toggleAsignado(p.id)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
-                      isSelected
-                        ? isPrincipal
-                          ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
-                          : "bg-sauce/15 text-verde-profundo border-sauce/30 font-semibold"
-                        : "bg-carbon/5 text-carbon/70 border-carbon/15 hover:bg-carbon/10"
-                    }`}
+                    onClick={() => {
+                      listarPerfilesActivos().then((p) => {
+                        setPerfiles(p);
+                        if (p.length > 0) {
+                          setPerfilId(p[0].id);
+                          setAsignadosIds([p[0].id]);
+                        }
+                      });
+                    }}
+                    className="text-sauce hover:underline font-semibold text-[11px]"
                   >
-                    <span>{isSelected ? (isPrincipal ? "👑" : "✅") : "⚪"}</span>
-                    <span>{p.nombre}</span>
-                    <span className="text-[10px] opacity-75">
-                      ({p.rol === "admin" ? "Admin" : p.rol === "asesor" ? "Asesor" : "Operario"})
-                    </span>
+                    Reintentar
                   </button>
-                );
-              })}
+                </div>
+              ) : (
+                perfiles.map((p) => {
+                  const isSelected = asignadosIds.includes(p.id);
+                  const isPrincipal = asignadosIds[0] === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleAsignado(p.id)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                        isSelected
+                          ? isPrincipal
+                            ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+                            : "bg-sauce/15 text-verde-profundo border-sauce/30 font-semibold"
+                          : "bg-carbon/5 text-carbon/70 border-carbon/15 hover:bg-carbon/10"
+                      }`}
+                    >
+                      <span>{isSelected ? (isPrincipal ? "👑" : "✅") : "⚪"}</span>
+                      <span>{p.nombre}</span>
+                      <span className="text-[10px] opacity-75">
+                        ({p.rol === "admin" ? "Admin" : p.rol === "asesor" ? "Asesor" : "Operario"})
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
             <p className="text-[10px] text-carbon/50 mt-1">
               Haz clic para sumar a 2 o más personas. El primero seleccionado (👑) será el responsable principal.
@@ -428,7 +516,7 @@ export function WidgetAgendaCitas({
           <div className="flex justify-end gap-2 pt-2 border-t border-carbon/10">
             <button
               type="button"
-              onClick={() => setMostrarForm(false)}
+              onClick={handleCerrarForm}
               className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-medium text-carbon/70 hover:bg-slate-100 transition cursor-pointer"
             >
               Cancelar
@@ -437,8 +525,8 @@ export function WidgetAgendaCitas({
               type="submit"
               className="rounded-lg bg-verde-profundo hover:bg-sauce text-white px-4 py-1.5 text-xs font-semibold shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <span>👁️</span>
-              <span>Previsualizar Mensajes y Agendar</span>
+              <span>{citaEditando ? "💾" : "👁️"}</span>
+              <span>{citaEditando ? "Previsualizar y Guardar Cambios" : "Previsualizar Mensajes y Agendar"}</span>
             </button>
           </div>
         </form>
@@ -575,13 +663,23 @@ export function WidgetAgendaCitas({
                   </span>
 
                   {!isCancelada && (
-                    <button
-                      type="button"
-                      onClick={() => handleCancelar(c.id)}
-                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 transition hover:underline cursor-pointer"
-                    >
-                      Cancelar Cita
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleIniciarEdicion(c)}
+                        className="text-[10px] font-bold text-sauce hover:text-sauce-oscuro transition hover:underline cursor-pointer flex items-center gap-0.5"
+                        title="Editar fecha, horario, responsables o notas de este evento"
+                      >
+                        ✏️ Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelar(c.id)}
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 transition hover:underline cursor-pointer"
+                      >
+                        Cancelar Cita
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -598,6 +696,7 @@ export function WidgetAgendaCitas({
           datos={datosPrevisualizacion}
           onConfirmar={handleConfirmarYAgendar}
           procesando={procesando}
+          modoReagendar={Boolean(citaEditando)}
         />
       )}
     </div>

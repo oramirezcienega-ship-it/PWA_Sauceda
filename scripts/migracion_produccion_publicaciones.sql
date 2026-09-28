@@ -31,12 +31,17 @@ alter table public.publicaciones_programadas
   add column if not exists leads_generados integer default 0,
   add column if not exists cpl numeric default 0,
   add column if not exists roi_score numeric default 0,
-  add column if not exists meta_ad_id text;
+  add column if not exists meta_ad_id text,
+  add column if not exists url_publicacion text,
+  add column if not exists meta_post_id text,
+  add column if not exists publicado_en timestamptz,
+  add column if not exists error_publicacion text;
 
 -- 3. Crear índices para rendimiento
 create index if not exists publicaciones_programadas_estado_idx on public.publicaciones_programadas(estado);
 create index if not exists publicaciones_programadas_fecha_idx on public.publicaciones_programadas(fecha_programacion);
 create index if not exists publicaciones_programadas_cpl_idx on public.publicaciones_programadas(cpl) where estado = 'publicado';
+create index if not exists publicaciones_programadas_meta_post_id_idx on public.publicaciones_programadas(meta_post_id) where meta_post_id is not null;
 
 -- 4. Habilitar seguridad a nivel de fila (RLS)
 alter table public.publicaciones_programadas enable row level security;

@@ -251,7 +251,9 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
 
   const crearExpediente = useCallback(
     async (datos: DatosExpediente): Promise<string> => {
-      const nuevo = await acciones.crearExpediente(datos);
+      const res = await acciones.guardarNuevoExpediente(datos);
+      if (!res.ok) throw new Error(res.mensaje);
+      const nuevo = res.expediente;
       setExpedientes((prev) => [...prev, nuevo]);
       return nuevo.id;
     },
@@ -260,7 +262,9 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
 
   const actualizarExpediente = useCallback(
     async (id: string, datos: DatosExpediente) => {
-      const actualizado = await acciones.actualizarExpediente(id, datos);
+      const res = await acciones.guardarCambiosExpediente(id, datos);
+      if (!res.ok) throw new Error(res.mensaje);
+      const actualizado = res.expediente;
       setExpedientes((prev) =>
         prev.map((exp) => (exp.id === id ? actualizado : exp)),
       );

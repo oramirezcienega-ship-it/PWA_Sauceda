@@ -8,6 +8,7 @@ import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { detectarTipoNegocio } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
+import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
 
 // Semáforo en memoria para consolidar mensajes consecutivos en ráfaga
 const debounceMap = new Map<string, number>();
@@ -486,7 +487,7 @@ export async function registrarLeadWhatsApp(
     lead.mensaje ?? "",
     [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
   );
-  await sb.from("expedientes").insert({
+  await insertarExpedienteSeguro(sb, {
     id,
     cliente: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
     fraccionamiento: "Por definir",
@@ -557,15 +558,20 @@ export async function registrarLeadWhatsApp(
   // así que el WhatsApp puede ir como texto libre. Si la IA está activa, ella
   // dará la bienvenida por WhatsApp (se omite el mensaje fijo para no duplicar).
   const iaOn = iaAgenteActivo();
-  await enviarBienvenida(sb, id, {
-    ventanaWhatsAppAbierta: true,
-    omitirWhatsApp: iaOn,
-  });
-  // Automatizaciones: expediente nuevo captado por WhatsApp.
-  await dispararEvento(sb, "nuevo-expediente", {
-    expedienteId: id,
-    prospectoId,
-  });
+  // Best-effort: un fallo aquí no debe impedir que Sofía conteste.
+  try {
+    await enviarBienvenida(sb, id, {
+      ventanaWhatsAppAbierta: true,
+      omitirWhatsApp: iaOn,
+    });
+    // Automatizaciones: expediente nuevo captado por WhatsApp.
+    await dispararEvento(sb, "nuevo-expediente", {
+      expedienteId: id,
+      prospectoId,
+    });
+  } catch (err) {
+    console.error(`[WhatsApp] Bienvenida/automatizaciones fallaron para ${id}:`, err);
+  }
   // Notificar al equipo sobre el nuevo lead
   void notificarNuevoLead(id);
 

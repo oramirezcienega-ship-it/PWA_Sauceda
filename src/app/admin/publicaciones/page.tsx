@@ -1,44 +1,350 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import PrevisualizadorRedSocial from "@/components/PrevisualizadorRedSocial";
+import CalendarioMarketingOmnicanal from "@/components/CalendarioMarketingOmnicanal";
+import ModalConexionMeta from "@/components/ModalConexionMeta";
+import ModalConexionTikTok from "@/components/ModalConexionTikTok";
+import ModalSubirVideo from "@/components/ModalSubirVideo";
+import { esArchivoVideoReal } from "@/lib/meta-publicador";
 import {
   PublicacionProgramada,
   obtenerPublicaciones,
   guardarPublicacion,
   cambiarEstadoPublicacion,
+  reprogramarPublicacion,
   generarPublicacionesAutomaticas,
+  adaptarPublicacionAOtrasRedes,
   regenerarCreativoPublicacion,
   eliminarPublicacion,
   eliminarPublicacionesMasivo,
   cambiarEstadoPublicacionesMasivo,
+  actualizarImagenManual,
+  restaurarFotoLimpia,
+  ejecutarPublicacionMeta,
+  ejecutarPublicacionTikTok,
+  ejecutarEnvioMautic,
+  procesarPublicacionesProgramadasVencidas,
+  desprogramarPublicacion,
+  desprogramarPublicacionesMasivo,
 } from "@/app/actions/marketing";
+import {
+  CATALOGO_CATEGORIAS_MARKETING,
+  resolverCategoriaMarketing,
+  generarPromptFluxParametrizado,
+} from "@/lib/marketing-prompts";
+
+interface OpcionFiltro {
+  id: string;
+  label: string;
+  icono?: string;
+}
+
+const OPCIONES_ESTADO: OpcionFiltro[] = [
+  { id: "pendiente_revision", label: "Pendientes de Revisión", icono: "⏳" },
+  { id: "aprobado", label: "Aprobados (Listos)", icono: "✅" },
+  { id: "publicado", label: "Publicados / Enviados", icono: "📲" },
+  { id: "rechazado", label: "Rechazados", icono: "❌" },
+];
+
+const OPCIONES_CANAL: OpcionFiltro[] = [
+  { id: "facebook", label: "Facebook", icono: "🔵" },
+  { id: "instagram", label: "Instagram", icono: "🟣" },
+  { id: "tiktok", label: "TikTok", icono: "⚫" },
+  { id: "whatsapp", label: "WhatsApp", icono: "🟢" },
+  { id: "mautic", label: "Mautic / Correo", icono: "🟠" },
+];
+
+const OPCIONES_FORMATO: OpcionFiltro[] = [
+  { id: "imagen", label: "Imagen Estática", icono: "🖼️" },
+  { id: "carrusel", label: "Carrusel", icono: "🖼️" },
+  { id: "video", label: "Video", icono: "🎥" },
+  { id: "reel", label: "Reel / TikTok", icono: "📱" },
+];
+
+const OPCIONES_TEMA: OpcionFiltro[] = [
+  { id: "impermeabilizacion", label: "Impermeabilización con Soplete", icono: "🌧️" },
+  { id: "cisternas", label: "Mantenimiento y Lavado de Cisternas / Tinacos", icono: "💧" },
+  { id: "herreria", label: "Herrería Residencial (Portones y Protecciones)", icono: "⚒️" },
+  { id: "piso_estampado", label: "Concreto y Pisos Estampados", icono: "🧱" },
+  { id: "remodelacion", label: "Remodelaciones y Ampliaciones", icono: "🏗️" },
+  { id: "mantenimiento", label: "Mantenimiento del Hogar / Pintura", icono: "🎨" },
+  { id: "concreto", label: "Concreto Premezclado y Losas", icono: "🚛" },
+  { id: "traspasos", label: "Traspasos INFONAVIT / FOVISSSTE", icono: "🏠" },
+  { id: "compra_directa", label: "Compra Directa de Casas (Contado)", icono: "💵" },
+  { id: "gestion", label: "Armado de Expediente INFONAVIT", icono: "📁" },
+  { id: "venta_casas", label: "Venta de Casas y Bienes Raíces", icono: "🏡" },
+];
+
+const OPCIONES_FECHA: OpcionFiltro[] = [
+  { id: "hoy", label: "Programadas para Hoy", icono: "📌" },
+  { id: "manana", label: "Programadas para Mañana", icono: "📌" },
+  { id: "esta_semana", label: "Esta Semana", icono: "📆" },
+  { id: "este_mes", label: "Este Mes", icono: "🗓️" },
+];
+
+function DropdownFiltroMultiple({
+  titulo,
+  icono,
+  opciones,
+  valoresSeleccionados,
+  onToggle,
+  onLimpiar,
+}: {
+  titulo: string;
+  icono: string;
+  opciones: OpcionFiltro[];
+  valoresSeleccionados: string[];
+  onToggle: (id: string) => void;
+  onLimpiar: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickAfuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAbierto(false);
+      }
+    }
+    if (abierto) {
+      document.addEventListener("mousedown", handleClickAfuera);
+      return () => document.removeEventListener("mousedown", handleClickAfuera);
+    }
+  }, [abierto]);
+
+  const cantSeleccionados = valoresSeleccionados.length;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setAbierto((prev) => !prev)}
+        className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer ${
+          cantSeleccionados > 0
+            ? "bg-verde-profundo text-white border-verde-profundo shadow-xs"
+            : "bg-crema/10 border-dorado/30 text-carbon/80 hover:border-dorado/60 hover:bg-white"
+        }`}
+      >
+        <span>{icono}</span>
+        <span>{titulo}</span>
+        {cantSeleccionados > 0 ? (
+          <span className="bg-dorado text-verde-profundo text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-[18px] text-center">
+            {cantSeleccionados}
+          </span>
+        ) : (
+          <span className="text-carbon/40 text-[10px]">Todos</span>
+        )}
+        <span className={`text-[9px] transition-transform duration-200 ${abierto ? "rotate-180" : ""}`}>
+          ▼
+        </span>
+      </button>
+
+      {abierto && (
+        <div className="absolute top-full left-0 mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-dorado/30 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-3 pb-2 mb-1 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-[11px] font-bold text-carbon/60 uppercase tracking-wider">
+              {titulo}
+            </span>
+            {cantSeleccionados > 0 && (
+              <button
+                type="button"
+                onClick={onLimpiar}
+                className="text-[10px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
+              >
+                Desmarcar todos
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-60 overflow-y-auto px-1.5 space-y-0.5">
+            {opciones.map((opc) => {
+              const estaActivo = valoresSeleccionados.includes(opc.id);
+              return (
+                <button
+                  key={opc.id}
+                  type="button"
+                  onClick={() => onToggle(opc.id)}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition cursor-pointer text-left ${
+                    estaActivo
+                      ? "bg-verde-profundo/10 text-verde-profundo font-bold"
+                      : "text-carbon/80 hover:bg-gray-100"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    {opc.icono && <span>{opc.icono}</span>}
+                    <span>{opc.label}</span>
+                  </span>
+                  <span
+                    className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] font-black transition-colors ${
+                      estaActivo
+                        ? "bg-verde-profundo text-white border-verde-profundo"
+                        : "border-gray-300 bg-white"
+                    }`}
+                  >
+                    {estaActivo && "✓"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PaginaPublicaciones() {
   const [publicaciones, setPublicaciones] = useState<PublicacionProgramada[]>([]);
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
-  const [filtroPlataforma, setFiltroPlataforma] = useState<string>("todos");
-  const [filtroFormato, setFiltroFormato] = useState<string>("todos");
-  const [filtroTemaFiltro, setFiltroTemaFiltro] = useState<string>("todos");
-  const [filtroFecha, setFiltroFecha] = useState<string>("todos");
+  const [mostrarModalMeta, setMostrarModalMeta] = useState(false);
+  const [mostrarModalTikTok, setMostrarModalTikTok] = useState(false);
+  const [publicandoMetaId, setPublicandoMetaId] = useState<string | null>(null);
+  const [publicandoTikTokId, setPublicandoTikTokId] = useState<string | null>(null);
+  const [disparandoMauticId, setDisparandoMauticId] = useState<string | null>(null);
+
+  // Estados de Filtros Multiselección
+  const [filtrosEstado, setFiltrosEstado] = useState<string[]>([]);
+  const [filtrosPlataforma, setFiltrosPlataforma] = useState<string[]>([]);
+  const [filtrosFormato, setFiltrosFormato] = useState<string[]>([]);
+  const [filtrosTema, setFiltrosTema] = useState<string[]>([]);
+  const [filtrosFecha, setFiltrosFecha] = useState<string[]>([]);
+  const [filtrosCargados, setFiltrosCargados] = useState(false);
+
+  // Densidad de visualización: número de columnas (2, 3 o 4 máximo por fila)
+  const [numColumnas, setNumColumnas] = useState<number>(4);
+  const [textosExpandidos, setTextosExpandidos] = useState<Record<string, boolean>>({});
+
+  const toggleTextoExpandido = (id: string) => {
+    setTextosExpandidos((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Restaurar filtros guardados en localStorage al iniciar
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem("crm_sauceda_publicaciones_filtros_v2");
+      if (guardado) {
+        const parsed = JSON.parse(guardado);
+        if (Array.isArray(parsed.estados)) setFiltrosEstado(parsed.estados);
+        if (Array.isArray(parsed.plataformas)) setFiltrosPlataforma(parsed.plataformas);
+        if (Array.isArray(parsed.formatos)) setFiltrosFormato(parsed.formatos);
+        if (Array.isArray(parsed.temas)) setFiltrosTema(parsed.temas);
+        if (Array.isArray(parsed.fechas)) setFiltrosFecha(parsed.fechas);
+      }
+      const colsGuardadas = localStorage.getItem("crm_sauceda_publicaciones_cols");
+      if (colsGuardadas) {
+        const n = parseInt(colsGuardadas, 10);
+        if (n === 2 || n === 3 || n === 4) setNumColumnas(n);
+        else setNumColumnas(4);
+      }
+    } catch (e) {
+      console.warn("Aviso al restaurar filtros de publicaciones:", e);
+    } finally {
+      setFiltrosCargados(true);
+    }
+  }, []);
+
+  // Guardar filtros en localStorage al cambiar
+  useEffect(() => {
+    if (!filtrosCargados) return;
+    try {
+      localStorage.setItem(
+        "crm_sauceda_publicaciones_filtros_v2",
+        JSON.stringify({
+          estados: filtrosEstado,
+          plataformas: filtrosPlataforma,
+          formatos: filtrosFormato,
+          temas: filtrosTema,
+          fechas: filtrosFecha,
+        })
+      );
+      localStorage.setItem("crm_sauceda_publicaciones_cols", String(numColumnas));
+    } catch (e) {
+      console.warn("Aviso al guardar filtros de publicaciones:", e);
+    }
+  }, [filtrosEstado, filtrosPlataforma, filtrosFormato, filtrosTema, filtrosFecha, numColumnas, filtrosCargados]);
+
+  // Handlers para togglear filtros
+  const handleToggleFiltro = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    valor: string
+  ) => {
+    setter((prev) =>
+      prev.includes(valor) ? prev.filter((v) => v !== valor) : [...prev, valor]
+    );
+  };
+
+  const handleLimpiarTodosFiltros = () => {
+    setFiltrosEstado([]);
+    setFiltrosPlataforma([]);
+    setFiltrosFormato([]);
+    setFiltrosTema([]);
+    setFiltrosFecha([]);
+    try {
+      localStorage.removeItem("crm_sauceda_publicaciones_filtros_v2");
+    } catch {}
+  };
+
+  const gridColsClass = useMemo(() => {
+    if (numColumnas === 2) {
+      return "grid grid-cols-1 md:grid-cols-2 gap-4";
+    }
+    if (numColumnas === 3) {
+      return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
+    }
+    // Default: 4 columnas máximo (nunca excede 4 por fila)
+    return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5";
+  }, [numColumnas]);
+
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
   
   const [pubEditando, setPubEditando] = useState<PublicacionProgramada | null>(null);
+  const [pubPrevisualizar, setPubPrevisualizar] = useState<PublicacionProgramada | null>(null);
+  const [pubProgramar, setPubProgramar] = useState<PublicacionProgramada | null>(null);
+  const [fechaHoraProgramar, setFechaHoraProgramar] = useState<string>("");
+  const [guardandoProgramacion, setGuardandoProgramacion] = useState(false);
   const [mostrarModalIA, setMostrarModalIA] = useState(false);
-  const [cantidadIA, setCantidadIA] = useState(1);
+  const [temaIA, setTemaIA] = useState<string>(
+    `${CATALOGO_CATEGORIAS_MARKETING.pintura.nombre}: ${CATALOGO_CATEGORIAS_MARKETING.pintura.ofertaPrincipal}`
+  );
+  const [usarTemaPersonalizado, setUsarTemaPersonalizado] = useState(false);
+  const [temaPersonalizado, setTemaPersonalizado] = useState("");
+  const [canalesSeleccionadosIA, setCanalesSeleccionadosIA] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
+    "instagram",
+    "facebook",
+    "tiktok",
+  ]);
+  const [detallesExtraIA, setDetallesExtraIA] = useState("");
   
   const obtenerManana = () => {
     const hoy = new Date();
     hoy.setDate(hoy.getDate() + 1);
-    return hoy.toISOString().split("T")[0];
+    return hoy.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
   };
   const [fechaIA, setFechaIA] = useState(obtenerManana());
 
-  const [temaIA, setTemaIA] = useState<string>("todos");
+  // Estados para Replicar / Adaptar publicación existente a otras redes
+  const [pubParaReplicar, setPubParaReplicar] = useState<PublicacionProgramada | null>(null);
+  const [canalesParaReplicar, setCanalesParaReplicar] = useState<Array<"facebook" | "instagram" | "tiktok" | "whatsapp" | "mautic">>([
+    "facebook",
+  ]);
+  const [instruccionesReplicar, setInstruccionesReplicar] = useState("");
+  const [replicando, setReplicando] = useState(false);
+
+  // Estados para Modal de Carga y Prevalidación de Video
+  const [pubParaSubirVideo, setPubParaSubirVideo] = useState<PublicacionProgramada | null>(null);
+  const [mostrarModalVideo, setMostrarModalVideo] = useState(false);
+
+  const handleAbrirSubirVideo = (pub: PublicacionProgramada) => {
+    setPubParaSubirVideo(pub);
+    setMostrarModalVideo(true);
+  };
 
   const [isPending, startTransition] = useTransition();
   const [cargandoLista, setCargandoLista] = useState(true);
   const [mensajeCarga, setMensajeCarga] = useState("Generando contenido...");
   const [guionesExpandidos, setGuionesExpandidos] = useState<Record<string, boolean>>({});
+  const [promptsExpandidos, setPromptsExpandidos] = useState<Record<string, boolean>>({});
+  const [regenerandoIds, setRegenerandoIds] = useState<Record<string, boolean>>({});
   const [errorBd, setErrorBd] = useState<string | null>(null);
 
   const SQL_MIGRACION_COMPLETA = `-- ==============================================================================
@@ -119,11 +425,14 @@ notify pgrst, 'reload schema';`;
     setCargandoLista(true);
     setErrorBd(null);
     try {
-      const res = await obtenerPublicaciones({
-        estado: filtroEstado,
-        plataforma: filtroPlataforma,
-        tipo_formato: filtroFormato,
-      });
+      // Revisar y detonar publicaciones programadas que ya hayan alcanzado su horario establecido
+      try {
+        await procesarPublicacionesProgramadasVencidas();
+      } catch (autoErr) {
+        console.warn("Aviso al verificar publicaciones vencidas:", autoErr);
+      }
+
+      const res = await obtenerPublicaciones();
       if (res.success && res.data) {
         setPublicaciones(res.data);
       } else if (res.error) {
@@ -141,60 +450,218 @@ notify pgrst, 'reload schema';`;
 
   useEffect(() => {
     cargarDatos();
-  }, [filtroEstado, filtroPlataforma, filtroFormato]);
+  }, []);
 
   const publicacionesFiltradas = publicaciones.filter((pub) => {
-    // Filtro por Tema / Campaña
-    if (filtroTemaFiltro !== "todos") {
-      const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
-      if (filtroTemaFiltro === "traspasos" && !textoBuscado.includes("traspaso") && !textoBuscado.includes("infonavit")) return false;
-      if (filtroTemaFiltro === "impermeabilizacion" && !textoBuscado.includes("impermeabiliz")) return false;
-      if (filtroTemaFiltro === "compra_directa" && !textoBuscado.includes("compra") && !textoBuscado.includes("contado") && !textoBuscado.includes("deuda")) return false;
-      if (filtroTemaFiltro === "remodelacion" && !textoBuscado.includes("remodela") && !textoBuscado.includes("construc")) return false;
-      if (filtroTemaFiltro === "gestion" && !textoBuscado.includes("gesti") && !textoBuscado.includes("legal") && !textoBuscado.includes("asesor")) return false;
+    // Filtro por Estado múltiple
+    if (filtrosEstado.length > 0 && !filtrosEstado.includes(pub.estado)) {
+      return false;
     }
 
-    // Filtro por Fecha
-    if (filtroFecha !== "todos" && pub.fecha_programacion) {
-      const fechaPub = pub.fecha_programacion.split("T")[0];
+    // Filtro por Canal múltiple
+    if (filtrosPlataforma.length > 0) {
+      const coincideCanal = filtrosPlataforma.some((plat) => {
+        if (plat === "mautic") {
+          return pub.plataforma === "mautic" || pub.plataforma === "email";
+        }
+        return pub.plataforma === plat;
+      });
+      if (!coincideCanal) return false;
+    }
+
+    // Filtro por Formato múltiple
+    if (filtrosFormato.length > 0 && !filtrosFormato.includes(pub.tipo_formato)) {
+      return false;
+    }
+
+    // Filtro por Tema / Campaña múltiple
+    if (filtrosTema.length > 0) {
+      const textoBuscado = (pub.titulo + " " + pub.contenido + " " + (pub.sugerencia_visual || "")).toLowerCase();
+      const coincideTema = filtrosTema.some((tema) => {
+        if (tema === "impermeabilizacion") return textoBuscado.includes("impermeabiliz") || textoBuscado.includes("soplete");
+        if (tema === "cisternas") return textoBuscado.includes("cisterna") || textoBuscado.includes("aljibe") || textoBuscado.includes("tinaco") || textoBuscado.includes("agua");
+        if (tema === "herreria") return textoBuscado.includes("herr") || textoBuscado.includes("porton") || textoBuscado.includes("protecc") || textoBuscado.includes("barandal");
+        if (tema === "piso_estampado") return textoBuscado.includes("estampad") || textoBuscado.includes("piso") || textoBuscado.includes("adoquin");
+        if (tema === "remodelacion") return textoBuscado.includes("remodela") || textoBuscado.includes("construc") || textoBuscado.includes("amplia");
+        if (tema === "mantenimiento") return textoBuscado.includes("manten") || textoBuscado.includes("pintur") || textoBuscado.includes("hogar");
+        if (tema === "concreto") return textoBuscado.includes("concreto") || textoBuscado.includes("premezclado") || textoBuscado.includes("losa");
+        if (tema === "traspasos") return textoBuscado.includes("traspaso") || textoBuscado.includes("infonavit") || textoBuscado.includes("fovissste");
+        if (tema === "compra_directa") return textoBuscado.includes("compra") || textoBuscado.includes("contado") || textoBuscado.includes("deuda");
+        if (tema === "gestion") return textoBuscado.includes("gesti") || textoBuscado.includes("legal") || textoBuscado.includes("asesor") || textoBuscado.includes("expediente");
+        if (tema === "venta_casas") return textoBuscado.includes("venta") || textoBuscado.includes("inmobiliari") || textoBuscado.includes("casa") || textoBuscado.includes("propiedad");
+        return false;
+      });
+      if (!coincideTema) return false;
+    }
+
+    // Filtro por Fecha múltiple
+    if (filtrosFecha.length > 0) {
+      const strFecha = (pub.estado === "publicado" && pub.publicado_en)
+        ? pub.publicado_en
+        : (pub.fecha_programacion || pub.created_at);
+      if (!strFecha) return false;
+      const dPub = new Date(strFecha);
+      const fechaPub = dPub.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
       const hoyObj = new Date();
-      const hoyStr = hoyObj.toISOString().split("T")[0];
-      
-      if (filtroFecha === "hoy" && fechaPub !== hoyStr) return false;
-      if (filtroFecha === "manana") {
-        const mananaObj = new Date();
-        mananaObj.setDate(mananaObj.getDate() + 1);
-        const mananaStr = mananaObj.toISOString().split("T")[0];
-        if (fechaPub !== mananaStr) return false;
-      }
-      if (filtroFecha === "esta_semana") {
-        const hoy = new Date();
-        const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
-        const finSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay() + 6));
-        const pubDate = new Date(fechaPub);
-        if (pubDate < inicioSemana || pubDate > finSemana) return false;
-      }
-      if (filtroFecha === "este_mes") {
-        const mesActual = new Date().toISOString().slice(0, 7);
-        if (!fechaPub.startsWith(mesActual)) return false;
-      }
+      const hoyStr = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+
+      const mananaObj = new Date();
+      mananaObj.setDate(mananaObj.getDate() + 1);
+      const mananaStr = mananaObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" });
+
+      const hoyD = new Date();
+      const inicioSemana = new Date(hoyD.setDate(hoyD.getDate() - hoyD.getDay()));
+      const finSemana = new Date(hoyD.setDate(hoyD.getDate() - hoyD.getDay() + 6));
+      const mesActual = hoyObj.toLocaleDateString("sv-SE", { timeZone: "America/Mexico_City" }).slice(0, 7);
+
+      const coincideFecha = filtrosFecha.some((tipoFecha) => {
+        if (tipoFecha === "hoy") return fechaPub === hoyStr;
+        if (tipoFecha === "manana") return fechaPub === mananaStr;
+        if (tipoFecha === "esta_semana") return dPub >= inicioSemana && dPub <= finSemana;
+        if (tipoFecha === "este_mes") return fechaPub.startsWith(mesActual);
+        return false;
+      });
+      if (!coincideFecha) return false;
     }
 
     return true;
   });
 
   const handleAprobar = async (id: string) => {
+    const pubTarget = publicaciones.find((p) => p.id === id);
+    const esVideoOReel =
+      pubTarget?.tipo_formato === "video" ||
+      pubTarget?.tipo_formato === "reel" ||
+      pubTarget?.plataforma === "tiktok";
+    const tieneVideoReal = Boolean(pubTarget?.url_imagen && esArchivoVideoReal(pubTarget.url_imagen));
+
+    if (pubTarget && esVideoOReel && !tieneVideoReal && (!pubTarget.url_imagen || pubTarget.url_imagen.length <= 5)) {
+      const deseaSubir = confirm(
+        `Esta publicación está configurada como ${pubTarget.tipo_formato === "reel" ? "Reel" : "Video"} para ${pubTarget.plataforma.toUpperCase()}.\n\nPara que la plataforma acepte el anuncio y no lo rechace por falta de video, se requiere un archivo multimedia compatible.\n\n¿Deseas subir y pre-validar el video ahora mismo?`
+      );
+      if (deseaSubir) {
+        handleAbrirSubirVideo(pubTarget);
+        return;
+      }
+    }
+
+    const tieneImagen = Boolean(pubTarget?.url_imagen && pubTarget.url_imagen.length > 5);
     const res = await cambiarEstadoPublicacion(id, "aprobado");
     if (res.success) {
-      if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
+      if (tieneImagen) {
+        alert("✅ ¡Publicación aprobada y lista para publicar! (El arte visual se conserva intacto)");
+      } else if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
         alert("Publicación aprobada en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
       } else {
         alert("¡Publicación aprobada y enviada a n8n con éxito! (n8n está generando el creativo)");
       }
       await cargarDatos();
+
+      // Si no tenía imagen previa, iniciar sondeo automático para cargar la imagen en cuanto n8n la genere
+      if (!tieneImagen) {
+        setRegenerandoIds((prev) => ({ ...prev, [id]: true }));
+        let intentos = 0;
+        const interval = setInterval(async () => {
+          intentos++;
+          try {
+            const resPubs = await obtenerPublicaciones();
+            if (resPubs.success && resPubs.data) {
+              setPublicaciones(resPubs.data);
+              const pubActualizada = resPubs.data.find((p) => p.id === id);
+              if (pubActualizada?.url_imagen || intentos >= 12) {
+                clearInterval(interval);
+                setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
+              }
+            }
+          } catch (e) {
+            console.warn("Error en sondeo tras aprobación:", e);
+          }
+        }, 2500);
+      }
     } else {
       alert("Error al aprobar publicación: " + res.error);
     }
+  };
+
+  const handleAbrirProgramar = (pub: PublicacionProgramada) => {
+    setPubProgramar(pub);
+    if (pub.fecha_programacion) {
+      const d = new Date(pub.fecha_programacion);
+      if (isNaN(d.getTime())) {
+        setFechaHoraProgramar("");
+      } else {
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        setFechaHoraProgramar(new Date(d.getTime() - tzOffset).toISOString().slice(0, 16));
+      }
+    } else {
+      const manana = new Date();
+      manana.setDate(manana.getDate() + 1);
+      manana.setHours(10, 0, 0, 0);
+      const tzOffset = manana.getTimezoneOffset() * 60000;
+      setFechaHoraProgramar(new Date(manana.getTime() - tzOffset).toISOString().slice(0, 16));
+    }
+  };
+
+  const handleGuardarProgramacionModal = async (nuevoEstado?: "aprobado" | "publicado") => {
+    if (!pubProgramar?.id || !fechaHoraProgramar) return;
+    setGuardandoProgramacion(true);
+    try {
+      const fechaIso = new Date(fechaHoraProgramar).toISOString();
+      const res = await reprogramarPublicacion(pubProgramar.id, fechaIso, nuevoEstado);
+      if (res.success) {
+        if (nuevoEstado === "aprobado") {
+          alert("¡Publicación programada con éxito en la agenda! El sistema la publicará automáticamente al llegar el horario indicado.");
+        } else if (nuevoEstado === "publicado") {
+          if (pubProgramar.plataforma === "facebook" || pubProgramar.plataforma === "instagram") {
+            const metaRes = await ejecutarPublicacionMeta(pubProgramar.id, pubProgramar.plataforma);
+            if (metaRes.success) {
+              alert(`¡Publicado de inmediato con éxito en ${pubProgramar.plataforma === "instagram" ? "Instagram" : "Facebook"}!`);
+            } else {
+              alert(`Guardado como publicado en base de datos. Aviso de Meta: ${metaRes.error}`);
+            }
+          } else if (pubProgramar.plataforma === "mautic" || pubProgramar.plataforma === "email") {
+            const mauticRes = await ejecutarEnvioMautic(pubProgramar.id);
+            if (mauticRes.success) {
+              alert(mauticRes.aviso || "¡Campaña disparada de inmediato en Mautic excluyendo contactos inhabilitados!");
+            } else {
+              alert(`Guardado como publicado en base de datos. Aviso de Mautic: ${mauticRes.error}`);
+            }
+          } else {
+            alert("¡Publicación marcada como publicada!");
+          }
+        } else {
+          alert("¡Fecha y hora de programación actualizadas con éxito!");
+        }
+        setPubProgramar(null);
+        await cargarDatos();
+      } else {
+        alert("Error al programar: " + res.error);
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setGuardandoProgramacion(false);
+    }
+  };
+
+  const handleAtajoFechaModal = (tipo: "hoy_tarde" | "manana_10" | "manana_19" | "sabado_11") => {
+    const base = new Date();
+    if (tipo === "hoy_tarde") {
+      base.setHours(18, 0, 0, 0);
+    } else if (tipo === "manana_10") {
+      base.setDate(base.getDate() + 1);
+      base.setHours(10, 0, 0, 0);
+    } else if (tipo === "manana_19") {
+      base.setDate(base.getDate() + 1);
+      base.setHours(19, 30, 0, 0);
+    } else if (tipo === "sabado_11") {
+      const diasHastaSabado = (6 - base.getDay() + 7) % 7 || 7;
+      base.setDate(base.getDate() + diasHastaSabado);
+      base.setHours(11, 0, 0, 0);
+    }
+    const tzOffset = base.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(base.getTime() - tzOffset).toISOString().slice(0, 16);
+    setFechaHoraProgramar(localISOTime);
   };
 
   const handleRechazar = async (id: string, notas?: string) => {
@@ -233,20 +700,199 @@ notify pgrst, 'reload schema';`;
   };
 
   const handleRegenerarCreativo = async (id: string) => {
+    setRegenerandoIds((prev) => ({ ...prev, [id]: true }));
     setMensajeCarga("Solicitando un nuevo creativo fotorrealista a n8n...");
+
     startTransition(async () => {
-      const res = await regenerarCreativoPublicacion(id);
-      if (res.success) {
-        if (res.aviso && (res.aviso.includes("falta") || res.aviso.includes("incorrecta") || res.aviso.includes("retornó") || res.aviso.includes("Error") || res.aviso.includes("Tiempo"))) {
-          alert("Se solicitó regeneración.\n\n⚠️ Aviso de n8n: " + res.aviso);
-        } else {
-          alert("¡Solicitud enviada a n8n! Generando nuevo diseño con IA...");
-        }
-        await cargarDatos();
-      } else {
+      const res = await regenerarCreativoPublicacion(id, true);
+      if (!res.success) {
         alert("Error al solicitar regeneración de creativo: " + res.error);
+        setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
+        return;
+      }
+
+      if (
+        res.aviso &&
+        (res.aviso.includes("falta") ||
+          res.aviso.includes("incorrecta") ||
+          res.aviso.includes("retornó") ||
+          res.aviso.includes("Error") ||
+          res.aviso.includes("Tiempo"))
+      ) {
+        alert("⚠️ Aviso de n8n: " + res.aviso);
+      }
+
+      // Actualizar inmediatamente para que url_imagen pase a estado de regeneración
+      await cargarDatos();
+
+      // Iniciar sondeo inteligente cada 2.5s para capturar la nueva imagen en cuanto n8n termine (toma ~5-8s)
+      let intentos = 0;
+      const interval = setInterval(async () => {
+        intentos++;
+        try {
+          const resPubs = await obtenerPublicaciones();
+
+          if (resPubs.success && resPubs.data) {
+            setPublicaciones(resPubs.data);
+            const pubActualizada = resPubs.data.find((p) => p.id === id);
+
+            if (pubActualizada?.url_imagen || intentos >= 12) {
+              clearInterval(interval);
+              setRegenerandoIds((prev) => ({ ...prev, [id]: false }));
+
+              // Si el modal de previsualización está abierto para esta publicación, actualizarlo en vivo
+              setPubPrevisualizar((prev) =>
+                prev?.id === id && pubActualizada ? pubActualizada : prev
+              );
+            }
+          }
+        } catch (e) {
+          console.warn("Error en sondeo de regeneración:", e);
+        }
+      }, 2500);
+    });
+  };
+
+  const CANVA_DESIGN_URL = "https://www.canva.com/design?create=true&template=EAHWDrq_iM8";
+  const [copiadoId, setCopiadoId] = useState<string | null>(null);
+
+  const handleCopiarYNotificar = (pub: PublicacionProgramada) => {
+    try {
+      const textoCopiar = `📢 TÍTULO:\n${pub.titulo}\n\n📝 COPY:\n${pub.contenido}\n\n📞 CONTACTO:\n477 465 4700 • León, Gto.`;
+      navigator.clipboard.writeText(textoCopiar);
+      setCopiadoId(pub.id || "copy");
+      setTimeout(() => setCopiadoId(null), 4000);
+    } catch (e) {
+      console.error("Error al copiar al portapapeles:", e);
+    }
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pubIdParaSubir, setPubIdParaSubir] = useState<string | null>(null);
+
+  const handleReemplazarArte = (id: string) => {
+    setPubIdParaSubir(id);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleArchivoSeleccionado = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const targetId = pubIdParaSubir;
+    if (!file || !targetId) return;
+
+    setMensajeCarga("Subiendo y guardando arte desde tu equipo...");
+    startTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append("id", targetId);
+        formData.append("file", file);
+
+        const res = await fetch("/api/marketing/subir-arte", {
+          method: "POST",
+          body: formData,
+        });
+
+        const json = await res.json();
+        if (res.ok && json.success) {
+          await cargarDatos();
+          // Si estamos editando en el modal, actualizar también su estado
+          if (pubEditando && pubEditando.id === targetId) {
+            setPubEditando({ ...pubEditando, url_imagen: json.url_imagen });
+          }
+          alert("🎉 ¡Arte publicitario guardado con éxito!");
+        } else {
+          alert("Error al subir imagen: " + (json.error || "Fallo desconocido"));
+        }
+      } catch (err: any) {
+        console.error("Error al subir archivo de imagen:", err);
+        alert("Error de red al subir imagen: " + err.message);
+      } finally {
+        setPubIdParaSubir(null);
       }
     });
+  };
+
+  const handleRestaurarFotoLimpia = async (id: string) => {
+    if (!confirm("¿Deseas remover el banner SVG y restaurar la fotografía limpia generada por IA (Flux)?")) return;
+
+    setMensajeCarga("Restaurando fotografía limpia original...");
+    startTransition(async () => {
+      const res = await restaurarFotoLimpia(id);
+      if (res.success) {
+        await cargarDatos();
+        if (pubEditando && pubEditando.id === id) {
+          setPubEditando(res.data ?? null);
+        }
+        alert("✨ Fotografía limpia restaurada con éxito.");
+      } else {
+        alert("Error al restaurar: " + res.error);
+      }
+    });
+  };
+
+  const [copiandoFotoId, setCopiandoFotoId] = useState<string | null>(null);
+
+  const handleCopiarFoto = async (url: string, id: string) => {
+    try {
+      setCopiandoFotoId(id);
+      let targetUrl = url;
+      if (targetUrl.includes("generar-banner")) {
+        const match = targetUrl.match(/foto=([^&]+)/);
+        if (match && match[1]) targetUrl = decodeURIComponent(match[1]);
+      }
+
+      const res = await fetch(targetUrl);
+      const blob = await res.blob();
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const objectUrl = URL.createObjectURL(blob);
+      img.src = objectUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("No se pudo obtener contexto 2D");
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(objectUrl);
+
+      canvas.toBlob(async (pngBlob) => {
+        if (!pngBlob) {
+          window.open(targetUrl, "_blank");
+          setCopiandoFotoId(null);
+          return;
+        }
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": pngBlob }),
+          ]);
+          setCopiandoFotoId(null);
+          alert("📋 ¡Foto copiada al portapapeles!\n\nVe a tu pestaña de Canva y presiona Ctrl + V para pegarla directamente en tu plantilla.");
+        } catch {
+          window.open(targetUrl, "_blank");
+          setCopiandoFotoId(null);
+          alert("Se abrió la foto limpia en una pestaña para copiarla (clic derecho -> Copiar imagen) o arrastrarla directamente a Canva.");
+        }
+      }, "image/png");
+    } catch (err: any) {
+      console.warn("Fallo al copiar imagen directo al portapapeles:", err);
+      let targetUrl = url;
+      if (targetUrl.includes("generar-banner")) {
+        const match = targetUrl.match(/foto=([^&]+)/);
+        if (match && match[1]) targetUrl = decodeURIComponent(match[1]);
+      }
+      window.open(targetUrl, "_blank");
+      setCopiandoFotoId(null);
+      alert("Se abrió la foto limpia en una pestaña para copiarla (clic derecho -> Copiar imagen) o arrastrarla a Canva.");
+    }
   };
 
   const handleToggleSeleccion = (id: string) => {
@@ -297,6 +943,11 @@ notify pgrst, 'reload schema';`;
     if (seleccionados.length === 0) return;
     if (!confirm(`¿Aprobar y enviar a n8n las ${seleccionados.length} publicaciones seleccionadas?`)) return;
     
+    const idsSinImagen = seleccionados.filter((id) => {
+      const p = publicaciones.find((pub) => pub.id === id);
+      return !p?.url_imagen || p.url_imagen.length <= 5;
+    });
+
     setMensajeCarga(`Aprobando ${seleccionados.length} publicaciones y enviando a n8n...`);
     startTransition(async () => {
       const res = await cambiarEstadoPublicacionesMasivo(seleccionados, "aprobado");
@@ -307,6 +958,36 @@ notify pgrst, 'reload schema';`;
           alert("Publicaciones aprobadas en base de datos.\n\n⚠️ Aviso de n8n: " + res.aviso);
         } else {
           alert("¡Publicaciones aprobadas y enviadas a n8n con éxito!");
+        }
+
+        if (idsSinImagen.length > 0) {
+          idsSinImagen.forEach((id) => {
+            setRegenerandoIds((prev) => ({ ...prev, [id]: true }));
+          });
+          let intentos = 0;
+          const interval = setInterval(async () => {
+            intentos++;
+            try {
+              const resPubs = await obtenerPublicaciones();
+              if (resPubs.success && resPubs.data) {
+                setPublicaciones(resPubs.data);
+                const todosListos = idsSinImagen.every((id) => {
+                  const p = resPubs.data?.find((pub) => pub.id === id);
+                  return Boolean(p?.url_imagen && p.url_imagen.length > 5);
+                });
+                if (todosListos || intentos >= 14) {
+                  clearInterval(interval);
+                  setRegenerandoIds((prev) => {
+                    const copia = { ...prev };
+                    idsSinImagen.forEach((id) => delete copia[id]);
+                    return copia;
+                  });
+                }
+              }
+            } catch (e) {
+              console.warn("Error en sondeo masivo:", e);
+            }
+          }, 2500);
         }
       } else {
         alert("Error al aprobar publicaciones: " + res.error);
@@ -330,19 +1011,153 @@ notify pgrst, 'reload schema';`;
     });
   };
 
+  const handleDesprogramar = async (id: string) => {
+    if (!confirm("¿Deseas desprogramar esta publicación? Se quitará de la agenda y del envío automático, regresando a Pendientes de Revisión (sin eliminar su contenido ni imagen).")) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await desprogramarPublicacion(id);
+      if (res.success) {
+        alert("¡Publicación desprogramada con éxito! Ya no se enviará automáticamente y ha regresado a Revisión.");
+        await cargarDatos();
+      } else {
+        alert("Error al desprogramar publicación: " + res.error);
+      }
+    });
+  };
+
+  const handleDesprogramarMasivo = async () => {
+    if (seleccionados.length === 0) return;
+    if (!confirm(`¿Desprogramar las ${seleccionados.length} publicaciones seleccionadas? Se quitarán de la agenda y regresarán a Revisión sin eliminar nada.`)) {
+      return;
+    }
+    setMensajeCarga(`Desprogramando ${seleccionados.length} publicaciones...`);
+    startTransition(async () => {
+      const res = await desprogramarPublicacionesMasivo(seleccionados);
+      if (res.success) {
+        alert(`¡${seleccionados.length} publicaciones desprogramadas con éxito!`);
+        setSeleccionados([]);
+        await cargarDatos();
+      } else {
+        alert("Error al desprogramar publicaciones: " + res.error);
+      }
+    });
+  };
+
   const handleCopiarTexto = (texto: string) => {
     navigator.clipboard.writeText(texto);
     alert("¡Texto copiado al portapapeles con éxito!");
   };
 
+  const handlePublicarDirectoMeta = async (id: string, plataforma: string) => {
+    const destino = plataforma === "instagram" ? "instagram" : "facebook";
+    const nombreRed = destino === "instagram" ? "Instagram" : "Facebook";
+
+    if (!confirm(`¿Deseas publicar este contenido de inmediato en la cuenta oficial de ${nombreRed}?`)) {
+      return;
+    }
+
+    setPublicandoMetaId(id);
+    try {
+      const res = await ejecutarPublicacionMeta(id, destino);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        await cargarDatos();
+        alert(`¡Publicación realizada con éxito en ${nombreRed}!`);
+      } else {
+        alert(`Aviso de Meta: ${res.error || "No se pudo completar la publicación."}`);
+      }
+    } catch (err: any) {
+      alert(`Error al intentar publicar en Meta: ${err?.message || String(err)}`);
+    } finally {
+      setPublicandoMetaId(null);
+    }
+  };
+
+  const handlePublicarDirectoTikTok = async (id: string) => {
+    if (!confirm("¿Deseas publicar este contenido de inmediato en la cuenta oficial de TikTok (@saucedamxbr)?")) {
+      return;
+    }
+
+    setPublicandoTikTokId(id);
+    try {
+      const res = await ejecutarPublicacionTikTok(id);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        await cargarDatos();
+        alert(res.aviso || "¡Publicación realizada con éxito en TikTok!");
+      } else {
+        if (res.error?.includes("No hay credenciales")) {
+          if (confirm(`${res.error}\n\n¿Deseas abrir la ventana de Conexión con TikTok ahora para ingresar tus credenciales?`)) {
+            setMostrarModalTikTok(true);
+          }
+        } else {
+          alert(`Aviso de TikTok: ${res.error || "No se pudo completar la publicación."}`);
+        }
+      }
+    } catch (err: any) {
+      alert(`Error al intentar publicar en TikTok: ${err?.message || String(err)}`);
+    } finally {
+      setPublicandoTikTokId(null);
+    }
+  };
+
+  const handleDispararMautic = async (id: string) => {
+    if (
+      !confirm(
+        "¿Deseas disparar esta campaña en Mautic ahora?\n\nSe enviará a todos los contactos activos y excluirá automáticamente a los prospectos inhabilitados del CRM."
+      )
+    ) {
+      return;
+    }
+
+    setDisparandoMauticId(id);
+    try {
+      const res = await ejecutarEnvioMautic(id);
+      if (res.success && res.data) {
+        setPublicaciones((prev) =>
+          prev.map((p) => (p.id === id ? (res.data as PublicacionProgramada) : p))
+        );
+        await cargarDatos();
+        alert(res.aviso || "¡Campaña disparada exitosamente en Mautic!");
+      } else {
+        alert(`Aviso de Mautic: ${res.error || "No se pudo disparar la campaña."}`);
+      }
+    } catch (err: any) {
+      alert(`Error al disparar campaña en Mautic: ${err?.message || String(err)}`);
+    } finally {
+      setDisparandoMauticId(null);
+    }
+  };
+
   const triggerGeneracionIA = () => {
-    setMensajeCarga("Conectando con el Agente de Marketing IA...");
+    const temaFinal = usarTemaPersonalizado && temaPersonalizado.trim()
+      ? temaPersonalizado.trim()
+      : temaIA;
+
+    if (canalesSeleccionadosIA.length === 0) {
+      alert("Por favor selecciona al menos una red social para la campaña.");
+      return;
+    }
+
+    setMensajeCarga(`Creando Campaña Omnicanal con IA (${canalesSeleccionadosIA.length} redes)...`);
     startTransition(async () => {
-      const res = await generarPublicacionesAutomaticas(cantidadIA, fechaIA, temaIA);
+      const res = await generarPublicacionesAutomaticas({
+        tema: temaFinal,
+        canales: canalesSeleccionadosIA,
+        fechaInicio: fechaIA,
+        detallesAdicionales: detallesExtraIA.trim() || undefined,
+      });
+
       if (res.success) {
         setMostrarModalIA(false);
         setErrorBd(null);
         await cargarDatos();
+        alert(`¡Campaña Omnicanal generada con éxito! Se crearon ${res.data?.length || canalesSeleccionadosIA.length} publicaciones adaptadas con el mismo concepto visual.`);
       } else {
         alert("Ocurrió un error en la generación automática:\n\n" + res.error);
         if (
@@ -354,6 +1169,48 @@ notify pgrst, 'reload schema';`;
         }
       }
     });
+  };
+
+  const handleAbrirReplicar = (pub: PublicacionProgramada) => {
+    setPubParaReplicar(pub);
+    const todasLasRedes: Array<"facebook" | "instagram" | "tiktok" | "whatsapp"> = [
+      "facebook",
+      "instagram",
+      "tiktok",
+      "whatsapp",
+    ];
+    setCanalesParaReplicar(todasLasRedes.filter((r) => r !== pub.plataforma));
+    setInstruccionesReplicar("");
+  };
+
+  const handleEjecutarReplicacion = async () => {
+    if (!pubParaReplicar?.id) return;
+    if (canalesParaReplicar.length === 0) {
+      alert("Por favor selecciona al menos un canal destino para replicar.");
+      return;
+    }
+
+    setReplicando(true);
+    setMensajeCarga(`Adaptando contenido con IA para ${canalesParaReplicar.length} redes sociales...`);
+    try {
+      const res = await adaptarPublicacionAOtrasRedes({
+        idPublicacionOriginal: pubParaReplicar.id,
+        canalesDestino: canalesParaReplicar,
+        instruccionesExtra: instruccionesReplicar.trim() || undefined,
+      });
+
+      if (res.success && res.data) {
+        setPubParaReplicar(null);
+        await cargarDatos();
+        alert(`¡Publicación adaptada con éxito a ${res.data.length} canales! Han quedado aprobadas y listas para publicar con el mismo arte visual.`);
+      } else {
+        alert("Error al adaptar publicación: " + res.error);
+      }
+    } catch (err: any) {
+      alert("Error inesperado al replicar: " + (err?.message || String(err)));
+    } finally {
+      setReplicando(false);
+    }
   };
 
   const handleGuardarEdicion = async (e: React.FormEvent) => {
@@ -376,27 +1233,42 @@ notify pgrst, 'reload schema';`;
     }));
   };
 
+  const togglePrompt = (id: string) => {
+    setPromptsExpandidos(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   const formatFecha = (fechaStr: string) => {
-    const d = new Date(fechaStr);
-    return d.toLocaleString("es-MX", {
-      weekday: "long",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    try {
+      const d = new Date(fechaStr);
+      return d.toLocaleString("es-MX", {
+        timeZone: "America/Mexico_City",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return fechaStr;
+    }
   };
 
   const getPlataformaBadge = (plataforma: string) => {
     switch (plataforma) {
       case "facebook":
-        return <span className="bg-blue-600/10 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-md">Facebook</span>;
+        return <span className="bg-blue-600/10 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🔵</span> Facebook</span>;
       case "instagram":
-        return <span className="bg-pink-600/10 text-pink-600 text-xs font-semibold px-2.5 py-1 rounded-md">Instagram</span>;
+        return <span className="bg-pink-600/10 text-pink-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🟣</span> Instagram</span>;
       case "tiktok":
-        return <span className="bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-md">TikTok</span>;
+        return <span className="bg-black text-white text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>⚫</span> TikTok</span>;
       case "whatsapp":
-        return <span className="bg-emerald-600/10 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-md">WhatsApp</span>;
+        return <span className="bg-emerald-600/10 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🟢</span> WhatsApp</span>;
+      case "email":
+      case "mautic":
+        return <span className="bg-orange-600/10 text-orange-600 text-xs font-semibold px-2.5 py-1 rounded-md flex items-center gap-1"><span>🟠</span> Mautic / Correo</span>;
       default:
         return <span className="bg-gray-100 text-gray-800 text-xs font-semibold px-2.5 py-1 rounded-md">{plataforma}</span>;
     }
@@ -412,8 +1284,22 @@ notify pgrst, 'reload schema';`;
     }
   };
 
+  const hayFiltrosActivos =
+    filtrosEstado.length > 0 ||
+    filtrosPlataforma.length > 0 ||
+    filtrosFormato.length > 0 ||
+    filtrosTema.length > 0 ||
+    filtrosFecha.length > 0;
+
   return (
     <main className="min-h-screen pb-16 bg-crema/20">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleArchivoSeleccionado}
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+      />
       <div className="bg-white border-b border-dorado/20 shadow-xs">
         <div className="mx-auto max-w-[1700px] px-6 py-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -424,12 +1310,32 @@ notify pgrst, 'reload schema';`;
               Genera copys automáticos, guiones de video y dispara la publicación real con n8n.
             </p>
           </div>
-          <button
-            onClick={() => setMostrarModalIA(true)}
-            className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema font-semibold px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 text-sm transform hover:scale-[1.02] cursor-pointer"
-          >
-            <span>✨</span> Generar Publicaciones con IA
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMostrarModalMeta(true)}
+              className="bg-white hover:bg-gray-50 border border-dorado/30 text-carbon font-semibold px-4 py-3 rounded-xl shadow-xs transition-all flex items-center gap-2 text-sm cursor-pointer"
+              title="Configurar y probar conexión oficial con Meta Graph API (Facebook & Instagram)"
+            >
+              <span className="text-base">🔗</span>
+              <span>Conexión Meta</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </button>
+            <button
+              onClick={() => setMostrarModalTikTok(true)}
+              className="bg-white hover:bg-gray-50 border border-dorado/30 text-carbon font-semibold px-4 py-3 rounded-xl shadow-xs transition-all flex items-center gap-2 text-sm cursor-pointer"
+              title="Configurar y probar conexión con TikTok Content Posting API"
+            >
+              <span className="text-base">🎵</span>
+              <span>Conexión TikTok</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </button>
+            <button
+              onClick={() => setMostrarModalIA(true)}
+              className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema font-semibold px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 text-sm transform hover:scale-[1.02] cursor-pointer"
+            >
+              <span>✨</span> Generar Publicaciones con IA
+            </button>
+          </div>
         </div>
       </div>
 
@@ -456,100 +1362,248 @@ notify pgrst, 'reload schema';`;
           </div>
         )}
 
-        <div className="flex flex-wrap gap-4 items-center justify-between mb-8 bg-white p-4 rounded-2xl border border-dorado/20 shadow-xs">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Estado</label>
-              <select
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">📋 Todos los Estados</option>
-                <option value="pendiente_revision">⏳ Pendientes de Revisión</option>
-                <option value="aprobado">✅ Aprobados (Enviados a n8n)</option>
-                <option value="rechazado">❌ Rechazados</option>
-                <option value="publicado">📲 Publicados</option>
-              </select>
+        {/* Tarjeta de Filtros Omnicanal con Selección Múltiple y Persistencia */}
+        <div className="mb-8 bg-white p-5 rounded-2xl border border-dorado/20 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* 5 Dropdowns de Selección Múltiple */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <DropdownFiltroMultiple
+                titulo="Estado"
+                icono="📋"
+                opciones={OPCIONES_ESTADO}
+                valoresSeleccionados={filtrosEstado}
+                onToggle={(id) => handleToggleFiltro(setFiltrosEstado, id)}
+                onLimpiar={() => setFiltrosEstado([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Canal"
+                icono="🌐"
+                opciones={OPCIONES_CANAL}
+                valoresSeleccionados={filtrosPlataforma}
+                onToggle={(id) => handleToggleFiltro(setFiltrosPlataforma, id)}
+                onLimpiar={() => setFiltrosPlataforma([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Formato"
+                icono="🎨"
+                opciones={OPCIONES_FORMATO}
+                valoresSeleccionados={filtrosFormato}
+                onToggle={(id) => handleToggleFiltro(setFiltrosFormato, id)}
+                onLimpiar={() => setFiltrosFormato([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Campaña / Tema"
+                icono="🎯"
+                opciones={OPCIONES_TEMA}
+                valoresSeleccionados={filtrosTema}
+                onToggle={(id) => handleToggleFiltro(setFiltrosTema, id)}
+                onLimpiar={() => setFiltrosTema([])}
+              />
+
+              <DropdownFiltroMultiple
+                titulo="Fecha"
+                icono="📅"
+                opciones={OPCIONES_FECHA}
+                valoresSeleccionados={filtrosFecha}
+                onToggle={(id) => handleToggleFiltro(setFiltrosFecha, id)}
+                onLimpiar={() => setFiltrosFecha([])}
+              />
             </div>
 
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Canal</label>
-              <select
-                value={filtroPlataforma}
-                onChange={(e) => setFiltroPlataforma(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">🌐 Todos los Canales</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-                <option value="tiktok">TikTok</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
-            </div>
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Formato</label>
-              <select
-                value={filtroFormato}
-                onChange={(e) => setFiltroFormato(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">🎨 Todos los Formatos</option>
-                <option value="imagen">🖼️ Imagen Estática</option>
-                <option value="carrusel">🖼️ Carrusel</option>
-                <option value="video">🎥 Video</option>
-                <option value="reel">📱 Reel / TikTok</option>
-              </select>
-            </div>
+            {/* Densidad de Columnas (2, 3 o 4 máximo por fila) + Contador + Selección masiva */}
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 ml-auto">
+              {/* Selector de Densidad de Columnas */}
+              <div className="flex items-center bg-gray-100/90 p-0.5 rounded-xl border border-gray-200 shadow-2xs">
+                <span className="text-[10px] font-bold text-carbon/50 px-2 uppercase hidden md:inline">Columnas:</span>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(2)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 2
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="2 columnas por fila"
+                >
+                  2 cols
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(3)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 3
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="3 columnas por fila"
+                >
+                  3 cols
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNumColumnas(4)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    numColumnas === 4
+                      ? "bg-white text-verde-profundo shadow-2xs"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="4 columnas por fila (máximo 4 por fila)"
+                >
+                  4 cols (Máx)
+                </button>
+              </div>
 
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Campaña / Tema</label>
-              <select
-                value={filtroTemaFiltro}
-                onChange={(e) => setFiltroTemaFiltro(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">🎯 Todos los Temas</option>
-                <option value="traspasos">🏠 Traspasos INFONAVIT</option>
-                <option value="impermeabilizacion">🌧️ Impermeabilización</option>
-                <option value="compra_directa">💵 Compra Directa de Casas</option>
-                <option value="remodelacion">🏗️ Remodelaciones</option>
-                <option value="gestion">⚖️ Asesoría / Gestión Legal</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-xs font-bold text-carbon/60 uppercase mb-1">Filtrar por Fecha</label>
-              <select
-                value={filtroFecha}
-                onChange={(e) => setFiltroFecha(e.target.value)}
-                className="bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-              >
-                <option value="todos">📅 Todas las Fechas</option>
-                <option value="hoy">📌 Programadas para Hoy</option>
-                <option value="manana">📌 Programadas para Mañana</option>
-                <option value="esta_semana">📆 Esta Semana</option>
-                <option value="este_mes">🗓️ Este Mes</option>
-              </select>
+              <div className="text-xs text-carbon/60 font-medium">
+                Mostrando:{" "}
+                <span className="font-bold text-verde-profundo text-sm">
+                  {publicacionesFiltradas.length}
+                </span>{" "}
+                de <span className="font-bold text-carbon/80">{publicaciones.length}</span>
+              </div>
+              {publicacionesFiltradas.length > 0 && (
+                <label className="flex items-center gap-2 text-xs font-bold text-verde-profundo bg-verde-profundo/5 hover:bg-verde-profundo/10 px-3 py-1.5 rounded-lg border border-verde-profundo/20 cursor-pointer transition-all">
+                  <input
+                    type="checkbox"
+                    checked={
+                      seleccionados.length === publicacionesFiltradas.length &&
+                      publicacionesFiltradas.length > 0
+                    }
+                    onChange={handleToggleSeleccionarTodos}
+                    className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                  />
+                  <span>
+                    Seleccionar todas ({seleccionados.length}/{publicacionesFiltradas.length})
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="text-xs text-carbon/50 font-medium">
-              Total encontradas: <span className="font-bold text-verde-profundo text-sm">{publicacionesFiltradas.length}</span>
+          {/* Fila de Chips de Filtros Activos con eliminación rápida (✕) y Botón de Limpiar */}
+          {hayFiltrosActivos && (
+            <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2 animate-in fade-in duration-150">
+              <span className="text-[11px] font-bold text-carbon/50 uppercase tracking-wider mr-1">
+                Filtros activos:
+              </span>
+
+              {filtrosEstado.map((id) => {
+                const opc = OPCIONES_ESTADO.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`st-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosEstado, id)}
+                      className="hover:bg-emerald-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosPlataforma.map((id) => {
+                const opc = OPCIONES_CANAL.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`pl-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-800 border border-blue-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosPlataforma, id)}
+                      className="hover:bg-blue-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosFormato.map((id) => {
+                const opc = OPCIONES_FORMATO.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`fo-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-800 border border-purple-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosFormato, id)}
+                      className="hover:bg-purple-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosTema.map((id) => {
+                const opc = OPCIONES_TEMA.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`te-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosTema, id)}
+                      className="hover:bg-amber-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              {filtrosFecha.map((id) => {
+                const opc = OPCIONES_FECHA.find((o) => o.id === id);
+                return (
+                  <span
+                    key={`fe-${id}`}
+                    className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-800 border border-rose-200 text-xs px-2.5 py-1 rounded-full font-medium"
+                  >
+                    <span>{opc?.icono}</span>
+                    <span>{opc?.label || id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFiltro(setFiltrosFecha, id)}
+                      className="hover:bg-rose-200/60 w-4 h-4 rounded-full flex items-center justify-center text-[11px] font-bold cursor-pointer transition"
+                      title="Quitar este filtro"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={handleLimpiarTodosFiltros}
+                className="ml-auto inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-bold px-3 py-1 rounded-xl bg-red-50 hover:bg-red-100 transition cursor-pointer"
+                title="Limpiar todos los filtros"
+              >
+                <span>✕</span> Limpiar todos los filtros
+              </button>
             </div>
-            {publicacionesFiltradas.length > 0 && (
-              <label className="flex items-center gap-2 text-xs font-bold text-verde-profundo bg-verde-profundo/5 hover:bg-verde-profundo/10 px-3 py-1.5 rounded-lg border border-verde-profundo/20 cursor-pointer transition-all">
-                <input
-                  type="checkbox"
-                  checked={seleccionados.length === publicacionesFiltradas.length && publicacionesFiltradas.length > 0}
-                  onChange={handleToggleSeleccionarTodos}
-                  className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
-                />
-                <span>Seleccionar todas ({seleccionados.length}/{publicacionesFiltradas.length})</span>
-              </label>
-            )}
-          </div>
+          )}
         </div>
 
         {/* Barra de Acciones Masivas Flotante cuando hay elementos seleccionados */}
@@ -567,6 +1621,13 @@ notify pgrst, 'reload schema';`;
                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <span>✓</span> Aprobar Seleccionadas ({seleccionados.length})
+              </button>
+              <button
+                onClick={handleDesprogramarMasivo}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Quitar de la agenda automática y regresar a Pendientes de Revisión"
+              >
+                <span>⏸️</span> Desprogramar ({seleccionados.length})
               </button>
               <button
                 onClick={handleRechazarMasivo}
@@ -602,66 +1663,292 @@ notify pgrst, 'reload schema';`;
             <p className="mt-2 text-sm text-carbon/60 max-w-md">
               Prueba cambiando o limpiando los filtros seleccionados para ver más publicaciones.
             </p>
+            {hayFiltrosActivos && (
+              <button
+                type="button"
+                onClick={handleLimpiarTodosFiltros}
+                className="mt-4 bg-verde-profundo text-crema hover:bg-verde-profundo/90 px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                <span>✕</span> Limpiar filtros aplicados
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className={gridColsClass}>
             {publicacionesFiltradas.map((pub) => {
               const guionActivo = guionesExpandidos[pub.id!] || false;
+              const promptActivo = promptsExpandidos[pub.id!] || false;
               const estaSeleccionado = seleccionados.includes(pub.id!);
+              const estaExpandido = textosExpandidos[pub.id!] || false;
+              const mediaUrl = pub.url_imagen && pub.url_imagen.length > 5
+                ? (pub.url_imagen.startsWith("http") || pub.url_imagen.startsWith("data:")
+                    ? pub.url_imagen
+                    : `https://${pub.url_imagen}`)
+                : null;
+              const esVideo = mediaUrl ? Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i)) : false;
+              const esBannerSvg = mediaUrl ? Boolean(mediaUrl.includes("generar-banner")) : false;
+
               return (
                 <div
                   key={pub.id}
-                  className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col shadow-xs ${
-                    estaSeleccionado ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-md" :
-                    pub.estado === "pendiente_revision" ? "border-dorado/30 hover:border-dorado/60 hover:shadow-md" :
-                    pub.estado === "aprobado" ? "border-emerald-500/30 hover:border-emerald-500/60" :
-                    pub.estado === "rechazado" ? "border-red-500/20 opacity-90" : "border-carbon/10 bg-gray-50/50"
+                  className={`bg-white rounded-xl border transition-all duration-200 flex flex-col shadow-xs overflow-hidden ${
+                    estaSeleccionado
+                      ? "border-verde-profundo ring-2 ring-verde-profundo/20 shadow-sm"
+                      : pub.estado === "pendiente_revision"
+                      ? "border-dorado/30 hover:border-dorado/60 hover:shadow-sm"
+                      : pub.estado === "aprobado"
+                      ? "border-emerald-500/30 hover:border-emerald-500/60 hover:shadow-sm"
+                      : pub.estado === "rechazado"
+                      ? "border-red-500/20 opacity-90"
+                      : "border-carbon/10 bg-gray-50/30 hover:shadow-xs"
                   }`}
                 >
-                  <div className="px-6 py-4 border-b border-carbon/5 flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3">
+                  {/* Cabecera ultra-compacta de la Tarjeta */}
+                  <div className="px-3 py-2 border-b border-carbon/5 flex items-center justify-between gap-1.5 bg-gray-50/60">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <input
                         type="checkbox"
                         checked={estaSeleccionado}
                         onChange={() => handleToggleSeleccion(pub.id!)}
-                        className="w-4 h-4 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer"
+                        className="w-3.5 h-3.5 rounded border-dorado/40 text-verde-profundo focus:ring-verde-profundo cursor-pointer shrink-0"
                         title="Seleccionar para acciones masivas"
                       />
-                      {getPlataformaBadge(pub.plataforma)}
-                      <span className="text-xs bg-carbon/5 text-carbon/70 font-semibold px-2 py-0.5 rounded-md">
+                      <div className="shrink-0 scale-90 origin-left">
+                        {getPlataformaBadge(pub.plataforma)}
+                      </div>
+                      <span className="text-[10px] bg-carbon/5 text-carbon/70 font-semibold px-1 py-0.5 rounded shrink-0">
                         {getFormatoIcon(pub.tipo_formato)}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-carbon/50 font-mono">
-                        ⏰ {formatFecha(pub.fecha_programacion)}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span
+                        className={`text-[10px] font-mono truncate max-w-[110px] ${
+                          pub.estado === "publicado" ? "text-blue-700 font-bold" : "text-carbon/60"
+                        }`}
+                        title={formatFecha(
+                          (pub.estado === "publicado" && pub.publicado_en)
+                            ? pub.publicado_en
+                            : pub.fecha_programacion
+                        )}
+                      >
+                        {formatFecha(
+                          (pub.estado === "publicado" && pub.publicado_en)
+                            ? pub.publicado_en
+                            : pub.fecha_programacion
+                        )}
                       </span>
+
                       {pub.estado === "pendiente_revision" && (
-                        <span className="bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Revisión</span>
+                        <span className="bg-amber-500/15 text-amber-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0">
+                          Revisión
+                        </span>
                       )}
                       {pub.estado === "aprobado" && (
-                        <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded" title="Enviado a n8n">Aprobado</span>
+                        <span
+                          className="bg-emerald-500/15 text-emerald-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0"
+                          title="Listo para publicar o programar"
+                        >
+                          Aprobado
+                        </span>
                       )}
                       {pub.estado === "rechazado" && (
-                        <span className="bg-red-500/10 text-red-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Rechazado</span>
+                        <span className="bg-red-500/15 text-red-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0">
+                          Rechazado
+                        </span>
                       )}
                       {pub.estado === "publicado" && (
-                        <span className="bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Publicado</span>
+                        <span className="bg-blue-600 text-white text-[9px] font-black uppercase px-1.5 py-0.5 rounded shadow-2xs shrink-0 flex items-center gap-0.5">
+                          ✓ Enviada
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="p-6 flex-1 flex flex-col gap-5">
+                  {/* Imagen / Visual / Placeholder */}
+                  {mediaUrl ? (
+                    <div className="relative aspect-[16/10] bg-black overflow-hidden group">
+                      {regenerandoIds[pub.id!] && (
+                        <div className="absolute inset-0 bg-carbon/85 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20 p-2 text-center animate-in fade-in">
+                          <div className="w-6 h-6 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
+                          <span className="text-[10px] font-bold text-dorado">Generando arte Flux...</span>
+                        </div>
+                      )}
+                      {esVideo ? (
+                        <video
+                          src={mediaUrl}
+                          controls
+                          preload="metadata"
+                          className="w-full h-full object-contain mx-auto"
+                        />
+                      ) : (
+                        <img
+                          src={
+                            pub.id
+                              ? `/api/marketing/imagen/${pub.id}.jpg?url=${encodeURIComponent(mediaUrl)}`
+                              : mediaUrl
+                          }
+                          alt={pub.titulo}
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.dataset.fallback && mediaUrl) {
+                              target.dataset.fallback = "true";
+                              target.src = mediaUrl;
+                            }
+                          }}
+                        />
+                      )}
+                      <div className="absolute top-1.5 right-1.5 bg-carbon/80 backdrop-blur-md text-crema text-[8px] font-bold px-1.5 py-0.5 rounded-full border border-white/20 flex items-center gap-1 shadow-xs">
+                        <span>{esVideo ? "🎬" : "🎨"}</span>
+                        <span>{esVideo ? "Video IA" : esBannerSvg ? "Banner" : "Flux"}</span>
+                      </div>
+                      {/* Botones rápidos en hover sobre la foto */}
+                      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <a
+                          href={CANVA_DESIGN_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => handleCopiarYNotificar(pub)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
+                          title="Abrir en Canva"
+                        >
+                          🎨 Canva
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopiarFoto(pub.url_imagen!, pub.id!)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
+                          title="Copiar foto"
+                        >
+                          📋 Foto
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirSubirVideo(pub)}
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
+                          title="Subir y pre-validar video para esta publicación"
+                        >
+                          🎬 Video
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReemplazarArte(pub.id!)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer"
+                          title="Subir Arte de Canva"
+                        >
+                          📁 Arte
+                        </button>
+                        <button
+                          type="button"
+                          disabled={regenerandoIds[pub.id!]}
+                          onClick={() => handleRegenerarCreativo(pub.id!)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition cursor-pointer disabled:opacity-60"
+                          title="Regenerar con IA"
+                        >
+                          🔄
+                        </button>
+                        <a
+                          href={mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-white/90 hover:bg-white text-carbon text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition"
+                          title="Ver en HD"
+                        >
+                          🔍
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative aspect-[16/10] border-b border-dashed border-dorado/30 bg-dorado/5 flex flex-col items-center justify-center p-2.5 text-center">
+                      {regenerandoIds[pub.id!] ? (
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="w-6 h-6 border-2 border-dorado border-t-transparent rounded-full animate-spin mb-1" />
+                          <span className="text-[10px] font-bold text-dorado">Generando arte con IA...</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-carbon/50">
+                          <span className="text-xl mb-0.5">
+                            {pub.tipo_formato === "video" || pub.tipo_formato === "reel" ? "🎬" : "🖼️"}
+                          </span>
+                          <span className="text-[10px] font-medium">
+                            {pub.tipo_formato === "video" || pub.tipo_formato === "reel"
+                              ? "Sin video asignado"
+                              : "Sin imagen asignada"}
+                          </span>
+                          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirSubirVideo(pub)}
+                              className="bg-purple-700 hover:bg-purple-800 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-xs transition cursor-pointer flex items-center gap-1"
+                              title="Subir y pre-validar video para esta publicación"
+                            >
+                              <span>🎬</span> Subir Video
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerarCreativo(pub.id!)}
+                              className="bg-verde-profundo text-crema text-[10px] font-bold px-2 py-0.5 rounded shadow-xs hover:bg-verde-profundo/90 transition cursor-pointer flex items-center gap-1"
+                              title="Generar imagen fotográfica con IA (Flux)"
+                            >
+                              <span>✨</span> Generar Flux
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cuerpo compacto de la publicación */}
+                  <div className="p-2.5 flex-1 flex flex-col gap-2">
                     <div>
-                      <h3 className="font-bold text-verde-profundo text-lg mb-2">{pub.titulo}</h3>
-                      <div className="bg-crema/10 border border-dorado/20 rounded-xl p-4 relative group">
-                        <p className="text-sm text-carbon whitespace-pre-wrap leading-relaxed font-cuerpo pr-8">
+                      {(() => {
+                        const catDetectada = resolverCategoriaMarketing(
+                          `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`
+                        );
+                        return (
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span
+                              className="text-[9px] font-bold text-carbon/75 bg-carbon/5 border border-carbon/10 px-1.5 py-0.5 rounded flex items-center gap-1 max-w-[170px] truncate"
+                              title={`${catDetectada.icono} ${catDetectada.nombre} (${catDetectada.lineaNegocio})`}
+                            >
+                              <span>{catDetectada.icono}</span>
+                              <span className="truncate">{catDetectada.nombre.split("(")[0].trim()}</span>
+                            </span>
+                            <span className="text-[9px] text-carbon/40 font-mono shrink-0">
+                              {pub.tipo_formato === "reel" || pub.tipo_formato === "video" ? "9:16" : "1:1"}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      <h3
+                        className="font-bold text-verde-profundo text-xs leading-snug line-clamp-1"
+                        title={pub.titulo}
+                      >
+                        {pub.titulo}
+                      </h3>
+                      <div className="mt-1 bg-crema/10 border border-dorado/15 rounded-lg p-2 relative group">
+                        <p
+                          className={`text-[11px] text-carbon whitespace-pre-wrap leading-relaxed font-cuerpo pr-4 ${
+                            estaExpandido ? "" : "line-clamp-2"
+                          }`}
+                        >
                           {pub.contenido}
                         </p>
+                        {pub.contenido && pub.contenido.length > 80 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTextoExpandido(pub.id!)}
+                            className="mt-0.5 text-[9px] font-bold text-verde-profundo hover:underline cursor-pointer block"
+                          >
+                            {estaExpandido ? "▲ Ver menos" : "▼ Ver más texto"}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleCopiarTexto(pub.contenido)}
-                          className="absolute right-3 top-3 p-1.5 rounded-lg bg-white/80 hover:bg-white text-carbon/50 hover:text-verde-profundo border border-carbon/10 shadow-xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          className="absolute right-1.5 top-1.5 p-0.5 rounded bg-white/80 hover:bg-white text-carbon/50 hover:text-verde-profundo border border-carbon/10 shadow-2xs opacity-0 group-hover:opacity-100 transition cursor-pointer text-[10px]"
                           title="Copiar Copy"
                         >
                           📋
@@ -669,63 +1956,19 @@ notify pgrst, 'reload schema';`;
                       </div>
                     </div>
 
-                    {pub.url_imagen && pub.url_imagen.length > 5 && (() => {
-                      const mediaUrl = pub.url_imagen.startsWith("http") ? pub.url_imagen : `https://${pub.url_imagen}`;
-                      const esVideo = Boolean(mediaUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i));
-                      return (
-                        <div className="relative rounded-2xl overflow-hidden border border-dorado/30 shadow-md group bg-black">
-                          {esVideo ? (
-                            <video
-                              src={mediaUrl}
-                              controls
-                              preload="metadata"
-                              className="w-full h-64 object-contain mx-auto"
-                            />
-                          ) : (
-                            <img
-                              src={mediaUrl}
-                              alt={pub.titulo}
-                              referrerPolicy="no-referrer"
-                              className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                          )}
-                          <div className="absolute top-3 right-3 bg-carbon/80 backdrop-blur-md text-crema text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 shadow-sm">
-                            <span>{esVideo ? "🎬" : "🎨"}</span> {esVideo ? "Video Generado por IA" : "Creativo Generado por IA (Flux)"}
-                          </div>
-                          <div className="absolute bottom-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                            <button
-                              type="button"
-                              onClick={() => handleRegenerarCreativo(pub.id!)}
-                              className="bg-amber-600/90 hover:bg-amber-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1 cursor-pointer"
-                              title="Generar otra variante de imagen/video"
-                            >
-                              🔄 Regenerar
-                            </button>
-                            <a
-                              href={mediaUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="bg-white/90 hover:bg-white text-carbon text-xs font-bold px-3 py-1.5 rounded-lg shadow-md transition-all flex items-center gap-1"
-                            >
-                              🔍 Ver en HD
-                            </a>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
+                    {/* Guion de Video (si existe, colapsable) */}
                     {pub.guion_video && (
-                      <div className="border border-carbon/10 rounded-xl overflow-hidden">
+                      <div className="border border-carbon/10 rounded-lg overflow-hidden">
                         <button
                           onClick={() => toggleGuion(pub.id!)}
-                          className="w-full bg-carbon/5 hover:bg-carbon/10 px-4 py-2.5 flex items-center justify-between text-xs font-bold text-carbon/70 transition-all cursor-pointer"
+                          className="w-full bg-carbon/5 hover:bg-carbon/10 px-2 py-1 flex items-center justify-between text-[10px] font-bold text-carbon/70 transition cursor-pointer"
                         >
-                          <span>🎥 {guionActivo ? "Ocultar Guion" : "Ver Guion de Video (Reel/TikTok)"}</span>
-                          <span>{guionActivo ? "▲" : "▼"}</span>
+                          <span>🎥 {guionActivo ? "Ocultar Guion" : "Ver Guion Video"}</span>
+                          <span className="text-[9px]">{guionActivo ? "▲" : "▼"}</span>
                         </button>
                         {guionActivo && (
-                          <div className="p-4 bg-gray-50 border-t border-carbon/10">
-                            <p className="text-xs text-carbon/80 whitespace-pre-wrap leading-relaxed font-mono">
+                          <div className="p-2 bg-gray-50 border-t border-carbon/10 max-h-36 overflow-y-auto">
+                            <p className="text-[10px] text-carbon/80 whitespace-pre-wrap leading-relaxed font-mono">
                               {pub.guion_video}
                             </p>
                           </div>
@@ -733,101 +1976,321 @@ notify pgrst, 'reload schema';`;
                       </div>
                     )}
 
-                    {pub.sugerencia_visual && (
-                      <div className="text-xs bg-amber-500/5 border border-amber-500/10 rounded-xl p-3">
-                        <span className="font-bold text-amber-800 block mb-1">💡 Sugerencia Visual (Prompt / Canva):</span>
-                        <p className="text-carbon/70 italic leading-snug">{pub.sugerencia_visual}</p>
+                    {/* Sugerencia Visual (Prompt / Canva, colapsable) */}
+                    {(pub.sugerencia_visual || pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (() => {
+                      const catDetectada = resolverCategoriaMarketing(
+                        `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`
+                      );
+                      return (
+                        <div className="border border-amber-500/20 rounded-lg overflow-hidden bg-amber-50/20">
+                          <button
+                            type="button"
+                            onClick={() => togglePrompt(pub.id!)}
+                            className="w-full px-2 py-1 flex items-center justify-between text-[10px] font-bold text-amber-900 hover:bg-amber-100/50 transition cursor-pointer"
+                          >
+                            <span className="truncate flex items-center gap-1">
+                              <span>💡</span>
+                              <span>{promptActivo ? "Ocultar Prompt" : "Ver Prompt Visual"}</span>
+                              <span className="text-[8px] font-normal text-amber-800 bg-amber-200/60 px-1 rounded ml-1">
+                                {catDetectada.icono} {catDetectada.id}
+                              </span>
+                            </span>
+                            <span className="text-[9px] shrink-0 ml-1">{promptActivo ? "▲" : "▼"}</span>
+                          </button>
+                          {promptActivo && (
+                            <div className="p-2 border-t border-amber-200/50 bg-white/70 max-h-48 overflow-y-auto space-y-1.5">
+                              <div className="flex items-center justify-between text-[9px] text-amber-900 font-semibold pb-1 border-b border-amber-200/40">
+                                <span className="truncate max-w-[160px]">Línea: {catDetectada.nombre.split("(")[0].trim()}</span>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await handleRegenerarCreativo(pub.id!);
+                                  }}
+                                  className="text-[9px] text-dorado hover:underline font-bold cursor-pointer shrink-0 ml-1"
+                                  title="Forzar regeneración con prompt parametrizado de esta categoría"
+                                >
+                                  🔄 Regenerar Foto
+                                </button>
+                              </div>
+                              {pub.sugerencia_visual && (
+                                <p className="text-[10px] text-carbon/80 italic leading-snug">
+                                  {pub.sugerencia_visual}
+                                </p>
+                              )}
+                              {(pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (
+                                <div className="text-[9px] font-mono text-carbon/70 bg-amber-50/70 p-1.5 rounded border border-amber-200/40 leading-tight">
+                                  <span className="font-bold text-amber-900 block mb-0.5">Prompt Flux (IA):</span>
+                                  <span>{pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Métricas Ads si existen */}
+                    {((pub.leads_generados !== undefined && pub.leads_generados > 0) ||
+                      (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
+                      <div className="text-[9px] bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-1.5 flex items-center justify-between gap-1">
+                        <div className="flex flex-wrap gap-1.5 text-carbon/80 font-mono">
+                          <span>${pub.inversion_ads || 0}</span>
+                          <span>👥 {pub.leads_generados || 0}</span>
+                          <span>CPL ${pub.cpl || 0}</span>
+                        </div>
+                        <span className="bg-emerald-600 text-white font-bold px-1 py-0.5 rounded text-[8px]">
+                          ⭐ {pub.roi_score || 0}
+                        </span>
                       </div>
                     )}
 
-                    {((pub.leads_generados !== undefined && pub.leads_generados > 0) || (pub.inversion_ads !== undefined && pub.inversion_ads > 0)) && (
-                      <div className="text-xs bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <span className="font-bold text-emerald-800 block mb-1">📊 Rendimiento de Campaña (API Sincronizado):</span>
-                          <div className="flex flex-wrap gap-3 text-carbon/80 font-mono text-[11px]">
-                            <span>💵 Inversión: <strong>${pub.inversion_ads || 0} MXN</strong></span>
-                            <span>👥 Prospectos: <strong>{pub.leads_generados || 0}</strong></span>
-                            <span>🎯 CPL: <strong>${pub.cpl || 0} MXN</strong></span>
-                          </div>
-                        </div>
-                        <div className="bg-emerald-600 text-white font-bold px-2.5 py-1 rounded-lg text-[10px]">
-                          ⭐ Score: {pub.roi_score || 0}/100
-                        </div>
-                      </div>
-                    )}
-
+                    {/* Observaciones de Rechazo si existen */}
                     {pub.estado === "rechazado" && pub.notas_revision && (
-                      <div className="text-xs bg-red-500/5 border border-red-500/10 rounded-xl p-3">
-                        <span className="font-bold text-red-800 block mb-1">❌ Observaciones de Rechazo:</span>
-                        <p className="text-carbon/70 leading-snug">{pub.notas_revision}</p>
+                      <div className="text-[10px] bg-red-500/5 border border-red-500/10 rounded-lg p-1.5">
+                        <span className="font-bold text-red-800 block text-[9px]">❌ Motivo de Rechazo:</span>
+                        <p className="text-carbon/70 leading-snug line-clamp-2">{pub.notas_revision}</p>
                       </div>
                     )}
                   </div>
 
-                  <div className="px-6 py-4 bg-gray-50/50 border-t border-carbon/5 flex flex-wrap gap-2 justify-end items-center rounded-b-2xl">
-                    <button
-                      onClick={() => handleEliminarIndividual(pub.id!)}
-                      className="bg-white hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 font-semibold text-xs px-3 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                      title="Eliminar esta publicación permanentemente"
-                    >
-                      🗑️ Eliminar
-                    </button>
-
-                    <button
-                      onClick={() => setPubEditando(pub)}
-                      className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/80 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
-                    >
-                      ✏️ Editar
-                    </button>
-
+                  {/* Pie de la tarjeta y Botonera Ultra-Compacta */}
+                  <div className="px-2.5 py-2 bg-gray-50/70 border-t border-carbon/5 flex flex-col gap-1.5 rounded-b-xl mt-auto">
+                    {/* Fila 1: Acciones Principales según Estado */}
                     {pub.estado === "pendiente_revision" && (
-                      <>
+                      <div className="flex items-center gap-1.5">
                         <button
-                          onClick={() => handleRechazar(pub.id!)}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
-                        >
-                          ✕ Rechazar
-                        </button>
-                        <button
+                          type="button"
                           onClick={() => handleAprobar(pub.id!)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          title="Aprobar para salir en el horario agendado y generar arte con IA si falta"
                         >
-                          ✓ Aprobar y Mandar a n8n
+                          <span>✓</span> Aprobar y Programar
                         </button>
-                      </>
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirProgramar(pub)}
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                          title="Elegir o modificar la fecha y hora de publicación programada"
+                        >
+                          <span>⏰</span> Cambiar Horario
+                        </button>
+                      </div>
                     )}
 
                     {pub.estado === "aprobado" && (
-                      <>
-                        <button
-                          onClick={() => handleRechazar(pub.id!)}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
-                        >
-                          ✕ Rechazar
-                        </button>
-                        <button
-                          onClick={() => handlePublicar(pub.id!)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
-                        >
-                          📲 Marcar Publicado
-                        </button>
-                      </>
+                      <div className="flex flex-col gap-1.5">
+                        {/* Fila 1: Publicación Inmediata */}
+                        <div className="flex items-center gap-1.5">
+                          {(pub.plataforma === "facebook" || pub.plataforma === "instagram") && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublicarDirectoMeta(pub.id!, pub.plataforma)}
+                              disabled={publicandoMetaId === pub.id}
+                              className={`flex-1 ${
+                                pub.plataforma === "instagram"
+                                  ? "bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-90"
+                                  : "bg-[#1877F2] hover:bg-[#166FE5]"
+                              } text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60`}
+                              title={`Publicar ahora mismo en ${pub.plataforma === "instagram" ? "Instagram" : "Facebook"}`}
+                            >
+                              <span>{publicandoMetaId === pub.id ? "⏳" : "🚀"}</span>
+                              <span className="truncate">
+                                {publicandoMetaId === pub.id
+                                  ? "Publicando..."
+                                  : `Publicar ${pub.plataforma === "instagram" ? "IG" : "FB"}`}
+                              </span>
+                            </button>
+                          )}
+
+                          {pub.plataforma === "tiktok" && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublicarDirectoTikTok(pub.id!)}
+                              disabled={publicandoTikTokId === pub.id}
+                              className="flex-1 bg-black hover:bg-neutral-800 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
+                              title="Publicar ahora mismo en TikTok oficial (@saucedamxbr)"
+                            >
+                              <span>{publicandoTikTokId === pub.id ? "⏳" : "🎵"}</span>
+                              <span className="truncate">
+                                {publicandoTikTokId === pub.id ? "Publicando..." : "TikTok"}
+                              </span>
+                            </button>
+                          )}
+
+                          {(pub.plataforma === "mautic" || pub.plataforma === "email") && (
+                            <button
+                              type="button"
+                              onClick={() => handleDispararMautic(pub.id!)}
+                              disabled={disparandoMauticId === pub.id}
+                              className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1 disabled:opacity-60"
+                              title="Disparar campaña masiva en Mautic"
+                            >
+                              <span>{disparandoMauticId === pub.id ? "⏳" : "🚀"}</span>
+                              <span className="truncate">
+                                {disparandoMauticId === pub.id ? "Enviando..." : "Mautic"}
+                              </span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handlePublicar(pub.id!)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-2 rounded-lg shadow-2xs transition cursor-pointer text-center flex items-center justify-center gap-1"
+                            title="Marcar como publicado manualmente"
+                          >
+                            <span>📲</span> Publicar
+                          </button>
+                        </div>
+
+                        {/* Fila 2: Gestión de la Programación */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleAbrirProgramar(pub)}
+                            className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold py-1 px-2 transition cursor-pointer flex items-center justify-center gap-1"
+                            title="Cambiar fecha y hora programada"
+                          >
+                            <span>⏰</span> Reagendar
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDesprogramar(pub.id!)}
+                            className="flex-1 bg-gray-100 hover:bg-amber-50 text-carbon/80 hover:text-amber-800 border border-gray-200 hover:border-amber-300 rounded-lg text-xs font-bold py-1 px-2 transition cursor-pointer flex items-center justify-center gap-1"
+                            title="Quitar de la agenda y del envío automático (regresa a Revisión sin eliminar)"
+                          >
+                            <span>⏸️</span> Desprogramar
+                          </button>
+                        </div>
+                      </div>
                     )}
 
-                    {(pub.estado === "rechazado" || pub.estado === "publicado") && (
-                      <button
-                        onClick={() => handleReconsiderar(pub.id!)}
-                        className="bg-white hover:bg-gray-100 border border-carbon/20 text-carbon/70 hover:text-carbon font-semibold text-xs px-3.5 py-2 rounded-lg transition-all cursor-pointer"
-                      >
-                        🔄 Regresar a Revisión
-                      </button>
+                    {pub.estado === "publicado" && (
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                          <span>✓</span> Enviada
+                        </span>
+                        {pub.url_publicacion && pub.plataforma !== "mautic" && pub.plataforma !== "email" && (
+                          <a
+                            href={pub.url_publicacion}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-0.5 truncate"
+                          >
+                            <span>🔗</span> Ver post ↗
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleReconsiderar(pub.id!)}
+                          className="text-[10px] text-carbon/60 hover:text-carbon hover:underline cursor-pointer ml-auto"
+                          title="Regresar a revisión"
+                        >
+                          Regresar
+                        </button>
+                      </div>
                     )}
+
+                    {/* Fila 2: Barra de Acciones Utilitarias Compactas */}
+                    <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-gray-200/60 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const actual = publicaciones.find((p) => p.id === pub.id) || pub;
+                          setPubPrevisualizar(actual);
+                        }}
+                        className="px-1.5 py-0.5 text-emerald-800 hover:bg-emerald-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Previsualizar en simulador móvil"
+                      >
+                        <span>👁️</span> <span className="hidden sm:inline">Previs.</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPubEditando(pub)}
+                        className="px-1.5 py-0.5 text-carbon/80 hover:bg-gray-200/60 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Editar publicación"
+                      >
+                        <span>✏️</span> <span className="hidden sm:inline">Editar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirReplicar(pub)}
+                        className="px-1.5 py-0.5 text-amber-800 hover:bg-amber-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Replicar a otras redes"
+                      >
+                        <span>🔄</span> <span className="hidden sm:inline">Replicar</span>
+                      </button>
+
+                      <a
+                        href={CANVA_DESIGN_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleCopiarYNotificar(pub)}
+                        className="px-1.5 py-0.5 text-purple-700 hover:bg-purple-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Abrir en Canva"
+                      >
+                        <span>🎨</span> <span className="hidden sm:inline">Canva</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirSubirVideo(pub)}
+                        className="px-1.5 py-0.5 text-purple-700 hover:bg-purple-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Subir y pre-validar video para esta publicación"
+                      >
+                        <span>🎬</span> <span className="hidden sm:inline">Video</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleReemplazarArte(pub.id!)}
+                        className="px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 rounded font-semibold transition cursor-pointer flex items-center gap-0.5 text-[11px]"
+                        title="Subir archivo (.png/.jpg) descargado de Canva"
+                      >
+                        <span>📁</span> <span className="hidden sm:inline">Arte</span>
+                      </button>
+
+                      {pub.estado !== "publicado" && (
+                        <button
+                          type="button"
+                          onClick={() => handleRechazar(pub.id!)}
+                          className="px-1.5 py-0.5 text-red-500 hover:bg-red-50 rounded font-semibold transition cursor-pointer text-[11px]"
+                          title="Rechazar publicación"
+                        >
+                          ✕
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarIndividual(pub.id!)}
+                        className="px-1.5 py-0.5 text-red-600 hover:bg-red-50 rounded font-semibold transition cursor-pointer ml-auto text-[11px]"
+                        title="Eliminar publicación"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+
+        {/* Sección de Calendario Editorial Omnicanal */}
+        <CalendarioMarketingOmnicanal
+          publicaciones={publicaciones}
+          onRecargar={cargarDatos}
+          onPrevisualizar={(pub) => setPubPrevisualizar(pub)}
+          onEditar={(pub) => setPubEditando(pub)}
+          onNuevaPublicacionParaFecha={(fechaIso) => {
+            setFechaIA(fechaIso);
+            setMostrarModalIA(true);
+          }}
+        />
       </div>
 
       {isPending && (
@@ -851,76 +2314,337 @@ notify pgrst, 'reload schema';`;
       )}
 
       {mostrarModalIA && (
-        <div className="fixed inset-0 bg-carbon/60 z-40 flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-dorado/20">
-            <div className="px-6 py-5 bg-verde-profundo text-crema">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <span>✨</span> Generar Propuestas con IA
-              </h3>
-              <p className="text-xs text-crema/70 mt-1">Configura las directrices para el agente de contenido.</p>
+        <div className="fixed inset-0 bg-carbon/60 z-40 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-dorado/20">
+            <div className="px-6 py-5 bg-verde-profundo text-crema flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <span>✨</span> Generar Campaña con IA (Omnicanal)
+                </h3>
+                <p className="text-xs text-crema/70 mt-0.5">
+                  Concepto visual unificado adaptado al lenguaje de cada red.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMostrarModalIA(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="p-6 flex flex-col gap-4">
+            <div className="p-6 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
+              {/* Tema de Campaña */}
               <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Cantidad de Publicaciones</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[1, 2, 3, 5].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setCantidadIA(num)}
-                      className={`py-2 rounded-xl text-sm font-bold border transition ${
-                        cantidadIA === num ? "bg-verde-profundo text-crema border-verde-profundo" : "bg-crema/10 text-carbon border-dorado/30 hover:bg-crema/20"
-                      }`}
-                    >
-                      {num} {num === 1 ? "post" : "posts"}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-carbon/80 uppercase">
+                    Tema o Campaña Central
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setUsarTemaPersonalizado(!usarTemaPersonalizado)}
+                    className="text-[11px] font-bold text-dorado hover:underline cursor-pointer"
+                  >
+                    {usarTemaPersonalizado ? "← Ver temas sugeridos" : "✏️ Tema personalizado"}
+                  </button>
                 </div>
+
+                {usarTemaPersonalizado ? (
+                  <textarea
+                    rows={2}
+                    value={temaPersonalizado}
+                    onChange={(e) => setTemaPersonalizado(e.target.value)}
+                    placeholder="Ej. Promoción de impermeabilización con soplete $210/m² con 10 años de garantía antes del temporal de lluvias..."
+                    className="w-full bg-crema/10 border border-dorado/40 rounded-xl px-3.5 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
+                  />
+                ) : (
+                  <select
+                    value={temaIA}
+                    onChange={(e) => setTemaIA(e.target.value)}
+                    className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer font-medium"
+                  >
+                    <optgroup label="🔨 Sauceda Construye">
+                      {Object.values(CATALOGO_CATEGORIAS_MARKETING)
+                        .filter((c) => c.lineaNegocio === "Sauceda Construye")
+                        .map((cat) => (
+                          <option key={cat.id} value={`${cat.nombre}: ${cat.ofertaPrincipal}`}>
+                            {cat.icono} {cat.nombre}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="🏡 Sauceda Bienes Raíces">
+                      {Object.values(CATALOGO_CATEGORIAS_MARKETING)
+                        .filter((c) => c.lineaNegocio === "Sauceda Bienes Raíces")
+                        .map((cat) => (
+                          <option key={cat.id} value={`${cat.nombre}: ${cat.ofertaPrincipal}`}>
+                            {cat.icono} {cat.nombre}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                )}
               </div>
 
+              {/* Redes Sociales Destino (Multiselección) */}
               <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Tema / Campaña de Enfoque</label>
-                <select
-                  value={temaIA}
-                  onChange={(e) => setTemaIA(e.target.value)}
-                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo cursor-pointer"
-                >
-                  <option value="todos">🔀 Variado (Todos los pilares mezclados)</option>
-                  <option value="Traspasos de viviendas con crédito INFONAVIT">🏠 Traspaso INFONAVIT (Explicación y Venta)</option>
-                  <option value="Compra rápida de casas de contado con adeudos o vandalizadas">💰 Compra de Casas de Contado (Problemas Legales/Deudas)</option>
-                  <option value="Servicios de impermeabilización profesional con garantía de 5 a 10 años">☔ Impermeabilización Profesional (Sauceda Construye)</option>
-                  <option value="Remodelaciones y ampliaciones de viviendas en León Gto">🏗️ Remodelación y Ampliación de Hogares</option>
-                  <option value="Gestión y armado de expediente INFONAVIT para trato directo">📂 Armado de Expediente INFONAVIT (Solo Trámite)</option>
-                </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-carbon/80 uppercase">
+                    Redes Sociales Destino (Se adaptará a cada una)
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook"])}
+                      className="text-[10px] text-carbon/60 hover:text-carbon font-semibold underline cursor-pointer"
+                    >
+                      Meta (FB + IG)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCanalesSeleccionadosIA(["instagram", "facebook", "tiktok", "whatsapp", "mautic"])}
+                      className="text-[10px] text-dorado font-bold hover:underline cursor-pointer"
+                    >
+                      Todas (5)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "instagram", nombre: "Instagram", icono: "🟣", detalle: "Post Feed + Hashtags" },
+                    { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed + Enlace" },
+                    { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video Corto" },
+                    { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje Difusión + Link" },
+                    { id: "mautic", nombre: "Mautic / Correo", icono: "🟠", detalle: "Boletín / Campaña Masiva" },
+                  ].map((canal) => {
+                    const seleccionado = canalesSeleccionadosIA.includes(canal.id as any);
+                    return (
+                      <button
+                        key={canal.id}
+                        type="button"
+                        onClick={() => {
+                          if (seleccionado) {
+                            if (canalesSeleccionadosIA.length > 1) {
+                              setCanalesSeleccionadosIA(canalesSeleccionadosIA.filter((c) => c !== canal.id));
+                            }
+                          } else {
+                            setCanalesSeleccionadosIA([...canalesSeleccionadosIA, canal.id as any]);
+                          }
+                        }}
+                        className={`p-3 rounded-2xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                          seleccionado
+                            ? "bg-verde-profundo/10 border-verde-profundo text-verde-profundo font-bold shadow-xs"
+                            : "bg-gray-50 border-gray-200 text-carbon/60 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className="text-lg">{canal.icono}</span>
+                        <div>
+                          <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                            <span>{canal.nombre}</span>
+                            {seleccionado && <span className="text-emerald-600 text-xs">✓</span>}
+                          </div>
+                          <span className="text-[10px] font-normal opacity-70 block mt-0.5">{canal.detalle}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-carbon/50 mt-1.5">
+                  📐 Todas las publicaciones compartirán el <strong>mismo concepto visual y prompt de fotografía</strong>, pero la IA redactará copys y guiones adaptados a cada formato.
+                </p>
               </div>
 
+              {/* Detalles adicionales / Oferta (Opcional) */}
               <div>
-                <label className="text-xs font-bold text-carbon/60 uppercase block mb-1">Día de Programación</label>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1">
+                  Detalles u Oferta Específica (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={detallesExtraIA}
+                  onChange={(e) => setDetallesExtraIA(e.target.value)}
+                  placeholder="Ej. WhatsApp 477 465 4700, promoción del mes, visita técnica gratuita..."
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-xs text-carbon focus:outline-none focus:border-verde-profundo"
+                />
+              </div>
+
+              {/* Día de Programación */}
+              <div>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1">Día de Programación</label>
                 <input
                   type="date"
                   value={fechaIA}
                   onChange={(e) => setFechaIA(e.target.value)}
-                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
                 />
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <div className="px-6 py-4 bg-gray-50 flex items-center justify-between border-t border-gray-200">
+              <span className="text-xs text-carbon/60 font-medium">
+                {canalesSeleccionadosIA.length} {canalesSeleccionadosIA.length === 1 ? "publicación" : "publicaciones unificadas"}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalIA(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-carbon/60 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={triggerGeneracionIA}
+                  className="px-5 py-2.5 bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>✨</span> Generar Campaña ({canalesSeleccionadosIA.length} Redes)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Replicar / Adaptar publicación existente a otras redes */}
+      {pubParaReplicar && (
+        <div className="fixed inset-0 bg-carbon/60 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-dorado/30">
+            <div className="px-6 py-5 bg-verde-profundo text-crema flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <span>🔄</span> Replicar en otros Canales
+                </h3>
+                <p className="text-xs text-crema/70 mt-0.5">
+                  Adapta esta publicación manteniendo la misma fotografía ya aprobada.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setMostrarModalIA(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-carbon/60 hover:bg-gray-100 transition"
+                onClick={() => setPubParaReplicar(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition"
               >
-                Cancelar
+                ✕
               </button>
-              <button
-                type="button"
-                onClick={triggerGeneracionIA}
-                className="px-5 py-2.5 bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold rounded-xl shadow transition"
-              >
-                Comenzar Generación
-              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              {/* Tarjeta resumen del post origen */}
+              <div className="bg-dorado/10 border border-dorado/30 rounded-2xl p-3.5 flex items-center gap-3">
+                {pubParaReplicar.url_imagen && pubParaReplicar.url_imagen.length > 5 ? (
+                  <img
+                    src={pubParaReplicar.url_imagen}
+                    alt="Arte aprobado"
+                    className="w-16 h-16 rounded-xl object-cover border border-dorado/40 shadow-xs flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-carbon/10 border border-carbon/20 flex items-center justify-center text-lg flex-shrink-0">
+                    🖼️
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[10px] uppercase font-bold text-dorado">Origen:</span>
+                    {getPlataformaBadge(pubParaReplicar.plataforma)}
+                  </div>
+                  <h4 className="text-xs font-bold text-carbon truncate">
+                    {pubParaReplicar.titulo}
+                  </h4>
+                  <p className="text-[11px] text-carbon/60 line-clamp-1 mt-0.5">
+                    {pubParaReplicar.contenido}
+                  </p>
+                </div>
+              </div>
+
+              {/* Selector de Canales Destino */}
+              <div>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1.5">
+                  ¿A qué redes deseas adaptar este post?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "instagram", nombre: "Instagram", icono: "🟣", detalle: "Post / Feed" },
+                    { id: "facebook", nombre: "Facebook", icono: "🔵", detalle: "Post Feed con enlace" },
+                    { id: "tiktok", nombre: "TikTok", icono: "⚫", detalle: "Guion de Video" },
+                    { id: "whatsapp", nombre: "WhatsApp", icono: "🟢", detalle: "Mensaje de Difusión" },
+                    { id: "mautic", nombre: "Mautic / Correo", icono: "🟠", detalle: "Boletín / Campaña Masiva" },
+                  ]
+                    .filter((canal) => canal.id !== pubParaReplicar.plataforma)
+                    .map((canal) => {
+                      const seleccionado = canalesParaReplicar.includes(canal.id as any);
+                      return (
+                        <button
+                          key={canal.id}
+                          type="button"
+                          onClick={() => {
+                            if (seleccionado) {
+                              setCanalesParaReplicar(canalesParaReplicar.filter((c) => c !== canal.id));
+                            } else {
+                              setCanalesParaReplicar([...canalesParaReplicar, canal.id as any]);
+                            }
+                          }}
+                          className={`p-3 rounded-2xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                            seleccionado
+                              ? "bg-verde-profundo/10 border-verde-profundo text-verde-profundo font-bold shadow-xs"
+                              : "bg-gray-50 border-gray-200 text-carbon/60 hover:bg-gray-100"
+                          }`}
+                        >
+                          <span className="text-lg">{canal.icono}</span>
+                          <div>
+                            <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                              <span>{canal.nombre}</span>
+                              {seleccionado && <span className="text-emerald-600 text-xs">✓</span>}
+                            </div>
+                            <span className="text-[10px] font-normal opacity-70 block mt-0.5">{canal.detalle}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Instrucciones opcionales */}
+              <div>
+                <label className="text-xs font-bold text-carbon/80 uppercase block mb-1">
+                  Instrucciones o enfoque adicional para la IA (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={instruccionesReplicar}
+                  onChange={(e) => setInstruccionesReplicar(e.target.value)}
+                  placeholder="Ej. Enfatizar la cotización gratuita o tono más enérgico..."
+                  className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-3.5 py-2 text-xs text-carbon focus:outline-none focus:border-verde-profundo"
+                />
+              </div>
+
+              <div className="text-[11px] bg-emerald-50 text-emerald-800 p-3 rounded-xl border border-emerald-200">
+                ✅ <strong>Misma Fotografía Garantizada:</strong> Las nuevas publicaciones conservarán automáticamente la fotografía aprobada de la publicación original.
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex items-center justify-between border-t border-gray-200">
+              <span className="text-xs text-carbon/60 font-medium">
+                {canalesParaReplicar.length} {canalesParaReplicar.length === 1 ? "red seleccionada" : "redes seleccionadas"}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={replicando}
+                  onClick={() => setPubParaReplicar(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-carbon/60 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={replicando || canalesParaReplicar.length === 0}
+                  onClick={handleEjecutarReplicacion}
+                  className="px-5 py-2.5 bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold rounded-xl shadow-md transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{replicando ? "⏳" : "✨"}</span>
+                  <span>{replicando ? "Adaptando..." : `Adaptar a ${canalesParaReplicar.length} Redes`}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -958,6 +2682,7 @@ notify pgrst, 'reload schema';`;
                     <option value="instagram">Instagram</option>
                     <option value="tiktok">TikTok</option>
                     <option value="whatsapp">WhatsApp</option>
+                    <option value="mautic">Mautic / Correo</option>
                   </select>
                 </div>
 
@@ -1006,12 +2731,72 @@ notify pgrst, 'reload schema';`;
                   />
                 </div>
 
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-carbon/60 block">
+                      Prompt Fotográfico IA (Flux / Replicate en Inglés)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nuevo = generarPromptFluxParametrizado(
+                          `${pubEditando.titulo || ""} ${pubEditando.contenido || ""} ${pubEditando.sugerencia_visual || ""}`,
+                          {
+                            esVertical:
+                              pubEditando.tipo_formato === "reel" ||
+                              pubEditando.tipo_formato === "video" ||
+                              pubEditando.plataforma === "tiktok",
+                          }
+                        );
+                        setPubEditando({
+                          ...pubEditando,
+                          prompt_imagen_flux: nuevo,
+                          diseno_banner: {
+                            ...(pubEditando.diseno_banner || {}),
+                            prompt_imagen_flux: nuevo,
+                          },
+                        });
+                      }}
+                      className="text-[11px] font-bold text-dorado hover:underline cursor-pointer flex items-center gap-1"
+                      title="Generar prompt fotorrealista basado en la categoría de negocio detectada"
+                    >
+                      <span>✨ Auto-generar según contenido</span>
+                    </button>
+                  </div>
+                  <textarea
+                    rows={3}
+                    placeholder="Award-winning commercial architectural editorial photography of a modern Mexican residential..."
+                    value={pubEditando.prompt_imagen_flux || (pubEditando.diseno_banner as any)?.prompt_imagen_flux || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPubEditando({
+                        ...pubEditando,
+                        prompt_imagen_flux: val,
+                        diseno_banner: {
+                          ...(pubEditando.diseno_banner || {}),
+                          prompt_imagen_flux: val,
+                        },
+                      });
+                    }}
+                    className="w-full bg-crema/10 border border-dorado/30 rounded-xl p-4 text-xs text-carbon focus:outline-none focus:border-verde-profundo font-mono"
+                  />
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-carbon/60 block mb-1">Fecha de Programación</label>
                   <input
                     type="datetime-local"
                     required
-                    value={pubEditando.fecha_programacion ? pubEditando.fecha_programacion.substring(0, 16) : ""}
+                    value={
+                      pubEditando.fecha_programacion
+                        ? (() => {
+                            const d = new Date(pubEditando.fecha_programacion);
+                            if (isNaN(d.getTime())) return "";
+                            const tzOffset = d.getTimezoneOffset() * 60000;
+                            return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+                          })()
+                        : ""
+                    }
                     onChange={(e) => setPubEditando({ ...pubEditando, fecha_programacion: e.target.value })}
                     className="w-full bg-crema/10 border border-dorado/30 rounded-xl px-4 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
                   />
@@ -1042,6 +2827,77 @@ notify pgrst, 'reload schema';`;
                     />
                   </div>
                 )}
+
+                {/* Sección de Arte / Imagen de la Publicación */}
+                <div className="md:col-span-2 border-t border-dorado/20 pt-4 mt-2">
+                  <label className="text-xs font-bold text-verde-profundo uppercase block mb-2 flex items-center gap-1.5">
+                    <span>🖼️</span> Arte / Creativo Visual
+                  </label>
+                  <div className="bg-crema/10 border border-dorado/30 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center">
+                    {pubEditando.url_imagen && pubEditando.url_imagen.length > 5 ? (
+                      <div className="w-24 h-24 rounded-xl overflow-hidden border border-dorado/30 relative flex-shrink-0 bg-black shadow-xs">
+                        {esArchivoVideoReal(pubEditando.url_imagen) ? (
+                          <video
+                            src={pubEditando.url_imagen}
+                            controls
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <img
+                            src={pubEditando.url_imagen}
+                            alt="Vista previa"
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-24 h-24 rounded-xl border border-dashed border-dorado/40 flex items-center justify-center text-xs text-carbon/40 flex-shrink-0">
+                        {pubEditando.tipo_formato === "video" || pubEditando.tipo_formato === "reel" ? "Sin video" : "Sin imagen"}
+                      </div>
+                    )}
+                    <div className="flex-1 w-full space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirSubirVideo(pubEditando)}
+                          className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          title="Subir y pre-validar video para esta publicación"
+                        >
+                          <span>🎬</span> Subir / Validar Video
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPubIdParaSubir(pubEditando.id!);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = "";
+                              fileInputRef.current.click();
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>📁</span> Cargar PNG de Canva / PC
+                        </button>
+                        {pubEditando.url_imagen?.includes("generar-banner") && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestaurarFotoLimpia(pubEditando.id!)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>🧹</span> Restaurar Foto Limpia
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="O pega una URL directa (https://...)"
+                        value={pubEditando.url_imagen || ""}
+                        onChange={(e) => setPubEditando({ ...pubEditando, url_imagen: e.target.value })}
+                        className="w-full bg-white border border-dorado/30 rounded-lg px-3 py-1.5 text-xs text-carbon focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Sección de Parametrización Dinámica de Anuncio Vendedor (Banner Meta Ads) */}
                 <div className="md:col-span-2 border-t border-dorado/20 pt-4 mt-2">
@@ -1189,6 +3045,207 @@ notify pgrst, 'reload schema';`;
           </div>
         </div>
       )}
+
+      {/* Modal de Previsualización en Redes Sociales */}
+      {pubPrevisualizar && (
+        <PrevisualizadorRedSocial
+          publicacion={pubPrevisualizar}
+          abierto={Boolean(pubPrevisualizar)}
+          onCerrar={() => setPubPrevisualizar(null)}
+          onEditar={(pub) => setPubEditando(pub)}
+          onProgramar={(pub) => handleAbrirProgramar(pub)}
+          onRegenerarCreativo={(id) => handleRegenerarCreativo(id)}
+          onReemplazarArte={(id) => handleReemplazarArte(id)}
+          onSubirVideo={(pub) => handleAbrirSubirVideo(pub)}
+          onReplicar={(pub) => handleAbrirReplicar(pub)}
+          onPublicado={async (pub) => {
+            setPublicaciones((prev) => prev.map((p) => (p.id === pub.id ? pub : p)));
+            await cargarDatos();
+          }}
+        />
+      )}
+
+      {/* Modal de Programación Rápida con Horario Específico */}
+      {pubProgramar && (
+        <div className="fixed inset-0 z-50 bg-carbon/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-dorado/30 overflow-hidden">
+            {/* Cabecera */}
+            <div className="bg-verde-profundo text-crema p-5 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-dorado block">
+                  Programación de Publicación
+                </span>
+                <h3 className="font-bold text-base mt-0.5 truncate max-w-[340px]">
+                  ⏰ Definir Horario de Publicación
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPubProgramar(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-4">
+              <div>
+                <h4 className="font-bold text-sm text-verde-profundo mb-1">
+                  {pubProgramar.titulo}
+                </h4>
+                <div className="flex items-center gap-2 mb-2">
+                  {getPlataformaBadge(pubProgramar.plataforma)}
+                  <span className="text-xs bg-gray-100 text-carbon/70 font-semibold px-2 py-0.5 rounded-md">
+                    {getFormatoIcon(pubProgramar.tipo_formato)}
+                  </span>
+                </div>
+                <p className="text-xs text-carbon/70 bg-gray-50 p-3 rounded-xl border border-gray-200 line-clamp-2">
+                  {pubProgramar.contenido}
+                </p>
+              </div>
+
+              {/* Selector de Fecha y Hora */}
+              <div className="border border-dorado/30 rounded-2xl p-4 bg-dorado/5 space-y-3">
+                <label className="text-xs font-bold text-carbon/80 block">
+                  Fecha y Hora Programada:
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={fechaHoraProgramar}
+                  onChange={(e) => setFechaHoraProgramar(e.target.value)}
+                  className="w-full bg-white border border-dorado/30 rounded-xl px-3.5 py-2.5 text-sm text-carbon focus:outline-none focus:border-verde-profundo"
+                />
+
+                {/* Atajos de 1 clic */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-carbon/50 block">Atajos de horarios recomendados:</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("hoy_tarde")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      🌆 Hoy a las 18:00 hrs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("manana_10")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      🌅 Mañana a las 10:00 hrs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("manana_19")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      🌙 Mañana a las 19:30 hrs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAtajoFechaModal("sabado_11")}
+                      className="text-[11px] font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-lg py-1.5 px-2 text-carbon text-left cursor-pointer transition"
+                    >
+                      ☀️ Sábado a las 11:00 hrs
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  disabled={guardandoProgramacion}
+                  onClick={() => handleGuardarProgramacionModal("aprobado")}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <span>✓</span> {guardandoProgramacion ? "Guardando..." : "Aprobar y Programar a esta Hora"}
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={guardandoProgramacion}
+                    onClick={() => handleGuardarProgramacionModal(undefined)}
+                    className="w-full bg-white hover:bg-gray-100 border border-dorado/40 text-carbon font-bold text-xs py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50"
+                  >
+                    💾 Guardar Fecha
+                  </button>
+                  <button
+                    type="button"
+                    disabled={guardandoProgramacion}
+                    onClick={() => handleGuardarProgramacionModal("publicado")}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    <span>📲</span> Publicar Ahora
+                  </button>
+                </div>
+
+                {pubProgramar.estado === "aprobado" && (
+                  <button
+                    type="button"
+                    disabled={guardandoProgramacion}
+                    onClick={async () => {
+                      const idTarget = pubProgramar.id!;
+                      setPubProgramar(null);
+                      await handleDesprogramar(idTarget);
+                    }}
+                    className="w-full bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-xs py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                    title="Quitar esta publicación de la agenda programada (regresa a Pendientes de Revisión)"
+                  >
+                    <span>⏸️</span> Desprogramar (Quitar de la Agenda)
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Pie */}
+            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPubProgramar(null)}
+                className="text-xs font-semibold text-carbon/60 hover:text-carbon cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Conexión y Diagnóstico Meta (Facebook & Instagram) */}
+      <ModalConexionMeta
+        abierto={mostrarModalMeta}
+        onCerrar={() => setMostrarModalMeta(false)}
+        onConexionActualizada={cargarDatos}
+      />
+
+      {/* Modal de Conexión y Diagnóstico TikTok */}
+      <ModalConexionTikTok
+        abierto={mostrarModalTikTok}
+        onCerrar={() => setMostrarModalTikTok(false)}
+        onConexionActualizada={cargarDatos}
+      />
+
+      {/* Modal para Subir y Pre-validar Video Técnico para Redes Sociales */}
+      <ModalSubirVideo
+        isOpen={mostrarModalVideo}
+        publicacion={pubParaSubirVideo}
+        onClose={() => {
+          setMostrarModalVideo(false);
+          setPubParaSubirVideo(null);
+        }}
+        onVideoSubido={async (pubActualizada) => {
+          await cargarDatos();
+          if (pubEditando && pubEditando.id === pubActualizada.id) {
+            setPubEditando(pubActualizada);
+          }
+          alert("🎉 ¡Video verificado y asignado exitosamente a la publicación!");
+        }}
+      />
     </main>
   );
 }

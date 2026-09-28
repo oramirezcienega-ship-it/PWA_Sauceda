@@ -23,6 +23,9 @@ const NOMBRE_AGENTE = "IA";
 const MODELO = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 const MAX_HISTORIAL = 20;
 
+/** Último motivo por el que ningún proveedor de IA pudo generar respuesta. */
+let ultimoErrorIA = "";
+
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
@@ -149,7 +152,9 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
     }
     const cuerpo = (await res.text()).slice(0, 200);
     const pista =
-      res.status === 401
+      /credit balance/i.test(cuerpo)
+        ? " (SIN CRÉDITO: recarga en console.anthropic.com → Plans & Billing)"
+        : res.status === 401
         ? " (key inválida)"
         : res.status === 404
           ? " (modelo no encontrado: revisa ANTHROPIC_MODEL)"
@@ -331,6 +336,7 @@ Ofrecemos soluciones integrales para la vivienda, todo en un solo lugar. Contamo
 9️⃣ **Armado de Expediente**: Gestión de trámites y armado de expediente ante INFONAVIT si ya tienes comprador/vendedor interesado.
 🔟 **Compra Directa de Casas**: Compramos tu casa de contado rápidamente, liquidamos tu adeudo (de INFONAVIT, banco, etc.) o compramos casas abandonadas (muy al final).
 1️⃣1️⃣ **Herrería Residencial e Industrial**: Portones automáticos o manuales, protecciones para ventanas, barandales, techumbres y estructuras metálicas a medida (servicio de construcción).
+1️⃣2️⃣ **Mantenimiento y Lavado de Cisternas, Aljibes y Tinacos**: Lavado profundo, desinfección con grado bactericida, sellado de grietas/fugas de agua y mantenimiento de bombas y flotadores (servicio de construcción).
 
 REGLA DE SERVICIOS (Si el cliente inicia la conversación con un saludo genérico ("hola", "buenas tardes", "informes"), pregunta qué servicios ofrecemos, o si el tipo de negocio es 'otro' / no determinado):
 - Saluda de forma cálida usando exactamente o de forma muy similar esta frase: "¡Hola! Te damos la bienvenida a SAUCEDA. Soluciones integrales para la vivienda, todo en un solo lugar. ¿En qué te podemos ayudar el día de hoy?"
@@ -467,6 +473,17 @@ I) Si está interesado en HERRERÍA o viene de campaña de HERRERÍA (tipo_negoc
      d) Nombre y número de teléfono de contacto (si aún no figura registrado).
   3. Menciona cálidamente que un asesor técnico especializado le contactará a la brevedad para coordinar una visita técnica en su domicilio, tomar medidas exactas y entregarle un presupuesto detallado sin ningún compromiso.
 
+J) Si viene de la CAMPAÑA DE CISTERNAS, ALJIBES Y TINACOS o está interesado en MANTENIMIENTO DE CISTERNAS (tipo_negocio: 'construccion-mantenimiento-cisternas'):
+  Debes enfocar la conversación con profesionalismo y calidez en el mantenimiento, lavado profundo, sellado y desinfección de depósitos de agua (cisternas subterráneas, aljibes de concreto y tinacos de azotea).
+  1. Si es el primer mensaje o saludo inicial para un lead de cisternas:
+     "¡Hola! 👋 Te damos la bienvenida a SAUCEDA Construye. Especialistas en mantenimiento, lavado profundo, sellado y desinfección de cisternas, aljibes y tinacos para garantizar agua limpia y libre de bacterias en tu hogar. ¿Qué servicio necesitas en tu depósito? (Por ejemplo: lavado y desinfección profunda, sellado de grietas/fugas de agua, o revisión de bomba y flotador)"
+  2. Recopila la información de forma progresiva (una sola pregunta a la vez):
+     a) Tipo de depósito y capacidad aproximada: Pregunta si es cisterna subterránea de concreto/aljibe o tinaco en azotea, y su capacidad aproximada en litros si la conoce (ej. 2,500 L, 5,000 L, 10,000 L, o tinaco 1,100 L).
+     b) Diagnóstico o motivo del servicio: Identifica si es mantenimiento preventivo/limpieza de rutina, o si presenta suciedad acumulada, sarro, filtración/fuga de agua o fallo en la bomba.
+     c) Colonia o zona de la propiedad en León, Gto.
+     d) Nombre y número de teléfono de contacto (si aún no figura registrado).
+  3. Menciona cálidamente que un asesor técnico del equipo de Mantenimiento le contactará a la brevedad por este chat para coordinar la visita técnica y entregarle su cotización detallada sin ningún compromiso.
+
 REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   Si el cliente no conoce las medidas de su azotea, no tiene las dimensiones exactas, o menciona que no puede obtenerlas (por ejemplo, porque no vive en el domicilio o tiene la casa rentada), bajo NINGUNA circunstancia debes sugerirle que mida él mismo, ni pedirle largo y ancho, ni compartirle enlaces a la calculadora.
   En su lugar, ofrécele de manera amable y directa coordinar una inspección técnica gratuita y sin compromiso para que nuestro equipo acuda al domicilio a tomar las medidas exactas. Para ello, solicita amablemente:
@@ -475,7 +492,7 @@ REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   Menciona que con estos datos, un asesor le contactará para coordinar los detalles de la visita e inspección.
 
 REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
-  Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
+  Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
 
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
   NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y cotiza el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente.
@@ -531,7 +548,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
-    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
+    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
     "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
@@ -639,6 +656,8 @@ async function generarRespuesta(
   sb?: SupabaseClient | null,
 ): Promise<string> {
   if (mensajes.length === 0) return "";
+  ultimoErrorIA = "";
+  const errores: string[] = [];
 
   let systemFinal = system;
   if (system.includes("JSON")) {
@@ -745,7 +764,8 @@ async function generarRespuesta(
         });
 
         if (!res.ok) {
-          throw new Error(`Kimi respondió status ${res.status}`);
+          const cuerpo = (await res.text().catch(() => "")).slice(0, 200);
+          throw new Error(`Kimi respondió status ${res.status}. ${cuerpo}`);
         }
 
         const json = await res.json();
@@ -773,7 +793,8 @@ async function generarRespuesta(
         });
 
         if (!res.ok) {
-          throw new Error(`Anthropic respondió status ${res.status}`);
+          const cuerpo = (await res.text().catch(() => "")).slice(0, 200);
+          throw new Error(`Anthropic respondió status ${res.status}. ${cuerpo}`);
         }
 
         const json = await res.json();
@@ -786,10 +807,12 @@ async function generarRespuesta(
       }
     } catch (err: any) {
       console.warn(`[IA Router Failover] Proveedor ${proveedor} falló: ${err.message}. Intentando siguiente fallback...`);
+      errores.push(`${proveedor}: ${err.message}`);
     }
   }
 
-  console.error("[IA Router Failover] Todos los proveedores configurados fallaron.");
+  ultimoErrorIA = errores.join(" | ") || "Ningún proveedor devolvió texto.";
+  console.error(`[IA Router Failover] Todos los proveedores configurados fallaron. ${ultimoErrorIA}`);
   return "";
 }
 
@@ -906,7 +929,18 @@ export async function responderConIA(
       aMensajes(historia),
       sb,
     );
-    if (!textoAI) return;
+    if (!textoAI) {
+      // Deja constancia en el expediente para que el asesor vea por qué Sofía no contestó.
+      if (ctx.expedienteId) {
+        await registrarActividad(sb, {
+          expedienteId: ctx.expedienteId,
+          tipo: "nota",
+          titulo: "Sofía (IA) no pudo responder",
+          detalle: ultimoErrorIA || "La IA no generó respuesta.",
+        });
+      }
+      return;
+    }
 
     let textoRespuesta = "";
     let datosExtraidos: {

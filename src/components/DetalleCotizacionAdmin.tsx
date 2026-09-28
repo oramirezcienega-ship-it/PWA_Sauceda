@@ -34,6 +34,7 @@ import { formatoPesos } from "@/lib/formato";
 import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
 import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
+import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -54,7 +55,7 @@ export function DetalleCotizacionAdmin({
   const [conceptos, setConceptos] = useState<CotizacionConcepto[]>(conceptosIniciales);
   const [reporteVisita, setReporteVisita] = useState<VisitaReporte | null>(reporteVisitaInicial);
 
-  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion" | "proveedores">("resumen");
+  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion" | "orden_trabajo" | "proveedores">("resumen");
 
   // --- State para Remisión & Factura ---
   const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
@@ -1217,6 +1218,14 @@ export function DetalleCotizacionAdmin({
           </button>
         )}
         <button
+          onClick={() => setPestaña("orden_trabajo")}
+          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+            pestaña === "orden_trabajo" ? "border-sauce text-sauce bg-white" : "border-transparent text-carbon/60 hover:text-carbon"
+          }`}
+        >
+          🛠️ Orden de Trabajo & Entrega
+        </button>
+        <button
           onClick={() => setPestaña("proveedores")}
           className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
             pestaña === "proveedores" ? "border-sauce text-sauce bg-white" : "border-transparent text-carbon/60 hover:text-carbon"
@@ -1345,6 +1354,35 @@ export function DetalleCotizacionAdmin({
                 )}
               </div>
             </div>
+
+            {/* Banner de Ejecución si está Aceptada */}
+            {(cotizacion.estatus === "aceptada" || cotizacion.estatus === "instalacion") && (
+              <div className="rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-xs">
+                    🛠️
+                  </div>
+                  <div>
+                    <h4 className="font-titular font-bold text-emerald-950 text-sm">
+                      {cotizacion.estatus === "instalacion"
+                        ? "Orden de Trabajo en Ejecución / Instalación"
+                        : "Cotización Aceptada por el Cliente"}
+                    </h4>
+                    <p className="text-xs text-emerald-800">
+                      Gestiona la orden técnica, asigna personal de campo, registra anticipos/recibos y genera la remisión de entrega.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPestaña("orden_trabajo")}
+                  className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-2.5 shadow-xs transition flex items-center gap-1.5"
+                >
+                  <span>Ir a Orden de Trabajo & Entrega</span>
+                  <span>→</span>
+                </button>
+              </div>
+            )}
 
             {/* Resumen del reporte si existe */}
             {reporteVisita && (
@@ -2884,6 +2922,20 @@ export function DetalleCotizacionAdmin({
                 </div>
               </form>
             )}
+          </div>
+        )}
+
+        {/* --- PESTAÑA ORDEN DE TRABAJO & ENTREGA --- */}
+        {pestaña === "orden_trabajo" && (
+          <div className="space-y-4">
+            <ModuloOrdenesTrabajo
+              cotizacionId={cotizacion.id}
+              prospectoId={cotizacion.prospectoId}
+              expedienteId={cotizacion.expedienteId}
+              clienteNombreDefault={cotizacion.prospectoNombre}
+              clienteTelefonoDefault={cotizacion.prospectoTelefono || ""}
+              tipoNegocioDefault={cotizacion.servicioTipo}
+            />
           </div>
         )}
 

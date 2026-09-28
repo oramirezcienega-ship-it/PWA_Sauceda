@@ -31,7 +31,10 @@ export async function GET(req: Request) {
     let base64Foto = fotoUrl;
     try {
       if (fotoUrl.startsWith("http")) {
-        const imgRes = await fetch(fotoUrl);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const imgRes = await fetch(fotoUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (imgRes.ok) {
           const buffer = await imgRes.arrayBuffer();
           const mime = imgRes.headers.get("content-type") || "image/jpeg";
@@ -47,7 +50,7 @@ export async function GET(req: Request) {
 
     // SVG Institucional Totalmente Parametrizable y Dinámico con Paleta Oficial SAUCEDA
     const svg = `
-    <svg width="1080" height="1350" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg">
+    <svg width="1080" height="1350" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
       <defs>
         <linearGradient id="footerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="${colorDestacado}"/>
@@ -100,36 +103,39 @@ export async function GET(req: Request) {
       </g>
 
       <!-- Logo Oficial SAUCEDA Header (Tarjeta Derecha) -->
-      <g filter="url(#shadow)" transform="translate(680, 20)">
-        <rect x="0" y="0" width="360" height="120" rx="16" fill="url(#headerSauceda)" stroke="#C9A961" stroke-width="4"/>
+      <g filter="url(#shadow)" transform="translate(640, 20)">
+        <rect x="0" y="0" width="400" height="120" rx="16" fill="url(#headerSauceda)" stroke="#C9A961" stroke-width="4"/>
         <circle cx="65" cy="60" r="42" fill="#C9A961" />
-        <text x="65" y="76" font-family="'Inter', sans-serif" font-size="48" font-weight="900" fill="#2D4A2B" text-anchor="middle">S</text>
-        <text x="130" y="70" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="#FFFFFF" letter-spacing="3">SAUCEDA</text>
-        <text x="130" y="98" font-family="'Inter', sans-serif" font-size="13" font-weight="800" fill="#C9A961" letter-spacing="2">BIENES RAÍCES Y CONSTRUCCIÓN</text>
+        <text x="65" y="76" font-family="'Inter', sans-serif" font-size="46" font-weight="900" fill="#2D4A2B" text-anchor="middle">S</text>
+        <text x="130" y="68" font-family="'Inter', sans-serif" font-size="32" font-weight="900" fill="#FFFFFF" letter-spacing="2">SAUCEDA</text>
+        <text x="130" y="96" font-family="'Inter', sans-serif" font-size="12" font-weight="800" fill="#C9A961" letter-spacing="1">BIENES RAÍCES Y CONSTRUCCIÓN</text>
       </g>
 
       <!-- FOTO CENTRAL FOTORREALISTA DE FLUX -->
       <g filter="url(#shadow)">
         <rect x="35" y="185" width="1010" height="740" rx="16" fill="#CBD5E0" />
-        <image href="${base64Foto}" x="40" y="190" width="1000" height="730" preserveAspectRatio="xMidYMid slice" />
+        <image href="${escapeXml(base64Foto)}" xlink:href="${escapeXml(base64Foto)}" x="40" y="190" width="1000" height="730" preserveAspectRatio="xMidYMid slice" />
       </g>
 
-      <!-- CALLOUT SUPERPUESTO DINÁMICO (Título y Subtítulo de Anuncio) -->
-      <g filter="url(#shadow)" transform="translate(50, 890)">
-        <rect x="0" y="0" width="980" height="155" rx="20" fill="#FFFFFF" stroke="#2D4A2B" stroke-width="4" />
+      <!-- CALLOUT SUPERPUESTO DINÁMICO (Título y Subtítulo de Anuncio - Sin colisiones) -->
+      <g filter="url(#shadow)" transform="translate(45, 875)">
+        <rect x="0" y="0" width="990" height="175" rx="20" fill="#FFFFFF" stroke="#2D4A2B" stroke-width="4" />
         
-        <text x="40" y="55" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="${colorDestacado}">
-          ${tituloUpper.substring(0, 42)}
+        <text x="35" y="52" font-family="'Inter', sans-serif" font-size="28" font-weight="900" fill="${colorDestacado}">
+          ${tituloUpper.substring(0, 44)}
         </text>
-        <text x="40" y="105" font-family="'Inter', sans-serif" font-size="26" font-weight="800" fill="#0F172A">
-          ${subEsc}
+        <text x="35" y="96" font-family="'Inter', sans-serif" font-size="21" font-weight="800" fill="#0F172A">
+          ${subEsc.substring(0, 52)}
+        </text>
+        <text x="35" y="136" font-family="'Inter', sans-serif" font-size="17" font-weight="700" fill="#5C7A52">
+          Atención técnica en León, Gto. • Presupuesto sin compromiso
         </text>
 
-        <!-- Sello de Oferta Dinámico SAUCEDA -->
-        <g transform="translate(740, 20)">
-          <circle cx="100" cy="55" r="55" fill="${colorDestacado}" />
-          <text x="100" y="45" font-family="'Inter', sans-serif" font-size="18" font-weight="900" fill="#FFFFFF" text-anchor="middle">COTIZA</text>
-          <text x="100" y="75" font-family="'Inter', sans-serif" font-size="24" font-weight="900" fill="#C9A961" text-anchor="middle">GRATIS</text>
+        <!-- Sello de Oferta Dinámico SAUCEDA (Colocado a la derecha con margen seguro) -->
+        <g transform="translate(850, 25)">
+          <circle cx="55" cy="62" r="52" fill="${colorDestacado}" stroke="#C9A961" stroke-width="3" filter="url(#shadow)"/>
+          <text x="55" y="52" font-family="'Inter', sans-serif" font-size="16" font-weight="900" fill="#FFFFFF" text-anchor="middle">COTIZA</text>
+          <text x="55" y="80" font-family="'Inter', sans-serif" font-size="22" font-weight="900" fill="#C9A961" text-anchor="middle">GRATIS</text>
         </g>
       </g>
 
@@ -150,7 +156,7 @@ export async function GET(req: Request) {
         <g transform="translate(550, 45)">
           <rect x="0" y="0" width="480" height="120" rx="60" fill="url(#goldButtonGrad)" filter="url(#shadow)" />
           <text x="240" y="52" font-family="'Inter', sans-serif" font-size="20" font-weight="800" fill="#2D4A2B" text-anchor="middle">Atención Inmediata:</text>
-          <text x="240" y="92" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="#2D4A2B" text-anchor="middle">SAUCEDA.com</text>
+          <text x="240" y="92" font-family="'Inter', sans-serif" font-size="34" font-weight="900" fill="#2D4A2B" text-anchor="middle">saucedamx.com</text>
         </g>
 
         <text x="540" y="235" font-family="'Inter', sans-serif" font-size="22" font-weight="800" fill="#C9A961" text-anchor="middle" letter-spacing="2">

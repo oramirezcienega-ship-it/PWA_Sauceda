@@ -54,8 +54,11 @@ export function ModalPrevisualizarCotizacion({
     remodelacion: "Remodelación Integral",
     herreria: "Herrería Residencial e Industrial",
     piso_estampado: "Piso Estampado",
+    mantenimiento_cisternas: "Mantenimiento de Cisternas y Aljibes",
+    cisternas: "Mantenimiento de Cisternas y Tinacos",
+    otro: "Construcción y Mantenimiento",
   };
-  const servicioNombre = servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción";
+  const servicioNombre = (cotizacion.servicioTipo === "otro" ? "Construcción y Mantenimiento" : (servicioLabels[cotizacion.servicioTipo] || cotizacion.servicioTipo || "Servicio de Construcción"));
 
   // Generador de texto base de WhatsApp
   const generarTextoBaseWhatsApp = () => {

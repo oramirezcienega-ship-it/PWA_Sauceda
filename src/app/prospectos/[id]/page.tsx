@@ -21,6 +21,9 @@ import { OperadorSelector } from "@/components/OperadorSelector";
 import { WidgetAgendaCitas } from "@/components/WidgetAgendaCitas";
 import { BotonDuplicarCotizacion } from "@/components/BotonDuplicarCotizacion";
 import { EmpresaSelector } from "@/components/EmpresaSelector";
+import { CabinaCoordinacionInspeccion } from "@/components/CabinaCoordinacionInspeccion";
+import { ModuloOrdenesTrabajo } from "@/components/ModuloOrdenesTrabajo";
+import { listarPerfilesActivos } from "@/app/actions/usuarios";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,7 @@ export default async function PaginaProspecto({
 }) {
   const resultado = await obtenerProspecto(params.id);
   const cotizaciones = resultado ? await obtenerCotizacionesDeProspecto(params.id) : [];
+  const perfiles = await listarPerfilesActivos();
 
   if (!resultado) {
     return (
@@ -258,10 +262,33 @@ export default async function PaginaProspecto({
           />
         </div>
 
+        {/* Cabina de Coordinación de Inspección Técnica (2 Asesores + SLA) */}
+        <div className="mt-6">
+          <CabinaCoordinacionInspeccion
+            prospectoId={prospecto.id}
+            expedienteId={expedientes[0]?.id ?? null}
+            clienteNombre={prospecto.nombreCompleto}
+            clienteTelefono={prospecto.telefono || ""}
+            tipoNegocioInicial={prospecto.tipoNegocioPrincipal || expedientes[0]?.tipoNegocio || undefined}
+            ubicacionInicial={
+              expedientes[0]?.fraccionamiento ||
+              prospecto.direccion ||
+              prospecto.ciudad ||
+              "León, Gto."
+            }
+            detallesIniciales={prospecto.notas || undefined}
+            perfiles={perfiles}
+            asesorPredefinidoId={prospecto.asesorId ?? null}
+            operadorPredefinidoId={prospecto.operadorId ?? null}
+          />
+        </div>
+
         {/* Widget de Agendamiento Directo e Historial de Citas */}
         <div className="mt-6">
           <WidgetAgendaCitas
             prospectoId={prospecto.id}
+            asesorId={prospecto.asesorId ?? null}
+            operadorId={prospecto.operadorId ?? null}
             clienteNombre={prospecto.nombreCompleto}
             clienteTelefono={prospecto.telefono || ""}
             clienteEmail={prospecto.correo || null}
@@ -362,6 +389,17 @@ export default async function PaginaProspecto({
               ))}
             </div>
           )}
+        </div>
+
+        {/* Órdenes de Trabajo y Documentos de Entrega (OT, Recibos y Garantías) */}
+        <div className="mt-6">
+          <ModuloOrdenesTrabajo
+            prospectoId={prospecto.id}
+            expedienteId={expedientes[0]?.id ?? null}
+            clienteNombreDefault={prospecto.nombreCompleto}
+            clienteTelefonoDefault={prospecto.telefono || ""}
+            tipoNegocioDefault={prospecto.tipoNegocioPrincipal || expedientes[0]?.tipoNegocio || "construccion"}
+          />
         </div>
 
         {/* Expedientes relacionados */}

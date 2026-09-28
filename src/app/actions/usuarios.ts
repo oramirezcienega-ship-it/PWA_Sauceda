@@ -176,20 +176,52 @@ export async function crearUsuario(datos: {
     ? datos.telefono_whatsapp.trim()
     : telLlamadas;
 
-  const { error: errPerfil } = await sb.from("perfiles").insert({
+  const insertData: Record<string, any> = {
     id: data.user.id,
     nombre: datos.nombre.trim(),
     rol: datos.rol,
     telefono: telLlamadas,
     telefono_whatsapp: telWhatsapp,
-    telefono_desvio: telLlamadas, // Por defecto igual al teléfono de llamadas
+    telefono_desvio: telLlamadas,
     disponible_llamadas: false,
     horario_inicio: "09:00:00",
     horario_fin: "18:00:00",
     notificar_whatsapp_nuevo_lead: datos.notificar_whatsapp_nuevo_lead ?? (datos.rol === "admin"),
     asignacion_automatica: datos.asignacion_automatica ?? false,
-  });
-  if (errPerfil) return { ok: false, mensaje: errPerfil.message };
+  };
+
+  const columnasOpcionalesCrear = [
+    "notificar_whatsapp_nuevo_lead",
+    "asignacion_automatica",
+    "telefono_whatsapp",
+  ];
+
+  let insertExito = false;
+  let insertError: string | undefined;
+
+  for (let intento = 0; intento < 5; intento++) {
+    const { error: errPerfil } = await sb.from("perfiles").insert(insertData);
+    if (!errPerfil) {
+      insertExito = true;
+      break;
+    }
+
+    let eliminada = false;
+    for (const col of columnasOpcionalesCrear) {
+      if (errPerfil.message.includes(col) && insertData[col] !== undefined) {
+        delete insertData[col];
+        eliminada = true;
+        break;
+      }
+    }
+
+    if (!eliminada) {
+      insertError = errPerfil.message;
+      break;
+    }
+  }
+
+  if (!insertExito) return { ok: false, mensaje: insertError || "No se pudo crear el perfil." };
   revalidatePath("/usuarios");
   return { ok: true };
 }
@@ -299,47 +331,47 @@ export async function actualizarUsuario(
       }
     }
 
-    let { error } = await sb
-      .from("perfiles")
-      .update(updateData)
-      .eq("id", id);
+    const columnasOpcionales = [
+      "notificar_whatsapp_alertas_previas",
+      "notificar_whatsapp_resumen_nocturno",
+      "notificar_whatsapp_resumen_matutino",
+      "notificar_whatsapp_nuevo_lead",
+      "asignacion_automatica",
+      "telefono_whatsapp",
+    ];
 
-    if (error) {
-      // Si la BD de producción no tiene columnas opcionales recien agregadas, eliminarlas y reintentar
-      let reintentar = false;
-      if (error.message.includes("telefono_whatsapp")) {
-        delete updateData.telefono_whatsapp;
-        reintentar = true;
-      }
-      if (error.message.includes("notificar_whatsapp_nuevo_lead")) {
-        delete updateData.notificar_whatsapp_nuevo_lead;
-        reintentar = true;
-      }
-      if (error.message.includes("asignacion_automatica")) {
-        delete updateData.asignacion_automatica;
-        reintentar = true;
-      }
-      if (error.message.includes("notificar_whatsapp_resumen_matutino")) {
-        delete updateData.notificar_whatsapp_resumen_matutino;
-        reintentar = true;
-      }
-      if (error.message.includes("notificar_whatsapp_resumen_nocturno")) {
-        delete updateData.notificar_whatsapp_resumen_nocturno;
-        reintentar = true;
-      }
-      if (error.message.includes("notificar_whatsapp_alertas_previas")) {
-        delete updateData.notificar_whatsapp_alertas_previas;
-        reintentar = true;
+    let exito = false;
+    let errorFinal: string | undefined;
+
+    for (let intento = 0; intento < 7; intento++) {
+      const { error } = await sb
+        .from("perfiles")
+        .update(updateData)
+        .eq("id", id);
+
+      if (!error) {
+        exito = true;
+        break;
       }
 
-      if (reintentar) {
-        const { error: errRetry } = await sb.from("perfiles").update(updateData).eq("id", id);
-        if (errRetry) {
-          return { ok: false, mensaje: errRetry.message };
+      // Buscar si alguna columna opcional causó el fallo
+      let eliminada = false;
+      for (const col of columnasOpcionales) {
+        if (error.message.includes(col) && updateData[col] !== undefined) {
+          delete updateData[col];
+          eliminada = true;
+          break;
         }
-      } else {
-        return { ok: false, mensaje: error.message };
       }
+
+      if (!eliminada) {
+        errorFinal = error.message;
+        break;
+      }
+    }
+
+    if (!exito) {
+      return { ok: false, mensaje: errorFinal || "No se pudo actualizar el perfil." };
     }
     revalidatePath("/usuarios");
     return { ok: true };
@@ -540,14 +572,36 @@ export async function reasignarOperador(
 
 /** Lista todos los perfiles activos para asignación. */
 export async function listarPerfilesActivos(): Promise<{ id: string; nombre: string; rol: string; telefono?: string | null; telefono_whatsapp?: string | null }[]> {
-  const sb = supabaseServidor();
-  const { data, error } = await sb
-    .from("perfiles")
-    .select("id, nombre, rol, telefono, telefono_whatsapp")
-    .neq("activo", false)
-    .order("nombre", { ascending: true });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  try {
+    const sb = supabaseServidor();
+    let { data, error } = await sb
+      .from("perfiles")
+      .select("id, nombre, rol, telefono, telefono_whatsapp")
+      .neq("activo", false)
+      .order("nombre", { ascending: true });
+
+    if (error && (error.message.includes("telefono_whatsapp") || (error as any).code === "42703")) {
+      const fallbackRes = await sb
+        .from("perfiles")
+        .select("id, nombre, rol, telefono")
+        .neq("activo", false)
+        .order("nombre", { ascending: true });
+      data = (fallbackRes.data || []).map((p: any) => ({
+        ...p,
+        telefono_whatsapp: p.telefono || "",
+      }));
+      error = fallbackRes.error;
+    }
+
+    if (error) {
+      console.error("Error al listar perfiles activos:", error.message);
+      return [];
+    }
+    return (data ?? []) as { id: string; nombre: string; rol: string; telefono?: string | null; telefono_whatsapp?: string | null }[];
+  } catch (err: any) {
+    console.error("Excepción en listarPerfilesActivos:", err);
+    return [];
+  }
 }
 
 

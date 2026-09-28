@@ -1195,6 +1195,254 @@ export async function programarCitaManual(data: {
 }
 
 /**
+ * Edita y actualiza un evento existente de inspección o instalación en agenda_citas.
+ * Sincroniza fecha_instalacion si aplica y permite notificar al cliente sobre el cambio.
+ */
+export async function editarCita(data: {
+  id?: string;
+  citaId?: string;
+  perfilId: string;
+  asignadosIds?: string[];
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  clienteEmail?: string | null;
+  tipoCita: "inspeccion" | "instalacion" | "llamada" | "venta" | "asesoria";
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  notas?: string;
+  notificarCliente?: boolean;
+  mensajeWhatsAppPersonalizado?: string | null;
+  enviarEmail?: boolean;
+  emailDestino?: string | null;
+  telefonoContacto?: string | null;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  waMessageId?: string | null;
+  estadoWhatsApp?: string | null;
+  emailEnviado?: boolean;
+}> {
+  await requireAdmin();
+  const idCita = data.id || data.citaId;
+  if (!idCita || !data.perfilId || !data.fecha || !data.horaInicio || !data.horaFin) {
+    return { ok: false, error: "Faltan datos obligatorios para editar la cita." };
+  }
+
+  const sb = supabaseServidor();
+
+  try {
+    // 1. Obtener la cita actual
+    const { data: citaActual, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("*")
+      .eq("id", idCita)
+      .maybeSingle();
+
+    if (errCita || !citaActual) {
+      return { ok: false, error: "La cita a editar no fue encontrada." };
+    }
+
+    const asignados = Array.from(
+      new Set([data.perfilId, ...(data.asignadosIds || [])].filter(Boolean))
+    );
+
+    // 2. Obtener datos de los perfiles asignados
+    const { data: perfilesAsignados = [] } = await sb
+      .from("perfiles")
+      .select("id, nombre, telefono, telefono_whatsapp, telefono_desvio")
+      .in("id", asignados);
+
+    const nombresAsesores = (perfilesAsignados || []).map((p: any) => p.nombre).filter(Boolean);
+    const nombreAsesor = nombresAsesores.length > 0 ? nombresAsesores.join(" y ") : "Asesor Técnico";
+    const primerAsesor = perfilesAsignados?.find((p: any) => p.id === data.perfilId) || perfilesAsignados?.[0];
+    const telContacto =
+      data.telefonoContacto?.trim() ||
+      primerAsesor?.telefono ||
+      primerAsesor?.telefono_desvio ||
+      "477 465 4700";
+
+    // 3. Actualizar la cita en agenda_citas
+    const updatePayload: any = {
+      perfil_id: data.perfilId,
+      asignados_ids: asignados,
+      tipo_cita: data.tipoCita,
+      fecha: data.fecha,
+      hora_inicio: data.horaInicio,
+      hora_fin: data.horaFin,
+      notas: data.notas !== undefined ? data.notas?.trim() : citaActual.notas,
+      cliente_telefono: data.clienteTelefono?.trim() || citaActual.cliente_telefono,
+      cliente_email: data.clienteEmail !== undefined ? (data.clienteEmail?.trim() || null) : citaActual.cliente_email,
+    };
+
+    let { error: errUpdate } = await sb
+      .from("agenda_citas")
+      .update(updatePayload)
+      .eq("id", idCita);
+
+    if (errUpdate && errUpdate.message.includes("asignados_ids")) {
+      delete updatePayload.asignados_ids;
+      const resRetry = await sb.from("agenda_citas").update(updatePayload).eq("id", idCita);
+      errUpdate = resRetry.error;
+    }
+
+    if (errUpdate) {
+      return { ok: false, error: errUpdate.message };
+    }
+
+    // 4. Si la cita es instalación y tiene expediente_id, sincronizar fecha_instalacion
+    if (data.tipoCita === "instalacion" && citaActual.expediente_id) {
+      const fechaISO = `${data.fecha}T${data.horaInicio}:00`;
+      await sb
+        .from("expedientes")
+        .update({
+          fecha_instalacion: fechaISO,
+          operador_id: data.perfilId,
+          ultimo_movimiento: new Date().toISOString().slice(0, 10),
+        })
+        .eq("id", citaActual.expediente_id);
+    } else if (data.tipoCita === "inspeccion" && citaActual.expediente_id) {
+      await sb
+        .from("expedientes")
+        .update({
+          etapa: "visita",
+          ultimo_movimiento: new Date().toISOString().slice(0, 10),
+        })
+        .eq("id", citaActual.expediente_id);
+    }
+
+    // 5. Registrar en la bitácora
+    const tipoLabel =
+      data.tipoCita === "inspeccion"
+        ? "Inspección Técnica"
+        : data.tipoCita === "instalacion"
+        ? "Instalación Profesional"
+        : data.tipoCita;
+
+    const fechaCambio = citaActual.fecha !== data.fecha || citaActual.hora_inicio !== data.horaInicio;
+    const detalleBitacora = fechaCambio
+      ? `Evento reprogramado: Del ${citaActual.fecha} (${citaActual.hora_inicio.slice(0, 5)}) al ${data.fecha} (${data.horaInicio.slice(0, 5)} - ${data.horaFin.slice(0, 5)}). Responsable: ${nombreAsesor}. Contacto: ${telContacto}. ${data.notas ? `Notas: ${data.notas}` : ""}`
+      : `Evento actualizado para el ${data.fecha} (${data.horaInicio.slice(0, 5)} - ${data.horaFin.slice(0, 5)}). Responsable: ${nombreAsesor}. Contacto: ${telContacto}. ${data.notas ? `Notas: ${data.notas}` : ""}`;
+
+    if (citaActual.expediente_id) {
+      const { registrarActividad } = await import("@/lib/actividades");
+      await registrarActividad(sb, {
+        expedienteId: citaActual.expediente_id,
+        tipo: "construccion",
+        titulo: `✏️ ${tipoLabel} Modificada`,
+        detalle: detalleBitacora,
+      });
+    } else if (citaActual.prospecto_id) {
+      await sb.from("actividades").insert({
+        prospecto_id: citaActual.prospecto_id,
+        tipo: "cita",
+        descripcion: `✏️ Cita de ${tipoLabel} modificada para el ${data.fecha} a las ${data.horaInicio} con ${nombreAsesor}. Contacto: ${telContacto}.`,
+      });
+    }
+
+    let waMessageId: string | null = null;
+    let estadoWhatsApp: string | null = null;
+    let emailEnviado = false;
+
+    // 6. Notificar al cliente si se solicitó
+    const telCliente = data.clienteTelefono?.trim() || citaActual.cliente_telefono;
+    if (data.notificarCliente && telCliente) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      const fechaLegible = new Date(`${data.fecha}T00:00:00`).toLocaleDateString("es-MX", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      const primerNombre = citaActual.cliente_nombre.split(" ")[0] || citaActual.cliente_nombre;
+      const mensajeDefault = `¡Hola ${primerNombre}! 🗓️ Te confirmamos que tu cita de *${tipoLabel}* con SAUCEDA ha sido actualizada:\n\n🗓️ *Nueva Fecha:* ${fechaLegible}\n⏰ *Horario:* ${data.horaInicio} a ${data.horaFin} hrs\n👷 *Responsable que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto:* ${telContacto}\n\nCualquier duda quedamos a tus órdenes. ¡Excelente día! 💚`;
+
+      const mensajeAEnviar = data.mensajeWhatsAppPersonalizado?.trim() || mensajeDefault;
+      const resWa = await enviarWhatsAppTexto(telCliente, mensajeAEnviar);
+
+      if (resWa.ok && resWa.messageId) {
+        waMessageId = resWa.messageId;
+        estadoWhatsApp = "enviado";
+        await sb
+          .from("agenda_citas")
+          .update({
+            wa_message_id: waMessageId,
+            mensaje_whatsapp_estado: "enviado",
+          })
+          .eq("id", idCita);
+      }
+    }
+
+    // 7. Enviar correo si se solicitó
+    const emailCliente = data.emailDestino?.trim() || data.clienteEmail?.trim() || citaActual.cliente_email;
+    if (data.enviarEmail && emailCliente && emailCliente.includes("@")) {
+      try {
+        const { enviarCorreo } = await import("@/lib/email");
+        const { generarHtmlCorreoInspeccion } = await import("@/lib/email-inspeccion");
+
+        const htmlCorreo = generarHtmlCorreoInspeccion({
+          clienteNombre: citaActual.cliente_nombre,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          horaFin: data.horaFin,
+          asesorNombre: nombreAsesor,
+          telefonoContacto: telContacto,
+          notas: data.notas,
+        });
+
+        await enviarCorreo(
+          emailCliente,
+          `📅 Actualización de ${data.tipoCita === "instalacion" ? "Instalación" : "Inspección Técnica"} - SAUCEDA`,
+          htmlCorreo
+        );
+        emailEnviado = true;
+        await sb
+          .from("agenda_citas")
+          .update({
+            email_enviado: true,
+            email_destinatario: emailCliente,
+          })
+          .eq("id", idCita);
+      } catch (errEmail) {
+        console.error("Error al enviar correo de actualización de cita:", errEmail);
+      }
+    }
+
+    // 8. Notificar al equipo asignado sobre la modificación
+    if (perfilesAsignados && perfilesAsignados.length > 0) {
+      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      for (const asesor of perfilesAsignados) {
+        const tel = (asesor as any).telefono_whatsapp?.trim() || asesor.telefono?.trim();
+        if (tel) {
+          const primerNom = asesor.nombre?.split(" ")[0] || "Compañero";
+          const msgEquipo = `✏️ *${tipoLabel} Modificada*\n\nHola ${primerNom},\nSe han actualizado los detalles de tu cita asignada:\n\n• Evento: ${tipoLabel}\n• Cliente: ${citaActual.cliente_nombre} (${telCliente})\n• Nueva Fecha: ${data.fecha}\n• Horario: ${data.horaInicio} a ${data.horaFin} hrs\n• Equipo: ${nombreAsesor}\n• Notas: ${data.notas || "Sin notas"}\n\nRevisa los detalles en el CRM: https://crm.saucedamx.com/agenda`;
+          try {
+            await enviarWhatsAppTexto(tel, msgEquipo);
+          } catch (e) {
+            console.warn(`[Agenda] No se pudo notificar por WhatsApp al asesor ${asesor.nombre}:`, e);
+          }
+        }
+      }
+    }
+
+    revalidatePath("/agenda");
+    if (citaActual.prospecto_id) revalidatePath(`/prospectos/${citaActual.prospecto_id}`);
+    if (citaActual.expediente_id) revalidatePath(`/expediente/${citaActual.expediente_id}`);
+
+    return {
+      ok: true,
+      waMessageId,
+      estadoWhatsApp,
+      emailEnviado,
+    };
+  } catch (err: any) {
+    console.error("Error al editar cita:", err);
+    return { ok: false, error: err?.message || "Error inesperado al editar la cita." };
+  }
+}
+
+/**
  * Consulta el estado actualizado de la confirmación enviada (WhatsApp y Correo)
  * verificando tanto agenda_citas como el registro más reciente en mensajes_whatsapp.
  */
