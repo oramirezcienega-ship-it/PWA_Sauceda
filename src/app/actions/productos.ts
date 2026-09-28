@@ -13,6 +13,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     unidad: fila.unidad || "m2",
     costoUnitario: Number(fila.costo_unitario || 0),
     precioUnitario: Number(fila.precio_unitario || 0),
+    porcentajeComision: Number(fila.porcentaje_comision !== undefined && fila.porcentaje_comision !== null ? fila.porcentaje_comision : 5.0),
     plantillaGarantia: fila.plantilla_garantia || "",
     createdAt: fila.created_at,
   };
@@ -51,6 +52,7 @@ export async function crearProductoServicio(datos: {
   unidad: string;
   costoUnitario: number;
   precioUnitario: number;
+  porcentajeComision?: number;
   plantillaGarantia?: string;
 }): Promise<ProductoServicio> {
   await requireAdmin();
@@ -71,6 +73,7 @@ export async function crearProductoServicio(datos: {
       unidad: datos.unidad,
       costo_unitario: datos.costoUnitario,
       precio_unitario: datos.precioUnitario,
+      porcentaje_comision: Number(datos.porcentajeComision ?? 5.0),
       plantilla_garantia: datos.plantillaGarantia || "",
     })
     .select("*")
@@ -89,6 +92,7 @@ export async function editarProductoServicio(
     unidad: string;
     costoUnitario: number;
     precioUnitario: number;
+    porcentajeComision?: number;
     plantillaGarantia?: string;
   }
 ): Promise<ProductoServicio> {
@@ -103,6 +107,7 @@ export async function editarProductoServicio(
       unidad: datos.unidad,
       costo_unitario: datos.costoUnitario,
       precio_unitario: datos.precioUnitario,
+      porcentaje_comision: Number(datos.porcentajeComision ?? 5.0),
       plantilla_garantia: datos.plantillaGarantia || "",
     })
     .eq("id", id)

@@ -65,6 +65,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
   const [unidad, setUnidad] = useState("m2");
   const [costoUnitario, setCostoUnitario] = useState("");
   const [precioUnitario, setPrecioUnitario] = useState("");
+  const [porcentajeComision, setPorcentajeComision] = useState("5.0");
   const [plantillaGarantia, setPlantillaGarantia] = useState("");
   const [cargando, setCargando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
@@ -76,6 +77,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
     setUnidad("m2");
     setCostoUnitario("");
     setPrecioUnitario("");
+    setPorcentajeComision("5.0");
     setPlantillaGarantia(DEFAULT_WARRANTY_TEMPLATE);
     setErrorForm("");
     setModalAbierto(true);
@@ -88,6 +90,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
     setUnidad(p.unidad);
     setCostoUnitario(String(p.costoUnitario));
     setPrecioUnitario(String(p.precioUnitario));
+    setPorcentajeComision(String(p.porcentajeComision ?? 5.0));
     setPlantillaGarantia(p.plantillaGarantia || DEFAULT_WARRANTY_TEMPLATE);
     setErrorForm("");
     setModalAbierto(true);
@@ -102,6 +105,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
 
     const cUnit = Number(costoUnitario) || 0;
     const pUnit = Number(precioUnitario) || 0;
+    const pCom = parseFloat(porcentajeComision) || 5.0;
 
     try {
       setCargando(true);
@@ -115,6 +119,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
           unidad,
           costoUnitario: cUnit,
           precioUnitario: pUnit,
+          porcentajeComision: pCom,
           plantillaGarantia: plantillaGarantia.trim(),
         });
 
@@ -129,6 +134,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
           unidad,
           costoUnitario: cUnit,
           precioUnitario: pUnit,
+          porcentajeComision: pCom,
           plantillaGarantia: plantillaGarantia.trim(),
         });
 
@@ -195,6 +201,14 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
           </svg>
         </div>
 
+        <a
+          href="/comisiones"
+          className="rounded-lg bg-amber-50 border border-amber-300 px-3 py-2 text-xs font-semibold text-verde-profundo transition hover:bg-amber-100 shadow-xs flex items-center gap-1.5"
+          title="Ver o parametrizar comisiones de asesores"
+        >
+          <span>💰</span> Comisiones Asesores
+        </a>
+
         <button
           onClick={handleOpenCrear}
           className="rounded-lg bg-sauce px-4 py-2 text-sm font-semibold text-white transition hover:bg-verde-profundo shadow-sm font-cuerpo"
@@ -214,29 +228,33 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
             <table className="w-full border-collapse text-left text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10 border-b border-carbon/10 font-titular font-semibold text-carbon/60 text-xs uppercase tracking-wider shadow-sm">
                 <tr>
-                  <th className="px-6 py-4 w-[12%]">Código</th>
-                  <th className="px-6 py-4 w-[30%]">Concepto / Nombre</th>
-                  <th className="px-6 py-4 w-[25%]">Descripción</th>
-                  <th className="px-6 py-4 text-center w-[8%]">Unidad</th>
-                  <th className="px-6 py-4 text-right w-[10%]">Costo Int.</th>
-                  <th className="px-6 py-4 text-right w-[10%]">Precio Venta</th>
-                  <th className="px-6 py-4 text-center w-[5%]">Acciones</th>
+                  <th className="px-4 py-4 w-[11%]">Código</th>
+                  <th className="px-4 py-4 w-[27%]">Concepto / Nombre</th>
+                  <th className="px-4 py-4 w-[22%]">Descripción</th>
+                  <th className="px-4 py-4 text-center w-[7%]">Unidad</th>
+                  <th className="px-4 py-4 text-right w-[10%]">Costo Int.</th>
+                  <th className="px-4 py-4 text-right w-[10%]">Precio Venta</th>
+                  <th className="px-4 py-4 text-center w-[8%]">% Comisión</th>
+                  <th className="px-4 py-4 text-center w-[5%]">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-carbon/5 font-cuerpo text-carbon">
                 {productosFiltrados.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/50 transition">
-                    <td className="px-6 py-4 font-mono font-bold text-sauce">{p.id}</td>
-                    <td className="px-6 py-4 font-semibold text-verde-profundo">{p.nombre}</td>
-                    <td className="px-6 py-4 text-xs text-carbon/60 truncate max-w-[200px]" title={p.descripcion}>
+                    <td className="px-4 py-4 font-mono font-bold text-sauce">{p.id}</td>
+                    <td className="px-4 py-4 font-semibold text-verde-profundo">{p.nombre}</td>
+                    <td className="px-4 py-4 text-xs text-carbon/60 truncate max-w-[200px]" title={p.descripcion}>
                       {p.descripcion || "—"}
                     </td>
-                    <td className="px-6 py-4 text-center">{p.unidad}</td>
-                    <td className="px-6 py-4 text-right font-mono text-carbon/75">{formatMoneda(p.costoUnitario)}</td>
-                    <td className="px-6 py-4 text-right font-mono font-semibold text-verde-profundo">
+                    <td className="px-4 py-4 text-center">{p.unidad}</td>
+                    <td className="px-4 py-4 text-right font-mono text-carbon/75">{formatMoneda(p.costoUnitario)}</td>
+                    <td className="px-4 py-4 text-right font-mono font-semibold text-verde-profundo">
                       {formatMoneda(p.precioUnitario)}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-4 py-4 text-center font-mono font-bold text-blue-900 bg-blue-50/20">
+                      {p.porcentajeComision ?? 5}%
+                    </td>
+                    <td className="px-4 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => handleOpenEditar(p)}
@@ -311,7 +329,7 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">
                     Unidad
@@ -353,8 +371,26 @@ export function TableroProductos({ productosIniciales }: TableroProductosProps) 
                     value={precioUnitario}
                     onChange={(e) => setPrecioUnitario(e.target.value)}
                     placeholder="0.00"
-                    className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none"
+                    className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm focus:border-sauce focus:outline-none font-semibold text-verde-profundo"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">
+                    % Comisión
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={porcentajeComision}
+                      onChange={(e) => setPorcentajeComision(e.target.value)}
+                      placeholder="5.00"
+                      className="w-full rounded-lg border border-carbon/20 px-3 py-2 text-sm font-mono focus:border-sauce focus:outline-none font-bold text-blue-900"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-carbon/40">%</span>
+                  </div>
                 </div>
               </div>
 

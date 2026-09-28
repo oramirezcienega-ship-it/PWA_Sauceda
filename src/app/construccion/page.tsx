@@ -102,6 +102,13 @@ export default async function PaginaConstruccion({
               📦 Catálogo de Conceptos
             </Link>
             <Link
+              href="/comisiones"
+              className="px-4 py-2 rounded-lg transition-all text-verde-profundo bg-amber-50 hover:bg-amber-100 border border-amber-200/60 shadow-xs flex items-center gap-1.5"
+              title="Ir al módulo de Comisiones de Asesores"
+            >
+              <span>💰</span> Comisiones Asesores
+            </Link>
+            <Link
               href="/visualizador"
               className="px-4 py-2 rounded-lg transition-all text-verde-profundo bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60 shadow-xs flex items-center gap-1.5"
             >
