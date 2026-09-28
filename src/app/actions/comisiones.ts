@@ -380,6 +380,9 @@ export async function listarComisiones(filtros?: {
         servicioTipo: cot?.servicio_tipo || null,
         fecha: row.fecha,
         montoVenta: Number(row.monto_venta || 0),
+        costoProveedor: Number(row.costo_proveedor || 0),
+        comisionBancaria: Number(row.comision_bancaria || 0),
+        baseComisionable: Number(row.base_comisionable || row.monto_venta || 0),
         porcentajeComision: Number(row.porcentaje_comision || 0),
         montoComision: Number(row.monto_comision || 0),
         montoPagado: Number(row.monto_pagado || 0),
@@ -752,7 +755,7 @@ export async function sincronizarComisionParaRemision(
     // 1. Obtener datos de la remisión (consulta plana, sin joins de PostgREST)
     const { data: rem, error: errRem } = await sb
       .from("remisiones_facturas")
-      .select("id, folio, tipo, fecha, monto_subtotal, monto_total, cotizacion_id, expediente_id, orden_trabajo_id")
+      .select("id, folio, tipo, fecha, monto_subtotal, monto_total, costo_financiero, cotizacion_id, expediente_id, orden_trabajo_id")
       .eq("id", remisionId)
       .single();
 
@@ -763,6 +766,7 @@ export async function sincronizarComisionParaRemision(
     // 1.1 Resolver datos relacionados por separado (evita fallos de joins embebidos en PostgREST)
     let servicioTipoRem: string | null = null;
     let asesorId: string | null = null;
+    let costoProveedorRem = 0;
 
     if (rem.cotizacion_id) {
       const { data: cot } = await sb
@@ -790,13 +794,16 @@ export async function sincronizarComisionParaRemision(
       asesorId = exp?.asesor_id || null;
     }
 
-    if (!asesorId && rem.orden_trabajo_id) {
+    if (rem.orden_trabajo_id) {
       const { data: ot } = await sb
         .from("ordenes_trabajo")
-        .select("asesor_responsable_id, asesor_ejecutor_id")
+        .select("asesor_responsable_id, asesor_ejecutor_id, costo_proveedor")
         .eq("id", rem.orden_trabajo_id)
         .maybeSingle();
-      asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+      costoProveedorRem = Number(ot?.costo_proveedor || 0);
+      if (!asesorId) {
+        asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+      }
     }
 
     if (!asesorId) {
@@ -825,6 +832,8 @@ export async function sincronizarComisionParaRemision(
       .maybeSingle();
 
     const montoVenta = Number(rem.monto_total || rem.monto_subtotal || 0);
+    const comisionBancariaRem = Number(rem.costo_financiero || 0);
+    const baseComisionableRem = Math.max(0, montoVenta - costoProveedorRem - comisionBancariaRem);
     const servicioTipo = servicioTipoRem;
 
     if (comisionExistente) {
@@ -839,7 +848,7 @@ export async function sincronizarComisionParaRemision(
         servicioTipo,
       });
 
-      const nuevoMontoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+      const nuevoMontoComision = Math.round(baseComisionableRem * (porcentaje / 100) * 100) / 100;
       const pagado = Number(comisionExistente.monto_pagado || 0);
 
       await sb
@@ -847,6 +856,9 @@ export async function sincronizarComisionParaRemision(
         .update({
           asesor_id: asesorId,
           monto_venta: montoVenta,
+          costo_proveedor: costoProveedorRem,
+          comision_bancaria: comisionBancariaRem,
+          base_comisionable: baseComisionableRem,
           porcentaje_comision: porcentaje,
           monto_comision: nuevoMontoComision,
           saldo_pendiente: Math.max(0, nuevoMontoComision - pagado),
@@ -870,7 +882,7 @@ export async function sincronizarComisionParaRemision(
       servicioTipo,
     });
 
-    const montoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+    const montoComision = Math.round(baseComisionableRem * (porcentaje / 100) * 100) / 100;
 
     const { data: nuevaCom, error: errIns } = await sb
       .from("comisiones")
@@ -882,6 +894,9 @@ export async function sincronizarComisionParaRemision(
         orden_trabajo_id: rem.orden_trabajo_id,
         fecha: rem.fecha || new Date().toISOString().split("T")[0],
         monto_venta: montoVenta,
+        costo_proveedor: costoProveedorRem,
+        comision_bancaria: comisionBancariaRem,
+        base_comisionable: baseComisionableRem,
         porcentaje_comision: porcentaje,
         monto_comision: montoComision,
         monto_pagado: 0.0,
@@ -922,13 +937,15 @@ export async function sincronizarComisionParaRecibo(
     // 1.1 Resolver datos relacionados por separado (evita fallos de joins embebidos en PostgREST)
     let servicioTipoRec: string | null = null;
     let asesorId: string | null = null;
+    let costoProveedorRec = 0;
 
     if (rec.orden_trabajo_id) {
       const { data: ot } = await sb
         .from("ordenes_trabajo")
-        .select("asesor_responsable_id, asesor_ejecutor_id, prospecto_id")
+        .select("asesor_responsable_id, asesor_ejecutor_id, prospecto_id, costo_proveedor")
         .eq("id", rec.orden_trabajo_id)
         .maybeSingle();
+      costoProveedorRec = Number(ot?.costo_proveedor || 0);
       asesorId = ot?.asesor_ejecutor_id || ot?.asesor_responsable_id || null;
       if (!asesorId && ot?.prospecto_id) {
         const { data: prosOt } = await sb
@@ -991,6 +1008,7 @@ export async function sincronizarComisionParaRecibo(
       .maybeSingle();
 
     const montoVenta = Number(rec.monto || 0);
+    const baseComisionableRec = Math.max(0, montoVenta - costoProveedorRec);
     const servicioTipo = servicioTipoRec;
 
     if (comisionExistente) {
@@ -1003,7 +1021,7 @@ export async function sincronizarComisionParaRecibo(
         servicioTipo,
       });
 
-      const nuevoMontoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+      const nuevoMontoComision = Math.round(baseComisionableRec * (porcentaje / 100) * 100) / 100;
       const pagado = Number(comisionExistente.monto_pagado || 0);
 
       await sb
@@ -1011,6 +1029,9 @@ export async function sincronizarComisionParaRecibo(
         .update({
           asesor_id: asesorId,
           monto_venta: montoVenta,
+          costo_proveedor: costoProveedorRec,
+          comision_bancaria: 0,
+          base_comisionable: baseComisionableRec,
           porcentaje_comision: porcentaje,
           monto_comision: nuevoMontoComision,
           saldo_pendiente: Math.max(0, nuevoMontoComision - pagado),
@@ -1040,7 +1061,7 @@ export async function sincronizarComisionParaRecibo(
       servicioTipo,
     });
 
-    const montoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+    const montoComision = Math.round(baseComisionableRec * (porcentaje / 100) * 100) / 100;
 
     const { data: nuevaCom, error: errIns } = await sb
       .from("comisiones")
@@ -1052,6 +1073,9 @@ export async function sincronizarComisionParaRecibo(
         orden_trabajo_id: rec.orden_trabajo_id,
         fecha: rec.fecha_pago || new Date().toISOString().split("T")[0],
         monto_venta: montoVenta,
+        costo_proveedor: costoProveedorRec,
+        comision_bancaria: 0,
+        base_comisionable: baseComisionableRec,
         porcentaje_comision: porcentaje,
         monto_comision: montoComision,
         monto_pagado: 0.0,
