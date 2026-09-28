@@ -225,6 +225,9 @@ export function ModuloComisiones({
       "Empresa",
       "Servicio",
       "Monto Venta",
+      "Costo Proveedor",
+      "Comisión Bancaria",
+      "Base Comisionable",
       "Porcentaje Comisión",
       "Comisión Generada",
       "Monto Pagado",
@@ -244,6 +247,9 @@ export function ModuloComisiones({
       `"${(c.clienteEmpresa || "").replace(/"/g, '""')}"`,
       `"${(c.servicioTipo || "").replace(/"/g, '""')}"`,
       c.montoVenta.toFixed(2),
+      c.costoProveedor.toFixed(2),
+      c.comisionBancaria.toFixed(2),
+      c.baseComisionable.toFixed(2),
       `${c.porcentajeComision}%`,
       c.montoComision.toFixed(2),
       c.montoPagado.toFixed(2),
@@ -635,6 +641,7 @@ export function ModuloComisiones({
                     <th className="py-3 px-4">Cliente / Empresa</th>
                     <th className="py-3 px-4">Servicio</th>
                     <th className="py-3 px-4 text-right">Venta</th>
+                    <th className="py-3 px-4 text-right">Base Comisionable</th>
                     <th className="py-3 px-4 text-center">% Com.</th>
                     <th className="py-3 px-4 text-right">Comisión</th>
                     <th className="py-3 px-4 text-right">Pagado</th>
@@ -718,6 +725,19 @@ export function ModuloComisiones({
                         {/* Venta */}
                         <td className="py-3 px-4 text-right font-mono font-medium text-carbon whitespace-nowrap">
                           {formatoMoneda(c.montoVenta)}
+                        </td>
+
+                        {/* Base Comisionable = Venta - Costo Proveedor - Comisión Bancaria */}
+                        <td className="py-3 px-4 text-right font-mono font-medium text-emerald-700 whitespace-nowrap">
+                          {formatoMoneda(c.baseComisionable)}
+                          {(c.costoProveedor > 0 || c.comisionBancaria > 0) && (
+                            <span
+                              className="block text-[9px] text-carbon/40 font-normal cursor-help"
+                              title={`Venta ${formatoMoneda(c.montoVenta)} − Proveedor ${formatoMoneda(c.costoProveedor)} − Banco ${formatoMoneda(c.comisionBancaria)}`}
+                            >
+                              −{formatoMoneda(c.costoProveedor + c.comisionBancaria)}
+                            </span>
+                          )}
                         </td>
 
                         {/* % Comisión */}
