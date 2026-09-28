@@ -106,14 +106,10 @@ export function ModalRegistrarPagoComision({
       return;
     }
 
-    if (montoNumerico > saldoTotalPendienteAsesor + 0.01) {
-      setError(
-        `El monto ($${montoNumerico}) supera el saldo pendiente total del asesor (${formatoMoneda(
-          saldoTotalPendienteAsesor
-        )}).`
-      );
-      return;
-    }
+    // Ya no se bloquea si el monto excede el saldo pendiente: el excedente
+    // (por ejemplo, un préstamo/anticipo que solicita el asesor) se registra
+    // como anticipo a favor de SAUCEDA y se descuenta automáticamente de sus
+    // próximas comisiones.
 
     try {
       setGuardando(true);
@@ -274,6 +270,24 @@ export function ModalRegistrarPagoComision({
             </div>
           </div>
 
+          {(() => {
+            const montoNumerico = parseFloat(monto) || 0;
+            const excedente =
+              Math.round((montoNumerico - saldoTotalPendienteAsesor) * 100) / 100;
+            if (excedente <= 0.01) return null;
+            return (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2">
+                <span>💰</span>
+                <span>
+                  Este pago excede el saldo pendiente por{" "}
+                  <strong>{formatoMoneda(excedente)}</strong>. Ese excedente se registrará como{" "}
+                  <strong>anticipo/préstamo a favor de SAUCEDA</strong>, y se descontará
+                  automáticamente de las próximas comisiones de este asesor.
+                </span>
+              </div>
+            );
+          })()}
+
           {/* Referencia bancaria */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -339,7 +353,9 @@ export function ModalRegistrarPagoComision({
                     {pendientesDelAsesor.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="p-4 text-center text-carbon/50">
-                          Este asesor no tiene comisiones pendientes por pagar.
+                          Este asesor no tiene comisiones pendientes por pagar. Puedes registrar el
+                          monto de todos modos como anticipo/préstamo a favor de SAUCEDA (se
+                          descontará de sus próximas comisiones).
                         </td>
                       </tr>
                     ) : (
@@ -407,7 +423,7 @@ export function ModalRegistrarPagoComision({
             </button>
             <button
               type="submit"
-              disabled={guardando || pendientesDelAsesor.length === 0}
+              disabled={guardando || (!monto && pendientesDelAsesor.length === 0)}
               className="px-5 py-2 bg-verde-profundo text-crema rounded-xl text-xs font-bold hover:bg-verde-profundo/90 transition shadow-md disabled:opacity-50 flex items-center gap-2"
             >
               {guardando ? (

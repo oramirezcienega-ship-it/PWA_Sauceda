@@ -34,6 +34,8 @@ interface Props {
       saldoPendiente: number;
       comisionesCount: number;
       pendientesCount: number;
+      anticiposPendientes: number;
+      saldoNeto: number;
     };
     porAsesor: ResumenEstadoCuentaAsesor[];
   };
@@ -174,6 +176,8 @@ export function ModuloComisiones({
                 saldoPendiente: 0,
                 comisionesCount: 0,
                 pendientesCount: 0,
+                anticiposPendientes: 0,
+                saldoNeto: 0,
               },
               porAsesor: [],
             };
@@ -428,6 +432,14 @@ export function ModuloComisiones({
           <span className="text-[11px] text-amber-900/80 mt-1 block font-medium">
             {resumen.general.pendientesCount} comisión(es) por liquidar
           </span>
+          {resumen.general.anticiposPendientes > 0 && (
+            <span className="text-[11px] text-blue-800 mt-1.5 pt-1.5 border-t border-amber-300/60 block font-semibold">
+              💰 Anticipos a favor de SAUCEDA: {formatoMoneda(resumen.general.anticiposPendientes)}
+              <span className="block font-mono font-bold text-blue-900">
+                Saldo neto: {formatoMoneda(resumen.general.saldoNeto)}
+              </span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -1337,6 +1349,33 @@ export function ModuloComisiones({
                       {formatoMoneda(a.saldoPendiente)}
                     </span>
                   </div>
+                  {a.anticiposPendientes > 0 && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-blue-800">💰 Anticipo a favor de SAUCEDA:</span>
+                        <span className="font-mono font-semibold text-blue-800">
+                          -{formatoMoneda(a.anticiposPendientes)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t pt-2 font-bold">
+                        <span className={a.saldoNeto < 0 ? "text-red-700" : "text-verde-profundo"}>
+                          Saldo Neto:
+                        </span>
+                        <span
+                          className={`font-mono text-sm ${
+                            a.saldoNeto < 0 ? "text-red-700" : "text-verde-profundo"
+                          }`}
+                        >
+                          {formatoMoneda(a.saldoNeto)}
+                        </span>
+                      </div>
+                      {a.saldoNeto < 0 && (
+                        <p className="text-[10px] text-red-600 italic">
+                          El asesor le debe a SAUCEDA (anticipo aún no cubierto por comisiones).
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <div className="pt-2 flex gap-2">

@@ -5,6 +5,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import type {
   Comision,
+  ComisionAnticipo,
   ComisionPago,
   ComisionPagoDetalle,
   EstatusComision,
@@ -552,15 +553,26 @@ export async function obtenerResumenEstadoCuenta(filtros?: {
     saldoPendiente: number;
     comisionesCount: number;
     pendientesCount: number;
+    anticiposPendientes: number;
+    saldoNeto: number;
   };
   porAsesor: ResumenEstadoCuentaAsesor[];
 }> {
   try {
-    const comisiones = await listarComisiones({
-      asesorId: filtros?.asesorId,
-      fechaDesde: filtros?.fechaDesde,
-      fechaHasta: filtros?.fechaHasta,
-    });
+    const [comisiones, anticipos] = await Promise.all([
+      listarComisiones({
+        asesorId: filtros?.asesorId,
+        fechaDesde: filtros?.fechaDesde,
+        fechaHasta: filtros?.fechaHasta,
+      }),
+      listarAnticiposComision({ asesorId: filtros?.asesorId, soloActivos: true }),
+    ]);
+
+    const anticiposPorAsesor = new Map<string, number>();
+    for (const a of anticipos) {
+      anticiposPorAsesor.set(a.asesorId, (anticiposPorAsesor.get(a.asesorId) || 0) + a.saldoRestante);
+    }
+    const anticiposPendientesTotal = anticipos.reduce((acc, a) => acc + a.saldoRestante, 0);
 
     const general = comisiones.reduce(
       (acc, c) => {
@@ -600,6 +612,8 @@ export async function obtenerResumenEstadoCuenta(filtros?: {
           saldoPendiente: 0,
           comisionesCount: 0,
           pendientesCount: 0,
+          anticiposPendientes: 0,
+          saldoNeto: 0,
         };
         asesorMap.set(c.asesorId, entry);
       }
@@ -611,11 +625,42 @@ export async function obtenerResumenEstadoCuenta(filtros?: {
       if (c.saldoPendiente > 0) entry.pendientesCount += 1;
     }
 
+    // Incluir asesores que solo tienen anticipo activo (sin comisiones pendientes)
+    for (const a of anticipos) {
+      if (!asesorMap.has(a.asesorId)) {
+        asesorMap.set(a.asesorId, {
+          asesorId: a.asesorId,
+          asesorNombre: a.asesorNombre,
+          asesorTelefono: null,
+          totalVentas: 0,
+          totalComisiones: 0,
+          totalPagado: 0,
+          saldoPendiente: 0,
+          comisionesCount: 0,
+          pendientesCount: 0,
+          anticiposPendientes: 0,
+          saldoNeto: 0,
+        });
+      }
+    }
+
+    for (const entry of Array.from(asesorMap.values())) {
+      entry.anticiposPendientes = anticiposPorAsesor.get(entry.asesorId) || 0;
+      entry.saldoNeto = Math.round((entry.saldoPendiente - entry.anticiposPendientes) * 100) / 100;
+    }
+
     const porAsesor = Array.from(asesorMap.values()).sort(
-      (a, b) => b.saldoPendiente - a.saldoPendiente
+      (a, b) => b.saldoNeto - a.saldoNeto
     );
 
-    return { general, porAsesor };
+    return {
+      general: {
+        ...general,
+        anticiposPendientes: anticiposPendientesTotal,
+        saldoNeto: Math.round((general.saldoPendiente - anticiposPendientesTotal) * 100) / 100,
+      },
+      porAsesor,
+    };
   } catch (err: any) {
     console.error("Error en obtenerResumenEstadoCuenta:", err);
     return {
@@ -626,6 +671,8 @@ export async function obtenerResumenEstadoCuenta(filtros?: {
         saldoPendiente: 0,
         comisionesCount: 0,
         pendientesCount: 0,
+        anticiposPendientes: 0,
+        saldoNeto: 0,
       },
       porAsesor: [],
     };
@@ -716,9 +763,11 @@ export async function registrarPagoComisiones(datos: {
 
     // 1. Determinar cómo se distribuye el pago entre las comisiones pendientes
     let aplicacionesFinales: { comisionId: string; monto: number }[] = [];
+    let remanente = montoTotal;
 
     if (datos.aplicaciones && datos.aplicaciones.length > 0) {
       aplicacionesFinales = datos.aplicaciones.filter((a) => a.monto > 0);
+      remanente = montoTotal - aplicacionesFinales.reduce((acc, a) => acc + a.monto, 0);
     } else {
       // Distribución automática por antigüedad
       const { data: pendientes, error: errPend } = await sb
@@ -732,7 +781,6 @@ export async function registrarPagoComisiones(datos: {
 
       if (errPend) throw new Error(errPend.message);
 
-      let remanente = montoTotal;
       for (const com of pendientes || []) {
         if (remanente <= 0) break;
         const saldo = Number(com.saldo_pendiente || 0);
@@ -742,7 +790,9 @@ export async function registrarPagoComisiones(datos: {
       }
     }
 
-    if (aplicacionesFinales.length === 0) {
+    remanente = Math.max(0, Math.round(remanente * 100) / 100);
+
+    if (aplicacionesFinales.length === 0 && remanente <= 0) {
       return {
         ok: false,
         error: "No hay comisiones pendientes seleccionadas o disponibles para aplicar este pago.",
@@ -765,23 +815,91 @@ export async function registrarPagoComisiones(datos: {
 
     if (errPago) throw new Error(errPago.message);
 
-    // 3. Insertar detalles de aplicación
-    const detallesInsert = aplicacionesFinales.map((a) => ({
-      pago_id: pago.id,
-      comision_id: a.comisionId,
-      monto_aplicado: a.monto,
-    }));
+    // 3. Insertar detalles de aplicación (si hay comisiones cubiertas)
+    if (aplicacionesFinales.length > 0) {
+      const detallesInsert = aplicacionesFinales.map((a) => ({
+        pago_id: pago.id,
+        comision_id: a.comisionId,
+        monto_aplicado: a.monto,
+      }));
 
-    const { error: errDet } = await sb
-      .from("comisiones_pagos_detalle")
-      .insert(detallesInsert);
+      const { error: errDet } = await sb
+        .from("comisiones_pagos_detalle")
+        .insert(detallesInsert);
 
-    if (errDet) throw new Error(errDet.message);
+      if (errDet) throw new Error(errDet.message);
+    }
+
+    // 4. Si el pago excede el saldo pendiente (préstamo/anticipo solicitado por
+    // el asesor), el excedente queda como anticipo a favor de SAUCEDA, pendiente
+    // de descontarse automáticamente de las próximas comisiones que se generen
+    // para este asesor.
+    if (remanente > 0) {
+      const { error: errAnt } = await sb.from("comisiones_anticipos").insert({
+        asesor_id: datos.asesorId,
+        pago_id: pago.id,
+        fecha: datos.fechaPago || new Date().toISOString().split("T")[0],
+        monto: remanente,
+        saldo_restante: remanente,
+        motivo:
+          datos.notas?.trim() ||
+          `Anticipo/préstamo generado por dispersión que excedió el saldo pendiente.`,
+        estatus: "activo",
+      });
+
+      if (errAnt) throw new Error(errAnt.message);
+    }
 
     revalidatePath("/comisiones");
     return { ok: true, pagoId: pago.id };
   } catch (err: any) {
     return { ok: false, error: err.message || "Error al registrar el pago." };
+  }
+}
+
+/** Lista los anticipos/préstamos de asesores (activos por defecto). */
+export async function listarAnticiposComision(filtros?: {
+  asesorId?: string;
+  soloActivos?: boolean;
+}): Promise<ComisionAnticipo[]> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    let query = sb
+      .from("comisiones_anticipos")
+      .select("*")
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (filtros?.asesorId) query = query.eq("asesor_id", filtros.asesorId);
+    if (filtros?.soloActivos !== false) query = query.eq("estatus", "activo");
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+
+    const asesorIds = Array.from(new Set((data || []).map((a: any) => a.asesor_id).filter(Boolean)));
+    const { data: perfiles } =
+      asesorIds.length > 0
+        ? await sb.from("perfiles").select("id, nombre").in("id", asesorIds)
+        : { data: [] as any[] };
+    const mapPerf = new Map<string, string>((perfiles || []).map((p: any) => [p.id, p.nombre]));
+
+    return (data || []).map((a: any) => ({
+      id: a.id,
+      asesorId: a.asesor_id,
+      asesorNombre: mapPerf.get(a.asesor_id) || "Asesor",
+      pagoId: a.pago_id,
+      fecha: a.fecha,
+      monto: Number(a.monto || 0),
+      saldoRestante: Number(a.saldo_restante || 0),
+      motivo: a.motivo || "",
+      estatus: a.estatus,
+      createdAt: a.created_at,
+    }));
+  } catch (err: any) {
+    console.error("Error al listar anticipos de comisión:", err.message);
+    return [];
   }
 }
 
@@ -1066,6 +1184,10 @@ export async function sincronizarComisionParaRemision(
 
     if (errIns) throw new Error(errIns.message);
 
+    // Si el asesor tiene anticipos/préstamos activos, descontar automáticamente
+    // de esta comisión recién generada antes de que quede disponible para pago.
+    await netearAnticiposContraComision(sb, asesorId, nuevaCom.id, montoComision);
+
     // Reflejar automáticamente la comisión devengada en Finanzas (opex_nomina).
     try {
       const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
@@ -1089,6 +1211,73 @@ export async function sincronizarComisionParaRemision(
     console.error("Error al sincronizar comisión de remisión:", err.message);
     return { ok: false, error: err.message };
   }
+}
+
+/**
+ * Descuenta anticipos/préstamos activos de un asesor contra una comisión
+ * recién generada (por orden de fecha, el más antiguo primero), hasta agotar
+ * el anticipo o el monto de la comisión. Actualiza tanto los anticipos
+ * (saldo_restante, estatus) como la comisión (monto_pagado, saldo_pendiente,
+ * estatus, anticipo_aplicado_id, monto_neteado_anticipo).
+ */
+async function netearAnticiposContraComision(
+  sb: ReturnType<typeof supabaseServidor>,
+  asesorId: string,
+  comisionId: string,
+  montoComision: number
+): Promise<void> {
+  if (montoComision <= 0) return;
+
+  const { data: anticipos } = await sb
+    .from("comisiones_anticipos")
+    .select("id, saldo_restante")
+    .eq("asesor_id", asesorId)
+    .eq("estatus", "activo")
+    .gt("saldo_restante", 0)
+    .order("fecha", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (!anticipos || anticipos.length === 0) return;
+
+  let disponible = montoComision;
+  let totalNeteado = 0;
+  let primerAnticipoId: string | null = null;
+
+  for (const ant of anticipos) {
+    if (disponible <= 0) break;
+    const saldoAnt = Number(ant.saldo_restante || 0);
+    const aplicar = Math.min(saldoAnt, disponible);
+    if (aplicar <= 0) continue;
+
+    if (!primerAnticipoId) primerAnticipoId = ant.id;
+    totalNeteado += aplicar;
+    disponible -= aplicar;
+
+    const nuevoSaldoAnt = Math.round((saldoAnt - aplicar) * 100) / 100;
+    await sb
+      .from("comisiones_anticipos")
+      .update({
+        saldo_restante: nuevoSaldoAnt,
+        estatus: nuevoSaldoAnt <= 0 ? "liquidado" : "activo",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ant.id);
+  }
+
+  if (totalNeteado <= 0) return;
+
+  const nuevoSaldoPendiente = Math.max(0, Math.round((montoComision - totalNeteado) * 100) / 100);
+  await sb
+    .from("comisiones")
+    .update({
+      monto_pagado: totalNeteado,
+      saldo_pendiente: nuevoSaldoPendiente,
+      estatus: nuevoSaldoPendiente <= 0 ? "pagada" : "parcial",
+      anticipo_aplicado_id: primerAnticipoId,
+      monto_neteado_anticipo: totalNeteado,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", comisionId);
 }
 
 export async function sincronizarComisionParaRecibo(
