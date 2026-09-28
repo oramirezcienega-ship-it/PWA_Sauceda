@@ -993,6 +993,73 @@ export interface AutomatizacionConfiguracion {
   createdAt?: string;
 }
 
+// ------------------------------------------------------------
+// MÓDULO PROVEEDORES (costos de terceros por orden de trabajo)
+// ------------------------------------------------------------
+
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  razonSocial: string;
+  rfc: string;
+  categoria: string;
+  contactoNombre: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  notas: string;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** Total acumulado de documentos (facturas/remisiones) registrados. Solo lectura, vía join. */
+  totalDocumentos?: number;
+  /** Suma de montos de todos los documentos registrados. Solo lectura, vía join. */
+  montoTotal?: number;
+}
+
+export type DatosProveedor = Omit<
+  Proveedor,
+  "id" | "createdAt" | "updatedAt" | "totalDocumentos" | "montoTotal"
+>;
+
+export type TipoDocumentoProveedor = "remision" | "factura";
+
+export interface DocumentoProveedor {
+  id: string;
+  proveedorId: string;
+  proveedorNombre?: string | null;
+  cotizacionId: string | null;
+  cotizacionFolio?: string | null;
+  expedienteId: string | null;
+  tipo: TipoDocumentoProveedor;
+  folio: string;
+  concepto: string;
+  fecha: string;
+  monto: number;
+  archivoUrl?: string | null;
+  archivoNombre?: string | null;
+  notas: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DatosDocumentoProveedor = Omit<
+  DocumentoProveedor,
+  "id" | "proveedorNombre" | "cotizacionFolio" | "createdAt" | "updatedAt"
+>;
+
+export const CATEGORIAS_PROVEEDOR = [
+  "Materiales de construcción",
+  "Herrería / Metalmecánica",
+  "Impermeabilización",
+  "Pintura y acabados",
+  "Electricidad",
+  "Plomería",
+  "Mano de obra / Subcontratista",
+  "Transporte / Maquinaria",
+  "Otro",
+];
+
 export interface ProcesoMaestro {
   id: string;
   nombre: string;

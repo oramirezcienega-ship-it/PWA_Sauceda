@@ -33,6 +33,7 @@ import { listarEmpresasMin } from "@/app/actions/empresas";
 import { formatoPesos } from "@/lib/formato";
 import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
+import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -53,7 +54,7 @@ export function DetalleCotizacionAdmin({
   const [conceptos, setConceptos] = useState<CotizacionConcepto[]>(conceptosIniciales);
   const [reporteVisita, setReporteVisita] = useState<VisitaReporte | null>(reporteVisitaInicial);
 
-  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion">("resumen");
+  const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion" | "proveedores">("resumen");
 
   // --- State para Remisión & Factura ---
   const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
@@ -1215,6 +1216,14 @@ export function DetalleCotizacionAdmin({
             Facturación & Ventas
           </button>
         )}
+        <button
+          onClick={() => setPestaña("proveedores")}
+          className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition border-b-2 -mb-[2px] ${
+            pestaña === "proveedores" ? "border-sauce text-sauce bg-white" : "border-transparent text-carbon/60 hover:text-carbon"
+          }`}
+        >
+          Proveedores
+        </button>
       </div>
 
       {/* Contenido Pestañas */}
@@ -2876,6 +2885,16 @@ export function DetalleCotizacionAdmin({
               </form>
             )}
           </div>
+        )}
+
+        {/* --- PESTAÑA PROVEEDORES --- */}
+        {pestaña === "proveedores" && (
+          <PanelProveedoresCotizacion
+            cotizacionId={cotizacion.id}
+            expedienteId={cotizacion.expedienteId}
+            precioFinal={cotizacion.precioFinal}
+            costoEstimado={cotizacion.costoEstimado}
+          />
         )}
 
       </div>

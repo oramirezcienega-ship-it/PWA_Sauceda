@@ -36,6 +36,7 @@ const ENLACES = [
   { href: "/prospectos/pipeline", label: "Pipeline" },
   { href: "/conversaciones", label: "Conversaciones" },
   { href: "/construccion", label: "Construcción" },
+  { href: "/proveedores", label: "Proveedores" },
   { href: "/agenda", label: "Agenda" },
   { href: "/visualizador", label: "Visualizador IA (Nuevo)" },
   { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
