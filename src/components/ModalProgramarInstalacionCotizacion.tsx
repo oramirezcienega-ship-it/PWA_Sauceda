@@ -85,11 +85,17 @@ export function ModalProgramarInstalacionCotizacion({
               ""
           );
           setProveedorId(res.ordenExistente?.proveedor_id || "");
-          setCostoProveedor(
-            res.ordenExistente?.costo_proveedor
-              ? String(res.ordenExistente.costo_proveedor)
-              : ""
-          );
+          // El costo de proveedor se autocompleta con la suma de
+          // cantidad × costo_unitario de los conceptos de la cotización
+          // (ya viene del catálogo de productos). Si la orden ya tenía un
+          // costo capturado/ajustado a mano, ese tiene prioridad.
+          if (res.ordenExistente?.costo_proveedor) {
+            setCostoProveedor(String(res.ordenExistente.costo_proveedor));
+          } else if (res.costoProveedorSugerido && res.costoProveedorSugerido > 0) {
+            setCostoProveedor(String(res.costoProveedorSugerido));
+          } else {
+            setCostoProveedor("");
+          }
           setMontoSaldo(res.saldoRestante ?? res.montoTotal ?? 0);
         } else {
           setError(res.error || "No se pudieron obtener los datos de la cotización.");
@@ -415,6 +421,16 @@ export function ModalProgramarInstalacionCotizacion({
                 <div className="text-[10px] text-purple-700 flex items-center">
                   💡 Se generará automáticamente el registro en la cuenta del proveedor vinculado a la Orden de Trabajo.
                 </div>
+                {datosIniciales?.costoProveedorSugerido > 0 && (
+                  <div className="sm:col-span-2 text-[10px] text-purple-800 bg-purple-100/70 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                    <span>🧮</span>
+                    <span>
+                      Precargado automáticamente desde el catálogo de la cotización (
+                      {formatMoneda(datosIniciales.costoProveedorSugerido)}). Puedes ajustarlo si el
+                      costo real con este proveedor es distinto.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
