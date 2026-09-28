@@ -8,5 +8,5 @@ export const MARCA = {
   whatsappTexto: "477 465 4700",
   facebook: "https://www.facebook.com/profile.php?id=61589957630232",
   tiktok: "https://www.tiktok.com/@saucedamxbr",
-  instagram: "https://www.instagram.com/saucedamxbr/",
+  instagram: "https://www.instagram.com/saucedamx_/",
 };
