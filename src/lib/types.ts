@@ -1170,6 +1170,9 @@ export interface Comision {
   servicioTipo?: string | null;
   fecha: string;
   montoVenta: number;
+  costoProveedor: number;
+  comisionBancaria: number;
+  baseComisionable: number;
   porcentajeComision: number;
   montoComision: number;
   montoPagado: number;
