@@ -5,6 +5,7 @@ import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
+import { detectarTipoNegocio } from "@/lib/types";
 
 /**
  * MÓDULO: CAPTACIÓN · Sitio web (formulario "Cotizar" de saucedamx.com).
@@ -116,6 +117,9 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
   const token = crypto.randomUUID();
   const expId = await siguienteId(sb, "expedientes", "EXP");
   const asesorId = await obtenerIdAsesorGerardo(sb);
+  const tipoNegocio = detectarTipoNegocio(
+    [lead.mensaje, lead.necesidad, lead.tipoCredito].filter(Boolean).join(" ")
+  );
   await sb.from("expedientes").insert({
     id: expId,
     token,
@@ -138,6 +142,7 @@ export async function registrarLeadWeb(lead: LeadWeb): Promise<string> {
     direccion_propiedad: lead.direccionPropiedad || null,
     link_google_maps: lead.linkGoogleMaps || null,
     necesidad: lead.necesidad || null,
+    tipo_negocio: tipoNegocio !== "otro" ? tipoNegocio : "traspaso_compra",
   });
 
   // Enrolar automáticamente en secuencias activas

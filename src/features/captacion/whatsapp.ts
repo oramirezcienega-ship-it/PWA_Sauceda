@@ -441,13 +441,17 @@ export async function registrarLeadWhatsApp(
     if (adset_name && adset_name !== exp.adset_name) updateData.adset_name = adset_name;
     if (ad_name && ad_name !== exp.ad_name) updateData.ad_name = ad_name;
 
-    // Si el tipo de negocio era traspaso_compra (default) y ahora se detecta algo distinto, lo actualizamos.
-    if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio) {
+    // Si el tipo de negocio era traspaso_compra (default), cayó en "otro" o no tenía, y ahora se detecta algo específico, lo actualizamos.
+    if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio || exp.tipo_negocio === "otro") {
+      const effectiveCampaign = campaign_name || exp.campaign_name || "";
+      const effectiveAdset = adset_name || exp.adset_name || "";
+      const effectiveAd = ad_name || exp.ad_name || "";
+      const metaContext = [effectiveCampaign, effectiveAdset, effectiveAd].filter(Boolean).join(" ");
       const detectado = detectarTipoNegocio(
         lead.mensaje ?? "",
-        [campaign_name, adset_name, ad_name].filter(Boolean).join(" ")
+        metaContext
       );
-      if (detectado !== "traspaso_compra") {
+      if (detectado !== "traspaso_compra" && detectado !== "otro") {
         updateData.tipo_negocio = detectado;
       }
     }

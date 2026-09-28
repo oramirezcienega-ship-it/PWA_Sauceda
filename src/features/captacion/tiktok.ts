@@ -5,6 +5,7 @@ import { dispararEvento } from "@/lib/automatizaciones/motor";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
+import { detectarTipoNegocio } from "@/lib/types";
 import crypto from "node:crypto";
 
 /**
@@ -131,6 +132,10 @@ export async function registrarLeadTikTok(lead: LeadTikTok): Promise<string> {
   const token = crypto.randomUUID();
   const expId = await siguienteId(sb, "expedientes", "EXP");
   const asesorId = await obtenerIdAsesorGerardo(sb);
+  const tipoNegocio = detectarTipoNegocio(
+    lead.mensaje || "",
+    [lead.campaign_name, lead.adset_name, lead.ad_name].filter(Boolean).join(" ")
+  );
   await sb.from("expedientes").insert({
     id: expId,
     token,
@@ -147,6 +152,7 @@ export async function registrarLeadTikTok(lead: LeadTikTok): Promise<string> {
     campaign_name: lead.campaign_name || "TikTok Ads",
     adset_name: lead.adset_name || "",
     ad_name: lead.ad_name || "",
+    tipo_negocio: tipoNegocio !== "otro" ? tipoNegocio : "traspaso_compra",
     asesor_id: asesorId,
   });
 

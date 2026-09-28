@@ -352,9 +352,24 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   if (esRutaPublica(pathname || "")) return <>{children}</>;
 
+  const enlacesBase = [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/", label: "Negocios" },
+    { href: "/empresas", label: "Empresas" },
+    { href: "/prospectos", label: "Prospectos" },
+    { href: "/prospectos/pipeline", label: "Pipeline" },
+    { href: "/ordenes-trabajo", label: "Órdenes de Trabajo (Nuevo)" },
+    { href: "/conversaciones", label: "Conversaciones" },
+    { href: "/construccion", label: "Construcción" },
+    ...(esAdmin ? [{ href: "/finanzas", label: "Finanzas" }] : []),
+    { href: "/agenda", label: "Agenda" },
+    { href: "/visualizador", label: "Visualizador IA (Nuevo)" },
+    { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
+  ];
+
   const enlaces = esAdmin
     ? [
-        ...ENLACES,
+        ...enlacesBase,
         { href: "/admin/publicaciones", label: "Publicaciones IA" },
         { href: "/secuencias", label: "Secuencias" },
         { href: "/dashboard/llamadas", label: "Llamadas" },
@@ -365,7 +380,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         { href: "/admin/gerente", label: "Gerente Operaciones" },
         { href: "/admin/procesos", label: "Procesos BPM" },
       ]
-    : ENLACES;
+    : enlacesBase;
 
   const activo = (href: string) =>
     href === "/" ? (pathname || "") === "/" : (pathname || "").startsWith(href);
