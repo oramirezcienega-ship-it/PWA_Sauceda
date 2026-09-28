@@ -1132,7 +1132,7 @@ export interface ProcesoMaestro {
 // Módulo de Comisiones para Asesores
 // ============================================================
 
-export type TipoReglaComision = 'global' | 'servicio' | 'producto' | 'asesor';
+export type TipoReglaComision = 'global' | 'servicio' | 'producto' | 'asesor' | 'inspeccion';
 export type EstatusComision = 'pendiente' | 'parcial' | 'pagada' | 'cancelada';
 export type MetodoPagoComision = 'transferencia' | 'efectivo' | 'cheque' | 'deposito' | 'otro';
 
@@ -1142,6 +1142,7 @@ export interface ReglaComision {
   clave: string;
   etiqueta: string;
   porcentaje: number;
+  montoFijo?: number;
   asesorId?: string | null;
   asesorNombre?: string | null;
   activo: boolean;
@@ -1152,10 +1153,12 @@ export interface ReglaComision {
 
 export interface Comision {
   id: string;
+  tipoComision?: 'venta' | 'inspeccion' | 'bono' | 'otro';
+  citaId?: string | null;
   remisionFacturaId?: string | null;
   reciboPagoId?: string | null;
   remisionFolio?: string | null;
-  remisionTipo?: 'remision' | 'factura' | 'recibo' | null;
+  remisionTipo?: 'remision' | 'factura' | 'recibo' | 'inspeccion' | null;
   remisionFecha?: string | null;
   asesorId: string;
   asesorNombre: string;

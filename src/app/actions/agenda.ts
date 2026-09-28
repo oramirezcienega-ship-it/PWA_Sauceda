@@ -20,7 +20,7 @@ export interface Cita {
   hora_inicio: string;
   hora_fin: string;
   notas?: string;
-  estado: "pendiente" | "confirmada" | "cancelada";
+  estado: "pendiente" | "confirmada" | "completada" | "cancelada" | "reagendada";
   created_at: string;
   wa_message_id?: string | null;
   mensaje_whatsapp_estado?: "pendiente" | "enviado" | "delivered" | "read" | "error" | null;

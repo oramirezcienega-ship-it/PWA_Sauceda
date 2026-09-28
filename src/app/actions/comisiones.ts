@@ -38,6 +38,7 @@ export async function listarReglasComision(): Promise<ReglaComision[]> {
       clave,
       etiqueta,
       porcentaje,
+      monto_fijo,
       asesor_id,
       activo,
       notas,
@@ -59,6 +60,7 @@ export async function listarReglasComision(): Promise<ReglaComision[]> {
     clave: row.clave,
     etiqueta: row.etiqueta,
     porcentaje: Number(row.porcentaje || 0),
+    montoFijo: Number(row.monto_fijo || 0),
     asesorId: row.asesor_id,
     asesorNombre: row.perfiles?.nombre || null,
     activo: Boolean(row.activo),
@@ -73,7 +75,8 @@ export async function guardarReglaComision(datos: {
   tipo: TipoReglaComision;
   clave: string;
   etiqueta: string;
-  porcentaje: number;
+  porcentaje?: number;
+  montoFijo?: number;
   asesorId?: string | null;
   activo?: boolean;
   notas?: string;
@@ -87,6 +90,7 @@ export async function guardarReglaComision(datos: {
       clave: datos.clave.trim().toLowerCase(),
       etiqueta: datos.etiqueta.trim(),
       porcentaje: Math.max(0, Math.min(100, Number(datos.porcentaje || 0))),
+      monto_fijo: Math.max(0, Number(datos.montoFijo || 0)),
       asesor_id: datos.tipo === "asesor" ? datos.asesorId || null : null,
       activo: datos.activo !== undefined ? Boolean(datos.activo) : true,
       notas: datos.notas?.trim() || "",
@@ -113,6 +117,63 @@ export async function guardarReglaComision(datos: {
     }
   } catch (err: any) {
     return { ok: false, error: err.message || "Error al guardar regla." };
+  }
+}
+
+/**
+ * Guarda o actualiza de manera directa la tarifa fija de comisión para inspecciones técnicas.
+ */
+export async function guardarTarifaInspeccionGeneral(
+  montoFijo: number
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const montoValido = Math.max(0, Number(montoFijo || 0));
+
+    // Buscar si ya existe la regla general de inspección
+    const { data: existente } = await sb
+      .from("comisiones_reglas")
+      .select("id")
+      .eq("tipo", "inspeccion")
+      .eq("clave", "general")
+      .maybeSingle();
+
+    if (existente) {
+      const { error: errUpd } = await sb
+        .from("comisiones_reglas")
+        .update({
+          monto_fijo: montoValido,
+          activo: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existente.id);
+
+      if (errUpd) throw new Error(errUpd.message);
+    } else {
+      const { error: errIns } = await sb
+        .from("comisiones_reglas")
+        .insert({
+          tipo: "inspeccion",
+          clave: "general",
+          etiqueta: "Comisión Fija por Inspección Técnica",
+          monto_fijo: montoValido,
+          porcentaje: 0.0,
+          activo: true,
+          notas: "Tarifa fija asignada al asesor técnico por cada inspección técnica ejecutada",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (errIns) throw new Error(errIns.message);
+    }
+
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al guardar tarifa de inspección:", err);
+    return { ok: false, error: err.message || "Error al guardar tarifa." };
   }
 }
 
@@ -211,6 +272,55 @@ export async function resolverPorcentajeComision(params: {
   return { porcentaje: 5.0, reglaOrigen: "Regla por defecto de contingencia (5.0%)" };
 }
 
+/**
+ * Resuelve la tarifa fija asignada para una comisión por inspección técnica ejecutada.
+ * Busca primero si existe una regla por asesor y luego la regla general de inspección.
+ */
+export async function resolverComisionInspeccion(params: {
+  asesorId?: string | null;
+}): Promise<{ montoFijo: number; reglaOrigen: string }> {
+  const sb = supabaseServidor();
+
+  // 1. Regla específica del asesor para inspecciones
+  if (params.asesorId) {
+    const { data: reglaAsesor } = await sb
+      .from("comisiones_reglas")
+      .select("monto_fijo, etiqueta")
+      .eq("tipo", "inspeccion")
+      .eq("asesor_id", params.asesorId)
+      .eq("activo", true)
+      .limit(1)
+      .maybeSingle();
+
+    if (reglaAsesor && Number(reglaAsesor.monto_fijo) > 0) {
+      return {
+        montoFijo: Number(reglaAsesor.monto_fijo),
+        reglaOrigen: `Regla individual de asesor: ${reglaAsesor.etiqueta}`,
+      };
+    }
+  }
+
+  // 2. Regla general para inspecciones técnicas
+  const { data: reglaGeneral } = await sb
+    .from("comisiones_reglas")
+    .select("monto_fijo, etiqueta")
+    .eq("tipo", "inspeccion")
+    .eq("clave", "general")
+    .eq("activo", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (reglaGeneral && Number(reglaGeneral.monto_fijo) > 0) {
+    return {
+      montoFijo: Number(reglaGeneral.monto_fijo),
+      reglaOrigen: `Regla general de inspección: ${reglaGeneral.etiqueta}`,
+    };
+  }
+
+  // Fallback por defecto si aún no estuviera configurada
+  return { montoFijo: 150.0, reglaOrigen: "Tarifa estándar por defecto ($150.00 MXN)" };
+}
+
 // ============================================================
 // 3. LISTADO DE COMISIONES Y ESTADO DE CUENTA
 // ============================================================
@@ -230,9 +340,14 @@ export async function listarComisiones(filtros?: {
     }
     const sb = supabaseServidor();
 
-    // 1. Limpieza preventiva: Las comisiones deben ser SOLO sobre remisiones o facturas, nunca sobre recibos
+    // 1. Limpieza preventiva: Las comisiones deben ser SOLO sobre remisiones/facturas o inspecciones, nunca sobre recibos huérfanos
     try {
-      await sb.from("comisiones").delete().is("remision_factura_id", null);
+      await sb
+        .from("comisiones")
+        .delete()
+        .is("remision_factura_id", null)
+        .is("cita_id", null)
+        .not("recibo_pago_id", "is", null);
     } catch (eDel) {
       console.warn("Aviso al depurar comisiones huérfanas de recibos:", eDel);
     }
@@ -241,7 +356,7 @@ export async function listarComisiones(filtros?: {
     let query = sb
       .from("comisiones")
       .select("*")
-      .not("remision_factura_id", "is", null)
+      .or("remision_factura_id.not.is.null,cita_id.not.is.null,tipo_comision.eq.inspeccion")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -278,8 +393,9 @@ export async function listarComisiones(filtros?: {
     const reciboIds = Array.from(new Set(rows.map((r: any) => r.recibo_pago_id).filter(Boolean)));
     const cotizacionIds = Array.from(new Set(rows.map((r: any) => r.cotizacion_id).filter(Boolean)));
     const ordenTrabajoIds = Array.from(new Set(rows.map((r: any) => r.orden_trabajo_id).filter(Boolean)));
+    const citaIds = Array.from(new Set(rows.map((r: any) => r.cita_id).filter(Boolean)));
 
-    const [resPerfiles, resRemisiones, resRecibos, resCotizaciones, resOrdenes] = await Promise.all([
+    const [resPerfiles, resRemisiones, resRecibos, resCotizaciones, resOrdenes, resCitas] = await Promise.all([
       asesorIds.length > 0
         ? sb.from("perfiles").select("id, nombre, telefono").in("id", asesorIds)
         : Promise.resolve({ data: [] }),
@@ -295,6 +411,9 @@ export async function listarComisiones(filtros?: {
       ordenTrabajoIds.length > 0
         ? sb.from("ordenes_trabajo").select("id, folio, titulo").in("id", ordenTrabajoIds)
         : Promise.resolve({ data: [] }),
+      citaIds.length > 0
+        ? sb.from("agenda_citas").select("id, fecha, hora_inicio, tipo_cita, cliente_nombre, direccion, fraccionamiento, expediente_id, prospecto_id").in("id", citaIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const mapPerf = new Map<string, any>((resPerfiles.data || []).map((p: any) => [p.id, p]));
@@ -302,6 +421,7 @@ export async function listarComisiones(filtros?: {
     const mapRec = new Map<string, any>((resRecibos.data || []).map((r: any) => [r.id, r]));
     const mapCot = new Map<string, any>((resCotizaciones.data || []).map((r: any) => [r.id, r]));
     const mapOt = new Map<string, any>((resOrdenes.data || []).map((r: any) => [r.id, r]));
+    const mapCita = new Map<string, any>((resCitas.data || []).map((c: any) => [c.id, c]));
 
     // Extraer prospectoIds de las cotizaciones
     const prospectoIds = Array.from(
@@ -335,10 +455,15 @@ export async function listarComisiones(filtros?: {
       const rec = row.recibo_pago_id ? mapRec.get(row.recibo_pago_id) : null;
       const cot = row.cotizacion_id ? mapCot.get(row.cotizacion_id) : null;
       const ot = row.orden_trabajo_id ? mapOt.get(row.orden_trabajo_id) : null;
+      const cita = row.cita_id ? mapCita.get(row.cita_id) : null;
+      const esInspeccion = row.tipo_comision === "inspeccion" || Boolean(row.cita_id);
 
       let nombreCliente = "";
       if (cot?.prospecto_id && mapPros.has(cot.prospecto_id)) {
         nombreCliente = mapPros.get(cot.prospecto_id)!;
+      }
+      if (!nombreCliente && cita?.cliente_nombre) {
+        nombreCliente = cita.cliente_nombre;
       }
       if (!nombreCliente && rec?.cliente_nombre) {
         nombreCliente = rec.cliente_nombre;
@@ -350,18 +475,16 @@ export async function listarComisiones(filtros?: {
         nombreCliente = "Cliente Sauceda";
       }
 
-      const folioCalculado =
-        rem?.folio ||
-        rec?.folio ||
-        ot?.folio ||
-        row.detalles_calculo?.folio ||
-        "S/F";
-      const tipoCalculado =
-        rem?.tipo || (row.recibo_pago_id ? "recibo" : "remision");
-      const fechaCalculada = rem?.fecha || rec?.fecha_pago || row.fecha;
+      const folioCalculado = esInspeccion
+        ? row.detalles_calculo?.folioInspeccion || `INSP-${String(row.cita_id || row.id).slice(0, 6).toUpperCase()}`
+        : rem?.folio || rec?.folio || ot?.folio || row.detalles_calculo?.folio || "S/F";
+      const tipoCalculado = esInspeccion ? "inspeccion" : (rem?.tipo || (row.recibo_pago_id ? "recibo" : "remision"));
+      const fechaCalculada = rem?.fecha || cita?.fecha || rec?.fecha_pago || row.fecha;
 
       return {
         id: row.id,
+        tipoComision: esInspeccion ? "inspeccion" : "venta",
+        citaId: row.cita_id || null,
         remisionFacturaId: row.remision_factura_id,
         reciboPagoId: row.recibo_pago_id,
         remisionFolio: folioCalculado,
@@ -372,18 +495,18 @@ export async function listarComisiones(filtros?: {
         asesorTelefono: perf?.telefono || null,
         cotizacionId: row.cotizacion_id,
         cotizacionToken: cot?.token || null,
-        expedienteId: row.expediente_id,
+        expedienteId: row.expediente_id || cita?.expediente_id || null,
         ordenTrabajoId: row.orden_trabajo_id,
         ordenTrabajoFolio: ot?.folio || null,
         clienteNombre: nombreCliente,
         clienteEmpresa: null,
-        servicioTipo: cot?.servicio_tipo || null,
+        servicioTipo: esInspeccion ? "Inspección Técnica" : (cot?.servicio_tipo || null),
         fecha: row.fecha,
         montoVenta: Number(row.monto_venta || 0),
         costoProveedor: Number(row.costo_proveedor || 0),
         comisionBancaria: Number(row.comision_bancaria || 0),
-        baseComisionable: Number(row.base_comisionable || row.monto_venta || 0),
-        porcentajeComision: Number(row.porcentaje_comision || 0),
+        baseComisionable: Number(row.base_comisionable || (esInspeccion ? row.monto_comision : row.monto_venta) || 0),
+        porcentajeComision: Number(row.porcentaje_comision || (esInspeccion ? 100 : 0)),
         montoComision: Number(row.monto_comision || 0),
         montoPagado: Number(row.monto_pagado || 0),
         saldoPendiente: Number(row.saldo_pendiente || 0),
@@ -1121,6 +1244,252 @@ export async function sincronizarComisionParaRecibo(
   }
 }
 
+// ============================================================
+// 7. SINCRONIZACIÓN DE COMISIONES POR INSPECCIÓN TÉCNICA
+// ============================================================
+
+export async function sincronizarComisionParaInspeccion(
+  citaId: string,
+  opciones?: {
+    montoFijoCustom?: number;
+    notas?: string;
+  }
+): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
+  try {
+    const sb = supabaseServidor();
+
+    // 1. Obtener la cita de inspección
+    const { data: cita, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("id, tipo_cita, estado, fecha, hora_inicio, hora_fin, perfil_id, expediente_id, prospecto_id, asignados_ids, notas")
+      .eq("id", citaId)
+      .single();
+
+    if (errCita || !cita) {
+      return { ok: false, error: "Cita de inspección no encontrada." };
+    }
+
+    if (cita.tipo_cita !== "inspeccion") {
+      return { ok: false, error: "La cita no es de tipo inspección técnica." };
+    }
+
+    // 2. Resolver el asesor responsable de la inspección
+    let asesorId: string | null = cita.perfil_id || null;
+
+    if (!asesorId && Array.isArray(cita.asignados_ids) && cita.asignados_ids.length > 0) {
+      asesorId = cita.asignados_ids[0];
+    }
+
+    if (!asesorId && cita.expediente_id) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("asesor_id")
+        .eq("id", cita.expediente_id)
+        .maybeSingle();
+      asesorId = exp?.asesor_id || null;
+    }
+
+    if (!asesorId && cita.prospecto_id) {
+      const { data: pros } = await sb
+        .from("prospectos")
+        .select("asesor_id")
+        .eq("id", cita.prospecto_id)
+        .maybeSingle();
+      asesorId = pros?.asesor_id || null;
+    }
+
+    if (!asesorId) {
+      const { data: defaultAsesor } = await sb
+        .from("perfiles")
+        .select("id")
+        .eq("rol", "asesor")
+        .eq("activo", true)
+        .order("nombre", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      asesorId = defaultAsesor?.id || null;
+    }
+
+    if (!asesorId) {
+      return { ok: false, error: "No se encontró ningún asesor asignado para comisionar la inspección." };
+    }
+
+    // 3. Resolver la tarifa fija asignada
+    let montoTarifa = 0;
+    let reglaOrigen = "";
+
+    if (opciones?.montoFijoCustom !== undefined && Number(opciones.montoFijoCustom) > 0) {
+      montoTarifa = Number(opciones.montoFijoCustom);
+      reglaOrigen = "Tarifa fija asignada manualmente a la inspección";
+    } else {
+      const resRegla = await resolverComisionInspeccion({ asesorId });
+      montoTarifa = resRegla.montoFijo;
+      reglaOrigen = resRegla.reglaOrigen;
+    }
+
+    // 4. Verificar si ya existe comisión para esta cita y asesor
+    const { data: comisionExistente } = await sb
+      .from("comisiones")
+      .select("id, es_ajuste_manual, monto_comision, monto_pagado, estatus")
+      .eq("cita_id", citaId)
+      .eq("asesor_id", asesorId)
+      .maybeSingle();
+
+    const fechaComision = cita.fecha || new Date().toISOString().split("T")[0];
+
+    if (comisionExistente) {
+      if (comisionExistente.es_ajuste_manual) {
+        return { ok: true, comisionId: comisionExistente.id };
+      }
+
+      const pagado = Number(comisionExistente.monto_pagado || 0);
+      const nuevoSaldo = Math.max(0, montoTarifa - pagado);
+      let nuevoEstatus = comisionExistente.estatus;
+      if (nuevoEstatus !== "cancelada") {
+        if (pagado >= montoTarifa) nuevoEstatus = "pagada";
+        else if (pagado > 0) nuevoEstatus = "parcial";
+        else nuevoEstatus = "pendiente";
+      }
+
+      await sb
+        .from("comisiones")
+        .update({
+          expediente_id: cita.expediente_id || null,
+          tipo_comision: "inspeccion",
+          monto_venta: 0,
+          costo_proveedor: 0,
+          comision_bancaria: 0,
+          base_comisionable: montoTarifa,
+          porcentaje_comision: 100,
+          monto_comision: montoTarifa,
+          saldo_pendiente: nuevoSaldo,
+          estatus: nuevoEstatus,
+          detalles_calculo: {
+            reglaOrigen,
+            origen: "inspeccion_tecnica",
+            citaId: cita.id,
+            fechaInspeccion: cita.fecha,
+            fechaCalculo: new Date().toISOString(),
+          },
+          notas: opciones?.notas || cita.notas || "Comisión fija por inspección técnica ejecutada",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", comisionExistente.id);
+
+      revalidatePath("/comisiones");
+      if (cita.expediente_id) revalidatePath(`/expediente/${cita.expediente_id}`);
+      return { ok: true, comisionId: comisionExistente.id };
+    }
+
+    // 5. Crear nueva comisión por inspección técnica ejecutada
+    const { data: nuevaCom, error: errIns } = await sb
+      .from("comisiones")
+      .insert({
+        cita_id: cita.id,
+        tipo_comision: "inspeccion",
+        asesor_id: asesorId,
+        expediente_id: cita.expediente_id || null,
+        fecha: fechaComision,
+        monto_venta: 0,
+        costo_proveedor: 0,
+        comision_bancaria: 0,
+        base_comisionable: montoTarifa,
+        porcentaje_comision: 100,
+        monto_comision: montoTarifa,
+        monto_pagado: 0.0,
+        saldo_pendiente: montoTarifa,
+        estatus: "pendiente",
+        es_ajuste_manual: Boolean(opciones?.montoFijoCustom),
+        motivo_ajuste: opciones?.montoFijoCustom ? "Tarifa personalizada de inspección" : "",
+        detalles_calculo: {
+          reglaOrigen,
+          origen: "inspeccion_tecnica",
+          citaId: cita.id,
+          fechaInspeccion: cita.fecha,
+          fechaCalculo: new Date().toISOString(),
+        },
+        notas: opciones?.notas || cita.notas || "Comisión fija por inspección técnica ejecutada",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (errIns) throw new Error(errIns.message);
+
+    revalidatePath("/comisiones");
+    if (cita.expediente_id) revalidatePath(`/expediente/${cita.expediente_id}`);
+    return { ok: true, comisionId: nuevaCom.id };
+  } catch (err: any) {
+    console.error("Error al sincronizar comisión de inspección:", err);
+    return { ok: false, error: err.message || "Error al sincronizar comisión de inspección." };
+  }
+}
+
+export async function marcarInspeccionEjecutada(datos: {
+  citaId: string;
+  notas?: string;
+  montoFijoCustom?: number;
+}): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
+  try {
+    const sb = supabaseServidor();
+
+    // 1. Obtener cita y validar
+    const { data: citaActual, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("id, tipo_cita, estado, expediente_id, prospecto_id, perfil_id, notas")
+      .eq("id", datos.citaId)
+      .single();
+
+    if (errCita || !citaActual) {
+      return { ok: false, error: "Cita no encontrada." };
+    }
+
+    // 2. Marcar como completada en agenda_citas
+    const { error: errUpd } = await sb
+      .from("agenda_citas")
+      .update({
+        estado: "completada",
+        notas: datos.notas !== undefined ? datos.notas : citaActual.notas,
+      })
+      .eq("id", datos.citaId);
+
+    if (errUpd) throw new Error(errUpd.message);
+
+    // 3. Registrar actividad en el expediente si existe
+    if (citaActual.expediente_id) {
+      try {
+        await sb.from("expedientes_actividades").insert({
+          expediente_id: citaActual.expediente_id,
+          tipo: "inspeccion_ejecutada",
+          titulo: "Inspección Técnica Ejecutada",
+          detalle: datos.notas ? `Inspección ejecutada con éxito. Notas: ${datos.notas}` : "Inspección técnica marcada como ejecutada en sitio. Se generó comisión para el asesor.",
+          created_at: new Date().toISOString(),
+        });
+      } catch (actErr) {
+        console.warn("Aviso al registrar actividad en expediente:", actErr);
+      }
+    }
+
+    // 4. Generar/sincronizar la comisión fija
+    const resCom = await sincronizarComisionParaInspeccion(datos.citaId, {
+      montoFijoCustom: datos.montoFijoCustom,
+      notas: datos.notas,
+    });
+
+    revalidatePath("/agenda");
+    revalidatePath("/comisiones");
+    if (citaActual.expediente_id) {
+      revalidatePath(`/expediente/${citaActual.expediente_id}`);
+    }
+
+    return { ok: true, comisionId: resCom.comisionId };
+  } catch (err: any) {
+    console.error("Error al marcar inspección ejecutada:", err);
+    return { ok: false, error: err.message || "Error al marcar inspección ejecutada." };
+  }
+}
+
 export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
   ok: boolean;
   creadas: number;
@@ -1140,12 +1509,17 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
 
     let procesadas = 0;
 
-    // 1. Limpiar comisiones de recibos si existieran
+    // 2. Limpiar comisiones de recibos si existieran (protegiendo citas de inspección y remisiones)
     try {
-      await sb.from("comisiones").delete().is("remision_factura_id", null);
+      await sb
+        .from("comisiones")
+        .delete()
+        .is("remision_factura_id", null)
+        .is("cita_id", null)
+        .not("recibo_pago_id", "is", null);
     } catch {}
 
-    // 2. Procesar remisiones_facturas (ÚNICO origen oficial de comisiones para evitar duplicados)
+    // 3. Procesar remisiones_facturas (origen de comisiones de venta)
     const { data: remisiones } = await sb
       .from("remisiones_facturas")
       .select("id");
@@ -1155,9 +1529,22 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
       if (res.ok) procesadas++;
     }
 
+    // 4. Procesar inspecciones ejecutadas de expedientes
+    const { data: inspecciones } = await sb
+      .from("agenda_citas")
+      .select("id")
+      .eq("tipo_cita", "inspeccion")
+      .eq("estado", "completada");
+
+    for (const insp of inspecciones || []) {
+      const res = await sincronizarComisionParaInspeccion(insp.id);
+      if (res.ok) procesadas++;
+    }
+
     revalidatePath("/comisiones");
     return { ok: true, creadas: procesadas, actualizadas: 0 };
   } catch (err: any) {
     return { ok: false, creadas: 0, actualizadas: 0, error: err.message };
   }
 }
+

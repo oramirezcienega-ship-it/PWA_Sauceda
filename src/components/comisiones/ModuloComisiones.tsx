@@ -15,6 +15,7 @@ import {
   obtenerResumenEstadoCuenta,
   sincronizarTodasLasRemisionesPendientes,
   eliminarReglaComision,
+  guardarTarifaInspeccionGeneral,
 } from "@/app/actions/comisiones";
 import { ModalAjustarComision } from "./ModalAjustarComision";
 import { ModalRegistrarPagoComision } from "./ModalRegistrarPagoComision";
@@ -73,6 +74,18 @@ export function ModuloComisiones({
   const [mensajeAlerta, setMensajeAlerta] = useState<{ tipo: "ok" | "error"; texto: string } | null>(
     null
   );
+
+  // Tarifa fija de inspecciones técnicas
+  const reglaInspInicial = reglasIniciales.find((r) => r.tipo === "inspeccion" && r.clave === "general");
+  const [tarifaInspeccion, setTarifaInspeccion] = useState<number>(reglaInspInicial?.montoFijo || 150);
+  const [guardandoTarifa, setGuardandoTarifa] = useState(false);
+
+  useEffect(() => {
+    const r = reglas.find((item) => item.tipo === "inspeccion" && item.clave === "general");
+    if (r && r.montoFijo !== undefined) {
+      setTarifaInspeccion(r.montoFijo);
+    }
+  }, [reglas]);
 
   const formatoMoneda = (val: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
@@ -672,23 +685,27 @@ export function ModuloComisiones({
                     </tr>
                   ) : (
                     comisiones.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-50/70 transition">
+                      <tr key={c.id} className={`hover:bg-slate-50/70 transition ${c.tipoComision === "inspeccion" ? "bg-amber-50/20" : ""}`}>
                         {/* Folio / Fecha */}
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold text-verde-profundo">
-                              {c.remisionFolio}
+                              {c.remisionFolio || (c.tipoComision === "inspeccion" ? "INSP" : "S/F")}
                             </span>
                             <span
                               className={`text-[9px] uppercase px-1.5 py-0.2 rounded font-bold ${
-                                c.remisionTipo === "factura"
+                                c.tipoComision === "inspeccion" || c.remisionTipo === "inspeccion"
+                                  ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                  : c.remisionTipo === "factura"
                                   ? "bg-purple-100 text-purple-800"
                                   : c.remisionTipo === "recibo"
                                   ? "bg-emerald-100 text-emerald-800"
                                   : "bg-blue-100 text-blue-800"
                               }`}
                             >
-                              {c.remisionTipo === "factura"
+                              {c.tipoComision === "inspeccion" || c.remisionTipo === "inspeccion"
+                                ? "🔍 INSP"
+                                : c.remisionTipo === "factura"
                                 ? "FAC"
                                 : c.remisionTipo === "recibo"
                                 ? "REC"
@@ -710,6 +727,17 @@ export function ModuloComisiones({
                           <span className="font-medium text-carbon truncate block" title={c.clienteNombre}>
                             {c.clienteNombre}
                           </span>
+                          {c.expedienteId && (
+                            <a
+                              href={`/expediente/${c.expedienteId}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-verde-profundo hover:underline font-bold block truncate"
+                              title="Abrir expediente en nueva pestaña"
+                            >
+                              📁 Expediente #{c.expedienteId.slice(0, 8)}...
+                            </a>
+                          )}
                           {c.clienteEmpresa && (
                             <span className="text-[10px] text-carbon/60 block truncate" title={c.clienteEmpresa}>
                               🏢 {c.clienteEmpresa}
@@ -719,18 +747,24 @@ export function ModuloComisiones({
 
                         {/* Servicio */}
                         <td className="py-3 px-4 capitalize text-carbon/80 whitespace-nowrap">
-                          {c.servicioTipo?.replace(/_/g, " ") || "Construcción"}
+                          {c.tipoComision === "inspeccion"
+                            ? "🔍 Inspección Técnica"
+                            : (c.servicioTipo?.replace(/_/g, " ") || "Construcción")}
                         </td>
 
                         {/* Venta */}
                         <td className="py-3 px-4 text-right font-mono font-medium text-carbon whitespace-nowrap">
-                          {formatoMoneda(c.montoVenta)}
+                          {c.tipoComision === "inspeccion" ? (
+                            <span className="text-[11px] text-carbon/40 italic">Tarifa Fija</span>
+                          ) : (
+                            formatoMoneda(c.montoVenta)
+                          )}
                         </td>
 
                         {/* Base Comisionable = Venta - Costo Proveedor - Comisión Bancaria */}
                         <td className="py-3 px-4 text-right font-mono font-medium text-emerald-700 whitespace-nowrap">
                           {formatoMoneda(c.baseComisionable)}
-                          {(c.costoProveedor > 0 || c.comisionBancaria > 0) && (
+                          {c.tipoComision !== "inspeccion" && (c.costoProveedor > 0 || c.comisionBancaria > 0) && (
                             <span
                               className="block text-[9px] text-carbon/40 font-normal cursor-help"
                               title={`Venta ${formatoMoneda(c.montoVenta)} − Proveedor ${formatoMoneda(c.costoProveedor)} − Banco ${formatoMoneda(c.comisionBancaria)}`}
@@ -742,7 +776,13 @@ export function ModuloComisiones({
 
                         {/* % Comisión */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <span className="font-mono font-semibold">{c.porcentajeComision}%</span>
+                          {c.tipoComision === "inspeccion" ? (
+                            <span className="font-mono font-bold text-amber-800 text-[10px] bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
+                              FIJA
+                            </span>
+                          ) : (
+                            <span className="font-mono font-semibold">{c.porcentajeComision}%</span>
+                          )}
                           {c.esAjusteManual && (
                             <span
                               className="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold block mt-0.5 cursor-help"
@@ -808,6 +848,18 @@ export function ModuloComisiones({
                               >
                                 💳 Pagar
                               </button>
+                            )}
+
+                            {c.expedienteId && (
+                              <a
+                                href={`/expediente/${c.expedienteId}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 hover:bg-slate-100 rounded-lg text-verde-profundo hover:text-sauce transition text-xs font-bold"
+                                title="Abrir expediente en nueva pestaña"
+                              >
+                                📁
+                              </a>
                             )}
 
                             {c.cotizacionToken && (
@@ -921,7 +973,7 @@ export function ModuloComisiones({
                 Parámetros y Reglas de Comisiones
               </h2>
               <p className="text-xs text-carbon/60">
-                Configure los porcentajes base por tipo de producto/servicio o excepciones por asesor.
+                Configure la tarifa fija por inspección técnica ejecutada, porcentajes base por tipo de servicio o excepciones por asesor.
               </p>
             </div>
             <button
@@ -931,6 +983,146 @@ export function ModuloComisiones({
             >
               <span>+ Nueva Regla</span>
             </button>
+          </div>
+
+          {/* TARJETA DESTACADA: TARIFA FIJA POR INSPECCIÓN TÉCNICA */}
+          <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-500/10 border-2 border-amber-300 rounded-2xl p-5 shadow-xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🔍</span>
+                  <div>
+                    <h3 className="font-bold text-sm text-carbon flex items-center gap-2">
+                      <span>Tarifa Fija por Inspección Técnica en Sitio</span>
+                      <span className="bg-amber-200/90 text-amber-950 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                        Generación Automática
+                      </span>
+                    </h3>
+                    <p className="text-xs text-carbon/70 mt-0.5">
+                      Esta tarifa se acredita automáticamente al asesor asignado cuando una inspección de un expediente se marca como ejecutada, <strong>independientemente de si la venta se concreta o no</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 flex-shrink-0 bg-white p-3 rounded-xl border border-amber-200 shadow-xs">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-carbon/60 mb-0.5">
+                    Tarifa Base General
+                  </label>
+                  <div className="flex items-center gap-1 font-mono font-bold text-base text-carbon">
+                    <span className="text-amber-700">$</span>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={tarifaInspeccion}
+                      onChange={(e) => setTarifaInspeccion(parseFloat(e.target.value) || 0)}
+                      className="w-24 border border-carbon/20 rounded-lg px-2 py-1 text-sm font-bold text-carbon focus:border-verde-profundo outline-none"
+                    />
+                    <span className="text-xs text-carbon/50">MXN</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={guardandoTarifa}
+                  onClick={async () => {
+                    try {
+                      setGuardandoTarifa(true);
+                      const res = await guardarTarifaInspeccionGeneral(tarifaInspeccion);
+                      if (!res.ok) throw new Error(res.error || "No se pudo actualizar");
+                      setMensajeAlerta({
+                        tipo: "ok",
+                        texto: `Tarifa fija de inspección actualizada a ${formatoMoneda(tarifaInspeccion)} MXN exitosamente.`,
+                      });
+                      recargarDatos();
+                    } catch (e: any) {
+                      setMensajeAlerta({
+                        tipo: "error",
+                        texto: e.message || "Error al actualizar tarifa.",
+                      });
+                    } finally {
+                      setGuardandoTarifa(false);
+                    }
+                  }}
+                  className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema text-xs font-bold px-3.5 py-2.5 rounded-lg transition disabled:opacity-50 shadow-xs"
+                >
+                  {guardandoTarifa ? "Guardando..." : "Guardar Tarifa"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Reglas de Inspección */}
+          <div className="bg-white border border-carbon/10 rounded-2xl shadow-xs overflow-hidden">
+            <div className="px-5 py-3 bg-amber-50/60 border-b border-carbon/10 font-bold text-xs uppercase tracking-wider text-amber-950 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>🔍</span> Reglas de Comisión por Inspecciones Técnicas
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/50 border-b border-carbon/5 text-carbon/60 text-[10px] uppercase">
+                  <tr>
+                    <th className="py-2.5 px-4">Clave</th>
+                    <th className="py-2.5 px-4">Descripción</th>
+                    <th className="py-2.5 px-4 text-center">Tarifa Fija ($ MXN)</th>
+                    <th className="py-2.5 px-4 text-center">Estatus</th>
+                    <th className="py-2.5 px-4">Notas</th>
+                    <th className="py-2.5 px-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-carbon/5">
+                  {reglas.filter((r) => r.tipo === "inspeccion").length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-4 text-center text-carbon/50">
+                        No hay reglas de inspección adicionales. Se usa la tarifa base general.
+                      </td>
+                    </tr>
+                  ) : (
+                    reglas
+                      .filter((r) => r.tipo === "inspeccion")
+                      .map((r) => (
+                        <tr key={r.id} className="hover:bg-slate-50/60">
+                          <td className="py-2.5 px-4 font-mono font-bold text-amber-900">
+                            {r.clave}
+                          </td>
+                          <td className="py-2.5 px-4 font-semibold text-carbon">
+                            {r.etiqueta}
+                          </td>
+                          <td className="py-2.5 px-4 text-center font-mono font-bold text-emerald-800 text-sm">
+                            {formatoMoneda(r.montoFijo || 0)}
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                r.activo ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-carbon/60"
+                              }`}
+                            >
+                              {r.activo ? "Activa" : "Inactiva"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-carbon/60 text-[11px]">
+                            {r.notas || "-"}
+                          </td>
+                          <td className="py-2.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setReglaParaEditar(r)}
+                                className="px-2 py-1 text-xs text-verde-profundo font-semibold hover:underline"
+                              >
+                                Editar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Reglas por tipo de servicio */}

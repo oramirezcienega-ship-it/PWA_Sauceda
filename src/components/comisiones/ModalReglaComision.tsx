@@ -16,6 +16,7 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
   const [clave, setClave] = useState<string>(regla?.clave || "");
   const [etiqueta, setEtiqueta] = useState<string>(regla?.etiqueta || "");
   const [porcentaje, setPorcentaje] = useState<number>(regla ? regla.porcentaje : 5.0);
+  const [montoFijo, setMontoFijo] = useState<number>(regla?.montoFijo !== undefined ? regla.montoFijo : 150.0);
   const [asesorId, setAsesorId] = useState<string>(regla?.asesorId || asesores[0]?.id || "");
   const [activo, setActivo] = useState<boolean>(regla ? regla.activo : true);
   const [notas, setNotas] = useState<string>(regla?.notas || "");
@@ -29,7 +30,7 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
       return;
     }
     if (!clave.trim() && tipo !== "asesor") {
-      setError("Ingrese una clave identificadora (ej. impermeabilizacion, pintura).");
+      setError("Ingrese una clave identificadora (ej. impermeabilizacion, general).");
       return;
     }
 
@@ -47,7 +48,8 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
         tipo,
         clave: claveFinal,
         etiqueta: etiqueta.trim(),
-        porcentaje,
+        porcentaje: tipo === "inspeccion" ? 0 : porcentaje,
+        montoFijo: tipo === "inspeccion" ? montoFijo : 0,
         asesorId: tipo === "asesor" ? asesorId : null,
         activo,
         notas: notas.trim(),
@@ -101,10 +103,18 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
             </label>
             <select
               value={tipo}
-              onChange={(e) => setTipo(e.target.value as TipoReglaComision)}
+              onChange={(e) => {
+                const val = e.target.value as TipoReglaComision;
+                setTipo(val);
+                if (val === "inspeccion" && !regla) {
+                  setClave("general");
+                  setEtiqueta("Comisión Fija por Inspección Técnica");
+                }
+              }}
               disabled={Boolean(regla?.tipo === "global")}
               className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-xs bg-white focus:border-verde-profundo outline-none"
             >
+              <option value="inspeccion">🔍 Por Inspección Técnica Ejecutada (Tarifa Fija)</option>
               <option value="servicio">Por Tipo de Servicio (Impermeabilización, Pintura, etc.)</option>
               <option value="asesor">Especial por Asesor (Excepción personal)</option>
               <option value="producto">Por Producto de Catálogo</option>
@@ -143,7 +153,7 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
               </label>
               <input
                 type="text"
-                placeholder="ej. impermeabilizacion, losa, CAT-001"
+                placeholder={tipo === "inspeccion" ? "general o clave de inspección" : "ej. impermeabilizacion, losa, CAT-001"}
                 value={clave}
                 onChange={(e) => setClave(e.target.value)}
                 className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-xs font-mono focus:border-verde-profundo outline-none"
@@ -158,7 +168,7 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
             </label>
             <input
               type="text"
-              placeholder="ej. Impermeabilización Acrílica 5 Años"
+              placeholder={tipo === "inspeccion" ? "Comisión Fija por Inspección Técnica" : "ej. Impermeabilización Acrílica 5 Años"}
               value={etiqueta}
               onChange={(e) => setEtiqueta(e.target.value)}
               className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-xs focus:border-verde-profundo outline-none"
@@ -167,24 +177,44 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-carbon mb-1">
-                Porcentaje (%)
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={porcentaje}
-                  onChange={(e) => setPorcentaje(parseFloat(e.target.value) || 0)}
-                  className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-sm font-mono font-bold text-verde-profundo focus:border-verde-profundo outline-none"
-                  required
-                />
-                <span className="absolute right-3 top-2 text-carbon/40 font-bold text-xs">%</span>
+            {tipo === "inspeccion" ? (
+              <div>
+                <label className="block text-xs font-semibold text-carbon mb-1">
+                  Monto Fijo por Inspección ($ MXN)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-carbon/40 font-bold text-xs">$</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={montoFijo}
+                    onChange={(e) => setMontoFijo(parseFloat(e.target.value) || 0)}
+                    className="w-full border border-carbon/20 rounded-xl pl-7 pr-3 py-2 text-sm font-mono font-bold text-verde-profundo focus:border-verde-profundo outline-none"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold text-carbon mb-1">
+                  Porcentaje (%)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={porcentaje}
+                    onChange={(e) => setPorcentaje(parseFloat(e.target.value) || 0)}
+                    className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-sm font-mono font-bold text-verde-profundo focus:border-verde-profundo outline-none"
+                    required
+                  />
+                  <span className="absolute right-3 top-2 text-carbon/40 font-bold text-xs">%</span>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center pt-5">
               <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold">
