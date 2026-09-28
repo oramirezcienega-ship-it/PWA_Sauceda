@@ -79,9 +79,15 @@ export function labelTipoNegocio(tipo: string): string {
  * Analiza el mensaje inicial y el nombre de la campaña para auto-detectar
  * el tipo de negocio/servicio de interés.
  */
-export function detectarTipoNegocio(mensaje: string, campaignName?: string): TipoNegocioId {
-  const texto = `${mensaje} ${campaignName ?? ""}`.toLowerCase();
-  const campLower = (campaignName ?? "").toLowerCase();
+export function detectarTipoNegocio(
+  mensaje: string,
+  campaignName?: string,
+  adsetName?: string,
+  adName?: string
+): TipoNegocioId {
+  const metadataAd = [campaignName, adsetName, adName].filter(Boolean).join(" ");
+  const texto = `${mensaje} ${metadataAd}`.toLowerCase();
+  const campLower = metadataAd.toLowerCase();
 
   // 1. Herrería (Campaña de Facebook/Meta o palabras clave de Herrería)
   if (
@@ -117,12 +123,14 @@ export function detectarTipoNegocio(mensaje: string, campaignName?: string): Tip
     campLower.includes("cisterna") ||
     campLower.includes("aljibe") ||
     campLower.includes("tinaco") ||
+    campLower.includes("rotoplas") ||
     texto.includes("cisterna") ||
     texto.includes("cisternas") ||
     texto.includes("aljibe") ||
     texto.includes("aljibes") ||
     texto.includes("tinaco") ||
     texto.includes("tinacos") ||
+    texto.includes("rotoplas") ||
     texto.includes("lavado de cisterna") ||
     texto.includes("lavado de aljibe") ||
     texto.includes("lavado de tinaco") ||
