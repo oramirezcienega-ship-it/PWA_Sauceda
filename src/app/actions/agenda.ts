@@ -1047,32 +1047,103 @@ export async function programarCitaManual(data: {
 
     // 5. Notificación por WhatsApp
     if (data.notificarCliente !== false && data.clienteTelefono) {
-      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+      const { enviarWhatsAppPlantilla, enviarWhatsAppTexto } = await import("@/lib/whatsapp");
       
+      const fechaObj = new Date(`${data.fecha}T00:00:00`);
+      const fechaLegible = !isNaN(fechaObj.getTime())
+        ? fechaObj.toLocaleDateString("es-MX", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : data.fecha;
+
+      const primerNombre = data.clienteNombre.split(" ")[0] || data.clienteNombre;
+      const horarioStr = `${data.horaInicio} a ${data.horaFin} hrs`;
+      const servicioNombre = (data.servicioTipo || "impermeabilización").replace(/_/g, " ");
+
       let msg = data.mensajeWhatsAppPersonalizado?.trim();
       if (!msg) {
-        const fechaObj = new Date(`${data.fecha}T00:00:00`);
-        const fechaLegible = !isNaN(fechaObj.getTime())
-          ? fechaObj.toLocaleDateString("es-MX", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })
-          : data.fecha;
-
-        const primerNombre = data.clienteNombre.split(" ")[0] || data.clienteNombre;
-
         if (data.tipoCita === "inspeccion") {
-          msg = `¡Hola ${primerNombre}! 📅 Te confirmamos que tu inspección técnica en sitio con SAUCEDA ha quedado programada:\n\n🗓️ *Fecha:* ${fechaLegible}\n⏰ *Horario:* ${data.horaInicio} a ${data.horaFin} hrs\n👷 *Asesor / Técnico que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto para cualquier tema:* ${telContacto}\n\nCualquier duda o cambio quedamos a tus órdenes respondiendo a este mensaje o marcando al número de contacto. ¡Que tengas un excelente día! 💚`;
+          msg = `¡Hola ${primerNombre}! 📅 Te confirmamos que tu inspección técnica en sitio con SAUCEDA ha quedado programada:\n\n🗓️ *Fecha:* ${fechaLegible}\n⏰ *Horario:* ${horarioStr}\n👷 *Asesor / Técnico que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto para cualquier tema:* ${telContacto}\n\nCualquier duda o cambio quedamos a tus órdenes respondiendo a este mensaje o marcando al número de contacto. ¡Que tengas un excelente día! 💚`;
         } else if (data.tipoCita === "instalacion") {
-          msg = `¡Hola ${primerNombre}! 🛠️ Te confirmamos que tu instalación profesional de impermeabilización con SAUCEDA ha quedado programada:\n\n🗓️ *Fecha:* ${fechaLegible}\n⏰ *Horario:* ${data.horaInicio} a ${data.horaFin} hrs\n👷 *Responsable que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto:* ${telContacto}\n\nPor favor asegúrate de tener libre el acceso a la azotea. ¡Cualquier duda quedamos a tus órdenes! 💚`;
+          msg = `¡Hola ${primerNombre}! 🛠️ Te confirmamos que tu instalación profesional de ${servicioNombre} con SAUCEDA ha quedado programada:\n\n🗓️ *Fecha:* ${fechaLegible}\n⏰ *Horario:* ${horarioStr}\n👷 *Responsable que te visitará:* ${nombreAsesor}\n📞 *Teléfono de contacto:* ${telContacto}\n\nPor favor asegúrate de tener libre el acceso a la zona de trabajo. ¡Cualquier duda quedamos a tus órdenes! 💚`;
         } else {
           msg = `¡Hola ${primerNombre}! 📅 Te confirmamos que tenemos programada una cita de tipo *${data.tipoCita}* para el día *${data.fecha}* a las *${data.horaInicio} hrs*.\n👷 *Atiende:* ${nombreAsesor}\n📞 *Contacto:* ${telContacto}\n\n¡Cualquier duda quedamos a tus órdenes! 💚`;
         }
       }
 
-      const resWsp = await enviarWhatsAppTexto(data.clienteTelefono, msg);
+      let resWsp: any = null;
+      const agenteTag = data.tipoCita === "instalacion" ? "confirmacion_instalacion" : "confirmacion_inspeccion";
+
+      // 1. Intentar enviar con plantilla oficial de Meta según el tipo de cita (salta ventana de 24h)
+      if (data.tipoCita === "instalacion") {
+        resWsp = await enviarWhatsAppPlantilla(
+          data.clienteTelefono,
+          "confirmacion_instalacion",
+          "es_MX",
+          [
+            primerNombre,
+            servicioNombre,
+            fechaLegible,
+            horarioStr,
+            nombreAsesor,
+            telContacto,
+          ]
+        );
+        if (!resWsp.ok) {
+          resWsp = await enviarWhatsAppPlantilla(
+            data.clienteTelefono,
+            "confirmacion_instalacion",
+            "es",
+            [
+              primerNombre,
+              servicioNombre,
+              fechaLegible,
+              horarioStr,
+              nombreAsesor,
+              telContacto,
+            ]
+          );
+        }
+      } else if (data.tipoCita === "inspeccion") {
+        resWsp = await enviarWhatsAppPlantilla(
+          data.clienteTelefono,
+          "confirmacion_inspeccion",
+          "es_MX",
+          [
+            primerNombre,
+            fechaLegible,
+            horarioStr,
+            nombreAsesor,
+            telContacto,
+          ]
+        );
+        if (!resWsp.ok) {
+          resWsp = await enviarWhatsAppPlantilla(
+            data.clienteTelefono,
+            "confirmacion_inspeccion",
+            "es",
+            [
+              primerNombre,
+              fechaLegible,
+              horarioStr,
+              nombreAsesor,
+              telContacto,
+            ]
+          );
+        }
+      }
+
+      // 2. Si no es cita de inspección/instalación o la plantilla falló / sigue pendiente, usar texto libre
+      if (!resWsp || !resWsp.ok) {
+        const resTxt = await enviarWhatsAppTexto(data.clienteTelefono, msg);
+        if (resTxt.ok || !resWsp) {
+          resWsp = resTxt;
+        }
+      }
+
       waMessageId = (resWsp as any).messageId || null;
       estadoWhatsApp = resWsp.ok ? "enviado" : "error";
 
@@ -1094,8 +1165,10 @@ export async function programarCitaManual(data: {
           expediente_id: data.expedienteId ?? null,
           prospecto_id: data.prospectoId ?? null,
           estado: resWsp.ok ? "enviado" : "error",
-          agente: "confirmacion_inspeccion",
+          agente: agenteTag,
           wa_message_id: waMessageId,
+          error_detalle: resWsp.errorDetail || resWsp.error || null,
+          error_codigo: resWsp.errorCode || null,
         });
       } catch (e) {
         console.warn("No se pudo insertar en mensajes_whatsapp:", e);
@@ -1542,8 +1615,93 @@ export async function reenviarNotificacionInspeccion(datos: {
 
     // Reenvío por WhatsApp
     if (datos.enviarWsp !== false && datos.clienteTelefono) {
-      const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
-      const resWsp = await enviarWhatsAppTexto(datos.clienteTelefono, datos.mensajeTexto);
+      const { enviarWhatsAppPlantilla, enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+
+      const primerNombre = cita.cliente_nombre.split(" ")[0] || cita.cliente_nombre;
+      const fechaObj = new Date(`${cita.fecha}T00:00:00`);
+      const fechaLegible = !isNaN(fechaObj.getTime())
+        ? fechaObj.toLocaleDateString("es-MX", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : cita.fecha;
+      const horarioStr = `${cita.hora_inicio ? cita.hora_inicio.slice(0, 5) : "09:00"} a ${cita.hora_fin ? cita.hora_fin.slice(0, 5) : "14:00"} hrs`;
+      const servicioNombre = (cita.servicio_tipo || "impermeabilización").replace(/_/g, " ");
+      const asesorNombre = datos.asesorNombre || "Asesor SAUCEDA";
+      const telContacto = datos.telefonoContacto || "524776735044";
+
+      let resWsp: any = null;
+      const agenteTag = cita.tipo_cita === "instalacion" ? "confirmacion_instalacion" : "confirmacion_inspeccion";
+
+      // 1. Intentar plantilla oficial según tipo de cita
+      if (cita.tipo_cita === "instalacion") {
+        resWsp = await enviarWhatsAppPlantilla(
+          datos.clienteTelefono,
+          "confirmacion_instalacion",
+          "es_MX",
+          [
+            primerNombre,
+            servicioNombre,
+            fechaLegible,
+            horarioStr,
+            asesorNombre,
+            telContacto,
+          ]
+        );
+        if (!resWsp.ok) {
+          resWsp = await enviarWhatsAppPlantilla(
+            datos.clienteTelefono,
+            "confirmacion_instalacion",
+            "es",
+            [
+              primerNombre,
+              servicioNombre,
+              fechaLegible,
+              horarioStr,
+              asesorNombre,
+              telContacto,
+            ]
+          );
+        }
+      } else if (cita.tipo_cita === "inspeccion") {
+        resWsp = await enviarWhatsAppPlantilla(
+          datos.clienteTelefono,
+          "confirmacion_inspeccion",
+          "es_MX",
+          [
+            primerNombre,
+            fechaLegible,
+            horarioStr,
+            asesorNombre,
+            telContacto,
+          ]
+        );
+        if (!resWsp.ok) {
+          resWsp = await enviarWhatsAppPlantilla(
+            datos.clienteTelefono,
+            "confirmacion_inspeccion",
+            "es",
+            [
+              primerNombre,
+              fechaLegible,
+              horarioStr,
+              asesorNombre,
+              telContacto,
+            ]
+          );
+        }
+      }
+
+      // 2. Respaldo a texto libre si la plantilla no aplicó o falló
+      if (!resWsp || !resWsp.ok) {
+        const resTxt = await enviarWhatsAppTexto(datos.clienteTelefono, datos.mensajeTexto);
+        if (resTxt.ok || !resWsp) {
+          resWsp = resTxt;
+        }
+      }
+
       const waMessageId = (resWsp as any).messageId || null;
       estadoWsp = resWsp.ok ? "enviado" : "error";
 
@@ -1563,8 +1721,10 @@ export async function reenviarNotificacionInspeccion(datos: {
         expediente_id: cita.expediente_id ?? null,
         prospecto_id: cita.prospecto_id ?? null,
         estado: resWsp.ok ? "enviado" : "error",
-        agente: "confirmacion_inspeccion",
+        agente: agenteTag,
         wa_message_id: waMessageId,
+        error_detalle: resWsp.errorDetail || resWsp.error || null,
+        error_codigo: resWsp.errorCode || null,
       });
 
       try {

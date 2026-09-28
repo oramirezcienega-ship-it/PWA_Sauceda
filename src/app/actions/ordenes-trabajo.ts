@@ -2119,7 +2119,6 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
       .select(`
         id,
         token,
-        folio,
         estatus,
         servicio_tipo,
         precio_final,
@@ -2232,7 +2231,6 @@ export async function programarInstalacionYDetonarOT(datos: {
       .select(`
         id,
         token,
-        folio,
         estatus,
         servicio_tipo,
         precio_final,
@@ -2498,8 +2496,38 @@ export async function programarInstalacionYDetonarOT(datos: {
     // Intentar envíos por Meta WhatsApp API si está habilitado
     if (datos.notificarClienteWhatsApp && telefonoCliente) {
       try {
-        const { enviarWhatsAppTexto } = await import("@/lib/whatsapp");
-        await enviarWhatsAppTexto(telefonoCliente, mensajeCliente);
+        const { enviarWhatsAppPlantilla, enviarWhatsAppTexto } = await import("@/lib/whatsapp");
+        let resCli = await enviarWhatsAppPlantilla(
+          telefonoCliente,
+          "confirmacion_instalacion",
+          "es_MX",
+          [
+            nombreCliente.split(" ")[0] || nombreCliente,
+            servicioTipo,
+            fechaLegible,
+            `${horaInicio} a ${horaFin} hrs`,
+            "Alejandro y Gerardo",
+            "524776735044",
+          ]
+        );
+        if (!resCli.ok) {
+          resCli = await enviarWhatsAppPlantilla(
+            telefonoCliente,
+            "confirmacion_instalacion",
+            "es",
+            [
+              nombreCliente.split(" ")[0] || nombreCliente,
+              servicioTipo,
+              fechaLegible,
+              `${horaInicio} a ${horaFin} hrs`,
+              "Alejandro y Gerardo",
+              "524776735044",
+            ]
+          );
+        }
+        if (!resCli.ok) {
+          await enviarWhatsAppTexto(telefonoCliente, mensajeCliente);
+        }
       } catch (errW) {
         console.warn("Aviso WhatsApp cliente:", errW);
       }
