@@ -256,10 +256,11 @@ export async function listarComisiones(filtros?: {
     const { data: rows, error } = await query;
     if (error) {
       console.error("Error al consultar comisiones:", error.message);
-      return [];
+      throw new Error("ERROR_QUERY_COMISIONES: " + error.message);
     }
 
     if (!rows || rows.length === 0) {
+      console.warn("Aviso: comisiones devolvio 0 filas en query");
       return [];
     }
 
@@ -401,7 +402,7 @@ export async function listarComisiones(filtros?: {
     return lista;
   } catch (err: any) {
     console.error("Error definitivo en listarComisiones:", err);
-    return [];
+    throw new Error("ERROR_LISTAR_COMISIONES: " + (err?.message || String(err)));
   }
 }
 
