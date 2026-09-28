@@ -274,6 +274,24 @@ export function DetalleOrdenTrabajo({
               <span className="text-xs font-semibold text-carbon/60 uppercase tracking-wider bg-carbon/5 px-2.5 py-0.5 rounded">
                 {(orden.tipoNegocio || "general").replace(/_/g, " ")}
               </span>
+              {orden.expedienteId && (
+                <Link
+                  href={`/expediente/${orden.expedienteId}`}
+                  className="text-xs font-semibold text-verde-profundo bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-2.5 py-0.5 rounded-md flex items-center gap-1 transition shadow-2xs"
+                  title="Abrir expediente completo del cliente"
+                >
+                  <span>📁</span> Expediente
+                </Link>
+              )}
+              {orden.prospectoId && (
+                <Link
+                  href={`/prospectos/${orden.prospectoId}`}
+                  className="text-xs font-semibold text-carbon/80 bg-slate-100 hover:bg-slate-200 border border-carbon/15 px-2.5 py-0.5 rounded-md flex items-center gap-1 transition shadow-2xs"
+                  title="Abrir ficha del prospecto en CRM"
+                >
+                  <span>👤</span> Prospecto
+                </Link>
+              )}
               {orden.notificadoClienteAt && (
                 <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <span>✓</span> Notificado por {orden.canalNotificacion || "WhatsApp"}
@@ -337,6 +355,31 @@ export function DetalleOrdenTrabajo({
                 📍 {orden.clienteDireccion}
               </div>
             )}
+
+            {/* Accesos directos a Expediente y Prospecto */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2 border-t border-carbon/10">
+              {orden.expedienteId && (
+                <Link
+                  href={`/expediente/${orden.expedienteId}`}
+                  className="inline-flex items-center gap-1 rounded-lg bg-sauce/10 hover:bg-sauce hover:text-white px-2.5 py-1 text-[11px] font-bold text-sauce border border-sauce/20 transition shadow-2xs"
+                  title="Ver expediente del cliente"
+                >
+                  <span>📁</span> Ver Expediente
+                </Link>
+              )}
+              {orden.prospectoId && (
+                <Link
+                  href={`/prospectos/${orden.prospectoId}`}
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-[11px] font-bold text-carbon/80 border border-carbon/15 transition shadow-2xs"
+                  title="Ver ficha del prospecto en CRM"
+                >
+                  <span>👤</span> Ver Prospecto
+                </Link>
+              )}
+              {!orden.expedienteId && !orden.prospectoId && (
+                <span className="text-[10px] text-carbon/40 italic">Sin expediente ni prospecto vinculado</span>
+              )}
+            </div>
           </div>
 
           <div>
@@ -494,6 +537,26 @@ export function DetalleOrdenTrabajo({
             >
               <span>🧾</span> {remisionFactura ? "Ver/Editar Remisión" : "+ Remisión Fiscal"}
             </button>
+
+            {orden.expedienteId && (
+              <Link
+                href={`/expediente/${orden.expedienteId}`}
+                className="rounded-xl border border-carbon/20 bg-white hover:bg-slate-50 text-carbon px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+                title="Abrir expediente completo"
+              >
+                <span>📁</span> Expediente
+              </Link>
+            )}
+
+            {orden.prospectoId && (
+              <Link
+                href={`/prospectos/${orden.prospectoId}`}
+                className="rounded-xl border border-carbon/20 bg-white hover:bg-slate-50 text-carbon px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+                title="Abrir ficha del prospecto en CRM"
+              >
+                <span>👤</span> Prospecto
+              </Link>
+            )}
           </div>
 
           {/* Subida rápida de fotos */}
@@ -736,10 +799,14 @@ export function DetalleOrdenTrabajo({
                   Total: {formatMoneda(remisionFactura.montoTotal)}
                 </span>
               </div>
-              {orden.cotizacionToken && (
+              {(orden.entregaToken || orden.cotizacionToken) && (
                 <div className="pt-2 text-right">
                   <a
-                    href={`/cotizacion/remision/${orden.cotizacionToken}`}
+                    href={
+                      orden.entregaToken
+                        ? `/orden-trabajo/remision/${orden.entregaToken}`
+                        : `/cotizacion/remision/${orden.cotizacionToken}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block rounded-lg bg-sauce hover:bg-verde-profundo text-white px-3 py-1 font-bold text-xs transition"

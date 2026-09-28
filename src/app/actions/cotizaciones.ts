@@ -1449,6 +1449,7 @@ export async function revalidarRutasCotizacion(sb: any, cotizacionId: string, to
     if (expedienteId) revalidatePath(`/expediente/${expedienteId}`);
     if (prospectoId) revalidatePath(`/prospectos/${prospectoId}`);
     revalidatePath("/construccion");
+    revalidatePath("/remisiones");
     revalidatePath("/");
   } catch (err) {
     console.warn("No se pudo revalidar la caché de rutas de cotización:", err);

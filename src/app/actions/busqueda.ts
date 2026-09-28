@@ -4,7 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 
 export interface ResultadoBusquedaGlobal {
-  tipo: "prospecto" | "expediente" | "cotizacion" | "cita";
+  tipo: "prospecto" | "expediente" | "cotizacion" | "cita" | "remision";
   id: string;
   titulo: string;
   subtitulo: string;
@@ -14,8 +14,8 @@ export interface ResultadoBusquedaGlobal {
 
 /**
  * Buscador Omnipresente / Global del sistema.
- * Permite buscar por teléfono, nombre, folios (EXP-, PROSP-, COT-), fraccionamiento, etc.
- * a través de prospectos, expedientes, cotizaciones y agenda.
+ * Permite buscar por teléfono, nombre, folios (EXP-, PROSP-, COT-, REM-, FAC-), fraccionamiento, etc.
+ * a través de prospectos, expedientes, cotizaciones, remisiones y agenda.
  */
 export async function buscarGlobal(query: string): Promise<ResultadoBusquedaGlobal[]> {
   await requireAdmin();
@@ -105,6 +105,26 @@ export async function buscarGlobal(query: string): Promise<ResultadoBusquedaGlob
           subtitulo: `Tipo: ${ct.tipo_cita || "cita"} · Fecha: ${ct.fecha} a las ${ct.hora_inicio.slice(0, 5)}hs`,
           etiqueta: "Agenda Cita",
           url: ct.expediente_id ? `/expediente/${ct.expediente_id}` : ct.prospecto_id ? `/prospectos/${ct.prospecto_id}` : "/agenda",
+        });
+      });
+    }
+
+    // 5. Buscar en Remisiones y Facturas
+    const { data: remisiones } = await sb
+      .from("remisiones_facturas")
+      .select("id, folio, tipo, fecha, monto_total")
+      .or(`folio.ilike.${term}`)
+      .limit(6);
+
+    if (remisiones) {
+      remisiones.forEach((r: any) => {
+        resultados.push({
+          tipo: "remision",
+          id: r.id,
+          titulo: `${r.tipo === "factura" ? "🏛️ Factura" : "📦 Remisión"} ${r.folio}`,
+          subtitulo: `Fecha: ${r.fecha} · Monto: $${Number(r.monto_total || 0).toLocaleString("es-MX")}`,
+          etiqueta: r.tipo === "factura" ? "Factura" : "Remisión",
+          url: `/remisiones`,
         });
       });
     }

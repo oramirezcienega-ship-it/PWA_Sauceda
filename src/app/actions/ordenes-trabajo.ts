@@ -13,7 +13,6 @@ import { MARCA } from "@/lib/marca";
 import { generarDocumentoProveedorAutomatico } from "@/app/actions/proveedores";
 import { aDocumentoProveedor } from "@/lib/supabase/mapeo";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
-import { sincronizarComisionParaRecibo } from "@/app/actions/comisiones";
 
 export interface EvidenciaFoto {
   url: string;
@@ -309,7 +308,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono, correo, direccion),
-        cotizaciones(id, precio_final, condiciones_pago, token),
+        cotizaciones(id, precio_final, condiciones_pago, token, expediente_id, prospecto_id),
         proveedores:proveedor_id(id, nombre)
       `)
       .order("created_at", { ascending: false });
@@ -402,9 +401,9 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         token: d.token || "",
         notificadoClienteAt: d.notificado_cliente_at,
         canalNotificacion: d.canal_notificacion,
-        expedienteId: d.expediente_id,
+        expedienteId: d.expediente_id || d.cotizaciones?.expediente_id || null,
         cotizacionId: d.cotizacion_id,
-        prospectoId: d.prospecto_id,
+        prospectoId: d.prospecto_id || d.cotizaciones?.prospecto_id || d.prospectos?.id || null,
         tipoNegocio: d.tipo_negocio || "construccion",
         estatus: d.estatus,
         titulo: d.titulo,
@@ -461,7 +460,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono, correo, direccion),
-        cotizaciones(id, precio_final, condiciones_pago, token),
+        cotizaciones(id, precio_final, condiciones_pago, token, expediente_id, prospecto_id),
         proveedores:proveedor_id(id, nombre)
       `)
       .eq("id", id)
@@ -570,15 +569,38 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         }
       : null;
 
+    let expedienteId = d.expediente_id || d.cotizaciones?.expediente_id || null;
+    let prospectoId = d.prospecto_id || d.cotizaciones?.prospecto_id || d.prospectos?.id || null;
+
+    if (!expedienteId && prospectoId) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("id")
+        .eq("prospecto_id", prospectoId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (exp?.id) expedienteId = exp.id;
+    }
+
+    if (!prospectoId && expedienteId) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("prospecto_id")
+        .eq("id", expedienteId)
+        .maybeSingle();
+      if (exp?.prospecto_id) prospectoId = exp.prospecto_id;
+    }
+
     const orden: OrdenTrabajo = {
       id: d.id,
       folio: d.folio,
       token: d.token || "",
       notificadoClienteAt: d.notificado_cliente_at,
       canalNotificacion: d.canal_notificacion,
-      expedienteId: d.expediente_id,
+      expedienteId,
       cotizacionId: d.cotizacion_id,
-      prospectoId: d.prospecto_id,
+      prospectoId,
       tipoNegocio: d.tipo_negocio || "construccion",
       estatus: d.estatus,
       titulo: d.titulo,
@@ -986,13 +1008,6 @@ export async function crearReciboPago(datos: {
 
     if (insertError) return { ok: false, error: insertError.message };
 
-    // Sincronizar automáticamente la comisión del asesor
-    try {
-      await sincronizarComisionParaRecibo(nuevo.id);
-    } catch (eCom: any) {
-      console.warn("No se pudo sincronizar automáticamente la comisión del recibo:", eCom?.message);
-    }
-
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/comisiones");
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
@@ -1387,6 +1402,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
     }
 
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/remisiones");
     if (ot.cotizacion_id) revalidatePath(`/cotizacion/${ot.cotizacion_id}`);
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
     if (ot.prospecto_id) revalidatePath(`/prospectos/${ot.prospecto_id}`);

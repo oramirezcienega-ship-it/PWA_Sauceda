@@ -80,7 +80,7 @@ export function BuscadorGlobalModal({ isOpen, onClose }: Props) {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Buscar por nombre, teléfono, folio (EXP-, PROSP-, COT-), fraccionamiento..."
+            placeholder="Buscar por nombre, teléfono, folio (EXP-, PROSP-, COT-, REM-, FAC-)..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-1 bg-transparent text-sm font-medium text-carbon outline-none placeholder:text-carbon/40 font-cuerpo"
@@ -119,7 +119,7 @@ export function BuscadorGlobalModal({ isOpen, onClose }: Props) {
             <div className="py-8 text-center space-y-1">
               <p className="text-xs font-bold text-verde-profundo font-titular">Buscador Omnipresente de SAUCEDA</p>
               <p className="text-[11px] text-carbon/50">
-                Escribe cualquier teléfono, nombre, dirección o folio para localizar prospectos, expedientes, cotizaciones y citas.
+                Escribe cualquier teléfono, nombre, dirección o folio para localizar prospectos, expedientes, cotizaciones, remisiones y citas.
               </p>
             </div>
           )}
@@ -144,6 +144,8 @@ export function BuscadorGlobalModal({ isOpen, onClose }: Props) {
                           ? "bg-blue-100 text-blue-800 border-blue-300"
                           : item.tipo === "cotizacion"
                           ? "bg-amber-100 text-amber-800 border-amber-300"
+                          : item.tipo === "remision"
+                          ? "bg-sky-100 text-sky-800 border-sky-300"
                           : "bg-purple-100 text-purple-800 border-purple-300"
                       }`}
                     >
