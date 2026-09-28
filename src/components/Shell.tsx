@@ -45,6 +45,7 @@ import {
   IconoUsuarios,
   IconoChevronAbajo,
   IconoFuego,
+  IconoRemisiones,
 } from "./IconosNav";
 
 /**
@@ -68,7 +69,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/agenda/") ||
     path.startsWith("/recibo/") ||
     path.startsWith("/garantia/") ||
-    path.startsWith("/orden-trabajo/entrega/")
+    path.startsWith("/orden-trabajo/entrega/") ||
+    path.startsWith("/orden-trabajo/remision/")
   );
 }
 
@@ -435,6 +437,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           label: "Órdenes de Trabajo",
           icono: IconoOrdenesTrabajo,
           badge: "nuevo",
+        },
+        {
+          href: "/remisiones",
+          label: "Remisiones y Facturas",
+          icono: IconoRemisiones,
         },
       ],
     },

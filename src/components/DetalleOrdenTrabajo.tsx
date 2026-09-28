@@ -799,10 +799,14 @@ export function DetalleOrdenTrabajo({
                   Total: {formatMoneda(remisionFactura.montoTotal)}
                 </span>
               </div>
-              {orden.cotizacionToken && (
+              {(orden.entregaToken || orden.cotizacionToken) && (
                 <div className="pt-2 text-right">
                   <a
-                    href={`/cotizacion/remision/${orden.cotizacionToken}`}
+                    href={
+                      orden.entregaToken
+                        ? `/orden-trabajo/remision/${orden.entregaToken}`
+                        : `/cotizacion/remision/${orden.cotizacionToken}`
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block rounded-lg bg-sauce hover:bg-verde-profundo text-white px-3 py-1 font-bold text-xs transition"

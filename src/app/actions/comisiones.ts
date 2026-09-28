@@ -230,10 +230,18 @@ export async function listarComisiones(filtros?: {
     }
     const sb = supabaseServidor();
 
-    // 1. Consultar comisiones directamente (100% plano, sin ningún join en PostgREST)
+    // 1. Limpieza preventiva: Las comisiones deben ser SOLO sobre remisiones o facturas, nunca sobre recibos
+    try {
+      await sb.from("comisiones").delete().is("remision_factura_id", null);
+    } catch (eDel) {
+      console.warn("Aviso al depurar comisiones huérfanas de recibos:", eDel);
+    }
+
+    // 2. Consultar comisiones directamente (100% plano, sin ningún join en PostgREST)
     let query = sb
       .from("comisiones")
       .select("*")
+      .not("remision_factura_id", "is", null)
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -1089,23 +1097,18 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
 
     let procesadas = 0;
 
-    // 2. Procesar remisiones_facturas
+    // 1. Limpiar comisiones de recibos si existieran
+    try {
+      await sb.from("comisiones").delete().is("remision_factura_id", null);
+    } catch {}
+
+    // 2. Procesar remisiones_facturas (ÚNICO origen oficial de comisiones para evitar duplicados)
     const { data: remisiones } = await sb
       .from("remisiones_facturas")
       .select("id");
 
     for (const r of remisiones || []) {
       const res = await sincronizarComisionParaRemision(r.id);
-      if (res.ok) procesadas++;
-    }
-
-    // 3. Procesar recibos_pago
-    const { data: recibos } = await sb
-      .from("recibos_pago")
-      .select("id");
-
-    for (const rec of recibos || []) {
-      const res = await sincronizarComisionParaRecibo(rec.id);
       if (res.ok) procesadas++;
     }
 

@@ -13,7 +13,6 @@ import { MARCA } from "@/lib/marca";
 import { generarDocumentoProveedorAutomatico } from "@/app/actions/proveedores";
 import { aDocumentoProveedor } from "@/lib/supabase/mapeo";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
-import { sincronizarComisionParaRecibo } from "@/app/actions/comisiones";
 
 export interface EvidenciaFoto {
   url: string;
@@ -1009,13 +1008,6 @@ export async function crearReciboPago(datos: {
 
     if (insertError) return { ok: false, error: insertError.message };
 
-    // Sincronizar automáticamente la comisión del asesor
-    try {
-      await sincronizarComisionParaRecibo(nuevo.id);
-    } catch (eCom: any) {
-      console.warn("No se pudo sincronizar automáticamente la comisión del recibo:", eCom?.message);
-    }
-
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/comisiones");
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
@@ -1410,6 +1402,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
     }
 
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/remisiones");
     if (ot.cotizacion_id) revalidatePath(`/cotizacion/${ot.cotizacion_id}`);
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
     if (ot.prospecto_id) revalidatePath(`/prospectos/${ot.prospecto_id}`);
