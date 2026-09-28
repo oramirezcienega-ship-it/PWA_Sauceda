@@ -52,7 +52,7 @@ export function GaleriaFotosExpediente({ expedienteId, readonly = false }: Props
 
     try {
       const res = await subirFotosExpediente(formData);
-      if (!res.ok) {
+      if (!res?.ok) {
         setError(res.error || "Error al subir las fotografías.");
       } else {
         await cargarFotos();
@@ -82,8 +82,9 @@ export function GaleriaFotosExpediente({ expedienteId, readonly = false }: Props
     setFotos((prev) => prev.filter((f) => f.id !== fotoId));
     try {
       await eliminarFotoExpediente(fotoId);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al eliminar foto:", err);
+      setError(err?.message || "No se pudo eliminar la fotografía.");
       void cargarFotos();
     }
   }
