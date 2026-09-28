@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { crearReciboPago, type ReciboPago } from "@/app/actions/ordenes-trabajo";
+import {
+  crearReciboPago,
+  enviarReciboPorWhatsApp,
+  type ReciboPago,
+} from "@/app/actions/ordenes-trabajo";
 
 interface ModalRegistrarReciboProps {
   abierto: boolean;
@@ -49,6 +53,8 @@ export function ModalRegistrarRecibo({
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [reciboCreado, setReciboCreado] = useState<ReciboPago | null>(null);
+  const [enviandoMeta, setEnviandoMeta] = useState(false);
+  const [resultadoMeta, setResultadoMeta] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   if (!abierto) return null;
 
@@ -103,6 +109,33 @@ export function ModalRegistrarRecibo({
       setError(err?.message || "Error al procesar el pago.");
     } finally {
       setCargando(false);
+    }
+  };
+
+  const handleEnviarReciboMeta = async () => {
+    if (!reciboCreado) return;
+    try {
+      setEnviandoMeta(true);
+      setResultadoMeta(null);
+      const res = await enviarReciboPorWhatsApp(reciboCreado.id);
+      if (res.ok) {
+        setResultadoMeta({
+          tipo: "ok",
+          texto: "¡Recibo entregado exitosamente al cliente por WhatsApp Cloud API de Meta!",
+        });
+      } else {
+        setResultadoMeta({
+          tipo: "error",
+          texto: res.error || "No se pudo entregar por Meta API. Prueba abrir WhatsApp Web.",
+        });
+      }
+    } catch (e: any) {
+      setResultadoMeta({
+        tipo: "error",
+        texto: e?.message || "Error al contactar el servidor de Meta.",
+      });
+    } finally {
+      setEnviandoMeta(false);
     }
   };
 
@@ -172,31 +205,54 @@ export function ModalRegistrarRecibo({
                     Método
                   </span>
                   <span className="text-sm font-bold text-emerald-900 capitalize">
-                    {reciboCreado.metodoPago}
-                  </span>
-                </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
-              <a
-                href={urlReciboPublico}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 text-center transition flex items-center justify-center gap-1.5 shadow-sm"
+            {resultadoMeta && (
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold animate-fade-in ${
+                  resultadoMeta.tipo === "ok"
+                    ? "bg-emerald-100/80 text-emerald-900 border border-emerald-300"
+                    : "bg-rose-100/80 text-rose-900 border border-rose-300"
+                }`}
               >
-                <span>🖨️</span> Ver / Imprimir Recibo
-              </a>
+                {resultadoMeta.texto}
+              </div>
+            )}
+
+            <div className="space-y-2 pt-2">
               {clienteTelefono && (
+                <button
+                  type="button"
+                  onClick={handleEnviarReciboMeta}
+                  disabled={enviandoMeta}
+                  className="w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold py-2.5 px-4 text-center transition flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <span>⚡</span>
+                  <span>{enviandoMeta ? "Enviando vía Meta..." : "Enviar por Meta Cloud API (WhatsApp)"}</span>
+                </button>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2">
                 <a
-                  href={`https://wa.me/${clienteTelefono.replace(/[^0-9]/g, "")}?text=${mensajeWhatsApp}`}
+                  href={urlReciboPublico}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 text-center transition flex items-center justify-center gap-1.5 shadow-sm"
+                  className="flex-1 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 text-center transition flex items-center justify-center gap-1.5 shadow-sm"
                 >
-                  <span>📲</span> Compartir por WhatsApp
+                  <span>🖨️</span> Ver / Imprimir
                 </a>
-              )}
+                {clienteTelefono && (
+                  <a
+                    href={`https://wa.me/${clienteTelefono.replace(/[^0-9]/g, "")}?text=${mensajeWhatsApp}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 text-center transition flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <span>📲</span> Abrir WhatsApp Web
+                  </a>
+                )}
+              </div>
             </div>
 
             <button
