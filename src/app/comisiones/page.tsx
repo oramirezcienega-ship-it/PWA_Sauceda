@@ -32,6 +32,8 @@ export default async function ComisionesPage() {
         saldoPendiente: 0,
         comisionesCount: 0,
         pendientesCount: 0,
+        anticiposPendientes: 0,
+        saldoNeto: 0,
       },
       porAsesor: [],
     })),

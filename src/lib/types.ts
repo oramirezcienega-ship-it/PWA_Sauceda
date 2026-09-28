@@ -1220,5 +1220,22 @@ export interface ResumenEstadoCuentaAsesor {
   saldoPendiente: number;
   comisionesCount: number;
   pendientesCount: number;
+  /** Anticipos/préstamos activos a favor de SAUCEDA, pendientes de descontar de comisiones futuras. */
+  anticiposPendientes: number;
+  /** saldoPendiente - anticiposPendientes. Negativo = el asesor le debe a SAUCEDA. */
+  saldoNeto: number;
+}
+
+export interface ComisionAnticipo {
+  id: string;
+  asesorId: string;
+  asesorNombre: string;
+  pagoId?: string | null;
+  fecha: string;
+  monto: number;
+  saldoRestante: number;
+  motivo: string;
+  estatus: "activo" | "liquidado";
+  createdAt: string;
 }
 
