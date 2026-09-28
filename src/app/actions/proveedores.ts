@@ -19,6 +19,31 @@ export interface FiltrosProveedores {
   soloActivos?: boolean;
 }
 
+/** Genera el folio interno consecutivo anual del documento de proveedor: REM-PROV-2026-0001 / FACT-PROV-2026-0001. */
+async function generarFolioDocumentoProveedor(
+  sb: ReturnType<typeof supabaseServidor>,
+  tipo: "remision" | "factura"
+): Promise<string> {
+  const anio = new Date().getFullYear();
+  const prefijo = tipo === "factura" ? `FACT-PROV-${anio}-` : `REM-PROV-${anio}-`;
+
+  const { data } = await sb
+    .from("documentos_proveedores")
+    .select("folio")
+    .ilike("folio", `${prefijo}%`)
+    .order("folio", { ascending: false })
+    .limit(1);
+
+  let siguienteNum = 1;
+  if (data && data.length > 0 && data[0]?.folio) {
+    const ultimo = data[0].folio.replace(prefijo, "");
+    const parsed = parseInt(ultimo, 10);
+    if (!isNaN(parsed)) siguienteNum = parsed + 1;
+  }
+
+  return `${prefijo}${String(siguienteNum).padStart(4, "0")}`;
+}
+
 /** Lista proveedores con métricas de documentos/monto acumulado. */
 export async function listarProveedores(filtros?: FiltrosProveedores): Promise<Proveedor[]> {
   await requireAdmin();
@@ -104,7 +129,7 @@ export async function obtenerProveedor(
   try {
     const { data: docsData } = await sb
       .from("documentos_proveedores")
-      .select("*, proveedores:proveedor_id(nombre)")
+      .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
       .eq("proveedor_id", id)
       .order("fecha", { ascending: false });
 
@@ -186,7 +211,7 @@ export async function listarDocumentosProveedorPorCotizacion(
   try {
     const { data, error } = await sb
       .from("documentos_proveedores")
-      .select("*, proveedores:proveedor_id(nombre)")
+      .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
       .eq("cotizacion_id", cotizacionId)
       .order("fecha", { ascending: false });
 
@@ -261,12 +286,13 @@ export async function registrarDocumentoProveedor(datos: DatosDocumentoProveedor
   }
 
   const sb = supabaseServidor();
-  const fila = aFilaDocumentoProveedor(datos);
+  const folio = await generarFolioDocumentoProveedor(sb, datos.tipo);
+  const fila = { ...aFilaDocumentoProveedor(datos), folio, origen: "manual" as const };
 
   const { data, error } = await sb
     .from("documentos_proveedores")
     .insert(fila)
-    .select("*, proveedores:proveedor_id(nombre)")
+    .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
     .single();
 
   if (error) {
@@ -302,7 +328,7 @@ export async function actualizarDocumentoProveedor(
   if (datos.cotizacionId !== undefined) camposActualizar.cotizacion_id = datos.cotizacionId || null;
   if (datos.expedienteId !== undefined) camposActualizar.expediente_id = datos.expedienteId || null;
   if (datos.tipo !== undefined) camposActualizar.tipo = datos.tipo;
-  if (datos.folio !== undefined) camposActualizar.folio = datos.folio.trim();
+  if (datos.folioProveedor !== undefined) camposActualizar.folio_proveedor = (datos.folioProveedor || "").trim() || null;
   if (datos.concepto !== undefined) camposActualizar.concepto = datos.concepto.trim();
   if (datos.fecha !== undefined) camposActualizar.fecha = datos.fecha;
   if (datos.monto !== undefined) camposActualizar.monto = Number(datos.monto) || 0;
@@ -360,6 +386,107 @@ export async function listarCotizacionesMinParaProveedor(): Promise<
       estatus: c.estatus,
       prospectoNombre: [c.prospectos?.nombre, c.prospectos?.primer_apellido].filter(Boolean).join(" ") || "",
     }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Genera automáticamente la remisión de costo del proveedor asignado a una orden de
+ * trabajo, jalando producto/cantidades de la cotización, cliente y folio de la orden.
+ * Se llama al concluir la orden de trabajo. Es idempotente: si ya existe un documento
+ * automático para esa orden, lo regresa en vez de duplicarlo.
+ */
+export async function generarDocumentoProveedorAutomatico(
+  ordenTrabajoId: string
+): Promise<{ ok: boolean; documento?: DocumentoProveedor; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const { data: existente } = await sb
+    .from("documentos_proveedores")
+    .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
+    .eq("orden_trabajo_id", ordenTrabajoId)
+    .eq("origen", "automatico")
+    .maybeSingle();
+
+  if (existente) {
+    return { ok: true, documento: aDocumentoProveedor(existente as FilaDocumentoProveedor) };
+  }
+
+  const { data: ot, error: errOt } = await sb
+    .from("ordenes_trabajo")
+    .select("id, folio, titulo, proveedor_id, costo_proveedor, proveedor_concepto, cotizacion_id, expediente_id, prospectos:prospecto_id(nombre)")
+    .eq("id", ordenTrabajoId)
+    .maybeSingle();
+
+  if (errOt || !ot) return { ok: false, error: "No se encontró la orden de trabajo." };
+  if (!ot.proveedor_id) return { ok: false, error: "La orden de trabajo no tiene un proveedor asignado." };
+  if (!ot.costo_proveedor || Number(ot.costo_proveedor) <= 0) {
+    return { ok: false, error: "La orden de trabajo no tiene un costo pactado con el proveedor." };
+  }
+
+  // Jalar producto y cantidades de la cotización, si existe
+  let concepto = (ot.proveedor_concepto || "").trim();
+  if (!concepto && ot.cotizacion_id) {
+    const { data: conceptos } = await sb
+      .from("cotizacion_conceptos")
+      .select("descripcion, cantidad, unidad")
+      .eq("cotizacion_id", ot.cotizacion_id);
+
+    if (conceptos && conceptos.length > 0) {
+      concepto = conceptos
+        .map((c: any) => `${c.cantidad ?? ""}${c.unidad ? ` ${c.unidad}` : ""} ${c.descripcion ?? ""}`.trim())
+        .filter(Boolean)
+        .join("; ");
+    }
+  }
+  if (!concepto) concepto = ot.titulo || "Trabajo realizado";
+
+  const clienteNombre = (ot as any).prospectos?.nombre || "Cliente";
+  const folio = await generarFolioDocumentoProveedor(sb, "remision");
+
+  const { data, error } = await sb
+    .from("documentos_proveedores")
+    .insert({
+      proveedor_id: ot.proveedor_id,
+      cotizacion_id: ot.cotizacion_id,
+      expediente_id: ot.expediente_id,
+      orden_trabajo_id: ot.id,
+      tipo: "remision",
+      folio,
+      concepto,
+      fecha: new Date().toISOString().slice(0, 10),
+      monto: Number(ot.costo_proveedor),
+      notas: `Generado automáticamente al concluir la orden de trabajo ${ot.folio} de ${clienteNombre}.`,
+      origen: "automatico",
+    })
+    .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message || "No se pudo generar el documento del proveedor." };
+  }
+
+  return { ok: true, documento: aDocumentoProveedor(data as FilaDocumentoProveedor) };
+}
+
+/** Lista los documentos (facturas/remisiones) de proveedores ligados a una orden de trabajo específica. */
+export async function listarDocumentosProveedorPorOrdenTrabajo(
+  ordenTrabajoId: string
+): Promise<DocumentoProveedor[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data, error } = await sb
+      .from("documentos_proveedores")
+      .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
+      .eq("orden_trabajo_id", ordenTrabajoId)
+      .order("fecha", { ascending: false });
+
+    if (error || !data) return [];
+    return (data as FilaDocumentoProveedor[]).map(aDocumentoProveedor);
   } catch {
     return [];
   }

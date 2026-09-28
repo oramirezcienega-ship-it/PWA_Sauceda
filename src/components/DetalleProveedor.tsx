@@ -18,13 +18,22 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
   const [proveedor, setProveedor] = useState<Proveedor>(proveedorInicial);
   const [documentos, setDocumentos] = useState<DocumentoProveedor[]>(documentosIniciales);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [documentoEnEdicion, setDocumentoEnEdicion] = useState<DocumentoProveedor | null>(null);
   const [actualizando, setActualizando] = useState(false);
 
   const montoTotal = documentos.reduce((acc, d) => acc + d.monto, 0);
 
-  function handleDocumentoRegistrado(nuevo: DocumentoProveedor) {
-    setDocumentos((prev) => [nuevo, ...prev]);
+  function handleDocumentoRegistrado(doc: DocumentoProveedor) {
+    setDocumentos((prev) => {
+      const existe = prev.some((d) => d.id === doc.id);
+      return existe ? prev.map((d) => (d.id === doc.id ? doc : d)) : [doc, ...prev];
+    });
     router.refresh();
+  }
+
+  function handleEditarDocumento(doc: DocumentoProveedor) {
+    setDocumentoEnEdicion(doc);
+    setModalAbierto(true);
   }
 
   async function handleEliminarDocumento(id: string) {
@@ -110,7 +119,10 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
           </div>
           <button
             type="button"
-            onClick={() => setModalAbierto(true)}
+            onClick={() => {
+              setDocumentoEnEdicion(null);
+              setModalAbierto(true);
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-sauce px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-verde-profundo transition shrink-0"
           >
             <span>📄</span> + Registrar Documento
@@ -130,7 +142,7 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
               <thead>
                 <tr className="border-b border-carbon/10 bg-carbon/5 text-carbon/70 uppercase tracking-wider font-semibold">
                   <th className="py-3 px-4">Tipo</th>
-                  <th className="py-3 px-4">Folio</th>
+                  <th className="py-3 px-4">Folio Interno</th>
                   <th className="py-3 px-4">Fecha</th>
                   <th className="py-3 px-4">Orden de Trabajo</th>
                   <th className="py-3 px-4">Concepto</th>
@@ -151,11 +163,23 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                       >
                         {d.tipo}
                       </span>
+                      {d.origen === "automatico" && (
+                        <span className="ml-1.5 inline-block rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700" title="Generado automáticamente al concluir la orden de trabajo">
+                          ⚡ auto
+                        </span>
+                      )}
                     </td>
-                    <td className="py-3 px-4 font-mono text-carbon/80">{d.folio || "—"}</td>
+                    <td className="py-3 px-4">
+                      <div className="font-mono text-carbon/80">{d.folio || "—"}</div>
+                      {d.tipo === "factura" && d.folioProveedor && (
+                        <div className="text-[10px] text-carbon/50">Folio proveedor: {d.folioProveedor}</div>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-carbon/70">{new Date(d.fecha).toLocaleDateString("es-MX")}</td>
                     <td className="py-3 px-4">
-                      {d.cotizacionId ? (
+                      {d.ordenTrabajoId ? (
+                        <span className="font-mono text-carbon/70">{d.ordenTrabajoFolio || d.ordenTrabajoId}</span>
+                      ) : d.cotizacionId ? (
                         <Link href={`/construccion/${d.cotizacionId}`} className="text-sauce font-semibold hover:underline">
                           {d.cotizacionId}
                         </Link>
@@ -180,6 +204,12 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                           </a>
                         )}
                         <button
+                          onClick={() => handleEditarDocumento(d)}
+                          className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+                        >
+                          Editar
+                        </button>
+                        <button
                           onClick={() => handleEliminarDocumento(d.id)}
                           className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5 transition"
                         >
@@ -197,10 +227,14 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
 
       <ModalRegistrarDocumentoProveedor
         abierto={modalAbierto}
-        onCerrar={() => setModalAbierto(false)}
+        onCerrar={() => {
+          setModalAbierto(false);
+          setDocumentoEnEdicion(null);
+        }}
         onRegistrado={handleDocumentoRegistrado}
         proveedorId={proveedor.id}
         proveedorNombre={proveedor.nombre}
+        documentoExistente={documentoEnEdicion}
       />
     </div>
   );

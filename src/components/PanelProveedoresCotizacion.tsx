@@ -29,6 +29,7 @@ export function PanelProveedoresCotizacion({
 }: PanelProveedoresCotizacionProps) {
   const [documentos, setDocumentos] = useState<DocumentoProveedor[] | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
+  const [documentoEnEdicion, setDocumentoEnEdicion] = useState<DocumentoProveedor | null>(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -56,8 +57,17 @@ export function PanelProveedoresCotizacion({
     }
   }
 
-  function handleRegistrado(nuevo: DocumentoProveedor) {
-    setDocumentos((prev) => (prev ? [nuevo, ...prev] : [nuevo]));
+  function handleRegistrado(doc: DocumentoProveedor) {
+    setDocumentos((prev) => {
+      if (!prev) return [doc];
+      const existe = prev.some((d) => d.id === doc.id);
+      return existe ? prev.map((d) => (d.id === doc.id ? doc : d)) : [doc, ...prev];
+    });
+  }
+
+  function handleEditar(doc: DocumentoProveedor) {
+    setDocumentoEnEdicion(doc);
+    setModalAbierto(true);
   }
 
   const totalProveedores = (documentos || []).reduce((acc, d) => acc + d.monto, 0);
@@ -74,7 +84,10 @@ export function PanelProveedoresCotizacion({
         </div>
         <button
           type="button"
-          onClick={() => setModalAbierto(true)}
+          onClick={() => {
+            setDocumentoEnEdicion(null);
+            setModalAbierto(true);
+          }}
           className="inline-flex items-center gap-1.5 rounded-lg bg-sauce px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-verde-profundo transition shrink-0"
         >
           <span>📄</span> + Registrar Costo de Proveedor
@@ -143,8 +156,18 @@ export function PanelProveedoresCotizacion({
                     >
                       {d.tipo}
                     </span>
+                    {d.origen === "automatico" && (
+                      <span className="ml-1.5 inline-block rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700" title="Generado automáticamente al concluir la orden de trabajo">
+                        ⚡ auto
+                      </span>
+                    )}
                   </td>
-                  <td className="py-3 px-4 font-mono text-carbon/80">{d.folio || "—"}</td>
+                  <td className="py-3 px-4">
+                    <div className="font-mono text-carbon/80">{d.folio || "—"}</div>
+                    {d.tipo === "factura" && d.folioProveedor && (
+                      <div className="text-[10px] text-carbon/50">Folio proveedor: {d.folioProveedor}</div>
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-carbon/70">{new Date(d.fecha).toLocaleDateString("es-MX")}</td>
                   <td className="py-3 px-4 text-carbon/70 max-w-[220px] truncate" title={d.concepto}>
                     {d.concepto || "—"}
@@ -163,6 +186,12 @@ export function PanelProveedoresCotizacion({
                         </a>
                       )}
                       <button
+                        onClick={() => handleEditar(d)}
+                        className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+                      >
+                        Editar
+                      </button>
+                      <button
                         onClick={() => handleEliminar(d.id)}
                         className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5 transition"
                       >
@@ -179,10 +208,14 @@ export function PanelProveedoresCotizacion({
 
       <ModalRegistrarDocumentoProveedor
         abierto={modalAbierto}
-        onCerrar={() => setModalAbierto(false)}
+        onCerrar={() => {
+          setModalAbierto(false);
+          setDocumentoEnEdicion(null);
+        }}
         onRegistrado={handleRegistrado}
         cotizacionId={cotizacionId}
         expedienteId={expedienteId}
+        documentoExistente={documentoEnEdicion}
       />
     </div>
   );
