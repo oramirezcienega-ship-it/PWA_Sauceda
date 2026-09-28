@@ -281,6 +281,17 @@ export function TablaRemisionesFacturas({
                         {formatMoneda(rem.montoTotal)}
                       </div>
 
+                      {((rem.costoFinanciero || 0) > 0 || (rem.costoProveedor || 0) > 0) && (
+                        <div>
+                          <span
+                            className="text-[9.5px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded inline-block"
+                            title="Base gravable para comisiones tras deducir pasarela y proveedor"
+                          >
+                            Base: {formatMoneda(rem.baseGravableComision)}
+                          </span>
+                        </div>
+                      )}
+
                       {rem.ordenTrabajoId && (
                         <>
                           <div className="text-[10px] text-carbon/60">
@@ -381,6 +392,11 @@ export function TablaRemisionesFacturas({
                   <div className="font-bold text-verde-profundo text-sm">
                     {formatMoneda(rem.montoTotal)}
                   </div>
+                  {((rem.costoFinanciero || 0) > 0 || (rem.costoProveedor || 0) > 0) && (
+                    <div className="text-[9.5px] font-semibold text-emerald-800 bg-emerald-50 px-1 py-0.5 rounded inline-block mt-0.5">
+                      Base: {formatMoneda(rem.baseGravableComision)}
+                    </div>
+                  )}
                   {rem.ordenTrabajoId && (
                     <div className="text-[10px] text-carbon/50">
                       {rem.saldoRestante > 0 ? (

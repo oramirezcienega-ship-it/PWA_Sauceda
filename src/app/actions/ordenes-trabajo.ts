@@ -2119,7 +2119,6 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
       .select(`
         id,
         token,
-        folio,
         estatus,
         servicio_tipo,
         precio_final,
@@ -2232,7 +2231,6 @@ export async function programarInstalacionYDetonarOT(datos: {
       .select(`
         id,
         token,
-        folio,
         estatus,
         servicio_tipo,
         precio_final,

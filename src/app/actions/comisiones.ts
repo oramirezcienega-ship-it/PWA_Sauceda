@@ -752,7 +752,7 @@ export async function sincronizarComisionParaRemision(
     // 1. Obtener datos de la remisión (consulta plana, sin joins de PostgREST)
     const { data: rem, error: errRem } = await sb
       .from("remisiones_facturas")
-      .select("id, folio, tipo, fecha, monto_subtotal, monto_total, cotizacion_id, expediente_id, orden_trabajo_id")
+      .select("id, folio, tipo, fecha, monto_subtotal, monto_total, costo_financiero, costo_proveedor, cotizacion_id, expediente_id, orden_trabajo_id")
       .eq("id", remisionId)
       .single();
 
@@ -763,6 +763,7 @@ export async function sincronizarComisionParaRemision(
     // 1.1 Resolver datos relacionados por separado (evita fallos de joins embebidos en PostgREST)
     let servicioTipoRem: string | null = null;
     let asesorId: string | null = null;
+    let otCostoProveedor = 0;
 
     if (rem.cotizacion_id) {
       const { data: cot } = await sb
@@ -790,13 +791,18 @@ export async function sincronizarComisionParaRemision(
       asesorId = exp?.asesor_id || null;
     }
 
-    if (!asesorId && rem.orden_trabajo_id) {
+    if (rem.orden_trabajo_id) {
       const { data: ot } = await sb
         .from("ordenes_trabajo")
-        .select("asesor_responsable_id, asesor_ejecutor_id")
+        .select("asesor_responsable_id, asesor_ejecutor_id, costo_proveedor")
         .eq("id", rem.orden_trabajo_id)
         .maybeSingle();
-      asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+      if (!asesorId) {
+        asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+      }
+      if (ot?.costo_proveedor) {
+        otCostoProveedor = Number(ot.costo_proveedor);
+      }
     }
 
     if (!asesorId) {
@@ -824,7 +830,13 @@ export async function sincronizarComisionParaRemision(
       .eq("remision_factura_id", remisionId)
       .maybeSingle();
 
-    const montoVenta = Number(rem.monto_total || rem.monto_subtotal || 0);
+    const montoTotalDoc = Number(rem.monto_total || rem.monto_subtotal || 0);
+    const costoFinanciero = Number(rem.costo_financiero || 0);
+    const costoProveedor = Number(rem.costo_proveedor || otCostoProveedor || 0);
+
+    // BASE GRAVABLE DE COMISIÓN = Total Documento - Costo Financiero (Pasarela) - Costo Ejecución (Proveedor)
+    const baseGravable = Math.max(0, montoTotalDoc - costoFinanciero - costoProveedor);
+    const montoVenta = baseGravable;
     const servicioTipo = servicioTipoRem;
 
     if (comisionExistente) {
@@ -833,20 +845,20 @@ export async function sincronizarComisionParaRemision(
         return { ok: true, comisionId: comisionExistente.id };
       }
 
-      // Si no es manual, sincronizar con la venta actualizada
+      // Si no es manual, sincronizar con la base gravable actualizada
       const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({
         asesorId,
         servicioTipo,
       });
 
-      const nuevoMontoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+      const nuevoMontoComision = Math.round(baseGravable * (porcentaje / 100) * 100) / 100;
       const pagado = Number(comisionExistente.monto_pagado || 0);
 
       await sb
         .from("comisiones")
         .update({
           asesor_id: asesorId,
-          monto_venta: montoVenta,
+          monto_venta: baseGravable,
           porcentaje_comision: porcentaje,
           monto_comision: nuevoMontoComision,
           saldo_pendiente: Math.max(0, nuevoMontoComision - pagado),
@@ -856,7 +868,14 @@ export async function sincronizarComisionParaRemision(
               : pagado > 0
               ? "parcial"
               : "pendiente",
-          detalles_calculo: { reglaOrigen, fechaCalculo: new Date().toISOString() },
+          detalles_calculo: {
+            reglaOrigen,
+            montoTotalDocumento: montoTotalDoc,
+            costoFinanciero,
+            costoProveedor,
+            baseGravable,
+            fechaCalculo: new Date().toISOString(),
+          },
           updated_at: new Date().toISOString(),
         })
         .eq("id", comisionExistente.id);
@@ -864,13 +883,13 @@ export async function sincronizarComisionParaRemision(
       return { ok: true, comisionId: comisionExistente.id };
     }
 
-    // 4. Crear nueva comisión
+    // 4. Crear nueva comisión calculada sobre la base gravable
     const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({
       asesorId,
       servicioTipo,
     });
 
-    const montoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+    const montoComision = Math.round(baseGravable * (porcentaje / 100) * 100) / 100;
 
     const { data: nuevaCom, error: errIns } = await sb
       .from("comisiones")
@@ -881,14 +900,21 @@ export async function sincronizarComisionParaRemision(
         expediente_id: rem.expediente_id,
         orden_trabajo_id: rem.orden_trabajo_id,
         fecha: rem.fecha || new Date().toISOString().split("T")[0],
-        monto_venta: montoVenta,
+        monto_venta: baseGravable,
         porcentaje_comision: porcentaje,
         monto_comision: montoComision,
         monto_pagado: 0.0,
         saldo_pendiente: montoComision,
         estatus: "pendiente",
         es_ajuste_manual: false,
-        detalles_calculo: { reglaOrigen, fechaCalculo: new Date().toISOString() },
+        detalles_calculo: {
+          reglaOrigen,
+          montoTotalDocumento: montoTotalDoc,
+          costoFinanciero,
+          costoProveedor,
+          baseGravable,
+          fechaCalculo: new Date().toISOString(),
+        },
       })
       .select("id")
       .single();

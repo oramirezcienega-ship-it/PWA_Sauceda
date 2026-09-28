@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/notificaciones";
 import { contarConversacionesPendientes } from "@/app/actions/conversaciones";
 import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
+import { HeaderActividadesSemana } from "./HeaderActividadesSemana";
 import {
   IconoConversaciones,
   IconoPipeline,
@@ -985,6 +986,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           colapsada ? "md:pl-0" : "md:pl-64"
         }`}
       >
+        {/* Barra superior de actividades de la semana (solo en versión escritorio) */}
+        <HeaderActividadesSemana />
+
         {children}
       </div>
 

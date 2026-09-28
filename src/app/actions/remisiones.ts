@@ -17,10 +17,25 @@ export interface RemisionFacturaEnriquecida {
   serviciosExtra: number;
   costoFinanciero: number;
   otrosGastos: number;
+  costoProveedor: number;
   montoSubtotal: number;
   montoTotal: number;
   createdAt: string;
   updatedAt: string;
+
+  // Datos de Ejecución & Proveedor
+  proveedorId?: string;
+  proveedorNombre?: string;
+  proveedorConcepto?: string;
+
+  // Análisis de Pagos & Pasarela
+  metodosPagoRecibos: string[];
+  tienePasarela: boolean;
+
+  // Base Gravable de Comisión
+  baseGravableComision: number;
+  comisionAsesorMonto?: number;
+  comisionAsesorPorcentaje?: number;
 
   // Datos Enriquecidos del Cliente
   clienteNombre: string;
@@ -100,19 +115,19 @@ export async function listarRemisionesFacturas(
       otIds.length > 0
         ? sb
             .from("ordenes_trabajo")
-            .select("id, folio, titulo, estatus, tipo_negocio, entrega_token, asesor_ejecutor_id, prospecto_id, cotizacion_id, cliente_nombre, cliente_telefono, cliente_direccion")
+            .select("id, folio, titulo, estatus, tipo_negocio, entrega_token, asesor_ejecutor_id, prospecto_id, cotizacion_id, cliente_nombre, cliente_telefono, cliente_direccion, proveedor_id, costo_proveedor, proveedor_concepto")
             .in("id", otIds)
         : Promise.resolve({ data: [] }),
       cotIds.length > 0
         ? sb
             .from("cotizaciones")
-            .select("id, token, servicio_tipo, folio, prospecto_id, expediente_id, precio_final")
+            .select("id, token, servicio_tipo, prospecto_id, expediente_id, precio_final")
             .in("id", cotIds)
         : Promise.resolve({ data: [] }),
       otIds.length > 0
         ? sb
             .from("recibos_pago")
-            .select("orden_trabajo_id, monto")
+            .select("orden_trabajo_id, monto, metodo_pago")
             .in("orden_trabajo_id", otIds)
         : Promise.resolve({ data: [] }),
     ]);
@@ -123,17 +138,26 @@ export async function listarRemisionesFacturas(
     const cotsMap = new Map<string, any>();
     (cotsRes.data || []).forEach((c: any) => cotsMap.set(c.id, c));
 
-    // Sumar recibos de pago por orden de trabajo
+    // Analizar recibos de pago por orden de trabajo (montos y métodos de pago como terminal/pasarela)
     const cobradoPorOt = new Map<string, number>();
+    const metodosPorOt = new Map<string, Set<string>>();
     (recsRes.data || []).forEach((r: any) => {
       const prev = cobradoPorOt.get(r.orden_trabajo_id) || 0;
       cobradoPorOt.set(r.orden_trabajo_id, prev + Number(r.monto || 0));
+      if (!metodosPorOt.has(r.orden_trabajo_id)) {
+        metodosPorOt.set(r.orden_trabajo_id, new Set<string>());
+      }
+      if (r.metodo_pago) {
+        metodosPorOt.get(r.orden_trabajo_id)!.add(String(r.metodo_pago).toLowerCase());
+      }
     });
 
-    // 4. Reunir IDs de prospectos y asesores
+    // 4. Reunir IDs de prospectos, asesores y proveedores
     const prospectoIds = new Set<string>();
+    const proveedorIds = new Set<string>();
     (otsRes.data || []).forEach((ot: any) => {
       if (ot.prospecto_id) prospectoIds.add(ot.prospecto_id);
+      if (ot.proveedor_id) proveedorIds.add(ot.proveedor_id);
     });
     (cotsRes.data || []).forEach((c: any) => {
       if (c.prospecto_id) prospectoIds.add(c.prospecto_id);
@@ -147,7 +171,9 @@ export async function listarRemisionesFacturas(
       )
     );
 
-    const [prospRes, expRes, asesoresRes] = await Promise.all([
+    const remisionIds = rows.map((r: any) => r.id);
+
+    const [prospRes, expRes, asesoresRes, provRes, comRes] = await Promise.all([
       prospectoIds.size > 0
         ? sb
             .from("prospectos")
@@ -166,6 +192,18 @@ export async function listarRemisionesFacturas(
             .select("id, nombre")
             .in("id", asesorIds)
         : Promise.resolve({ data: [] }),
+      proveedorIds.size > 0
+        ? sb
+            .from("proveedores")
+            .select("id, nombre, razon_social")
+            .in("id", Array.from(proveedorIds))
+        : Promise.resolve({ data: [] }),
+      remisionIds.length > 0
+        ? sb
+            .from("comisiones")
+            .select("remision_factura_id, porcentaje_comision, monto_comision, estatus")
+            .in("remision_factura_id", remisionIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const prospMap = new Map<string, any>();
@@ -176,6 +214,12 @@ export async function listarRemisionesFacturas(
 
     const asesoresMap = new Map<string, string>();
     (asesoresRes.data || []).forEach((a: any) => asesoresMap.set(a.id, a.nombre));
+
+    const provMap = new Map<string, string>();
+    (provRes.data || []).forEach((p: any) => provMap.set(p.id, p.razon_social || p.nombre));
+
+    const comMap = new Map<string, any>();
+    (comRes.data || []).forEach((c: any) => comMap.set(c.remision_factura_id, c));
 
     // 5. Ensamblar los registros enriquecidos
     const listaEnriquecida: RemisionFacturaEnriquecida[] = rows.map((r: any) => {
@@ -218,12 +262,33 @@ export async function listarRemisionesFacturas(
         ? asesoresMap.get(ot.asesor_ejecutor_id) || "Sin asignar"
         : "Sin asignar";
 
-      // Cobranza
+      // Proveedor & Costos de Ejecución
+      const provId = r.proveedor_id || ot?.proveedor_id || null;
+      const provNombre = provId ? provMap.get(provId) || "Proveedor Asignado" : undefined;
+      const provConcepto = ot?.proveedor_concepto || undefined;
+      const costoProveedor = Number(r.costo_proveedor || ot?.costo_proveedor || 0);
+
+      // Cobranza & Métodos de Pago (Detección de Terminal / Pasarela)
       const cobrado = r.orden_trabajo_id
         ? cobradoPorOt.get(r.orden_trabajo_id) || 0
         : 0;
+      const metodosSet = r.orden_trabajo_id ? metodosPorOt.get(r.orden_trabajo_id) : null;
+      const metodosPagoRecibos = metodosSet ? Array.from(metodosSet) : [];
+      const tienePasarela =
+        metodosPagoRecibos.some((m) =>
+          ["terminal_tarjeta", "tarjeta", "terminal", "clip", "pasarela", "stripe"].includes(m)
+        ) || Number(r.costo_financiero || 0) > 0;
+
       const montoTotal = Number(r.monto_total || 0);
+      const costoFinanciero = Number(r.costo_financiero || 0);
+      const otrosGastos = Number(r.otros_gastos || 0);
       const saldoRestante = Math.max(0, montoTotal - cobrado);
+
+      // BASE GRAVABLE DE COMISIÓN = Total - Costo Financiero (Pasarela) - Costo Ejecución (Proveedor)
+      const baseGravableComision = Math.max(0, montoTotal - costoFinanciero - costoProveedor);
+
+      // Comisión registrada si ya existe
+      const comData = comMap.get(r.id);
 
       return {
         id: r.id,
@@ -236,12 +301,24 @@ export async function listarRemisionesFacturas(
         tipoCambio: Number(r.tipo_cambio || 1.0),
         datosDocumento: r.datos_documento || {},
         serviciosExtra: Number(r.servicios_extra || 0),
-        costoFinanciero: Number(r.costo_financiero || 0),
-        otrosGastos: Number(r.otros_gastos || 0),
+        costoFinanciero,
+        otrosGastos,
+        costoProveedor,
         montoSubtotal: Number(r.monto_subtotal || 0),
         montoTotal,
         createdAt: r.created_at,
         updatedAt: r.updated_at,
+
+        proveedorId: provId || undefined,
+        proveedorNombre: provNombre,
+        proveedorConcepto: provConcepto,
+
+        metodosPagoRecibos,
+        tienePasarela,
+
+        baseGravableComision,
+        comisionAsesorMonto: comData ? Number(comData.monto_comision) : undefined,
+        comisionAsesorPorcentaje: comData ? Number(comData.porcentaje_comision) : undefined,
 
         clienteNombre: nombreCliente,
         clienteTelefono: telefonoCliente,
@@ -276,6 +353,7 @@ export async function listarRemisionesFacturas(
           (item.clienteTelefono && item.clienteTelefono.toLowerCase().includes(q)) ||
           (item.ordenFolio && item.ordenFolio.toLowerCase().includes(q)) ||
           (item.ordenTitulo && item.ordenTitulo.toLowerCase().includes(q)) ||
+          (item.proveedorNombre && item.proveedorNombre.toLowerCase().includes(q)) ||
           (item.datosDocumento?.rfc && String(item.datosDocumento.rfc).toLowerCase().includes(q)) ||
           (item.datosDocumento?.razonSocial && String(item.datosDocumento.razonSocial).toLowerCase().includes(q))
         );
@@ -316,6 +394,10 @@ export async function obtenerRemisionFacturaPorId(
       return { ok: true, remision: encontrado };
     }
 
+    const montoTotal = Number(rem.monto_total || 0);
+    const costoFinanciero = Number(rem.costo_financiero || 0);
+    const costoProveedor = Number(rem.costo_proveedor || 0);
+
     return {
       ok: true,
       remision: {
@@ -329,19 +411,96 @@ export async function obtenerRemisionFacturaPorId(
         tipoCambio: Number(rem.tipo_cambio || 1.0),
         datosDocumento: rem.datos_documento || {},
         serviciosExtra: Number(rem.servicios_extra || 0),
-        costoFinanciero: Number(rem.costo_financiero || 0),
+        costoFinanciero,
         otrosGastos: Number(rem.otros_gastos || 0),
+        costoProveedor,
         montoSubtotal: Number(rem.monto_subtotal || 0),
-        montoTotal: Number(rem.monto_total || 0),
+        montoTotal,
         createdAt: rem.created_at,
         updatedAt: rem.updated_at,
+        metodosPagoRecibos: [],
+        tienePasarela: costoFinanciero > 0,
+        baseGravableComision: Math.max(0, montoTotal - costoFinanciero - costoProveedor),
         clienteNombre: rem.datos_documento?.razonSocial || rem.datos_documento?.personaRecibe || "Cliente General",
         totalCobrado: 0,
-        saldoRestante: Number(rem.monto_total || 0),
+        saldoRestante: montoTotal,
       },
     };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al obtener documento." };
+  }
+}
+
+/**
+ * Actualiza los costos deducibles de una remisión (financiero/pasarela y ejecución/proveedor)
+ * y sincroniza automáticamente la base gravable de las comisiones.
+ */
+export async function actualizarCostosRemision(datos: {
+  remisionId: string;
+  costoFinanciero: number;
+  costoProveedor: number;
+  otrosGastos?: number;
+}): Promise<{ ok: boolean; success: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    // 1. Obtener la remisión actual
+    const { data: rem, error: errRem } = await sb
+      .from("remisiones_facturas")
+      .select("id, folio, orden_trabajo_id, cotizacion_id, expediente_id")
+      .eq("id", datos.remisionId)
+      .single();
+
+    if (errRem || !rem) {
+      return { ok: false, success: false, error: "Remisión no encontrada." };
+    }
+
+    const cFin = Math.max(0, Number(datos.costoFinanciero || 0));
+    const cProv = Math.max(0, Number(datos.costoProveedor || 0));
+    const cOtros = Math.max(0, Number(datos.otrosGastos || 0));
+
+    // 2. Actualizar costos en remisiones_facturas
+    const { error: errUpd } = await sb
+      .from("remisiones_facturas")
+      .update({
+        costo_financiero: cFin,
+        costo_proveedor: cProv,
+        otros_gastos: cOtros,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", datos.remisionId);
+
+    if (errUpd) throw new Error(errUpd.message);
+
+    // 3. Si tiene orden de trabajo vinculada, sincronizar costo_proveedor en la OT
+    if (rem.orden_trabajo_id && cProv > 0) {
+      await sb
+        .from("ordenes_trabajo")
+        .update({
+          costo_proveedor: cProv,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", rem.orden_trabajo_id);
+    }
+
+    // 4. Sincronizar comisiones automáticamente para reflejar la nueva base gravable
+    try {
+      const { sincronizarComisionParaRemision } = await import("@/app/actions/comisiones");
+      await sincronizarComisionParaRemision(datos.remisionId);
+    } catch (errCom) {
+      console.warn("Aviso al recalcular comisión tras actualizar costos:", errCom);
+    }
+
+    revalidatePath("/remisiones");
+    revalidatePath("/comisiones");
+    if (rem.orden_trabajo_id) revalidatePath(`/ordenes-trabajo/${rem.orden_trabajo_id}`);
+    if (rem.cotizacion_id) revalidatePath(`/construccion/${rem.cotizacion_id}`);
+
+    return { ok: true, success: true };
+  } catch (err: any) {
+    console.error("Error en actualizarCostosRemision:", err);
+    return { ok: false, success: false, error: err?.message || "Error al actualizar costos." };
   }
 }
 
