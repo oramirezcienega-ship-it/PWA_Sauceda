@@ -2144,6 +2144,8 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
   montoTotal?: number;
   saldoRestante?: number;
   conceptos?: Array<{ descripcion: string; cantidad: number; unidad: string; importe: number }>;
+  /** Suma de cantidad × costo_unitario de los conceptos de la cotización: lo que costaría pagarle al proveedor según el catálogo, calculado automáticamente. */
+  costoProveedorSugerido?: number;
   ordenExistente?: any;
   citaExistente?: any;
   asesores: Array<{ id: string; nombre: string; telefono?: string }>;
@@ -2174,7 +2176,7 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
 
     // 2. Consultar conceptos, prospecto/expediente, orden de trabajo existente, cita de agenda y recibos
     const [conceptosRes, prospectoRes, expedienteRes, otRes, citaRes, recsRes, asesores, proveedores] = await Promise.all([
-      sb.from("cotizacion_conceptos").select("descripcion, cantidad, unidad, importe").eq("cotizacion_id", cot.id),
+      sb.from("cotizacion_conceptos").select("descripcion, cantidad, unidad, importe, costo_unitario").eq("cotizacion_id", cot.id),
       cot.prospecto_id
         ? sb
             .from("prospectos")
@@ -2214,6 +2216,14 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
     const totalPagado = (recsRes.data || []).reduce((acc: number, r: any) => acc + Number(r.monto || 0), 0);
     const saldoRestante = Math.max(0, montoTotal - totalPagado);
 
+    // Costo de proveedor sugerido: se calcula automáticamente sumando
+    // cantidad × costo_unitario de cada concepto de la cotización (ese costo
+    // ya viene del catálogo de productos al armar la cotización).
+    const costoProveedorSugerido = (conceptosRes.data || []).reduce(
+      (acc: number, c: any) => acc + Number(c.cantidad || 0) * Number(c.costo_unitario || 0),
+      0
+    );
+
     return {
       ok: true,
       cotizacion: {
@@ -2233,6 +2243,7 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
       montoTotal,
       saldoRestante,
       conceptos: conceptosRes.data || [],
+      costoProveedorSugerido: Math.round(costoProveedorSugerido * 100) / 100,
       ordenExistente: otRes.data || null,
       citaExistente: citaRes.data || null,
       asesores,
