@@ -2014,6 +2014,21 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         {m.direccion === "out" && m.agente && `${m.agente} · `}
                         {horaCorta(m.fecha)}
+                        {m.direccion === "out" && m.estado === "read" && (
+                          <span className="ml-1 font-bold text-sky-300" title="Leído">
+                            ✓✓
+                          </span>
+                        )}
+                        {m.direccion === "out" && m.estado === "delivered" && (
+                          <span className="ml-1 font-bold text-crema/70" title="Entregado">
+                            ✓✓
+                          </span>
+                        )}
+                        {m.direccion === "out" && m.estado === "enviado" && (
+                          <span className="ml-1 font-bold text-crema/70" title="Enviado">
+                            ✓
+                          </span>
+                        )}
                         {m.direccion === "out" && m.estado === "error" && (
                           <span
                             className="inline-flex items-center gap-1 ml-1 text-[9px] font-bold text-red-200 bg-red-950/75 px-1.5 py-0.5 rounded border border-red-400/40 cursor-help"

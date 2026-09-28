@@ -6,6 +6,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { numeroALetras } from "@/lib/numero-a-letras";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
+import { normalizarTelefono } from "@/lib/telefono";
 import { enviarCorreo } from "@/lib/email";
 import { PLANTILLA_ENTREGA_SERVICIO } from "@/lib/meta-plantillas";
 import { MARCA } from "@/lib/marca";
@@ -1869,7 +1870,39 @@ export async function enviarNotificacionEntregaCliente(params: {
       });
     }
 
+    // Integrar el envío al historial de conversaciones de WhatsApp, para que
+    // aparezca en la bandeja y el webhook de Meta pueda actualizar su estado
+    // de entregado/leído emparejando por wa_message_id.
+    if (params.canal === "whatsapp_plantilla" && telefono) {
+      const usuario = await usuarioActual();
+      let agente = usuario?.email || "";
+      if (usuario) {
+        const { data: perfil } = await sb
+          .from("perfiles")
+          .select("nombre")
+          .eq("id", usuario.id)
+          .maybeSingle();
+        agente = (perfil as { nombre?: string } | null)?.nombre?.trim() || agente;
+      }
+
+      const { error: insertErr } = await sb.from("mensajes_whatsapp").insert({
+        telefono: normalizarTelefono(telefono),
+        texto: `[plantilla: ${params.plantillaNombre || "sauceda_entrega_servicio"}] Aviso de entrega de la orden ${orden.folio}`,
+        direccion: "out",
+        expediente_id: orden.expedienteId,
+        prospecto_id: orden.prospectoId,
+        estado: "enviado",
+        agente,
+        wa_message_id: messageId || null,
+      });
+
+      if (insertErr) {
+        console.error("Error al insertar notificación de entrega en historial de WhatsApp:", insertErr);
+      }
+    }
+
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/conversaciones");
     if (orden.expedienteId) revalidatePath(`/expediente/${orden.expedienteId}`);
 
     return { ok: true, messageId };
