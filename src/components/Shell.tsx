@@ -28,22 +28,6 @@ import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
  * esto: solo se renderiza el contenido.
  */
 
-const ENLACES = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/", label: "Negocios" },
-  { href: "/empresas", label: "Empresas" },
-  { href: "/prospectos", label: "Prospectos" },
-  { href: "/prospectos/pipeline", label: "Pipeline" },
-  { href: "/ordenes-trabajo", label: "Órdenes de Trabajo (Nuevo)" },
-  { href: "/comisiones", label: "Comisiones" },
-  { href: "/conversaciones", label: "Conversaciones" },
-  { href: "/construccion", label: "Construcción" },
-  { href: "/proveedores", label: "Proveedores" },
-  { href: "/agenda", label: "Agenda" },
-  { href: "/visualizador", label: "Visualizador IA (Nuevo)" },
-  { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
-];
-
 function esRutaPublica(path: string): boolean {
   return (
     path.startsWith("/login") ||
@@ -363,6 +347,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { href: "/comisiones", label: "Comisiones" },
     { href: "/conversaciones", label: "Conversaciones" },
     { href: "/construccion", label: "Construcción" },
+    { href: "/proveedores", label: "Proveedores" },
     ...(esAdmin ? [{ href: "/finanzas", label: "Finanzas" }] : []),
     { href: "/agenda", label: "Agenda" },
     { href: "/visualizador", label: "Visualizador IA (Nuevo)" },
