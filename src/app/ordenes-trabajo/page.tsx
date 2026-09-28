@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Encabezado } from "@/components/Encabezado";
 import {
   obtenerOrdenesTrabajo,
+  actualizarEstatusOrdenTrabajo,
   type OrdenTrabajo,
 } from "@/app/actions/ordenes-trabajo";
 import { listarAsesoresActivos } from "@/app/actions/usuarios";
-import { ModuloOrdenesTrabajo } from "@/components/ModuloOrdenesTrabajo";
+import { TablaOrdenesTrabajo } from "@/components/TablaOrdenesTrabajo";
 import { ModalCrearOrdenTrabajo } from "@/components/ModalCrearOrdenTrabajo";
 
 export default function PaginaOrdenesTrabajo() {
+  const router = useRouter();
   const [ordenes, setOrdenes] = useState<OrdenTrabajo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [asesores, setAsesores] = useState<Array<{ id: string; nombre: string }>>([]);
@@ -23,6 +26,20 @@ export default function PaginaOrdenesTrabajo() {
   const [busqueda, setBusqueda] = useState("");
 
   const [modalCrear, setModalCrear] = useState(false);
+
+  const handleActualizarEstatus = async (
+    ot: OrdenTrabajo,
+    nuevoEstatus: "pendiente" | "en_proceso" | "completada" | "cancelada"
+  ) => {
+    try {
+      await actualizarEstatusOrdenTrabajo(ot.id, nuevoEstatus);
+      setOrdenes((prev) =>
+        prev.map((o) => (o.id === ot.id ? { ...o, estatus: nuevoEstatus } : o))
+      );
+    } catch (e) {
+      alert("Error al actualizar el estado de la orden.");
+    }
+  };
 
   const cargarDatos = async () => {
     try {
@@ -229,16 +246,13 @@ export default function PaginaOrdenesTrabajo() {
           </div>
         </div>
 
-        {/* Listado Principal de Órdenes */}
-        <ModuloOrdenesTrabajo
-          clienteNombreDefault="General"
-          soloLectura={false}
-          filtroEstatus={filtroEstatus}
-          filtroTipo={filtroTipo}
-          filtroAsesor={filtroAsesor}
-          busqueda={busqueda}
-          alEliminarOrden={() => cargarDatos()}
-          alCrearOrden={() => cargarDatos()}
+        {/* Listado Principal de Órdenes (Tabla Resumida y Optimizada) */}
+        <TablaOrdenesTrabajo
+          ordenes={ordenesFiltradas}
+          cargando={cargando}
+          asesores={asesores}
+          alActualizarEstatus={handleActualizarEstatus}
+          alNuevaOrden={() => setModalCrear(true)}
         />
       </div>
 
@@ -246,7 +260,13 @@ export default function PaginaOrdenesTrabajo() {
       <ModalCrearOrdenTrabajo
         abierto={modalCrear}
         alCerrar={() => setModalCrear(false)}
-        alCrear={() => cargarDatos()}
+        alCrear={(nuevaOT) => {
+          setModalCrear(false);
+          cargarDatos();
+          if (nuevaOT?.id) {
+            router.push(`/ordenes-trabajo/${nuevaOT.id}`);
+          }
+        }}
         asesores={asesores}
       />
     </main>
