@@ -7,6 +7,7 @@ import {
   eliminarOrdenTrabajo,
   asignarAsesorEjecutor,
   agregarEvidenciaFotoOT,
+  eliminarEvidenciaFotoOT,
   obtenerOrdenTrabajoPorId,
   type OrdenTrabajo,
   type ReciboPago,
@@ -277,7 +278,7 @@ export function ModuloOrdenesTrabajo({
         fd.append("descripcion", `Evidencia de etapa ${fotoEtapa}`);
 
         const res = await agregarEvidenciaFotoOT(ordenId, fd);
-        if (res.ok && res.foto) {
+        if (res?.ok && res.foto) {
           const fotoSubida = res.foto;
           setOrdenes((prev) =>
             prev.map((o) =>
@@ -300,6 +301,34 @@ export function ModuloOrdenesTrabajo({
       setSubiendoFotoOrdenId(null);
       setProgresoFotos(null);
       e.target.value = "";
+    }
+  };
+
+  const handleEliminarFoto = async (ordenId: string, fotoUrl: string) => {
+    if (!confirm("¿Eliminar esta foto de evidencia? Esta acción no se puede deshacer.")) return;
+
+    const previas = ordenes.find((o) => o.id === ordenId)?.fotosEvidencia || [];
+    setOrdenes((prev) =>
+      prev.map((o) =>
+        o.id === ordenId
+          ? { ...o, fotosEvidencia: o.fotosEvidencia.filter((f) => f.url !== fotoUrl) }
+          : o
+      )
+    );
+
+    try {
+      const res = await eliminarEvidenciaFotoOT(ordenId, fotoUrl);
+      if (!res.ok) {
+        alert(res.error || "No se pudo eliminar la foto.");
+        setOrdenes((prev) =>
+          prev.map((o) => (o.id === ordenId ? { ...o, fotosEvidencia: previas } : o))
+        );
+      }
+    } catch (err: any) {
+      alert(err?.message || "Error al eliminar la foto.");
+      setOrdenes((prev) =>
+        prev.map((o) => (o.id === ordenId ? { ...o, fotosEvidencia: previas } : o))
+      );
     }
   };
 
@@ -1110,22 +1139,32 @@ export function ModuloOrdenesTrabajo({
                           {ot.fotosEvidencia && ot.fotosEvidencia.length > 0 ? (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                               {ot.fotosEvidencia.map((f, idx) => (
-                                <a
+                                <div
                                   key={idx}
-                                  href={f.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="group relative rounded-xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square block shadow-2xs hover:shadow-md transition"
+                                  className="group relative rounded-xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square shadow-2xs hover:shadow-md transition"
                                 >
-                                  <img
-                                    src={f.url}
-                                    alt={f.descripcion || "Evidencia OT"}
-                                    className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
-                                  />
-                                  <span className="absolute bottom-1 left-1 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 capitalize">
+                                  <a href={f.url} target="_blank" rel="noreferrer" className="block h-full w-full">
+                                    <img
+                                      src={f.url}
+                                      alt={f.descripcion || "Evidencia OT"}
+                                      className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                                    />
+                                  </a>
+                                  <span className="absolute bottom-1 left-1 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 capitalize pointer-events-none">
                                     {f.etapa}
                                   </span>
-                                </a>
+                                  {!soloLectura && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEliminarFoto(ot.id, f.url)}
+                                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      title="Eliminar foto"
+                                      aria-label="Eliminar foto"
+                                    >
+                                      🗑️
+                                    </button>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           ) : (

@@ -843,6 +843,56 @@ export async function agregarEvidenciaFotoOT(
   }
 }
 
+/** Elimina una foto de evidencia de la orden de trabajo (storage + registro). */
+export async function eliminarEvidenciaFotoOT(
+  ordenId: string,
+  fotoUrl: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: otData, error: otErr } = await sb
+      .from("ordenes_trabajo")
+      .select("fotos_evidencia")
+      .eq("id", ordenId)
+      .single();
+
+    if (otErr || !otData) return { ok: false, error: "Orden de trabajo no encontrada." };
+
+    const existentes: EvidenciaFoto[] = Array.isArray(otData.fotos_evidencia)
+      ? otData.fotos_evidencia
+      : [];
+    const restantes = existentes.filter((f) => f.url !== fotoUrl);
+
+    if (restantes.length === existentes.length) {
+      return { ok: false, error: "La foto ya no está en la orden de trabajo." };
+    }
+
+    const { error: updateError } = await sb
+      .from("ordenes_trabajo")
+      .update({ fotos_evidencia: restantes, updated_at: new Date().toISOString() })
+      .eq("id", ordenId);
+
+    if (updateError) return { ok: false, error: updateError.message };
+
+    // Borrado del archivo en storage (best-effort, no bloquea si falla)
+    const match = fotoUrl.match(/expedientes-fotos\/(.+)$/);
+    if (match) {
+      try {
+        await sb.storage.from("expedientes-fotos").remove([match[1]]);
+      } catch (e) {
+        console.warn("No se pudo borrar el archivo de storage:", e);
+      }
+    }
+
+    revalidatePath("/ordenes-trabajo");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al eliminar la evidencia fotográfica." };
+  }
+}
+
 /** 7. Crear Recibo de Pago (Anticipo / Liquidación) */
 export async function crearReciboPago(datos: {
   ordenTrabajoId: string;
