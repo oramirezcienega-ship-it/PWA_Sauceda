@@ -1301,6 +1301,8 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         titulo,
         fecha_conclusion,
         fecha_programada,
+        costo_proveedor,
+        comision_bancaria_pct,
         prospectos(nombre, telefono, direccion),
         cotizaciones(id, precio_final, token, expediente_id)
       `)
@@ -1364,6 +1366,12 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
               new Date().toISOString().split("T")[0],
           };
 
+    // El costo financiero (comisión bancaria/pasarela) se hereda automáticamente
+    // del % capturado en la orden de trabajo al programar la instalación
+    // (terminal, meses sin intereses, etc.), en vez de partir siempre de $0.
+    const comisionBancariaPctOt = Number(ot.comision_bancaria_pct || 0);
+    const costoFinancieroAuto = Math.round(montoBase * (comisionBancariaPctOt / 100) * 100) / 100;
+
     const { data: nuevaRem, error: insErr } = await sb
       .from("remisiones_facturas")
       .insert({
@@ -1376,7 +1384,8 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         tipo_cambio: 1.0,
         datos_documento: datosDoc,
         servicios_extra: 0.0,
-        costo_financiero: 0.0,
+        costo_financiero: costoFinancieroAuto,
+        costo_proveedor: Number(ot.costo_proveedor || 0),
         otros_gastos: 0.0,
         monto_subtotal: montoBase,
         monto_total: montoBase,
@@ -2247,7 +2256,9 @@ export async function programarInstalacionYDetonarOT(datos: {
   proveedorId?: string | null;
   costoProveedor?: number | null;
   proveedorConcepto?: string | null;
-  metodoPagoSaldo?: string; // "terminal_tarjeta" | "transferencia" | "efectivo" | "liquidado"
+  metodoPagoSaldo?: string; // "terminal_tarjeta" | "meses_sin_intereses" | "transferencia" | "efectivo" | "liquidado"
+  mesesSinIntereses?: number | null;
+  comisionBancariaPct?: number;
   montoSaldo?: number;
   notasInstalacion?: string;
   notificarClienteWhatsApp?: boolean;
@@ -2321,9 +2332,13 @@ export async function programarInstalacionYDetonarOT(datos: {
     // 4. Saldo y método de pago
     const montoSaldo = datos.montoSaldo !== undefined ? Number(datos.montoSaldo) : Number(cot.precio_final || 0);
     const metodoPago = datos.metodoPagoSaldo || "terminal_tarjeta";
+    const comisionBancariaPct = Math.max(0, Number(datos.comisionBancariaPct || 0));
+    const mesesSinIntereses = datos.mesesSinIntereses ? Number(datos.mesesSinIntereses) : null;
     const metodoPagoLabel =
       metodoPago === "terminal_tarjeta"
         ? "Terminal Bancaria en Sitio (Tarjeta de Débito / Crédito)"
+        : metodoPago === "meses_sin_intereses"
+        ? `Meses Sin Intereses${mesesSinIntereses ? ` (${mesesSinIntereses} MSI)` : ""}`
         : metodoPago === "transferencia"
         ? "Transferencia bancaria previa"
         : metodoPago === "efectivo"
@@ -2443,6 +2458,9 @@ export async function programarInstalacionYDetonarOT(datos: {
           proveedor_id: datos.proveedorId || null,
           costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
           proveedor_concepto: datos.proveedorConcepto || null,
+          metodo_pago_saldo: metodoPago,
+          meses_sin_intereses: mesesSinIntereses,
+          comision_bancaria_pct: comisionBancariaPct,
           descripcion: descripcionOT,
           estatus: otExistente.estatus === "completada" ? "completada" : "en_proceso",
           updated_at: new Date().toISOString(),
@@ -2472,6 +2490,9 @@ export async function programarInstalacionYDetonarOT(datos: {
           proveedor_id: datos.proveedorId || null,
           costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
           proveedor_concepto: datos.proveedorConcepto || null,
+          metodo_pago_saldo: metodoPago,
+          meses_sin_intereses: mesesSinIntereses,
+          comision_bancaria_pct: comisionBancariaPct,
         })
         .select("id, folio")
         .single();
