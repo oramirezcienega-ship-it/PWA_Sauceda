@@ -1311,6 +1311,13 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
 
     if (insErr) return { ok: false, error: insErr.message };
 
+    try {
+      const { sincronizarComisionParaRemision } = await import("@/app/actions/comisiones");
+      await sincronizarComisionParaRemision(nuevaRem.id);
+    } catch (errCom) {
+      console.error("Error al sincronizar comisión tras generar remisión desde OT:", errCom);
+    }
+
     // Si tiene cotización, asegurar que pase a 'instalacion'
     if (ot.cotizacion_id) {
       await sb

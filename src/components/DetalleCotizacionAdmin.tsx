@@ -2462,6 +2462,13 @@ export function DetalleCotizacionAdmin({
                         >
                           ✏️ Editar Remisión / Factura
                         </button>
+                        <a
+                          href={`/comisiones?busqueda=${remisionFactura.folio}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 text-xs font-semibold transition shadow-sm"
+                          title="Consultar comisión y balance del asesor en el módulo de comisiones"
+                        >
+                          💰 Ver Comisión Asesor
+                        </a>
                       </div>
                     </div>
                     <div className="text-right">

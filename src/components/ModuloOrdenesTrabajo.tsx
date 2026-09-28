@@ -981,6 +981,13 @@ export function ModuloOrdenesTrabajo({
                                     🖨️ Ver Remisión
                                   </a>
                                 )}
+                                <a
+                                  href={`/comisiones?busqueda=${detalleOT.remisionFactura.folio}`}
+                                  className="rounded-lg bg-emerald-50 border border-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                                  title="Ver comisión y liquidación de esta orden en el módulo de comisiones"
+                                >
+                                  💰 Comisión Asesor
+                                </a>
                                 {ot.cotizacionToken && ot.clienteTelefono && (
                                   <a
                                     href={`https://wa.me/${ot.clienteTelefono.replace(
