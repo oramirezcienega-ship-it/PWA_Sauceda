@@ -181,16 +181,20 @@ ALTER TABLE public.comisiones_pagos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comisiones_pagos_detalle ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Acceso total comisiones_reglas authenticated" ON public.comisiones_reglas;
-CREATE POLICY "Acceso total comisiones_reglas authenticated" ON public.comisiones_reglas FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo comisiones_reglas" ON public.comisiones_reglas;
+CREATE POLICY "Permitir todo comisiones_reglas" ON public.comisiones_reglas FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acceso total comisiones authenticated" ON public.comisiones;
-CREATE POLICY "Acceso total comisiones authenticated" ON public.comisiones FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo comisiones" ON public.comisiones;
+CREATE POLICY "Permitir todo comisiones" ON public.comisiones FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acceso total comisiones_pagos authenticated" ON public.comisiones_pagos;
-CREATE POLICY "Acceso total comisiones_pagos authenticated" ON public.comisiones_pagos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo comisiones_pagos" ON public.comisiones_pagos;
+CREATE POLICY "Permitir todo comisiones_pagos" ON public.comisiones_pagos FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acceso total comisiones_pagos_detalle authenticated" ON public.comisiones_pagos_detalle;
-CREATE POLICY "Acceso total comisiones_pagos_detalle authenticated" ON public.comisiones_pagos_detalle FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo comisiones_pagos_detalle" ON public.comisiones_pagos_detalle;
+CREATE POLICY "Permitir todo comisiones_pagos_detalle" ON public.comisiones_pagos_detalle FOR ALL USING (true) WITH CHECK (true);
 
 -- 10. Función para sincronizar comisiones tanto de remisiones como de recibos de pago
 CREATE OR REPLACE FUNCTION public.fn_sincronizar_comisiones_todas()

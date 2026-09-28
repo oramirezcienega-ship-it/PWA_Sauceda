@@ -28,8 +28,20 @@ export function TablaOrdenesTrabajo({
     }).format(val);
   };
 
-  const getEstatusBadge = (estatus: string) => {
-    switch (estatus) {
+  const formatearFecha = (fechaStr?: string | null) => {
+    if (!fechaStr) return null;
+    try {
+      const d = new Date(fechaStr);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" });
+    } catch {
+      return null;
+    }
+  };
+
+  const getEstatusBadge = (estatus?: string | null) => {
+    const st = estatus || "pendiente";
+    switch (st) {
       case "en_proceso":
         return (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
@@ -61,13 +73,13 @@ export function TablaOrdenesTrabajo({
       default:
         return (
           <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
-            {estatus}
+            {st}
           </span>
         );
     }
   };
 
-  const getTipoBadge = (tipo: string) => {
+  const getTipoBadge = (tipo?: string | null) => {
     const tiposMap: Record<string, { label: string; color: string }> = {
       impermeabilizacion: { label: "Impermeabilización", color: "bg-cyan-50 text-cyan-800 border-cyan-200/60" },
       mantenimiento_cisternas: { label: "Cisternas & Aljibes", color: "bg-sky-50 text-sky-800 border-sky-200/60" },
@@ -75,10 +87,14 @@ export function TablaOrdenesTrabajo({
       herreria: { label: "Herrería", color: "bg-stone-100 text-stone-800 border-stone-200" },
       piso_estampado: { label: "Piso Estampado", color: "bg-orange-50 text-orange-800 border-orange-200/60" },
       traspaso_compra: { label: "Inmobiliaria", color: "bg-purple-50 text-purple-800 border-purple-200/60" },
+      pintura: { label: "Pintura", color: "bg-amber-50 text-amber-800 border-amber-200/60" },
+      remodelacion: { label: "Remodelación", color: "bg-indigo-50 text-indigo-800 border-indigo-200/60" },
+      losa: { label: "Construcción de Losa", color: "bg-emerald-50 text-emerald-800 border-emerald-200/60" },
     };
 
-    const config = tiposMap[tipo] || {
-      label: tipo.replace(/_/g, " "),
+    const tipoSeguro = (tipo || "general").toLowerCase();
+    const config = tiposMap[tipoSeguro] || {
+      label: (tipo || "General").replace(/_/g, " "),
       color: "bg-slate-100 text-slate-700 border-slate-200",
     };
 
@@ -161,13 +177,14 @@ export function TablaOrdenesTrabajo({
                   <td className="px-5 py-4 whitespace-nowrap">
                     <Link
                       href={`/ordenes-trabajo/${ot.id}`}
+                      prefetch={false}
                       className="font-mono font-bold text-sauce hover:text-verde-profundo hover:underline inline-flex items-center gap-1.5 text-xs"
                       title="Ver y editar orden de trabajo"
                     >
-                      <span>{ot.folio}</span>
+                      <span>{ot.folio || "OT-SN"}</span>
                     </Link>
                     <div className="text-[10px] text-carbon/40 font-mono mt-0.5">
-                      {new Date(ot.createdAt).toLocaleDateString()}
+                      {formatearFecha(ot.createdAt) || "—"}
                     </div>
                   </td>
 
@@ -191,7 +208,7 @@ export function TablaOrdenesTrabajo({
                   {/* Trabajo / Servicio */}
                   <td className="px-5 py-4 max-w-[240px]">
                     <div className="font-semibold text-carbon text-xs line-clamp-1 group-hover:text-verde-profundo transition-colors">
-                      {ot.titulo}
+                      {ot.titulo || "Orden de Trabajo"}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5">
                       {getTipoBadge(ot.tipoNegocio)}
@@ -210,7 +227,7 @@ export function TablaOrdenesTrabajo({
                     </div>
                     {ot.fechaConclusion ? (
                       <div className="text-emerald-700 font-semibold text-[10px] mt-0.5">
-                        ✓ Entregado {new Date(ot.fechaConclusion).toLocaleDateString()}
+                        ✓ Entregado {formatearFecha(ot.fechaConclusion) || "Concluida"}
                       </div>
                     ) : (
                       <div className="text-carbon/40 italic text-[10px] mt-0.5">
@@ -231,7 +248,7 @@ export function TablaOrdenesTrabajo({
                   <td className="px-5 py-4 whitespace-nowrap">
                     {alActualizarEstatus ? (
                       <select
-                        value={ot.estatus}
+                        value={ot.estatus || "pendiente"}
                         disabled={actualizandoId === ot.id}
                         onChange={(e) => handleCambiarEstado(ot, e.target.value as any)}
                         className="rounded-lg border border-carbon/20 px-2 py-1 text-xs font-semibold text-carbon bg-white focus:border-sauce outline-none cursor-pointer shadow-2xs"
@@ -283,6 +300,7 @@ export function TablaOrdenesTrabajo({
                   <td className="px-5 py-4 whitespace-nowrap text-right">
                     <Link
                       href={`/ordenes-trabajo/${ot.id}`}
+                      prefetch={false}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-sauce/30 bg-sauce/10 hover:bg-sauce hover:text-white px-3 py-1.5 text-xs font-bold text-sauce transition shadow-2xs group-hover:border-sauce/50"
                       title="Ver y editar todos los detalles de la orden"
                     >
@@ -305,16 +323,17 @@ export function TablaOrdenesTrabajo({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-sauce bg-sauce/10 border border-sauce/20 px-2 py-0.5 rounded">
-                    {ot.folio}
+                    {ot.folio || "OT-SN"}
                   </span>
                   {getEstatusBadge(ot.estatus)}
                 </div>
                 <h3 className="font-titular text-sm font-bold text-carbon mt-1.5">
-                  {ot.titulo}
+                  {ot.titulo || "Orden de Trabajo"}
                 </h3>
               </div>
               <Link
                 href={`/ordenes-trabajo/${ot.id}`}
+                prefetch={false}
                 className="shrink-0 rounded-lg bg-sauce text-white px-3 py-1.5 text-xs font-bold shadow-2xs"
               >
                 Ver / Editar
@@ -324,7 +343,7 @@ export function TablaOrdenesTrabajo({
             <div className="text-xs text-carbon/80 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-carbon/5">
               <div className="flex justify-between">
                 <span className="text-carbon/50">Cliente:</span>
-                <span className="font-semibold text-carbon">{ot.clienteNombre}</span>
+                <span className="font-semibold text-carbon">{ot.clienteNombre || "Cliente General"}</span>
               </div>
               {ot.clienteTelefono && (
                 <div className="flex justify-between">
@@ -338,7 +357,7 @@ export function TablaOrdenesTrabajo({
               </div>
               <div className="flex justify-between">
                 <span className="text-carbon/50">Asesor:</span>
-                <span className="font-medium">👤 {ot.asesorEjecutorNombre}</span>
+                <span className="font-medium">👤 {ot.asesorEjecutorNombre || "Sin asignar"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-carbon/50">Programada:</span>
