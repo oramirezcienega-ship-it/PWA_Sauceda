@@ -203,7 +203,7 @@ export function ModuloComisiones({
       if (res.ok) {
         setMensajeAlerta({
           tipo: "ok",
-          texto: `¡Sincronización completada! ${res.creadas} remisión(es) procesada(s) exitosamente.`,
+          texto: `¡Sincronización completada! ${res.creadas} comisión(es) y/o inspección(es) procesada(s) exitosamente.`,
         });
         setFiltroPeriodo("historico");
         setFechaDesde("");
@@ -353,10 +353,10 @@ export function ModuloComisiones({
             onClick={handleSincronizarRemisiones}
             disabled={sincronizando}
             className="bg-slate-100 hover:bg-slate-200 text-carbon text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5 border border-carbon/10 disabled:opacity-50"
-            title="Buscar remisiones o facturas que falten de registrar comisión"
+            title="Sincronizar remisiones de ventas e inspecciones técnicas ejecutadas para registrar comisiones faltantes"
           >
             <span className={sincronizando ? "animate-spin" : ""}>🔄</span>
-            <span>{sincronizando ? "Sincronizando..." : "Sincronizar Remisiones"}</span>
+            <span>{sincronizando ? "Sincronizando..." : "Sincronizar Comisiones e Inspecciones"}</span>
           </button>
 
           <button

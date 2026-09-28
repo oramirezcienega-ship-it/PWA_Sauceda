@@ -10,6 +10,7 @@ import {
   type Cita,
 } from "@/app/actions/agenda";
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
+import { marcarInspeccionEjecutada } from "@/app/actions/comisiones";
 import { obtenerUsuarioActual, listarPerfilesActivos } from "@/app/actions/usuarios";
 import { obtenerTelLink } from "@/lib/telefono";
 import {
@@ -289,6 +290,28 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
     }
   }
 
+  const [ejecutandoCitaId, setEjecutandoCitaId] = useState<string | null>(null);
+
+  async function handleMarcarInspeccion(citaId: string) {
+    if (!confirm("¿Deseas confirmar esta inspección técnica como ejecutada y generar su comisión fija?")) {
+      return;
+    }
+    setEjecutandoCitaId(citaId);
+    try {
+      const res = await marcarInspeccionEjecutada({ citaId });
+      if (!res.ok) {
+        alert("Error al registrar inspección: " + res.error);
+        return;
+      }
+      alert("✅ Inspección técnica ejecutada y comisión fija registrada exitosamente.");
+      await cargarAgenda();
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setEjecutandoCitaId(null);
+    }
+  }
+
   const citasFiltradas = citas.filter((c) => {
     if (filtroTipo === "instalacion") return c.tipo_cita === "instalacion";
     if (filtroTipo === "inspeccion") return c.tipo_cita === "inspeccion";
@@ -523,13 +546,33 @@ export function ProximasVisitasWidget({ perfilId }: ProximasVisitasWidgetProps) 
                       </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleAbrirModalResultado(c)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-sauce hover:bg-verde-profundo text-white px-2 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer"
-                    >
-                      ✓ Retro
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {esInspeccion && (
+                        c.estado === "completada" ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-1 rounded-lg border border-emerald-300" title="Inspección completada y comisión devengada">
+                            💰 Comisión OK
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleMarcarInspeccion(c.id)}
+                            disabled={ejecutandoCitaId === c.id}
+                            title="Marcar inspección técnica como completada y generar comisión fija"
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
+                          >
+                            {ejecutandoCitaId === c.id ? "Guardando..." : "✓ Ejecutada"}
+                          </button>
+                        )
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirModalResultado(c)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-sauce hover:bg-verde-profundo text-white px-2 py-1 text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                      >
+                        ✓ Retro
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

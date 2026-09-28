@@ -515,6 +515,45 @@ export async function guardarReporteVisita(
     await activarTareasBPMPorEvento(cotExp.expediente_id, "visita_tecnica_concluida");
   }
 
+  // Sincronizar comisión por inspección técnica ejecutada
+  try {
+    const { sincronizarComisionParaInspeccion } = await import("@/app/actions/comisiones");
+    let queryCita = sb.from("agenda_citas").select("id").eq("tipo_cita", "inspeccion");
+    if (cotExp?.expediente_id) {
+      queryCita = queryCita.eq("expediente_id", cotExp.expediente_id);
+    } else if (cot.prospecto_id) {
+      queryCita = queryCita.eq("prospecto_id", cot.prospecto_id);
+    }
+
+    const { data: citasInsp } = await queryCita;
+    if (citasInsp && citasInsp.length > 0) {
+      for (const c of citasInsp) {
+        await sb.from("agenda_citas").update({ estado: "completada" }).eq("id", c.id);
+        await sincronizarComisionParaInspeccion(c.id);
+      }
+    } else {
+      // Si la inspección no fue agendada previamente en agenda_citas, crear la cita completada
+      const { data: nuevaCita } = await sb.from("agenda_citas").insert({
+        tipo_cita: "inspeccion",
+        estado: "completada",
+        perfil_id: user.id,
+        expediente_id: cotExp?.expediente_id || null,
+        prospecto_id: cot.prospecto_id || null,
+        fecha: datosReporte.fechaInspeccion?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+        hora_inicio: "10:00:00",
+        hora_fin: "11:00:00",
+        notas: `Inspección técnica registrada en reporte de visita (${cotizacionId})`,
+        created_at: new Date().toISOString(),
+      }).select("id").single();
+
+      if (nuevaCita?.id) {
+        await sincronizarComisionParaInspeccion(nuevaCita.id);
+      }
+    }
+  } catch (errCom) {
+    console.warn("Aviso al comisionar reporte de visita técnica:", errCom);
+  }
+
   await registrarActividad(sb, {
     prospectoId: cot.prospecto_id,
     tipo: "construccion",
