@@ -1619,6 +1619,13 @@ export async function crearRemisionFactura(
     });
   }
 
+  try {
+    const { sincronizarComisionParaRemision } = await import("@/app/actions/comisiones");
+    await sincronizarComisionParaRemision(doc.id);
+  } catch (errCom) {
+    console.error("Error al sincronizar comisión tras crear remisión:", errCom);
+  }
+
   await revalidarRutasCotizacion(sb, cotizacionId, cot.token);
   return { ok: true, id: doc.id };
 }
@@ -1771,6 +1778,13 @@ export async function editarRemisionFactura(
       .insert(transacciones);
 
     if (errIns) console.error("Error al re-registrar transacciones financieras:", errIns.message);
+  }
+
+  try {
+    const { sincronizarComisionParaRemision } = await import("@/app/actions/comisiones");
+    await sincronizarComisionParaRemision(id);
+  } catch (errCom) {
+    console.error("Error al sincronizar comisión tras editar remisión:", errCom);
   }
 
   await revalidarRutasCotizacion(sb, rem.cotizacion_id);

@@ -1050,3 +1050,93 @@ export interface ProcesoMaestro {
   updatedAt?: string;
 }
 
+// ============================================================
+// Módulo de Comisiones para Asesores
+// ============================================================
+
+export type TipoReglaComision = 'global' | 'servicio' | 'producto' | 'asesor';
+export type EstatusComision = 'pendiente' | 'parcial' | 'pagada' | 'cancelada';
+export type MetodoPagoComision = 'transferencia' | 'efectivo' | 'cheque' | 'deposito' | 'otro';
+
+export interface ReglaComision {
+  id: string;
+  tipo: TipoReglaComision;
+  clave: string;
+  etiqueta: string;
+  porcentaje: number;
+  asesorId?: string | null;
+  asesorNombre?: string | null;
+  activo: boolean;
+  notas: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Comision {
+  id: string;
+  remisionFacturaId?: string | null;
+  remisionFolio?: string | null;
+  remisionTipo?: 'remision' | 'factura' | null;
+  remisionFecha?: string | null;
+  asesorId: string;
+  asesorNombre: string;
+  asesorTelefono?: string | null;
+  cotizacionId?: string | null;
+  cotizacionToken?: string | null;
+  expedienteId?: string | null;
+  ordenTrabajoId?: string | null;
+  ordenTrabajoFolio?: string | null;
+  clienteNombre: string;
+  clienteEmpresa?: string | null;
+  servicioTipo?: string | null;
+  fecha: string;
+  montoVenta: number;
+  porcentajeComision: number;
+  montoComision: number;
+  montoPagado: number;
+  saldoPendiente: number;
+  estatus: EstatusComision;
+  esAjusteManual: boolean;
+  motivoAjuste?: string;
+  detallesCalculo?: Record<string, any>;
+  notas?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ComisionPagoDetalle {
+  id: string;
+  pagoId: string;
+  comisionId: string;
+  remisionFolio?: string;
+  montoAplicado: number;
+  createdAt: string;
+}
+
+export interface ComisionPago {
+  id: string;
+  asesorId: string;
+  asesorNombre: string;
+  fechaPago: string;
+  monto: number;
+  metodoPago: MetodoPagoComision;
+  referencia: string;
+  comprobanteUrl?: string;
+  notas: string;
+  detalles?: ComisionPagoDetalle[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResumenEstadoCuentaAsesor {
+  asesorId: string;
+  asesorNombre: string;
+  asesorTelefono?: string | null;
+  totalVentas: number;
+  totalComisiones: number;
+  totalPagado: number;
+  saldoPendiente: number;
+  comisionesCount: number;
+  pendientesCount: number;
+}
+
