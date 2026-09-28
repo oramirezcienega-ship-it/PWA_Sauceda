@@ -842,8 +842,22 @@ export async function sincronizarComisionParaRemision(
     const servicioTipo = servicioTipoRem;
 
     if (comisionExistente) {
-      // Si ya existe y fue ajustada manualmente, no sobreescribir el monto ajustado
+      // Si fue ajustada manualmente, no se toca el % ni el monto de comisión
+      // que se fijó a mano, pero sí se mantienen al día los datos objetivos
+      // (venta, costo de proveedor, comisión bancaria y base gravable), que
+      // vienen de la orden/remisión y no dependen del ajuste manual.
       if (comisionExistente.es_ajuste_manual) {
+        await sb
+          .from("comisiones")
+          .update({
+            monto_venta: montoVenta,
+            costo_proveedor: costoProveedorRem,
+            comision_bancaria: comisionBancariaRem,
+            base_comisionable: baseComisionableRem,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", comisionExistente.id);
+
         return { ok: true, comisionId: comisionExistente.id };
       }
 
