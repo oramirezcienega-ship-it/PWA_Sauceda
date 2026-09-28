@@ -254,7 +254,11 @@ export async function enviarWhatsAppPlantilla(
     if (parametrosCuerpo.length > 0) {
       components.push({
         type: "body",
-        parameters: parametrosCuerpo.map((text) => ({ type: "text", text })),
+        parameters: parametrosCuerpo.map((text) => ({
+          type: "text",
+          // Meta Cloud API prohíbe saltos de línea (\n), tabuladores y más de 4 espacios en variables de plantilla
+          text: (text || "").replace(/[\r\n\t]+/g, " ").replace(/\s{4,}/g, " ").trim(),
+        })),
       });
     }
     if (urlBotonParam) {

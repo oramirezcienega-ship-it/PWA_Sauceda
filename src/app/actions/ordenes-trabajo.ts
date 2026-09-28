@@ -1708,9 +1708,9 @@ export async function enviarNotificacionEntregaCliente(params: {
         const urlRemision = orden.cotizacionToken ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}` : "";
         const urlGarantia = garantia?.token ? `${SITE_URL}/garantia/${garantia.token}` : "";
 
-        let docsTexto = `📄 Reporte de Obra & Evidencias: ${urlEntrega}`;
-        if (urlRemision) docsTexto += `\n🧾 Remisión/Factura: ${urlRemision}`;
-        if (urlGarantia) docsTexto += `\n🛡️ Póliza de Garantía: ${urlGarantia}`;
+        let docsTexto = `📄 Reporte de Obra: ${urlEntrega}`;
+        if (urlRemision) docsTexto += ` • 🧾 Remisión: ${urlRemision}`;
+        if (urlGarantia) docsTexto += ` • 🛡️ Garantía: ${urlGarantia}`;
 
         resWhatsApp = await enviarWhatsAppPlantilla(
           telefono,
@@ -1945,7 +1945,7 @@ export async function enviarReciboPorWhatsApp(reciboId: string): Promise<{
         "es_MX",
         [
           rec.cliente_nombre,
-          `💳 Recibo Oficial de Pago (${rec.folio}) por $${montoStr} MXN:\n${urlRecibo}`,
+          `💳 Recibo Oficial de Pago (${rec.folio}) por $${montoStr} MXN: ${urlRecibo}`,
         ]
       );
     }
