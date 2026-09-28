@@ -21,11 +21,15 @@ export function ModalAjustarComision({ comision, alCerrar, alGuardar }: Props) {
   const formatoMoneda = (val: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
 
+  // La comisión se calcula sobre la base comisionable (venta - costo de
+  // proveedor - comisión bancaria), no sobre el monto de venta completo.
+  const baseComisionable = comision.baseComisionable || comision.montoVenta;
+
   // Sincronizar porcentaje -> monto
   const handleCambioPorcentaje = (val: number) => {
     setPorcentaje(val);
-    if (comision.montoVenta > 0) {
-      const nuevoMonto = Math.round(comision.montoVenta * (val / 100) * 100) / 100;
+    if (baseComisionable > 0) {
+      const nuevoMonto = Math.round(baseComisionable * (val / 100) * 100) / 100;
       setMonto(nuevoMonto);
     }
   };
@@ -33,8 +37,8 @@ export function ModalAjustarComision({ comision, alCerrar, alGuardar }: Props) {
   // Sincronizar monto -> porcentaje
   const handleCambioMonto = (val: number) => {
     setMonto(val);
-    if (comision.montoVenta > 0) {
-      const nuevoPorcentaje = Math.round((val / comision.montoVenta) * 100 * 100) / 100;
+    if (baseComisionable > 0) {
+      const nuevoPorcentaje = Math.round((val / baseComisionable) * 100 * 100) / 100;
       setPorcentaje(nuevoPorcentaje);
     }
   };
@@ -119,6 +123,14 @@ export function ModalAjustarComision({ comision, alCerrar, alGuardar }: Props) {
               {formatoMoneda(comision.montoPagado)}
             </span>
           </div>
+          <div className="col-span-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+            <span className="text-emerald-800 block">
+              Base Comisionable (Venta − Proveedor − Comisión Bancaria):
+            </span>
+            <span className="font-mono font-bold text-emerald-900 text-sm">
+              {formatoMoneda(baseComisionable)}
+            </span>
+          </div>
         </div>
 
         {/* Formulario */}
@@ -128,6 +140,28 @@ export function ModalAjustarComision({ comision, alCerrar, alGuardar }: Props) {
               ⚠️ {error}
             </div>
           )}
+
+          {(() => {
+            const montoEsperado = Math.round(baseComisionable * (porcentaje / 100) * 100) / 100;
+            const desfasado = Math.abs(montoEsperado - monto) > 0.01;
+            if (!desfasado) return null;
+            return (
+              <div className="flex items-center justify-between gap-3 p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs">
+                <span className="text-amber-900">
+                  ⚠️ Este monto (${monto.toFixed(2)}) no coincide con {porcentaje}% de la base comisionable
+                  actual (${montoEsperado.toFixed(2)}). Es probable que se haya calculado antes de que
+                  existieran las deducciones de proveedor/pasarela.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMonto(montoEsperado)}
+                  className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 whitespace-nowrap"
+                >
+                  Recalcular
+                </button>
+              </div>
+            );
+          })()}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
