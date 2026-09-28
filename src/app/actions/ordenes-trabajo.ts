@@ -2145,30 +2145,41 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
     await requireAdmin();
     const sb = supabaseServidor();
 
-    // 1. Obtener cotización con prospecto y expediente
+    // 1. Obtener cotización (consulta plana, sin joins embebidos de PostgREST:
+    // en este proyecto ya se identificó que fallan de forma intermitente en
+    // producción y hacían que funciones similares reportaran "no encontrado"
+    // aun existiendo el registro; ver listarComisiones / sincronizarComision*).
     const { data: cot, error: cotErr } = await sb
       .from("cotizaciones")
-      .select(`
-        id,
-        token,
-        estatus,
-        servicio_tipo,
-        precio_final,
-        prospecto_id,
-        expediente_id,
-        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, email, direccion, fraccionamiento),
-        expedientes(id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, fecha_instalacion, operador_id)
-      `)
+      .select("id, token, estatus, servicio_tipo, precio_final, prospecto_id, expediente_id")
       .eq("id", cotizacionId)
       .maybeSingle();
 
-    if (cotErr || !cot) {
-      return { ok: false, error: "Cotización no encontrada.", asesores: [], proveedores: [] };
+    if (cotErr) {
+      console.error("obtenerDatosProgramacionInstalacion: error al consultar cotización", cotizacionId, cotErr.message);
+      return { ok: false, error: `Error al consultar la cotización: ${cotErr.message}`, asesores: [], proveedores: [] };
+    }
+    if (!cot) {
+      return { ok: false, error: `Cotización "${cotizacionId}" no encontrada.`, asesores: [], proveedores: [] };
     }
 
-    // 2. Consultar conceptos, orden de trabajo existente, cita de agenda y recibos
-    const [conceptosRes, otRes, citaRes, recsRes, asesores, proveedores] = await Promise.all([
+    // 2. Consultar conceptos, prospecto/expediente, orden de trabajo existente, cita de agenda y recibos
+    const [conceptosRes, prospectoRes, expedienteRes, otRes, citaRes, recsRes, asesores, proveedores] = await Promise.all([
       sb.from("cotizacion_conceptos").select("descripcion, cantidad, unidad, importe").eq("cotizacion_id", cot.id),
+      cot.prospecto_id
+        ? sb
+            .from("prospectos")
+            .select("id, nombre, primer_apellido, segundo_apellido, telefono, email, direccion, fraccionamiento")
+            .eq("id", cot.prospecto_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      cot.expediente_id
+        ? sb
+            .from("expedientes")
+            .select("id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, fecha_instalacion, operador_id")
+            .eq("id", cot.expediente_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       sb.from("ordenes_trabajo").select("*").eq("cotizacion_id", cot.id).maybeSingle(),
       sb.from("agenda_citas").select("*").eq("cotizacion_id", cot.id).eq("tipo_cita", "instalacion").maybeSingle(),
       sb.from("recibos_pago").select("monto").eq("cotizacion_id", cot.id),
@@ -2177,8 +2188,8 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
     ]);
 
     // Resolver cliente
-    const p = cot.prospectos as any;
-    const e = cot.expedientes as any;
+    const p = prospectoRes.data as any;
+    const e = expedienteRes.data as any;
     const nombreCliente = [
       p?.nombre || e?.cliente,
       p?.primer_apellido || e?.primer_apellido,
@@ -2199,7 +2210,7 @@ export async function obtenerDatosProgramacionInstalacion(cotizacionId: string):
       cotizacion: {
         id: cot.id,
         token: cot.token,
-        folio: cot.folio || cot.id,
+        folio: cot.id,
         estatus: cot.estatus,
         servicioTipo: cot.servicio_tipo || "impermeabilizacion",
         precioFinal: montoTotal,
