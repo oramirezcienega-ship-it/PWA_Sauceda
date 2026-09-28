@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import type {
   Comision,
   ComisionPago,
@@ -135,25 +135,52 @@ export function ModuloComisiones({
             fechaDesde: fd || undefined,
             fechaHasta: fh || undefined,
             busqueda: b || undefined,
+          }).catch((err) => {
+            console.error("Error al cargar comisiones:", err);
+            return [];
           }),
-          listarPagosComisiones(asId),
-          listarReglasComision(),
+          listarPagosComisiones(asId).catch((err) => {
+            console.error("Error al cargar pagos:", err);
+            return [];
+          }),
+          listarReglasComision().catch((err) => {
+            console.error("Error al cargar reglas:", err);
+            return [];
+          }),
           obtenerResumenEstadoCuenta({
             asesorId: asId,
             fechaDesde: fd || undefined,
             fechaHasta: fh || undefined,
+          }).catch((err) => {
+            console.error("Error al cargar resumen:", err);
+            return {
+              general: {
+                totalVentas: 0,
+                totalComisiones: 0,
+                totalPagado: 0,
+                saldoPendiente: 0,
+                comisionesCount: 0,
+                pendientesCount: 0,
+              },
+              porAsesor: [],
+            };
           }),
         ]);
 
-        setComisiones(nuevasComisiones);
-        setPagos(nuevosPagos);
-        setReglas(nuevasReglas);
-        setResumen(nuevoResumen);
+        if (nuevasComisiones) setComisiones(nuevasComisiones);
+        if (nuevosPagos) setPagos(nuevosPagos);
+        if (nuevasReglas) setReglas(nuevasReglas);
+        if (nuevoResumen) setResumen(nuevoResumen);
       } catch (err: any) {
         console.error("Error al recargar datos:", err);
       }
     });
   };
+
+  // Cargar datos frescos al montar en el cliente
+  useEffect(() => {
+    recargarDatos();
+  }, []);
 
   const handleSincronizarRemisiones = async () => {
     try {
