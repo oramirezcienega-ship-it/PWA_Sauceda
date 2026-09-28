@@ -12,29 +12,14 @@ import {
 export function HeaderActividadesSemana() {
   const [datos, setDatos] = useState<ResumenSemanaActividades | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [colapsada, setColapsada] = useState(false);
+  // Regla: Siempre iniciar contraída por defecto
+  const [colapsada, setColapsada] = useState(true);
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [filtroTipo, setFiltroTipo] = useState<"todas" | "instalacion" | "inspeccion">("todas");
-  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null); // fecha YYYY-MM-DD o null para todas
-
-  // Cargar preferencia de colapso desde localStorage
-  useEffect(() => {
-    try {
-      const guardado = localStorage.getItem("sauceda_header_agenda_colapsada");
-      if (guardado !== null) {
-        setColapsada(guardado === "true");
-      }
-    } catch {}
-  }, []);
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
 
   const toggleColapso = () => {
-    setColapsada((prev) => {
-      const nuevo = !prev;
-      try {
-        localStorage.setItem("sauceda_header_agenda_colapsada", String(nuevo));
-      } catch {}
-      return nuevo;
-    });
+    setColapsada((prev) => !prev);
   };
 
   // Cargar datos de la semana
@@ -78,7 +63,7 @@ export function HeaderActividadesSemana() {
     return true;
   });
 
-  // Próxima actividad pendiente para el teaser colapsado
+  // Próxima actividad pendiente para el ticker
   const proximaActividad = (datos?.actividades || []).find((a) => {
     if (!datos?.fechaHoy) return true;
     return a.fecha >= datos.fechaHoy && a.estado !== "completada" && a.estado !== "cancelada";
@@ -87,30 +72,30 @@ export function HeaderActividadesSemana() {
   return (
     <aside
       aria-label="Barra de actividades de la semana"
-      className="hidden md:block sticky top-0 z-20 border-b border-carbon/10 bg-white/95 backdrop-blur-md text-carbon shadow-xs transition-all duration-200"
+      className="hidden md:block sticky top-0 z-20 border-b border-carbon/10 bg-white/95 backdrop-blur-md text-carbon shadow-2xs transition-all duration-200"
     >
       {/* ========================================================= */}
-      {/* 1. MODO COLAPSADO (Barra compacta minimalista ~40px)       */}
+      {/* 1. MODO CONTRAÍDO (Siempre activo por defecto)            */}
       {/* ========================================================= */}
       {colapsada ? (
-        <div className="flex h-10 items-center justify-between px-4 text-xs">
+        <div className="flex h-10 items-center justify-between px-3 text-xs bg-gradient-to-r from-white via-slate-50/60 to-white">
           {/* Lado izquierdo: Título e indicadores */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
               onClick={toggleColapso}
-              className="flex items-center gap-1.5 font-display font-semibold text-verde-profundo hover:text-sauce transition cursor-pointer"
-              title="Expandir barra de actividades"
+              className="flex items-center gap-1.5 font-display font-semibold text-verde-profundo hover:text-sauce transition cursor-pointer group"
+              title="Clic para desplegar las actividades de la semana"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-verde-profundo/10 text-verde-profundo">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-verde-profundo/10 text-verde-profundo text-xs group-hover:scale-105 transition-transform">
                 📅
               </span>
-              <span className="truncate">Actividades de la Semana</span>
+              <span className="truncate font-bold tracking-tight">Actividades de la Semana</span>
             </button>
 
-            {datos?.esSemanaActual && (
-              <span className="hidden lg:inline-flex items-center rounded-full bg-verde-profundo/5 border border-verde-profundo/20 px-2 py-0.5 text-[10px] font-medium text-verde-profundo">
-                Semana corriente
+            {datos?.rangoTexto && (
+              <span className="hidden xl:inline-block font-mono text-[10px] text-carbon/50 bg-carbon/5 px-1.5 py-0.5 rounded">
+                {datos.rangoTexto}
               </span>
             )}
 
@@ -118,11 +103,11 @@ export function HeaderActividadesSemana() {
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 font-mono text-[11px] font-semibold text-emerald-800">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                🛠️ {datos?.conteoInstalaciones ?? 0} Inst.
+                🛠️ {datos?.conteoInstalaciones ?? 0} {datos?.conteoInstalaciones === 1 ? "Instalación" : "Instalaciones"}
               </span>
               <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-800">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
-                🔍 {datos?.conteoInspecciones ?? 0} Insp.
+                🔍 {datos?.conteoInspecciones ?? 0} {datos?.conteoInspecciones === 1 ? "Inspección" : "Inspecciones"}
               </span>
               {(datos?.conteoHoy ?? 0) > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-rojo/10 border border-rojo/30 px-2 py-0.5 font-mono text-[11px] font-bold text-rojo animate-pulse">
@@ -133,29 +118,34 @@ export function HeaderActividadesSemana() {
           </div>
 
           {/* Centro: Ticker de próxima actividad */}
-          {proximaActividad && (
+          {proximaActividad ? (
             <div
               onClick={toggleColapso}
-              className="hidden xl:flex items-center gap-2 max-w-md truncate cursor-pointer rounded-lg bg-carbon/5 px-2.5 py-1 text-[11px] text-carbon/80 hover:bg-carbon/10 transition"
+              className="hidden lg:flex items-center gap-2 max-w-lg truncate cursor-pointer rounded-lg bg-carbon/5 px-2.5 py-1 text-[11px] text-carbon/80 hover:bg-carbon/10 transition border border-carbon/5"
               title="Clic para ver detalles de la agenda"
             >
               <span className="font-semibold text-verde-profundo shrink-0">
                 {proximaActividad.esHoy ? "⚡ Hoy" : proximaActividad.diaSemanaNombre} {proximaActividad.horaInicio}:
               </span>
               <span className="truncate">
-                {proximaActividad.tipo === "instalacion" ? "🛠️" : "🔍"} {proximaActividad.clienteNombre} ({proximaActividad.fraccionamiento})
+                {proximaActividad.tipo === "instalacion" ? "🛠️" : "🔍"} {proximaActividad.clienteNombre}
+                {proximaActividad.fraccionamiento ? ` · ${proximaActividad.fraccionamiento}` : ""}
               </span>
+            </div>
+          ) : (
+            <div className="hidden lg:inline-block text-[11px] text-carbon/40 italic">
+              Sin compromisos pendientes para esta semana
             </div>
           )}
 
-          {/* Lado derecho: Acciones y botón expandir */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Lado derecho: Acciones y botón desplegar */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <Link
               href="/agenda"
-              className="text-[11px] font-medium text-carbon/60 hover:text-verde-profundo hover:underline hidden sm:inline"
+              className="text-[11px] font-medium text-carbon/60 hover:text-verde-profundo hover:underline hidden sm:inline px-1"
               title="Abrir módulo de agenda completo"
             >
-              Ver Agenda →
+              Agenda →
             </Link>
 
             <button
@@ -163,11 +153,11 @@ export function HeaderActividadesSemana() {
               onClick={() => cargar(semanaOffset)}
               disabled={cargando}
               title="Recargar actividades"
-              className="rounded p-1 text-carbon/50 hover:bg-carbon/5 hover:text-carbon transition"
+              className="rounded p-1 text-carbon/50 hover:bg-carbon/5 hover:text-carbon transition cursor-pointer"
             >
               <svg
-                width="14"
-                height="14"
+                width="13"
+                height="13"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -183,9 +173,9 @@ export function HeaderActividadesSemana() {
             <button
               type="button"
               onClick={toggleColapso}
-              className="flex items-center gap-1 rounded-md bg-verde-profundo text-crema px-2.5 py-1 text-[11px] font-semibold hover:bg-sauce transition shadow-2xs cursor-pointer"
+              className="flex items-center gap-1 rounded-md bg-verde-profundo text-crema px-2.5 py-1 text-[11px] font-semibold hover:bg-sauce transition shadow-2xs cursor-pointer ml-1"
             >
-              <span>Expandir</span>
+              <span>Desplegar</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="m6 9 6 6 6-6" />
               </svg>
@@ -194,7 +184,7 @@ export function HeaderActividadesSemana() {
         </div>
       ) : (
         /* ========================================================= */
-        /* 2. MODO DESPLEGADO (Panel completo interactivo)           */
+        /* 2. MODO DESPLEGADO (Vista detallada temporal)             */
         /* ========================================================= */
         <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
           {/* Fila superior: Título, rango de fechas, filtros y botón contraer */}
@@ -294,7 +284,7 @@ export function HeaderActividadesSemana() {
               <Link
                 href="/agenda"
                 className="hidden lg:inline-flex items-center gap-1 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-xs font-medium text-carbon/80 hover:bg-carbon/5 hover:text-verde-profundo transition"
-                title="Abrir agenda completa para agendar nuevas citas"
+                title="Abrir agenda completa"
               >
                 <span>Ver Agenda Completa</span>
                 <span className="text-[10px]">↗</span>

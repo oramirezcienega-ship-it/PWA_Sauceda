@@ -91,6 +91,7 @@ function mapearEstado(estado?: string | null): { estado: string; label: string }
 
 /**
  * Obtiene las actividades (instalaciones e inspecciones) de la semana corriente (o desplazada por semanaOffset).
+ * Filtra citas activas/pendientes para mostrar los próximos compromisos del equipo.
  */
 export async function obtenerActividadesSemana(semanaOffset: number = 0): Promise<ResumenSemanaActividades> {
   try {
@@ -103,8 +104,7 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     const [y, m, d] = fechaLocalStr.split("-").map(Number);
     const fechaHoyObj = new Date(y, m - 1, d);
 
-    // Calcular lunes de la semana
-    // En JS getDay(): 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+    // Calcular lunes de la semana (0 = Domingo, 1 = Lunes, ..., 6 = Sábado)
     const diaSemanaNum = fechaHoyObj.getDay();
     const diffAlLunes = (diaSemanaNum === 0 ? -6 : 1) - diaSemanaNum + (semanaOffset * 7);
     const fechaLunes = new Date(fechaHoyObj);
@@ -137,31 +137,14 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     const fechaFin = dias[6].fecha;
     const rangoTexto = `${dias[0].diaNumero} ${dias[0].mesNombre} — ${dias[6].diaNumero} ${dias[6].mesNombre} ${dias[6].fecha.slice(0, 4)}`;
 
-    // 2. Consultar agenda_citas en el rango de la semana
+    // 2. Consultar agenda_citas en el rango de la semana (excluyendo canceladas y completadas para enfocar próximos)
     const { data: citasRaw, error: errCitas } = await sb
       .from("agenda_citas")
-      .select(`
-        id,
-        tipo_cita,
-        fecha,
-        hora_inicio,
-        hora_fin,
-        cliente_nombre,
-        cliente_telefono,
-        cliente_email,
-        fraccionamiento,
-        direccion,
-        notas,
-        estado,
-        perfil_id,
-        asignados_ids,
-        expediente_id,
-        cotizacion_id,
-        prospecto_id
-      `)
+      .select("*, perfiles(nombre)")
       .gte("fecha", fechaInicio)
       .lte("fecha", fechaFin)
       .neq("estado", "cancelada")
+      .neq("estado", "completada")
       .order("fecha", { ascending: true })
       .order("hora_inicio", { ascending: true });
 
@@ -169,7 +152,7 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       console.error("Error al consultar agenda_citas para actividades de la semana:", errCitas);
     }
 
-    // 3. Consultar ordenes_trabajo en el rango de la semana
+    // 3. Consultar ordenes_trabajo en el rango de la semana (excluyendo canceladas y completadas)
     const { data: otsRaw, error: errOTs } = await sb
       .from("ordenes_trabajo")
       .select(`
@@ -188,6 +171,7 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       .gte("fecha_programada", fechaInicio)
       .lte("fecha_programada", fechaFin)
       .neq("estatus", "cancelada")
+      .neq("estatus", "completada")
       .order("fecha_programada", { ascending: true });
 
     if (errOTs) {
@@ -199,7 +183,7 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     const setExpIds = new Set<string>();
     const setProsIds = new Set<string>();
 
-    (citasRaw || []).forEach((c) => {
+    (citasRaw || []).forEach((c: any) => {
       if (c.perfil_id) setPerfilIds.add(c.perfil_id);
       if (Array.isArray(c.asignados_ids)) {
         c.asignados_ids.forEach((id: string) => id && setPerfilIds.add(id));
@@ -208,31 +192,31 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       if (c.prospecto_id) setProsIds.add(c.prospecto_id);
     });
 
-    (otsRaw || []).forEach((ot) => {
+    (otsRaw || []).forEach((ot: any) => {
       if (ot.asesor_ejecutor_id) setPerfilIds.add(ot.asesor_ejecutor_id);
       if (ot.asesor_responsable_id) setPerfilIds.add(ot.asesor_responsable_id);
       if (ot.expediente_id) setExpIds.add(ot.expediente_id);
       if (ot.prospecto_id) setProsIds.add(ot.prospecto_id);
     });
 
-    // Traer perfiles
+    // Traer catálogo de perfiles para resolver asignados
     const mapaPerfiles = new Map<string, string>();
     if (setPerfilIds.size > 0) {
       const { data: perfilesData } = await sb
         .from("perfiles")
         .select("id, nombre")
         .in("id", Array.from(setPerfilIds));
-      (perfilesData || []).forEach((p) => mapaPerfiles.set(p.id, p.nombre));
+      (perfilesData || []).forEach((p: any) => mapaPerfiles.set(p.id, p.nombre));
     }
 
-    // Traer expedientes
+    // Traer expedientes para complementar direcciones y clientes
     const mapaExpedientes = new Map<string, { cliente: string; primer_apellido?: string; telefono?: string; direccion_propiedad?: string; fraccionamiento?: string }>();
     if (setExpIds.size > 0) {
       const { data: expsData } = await sb
         .from("expedientes")
         .select("id, cliente, primer_apellido, telefono, direccion_propiedad, fraccionamiento")
         .in("id", Array.from(setExpIds));
-      (expsData || []).forEach((e) => mapaExpedientes.set(e.id, e));
+      (expsData || []).forEach((e: any) => mapaExpedientes.set(e.id, e));
     }
 
     // Traer prospectos
@@ -242,14 +226,14 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         .from("prospectos")
         .select("id, nombre, primer_apellido, telefono, direccion, ciudad")
         .in("id", Array.from(setProsIds));
-      (prosData || []).forEach((p) => mapaProspectos.set(p.id, p));
+      (prosData || []).forEach((p: any) => mapaProspectos.set(p.id, p));
     }
 
     // 5. Procesar citas y clasificar
     const actividades: ActividadSemanaItem[] = [];
     const idsCitasProcesadas = new Set<string>();
 
-    for (const c of citasRaw || []) {
+    for (const c of (citasRaw || []) as any[]) {
       const tipoRaw = (c.tipo_cita || "").toLowerCase();
       const notasLower = (c.notas || "").toLowerCase();
 
@@ -265,14 +249,9 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         tipo = "inspeccion";
       }
 
-      // Si no es instalación ni inspección explícita, evaluamos si es una actividad relevante para la semana
+      // Si no es explícita, se considera inspección técnica / visita de servicio
       if (!tipo) {
-        if (tipoRaw === "venta" || tipoRaw === "asesoria" || tipoRaw === "llamada") {
-          // Asumimos tipo inspección/visita técnica si no se especifica otra
-          tipo = "inspeccion";
-        } else {
-          tipo = "inspeccion";
-        }
+        tipo = "inspeccion";
       }
 
       const exp = c.expediente_id ? mapaExpedientes.get(c.expediente_id) : null;
@@ -303,23 +282,26 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
         "León, Gto.";
 
       const direccion =
-        c.direccion ||
         exp?.direccion_propiedad ||
         prsp?.direccion ||
-        (fraccionamiento ? `Col. ${fraccionamiento}` : "");
+        (fraccionamiento ? `Col. ${fraccionamiento}` : "León, Gto.");
 
       // Responsables asignados
       const idsResp: string[] = Array.isArray(c.asignados_ids) && c.asignados_ids.length > 0
         ? c.asignados_ids
         : (c.perfil_id ? [c.perfil_id] : []);
-      const responsables = idsResp
+      let responsables = idsResp
         .map((id) => mapaPerfiles.get(id))
         .filter(Boolean) as string[];
 
+      if (responsables.length === 0 && c.perfiles?.nombre) {
+        responsables = [c.perfiles.nombre];
+      }
+
       // Buscar si tiene OT vinculada
-      const otMatch = (otsRaw || []).find((ot) =>
-        (c.cotizacion_id && ot.cotizacion_id === c.cotizacion_id) ||
-        (c.expediente_id && ot.expediente_id === c.expediente_id && ot.fecha_programada === c.fecha)
+      const otMatch = (otsRaw || []).find((ot: any) =>
+        (c.expediente_id && ot.expediente_id === c.expediente_id && ot.fecha_programada === c.fecha) ||
+        (c.cotizacion_id && ot.cotizacion_id === c.cotizacion_id)
       );
 
       const st = mapearEstado(c.estado);
@@ -358,9 +340,8 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     }
 
     // 6. Procesar órdenes de trabajo que no estén ya reflejadas en citas
-    for (const ot of otsRaw || []) {
+    for (const ot of (otsRaw || []) as any[]) {
       if (idsCitasProcesadas.has(ot.id)) continue;
-      // Verificar si ya se cubrió por cotizacion_id en la misma fecha
       const yaCubierta = actividades.some(
         (a) => a.cotizacionId && a.cotizacionId === ot.cotizacion_id && a.fecha === ot.fecha_programada
       );
