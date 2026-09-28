@@ -62,6 +62,12 @@ export function DocumentosVentas({ modoSelector = false, onSeleccionar }: Props)
     e.preventDefault();
     if (!archivo) { setError("Selecciona un archivo."); return; }
     if (!nombre.trim()) { setError("Escribe un nombre para el documento."); return; }
+    if (archivo.size === 0) {
+      setError(
+        `"${archivo.name}" se seleccionó pero está vacío (0 bytes). Si el archivo está en OneDrive/Google Drive marcado como "solo en la nube", ábrelo primero para descargarlo por completo y vuelve a intentar.`
+      );
+      return;
+    }
 
     setSubiendo(true);
     setError(null);
@@ -203,6 +209,11 @@ export function DocumentosVentas({ modoSelector = false, onSeleccionar }: Props)
         <form onSubmit={handleSubir} className="rounded-lg border border-sauce/20 bg-sauce/5 p-3 space-y-2">
           <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre del documento *" className={INPUT} required />
           <input type="file" ref={inputFileRef} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} className="block w-full text-xs text-carbon/70 file:mr-2 file:rounded file:border-0 file:bg-sauce/20 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-verde-profundo" required />
+          {archivo && (
+            <p className={`text-[10px] ${archivo.size === 0 ? "text-rojo font-semibold" : "text-carbon/50"}`}>
+              {archivo.name} — {archivo.size === 0 ? "⚠️ 0 bytes (archivo vacío)" : formatBytes(archivo.size)}
+            </p>
+          )}
           <button type="submit" disabled={subiendo} className="rounded bg-sauce px-3 py-1.5 text-xs font-semibold text-crema hover:bg-verde-profundo disabled:opacity-50">{subiendo ? "Subiendo…" : "Subir"}</button>
         </form>
       )}
