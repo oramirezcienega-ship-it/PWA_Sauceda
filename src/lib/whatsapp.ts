@@ -41,6 +41,9 @@ export function interpretarErrorMeta(code?: number, message?: string): string {
   if (code === 130429) {
     return "Límite de envíos alcanzado en la cuenta de WhatsApp (Rate Limit de Meta)";
   }
+  if (code === 131049) {
+    return "Meta pausó el envío para proteger la experiencia del usuario (límite de mensajes de marketing/plantilla a este contacto). Reintenta más tarde o usa una plantilla de servicio/utilidad.";
+  }
   if (code === 190) {
     return "Token de WhatsApp expirado o revocado en Meta";
   }
