@@ -1328,7 +1328,10 @@ export async function eliminarFotoExpediente(fotoId: string): Promise<void> {
     }
   }
 
-  await sb.from("fotos_expedientes").delete().eq("id", fotoId);
+  const { error } = await sb.from("fotos_expedientes").delete().eq("id", fotoId);
+  if (error) {
+    throw new Error(`No se pudo eliminar la foto: ${error.message}`);
+  }
 }
 
 /** Obtiene el proveedor de IA activo desde la base de datos o fallback a process.env. */

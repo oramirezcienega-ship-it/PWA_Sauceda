@@ -9,7 +9,9 @@ import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { enviarCorreo } from "@/lib/email";
 import { PLANTILLA_ENTREGA_SERVICIO } from "@/lib/meta-plantillas";
 import { MARCA } from "@/lib/marca";
-import type { RemisionFactura } from "@/lib/types";
+import { generarDocumentoProveedorAutomatico } from "@/app/actions/proveedores";
+import { aDocumentoProveedor } from "@/lib/supabase/mapeo";
+import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 import { sincronizarComisionParaRecibo } from "@/app/actions/comisiones";
 
 export interface EvidenciaFoto {
@@ -39,6 +41,11 @@ export interface OrdenTrabajo {
   fotosEvidencia: EvidenciaFoto[];
   createdAt: string;
   updatedAt: string;
+  // Proveedor asignado a esta orden de trabajo
+  proveedorId: string | null;
+  proveedorNombre?: string | null;
+  costoProveedor: number | null;
+  proveedorConcepto: string | null;
   // Enriquecidos
   token: string;
   notificadoClienteAt?: string | null;
@@ -153,6 +160,9 @@ export async function crearOrdenTrabajo(datos: {
   descripcion?: string;
   fechaProgramada?: string;
   asesorEjecutorId?: string | null;
+  proveedorId?: string | null;
+  costoProveedor?: number | null;
+  proveedorConcepto?: string | null;
 }): Promise<{ ok: boolean; id?: string; folio?: string; error?: string }> {
   try {
     await requireAdmin();
@@ -168,6 +178,9 @@ export async function crearOrdenTrabajo(datos: {
       descripcion = "",
       fechaProgramada = null,
       asesorEjecutorId = null,
+      proveedorId = null,
+      costoProveedor = null,
+      proveedorConcepto = null,
     } = datos;
 
     // Si viene de una cotización y faltan datos, resolverlos automáticamente
@@ -222,6 +235,9 @@ export async function crearOrdenTrabajo(datos: {
         asesor_ejecutor_id: asesorEjecutorId || null,
         creado_por: usuario?.id || null,
         fotos_evidencia: [],
+        proveedor_id: proveedorId || null,
+        costo_proveedor: costoProveedor && costoProveedor > 0 ? costoProveedor : null,
+        proveedor_concepto: proveedorConcepto?.trim() || null,
       })
       .select("id, folio, token")
       .single();
@@ -240,6 +256,34 @@ export async function crearOrdenTrabajo(datos: {
     return { ok: true, id: nuevaOT.id, folio: nuevaOT.folio };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al crear la orden de trabajo." };
+  }
+}
+
+/** Asigna (o cambia) el proveedor y el costo pactado con él para esta orden de trabajo. */
+export async function asignarProveedorOrdenTrabajo(
+  ordenId: string,
+  datos: { proveedorId: string | null; costoProveedor: number | null; proveedorConcepto?: string | null }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { error } = await sb
+      .from("ordenes_trabajo")
+      .update({
+        proveedor_id: datos.proveedorId || null,
+        costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
+        proveedor_concepto: datos.proveedorConcepto?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ordenId);
+
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/ordenes-trabajo");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al asignar el proveedor." };
   }
 }
 
@@ -264,7 +308,8 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono, correo, direccion),
-        cotizaciones(id, precio_final, condiciones_pago, token)
+        cotizaciones(id, precio_final, condiciones_pago, token),
+        proveedores:proveedor_id(id, nombre)
       `)
       .order("created_at", { ascending: false });
 
@@ -373,6 +418,10 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         fotosEvidencia: Array.isArray(d.fotos_evidencia) ? d.fotos_evidencia : [],
         createdAt: d.created_at,
         updatedAt: d.updated_at,
+        proveedorId: d.proveedor_id,
+        proveedorNombre: d.proveedores?.nombre || null,
+        costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
+        proveedorConcepto: d.proveedor_concepto,
         asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
         asesorResponsableNombre: d.asesor_responsable?.nombre || "",
         clienteNombre: d.prospectos?.nombre || "Cliente General",
@@ -398,6 +447,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
   recibos: ReciboPago[];
   garantia: CartaGarantiaOT | null;
   remisionFactura: RemisionFactura | null;
+  documentoProveedor: DocumentoProveedor | null;
 }> {
   try {
     await requireAdmin();
@@ -410,12 +460,25 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
         asesor_ejecutor:perfiles!ordenes_trabajo_asesor_ejecutor_id_fkey(id, nombre),
         asesor_responsable:perfiles!ordenes_trabajo_asesor_responsable_id_fkey(id, nombre),
         prospectos(id, nombre, telefono, correo, direccion),
-        cotizaciones(id, precio_final, condiciones_pago, token)
+        cotizaciones(id, precio_final, condiciones_pago, token),
+        proveedores:proveedor_id(id, nombre)
       `)
       .eq("id", id)
       .maybeSingle();
 
-    if (error || !d) return { orden: null, recibos: [], garantia: null, remisionFactura: null };
+    if (error || !d) return { orden: null, recibos: [], garantia: null, remisionFactura: null, documentoProveedor: null };
+
+    // Documento de costo del proveedor (generado automático al concluir, o registrado manualmente)
+    const { data: docProv } = await sb
+      .from("documentos_proveedores")
+      .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
+      .eq("orden_trabajo_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const documentoProveedor: DocumentoProveedor | null = docProv
+      ? aDocumentoProveedor(docProv as any)
+      : null;
 
     // Recibos asociados
     const { data: recs } = await sb
@@ -529,6 +592,10 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       fotosEvidencia: Array.isArray(d.fotos_evidencia) ? d.fotos_evidencia : [],
       createdAt: d.created_at,
       updatedAt: d.updated_at,
+      proveedorId: d.proveedor_id,
+      proveedorNombre: d.proveedores?.nombre || null,
+      costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
+      proveedorConcepto: d.proveedor_concepto,
       asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
       clienteNombre: d.prospectos?.nombre || "Cliente General",
@@ -542,10 +609,10 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       remisionFactura,
     };
 
-    return { orden, recibos, garantia, remisionFactura };
+    return { orden, recibos, garantia, remisionFactura, documentoProveedor };
   } catch (err) {
     console.error("Error en obtenerOrdenTrabajoPorId:", err);
-    return { orden: null, recibos: [], garantia: null, remisionFactura: null };
+    return { orden: null, recibos: [], garantia: null, remisionFactura: null, documentoProveedor: null };
   }
 }
 
@@ -579,6 +646,14 @@ export async function actualizarEstatusOrdenTrabajo(
       .eq("id", ordenId);
 
     if (error) return { ok: false, error: error.message };
+
+    // Al concluir la orden, generar en automático la remisión de costo del proveedor asignado
+    if (nuevoEstatus === "completada") {
+      const resDoc = await generarDocumentoProveedorAutomatico(ordenId);
+      if (!resDoc.ok) {
+        console.warn("No se generó el documento de proveedor automático:", resDoc.error);
+      }
+    }
 
     revalidatePath("/ordenes-trabajo");
     return { ok: true };
@@ -766,6 +841,56 @@ export async function agregarEvidenciaFotoOT(
     return { ok: true, foto: nuevaFoto };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al subir evidencia fotográfica." };
+  }
+}
+
+/** Elimina una foto de evidencia de la orden de trabajo (storage + registro). */
+export async function eliminarEvidenciaFotoOT(
+  ordenId: string,
+  fotoUrl: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: otData, error: otErr } = await sb
+      .from("ordenes_trabajo")
+      .select("fotos_evidencia")
+      .eq("id", ordenId)
+      .single();
+
+    if (otErr || !otData) return { ok: false, error: "Orden de trabajo no encontrada." };
+
+    const existentes: EvidenciaFoto[] = Array.isArray(otData.fotos_evidencia)
+      ? otData.fotos_evidencia
+      : [];
+    const restantes = existentes.filter((f) => f.url !== fotoUrl);
+
+    if (restantes.length === existentes.length) {
+      return { ok: false, error: "La foto ya no está en la orden de trabajo." };
+    }
+
+    const { error: updateError } = await sb
+      .from("ordenes_trabajo")
+      .update({ fotos_evidencia: restantes, updated_at: new Date().toISOString() })
+      .eq("id", ordenId);
+
+    if (updateError) return { ok: false, error: updateError.message };
+
+    // Borrado del archivo en storage (best-effort, no bloquea si falla)
+    const match = fotoUrl.match(/expedientes-fotos\/(.+)$/);
+    if (match) {
+      try {
+        await sb.storage.from("expedientes-fotos").remove([match[1]]);
+      } catch (e) {
+        console.warn("No se pudo borrar el archivo de storage:", e);
+      }
+    }
+
+    revalidatePath("/ordenes-trabajo");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al eliminar la evidencia fotográfica." };
   }
 }
 
@@ -1121,6 +1246,9 @@ export async function obtenerGarantiaOTPorToken(
         asesorEjecutorNombre: ot.asesor_ejecutor?.nombre || "Sauceda Construye",
         clienteNombre: ot.prospectos?.nombre || "Cliente Sauceda",
         clienteTelefono: ot.prospectos?.telefono || "",
+        proveedorId: ot.proveedor_id ?? null,
+        costoProveedor: ot.costo_proveedor !== null && ot.costo_proveedor !== undefined ? Number(ot.costo_proveedor) : null,
+        proveedorConcepto: ot.proveedor_concepto ?? null,
       },
     };
   } catch (err) {
@@ -1506,6 +1634,9 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
       fotosEvidencia: Array.isArray(d.fotos_evidencia) ? d.fotos_evidencia : [],
       createdAt: d.created_at,
       updatedAt: d.updated_at,
+      proveedorId: d.proveedor_id ?? null,
+      costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
+      proveedorConcepto: d.proveedor_concepto ?? null,
       asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Técnico Asignado",
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
       clienteNombre: d.prospectos?.nombre || "Cliente General",

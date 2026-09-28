@@ -7,6 +7,7 @@ import {
   eliminarOrdenTrabajo,
   asignarAsesorEjecutor,
   agregarEvidenciaFotoOT,
+  eliminarEvidenciaFotoOT,
   obtenerOrdenTrabajoPorId,
   type OrdenTrabajo,
   type ReciboPago,
@@ -18,7 +19,8 @@ import { ModalRegistrarRecibo } from "./ModalRegistrarRecibo";
 import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
-import type { RemisionFactura } from "@/lib/types";
+import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
+import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface ModuloOrdenesTrabajoProps {
   expedienteId?: string | null;
@@ -64,12 +66,14 @@ export function ModuloOrdenesTrabajo({
   } | null>(null);
   const [ordenParaRemision, setOrdenParaRemision] = useState<OrdenTrabajo | null>(null);
   const [ordenParaNotificar, setOrdenParaNotificar] = useState<OrdenTrabajo | null>(null);
+  const [ordenParaProveedor, setOrdenParaProveedor] = useState<OrdenTrabajo | null>(null);
   const [ordenParaEliminar, setOrdenParaEliminar] = useState<OrdenTrabajo | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
 
   // Foto en proceso de subida
   const [subiendoFotoOrdenId, setSubiendoFotoOrdenId] = useState<string | null>(null);
+  const [progresoFotos, setProgresoFotos] = useState<{ actual: number; total: number } | null>(null);
   const [fotoEtapa, setFotoEtapa] = useState<"inicio" | "proceso" | "entrega">("proceso");
 
   // Orden expandida para ver detalles/recibos
@@ -78,7 +82,8 @@ export function ModuloOrdenesTrabajo({
     recibos: ReciboPago[];
     garantia: CartaGarantiaOT | null;
     remisionFactura: RemisionFactura | null;
-  }>({ recibos: [], garantia: null, remisionFactura: null });
+    documentoProveedor: DocumentoProveedor | null;
+  }>({ recibos: [], garantia: null, remisionFactura: null, documentoProveedor: null });
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   // Modal para concluir orden
@@ -123,6 +128,7 @@ export function ModuloOrdenesTrabajo({
         recibos: res.recibos,
         garantia: res.garantia,
         remisionFactura: res.remisionFactura,
+        documentoProveedor: res.documentoProveedor,
       });
     } catch (e) {
       console.error("Error al cargar detalle de OT:", e);
@@ -173,6 +179,11 @@ export function ModuloOrdenesTrabajo({
       );
       setOrdenParaConcluir(null);
 
+      // Refrescar el detalle para reflejar el documento de proveedor generado en automático
+      if (otExpandidaId === otConcluida.id) {
+        cargarDetalle(otConcluida.id);
+      }
+
       // Si tiene cotización y aún no tiene remisión generada, sugerir generarla; de lo contrario sugerir notificar
       if (!otConcluida.remisionFactura && otConcluida.cotizacionId) {
         setTimeout(() => {
@@ -204,7 +215,7 @@ export function ModuloOrdenesTrabajo({
       setOrdenes((prev) => prev.filter((o) => o.id !== idEliminado));
       if (otExpandidaId === idEliminado) {
         setOtExpandidaId(null);
-        setDetalleOT({ recibos: [], garantia: null, remisionFactura: null });
+        setDetalleOT({ recibos: [], garantia: null, remisionFactura: null, documentoProveedor: null });
       }
       setOrdenParaEliminar(null);
       alEliminarOrden?.(idEliminado);
@@ -235,34 +246,89 @@ export function ModuloOrdenesTrabajo({
     }
   };
 
+  const handleProveedorAsignado = (
+    ordenId: string,
+    datos: { proveedorId: string | null; proveedorNombre: string | null; costoProveedor: number | null }
+  ) => {
+    setOrdenes((prev) =>
+      prev.map((o) =>
+        o.id === ordenId
+          ? { ...o, proveedorId: datos.proveedorId, proveedorNombre: datos.proveedorNombre, costoProveedor: datos.costoProveedor }
+          : o
+      )
+    );
+  };
+
   const handleSubirFoto = async (ordenId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const archivos = Array.from(e.target.files || []);
+    if (archivos.length === 0) return;
 
     try {
       setSubiendoFotoOrdenId(ordenId);
-      const fd = new FormData();
-      fd.append("foto", file);
-      fd.append("etapa", fotoEtapa);
-      fd.append("descripcion", `Evidencia de etapa ${fotoEtapa}`);
+      const erroresPorArchivo: string[] = [];
 
-      const res = await agregarEvidenciaFotoOT(ordenId, fd);
-      if (res.ok && res.foto) {
-        setOrdenes((prev) =>
-          prev.map((o) =>
-            o.id === ordenId
-              ? { ...o, fotosEvidencia: [...o.fotosEvidencia, res.foto!] }
-              : o
-          )
-        );
-      } else {
-        alert(res.error || "No se pudo subir la foto.");
+      // Se suben en secuencia (no en paralelo) porque cada subida lee y
+      // reescribe el arreglo completo de fotos_evidencia en la orden.
+      for (let i = 0; i < archivos.length; i++) {
+        setProgresoFotos({ actual: i + 1, total: archivos.length });
+
+        const fd = new FormData();
+        fd.append("foto", archivos[i]);
+        fd.append("etapa", fotoEtapa);
+        fd.append("descripcion", `Evidencia de etapa ${fotoEtapa}`);
+
+        const res = await agregarEvidenciaFotoOT(ordenId, fd);
+        if (res?.ok && res.foto) {
+          const fotoSubida = res.foto;
+          setOrdenes((prev) =>
+            prev.map((o) =>
+              o.id === ordenId
+                ? { ...o, fotosEvidencia: [...o.fotosEvidencia, fotoSubida] }
+                : o
+            )
+          );
+        } else {
+          erroresPorArchivo.push(archivos[i].name);
+        }
+      }
+
+      if (erroresPorArchivo.length > 0) {
+        alert(`No se pudieron subir ${erroresPorArchivo.length} de ${archivos.length} foto(s): ${erroresPorArchivo.join(", ")}`);
       }
     } catch (err: any) {
-      alert(err?.message || "Error al subir foto.");
+      alert(err?.message || "Error al subir fotos.");
     } finally {
       setSubiendoFotoOrdenId(null);
+      setProgresoFotos(null);
       e.target.value = "";
+    }
+  };
+
+  const handleEliminarFoto = async (ordenId: string, fotoUrl: string) => {
+    if (!confirm("¿Eliminar esta foto de evidencia? Esta acción no se puede deshacer.")) return;
+
+    const previas = ordenes.find((o) => o.id === ordenId)?.fotosEvidencia || [];
+    setOrdenes((prev) =>
+      prev.map((o) =>
+        o.id === ordenId
+          ? { ...o, fotosEvidencia: o.fotosEvidencia.filter((f) => f.url !== fotoUrl) }
+          : o
+      )
+    );
+
+    try {
+      const res = await eliminarEvidenciaFotoOT(ordenId, fotoUrl);
+      if (!res.ok) {
+        alert(res.error || "No se pudo eliminar la foto.");
+        setOrdenes((prev) =>
+          prev.map((o) => (o.id === ordenId ? { ...o, fotosEvidencia: previas } : o))
+        );
+      }
+    } catch (err: any) {
+      alert(err?.message || "Error al eliminar la foto.");
+      setOrdenes((prev) =>
+        prev.map((o) => (o.id === ordenId ? { ...o, fotosEvidencia: previas } : o))
+      );
     }
   };
 
@@ -542,6 +608,35 @@ export function ModuloOrdenesTrabajo({
                         )}
                       </span>
                     </div>
+
+                    <div>
+                      <span className="text-[10px] text-carbon/40 uppercase block font-semibold">
+                        Proveedor Asignado
+                      </span>
+                      {ot.proveedorId ? (
+                        <button
+                          type="button"
+                          onClick={() => !soloLectura && setOrdenParaProveedor(ot)}
+                          className="mt-0.5 flex items-center gap-1 text-left"
+                          disabled={soloLectura}
+                        >
+                          <span className="font-semibold text-carbon">🧾 {ot.proveedorNombre}</span>
+                          {ot.costoProveedor != null && (
+                            <span className="font-mono text-carbon/60">({formatMoneda(ot.costoProveedor)})</span>
+                          )}
+                        </button>
+                      ) : !soloLectura ? (
+                        <button
+                          type="button"
+                          onClick={() => setOrdenParaProveedor(ot)}
+                          className="mt-0.5 text-sauce hover:underline font-semibold"
+                        >
+                          + Asignar proveedor
+                        </button>
+                      ) : (
+                        <span className="text-carbon/40 italic mt-0.5 block">Sin asignar</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Barra Financiera de Cobranza */}
@@ -657,12 +752,13 @@ export function ModuloOrdenesTrabajo({
                           <span>📷</span>
                           <span>
                             {subiendoFotoOrdenId === ot.id
-                              ? "Subiendo..."
-                              : "+ Foto"}
+                              ? `Subiendo${progresoFotos ? ` ${progresoFotos.actual}/${progresoFotos.total}` : "..."}`
+                              : "+ Fotos"}
                           </span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             disabled={subiendoFotoOrdenId === ot.id}
                             onChange={(e) => handleSubirFoto(ot.id, e)}
                             className="hidden"
@@ -985,6 +1081,62 @@ export function ModuloOrdenesTrabajo({
                           )}
                         </div>
 
+                        {/* 3.5. Costo de Proveedor (remisión/factura generada automáticamente al concluir) */}
+                        <div className="border-t border-carbon/10 pt-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-titular text-xs font-bold uppercase tracking-wider text-verde-profundo flex items-center gap-1.5">
+                              <span>🧰</span> Costo de Proveedor
+                            </h4>
+                            {!soloLectura && (
+                              <button
+                                type="button"
+                                onClick={() => setOrdenParaProveedor(ot)}
+                                className="text-[11px] text-sauce hover:underline font-bold"
+                              >
+                                {ot.proveedorId ? "✏️ Editar proveedor" : "+ Asignar proveedor"}
+                              </button>
+                            )}
+                          </div>
+
+                          {detalleOT.documentoProveedor ? (
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-xs text-emerald-950 font-mono">
+                                    {detalleOT.documentoProveedor.folio}
+                                  </span>
+                                  <span className="bg-emerald-200 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                                    {detalleOT.documentoProveedor.tipo}
+                                  </span>
+                                  {detalleOT.documentoProveedor.origen === "automatico" && (
+                                    <span className="bg-white text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                                      ⚡ Generada automática
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-bold text-emerald-900">
+                                    {formatMoneda(detalleOT.documentoProveedor.monto)}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-carbon/60 mt-1">
+                                  {detalleOT.documentoProveedor.proveedorNombre} · {detalleOT.documentoProveedor.concepto}
+                                </p>
+                              </div>
+                            </div>
+                          ) : ot.proveedorId ? (
+                            <div className="flex items-center justify-between py-1 bg-amber-50/50 border border-dashed border-amber-200 rounded-xl px-3">
+                              <p className="text-xs text-amber-900/80 italic">
+                                Proveedor {ot.proveedorNombre} asignado
+                                {ot.costoProveedor != null ? ` (${formatMoneda(ot.costoProveedor)})` : ""}. La
+                                remisión se generará automáticamente al concluir la orden.
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-carbon/50 italic py-1">
+                              No hay proveedor asignado a esta orden de trabajo.
+                            </p>
+                          )}
+                        </div>
+
                         {/* 4. Galería de Evidencia Fotográfica */}
                         <div className="border-t border-carbon/10 pt-4">
                           <h4 className="font-titular text-xs font-bold uppercase tracking-wider text-verde-profundo mb-2 flex items-center gap-1.5">
@@ -994,22 +1146,32 @@ export function ModuloOrdenesTrabajo({
                           {ot.fotosEvidencia && ot.fotosEvidencia.length > 0 ? (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                               {ot.fotosEvidencia.map((f, idx) => (
-                                <a
+                                <div
                                   key={idx}
-                                  href={f.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="group relative rounded-xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square block shadow-2xs hover:shadow-md transition"
+                                  className="group relative rounded-xl overflow-hidden border border-carbon/15 bg-carbon/5 aspect-square shadow-2xs hover:shadow-md transition"
                                 >
-                                  <img
-                                    src={f.url}
-                                    alt={f.descripcion || "Evidencia OT"}
-                                    className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
-                                  />
-                                  <span className="absolute bottom-1 left-1 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 capitalize">
+                                  <a href={f.url} target="_blank" rel="noreferrer" className="block h-full w-full">
+                                    <img
+                                      src={f.url}
+                                      alt={f.descripcion || "Evidencia OT"}
+                                      className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
+                                    />
+                                  </a>
+                                  <span className="absolute bottom-1 left-1 rounded-md bg-carbon/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 capitalize pointer-events-none">
                                     {f.etapa}
                                   </span>
-                                </a>
+                                  {!soloLectura && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEliminarFoto(ot.id, f.url)}
+                                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      title="Eliminar foto"
+                                      aria-label="Eliminar foto"
+                                    >
+                                      🗑️
+                                    </button>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           ) : (
@@ -1225,6 +1387,16 @@ export function ModuloOrdenesTrabajo({
           remisionFactura={detalleOT.remisionFactura}
         />
       )}
+
+      {/* Modal Asignar Proveedor a la Orden */}
+      <ModalAsignarProveedorOT
+        orden={ordenParaProveedor}
+        onCerrar={() => setOrdenParaProveedor(null)}
+        onAsignado={(ordenId, datos) => {
+          handleProveedorAsignado(ordenId, datos);
+          if (otExpandidaId === ordenId) cargarDetalle(ordenId);
+        }}
+      />
 
       {/* Modal Confirmar Eliminación de Orden */}
       {ordenParaEliminar && (

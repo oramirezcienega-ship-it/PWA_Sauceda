@@ -10,6 +10,11 @@ import type {
   TipoNegocioId,
   Empresa,
   DatosEmpresa,
+  Proveedor,
+  DatosProveedor,
+  DocumentoProveedor,
+  DatosDocumentoProveedor,
+  TipoDocumentoProveedor,
 } from "@/lib/types";
 
 /** Arma el nombre completo a partir de nombre + apellidos. */
@@ -325,5 +330,128 @@ export function aFilaEmpresa(datos: DatosEmpresa) {
     billing_address: datos.billingAddress || "",
     owner_id: datos.ownerId || null,
     parent_id: datos.parentId || null,
+  };
+}
+
+// ------------------------------------------------------------
+// MÓDULO PROVEEDORES
+// ------------------------------------------------------------
+
+export interface FilaProveedor {
+  id: string;
+  nombre: string;
+  razon_social: string;
+  rfc: string;
+  categoria: string;
+  contacto_nombre: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  notas: string;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function aProveedor(
+  fila: FilaProveedor,
+  metricas?: { totalDocumentos?: number; montoTotal?: number }
+): Proveedor {
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    razonSocial: fila.razon_social ?? "",
+    rfc: fila.rfc ?? "",
+    categoria: fila.categoria ?? "",
+    contactoNombre: fila.contacto_nombre ?? "",
+    telefono: fila.telefono ?? "",
+    email: fila.email ?? "",
+    direccion: fila.direccion ?? "",
+    notas: fila.notas ?? "",
+    activo: fila.activo ?? true,
+    createdAt: fila.created_at ?? "",
+    updatedAt: fila.updated_at ?? "",
+    totalDocumentos: metricas?.totalDocumentos ?? 0,
+    montoTotal: metricas?.montoTotal ?? 0,
+  };
+}
+
+export function aFilaProveedor(datos: DatosProveedor) {
+  return {
+    nombre: datos.nombre.trim(),
+    razon_social: datos.razonSocial || "",
+    rfc: datos.rfc || "",
+    categoria: datos.categoria || "",
+    contacto_nombre: datos.contactoNombre || "",
+    telefono: datos.telefono || "",
+    email: datos.email || "",
+    direccion: datos.direccion || "",
+    notas: datos.notas || "",
+    activo: datos.activo ?? true,
+  };
+}
+
+export interface FilaDocumentoProveedor {
+  id: string;
+  proveedor_id: string;
+  proveedores?: { nombre: string } | null;
+  cotizacion_id: string | null;
+  cotizaciones?: { id: string } | null;
+  expediente_id: string | null;
+  orden_trabajo_id: string | null;
+  ordenes_trabajo?: { folio: string } | null;
+  tipo: TipoDocumentoProveedor;
+  folio: string;
+  folio_proveedor: string | null;
+  concepto: string;
+  fecha: string;
+  monto: number;
+  archivo_url: string | null;
+  archivo_nombre: string | null;
+  notas: string;
+  origen: "manual" | "automatico";
+  created_at: string;
+  updated_at: string;
+}
+
+export function aDocumentoProveedor(fila: FilaDocumentoProveedor): DocumentoProveedor {
+  return {
+    id: fila.id,
+    proveedorId: fila.proveedor_id,
+    proveedorNombre: fila.proveedores?.nombre ?? null,
+    cotizacionId: fila.cotizacion_id,
+    cotizacionFolio: fila.cotizacion_id ?? null,
+    expedienteId: fila.expediente_id,
+    ordenTrabajoId: fila.orden_trabajo_id,
+    ordenTrabajoFolio: fila.ordenes_trabajo?.folio ?? null,
+    tipo: fila.tipo,
+    folio: fila.folio ?? "",
+    folioProveedor: fila.folio_proveedor ?? null,
+    concepto: fila.concepto ?? "",
+    fecha: fila.fecha,
+    monto: Number(fila.monto) || 0,
+    archivoUrl: fila.archivo_url ?? null,
+    archivoNombre: fila.archivo_nombre ?? null,
+    notas: fila.notas ?? "",
+    origen: fila.origen ?? "manual",
+    createdAt: fila.created_at ?? "",
+    updatedAt: fila.updated_at ?? "",
+  };
+}
+
+export function aFilaDocumentoProveedor(datos: DatosDocumentoProveedor) {
+  return {
+    proveedor_id: datos.proveedorId,
+    cotizacion_id: datos.cotizacionId || null,
+    expediente_id: datos.expedienteId || null,
+    orden_trabajo_id: datos.ordenTrabajoId || null,
+    tipo: datos.tipo,
+    folio_proveedor: datos.folioProveedor || null,
+    concepto: datos.concepto || "",
+    fecha: datos.fecha,
+    monto: Number(datos.monto) || 0,
+    archivo_url: datos.archivoUrl || null,
+    archivo_nombre: datos.archivoNombre || null,
+    notas: datos.notas || "",
   };
 }

@@ -1037,6 +1037,83 @@ export interface AutomatizacionConfiguracion {
   createdAt?: string;
 }
 
+// ------------------------------------------------------------
+// MÓDULO PROVEEDORES (costos de terceros por orden de trabajo)
+// ------------------------------------------------------------
+
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  razonSocial: string;
+  rfc: string;
+  categoria: string;
+  contactoNombre: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  notas: string;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  /** Total acumulado de documentos (facturas/remisiones) registrados. Solo lectura, vía join. */
+  totalDocumentos?: number;
+  /** Suma de montos de todos los documentos registrados. Solo lectura, vía join. */
+  montoTotal?: number;
+}
+
+export type DatosProveedor = Omit<
+  Proveedor,
+  "id" | "createdAt" | "updatedAt" | "totalDocumentos" | "montoTotal"
+>;
+
+export type TipoDocumentoProveedor = "remision" | "factura";
+
+/** Origen del documento: capturado a mano, o generado en automático al concluir una orden de trabajo. */
+export type OrigenDocumentoProveedor = "manual" | "automatico";
+
+export interface DocumentoProveedor {
+  id: string;
+  proveedorId: string;
+  proveedorNombre?: string | null;
+  cotizacionId: string | null;
+  cotizacionFolio?: string | null;
+  expedienteId: string | null;
+  /** Orden de trabajo que originó este documento (cuando se generó en automático al concluirla). */
+  ordenTrabajoId: string | null;
+  ordenTrabajoFolio?: string | null;
+  tipo: TipoDocumentoProveedor;
+  /** Folio interno consecutivo, generado siempre por el sistema (REM-PROV-#### / FACT-PROV-####). */
+  folio: string;
+  /** Folio que el proveedor puso en su factura fiscal. Solo aplica cuando tipo = "factura". */
+  folioProveedor?: string | null;
+  concepto: string;
+  fecha: string;
+  monto: number;
+  archivoUrl?: string | null;
+  archivoNombre?: string | null;
+  notas: string;
+  origen: OrigenDocumentoProveedor;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DatosDocumentoProveedor = Omit<
+  DocumentoProveedor,
+  "id" | "proveedorNombre" | "cotizacionFolio" | "ordenTrabajoFolio" | "folio" | "origen" | "createdAt" | "updatedAt"
+>;
+
+export const CATEGORIAS_PROVEEDOR = [
+  "Materiales de construcción",
+  "Herrería / Metalmecánica",
+  "Impermeabilización",
+  "Pintura y acabados",
+  "Electricidad",
+  "Plomería",
+  "Mano de obra / Subcontratista",
+  "Transporte / Maquinaria",
+  "Otro",
+];
+
 export interface ProcesoMaestro {
   id: string;
   nombre: string;
