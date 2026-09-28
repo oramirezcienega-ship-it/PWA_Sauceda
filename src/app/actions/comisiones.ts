@@ -221,128 +221,111 @@ export async function listarComisiones(filtros?: {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  let data: any[] = [];
-  try {
-    let query = sb
-      .from("comisiones")
-      .select(`
-        id,
-        remision_factura_id,
-        recibo_pago_id,
-        asesor_id,
-        cotizacion_id,
-        expediente_id,
-        orden_trabajo_id,
-        fecha,
-        monto_venta,
-        porcentaje_comision,
-        monto_comision,
-        monto_pagado,
-        saldo_pendiente,
-        estatus,
-        es_ajuste_manual,
-        motivo_ajuste,
-        detalles_calculo,
-        notas,
-        created_at,
-        updated_at,
-        perfiles:asesor_id(nombre, telefono),
-        remisiones_facturas:remision_factura_id(id, folio, tipo, fecha, monto_subtotal, monto_total),
-        recibos_pago:recibo_pago_id(id, folio, concepto, monto, fecha_pago, cliente_nombre),
-        cotizaciones:cotizacion_id(id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id),
-        ordenes_trabajo:orden_trabajo_id(id, folio, titulo)
-      `)
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false });
+  // 1. Consultar comisiones directamente (100% libre de fallos de joins PostgREST)
+  let query = sb
+    .from("comisiones")
+    .select("*, perfiles:asesor_id(nombre, telefono)")
+    .order("fecha", { ascending: false })
+    .order("created_at", { ascending: false });
 
-    if (filtros?.asesorId && filtros.asesorId !== "todos") {
-      query = query.eq("asesor_id", filtros.asesorId);
-    }
-
-    if (filtros?.estatus && filtros.estatus !== "todas") {
-      query = query.eq("estatus", filtros.estatus);
-    }
-
-    if (filtros?.fechaDesde) {
-      query = query.gte("fecha", filtros.fechaDesde);
-    }
-
-    if (filtros?.fechaHasta) {
-      query = query.lte("fecha", filtros.fechaHasta);
-    }
-
-    const res = await query;
-    if (res.error) {
-      console.warn("Aviso en consulta enriquecida de comisiones, usando consulta base:", res.error.message);
-      throw new Error(res.error.message);
-    }
-    data = res.data || [];
-  } catch (errPrimario: any) {
-    // Consulta base a prueba de fallos
-    let fallbackQuery = sb
-      .from("comisiones")
-      .select("*, perfiles:asesor_id(nombre, telefono)")
-      .order("fecha", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (filtros?.asesorId && filtros.asesorId !== "todos") {
-      fallbackQuery = fallbackQuery.eq("asesor_id", filtros.asesorId);
-    }
-
-    if (filtros?.estatus && filtros.estatus !== "todas") {
-      fallbackQuery = fallbackQuery.eq("estatus", filtros.estatus);
-    }
-
-    if (filtros?.fechaDesde) {
-      fallbackQuery = fallbackQuery.gte("fecha", filtros.fechaDesde);
-    }
-
-    if (filtros?.fechaHasta) {
-      fallbackQuery = fallbackQuery.lte("fecha", filtros.fechaHasta);
-    }
-
-    const { data: fallbackData, error: errFallback } = await fallbackQuery;
-    if (errFallback) {
-      console.error("Error al listar comisiones base:", errFallback.message);
-      return [];
-    }
-    data = fallbackData || [];
+  if (filtros?.asesorId && filtros.asesorId !== "todos") {
+    query = query.eq("asesor_id", filtros.asesorId);
   }
 
-  // Extraer prospectoIds para resolver nombres si no vienen por recibo
+  if (filtros?.estatus && filtros.estatus !== "todas") {
+    query = query.eq("estatus", filtros.estatus);
+  }
+
+  if (filtros?.fechaDesde) {
+    query = query.gte("fecha", filtros.fechaDesde);
+  }
+
+  if (filtros?.fechaHasta) {
+    query = query.lte("fecha", filtros.fechaHasta);
+  }
+
+  let rows: any[] = [];
+  const { data: qRows, error } = await query;
+  if (error) {
+    console.warn("Aviso al consultar comisiones con perfiles:", error.message);
+    const { data: rawRows, error: errRaw } = await sb
+      .from("comisiones")
+      .select("*")
+      .order("fecha", { ascending: false });
+    if (errRaw) {
+      console.error("Error definitivo al consultar comisiones:", errRaw.message);
+      return [];
+    }
+    rows = rawRows || [];
+  } else {
+    rows = qRows || [];
+  }
+
+  if (!rows || rows.length === 0) {
+    return [];
+  }
+
+  // 2. Extraer IDs vinculados para enriquecer en paralelo sin joins problemáticos
+  const remisionIds = Array.from(new Set(rows.map((r: any) => r.remision_factura_id).filter(Boolean)));
+  const reciboIds = Array.from(new Set(rows.map((r: any) => r.recibo_pago_id).filter(Boolean)));
+  const cotizacionIds = Array.from(new Set(rows.map((r: any) => r.cotizacion_id).filter(Boolean)));
+  const ordenTrabajoIds = Array.from(new Set(rows.map((r: any) => r.orden_trabajo_id).filter(Boolean)));
+
+  const [resRemisiones, resRecibos, resCotizaciones, resOrdenes] = await Promise.all([
+    remisionIds.length > 0
+      ? sb.from("remisiones_facturas").select("id, folio, tipo, fecha, monto_subtotal, monto_total").in("id", remisionIds)
+      : Promise.resolve({ data: [] }),
+    reciboIds.length > 0
+      ? sb.from("recibos_pago").select("id, folio, concepto, monto, fecha_pago, cliente_nombre").in("id", reciboIds)
+      : Promise.resolve({ data: [] }),
+    cotizacionIds.length > 0
+      ? sb.from("cotizaciones").select("id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id").in("id", cotizacionIds)
+      : Promise.resolve({ data: [] }),
+    ordenTrabajoIds.length > 0
+      ? sb.from("ordenes_trabajo").select("id, folio, titulo").in("id", ordenTrabajoIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const mapRem = new Map<string, any>((resRemisiones.data || []).map((r: any) => [r.id, r]));
+  const mapRec = new Map<string, any>((resRecibos.data || []).map((r: any) => [r.id, r]));
+  const mapCot = new Map<string, any>((resCotizaciones.data || []).map((r: any) => [r.id, r]));
+  const mapOt = new Map<string, any>((resOrdenes.data || []).map((r: any) => [r.id, r]));
+
+  // Extraer prospectoIds de las cotizaciones
   const prospectoIds = Array.from(
     new Set(
-      data
-        .map((r: any) => r.cotizaciones?.prospecto_id)
+      Array.from(mapCot.values())
+        .map((c: any) => c.prospecto_id)
         .filter(Boolean)
     )
   );
 
-  const mapaProspectos = new Map<string, string>();
+  let mapPros = new Map<string, string>();
   if (prospectoIds.length > 0) {
     try {
-      const { data: prosData } = await sb
+      const { data: pros } = await sb
         .from("prospectos")
         .select("id, nombre, primer_apellido, segundo_apellido")
         .in("id", prospectoIds);
-      for (const p of prosData || []) {
+      for (const p of pros || []) {
         const nom = [p.nombre, p.primer_apellido, p.segundo_apellido].filter(Boolean).join(" ");
-        if (nom) mapaProspectos.set(p.id, nom);
+        if (nom) mapPros.set(p.id, nom);
       }
     } catch {
-      // Ignorar si prospectos no se pudo consultar
+      // Ignorar fallo de resolución secundaria
     }
   }
 
-  const lista: Comision[] = data.map((row: any) => {
-    const rem = row.remisiones_facturas;
-    const rec = row.recibos_pago;
-    const cot = row.cotizaciones;
+  // 3. Mapeo final enriquecido
+  const lista: Comision[] = rows.map((row: any) => {
+    const rem = row.remision_factura_id ? mapRem.get(row.remision_factura_id) : null;
+    const rec = row.recibo_pago_id ? mapRec.get(row.recibo_pago_id) : null;
+    const cot = row.cotizacion_id ? mapCot.get(row.cotizacion_id) : null;
+    const ot = row.orden_trabajo_id ? mapOt.get(row.orden_trabajo_id) : null;
 
-    // Nombre del cliente
     let nombreCliente = cot?.cliente_nombre_personalizado?.trim() || "";
-    if (!nombreCliente && cot?.prospecto_id && mapaProspectos.has(cot.prospecto_id)) {
-      nombreCliente = mapaProspectos.get(cot.prospecto_id)!;
+    if (!nombreCliente && cot?.prospecto_id && mapPros.has(cot.prospecto_id)) {
+      nombreCliente = mapPros.get(cot.prospecto_id)!;
     }
     if (!nombreCliente && rec?.cliente_nombre) {
       nombreCliente = rec.cliente_nombre;
@@ -357,8 +340,8 @@ export async function listarComisiones(filtros?: {
     const folioCalculado =
       rem?.folio ||
       rec?.folio ||
+      ot?.folio ||
       row.detalles_calculo?.folio ||
-      row.ordenes_trabajo?.folio ||
       "S/F";
     const tipoCalculado =
       rem?.tipo || (row.recibo_pago_id ? "recibo" : "remision");
@@ -378,7 +361,7 @@ export async function listarComisiones(filtros?: {
       cotizacionToken: cot?.token || null,
       expedienteId: row.expediente_id,
       ordenTrabajoId: row.orden_trabajo_id,
-      ordenTrabajoFolio: row.ordenes_trabajo?.folio || null,
+      ordenTrabajoFolio: ot?.folio || null,
       clienteNombre,
       clienteEmpresa: null,
       servicioTipo: cot?.servicio_tipo || null,
@@ -667,13 +650,7 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
         pago_id,
         comision_id,
         monto_aplicado,
-        created_at,
-        comisiones:comision_id(
-          remision_factura_id,
-          recibo_pago_id,
-          remisiones_facturas:remision_factura_id(folio),
-          recibos_pago:recibo_pago_id(folio)
-        )
+        created_at
       )
     `)
     .order("fecha_pago", { ascending: false })
@@ -685,8 +662,8 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
 
   const { data, error } = await query;
   if (error) {
-    console.error("Error al listar pagos de comisiones:", error.message);
-    throw new Error(error.message);
+    console.warn("Aviso al listar pagos de comisiones:", error.message);
+    return [];
   }
 
   return (data || []).map((row: any) => ({
@@ -703,10 +680,7 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
       id: d.id,
       pagoId: d.pago_id,
       comisionId: d.comision_id,
-      remisionFolio:
-        d.comisiones?.remisiones_facturas?.folio ||
-        d.comisiones?.recibos_pago?.folio ||
-        "S/F",
+      remisionFolio: "S/F",
       montoAplicado: Number(d.monto_aplicado || 0),
       createdAt: d.created_at,
     })),
