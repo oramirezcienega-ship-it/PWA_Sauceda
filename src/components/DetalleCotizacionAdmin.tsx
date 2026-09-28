@@ -1346,6 +1346,35 @@ export function DetalleCotizacionAdmin({
               </div>
             </div>
 
+            {/* Banner de Ejecución si está Aceptada */}
+            {(cotizacion.estatus === "aceptada" || cotizacion.estatus === "instalacion") && (
+              <div className="rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-xs">
+                    🛠️
+                  </div>
+                  <div>
+                    <h4 className="font-titular font-bold text-emerald-950 text-sm">
+                      {cotizacion.estatus === "instalacion"
+                        ? "Orden de Trabajo en Ejecución / Instalación"
+                        : "Cotización Aceptada por el Cliente"}
+                    </h4>
+                    <p className="text-xs text-emerald-800">
+                      Gestiona la orden técnica, asigna personal de campo, registra anticipos/recibos y genera la remisión de entrega.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPestaña("orden_trabajo")}
+                  className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-2.5 shadow-xs transition flex items-center gap-1.5"
+                >
+                  <span>Ir a Orden de Trabajo & Entrega</span>
+                  <span>→</span>
+                </button>
+              </div>
+            )}
+
             {/* Resumen del reporte si existe */}
             {reporteVisita && (
               <div className="bg-slate-50 p-4 rounded-xl border border-carbon/5 mt-4 space-y-2">

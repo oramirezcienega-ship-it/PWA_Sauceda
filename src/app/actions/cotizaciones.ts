@@ -1380,6 +1380,15 @@ export async function sincronizarEtapaExpediente(sb: any, cotizacionId: string) 
         break;
     }
 
+    if (cot.estatus === "aceptada") {
+      try {
+        const { asegurarOrdenTrabajoParaCotizacion } = await import("@/app/actions/ordenes-trabajo");
+        await asegurarOrdenTrabajoParaCotizacion(cotizacionId);
+      } catch (errOT) {
+        console.error("Error asegurando orden de trabajo al sincronizar etapa aceptada:", errOT);
+      }
+    }
+
     if (cot.estatus === "pendiente_aprobacion") {
       const { activarTareasBPMPorEvento } = await import("@/app/actions/bpm");
       await activarTareasBPMPorEvento(cot.expediente_id, "cotizacion_conceptos_guardada");

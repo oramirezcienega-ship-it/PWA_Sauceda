@@ -946,6 +946,7 @@ export interface ProductoServicio {
 export interface RemisionFactura {
   id: string;
   cotizacionId: string | null;
+  ordenTrabajoId?: string | null;
   expedienteId: string | null;
   tipo: 'remision' | 'factura';
   folio: string;

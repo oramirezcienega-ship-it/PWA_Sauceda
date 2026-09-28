@@ -23,6 +23,9 @@ const NOMBRE_AGENTE = "IA";
 const MODELO = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 const MAX_HISTORIAL = 20;
 
+/** Último motivo por el que ningún proveedor de IA pudo generar respuesta. */
+let ultimoErrorIA = "";
+
 /** ¿Está activo el agente de IA? */
 export function iaAgenteActivo(): boolean {
   if (process.env.IA_AGENTE === "off") return false;
@@ -149,7 +152,9 @@ export async function diagnosticoIA(): Promise<{ ok: boolean; mensaje: string }>
     }
     const cuerpo = (await res.text()).slice(0, 200);
     const pista =
-      res.status === 401
+      /credit balance/i.test(cuerpo)
+        ? " (SIN CRÉDITO: recarga en console.anthropic.com → Plans & Billing)"
+        : res.status === 401
         ? " (key inválida)"
         : res.status === 404
           ? " (modelo no encontrado: revisa ANTHROPIC_MODEL)"
@@ -651,6 +656,8 @@ async function generarRespuesta(
   sb?: SupabaseClient | null,
 ): Promise<string> {
   if (mensajes.length === 0) return "";
+  ultimoErrorIA = "";
+  const errores: string[] = [];
 
   let systemFinal = system;
   if (system.includes("JSON")) {
@@ -757,7 +764,8 @@ async function generarRespuesta(
         });
 
         if (!res.ok) {
-          throw new Error(`Kimi respondió status ${res.status}`);
+          const cuerpo = (await res.text().catch(() => "")).slice(0, 200);
+          throw new Error(`Kimi respondió status ${res.status}. ${cuerpo}`);
         }
 
         const json = await res.json();
@@ -785,7 +793,8 @@ async function generarRespuesta(
         });
 
         if (!res.ok) {
-          throw new Error(`Anthropic respondió status ${res.status}`);
+          const cuerpo = (await res.text().catch(() => "")).slice(0, 200);
+          throw new Error(`Anthropic respondió status ${res.status}. ${cuerpo}`);
         }
 
         const json = await res.json();
@@ -798,10 +807,12 @@ async function generarRespuesta(
       }
     } catch (err: any) {
       console.warn(`[IA Router Failover] Proveedor ${proveedor} falló: ${err.message}. Intentando siguiente fallback...`);
+      errores.push(`${proveedor}: ${err.message}`);
     }
   }
 
-  console.error("[IA Router Failover] Todos los proveedores configurados fallaron.");
+  ultimoErrorIA = errores.join(" | ") || "Ningún proveedor devolvió texto.";
+  console.error(`[IA Router Failover] Todos los proveedores configurados fallaron. ${ultimoErrorIA}`);
   return "";
 }
 
@@ -918,7 +929,18 @@ export async function responderConIA(
       aMensajes(historia),
       sb,
     );
-    if (!textoAI) return;
+    if (!textoAI) {
+      // Deja constancia en el expediente para que el asesor vea por qué Sofía no contestó.
+      if (ctx.expedienteId) {
+        await registrarActividad(sb, {
+          expedienteId: ctx.expedienteId,
+          tipo: "nota",
+          titulo: "Sofía (IA) no pudo responder",
+          detalle: ultimoErrorIA || "La IA no generó respuesta.",
+        });
+      }
+      return;
+    }
 
     let textoRespuesta = "";
     let datosExtraidos: {
