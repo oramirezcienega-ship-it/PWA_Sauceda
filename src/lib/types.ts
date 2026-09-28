@@ -1153,8 +1153,9 @@ export interface ReglaComision {
 export interface Comision {
   id: string;
   remisionFacturaId?: string | null;
+  reciboPagoId?: string | null;
   remisionFolio?: string | null;
-  remisionTipo?: 'remision' | 'factura' | null;
+  remisionTipo?: 'remision' | 'factura' | 'recibo' | null;
   remisionFecha?: string | null;
   asesorId: string;
   asesorNombre: string;

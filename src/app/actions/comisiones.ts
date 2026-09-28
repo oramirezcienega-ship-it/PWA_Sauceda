@@ -226,6 +226,7 @@ export async function listarComisiones(filtros?: {
     .select(`
       id,
       remision_factura_id,
+      recibo_pago_id,
       asesor_id,
       cotizacion_id,
       expediente_id,
@@ -245,8 +246,9 @@ export async function listarComisiones(filtros?: {
       updated_at,
       perfiles:asesor_id(nombre, telefono),
       remisiones_facturas:remision_factura_id(id, folio, tipo, fecha, monto_subtotal, monto_total),
+      recibos_pago:recibo_pago_id(id, folio, concepto, monto, fecha_pago, cliente_nombre),
       cotizaciones:cotizacion_id(id, token, servicio_tipo, cliente_nombre_personalizado, prospecto_id, empresa_id, prospectos(nombre, primer_apellido, segundo_apellido, empresa_id), empresas(name)),
-      ordenes_trabajo:orden_trabajo_id(id, folio, titulo)
+      ordenes_trabajo:orden_trabajo_id(id, folio, titulo, prospectos(nombre, primer_apellido, segundo_apellido))
     `)
     .order("fecha", { ascending: false })
     .order("created_at", { ascending: false });
@@ -275,8 +277,9 @@ export async function listarComisiones(filtros?: {
 
   const lista: Comision[] = (data || []).map((row: any) => {
     const rem = row.remisiones_facturas;
+    const rec = row.recibos_pago;
     const cot = row.cotizaciones;
-    const pros = cot?.prospectos;
+    const pros = cot?.prospectos || row.ordenes_trabajo?.prospectos;
     const emp = cot?.empresas;
 
     // Nombre del cliente
@@ -288,6 +291,9 @@ export async function listarComisiones(filtros?: {
           .join(" ");
       }
     }
+    if (!nombreCliente && rec?.cliente_nombre) {
+      nombreCliente = rec.cliente_nombre;
+    }
     if (!nombreCliente && emp?.name) {
       nombreCliente = emp.name;
     }
@@ -296,13 +302,23 @@ export async function listarComisiones(filtros?: {
     }
 
     const empresaNombre = emp?.name || null;
+    const folioCalculado =
+      rem?.folio ||
+      rec?.folio ||
+      row.detalles_calculo?.folio ||
+      row.ordenes_trabajo?.folio ||
+      "S/F";
+    const tipoCalculado =
+      rem?.tipo || (row.recibo_pago_id ? "recibo" : "remision");
+    const fechaCalculada = rem?.fecha || rec?.fecha_pago || row.fecha;
 
     return {
       id: row.id,
       remisionFacturaId: row.remision_factura_id,
-      remisionFolio: rem?.folio || "S/F",
-      remisionTipo: rem?.tipo || "remision",
-      remisionFecha: rem?.fecha || row.fecha,
+      reciboPagoId: row.recibo_pago_id,
+      remisionFolio: folioCalculado,
+      remisionTipo: tipoCalculado,
+      remisionFecha: fechaCalculada,
       asesorId: row.asesor_id,
       asesorNombre: row.perfiles?.nombre || "Sin Asesor",
       asesorTelefono: row.perfiles?.telefono || null,
@@ -600,7 +616,12 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
         comision_id,
         monto_aplicado,
         created_at,
-        comisiones:comision_id(remision_factura_id, remisiones_facturas:remision_factura_id(folio))
+        comisiones:comision_id(
+          remision_factura_id,
+          recibo_pago_id,
+          remisiones_facturas:remision_factura_id(folio),
+          recibos_pago:recibo_pago_id(folio)
+        )
       )
     `)
     .order("fecha_pago", { ascending: false })
@@ -630,7 +651,10 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
       id: d.id,
       pagoId: d.pago_id,
       comisionId: d.comision_id,
-      remisionFolio: d.comisiones?.remisiones_facturas?.folio || "S/F",
+      remisionFolio:
+        d.comisiones?.remisiones_facturas?.folio ||
+        d.comisiones?.recibos_pago?.folio ||
+        "S/F",
       montoAplicado: Number(d.monto_aplicado || 0),
       createdAt: d.created_at,
     })),
@@ -790,6 +814,166 @@ export async function sincronizarComisionParaRemision(
   }
 }
 
+export async function sincronizarComisionParaRecibo(
+  reciboId: string
+): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
+  try {
+    const sb = supabaseServidor();
+
+    // 1. Obtener datos del recibo
+    const { data: rec, error: errRec } = await sb
+      .from("recibos_pago")
+      .select(`
+        id,
+        folio,
+        monto,
+        concepto,
+        fecha_pago,
+        cotizacion_id,
+        expediente_id,
+        orden_trabajo_id,
+        cliente_nombre,
+        cotizaciones(
+          id,
+          servicio_tipo,
+          prospecto_id,
+          prospectos(asesor_id)
+        ),
+        expedientes(asesor_id),
+        ordenes_trabajo(
+          asesor_responsable_id,
+          asesor_ejecutor_id,
+          prospectos(asesor_id)
+        )
+      `)
+      .eq("id", reciboId)
+      .single();
+
+    if (errRec || !rec) {
+      return { ok: false, error: "Recibo de pago no encontrado." };
+    }
+
+    // 2. Determinar Asesor asignado
+    let asesorId: string | null =
+      rec.ordenes_trabajo?.asesor_ejecutor_id ||
+      rec.ordenes_trabajo?.asesor_responsable_id ||
+      rec.ordenes_trabajo?.prospectos?.asesor_id ||
+      rec.cotizaciones?.prospectos?.asesor_id ||
+      rec.expedientes?.asesor_id ||
+      null;
+
+    if (!asesorId) {
+      const { data: defaultAsesor } = await sb
+        .from("perfiles")
+        .select("id")
+        .eq("rol", "asesor")
+        .eq("activo", true)
+        .order("nombre", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      asesorId = defaultAsesor?.id || null;
+    }
+
+    if (!asesorId) {
+      return { ok: false, error: "No se encontró ningún asesor activo para comisionar la venta." };
+    }
+
+    // 3. Verificar si ya existe comisión registrada para este recibo
+    const { data: comisionExistente } = await sb
+      .from("comisiones")
+      .select("id, es_ajuste_manual, monto_comision, monto_pagado")
+      .eq("recibo_pago_id", reciboId)
+      .maybeSingle();
+
+    const montoVenta = Number(rec.monto || 0);
+    const servicioTipo = rec.cotizaciones?.servicio_tipo || null;
+
+    if (comisionExistente) {
+      if (comisionExistente.es_ajuste_manual) {
+        return { ok: true, comisionId: comisionExistente.id };
+      }
+
+      const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({
+        asesorId,
+        servicioTipo,
+      });
+
+      const nuevoMontoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+      const pagado = Number(comisionExistente.monto_pagado || 0);
+
+      await sb
+        .from("comisiones")
+        .update({
+          asesor_id: asesorId,
+          monto_venta: montoVenta,
+          porcentaje_comision: porcentaje,
+          monto_comision: nuevoMontoComision,
+          saldo_pendiente: Math.max(0, nuevoMontoComision - pagado),
+          estatus:
+            pagado >= nuevoMontoComision
+              ? "pagada"
+              : pagado > 0
+              ? "parcial"
+              : "pendiente",
+          detalles_calculo: {
+            reglaOrigen,
+            origen: "recibo_pago",
+            folio: rec.folio,
+            fechaCalculo: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", comisionExistente.id);
+
+      revalidatePath("/comisiones");
+      return { ok: true, comisionId: comisionExistente.id };
+    }
+
+    // 4. Crear nueva comisión
+    const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({
+      asesorId,
+      servicioTipo,
+    });
+
+    const montoComision = Math.round(montoVenta * (porcentaje / 100) * 100) / 100;
+
+    const { data: nuevaCom, error: errIns } = await sb
+      .from("comisiones")
+      .insert({
+        recibo_pago_id: rec.id,
+        asesor_id: asesorId,
+        cotizacion_id: rec.cotizacion_id,
+        expediente_id: rec.expediente_id,
+        orden_trabajo_id: rec.orden_trabajo_id,
+        fecha: rec.fecha_pago || new Date().toISOString().split("T")[0],
+        monto_venta: montoVenta,
+        porcentaje_comision: porcentaje,
+        monto_comision: montoComision,
+        monto_pagado: 0.0,
+        saldo_pendiente: montoComision,
+        estatus: "pendiente",
+        es_ajuste_manual: false,
+        detalles_calculo: {
+          reglaOrigen,
+          origen: "recibo_pago",
+          folio: rec.folio,
+          fechaCalculo: new Date().toISOString(),
+        },
+      })
+      .select("id")
+      .single();
+
+    if (errIns) throw new Error(errIns.message);
+
+    revalidatePath("/comisiones");
+    return { ok: true, comisionId: nuevaCom.id };
+  } catch (err: any) {
+    console.error("Error al sincronizar comisión de recibo:", err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
 export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
   ok: boolean;
   creadas: number;
@@ -800,15 +984,32 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
     await requireAdmin();
     const sb = supabaseServidor();
 
-    const { data: remisiones, error: errRem } = await sb
+    // 1. Invocar función SQL global si existe
+    try {
+      await sb.rpc("fn_sincronizar_comisiones_todas");
+    } catch (e: any) {
+      console.warn("RPC fn_sincronizar_comisiones_todas:", e?.message);
+    }
+
+    let procesadas = 0;
+
+    // 2. Procesar remisiones_facturas
+    const { data: remisiones } = await sb
       .from("remisiones_facturas")
       .select("id");
 
-    if (errRem) throw new Error(errRem.message);
-
-    let procesadas = 0;
     for (const r of remisiones || []) {
       const res = await sincronizarComisionParaRemision(r.id);
+      if (res.ok) procesadas++;
+    }
+
+    // 3. Procesar recibos_pago
+    const { data: recibos } = await sb
+      .from("recibos_pago")
+      .select("id");
+
+    for (const rec of recibos || []) {
+      const res = await sincronizarComisionParaRecibo(rec.id);
       if (res.ok) procesadas++;
     }
 

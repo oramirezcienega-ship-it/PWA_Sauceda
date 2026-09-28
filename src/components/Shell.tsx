@@ -18,6 +18,34 @@ import {
 } from "@/app/actions/notificaciones";
 import { contarConversacionesPendientes } from "@/app/actions/conversaciones";
 import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
+import {
+  IconoConversaciones,
+  IconoPipeline,
+  IconoCotizaciones,
+  IconoOrdenesTrabajo,
+  IconoProspectos,
+  IconoNegocios,
+  IconoEmpresas,
+  IconoComisiones,
+  IconoConstruccion,
+  IconoProveedores,
+  IconoAgenda,
+  IconoFinanzas,
+  IconoVisualizadorIA,
+  IconoChatwoot,
+  IconoPublicacionesIA,
+  IconoSecuencias,
+  IconoLlamadas,
+  IconoDashboard,
+  IconoDashboardInteligente,
+  IconoReportes,
+  IconoConsejo,
+  IconoGerente,
+  IconoProcesosBPM,
+  IconoUsuarios,
+  IconoChevronAbajo,
+  IconoFuego,
+} from "./IconosNav";
 
 /**
  * Estructura (chrome) del panel del admin: menú de navegación en una columna
@@ -55,6 +83,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [notificadosIds, setNotificadosIds] = useState<string[]>([]);
   const [busquedaAbierta, setBusquedaAbierta] = useState(false);
   const [colapsada, setColapsada] = useState(false);
+  const [gruposColapsados, setGruposColapsados] = useState<Record<string, boolean>>({});
+  const [currentSearch, setCurrentSearch] = useState("");
 
   useEffect(() => {
     try {
@@ -62,14 +92,39 @@ export function Shell({ children }: { children: React.ReactNode }) {
       if (guardado !== null) {
         setColapsada(guardado === "true");
       }
+      const gruposGuardados = localStorage.getItem("sauceda_sidebar_grupos_colapsados");
+      if (gruposGuardados) {
+        setGruposColapsados(JSON.parse(gruposGuardados));
+      }
     } catch {}
   }, []);
+
+  useEffect(() => {
+    const updateSearch = () => {
+      if (typeof window !== "undefined") {
+        setCurrentSearch(window.location.search);
+      }
+    };
+    updateSearch();
+    window.addEventListener("popstate", updateSearch);
+    return () => window.removeEventListener("popstate", updateSearch);
+  }, [pathname]);
 
   const toggleSidebar = () => {
     setColapsada((prev) => {
       const next = !prev;
       try {
         localStorage.setItem("sauceda_sidebar_colapsada", String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const toggleGrupo = (grupoId: string) => {
+    setGruposColapsados((prev) => {
+      const next = { ...prev, [grupoId]: !prev[grupoId] };
+      try {
+        localStorage.setItem("sauceda_sidebar_grupos_colapsados", JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -337,50 +392,241 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   if (esRutaPublica(pathname || "")) return <>{children}</>;
 
-  const enlacesBase = [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/", label: "Negocios" },
-    { href: "/empresas", label: "Empresas" },
-    { href: "/prospectos", label: "Prospectos" },
-    { href: "/prospectos/pipeline", label: "Pipeline" },
-    { href: "/ordenes-trabajo", label: "Órdenes de Trabajo (Nuevo)" },
-    { href: "/comisiones", label: "Comisiones" },
-    { href: "/conversaciones", label: "Conversaciones" },
-    { href: "/construccion", label: "Construcción" },
-    { href: "/proveedores", label: "Proveedores" },
-    ...(esAdmin ? [{ href: "/finanzas", label: "Finanzas" }] : []),
-    { href: "/agenda", label: "Agenda" },
-    { href: "/visualizador", label: "Visualizador IA (Nuevo)" },
-    { href: "/chatwoot", label: "Chatwoot (Nuevo)" },
+  interface ElementoNav {
+    href: string;
+    label: string;
+    icono: React.ComponentType<{ className?: string }>;
+    badge?: "contador" | "nuevo";
+    esAdminOnly?: boolean;
+  }
+
+  interface CategoriaNav {
+    id: string;
+    titulo: string;
+    icono?: React.ComponentType<{ className?: string }>;
+    esAdminOnly?: boolean;
+    items: ElementoNav[];
+  }
+
+  const categorias: CategoriaNav[] = [
+    {
+      id: "frecuentes",
+      titulo: "Mi Día a Día",
+      icono: IconoFuego,
+      items: [
+        {
+          href: "/conversaciones",
+          label: "Conversaciones",
+          icono: IconoConversaciones,
+          badge: "contador",
+        },
+        {
+          href: "/prospectos/pipeline",
+          label: "Pipeline",
+          icono: IconoPipeline,
+        },
+        {
+          href: "/construccion?tab=cotizaciones",
+          label: "Cotizaciones",
+          icono: IconoCotizaciones,
+        },
+        {
+          href: "/ordenes-trabajo",
+          label: "Órdenes de Trabajo",
+          icono: IconoOrdenesTrabajo,
+          badge: "nuevo",
+        },
+      ],
+    },
+    {
+      id: "comercial",
+      titulo: "Comercial & Negocios",
+      items: [
+        {
+          href: "/prospectos",
+          label: "Prospectos",
+          icono: IconoProspectos,
+        },
+        {
+          href: "/",
+          label: "Negocios",
+          icono: IconoNegocios,
+        },
+        {
+          href: "/empresas",
+          label: "Empresas",
+          icono: IconoEmpresas,
+        },
+        {
+          href: "/comisiones",
+          label: "Comisiones",
+          icono: IconoComisiones,
+        },
+      ],
+    },
+    {
+      id: "operaciones",
+      titulo: "Operaciones & Obra",
+      items: [
+        {
+          href: "/construccion?tab=catalogo",
+          label: "Construcción",
+          icono: IconoConstruccion,
+        },
+        {
+          href: "/proveedores",
+          label: "Proveedores",
+          icono: IconoProveedores,
+        },
+        {
+          href: "/agenda",
+          label: "Agenda",
+          icono: IconoAgenda,
+        },
+        {
+          href: "/finanzas",
+          label: "Finanzas",
+          icono: IconoFinanzas,
+          esAdminOnly: true,
+        },
+      ],
+    },
+    {
+      id: "ia",
+      titulo: "Inteligencia IA",
+      items: [
+        {
+          href: "/visualizador",
+          label: "Visualizador IA",
+          icono: IconoVisualizadorIA,
+          badge: "nuevo",
+        },
+        {
+          href: "/chatwoot",
+          label: "Chatwoot",
+          icono: IconoChatwoot,
+          badge: "nuevo",
+        },
+        {
+          href: "/admin/publicaciones",
+          label: "Publicaciones IA",
+          icono: IconoPublicacionesIA,
+          esAdminOnly: true,
+        },
+        {
+          href: "/secuencias",
+          label: "Secuencias",
+          icono: IconoSecuencias,
+          esAdminOnly: true,
+        },
+        {
+          href: "/dashboard/llamadas",
+          label: "Llamadas",
+          icono: IconoLlamadas,
+          esAdminOnly: true,
+        },
+      ],
+    },
+    {
+      id: "gestion",
+      titulo: "Estrategia & Control",
+      esAdminOnly: true,
+      items: [
+        {
+          href: "/dashboard",
+          label: "Dashboard",
+          icono: IconoDashboard,
+        },
+        {
+          href: "/reportes/dashboard-inteligente",
+          label: "Dashboard Inteligente",
+          icono: IconoDashboardInteligente,
+        },
+        {
+          href: "/reportes",
+          label: "Reportes",
+          icono: IconoReportes,
+        },
+        {
+          href: "/consejo",
+          label: "El Consejo",
+          icono: IconoConsejo,
+        },
+        {
+          href: "/admin/gerente",
+          label: "Gerente Operaciones",
+          icono: IconoGerente,
+        },
+        {
+          href: "/admin/procesos",
+          label: "Procesos BPM",
+          icono: IconoProcesosBPM,
+        },
+        {
+          href: "/usuarios",
+          label: "Usuarios",
+          icono: IconoUsuarios,
+        },
+      ],
+    },
   ];
 
-  const enlaces = esAdmin
-    ? [
-        ...enlacesBase,
-        { href: "/admin/publicaciones", label: "Publicaciones IA" },
-        { href: "/secuencias", label: "Secuencias" },
-        { href: "/dashboard/llamadas", label: "Llamadas" },
-        { href: "/reportes", label: "Reportes" },
-        { href: "/reportes/dashboard-inteligente", label: "Dashboard Inteligente" },
-        { href: "/usuarios", label: "Usuarios" },
-        { href: "/consejo", label: "El Consejo" },
-        { href: "/admin/gerente", label: "Gerente Operaciones" },
-        { href: "/admin/procesos", label: "Procesos BPM" },
-      ]
-    : enlacesBase;
+  const esActivo = (href: string) => {
+    const currentPath = pathname || "";
+    const [targetPath, targetQuery] = href.split("?");
 
-  const activo = (href: string) =>
-    href === "/" ? (pathname || "") === "/" : (pathname || "").startsWith(href);
+    if (targetQuery) {
+      return (
+        currentPath === targetPath &&
+        (currentSearch.includes(targetQuery) ||
+          (targetQuery === "tab=cotizaciones" &&
+            (!currentSearch || currentSearch.includes("tab=cotizaciones"))))
+      );
+    }
+
+    if (href === "/") {
+      return currentPath === "/";
+    }
+
+    if (href === "/prospectos") {
+      return (
+        currentPath === "/prospectos" ||
+        (currentPath.startsWith("/prospectos/") &&
+          !currentPath.startsWith("/prospectos/pipeline"))
+      );
+    }
+
+    if (href === "/dashboard") {
+      return currentPath === "/dashboard";
+    }
+
+    if (href === "/reportes") {
+      return currentPath === "/reportes";
+    }
+
+    if (href.startsWith("/construccion")) {
+      return (
+        currentPath === "/construccion" &&
+        currentSearch.includes("tab=catalogo")
+      );
+    }
+
+    return currentPath === href || currentPath.startsWith(href + "/");
+  };
 
   const marca = (
-    <Link href="/" className="flex items-center gap-2 px-4 py-4 leading-none">
+    <Link href="/" className="flex items-center gap-2.5 px-3 py-3 leading-none group">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.svg" alt="SAUCEDA" className="h-9 w-9" />
+      <img
+        src="/logo.svg"
+        alt="SAUCEDA"
+        className="h-8.5 w-8.5 transition-transform duration-200 group-hover:scale-105"
+      />
       <span className="flex flex-col">
-        <span className="font-display text-xl font-semibold tracking-tight text-crema">
+        <span className="font-display text-[19px] font-bold tracking-tight text-white group-hover:text-dorado transition-colors">
           SAUCEDA
         </span>
-        <span className="font-cuerpo text-[10px] uppercase tracking-[0.2em] text-dorado">
+        <span className="font-cuerpo text-[9px] uppercase tracking-[0.22em] text-dorado font-semibold">
           Bienes Raíces
         </span>
       </span>
@@ -388,51 +634,146 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 
   const navegacion = (
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
+    <nav className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-2.5 py-2.5 scrollbar-sutil">
       <button
         type="button"
         onClick={() => setBusquedaAbierta(true)}
-        className="mb-2 flex w-full items-center justify-between rounded-xl bg-crema/10 hover:bg-crema/20 border border-crema/20 px-3 py-2 text-xs font-bold text-crema transition shadow-xs cursor-pointer"
+        className="group flex w-full items-center justify-between rounded-xl bg-black/25 hover:bg-black/35 border border-crema/10 hover:border-dorado/40 px-3 py-2 text-xs text-crema transition-all shadow-inner cursor-pointer"
       >
         <span className="flex items-center gap-2">
-          <span>🔍</span>
-          <span>Buscar en todo...</span>
+          <svg
+            className="h-3.5 w-3.5 text-dorado/80 transition group-hover:text-dorado"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span className="text-[12px] text-crema/80 group-hover:text-white">Buscar en todo...</span>
         </span>
-        <kbd className="rounded bg-black/30 border border-crema/20 px-1.5 py-0.5 text-[9px] font-mono text-crema/70">
+        <kbd className="rounded bg-black/40 border border-crema/20 px-1.5 py-0.5 text-[9px] font-mono text-crema/70 shadow-xs">
           Ctrl+K
         </kbd>
       </button>
 
-      {enlaces.map((l) => {
-        const esConversaciones = l.href === "/conversaciones";
-        return (
-          <Link
-            key={l.href}
-            href={l.href}
-            onClick={() => setAbierto(false)}
-            className={`flex items-center justify-between rounded-md px-3 py-2 text-sm transition ${
-              activo(l.href)
-                ? "bg-crema/15 font-medium text-crema"
-                : "text-crema/80 hover:bg-crema/10"
-            }`}
-          >
-            <span>{l.label}</span>
-            {esConversaciones && conversacionesPendientes > 0 && (
-              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rojo px-1.5 text-[10px] font-bold text-crema animate-pulse">
-                {conversacionesPendientes > 99 ? "99+" : conversacionesPendientes}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+      <div className="flex flex-col gap-3">
+        {categorias
+          .filter((cat) => !cat.esAdminOnly || esAdmin)
+          .map((cat) => {
+            const itemsVisibles = cat.items.filter(
+              (item) => !item.esAdminOnly || esAdmin
+            );
+            if (itemsVisibles.length === 0) return null;
+
+            const colapsado = !!gruposColapsados[cat.id];
+            const IconoCat = cat.icono;
+            const esFrecuentes = cat.id === "frecuentes";
+
+            return (
+              <div
+                key={cat.id}
+                className={`flex flex-col rounded-xl transition-colors ${
+                  esFrecuentes ? "bg-black/15 p-1 border border-dorado/20" : ""
+                }`}
+              >
+                {/* Encabezado del grupo */}
+                <button
+                  type="button"
+                  onClick={() => toggleGrupo(cat.id)}
+                  className={`flex w-full items-center justify-between px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer select-none group ${
+                    esFrecuentes
+                      ? "text-dorado"
+                      : "text-dorado/80 hover:text-dorado"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {IconoCat && <IconoCat className="h-3 w-3 text-dorado" />}
+                    <span>{cat.titulo}</span>
+                  </span>
+                  <IconoChevronAbajo
+                    className={`h-3 w-3 text-dorado/60 transition-transform duration-200 group-hover:text-dorado ${
+                      colapsado ? "-rotate-90" : "rotate-0"
+                    }`}
+                  />
+                </button>
+
+                {/* Items del grupo */}
+                {!colapsado && (
+                  <div className="flex flex-col gap-0.5 mt-0.5 animate-in fade-in duration-150">
+                    {itemsVisibles.map((item) => {
+                      const isActivo = esActivo(item.href);
+                      const Icono = item.icono;
+                      const esConversaciones = item.href === "/conversaciones";
+
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => {
+                            setAbierto(false);
+                            const [, query] = item.href.split("?");
+                            setCurrentSearch(query ? `?${query}` : "");
+                          }}
+                          className={`group relative flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] transition-all duration-150 ${
+                            isActivo
+                              ? "bg-dorado/15 font-semibold text-white shadow-xs border border-dorado/30"
+                              : "text-crema/80 hover:bg-white/8 hover:text-white border border-transparent"
+                          }`}
+                        >
+                          {isActivo && (
+                            <span className="absolute left-0 top-1 bottom-1 w-1 rounded-r-full bg-dorado" />
+                          )}
+
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Icono
+                              className={`h-4 w-4 shrink-0 transition-colors ${
+                                isActivo
+                                  ? "text-dorado"
+                                  : "text-crema/60 group-hover:text-dorado"
+                              }`}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </div>
+
+                          {/* Badges */}
+                          {esConversaciones && conversacionesPendientes > 0 && (
+                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rojo px-1.5 text-[10px] font-bold text-white shadow-xs animate-pulse">
+                              {conversacionesPendientes > 99
+                                ? "99+"
+                                : conversacionesPendientes}
+                            </span>
+                          )}
+
+                          {item.badge === "nuevo" && (
+                            <span className="rounded-full bg-dorado/20 border border-dorado/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-dorado shrink-0">
+                              Nuevo
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+      </div>
     </nav>
   );
 
   const pie = (
-    <div className="flex flex-col gap-2 border-t border-crema/10 px-4 py-3">
+    <div className="flex flex-col gap-2.5 border-t border-crema/10 bg-black/15 px-3.5 py-3">
       <BotonRegistroBiometria />
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11px] text-crema/50" title="Versión">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2 py-0.5 font-mono text-[10px] text-crema/60"
+          title="Versión de la plataforma"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
           v{VERSION}
         </span>
         <CerrarSesion />
@@ -474,7 +815,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Columna lateral (escritorio) */}
       <aside
-        className={`hidden border-r border-dorado/30 bg-verde-profundo text-crema md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:w-60 md:flex-col transition-transform duration-300 ease-in-out ${
+        className={`hidden border-r border-dorado/30 bg-verde-profundo text-crema md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:w-64 md:flex-col transition-transform duration-300 ease-in-out ${
           colapsada ? "md:-translate-x-full" : "md:translate-x-0"
         }`}
       >
@@ -498,7 +839,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 )}
               </button>
               {notifsAbierto && (
-                <div className="absolute left-[180px] top-2 z-50 w-80 rounded-xl border border-carbon/10 bg-white p-2 shadow-xl text-carbon">
+                <div className="absolute left-full top-2 ml-3 z-50 w-80 rounded-xl border border-carbon/10 bg-white p-2 shadow-xl text-carbon">
                   {renderNotificacionesLista(true)}
                   {renderContenidoNotificaciones()}
                 </div>
@@ -602,8 +943,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
             onClick={() => setAbierto(false)}
             aria-hidden
           />
-          <aside className="absolute inset-y-0 left-0 flex w-64 max-w-[80%] flex-col bg-verde-profundo text-crema shadow-2xl animate-in slide-in-from-left duration-200">
-            <div className="flex items-center justify-between pr-2">
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-verde-profundo text-crema shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between pr-2 border-b border-crema/10">
               {marca}
               <button
                 type="button"
@@ -634,7 +975,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Contenido (con espacio a la izquierda para la columna en escritorio) */}
       <div
         className={`transition-all duration-300 ease-in-out ${
-          colapsada ? "md:pl-0" : "md:pl-60"
+          colapsada ? "md:pl-0" : "md:pl-64"
         }`}
       >
         {children}

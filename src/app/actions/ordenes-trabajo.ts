@@ -12,6 +12,7 @@ import { MARCA } from "@/lib/marca";
 import { generarDocumentoProveedorAutomatico } from "@/app/actions/proveedores";
 import { aDocumentoProveedor } from "@/lib/supabase/mapeo";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
+import { sincronizarComisionParaRecibo } from "@/app/actions/comisiones";
 
 export interface EvidenciaFoto {
   url: string;
@@ -984,7 +985,15 @@ export async function crearReciboPago(datos: {
 
     if (insertError) return { ok: false, error: insertError.message };
 
+    // Sincronizar automáticamente la comisión del asesor
+    try {
+      await sincronizarComisionParaRecibo(nuevo.id);
+    } catch (eCom: any) {
+      console.warn("No se pudo sincronizar automáticamente la comisión del recibo:", eCom?.message);
+    }
+
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/comisiones");
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
     if (ot.prospecto_id) revalidatePath(`/prospectos/${ot.prospecto_id}`);
 
@@ -1699,9 +1708,9 @@ export async function enviarNotificacionEntregaCliente(params: {
         const urlRemision = orden.cotizacionToken ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}` : "";
         const urlGarantia = garantia?.token ? `${SITE_URL}/garantia/${garantia.token}` : "";
 
-        let docsTexto = `📄 Reporte de Obra & Evidencias: ${urlEntrega}`;
-        if (urlRemision) docsTexto += `\n🧾 Remisión/Factura: ${urlRemision}`;
-        if (urlGarantia) docsTexto += `\n🛡️ Póliza de Garantía: ${urlGarantia}`;
+        let docsTexto = `📄 Reporte de Obra: ${urlEntrega}`;
+        if (urlRemision) docsTexto += ` • 🧾 Remisión: ${urlRemision}`;
+        if (urlGarantia) docsTexto += ` • 🛡️ Garantía: ${urlGarantia}`;
 
         resWhatsApp = await enviarWhatsAppPlantilla(
           telefono,
@@ -1936,7 +1945,7 @@ export async function enviarReciboPorWhatsApp(reciboId: string): Promise<{
         "es_MX",
         [
           rec.cliente_nombre,
-          `💳 Recibo Oficial de Pago (${rec.folio}) por $${montoStr} MXN:\n${urlRecibo}`,
+          `💳 Recibo Oficial de Pago (${rec.folio}) por $${montoStr} MXN: ${urlRecibo}`,
         ]
       );
     }
