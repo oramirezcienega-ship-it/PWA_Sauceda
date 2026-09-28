@@ -1459,7 +1459,7 @@ export function DashboardInteligente() {
                 : "text-slate-500 hover:text-slate-800"
             }`}
           >
-            💰 Finanzas & P&L (Contabilidad)
+            💰 Finanzas (Resumen)
           </button>
           <button
             onClick={() => setActiveTab("organico")}
@@ -1805,905 +1805,119 @@ export function DashboardInteligente() {
         </>
       ) : activeTab === "finanzas" ? (
         <>
-          {/* TARJETAS DE KPIS PRINCIPALES (FINANZAS Y P&L) */}
-          <section className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+          {/* BANNER / RESUMEN EJECUTIVO DE FINANZAS */}
+          <section className="bg-gradient-to-r from-[#2D4A2B] to-[#1e331c] rounded-2xl p-6 text-white mb-8 shadow-md">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <span className="text-[10px] tracking-widest uppercase font-bold text-[#C9A961] bg-white/10 px-2.5 py-1 rounded-full">
+                  Módulo Principal
+                </span>
+                <h3 className="text-2xl font-bold font-serif mt-2 text-[#F5F1E8]">Finanzas & Contabilidad SAUCEDA</h3>
+                <p className="text-xs text-white/70 max-w-xl mt-1">
+                  El módulo completo de Finanzas ahora cuenta con sección propia en el CRM: Balances Generales, Flujo de Efectivo, Estado de Resultados por unidad de negocio, cuentas por cobrar/pagar y diagnósticos de Sofía.
+                </p>
+              </div>
+              <Link
+                href="/finanzas"
+                className="inline-flex items-center gap-2 bg-[#C9A961] hover:bg-[#b89850] text-[#1c2e1b] px-5 py-2.5 rounded-xl font-bold text-xs tracking-wide uppercase shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap"
+              >
+                <span>Ir al Módulo de Finanzas</span>
+                <span>&rarr;</span>
+              </Link>
+            </div>
+          </section>
+
+          {/* TARJETAS DE KPIS PRINCIPALES (4 KPIS RESUMEN) */}
+          <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ingresos Totales</span>
-                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">${finanzasKPIs.ingresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                <p className="text-2xl font-extrabold text-[#2D4A2B] mt-1 font-mono">
+                  ${finanzasKPIs.ingresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-[9px] text-slate-400">Ventas & Comisiones</span>
+              <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Ventas & Comisiones</span>
                 {finanzasKPIs.ingresosPrev > 0 ? (
-                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionIngresos >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {finanzasKPIs.variacionIngresos >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionIngresos).toFixed(1)}% vs periodo ant.
+                  <span className={`font-bold ${finanzasKPIs.variacionIngresos >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    {finanzasKPIs.variacionIngresos >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionIngresos).toFixed(1)}%
                   </span>
                 ) : (
-                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
+                  <span className="text-slate-300">Sin comparativo</span>
                 )}
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Inversión Marketing</span>
-                <p className="text-xl font-extrabold text-amber-600 mt-1">${finanzasKPIs.marketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Egresos Totales</span>
+                <p className="text-2xl font-extrabold text-slate-800 mt-1 font-mono">
+                  ${(finanzasKPIs.gastos + finanzasKPIs.marketing).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-[9px] text-slate-400">Facebook & TikTok Ads</span>
-                {finanzasKPIs.marketingPrev > 0 ? (
-                  <span className={`text-[9px] font-bold ${finanzasKPIs.marketing <= finanzasKPIs.marketingPrev ? "text-emerald-600" : "text-rose-600"}`}>
-                    {finanzasKPIs.marketing >= finanzasKPIs.marketingPrev ? "▲" : "▼"} {Math.abs(((finanzasKPIs.marketing - finanzasKPIs.marketingPrev)/finanzasKPIs.marketingPrev)*100).toFixed(1)}% vs periodo ant.
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
-                )}
+              <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">OpEx + Marketing</span>
+                <span className="text-slate-500 font-mono text-[10px]">
+                  Mkt: ${finanzasKPIs.marketing.toLocaleString("es-MX", { minimumFractionDigits: 0 })}
+                </span>
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+            <div className={`border rounded-xl p-5 shadow-sm transition flex flex-col justify-between ${
+              finanzasKPIs.utilidadNeta >= 0 ? "bg-emerald-50/50 border-emerald-200" : "bg-rose-50/50 border-rose-200"
+            }`}>
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gastos OPEX</span>
-                <p className="text-xl font-extrabold text-slate-700 mt-1">${finanzasKPIs.opex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-              </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-[9px] text-slate-400">Nómina, renta, servicios</span>
-                {finanzasKPIs.opexPrev > 0 ? (
-                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionOpex <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {finanzasKPIs.variacionOpex >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionOpex).toFixed(1)}% vs periodo ant.
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Utilidad Neta</span>
-                <p className={`text-xl font-extrabold mt-1 ${finanzasKPIs.utilidadNeta >= 0 ? "text-[#2D4A2B]" : "text-rose-600"}`}>
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Utilidad Neta</span>
+                <p className={`text-2xl font-black mt-1 font-mono ${
+                  finanzasKPIs.utilidadNeta >= 0 ? "text-emerald-700" : "text-rose-700"
+                }`}>
                   ${finanzasKPIs.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-[9px] text-slate-400">Ingresos - Egresos</span>
-                {finanzasKPIs.utilidadNetaPrev !== 0 ? (
-                  <span className={`text-[9px] font-bold ${finanzasKPIs.utilidadNeta >= finanzasKPIs.utilidadNetaPrev ? "text-emerald-600" : "text-rose-600"}`}>
-                    {finanzasKPIs.utilidadNeta >= finanzasKPIs.utilidadNetaPrev ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionUtilidad).toFixed(1)}% vs periodo ant.
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
-                )}
+              <div className="mt-3 pt-2 border-t border-slate-200/50 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-semibold">Margen Neto</span>
+                <span className={`font-bold font-mono ${finanzasKPIs.margenUtilidad >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                  {finanzasKPIs.margenUtilidad.toFixed(1)}%
+                </span>
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Margen Neto</span>
-                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{finanzasKPIs.margenNeta.toFixed(1)}%</p>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">ROAS Global</span>
+                <p className={`text-2xl font-black mt-1 font-mono ${
+                  finanzasKPIs.roas >= 4 ? "text-emerald-700" : finanzasKPIs.roas >= 2 ? "text-[#C9A961]" : "text-slate-700"
+                }`}>
+                  {finanzasKPIs.roas.toFixed(2)}x
+                </p>
               </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-[9px] text-slate-400">Porcentaje de Retorno</span>
-                {finanzasKPIs.ingresosPrev > 0 ? (
-                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionMargen >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {finanzasKPIs.variacionMargen >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionMargen).toFixed(1)} pp vs periodo ant.
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-[#2D4A2B] transition flex flex-col justify-between h-28">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">ROAS Real</span>
-                <p className="text-xl font-extrabold text-[#2D4A2B] mt-1">{finanzasKPIs.roasReal.toFixed(2)}x</p>
-              </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-[9px] text-slate-400">Retorno real de inversión</span>
-                {finanzasKPIs.roasRealPrev > 0 ? (
-                  <span className={`text-[9px] font-bold ${finanzasKPIs.variacionRoas >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {finanzasKPIs.variacionRoas >= 0 ? "▲" : "▼"} {Math.abs(finanzasKPIs.variacionRoas).toFixed(1)}% vs periodo ant.
-                  </span>
-                ) : (
-                  <span className="text-[9px] text-slate-300">Sin comparativo</span>
-                )}
+              <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Retorno publicitario</span>
+                <span className="text-slate-400 text-[10px]">
+                  {finanzasKPIs.roas >= 3 ? "🟢 Saludable" : "🟡 Revisar"}
+                </span>
               </div>
             </div>
           </section>
 
-          {/* GRÁFICOS FINANCIEROS */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
-              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
-                Flujo de Caja (Ingresos vs Egresos Totales)
-              </h3>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={datosGraficoFinanciero} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="fecha" tick={{ fontSize: 9 }} stroke="#64748B" />
-                    <YAxis tick={{ fontSize: 9 }} stroke="#64748B" />
-                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Ingresos" name="Ingresos ($)" fill="#10B981" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Gastos" name="Egresos ($)" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+          {/* ACCESO DIRECTO DESTACADO */}
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center shadow-sm mb-8">
+            <div className="w-14 h-14 bg-[#2D4A2B]/10 text-[#2D4A2B] rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
+              📊
             </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-4">
-                Distribución del Total de Gastos
-              </h3>
-              <div className="h-72 flex flex-col justify-between">
-                {datosDistribucionOpex.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-xs text-slate-400">
-                    Sin egresos registrados en este periodo.
-                  </div>
-                ) : (
-                  <>
-                    <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={datosDistribucionOpex}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {datosDistribucionOpex.map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={Object.values(COLORES)[index % Object.values(COLORES).length]} 
-                              />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-[10px] mt-2 max-h-20 overflow-y-auto pr-1 scrollbar-sutil">
-                      {datosDistribucionOpex.map((entry, idx) => (
-                        <div key={idx} className="flex items-center gap-1">
-                          <span
-                            className="h-2 w-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: Object.values(COLORES)[idx % Object.values(COLORES).length] }}
-                          />
-                          <span className="truncate text-slate-600 uppercase font-semibold">{entry.name}:</span>
-                          <span className="font-bold">${entry.value.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+            <h4 className="text-lg font-bold text-slate-800 font-serif">Gestión Financiera Centralizada</h4>
+            <p className="text-sm text-slate-500 max-w-lg mx-auto mt-2">
+              Para registrar nuevos movimientos, consultar el Estado de Resultados detallado, Balance General cuadrado o Flujo de Efectivo, dirígete al módulo completo de Finanzas.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <Link
+                href="/finanzas"
+                className="bg-[#2D4A2B] hover:bg-[#1e331c] text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow transition"
+              >
+                Abrir Finanzas CRM
+              </Link>
             </div>
-          </section>
-
-          {/* TABLA DE TRANSACCIONES Y ATRIBUCIÓN CRM */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm lg:col-span-2">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
-                  Libro Contable (Ingresos y Costos Operativos)
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleLimpiarDemos}
-                    className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-[#FDF2F2] px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 transition shadow-sm"
-                  >
-                    🗑️ Limpiar Demos
-                  </button>
-                  <button
-                    onClick={() => setShowImportModal(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
-                  >
-                    📋 Importar Excel
-                  </button>
-                  <button
-                    onClick={() => setShowManualModal(true)}
-                    className="flex items-center gap-1.5 rounded-lg bg-[#2D4A2B] px-3 py-1.5 text-xs font-bold text-[#F5F1E8] hover:bg-[#5C7A52] transition shadow-sm"
-                  >
-                    ➕ Nuevo Registro
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto max-h-[350px] scrollbar-sutil">
-                <table className="w-full text-xs text-left border-collapse">
-                  <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-bold tracking-wider sticky top-0">
-                    <tr>
-                      <th className="px-4 py-2.5">Fecha</th>
-                      <th className="px-4 py-2.5">Tipo</th>
-                      <th className="px-4 py-2.5">Categoría</th>
-                      <th className="px-4 py-2.5">Concepto</th>
-                      <th className="px-4 py-2.5 text-right">Monto</th>
-                      <th className="px-4 py-2.5 text-center">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {transacciones.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                          Sin transacciones contables registradas para este periodo.
-                        </td>
-                      </tr>
-                    ) : (
-                      transacciones.map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50 text-slate-700 transition">
-                          <td className="px-4 py-2.5 font-mono text-[10px]">{t.fecha}</td>
-                          <td className="px-4 py-2.5">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider ${
-                              t.tipo === "ingreso" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                            }`}>
-                              {t.tipo}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-[10px] font-bold uppercase text-slate-500">{t.categoria}</td>
-                          <td className="px-4 py-2.5">
-                            <div className="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
-                              <span>{t.concepto}</span>
-                              {t.es_recurrente && (
-                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-bold px-1.5 py-0.2 rounded" title="Plantilla recurrente activa">
-                                  🔁 Recurrente
-                                </span>
-                              )}
-                              {t.recurrente_parent_id && (
-                                <span className="bg-slate-50 text-slate-500 border border-slate-200 text-[8px] font-medium px-1.5 py-0.2 rounded" title="Movimiento generado automáticamente">
-                                  ⚙️ Autogenerado
-                                </span>
-                              )}
-                            </div>
-                            {t.expediente_cliente && (
-                              <span className="text-[9px] text-[#2D4A2B] bg-[#F5F1E8] px-1.5 py-0.5 rounded mt-0.5 inline-block font-bold">
-                                Folio: {t.expediente_id} · Cliente: {t.expediente_cliente}
-                              </span>
-                            )}
-                          </td>
-                          <td className={`px-4 py-2.5 text-right font-mono font-bold ${
-                            t.tipo === "ingreso" ? "text-emerald-600" : "text-slate-900"
-                          }`}>
-                            ${t.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-4 py-2.5 text-center flex items-center justify-center gap-3">
-                            <button
-                              onClick={() => {
-                                setEditingId(t.id!);
-                                setManualData({
-                                  fecha: t.fecha,
-                                  tipo: t.tipo,
-                                  categoria: t.categoria,
-                                  concepto: t.concepto,
-                                  monto: String(t.monto),
-                                  expediente_id: t.expediente_id || "",
-                                  es_recurrente: t.es_recurrente || false
-                                });
-                                const isCustom = t.tipo === "ingreso"
-                                  ? !["comision", "venta", "otro"].includes(t.categoria.toLowerCase())
-                                  : !["nomina", "renta", "servicios", "marketing", "impuestos", "otro"].includes(t.categoria.toLowerCase());
-                                if (isCustom) {
-                                  setIsCustomCategory(true);
-                                  setCustomCategoryName(t.categoria);
-                                } else {
-                                  setIsCustomCategory(false);
-                                  setCustomCategoryName("");
-                                }
-                                setShowManualModal(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-900 hover:underline font-bold"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => handleEliminarTransaccion(t.id!)}
-                              className="text-rose-600 hover:text-rose-900 hover:underline font-bold"
-                            >
-                              Eliminar
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* PANEL DE ATRIBUCIÓN CRM */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <h3 className="font-fraunces text-base font-bold text-[#2D4A2B] mb-2">
-                Atribución de Ventas CRM
-              </h3>
-              <p className="text-[10px] text-slate-400 mb-4 leading-normal">
-                Registra la comisión de los expedientes cerrados en tu embudo para sumarlos a los ingresos del P&L:
-              </p>
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-sutil">
-                {expedientesCerrados.length === 0 ? (
-                  <div className="flex h-44 flex-col items-center justify-center text-xs text-slate-400 text-center p-4">
-                    <span>🎉</span>
-                    <span className="mt-1 font-semibold text-slate-500">¡Todo al día!</span>
-                    <span className="text-[10px] text-slate-300 mt-0.5">Todos los expedientes cerrados tienen sus comisiones registradas.</span>
-                  </div>
-                ) : (
-                  expedientesCerrados.map((exp) => (
-                    <div key={exp.id} className="border border-slate-100 rounded-xl p-3 hover:border-[#2D4A2B] transition flex flex-col justify-between bg-slate-50">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[9px] font-bold text-slate-400 font-mono uppercase">EXP: {exp.id}</span>
-                          <span className="bg-emerald-100 text-emerald-800 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">Cerrado</span>
-                        </div>
-                        <h4 className="font-bold text-slate-800 text-xs truncate">{exp.cliente}</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Valor de Operación: <span className="font-semibold text-slate-600">${exp.valor_estimado.toLocaleString("es-MX")}</span></p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setManualData({
-                            fecha: exp.ultimo_movimiento || new Date().toISOString().split("T")[0],
-                            tipo: "ingreso",
-                            categoria: "comision",
-                            concepto: `Comisión por Venta Cerrada: ${exp.cliente}`,
-                            monto: String(Math.round(exp.valor_estimado * 0.05)), // Sugiere 5% de comisión por defecto
-                            expediente_id: exp.id,
-                            es_recurrente: false
-                          });
-                          setShowManualModal(true);
-                        }}
-                        className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] py-1.5 rounded-lg transition text-center shadow-sm"
-                      >
-                        Registrar Comisión (5%)
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* ESTADO DE RESULTADOS TRADICIONAL (P&L STATEMENT) */}
-          <section className="mb-8">
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <div className="border-b border-slate-100 pb-4 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h3 className="font-fraunces text-base font-bold text-[#2D4A2B]">
-                    Estado de Resultados (P&L Tradicional)
-                  </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                    Resumen contable estructurado para el período seleccionado
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 shadow-sm text-[10px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setVistaPnLMensual(false)}
-                      className={`rounded-md px-2.5 py-1 transition ${
-                        !vistaPnLMensual
-                          ? "bg-[#2D4A2B] text-[#F5F1E8]"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      Consolidado
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVistaPnLMensual(true)}
-                      className={`rounded-md px-2.5 py-1 transition ${
-                        vistaPnLMensual
-                          ? "bg-[#2D4A2B] text-[#F5F1E8]"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      Mensual
-                    </button>
-                  </div>
-                  <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded tracking-wide">
-                    Moneda: MXN ($)
-                  </span>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto scrollbar-sutil">
-                {vistaPnLMensual ? (
-                  <table className="w-full text-xs text-left border-collapse min-w-[800px]">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase text-[9px] tracking-wider">
-                        <th className="px-4 py-2.5 min-w-[200px]">Concepto</th>
-                        <th className="px-4 py-2.5">Detalle / Notas</th>
-                        {PnLMensual.map((m) => (
-                          <th key={m.mes} className="px-4 py-2.5 text-right font-mono text-[10px]">
-                            {formatearMes(m.mes)}
-                          </th>
-                        ))}
-                        <th className="px-4 py-2.5 text-right bg-slate-100 font-bold font-mono text-[10px] text-slate-800">
-                          Acumulado
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* 1. INGRESOS */}
-                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-[#2D4A2B]">
-                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          1. Ingresos Operativos (Revenues)
-                        </td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2.5 text-right font-mono">
-                            ${m.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2.5 text-right font-mono bg-slate-50 text-slate-800">
-                          ${estadoResultados.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Intermediación de ventas/rentas</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "comision", mes: m.mes, titulo: `Comisiones Inmobiliarias (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              ${m.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "comision", titulo: "Comisiones Inmobiliarias (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Traspasos y cierres directos</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "venta", mes: m.mes, titulo: `Ventas Directas (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              ${m.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "venta", titulo: "Ventas Directas (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Otros conceptos financieros</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-slate-700">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "otrosIngresos", mes: m.mes, titulo: `Otros Ingresos (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              ${m.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-slate-700 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "otrosIngresos", titulo: "Otros Ingresos (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* 2. COSTO DE VENTAS */}
-                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
-                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          2. Costo de Adquisición / Marketing (COGS)
-                        </td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2.5 text-right font-mono text-rose-600">
-                            -${m.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2.5 text-right font-mono text-rose-600 bg-slate-50">
-                          -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Meta Ads, TikTok Ads y agencias</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "marketing", mes: m.mes, titulo: `Inversión en Publicidad/Marketing (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              -${m.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "marketing", titulo: "Inversión en Publicidad/Marketing (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* UTILIDAD BRUTA */}
-                      <tr className="bg-[#F5F1E8] border-y border-[#E6DEC9] font-extrabold text-[#2D4A2B]">
-                        <td className="px-4 py-3 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          (=) Utilidad Bruta (Gross Profit)
-                        </td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-3 text-right font-mono text-[12px]">
-                            ${m.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </td>
-                        ))}
-                        <td className="px-4 py-3 text-right font-mono text-[13px] bg-[#EBE5D5] text-[#2D4A2B]">
-                          ${estadoResultados.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-
-                      {/* 3. GASTOS OPERATIVOS */}
-                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
-                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          3. Gastos de Operación y Administración (OPEX)
-                        </td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2.5 text-right font-mono text-rose-600">
-                            -${m.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2.5 text-right font-mono text-rose-600 bg-slate-50">
-                          -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Salarios y honorarios profesionales fijos</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "nomina", mes: m.mes, titulo: `Nóminas y Sueldos (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              -${m.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "nomina", titulo: "Nóminas y Sueldos (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Alquileres corporativos</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "renta", mes: m.mes, titulo: `Renta de Oficinas (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              -${m.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "renta", titulo: "Renta de Oficinas (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Luz, internet, telefonía e insumos</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "servicios", mes: m.mes, titulo: `Servicios Básicos (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              -${m.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "servicios", titulo: "Servicios Básicos (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Pagos al SAT y provisiones fiscales</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "impuestos", mes: m.mes, titulo: `Impuestos y Retenciones (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              -${m.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "impuestos", titulo: "Impuestos y Retenciones (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
-                        <td className="px-4 py-2 text-slate-400 text-[10px]">Cualquier otro gasto de operación menor</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className="px-4 py-2 text-right font-mono text-rose-600">
-                            <span
-                              onClick={() => setDrillDownConfig({ categoria: "otrosGastos", mes: m.mes, titulo: `Otros Gastos Administrativos (${formatearMes(m.mes)})` })}
-                              className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                            >
-                              -${m.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right font-mono text-rose-600 bg-slate-50/50">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "otrosGastos", titulo: "Otros Gastos Administrativos (Acumulado)" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* RESULTADO NETO */}
-                      <tr className={`border-y-2 border-slate-900 font-black ${
-                        estadoResultados.utilidadNeta >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
-                      }`}>
-                        <td className="px-4 py-3.5 uppercase tracking-wider text-[11px]" colSpan={2}>
-                          (=) Utilidad Neta (Net Income / EBIT)
-                        </td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className={`px-4 py-3.5 text-right font-mono text-xs ${
-                            m.utilidadNeta >= 0 ? "text-emerald-700" : "text-rose-700"
-                          }`}>
-                            ${m.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </td>
-                        ))}
-                        <td className="px-4 py-3.5 text-right font-mono text-sm underline decoration-double bg-slate-100">
-                          ${estadoResultados.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr className="font-semibold text-slate-500 text-[10px]">
-                        <td className="px-4 py-2" colSpan={2}>Margen de Utilidad Neto (%)</td>
-                        {PnLMensual.map((m) => (
-                          <td key={m.mes} className={`px-4 py-2 text-right font-mono font-bold ${
-                            m.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
-                          }`}>
-                            {m.margenNeto.toFixed(2)}%
-                          </td>
-                        ))}
-                        <td className={`px-4 py-2 text-right font-mono font-bold bg-slate-50/50 ${
-                          estadoResultados.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
-                        }`}>
-                          {estadoResultados.margenNeto.toFixed(2)}%
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                ) : (
-                  <table className="w-full text-xs text-left border-collapse">
-                    <tbody>
-                      {/* INGRESO BRUTO */}
-                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-[#2D4A2B]">
-                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          1. Ingresos Operativos (Revenues)
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono">
-                          ${estadoResultados.totalIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Comisiones Inmobiliarias</td>
-                        <td className="px-4 py-2 text-slate-400">Ingresos por intermediación de ventas/rentas</td>
-                        <td className="px-4 py-2 text-right font-mono text-slate-700">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "comision", titulo: "Comisiones Inmobiliarias" })}
-                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            ${estadoResultados.comisiones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Ventas Directas</td>
-                        <td className="px-4 py-2 text-slate-400">Ingresos directos o traspasos comerciales</td>
-                        <td className="px-4 py-2 text-right font-mono text-slate-700">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "venta", titulo: "Ventas Directas" })}
-                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            ${estadoResultados.ventasDirectas.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Otros Ingresos</td>
-                        <td className="px-4 py-2 text-slate-400">Otros conceptos de entrada financiera</td>
-                        <td className="px-4 py-2 text-right font-mono text-slate-700">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "otrosIngresos", titulo: "Otros Ingresos" })}
-                            className="cursor-pointer hover:underline text-emerald-700 font-bold hover:bg-slate-100 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            ${estadoResultados.otrosIngresos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* COSTO DE VENTAS */}
-                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
-                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          2. Costo de Adquisición / Marketing (COGS)
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "marketing", titulo: "Inversión en Publicidad / Marketing" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Inversión en Publicidad Directa</td>
-                        <td className="px-4 py-2 text-slate-400">Gasto en Meta Ads, TikTok Ads y agencias de medios</td>
-                        <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "marketing", titulo: "Inversión en Publicidad / Marketing" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.totalMarketing.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* UTILIDAD BRUTA */}
-                      <tr className="bg-[#F5F1E8] border-y border-[#E6DEC9] font-extrabold text-[#2D4A2B]">
-                        <td className="px-4 py-3 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          (=) Utilidad Bruta (Gross Profit)
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-[13px]">
-                          ${estadoResultados.utilidadBruta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-
-                      {/* GASTOS OPERATIVOS */}
-                      <tr className="bg-slate-50 border-y border-slate-200 font-bold text-slate-700">
-                        <td className="px-4 py-2.5 uppercase tracking-wider text-[10px]" colSpan={2}>
-                          3. Gastos de Operación y Administración (OPEX)
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "nomina", titulo: "Gastos Operativos (OPEX)" })} // Default to showing OPEX breakdown (can list all OPEX accounts or default to nomina)
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.totalOpex.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Nóminas y Sueldos</td>
-                        <td className="px-4 py-2 text-slate-400">Salarios y honorarios profesionales fijos</td>
-                        <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "nomina", titulo: "Nóminas y Sueldos" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.nomina.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Renta de Oficinas</td>
-                        <td className="px-4 py-2 text-slate-400">Alquileres de sucursales e inmuebles corporativos</td>
-                        <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "renta", titulo: "Renta de Oficinas" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.renta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Servicios Básicos</td>
-                        <td className="px-4 py-2 text-slate-400">Luz, agua, internet, telefonía e insumos de oficina</td>
-                        <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "servicios", titulo: "Servicios Básicos" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.servicios.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500 font-medium">Impuestos y Retenciones</td>
-                        <td className="px-4 py-2 text-slate-400">Pagos al SAT y provisiones fiscales</td>
-                        <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "impuestos", titulo: "Impuestos y Retenciones" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.impuestos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="border-b border-slate-100 font-medium">
-                        <td className="px-8 py-2 text-slate-500">Otros Gastos Administrativos</td>
-                        <td className="px-4 py-2 text-slate-400">Cualquier otro gasto de operación menor o misceláneo</td>
-                        <td className="px-4 py-2 text-right font-mono text-rose-600">
-                          <span
-                            onClick={() => setDrillDownConfig({ categoria: "otrosGastos", titulo: "Otros Gastos Administrativos" })}
-                            className="cursor-pointer hover:underline text-rose-700 font-bold hover:bg-rose-50 rounded px-1.5 py-0.5 -mx-1.5"
-                          >
-                            -${estadoResultados.otrosGastos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                      </tr>
-
-                      {/* RESULTADO NETO */}
-                      <tr className={`border-y-2 border-slate-900 font-black ${
-                        estadoResultados.utilidadNeta >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"
-                      }`}>
-                        <td className="px-4 py-3.5 uppercase tracking-wider text-[11px]" colSpan={2}>
-                          (=) Utilidad Neta (Net Income / EBIT)
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono text-sm underline decoration-double">
-                          ${estadoResultados.utilidadNeta.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                      <tr className="font-semibold text-slate-500 text-[10px]">
-                        <td className="px-4 py-2" colSpan={2}>Margen de Utilidad Neto (%)</td>
-                        <td className={`px-4 py-2 text-right font-mono font-bold ${
-                          estadoResultados.margenNeto >= 0 ? "text-emerald-700" : "text-rose-700"
-                        }`}>
-                          {estadoResultados.margenNeto.toFixed(2)}%
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </section>
+          </div>
         </>
       ) : (
         <>
