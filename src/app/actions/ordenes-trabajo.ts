@@ -1462,6 +1462,7 @@ export async function enviarNotificacionEntregaCliente(params: {
   correoDestino?: string;
   telefonoDestino?: string;
   mensajePersonalizado?: string;
+  plantillaNombre?: string;
 }): Promise<{ ok: boolean; error?: string; messageId?: string }> {
   try {
     await requireAdmin();
@@ -1487,19 +1488,35 @@ export async function enviarNotificacionEntregaCliente(params: {
         return { ok: false, error: "El cliente no cuenta con teléfono registrado para WhatsApp." };
       }
 
-      // Parámetros de la plantilla UTILITY de Meta:
-      // {{1}}: Nombre cliente
-      // {{2}}: Folio OT
-      // {{3}}: Título proyecto
-      // {{4}}: Fecha entrega
-      // Botón URL dinámico: token de la OT
-      const resWhatsApp = await enviarWhatsAppPlantilla(
-        telefono,
-        PLANTILLA_ENTREGA_SERVICIO.nombre,
-        PLANTILLA_ENTREGA_SERVICIO.idioma,
-        [clienteNombre, orden.folio, orden.titulo, fechaEntrega],
-        orden.token
-      );
+      const plantillaElegida = params.plantillaNombre || "sauceda_entrega_servicio";
+      let resWhatsApp: { ok: boolean; error?: string; messageId?: string };
+
+      if (plantillaElegida === "entrega_documentos_remision_garantia") {
+        // Plantilla oficial ya APROBADA en Meta (2 variables de texto)
+        const urlEntrega = `${SITE_URL}/orden-trabajo/entrega/${orden.token}`;
+        const urlRemision = orden.cotizacionToken ? `${SITE_URL}/cotizacion/remision/${orden.cotizacionToken}` : "";
+        const urlGarantia = garantia?.token ? `${SITE_URL}/garantia/${garantia.token}` : "";
+
+        let docsTexto = `📄 Reporte de Obra & Evidencias: ${urlEntrega}`;
+        if (urlRemision) docsTexto += `\n🧾 Remisión/Factura: ${urlRemision}`;
+        if (urlGarantia) docsTexto += `\n🛡️ Póliza de Garantía: ${urlGarantia}`;
+
+        resWhatsApp = await enviarWhatsAppPlantilla(
+          telefono,
+          "entrega_documentos_remision_garantia",
+          "es_MX",
+          [clienteNombre, docsTexto]
+        );
+      } else {
+        // Plantilla UTILITY sauceda_entrega_servicio (enviada a aprobación con botón dinámico)
+        resWhatsApp = await enviarWhatsAppPlantilla(
+          telefono,
+          PLANTILLA_ENTREGA_SERVICIO.nombre,
+          PLANTILLA_ENTREGA_SERVICIO.idioma,
+          [clienteNombre, orden.folio, orden.titulo, fechaEntrega],
+          orden.token
+        );
+      }
 
       if (!resWhatsApp.ok) {
         return {
@@ -1659,5 +1676,89 @@ export async function enviarNotificacionEntregaCliente(params: {
     return { ok: false, error: err?.message || "Error al enviar la notificación de entrega." };
   }
 }
+
+/**
+ * 15. Enviar Recibo de Pago por WhatsApp (Meta Cloud API).
+ */
+export async function enviarReciboPorWhatsApp(reciboId: string): Promise<{
+  ok: boolean;
+  error?: string;
+  messageId?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: rec, error } = await sb
+      .from("recibos_pago")
+      .select("*, ordenes_trabajo(folio, titulo)")
+      .eq("id", reciboId)
+      .maybeSingle();
+
+    if (error || !rec) {
+      return { ok: false, error: "Recibo no encontrado." };
+    }
+
+    if (!rec.cliente_telefono) {
+      return { ok: false, error: "El cliente no cuenta con teléfono registrado." };
+    }
+
+    const SITE_URL = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://crm.saucedamx.com";
+    const montoStr = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2 }).format(Number(rec.monto || 0));
+    const saldoRestanteStr = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2 }).format(Number(rec.saldo_restante || 0));
+    const fechaStr = new Date(rec.fecha_pago).toLocaleDateString("es-MX");
+    const ordenFolio = rec.ordenes_trabajo?.folio || "Orden";
+
+    // Intentar primero con la plantilla oficial sauceda_recibo_pago
+    let res = await enviarWhatsAppPlantilla(
+      rec.cliente_telefono,
+      "sauceda_recibo_pago",
+      "es_MX",
+      [
+        rec.cliente_nombre,
+        montoStr,
+        rec.monto_letra || "Pesos M.N.",
+        ordenFolio,
+        saldoRestanteStr,
+        fechaStr,
+      ],
+      rec.token
+    );
+
+    // Si aún está en revisión en Meta, enviar mediante plantilla aprobada de entrega
+    if (!res.ok && res.error && (res.error.includes("does not exist") || res.error.includes("not approved") || res.error.includes("PENDING"))) {
+      const urlRecibo = `${SITE_URL}/recibo/${rec.token}`;
+      res = await enviarWhatsAppPlantilla(
+        rec.cliente_telefono,
+        "entrega_documentos_remision_garantia",
+        "es_MX",
+        [
+          rec.cliente_nombre,
+          `💳 Recibo Oficial de Pago (${rec.folio}) por $${montoStr} MXN:\n${urlRecibo}`,
+        ]
+      );
+    }
+
+    if (!res.ok) {
+      return { ok: false, error: res.error || "No se pudo enviar el recibo por WhatsApp." };
+    }
+
+    // Registrar actividad en el CRM
+    if (rec.expediente_id || rec.prospecto_id) {
+      await sb.from("actividades").insert({
+        prospecto_id: rec.prospecto_id || null,
+        expediente_id: rec.expediente_id || null,
+        tipo: "recibo_pago",
+        titulo: `Recibo de Pago Enviado por WhatsApp (${rec.folio})`,
+        detalle: `Se envió el recibo por $${montoStr} MXN al teléfono ${rec.cliente_telefono} vía Meta Cloud API.`,
+      });
+    }
+
+    return { ok: true, messageId: res.messageId };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al enviar recibo por WhatsApp." };
+  }
+}
+
 
 
