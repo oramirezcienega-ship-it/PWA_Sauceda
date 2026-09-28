@@ -205,6 +205,9 @@ export function ModalRegistrarRecibo({
                     Método
                   </span>
                   <span className="text-sm font-bold text-emerald-900 capitalize">
+                    {reciboCreado.metodoPago}
+                  </span>
+                </div>
               </div>
             </div>
 
