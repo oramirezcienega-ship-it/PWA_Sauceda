@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/notificaciones";
 import { contarConversacionesPendientes } from "@/app/actions/conversaciones";
 import { BuscadorGlobalModal } from "./BuscadorGlobalModal";
+import { HeaderActividadesSemana } from "./HeaderActividadesSemana";
 import {
   IconoConversaciones,
   IconoPipeline,
@@ -45,6 +46,7 @@ import {
   IconoUsuarios,
   IconoChevronAbajo,
   IconoFuego,
+  IconoRemisiones,
 } from "./IconosNav";
 
 /**
@@ -68,7 +70,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/agenda/") ||
     path.startsWith("/recibo/") ||
     path.startsWith("/garantia/") ||
-    path.startsWith("/orden-trabajo/entrega/")
+    path.startsWith("/orden-trabajo/entrega/") ||
+    path.startsWith("/orden-trabajo/remision/")
   );
 }
 
@@ -435,6 +438,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           label: "Órdenes de Trabajo",
           icono: IconoOrdenesTrabajo,
           badge: "nuevo",
+        },
+        {
+          href: "/remisiones",
+          label: "Remisiones y Facturas",
+          icono: IconoRemisiones,
         },
       ],
     },
@@ -978,6 +986,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           colapsada ? "md:pl-0" : "md:pl-64"
         }`}
       >
+        {/* Barra superior de actividades de la semana (solo en versión escritorio) */}
+        <HeaderActividadesSemana />
+
         {children}
       </div>
 

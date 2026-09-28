@@ -35,6 +35,7 @@ import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
 import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
+import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 
 interface DetalleCotizacionAdminProps {
@@ -56,6 +57,7 @@ export function DetalleCotizacionAdmin({
   const [reporteVisita, setReporteVisita] = useState<VisitaReporte | null>(reporteVisitaInicial);
 
   const [pestaña, setPestaña] = useState<"resumen" | "inspeccion" | "presupuesto" | "aprobacion" | "facturacion" | "orden_trabajo" | "proveedores">("resumen");
+  const [modalProgramarInstalacion, setModalProgramarInstalacion] = useState(false);
 
   // --- State para Remisión & Factura ---
   const [remisionFactura, setRemisionFactura] = useState<RemisionFactura | null>(null);
@@ -2404,6 +2406,58 @@ export function DetalleCotizacionAdmin({
                       </div>
                     </div>
                   )}
+
+                  {/* --- CONTINUIDAD DE FLUJO: PROGRAMAR INSTALACIÓN & DETONAR ORDEN DE TRABAJO --- */}
+                  <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-emerald-50 p-5 space-y-3 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white text-2xl shadow-xs">
+                          🛠️
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                              Siguiente Paso Operativo
+                            </span>
+                            {cotizacion.estatus === "instalacion" && (
+                              <span className="text-[10px] font-bold text-verde-profundo bg-emerald-200/80 px-2 py-0.5 rounded-full">
+                                ✓ Instalación en Curso
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-titular font-bold text-base text-emerald-950">
+                            Programar Instalación & Detonar Orden de Trabajo
+                          </h4>
+                          <p className="text-xs text-emerald-800/90 max-w-xl font-cuerpo mt-0.5">
+                            Al autorizarse la propuesta, programa la fecha de instalación para detonar la orden de trabajo en automático, asignar cuadrilla o proveedor y notificar al cliente con el método de cobro (terminal bancaria en sitio).
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setModalProgramarInstalacion(true)}
+                          className="rounded-xl bg-emerald-700 hover:bg-verde-profundo text-white font-bold text-xs px-5 py-3 shadow-md transition flex items-center gap-2 cursor-pointer"
+                        >
+                          <span>📅</span>
+                          <span>
+                            {cotizacion.estatus === "instalacion"
+                              ? "Reagendar / Modificar Instalación"
+                              : "Programar Instalación"}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPestaña("orden_trabajo")}
+                          className="rounded-xl border border-emerald-400 bg-white hover:bg-emerald-50 text-emerald-900 font-bold text-xs px-4 py-3 shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>🛠️ Ver OT</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="p-4 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl text-xs">
@@ -2935,6 +2989,16 @@ export function DetalleCotizacionAdmin({
         {/* --- PESTAÑA ORDEN DE TRABAJO & ENTREGA --- */}
         {pestaña === "orden_trabajo" && (
           <div className="space-y-4">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalProgramarInstalacion(true)}
+                className="rounded-xl bg-emerald-700 hover:bg-verde-profundo text-white font-bold text-xs px-4 py-2 transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>📅</span>
+                <span>Programar / Reagendar Instalación</span>
+              </button>
+            </div>
             <ModuloOrdenesTrabajo
               cotizacionId={cotizacion.id}
               prospectoId={cotizacion.prospectoId}
@@ -3342,6 +3406,18 @@ export function DetalleCotizacionAdmin({
             opcionesSeleccionadas: seleccionActualizada || prev.opcionesSeleccionadas,
             precioFinal: nuevoPrecio || nuevosDatos.estructuraBase?.precio || prev.precioFinal,
           }));
+        }}
+      />
+
+      {/* Modal Programar Instalación & Detonar OT */}
+      <ModalProgramarInstalacionCotizacion
+        cotizacionId={cotizacion.id}
+        abierto={modalProgramarInstalacion}
+        alCerrar={() => setModalProgramarInstalacion(false)}
+        alExito={() => {
+          setModalProgramarInstalacion(false);
+          setPestaña("orden_trabajo");
+          router.refresh();
         }}
       />
     </div>
