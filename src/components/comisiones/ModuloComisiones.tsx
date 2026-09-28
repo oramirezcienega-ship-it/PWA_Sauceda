@@ -55,15 +55,9 @@ export function ModuloComisiones({
   // Filtros
   const [filtroAsesor, setFiltroAsesor] = useState<string>("todos");
   const [filtroEstatus, setFiltroEstatus] = useState<EstatusComision | "todas">("todas");
-  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("mes_actual");
-  const [fechaDesde, setFechaDesde] = useState<string>(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
-  });
-  const [fechaHasta, setFechaHasta] = useState<string>(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
-  });
+  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("historico");
+  const [fechaDesde, setFechaDesde] = useState<string>("");
+  const [fechaHasta, setFechaHasta] = useState<string>("");
   const [busqueda, setBusqueda] = useState<string>("");
 
   // Modales
@@ -83,25 +77,32 @@ export function ModuloComisiones({
   const formatoMoneda = (val: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
 
+  const formatearFechaISO = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dia}`;
+  };
+
   // Manejar cambio de selector de período
   const handleCambioPeriodo = (p: string) => {
     setFiltroPeriodo(p);
     const hoy = new Date();
     if (p === "mes_actual") {
-      const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split("T")[0];
-      const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split("T")[0];
+      const inicio = formatearFechaISO(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+      const fin = formatearFechaISO(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0));
       setFechaDesde(inicio);
       setFechaHasta(fin);
       recargarDatos({ fDesde: inicio, fHasta: fin });
     } else if (p === "mes_anterior") {
-      const inicio = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1).toISOString().split("T")[0];
-      const fin = new Date(hoy.getFullYear(), hoy.getMonth(), 0).toISOString().split("T")[0];
+      const inicio = formatearFechaISO(new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1));
+      const fin = formatearFechaISO(new Date(hoy.getFullYear(), hoy.getMonth(), 0));
       setFechaDesde(inicio);
       setFechaHasta(fin);
       recargarDatos({ fDesde: inicio, fHasta: fin });
     } else if (p === "anio_actual") {
-      const inicio = new Date(hoy.getFullYear(), 0, 1).toISOString().split("T")[0];
-      const fin = new Date(hoy.getFullYear(), 11, 31).toISOString().split("T")[0];
+      const inicio = `${hoy.getFullYear()}-01-01`;
+      const fin = `${hoy.getFullYear()}-12-31`;
       setFechaDesde(inicio);
       setFechaHasta(fin);
       recargarDatos({ fDesde: inicio, fHasta: fin });
@@ -164,7 +165,10 @@ export function ModuloComisiones({
           tipo: "ok",
           texto: `¡Sincronización completada! ${res.creadas} remisión(es) procesada(s) exitosamente.`,
         });
-        recargarDatos();
+        setFiltroPeriodo("historico");
+        setFechaDesde("");
+        setFechaHasta("");
+        recargarDatos({ fDesde: "", fHasta: "" });
       } else {
         setMensajeAlerta({
           tipo: "error",
@@ -486,10 +490,10 @@ export function ModuloComisiones({
                   onChange={(e) => handleCambioPeriodo(e.target.value)}
                   className="w-full border border-carbon/20 rounded-xl px-3 py-2 bg-white text-xs focus:border-verde-profundo outline-none"
                 >
+                  <option value="historico">Todo el Histórico</option>
                   <option value="mes_actual">Este Mes (Actual)</option>
                   <option value="mes_anterior">Mes Anterior</option>
                   <option value="anio_actual">Este Año (Completo)</option>
-                  <option value="historico">Todo el Histórico</option>
                   <option value="personalizado">Rango Personalizado</option>
                 </select>
               </div>

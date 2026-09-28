@@ -17,25 +17,14 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function ComisionesPage() {
-  const hoy = new Date();
-  const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
-  const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-    .toISOString()
-    .split("T")[0];
-
   const [comisiones, pagos, reglas, resumen, asesores] = await Promise.all([
-    listarComisiones({
-      fechaDesde: primerDiaMes,
-      fechaHasta: ultimoDiaMes,
-    }).catch(() => []),
+    listarComisiones().catch((err) => {
+      console.error("Error al cargar comisiones iniciales:", err);
+      return [];
+    }),
     listarPagosComisiones().catch(() => []),
     listarReglasComision().catch(() => []),
-    obtenerResumenEstadoCuenta({
-      fechaDesde: primerDiaMes,
-      fechaHasta: ultimoDiaMes,
-    }).catch(() => ({
+    obtenerResumenEstadoCuenta().catch(() => ({
       general: {
         totalVentas: 0,
         totalComisiones: 0,
