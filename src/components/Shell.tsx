@@ -359,6 +359,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { href: "/prospectos", label: "Prospectos" },
     { href: "/prospectos/pipeline", label: "Pipeline" },
     { href: "/ordenes-trabajo", label: "Órdenes de Trabajo (Nuevo)" },
+    { href: "/comisiones", label: "Comisiones" },
     { href: "/conversaciones", label: "Conversaciones" },
     { href: "/construccion", label: "Construcción" },
     ...(esAdmin ? [{ href: "/finanzas", label: "Finanzas" }] : []),

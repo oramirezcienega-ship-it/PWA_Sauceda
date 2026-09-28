@@ -947,6 +947,7 @@ export interface ProductoServicio {
   unidad: string;
   costoUnitario: number;
   precioUnitario: number;
+  porcentajeComision?: number;
   plantillaGarantia?: string;
   createdAt: string;
 }
