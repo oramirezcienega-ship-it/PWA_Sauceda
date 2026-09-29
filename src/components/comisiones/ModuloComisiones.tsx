@@ -16,6 +16,7 @@ import {
   sincronizarTodasLasRemisionesPendientes,
   eliminarReglaComision,
   guardarTarifaInspeccionGeneral,
+  cancelarComision,
 } from "@/app/actions/comisiones";
 import { ModalAjustarComision } from "./ModalAjustarComision";
 import { ModalRegistrarPagoComision } from "./ModalRegistrarPagoComision";
@@ -199,6 +200,20 @@ export function ModuloComisiones({
   useEffect(() => {
     recargarDatos();
   }, []);
+
+  const handleCancelarComision = async (c: Comision) => {
+    const motivo = window.prompt(
+      `¿Cancelar la comisión ${c.remisionFolio || "de inspección"} de ${c.asesorNombre} por ${formatoMoneda(c.montoComision)}?\n\nEscribe el motivo (ej. "Reasignada a otro asesor"):`
+    );
+    if (motivo === null) return;
+    const res = await cancelarComision({ comisionId: c.id, motivo });
+    if (res.ok) {
+      setMensajeAlerta({ tipo: "ok", texto: "Comisión cancelada." });
+      recargarDatos();
+    } else {
+      setMensajeAlerta({ tipo: "error", texto: res.error || "No se pudo cancelar la comisión." });
+    }
+  };
 
   const handleSincronizarRemisiones = async () => {
     try {
@@ -592,6 +607,7 @@ export function ModuloComisiones({
                   <option value="pendiente">Pendientes de Pago</option>
                   <option value="parcial">Con Pago Parcial</option>
                   <option value="pagada">Pagadas / Finiquitadas</option>
+                  <option value="cancelada">Canceladas</option>
                 </select>
               </div>
 
@@ -706,7 +722,9 @@ export function ModuloComisiones({
                     <th className="py-3 px-4 text-right">Pagado</th>
                     <th className="py-3 px-4 text-right">Saldo Pend.</th>
                     <th className="py-3 px-4 text-center">Estatus</th>
-                    <th className="py-3 px-4 text-center">Acciones</th>
+                    <th className="py-3 px-2 text-center sticky right-0 z-10 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-carbon/5">
@@ -862,6 +880,8 @@ export function ModuloComisiones({
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                                 : c.estatus === "parcial"
                                 ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                : c.estatus === "cancelada"
+                                ? "bg-red-100 text-red-800 border border-red-200"
                                 : "bg-amber-100 text-amber-800 border border-amber-200"
                             }`}
                           >
@@ -870,7 +890,7 @@ export function ModuloComisiones({
                         </td>
 
                         {/* Acciones */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <td className="py-3 px-2 text-center whitespace-nowrap sticky right-0 z-10 bg-white shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
@@ -892,7 +912,18 @@ export function ModuloComisiones({
                                 className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg transition text-xs font-semibold"
                                 title="Registrar pago o abono a esta comisión"
                               >
-                                💳 Pagar
+                                💳
+                              </button>
+                            )}
+
+                            {c.estatus !== "cancelada" && c.montoPagado <= 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleCancelarComision(c)}
+                                className="p-1.5 hover:bg-red-50 rounded-lg text-red-600 transition text-xs"
+                                title="Cancelar esta comisión (deja de contar en el balance)"
+                              >
+                                🗑️
                               </button>
                             )}
 
