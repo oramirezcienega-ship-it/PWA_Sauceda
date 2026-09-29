@@ -22,6 +22,7 @@ import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { SeccionContratoOT } from "./SeccionContratoOT";
+import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface DetalleOrdenTrabajoProps {
@@ -601,6 +602,9 @@ export function DetalleOrdenTrabajo({
           )}
         </div>
       </div>
+
+      {/* 3a. Cotización de origen */}
+      <TarjetaCotizacionOrigenOT cotizacionId={orden.cotizacionId} cotizacionToken={orden.cotizacionToken} totalCotizado={orden.totalCotizado} />
 
       {/* 3b. Contrato de Prestación de Servicios */}
       <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
