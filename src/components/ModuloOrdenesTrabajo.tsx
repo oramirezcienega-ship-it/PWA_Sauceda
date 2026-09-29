@@ -1,6 +1,7 @@
 "use client";
 
 import { cambiarEstatusOTConContrato } from "@/lib/estatus-ot-cliente";
+import { SeccionContratoOT } from "./SeccionContratoOT";
 import { useEffect, useState } from "react";
 import {
   obtenerOrdenesTrabajo,
@@ -779,6 +780,9 @@ export function ModuloOrdenesTrabajo({
                       </p>
                     ) : (
                       <>
+                        {/* Contrato de Prestación de Servicios */}
+                        <SeccionContratoOT ordenId={ot.id} tieneCotizacion={Boolean(ot.cotizacionId)} />
+
                         {/* Enlace al Portal Público de Entrega del Cliente */}
                         <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-carbon/10 shadow-2xs">
                           <div className="flex items-center gap-2.5">

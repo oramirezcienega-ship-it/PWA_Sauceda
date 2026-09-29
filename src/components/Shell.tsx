@@ -47,6 +47,7 @@ import {
   IconoChevronAbajo,
   IconoFuego,
   IconoRemisiones,
+  IconoProductos,
 } from "./IconosNav";
 
 /**
@@ -477,9 +478,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
       titulo: "Operaciones & Obra",
       items: [
         {
-          href: "/construccion?tab=catalogo",
-          label: "Construcción",
+          href: "/construccion",
+          label: "Presupuestos de Obra",
           icono: IconoConstruccion,
+        },
+        {
+          href: "/productos",
+          label: "Productos y Servicios",
+          icono: IconoProductos,
         },
         {
           href: "/proveedores",
