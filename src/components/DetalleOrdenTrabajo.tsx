@@ -12,11 +12,13 @@ import {
   eliminarEvidenciaFotoOT,
   obtenerOrdenTrabajoPorId,
   enviarReciboPorWhatsApp,
+  eliminarReciboPago,
   type OrdenTrabajo,
   type ReciboPago,
   type CartaGarantiaOT,
 } from "@/app/actions/ordenes-trabajo";
 import { ModalRegistrarRecibo } from "./ModalRegistrarRecibo";
+import { ModalEditarRecibo } from "./ModalEditarRecibo";
 import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
@@ -52,6 +54,7 @@ export function DetalleOrdenTrabajo({
   const [documentoProveedor, setDocumentoProveedor] = useState<DocumentoProveedor | null>(documentoProveedorInicial);
 
   const [cargando, setCargando] = useState(false);
+  const [reciboEditando, setReciboEditando] = useState<ReciboPago | null>(null);
 
   // Modales
   const [modalRecibo, setModalRecibo] = useState(false);
@@ -110,6 +113,22 @@ export function DetalleOrdenTrabajo({
       console.error("Error al recargar detalle:", e);
     } finally {
       setCargando(false);
+    }
+  };
+
+  const handleEliminarRecibo = async (r: ReciboPago) => {
+    if (
+      !window.confirm(
+        `¿Eliminar el recibo ${r.folio} por ${formatMoneda(r.monto)}?\n\nSe recalcularán los saldos de los demás recibos. Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    const res = await eliminarReciboPago(r.id);
+    if (res.ok) {
+      await recargarDetalle();
+    } else {
+      alert(res.error || "No se pudo eliminar el recibo.");
     }
   };
 
@@ -663,6 +682,26 @@ export function DetalleOrdenTrabajo({
                     >
                       PDF
                     </a>
+                    {!soloLectura && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setReciboEditando(r)}
+                          className="rounded-lg border border-carbon/15 bg-white hover:bg-slate-50 px-2 py-1 text-[11px] transition"
+                          title="Editar recibo"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarRecibo(r)}
+                          className="rounded-lg border border-rojo/20 bg-white hover:bg-rojo/10 px-2 py-1 text-[11px] transition"
+                          title="Eliminar recibo"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
                     {r.clienteTelefono && (
                       <button
                         type="button"
@@ -1053,6 +1092,17 @@ export function DetalleOrdenTrabajo({
         totalCotizado={orden.totalCotizado || 0}
         saldoRestante={orden.saldoRestante || 0}
       />
+
+      {reciboEditando && (
+        <ModalEditarRecibo
+          recibo={reciboEditando}
+          alCerrar={() => setReciboEditando(null)}
+          alGuardado={async () => {
+            setReciboEditando(null);
+            await recargarDetalle();
+          }}
+        />
+      )}
 
       <ModalGestionarGarantia
         abierto={modalGarantia}

@@ -1285,6 +1285,151 @@ export async function emitirRecibosEnPartes(datos: {
   }
 }
 
+/**
+ * Recalcula saldo anterior / saldo restante de todos los recibos de una OT
+ * en orden cronológico, para que sigan siendo coherentes tras editar o
+ * eliminar alguno.
+ */
+async function recalcularSaldosRecibosOT(sb: any, ordenTrabajoId: string): Promise<void> {
+  const { data: ot } = await sb
+    .from("ordenes_trabajo")
+    .select("cotizacion_id")
+    .eq("id", ordenTrabajoId)
+    .maybeSingle();
+
+  let total = 0;
+  if (ot?.cotizacion_id) {
+    const { data: cot } = await sb
+      .from("cotizaciones")
+      .select("precio_final")
+      .eq("id", ot.cotizacion_id)
+      .maybeSingle();
+    total = Number(cot?.precio_final || 0);
+  }
+
+  const { data: recibos } = await sb
+    .from("recibos_pago")
+    .select("id, monto")
+    .eq("orden_trabajo_id", ordenTrabajoId)
+    .order("fecha_pago", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  let pagado = 0;
+  for (const r of recibos || []) {
+    const saldoAnterior = total > 0 ? Math.max(0, Math.round((total - pagado) * 100) / 100) : 0;
+    const monto = Number(r.monto || 0);
+    const saldoRestante = total > 0 ? Math.max(0, Math.round((saldoAnterior - monto) * 100) / 100) : 0;
+    await sb
+      .from("recibos_pago")
+      .update({ saldo_anterior: saldoAnterior, saldo_restante: saldoRestante })
+      .eq("id", r.id);
+    pagado += monto;
+  }
+}
+
+/** Edita un recibo ya emitido (monto, método, concepto, referencia, fecha, quién recibió, notas). */
+export async function actualizarReciboPago(
+  reciboId: string,
+  datos: {
+    monto?: number;
+    metodoPago?: "transferencia" | "efectivo" | "tarjeta" | "otro";
+    referenciaPago?: string;
+    concepto?: string;
+    fechaPago?: string;
+    notas?: string;
+    recibidoPorId?: string | null;
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: actual } = await sb
+      .from("recibos_pago")
+      .select("id, orden_trabajo_id")
+      .eq("id", reciboId)
+      .maybeSingle();
+    if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    const cambios: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (datos.monto !== undefined) {
+      const monto = Math.round(Number(datos.monto) * 100) / 100;
+      if (!(monto > 0)) return { ok: false, error: "El monto debe ser mayor a cero." };
+      cambios.monto = monto;
+      cambios.monto_letra = numeroALetras(monto);
+    }
+    if (datos.metodoPago) cambios.metodo_pago = datos.metodoPago;
+    if (datos.referenciaPago !== undefined) cambios.referencia_pago = datos.referenciaPago.trim() || null;
+    if (datos.concepto !== undefined) {
+      if (!datos.concepto.trim()) return { ok: false, error: "El concepto no puede estar vacío." };
+      cambios.concepto = datos.concepto.trim();
+    }
+    if (datos.fechaPago) cambios.fecha_pago = datos.fechaPago;
+    if (datos.notas !== undefined) cambios.notas = datos.notas.trim() || null;
+
+    if (datos.recibidoPorId) {
+      const { data: perf } = await sb
+        .from("perfiles")
+        .select("id, nombre")
+        .eq("id", datos.recibidoPorId)
+        .maybeSingle();
+      if (!perf) return { ok: false, error: "La persona seleccionada no existe en el sistema." };
+      cambios.recibido_por = perf.id;
+      cambios.recibido_por_nombre = perf.nombre;
+    }
+
+    const { error } = await sb.from("recibos_pago").update(cambios).eq("id", reciboId);
+    if (error) return { ok: false, error: error.message };
+
+    await recalcularSaldosRecibosOT(sb, actual.orden_trabajo_id);
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al editar el recibo." };
+  }
+}
+
+/** Elimina un recibo emitido (p. ej. para rehacerlo). Recalcula los saldos de los demás. */
+export async function eliminarReciboPago(reciboId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: actual } = await sb
+      .from("recibos_pago")
+      .select("id, orden_trabajo_id, folio")
+      .eq("id", reciboId)
+      .maybeSingle();
+    if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    // No se elimina si una comisión ligada a este recibo ya tiene pagos aplicados
+    const { data: coms } = await sb
+      .from("comisiones")
+      .select("id, monto_pagado")
+      .eq("recibo_pago_id", reciboId);
+    if ((coms || []).some((c: any) => Number(c.monto_pagado || 0) > 0)) {
+      return {
+        ok: false,
+        error: `El recibo ${actual.folio} tiene una comisión con pagos aplicados; primero cancela o ajusta esa comisión.`,
+      };
+    }
+
+    const { error } = await sb.from("recibos_pago").delete().eq("id", reciboId);
+    if (error) return { ok: false, error: error.message };
+
+    await recalcularSaldosRecibosOT(sb, actual.orden_trabajo_id);
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al eliminar el recibo." };
+  }
+}
+
 /** 8. Obtener Recibo de Pago de forma pública por Token (para cliente / PDF) */
 export async function obtenerReciboPorToken(token: string): Promise<ReciboPago | null> {
   try {
