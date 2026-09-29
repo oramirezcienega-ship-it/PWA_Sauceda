@@ -363,6 +363,22 @@ export function ModuloComisiones({
     return lista;
   }, [comisiones, filtroTipo, filtroAsesor]);
 
+  // Totales generales de las comisiones mostradas en el desglose
+  const totalesDesglose = useMemo(
+    () =>
+      comisionesFiltradas.reduce(
+        (acc, c) => ({
+          venta: acc.venta + (c.tipoComision === "inspeccion" ? 0 : c.montoVenta || 0),
+          base: acc.base + (c.baseComisionable || 0),
+          comision: acc.comision + (c.montoComision || 0),
+          pagado: acc.pagado + (c.montoPagado || 0),
+          saldo: acc.saldo + (c.saldoPendiente || 0),
+        }),
+        { venta: 0, base: 0, comision: 0, pagado: 0, saldo: 0 }
+      ),
+    [comisionesFiltradas]
+  );
+
   const asesorSeleccionadoNombre = useMemo(() => {
     if (filtroAsesor === "todos") return "Todos los Asesores";
     return asesores.find((a) => a.id === filtroAsesor)?.nombre || "Asesor";
@@ -995,6 +1011,22 @@ export function ModuloComisiones({
                     ))
                   )}
                 </tbody>
+                {comisionesFiltradas.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-carbon/20 font-bold">
+                      <td colSpan={4} className="py-3 px-2 uppercase text-[10px] tracking-wider text-carbon/70">
+                        Totales generales ({comisionesFiltradas.length} comisiones)
+                      </td>
+                      <td className="py-3 px-2 text-right font-mono whitespace-nowrap">{formatoMoneda(totalesDesglose.venta)}</td>
+                      <td className="py-3 px-2 text-right font-mono text-emerald-700 whitespace-nowrap">{formatoMoneda(totalesDesglose.base)}</td>
+                      <td className="py-3 px-2 text-center">-</td>
+                      <td className="py-3 px-2 text-right font-mono text-blue-900 whitespace-nowrap">{formatoMoneda(totalesDesglose.comision)}</td>
+                      <td className="py-3 px-2 text-right font-mono text-emerald-700 whitespace-nowrap">{formatoMoneda(totalesDesglose.pagado)}</td>
+                      <td className="py-3 px-2 text-right font-mono text-amber-950 whitespace-nowrap">{formatoMoneda(totalesDesglose.saldo)}</td>
+                      <td colSpan={2} className="py-3 px-2 sticky right-0 bg-slate-50" />
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
