@@ -1042,6 +1042,8 @@ export async function crearReciboPago(datos: {
   concepto: string;
   fechaPago?: string;
   notas?: string;
+  /** Persona (perfil) que recibe el dinero. Si no se indica, el usuario en sesión. */
+  recibidoPorId?: string | null;
 }): Promise<{ ok: boolean; recibo?: ReciboPago; error?: string }> {
   try {
     await requireAdmin();
@@ -1090,13 +1092,20 @@ export async function crearReciboPago(datos: {
 
     // Obtener nombre del perfil que recibe el pago
     let recibidoPorNombre = "Asesor Sauceda";
-    if (usuario?.id) {
+    let recibidoPorId: string | null = usuario?.id || null;
+    const quienRecibe = datos.recibidoPorId || usuario?.id;
+    if (quienRecibe) {
       const { data: perf } = await sb
         .from("perfiles")
-        .select("nombre")
-        .eq("id", usuario.id)
+        .select("id, nombre")
+        .eq("id", quienRecibe)
         .maybeSingle();
-      if (perf?.nombre) recibidoPorNombre = perf.nombre;
+      if (perf?.nombre) {
+        recibidoPorNombre = perf.nombre;
+        recibidoPorId = perf.id;
+      } else if (datos.recibidoPorId) {
+        return { ok: false, error: "La persona seleccionada para recibir el dinero no existe en el sistema." };
+      }
     }
 
     const { data: nuevo, error: insertError } = await sb
@@ -1116,7 +1125,7 @@ export async function crearReciboPago(datos: {
         concepto: datos.concepto.trim(),
         saldo_anterior: saldoAnterior,
         saldo_restante: saldoRestante,
-        recibido_por: usuario?.id || null,
+        recibido_por: recibidoPorId,
         recibido_por_nombre: recibidoPorNombre,
         fecha_pago: datos.fechaPago || new Date().toISOString().split("T")[0],
         notas: datos.notas?.trim() || null,
@@ -1161,6 +1170,118 @@ export async function crearReciboPago(datos: {
     };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al registrar recibo de pago." };
+  }
+}
+
+/** Personas que pueden recibir dinero: todos los usuarios activos (admin, asesor, operaciones/instalador). */
+export async function listarReceptoresRecibo(): Promise<
+  { id: string; nombre: string; rol: string }[]
+> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("perfiles")
+      .select("id, nombre, rol")
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
+    return (data || []).map((p: any) => ({ id: p.id, nombre: p.nombre, rol: p.rol || "" }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Reparte un monto total en N recibos de igual importe (el último absorbe el
+ * redondeo). N = 1 emite un solo recibo con el concepto tal cual.
+ */
+async function repartirEnRecibos(datos: {
+  ordenTrabajoId: string;
+  ordenFolio: string;
+  montoTotal: number;
+  numRecibos: number;
+  metodoPago: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  recibidoPorId?: string | null;
+  fechaPago?: string;
+  conceptoBase?: string;
+  referenciaPago?: string;
+  notas?: string;
+}): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
+  const n = Math.min(12, Math.max(1, Math.floor(Number(datos.numRecibos) || 1)));
+  const total = Math.round(Number(datos.montoTotal) * 100) / 100;
+  if (!(total > 0)) return { ok: false, recibos: [], error: "El monto total debe ser mayor a cero." };
+
+  const base = Math.floor((total / n) * 100) / 100;
+  const recibos: ReciboPago[] = [];
+  let acumulado = 0;
+
+  for (let i = 1; i <= n; i++) {
+    const monto = i === n ? Math.round((total - acumulado) * 100) / 100 : base;
+    acumulado = Math.round((acumulado + monto) * 100) / 100;
+    const pct = Math.round((monto / total) * 1000) / 10;
+    const concepto =
+      n === 1
+        ? datos.conceptoBase?.trim() || `Pago único - Orden de Trabajo ${datos.ordenFolio}`
+        : `${datos.conceptoBase?.trim() ? datos.conceptoBase.trim() + " · " : ""}Pago ${i} de ${n} (${pct}%) - Orden de Trabajo ${datos.ordenFolio}`;
+
+    const res = await crearReciboPago({
+      ordenTrabajoId: datos.ordenTrabajoId,
+      monto,
+      metodoPago: datos.metodoPago,
+      referenciaPago: datos.referenciaPago,
+      concepto,
+      fechaPago: datos.fechaPago,
+      notas: datos.notas,
+      recibidoPorId: datos.recibidoPorId,
+    });
+    if (!res.ok || !res.recibo) {
+      return {
+        ok: false,
+        recibos,
+        error: `${res.error || "No se pudo crear el recibo"} (se alcanzaron a emitir ${recibos.length} de ${n}).`,
+      };
+    }
+    recibos.push(res.recibo);
+  }
+  return { ok: true, recibos };
+}
+
+/** Emite 1..N recibos repartiendo un monto total; permite elegir quién recibe el dinero. */
+export async function emitirRecibosEnPartes(datos: {
+  ordenTrabajoId: string;
+  montoTotal: number;
+  numRecibos: number;
+  metodoPago: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  recibidoPorId?: string | null;
+  fechaPago?: string;
+  concepto?: string;
+  referenciaPago?: string;
+  notas?: string;
+}): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: ot } = await sb
+      .from("ordenes_trabajo")
+      .select("folio")
+      .eq("id", datos.ordenTrabajoId)
+      .maybeSingle();
+    if (!ot) return { ok: false, recibos: [], error: "Orden de trabajo no encontrada." };
+
+    return await repartirEnRecibos({
+      ordenTrabajoId: datos.ordenTrabajoId,
+      ordenFolio: ot.folio,
+      montoTotal: datos.montoTotal,
+      numRecibos: datos.numRecibos,
+      metodoPago: datos.metodoPago,
+      recibidoPorId: datos.recibidoPorId,
+      fechaPago: datos.fechaPago,
+      conceptoBase: datos.concepto,
+      referenciaPago: datos.referenciaPago,
+      notas: datos.notas,
+    });
+  } catch (err: any) {
+    return { ok: false, recibos: [], error: err?.message || "Error al emitir los recibos." };
   }
 }
 
@@ -1697,12 +1818,16 @@ async function generarDocumentosAutomaticosOT(
     montoCobro?: number | null;
     metodoPago?: string | null;
     direccionCliente?: string;
+    /** Cantidad de recibos en que se reparte el cobro. Por omisión: 1 si el monto es <= $10,000; 2 si es mayor. */
+    numRecibos?: number | null;
+    /** Persona que recibe el dinero (perfil). Por omisión, el usuario en sesión. */
+    recibidoPorId?: string | null;
   }
 ): Promise<void> {
   const { ordenTrabajoId, ordenFolio, clienteNombre, montoCobro, metodoPago, direccionCliente } = params;
 
-  // 1. Recibo(s) de pago: un único recibo si el monto a cobrar es <= $10,000;
-  // si es mayor, se divide en dos recibos iguales (50% / 50%).
+  // 1. Recibo(s) de pago: la cantidad es parametrizable; si no se indica,
+  // un único recibo si el monto es <= $10,000 y dos (50% / 50%) si es mayor.
   const monto = Number(montoCobro || 0);
   if (monto > 0) {
     try {
@@ -1715,28 +1840,18 @@ async function generarDocumentosAutomaticosOT(
           ? "tarjeta"
           : "otro";
 
-      if (monto <= 10000) {
-        await crearReciboPago({
-          ordenTrabajoId,
-          monto,
-          metodoPago: metodoRecibo,
-          concepto: `Pago único - Orden de Trabajo ${ordenFolio}`,
-        });
-      } else {
-        const primeraParte = Math.round((monto / 2) * 100) / 100;
-        const segundaParte = Math.round((monto - primeraParte) * 100) / 100;
-        await crearReciboPago({
-          ordenTrabajoId,
-          monto: primeraParte,
-          metodoPago: metodoRecibo,
-          concepto: `Pago 1 de 2 (50%) - Orden de Trabajo ${ordenFolio}`,
-        });
-        await crearReciboPago({
-          ordenTrabajoId,
-          monto: segundaParte,
-          metodoPago: metodoRecibo,
-          concepto: `Pago 2 de 2 (50%) - Orden de Trabajo ${ordenFolio}`,
-        });
+      const numRecibos =
+        params.numRecibos && params.numRecibos > 0 ? params.numRecibos : monto <= 10000 ? 1 : 2;
+      const resRec = await repartirEnRecibos({
+        ordenTrabajoId,
+        ordenFolio,
+        montoTotal: monto,
+        numRecibos,
+        metodoPago: metodoRecibo,
+        recibidoPorId: params.recibidoPorId,
+      });
+      if (!resRec.ok) {
+        console.error("Aviso: recibos automáticos incompletos para OT", ordenFolio, resRec.error);
       }
     } catch (errRec) {
       console.error("Aviso: no se pudo generar recibo(s) automático(s) para OT", ordenFolio, errRec);
@@ -2603,6 +2718,10 @@ export async function programarInstalacionYDetonarOT(datos: {
   mesesSinIntereses?: number | null;
   comisionBancariaPct?: number;
   montoSaldo?: number;
+  /** Cantidad de recibos en que se reparte el saldo (por omisión 1 si <= $10,000; 2 si es mayor). */
+  numRecibos?: number | null;
+  /** Persona (perfil) que recibe el dinero. */
+  recibidoPorId?: string | null;
   notasInstalacion?: string;
   notificarClienteWhatsApp?: boolean;
   notificarProveedorWhatsApp?: boolean;
@@ -2882,6 +3001,8 @@ export async function programarInstalacionYDetonarOT(datos: {
           montoCobro: montoSaldo,
           metodoPago,
           direccionCliente,
+          numRecibos: datos.numRecibos,
+          recibidoPorId: datos.recibidoPorId,
         });
       } catch (errAuto) {
         console.error("Aviso: no se pudieron generar documentos automáticos de la OT:", errAuto);

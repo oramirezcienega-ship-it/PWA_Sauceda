@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   obtenerDatosProgramacionInstalacion,
   programarInstalacionYDetonarOT,
+  listarReceptoresRecibo,
 } from "@/app/actions/ordenes-trabajo";
 
 interface ModalProgramarInstalacionCotizacionProps {
@@ -38,6 +39,9 @@ export function ModalProgramarInstalacionCotizacion({
   const [mesesSinIntereses, setMesesSinIntereses] = useState<string>("");
   const [comisionBancariaPct, setComisionBancariaPct] = useState<string>("3.5");
   const [montoSaldo, setMontoSaldo] = useState<number>(0);
+  const [numRecibos, setNumRecibos] = useState<string>("");
+  const [recibidoPorId, setRecibidoPorId] = useState("");
+  const [receptores, setReceptores] = useState<{ id: string; nombre: string; rol: string }[]>([]);
   const [notas, setNotas] = useState("");
   const [notificarCliente, setNotificarCliente] = useState(true);
   const [notificarProveedor, setNotificarProveedor] = useState(true);
@@ -45,6 +49,12 @@ export function ModalProgramarInstalacionCotizacion({
 
   // Resultado Exitoso
   const [resultado, setResultado] = useState<any | null>(null);
+
+  // Personas que pueden recibir el dinero (todos los usuarios activos)
+  useEffect(() => {
+    if (!abierto) return;
+    listarReceptoresRecibo().then(setReceptores).catch(() => setReceptores([]));
+  }, [abierto]);
 
   useEffect(() => {
     if (!abierto || !cotizacionId) return;
@@ -146,6 +156,8 @@ export function ModalProgramarInstalacionCotizacion({
         mesesSinIntereses: metodoPago === "meses_sin_intereses" && mesesSinIntereses ? Number(mesesSinIntereses) : null,
         comisionBancariaPct: comisionBancariaPct ? Number(comisionBancariaPct) : 0,
         montoSaldo,
+        numRecibos: numRecibos ? Number(numRecibos) : null,
+        recibidoPorId: recibidoPorId || null,
         notasInstalacion: notas,
         notificarClienteWhatsApp: notificarCliente,
         notificarProveedorWhatsApp: notificarProveedor,
@@ -480,6 +492,40 @@ export function ModalProgramarInstalacionCotizacion({
                     value={montoSaldo}
                     onChange={(e) => setMontoSaldo(Number(e.target.value))}
                     className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs font-mono font-bold text-verde-profundo outline-none focus:border-sauce bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-carbon/60 mb-1">
+                    Recibe el dinero
+                  </label>
+                  <select
+                    value={recibidoPorId}
+                    onChange={(e) => setRecibidoPorId(e.target.value)}
+                    className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon outline-none focus:border-sauce bg-white font-medium"
+                  >
+                    <option value="">Yo (usuario en sesión)</option>
+                    {receptores.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} · {p.rol === "admin" ? "Administrador" : p.rol === "asesor" ? "Asesor" : p.rol === "operaciones" ? "Operaciones / Instalador" : p.rol}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-carbon/60 mb-1">
+                    Cantidad de recibos (vacío = automático)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    placeholder="Automático: 1 si es ≤ $10,000; 2 si es mayor"
+                    value={numRecibos}
+                    onChange={(e) => setNumRecibos(e.target.value)}
+                    className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs font-mono text-carbon outline-none focus:border-sauce bg-white"
                   />
                 </div>
               </div>
