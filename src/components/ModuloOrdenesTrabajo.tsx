@@ -1,5 +1,6 @@
 "use client";
 
+import { cambiarEstatusOTConContrato } from "@/lib/estatus-ot-cliente";
 import { useEffect, useState } from "react";
 import {
   obtenerOrdenesTrabajo,
@@ -148,7 +149,7 @@ export function ModuloOrdenesTrabajo({
     }
 
     try {
-      await actualizarEstatusOrdenTrabajo(ot.id, nuevoEstatus);
+      if (!(await cambiarEstatusOTConContrato(ot.id, nuevoEstatus))) return;
       setOrdenes((prev) =>
         prev.map((o) => (o.id === ot.id ? { ...o, estatus: nuevoEstatus } : o))
       );

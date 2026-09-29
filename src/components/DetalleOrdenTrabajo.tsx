@@ -1,5 +1,6 @@
 "use client";
 
+import { cambiarEstatusOTConContrato } from "@/lib/estatus-ot-cliente";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -20,6 +21,7 @@ import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
+import { SeccionContratoOT } from "./SeccionContratoOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface DetalleOrdenTrabajoProps {
@@ -116,7 +118,7 @@ export function DetalleOrdenTrabajo({
       return;
     }
     try {
-      await actualizarEstatusOrdenTrabajo(orden.id, nuevoEstatus);
+      if (!(await cambiarEstatusOTConContrato(orden.id, nuevoEstatus))) return;
       setOrden((prev) => ({ ...prev, estatus: nuevoEstatus }));
     } catch (e) {
       alert("Error al actualizar el estado de la orden.");
@@ -599,6 +601,9 @@ export function DetalleOrdenTrabajo({
           )}
         </div>
       </div>
+
+      {/* 3b. Contrato de Prestación de Servicios */}
+      <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
 
       {/* 4. Grid de Módulos: Recibos Oficiales & Póliza de Garantía */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

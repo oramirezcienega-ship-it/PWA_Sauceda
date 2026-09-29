@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
+import { estadoContratoDeOrden } from "@/app/actions/contratos";
 import { numeroALetras } from "@/lib/numero-a-letras";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { normalizarTelefono } from "@/lib/telefono";
@@ -197,6 +198,24 @@ export async function crearOrdenTrabajo(datos: {
         if (!tipoNegocio || tipoNegocio === "construccion") {
           tipoNegocio = cot.servicio_tipo || "construccion";
         }
+      }
+    }
+
+    // Solo se crea una OT desde una cotización aceptada por el cliente
+    if (cotizacionId) {
+      const { data: cotEstado } = await sb
+        .from("cotizaciones")
+        .select("estatus")
+        .eq("id", cotizacionId)
+        .maybeSingle();
+      if (!cotEstado) {
+        return { ok: false, error: "La cotización indicada no existe." };
+      }
+      if (cotEstado.estatus !== "aceptada") {
+        return {
+          ok: false,
+          error: `La cotización ${cotizacionId} está en estado "${cotEstado.estatus}". Solo se puede crear una orden de trabajo desde una cotización aceptada por el cliente.`,
+        };
       }
     }
 
@@ -668,11 +687,43 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
 export async function actualizarEstatusOrdenTrabajo(
   ordenId: string,
   nuevoEstatus: "pendiente" | "en_proceso" | "completada" | "cancelada",
-  extras?: { notasConclusion?: string }
-): Promise<{ ok: boolean; error?: string }> {
+  extras?: { notasConclusion?: string; overrideContrato?: boolean }
+): Promise<{ ok: boolean; error?: string; codigo?: "CONTRATO_PENDIENTE" }> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
+
+    // La OT no pasa a "En proceso" sin contrato firmado (si nace de una
+    // cotización). Un administrador puede forzarlo; queda en la bitácora.
+    if (nuevoEstatus === "en_proceso") {
+      const ctr = await estadoContratoDeOrden(ordenId);
+      if (ctr.aplica && !ctr.firmado) {
+        const usuario = await usuarioActual();
+        const esAdmin = usuario ? (await rolDe(usuario.id)).rol === "admin" : false;
+        if (!extras?.overrideContrato || !esAdmin) {
+          return {
+            ok: false,
+            codigo: "CONTRATO_PENDIENTE",
+            error: ctr.estado
+              ? "El contrato de esta orden aún no está firmado."
+              : "Esta orden no tiene contrato generado ni firmado.",
+          };
+        }
+        const { data: otReg } = await sb
+          .from("ordenes_trabajo")
+          .select("folio, expediente_id, prospecto_id")
+          .eq("id", ordenId)
+          .maybeSingle();
+        const { registrarActividad } = await import("@/lib/actividades");
+        await registrarActividad(sb, {
+          expedienteId: otReg?.expediente_id || null,
+          prospectoId: otReg?.prospecto_id || null,
+          tipo: "construccion",
+          titulo: "⚠️ OT iniciada sin contrato firmado (override de administrador)",
+          detalle: `La orden ${otReg?.folio || ordenId} pasó a "En proceso" sin contrato firmado. Autorizó: ${usuario?.email || usuario?.id}.`,
+        });
+      }
+    }
 
     const actualizacion: Record<string, any> = {
       estatus: nuevoEstatus,
