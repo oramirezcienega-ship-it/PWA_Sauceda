@@ -382,15 +382,14 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   🛠️ ¿QUÉ INCLUYE?: Diagnóstico técnico, limpieza profunda de la superficie, resane y sellado de grietas, y la aplicación profesional.
   🏆 ¿POR QUÉ ELEGIRNOS?: Te entregamos una garantía de 5 años por escrito, utilizamos materiales de primera y contamos con mano de obra altamente capacitada para proteger tu azotea de goteras y filtraciones.
 
-  Para darte una cotización personalizada de inmediato, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?"
+  Para poder orientarte mejor y coordinar tu inspección técnica gratuita, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?"
 
-- PASO 2: PRESENTACIÓN DEL PRESUPUESTO Y PAGO (Al tener los metros cuadrados)
+- PASO 2: PRESENTACIÓN DEL SERVICIO Y AGENDA DE INSPECCIÓN (Al tener los metros cuadrados)
   Se activa en cuanto el cliente proporciona los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
-  Calcula matemáticamente los valores del presupuesto:
-    - TOTAL_SIN_IVA = @metros * 210
-  Construye tu respuesta incluyendo exactamente la siguiente estructura de cotización (solo para el producto Estándar, sin mencionar paquetes Premium ni enviar links):
+  PROHIBIDO calcular, mencionar o dar cualquier precio, presupuesto, monto en pesos o rango de precios en tu respuesta, aunque el cliente lo pida directamente: el precio depende de las condiciones reales de la azotea y SIEMPRE lo confirma un asesor humano tras la inspección técnica gratuita. Si el cliente insiste en un precio exacto o estimado, explícale amablemente que el costo se determina en la inspección gratuita (varía según el estado de la superficie) y ofrécele agendarla.
+  Construye tu respuesta incluyendo exactamente la siguiente estructura (solo para el producto Estándar, sin mencionar paquetes Premium, sin cifras en pesos ni enviar links):
 
-  "Perfecto. Para [METROS] m², aquí están los detalles de nuestro servicio:
+  "Perfecto. Para [METROS] m², contamos con:
 
   🟡 IMPERMEABILIZACIÓN ESTÁNDAR
   • Impermeabilizante 3.5 mm + gravilla (roja o gris a tu elección)
@@ -398,9 +397,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
   • Tiempo de ejecución: 1 día
 
-  💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN (Precios más IVA)
-
-  💳 Ofrecemos opción de pago con tarjeta de crédito.[REGLA_PROMO: Si el TOTAL_SIN_IVA es mayor a 10000, agrega exactamente este texto: " ¡Y contamos con 3 meses sin intereses!"]
+  El costo exacto se confirma en la inspección técnica gratuita, ya que depende del estado real de tu azotea. También contamos con opción de pago con tarjeta de crédito y meses sin intereses.
 
   ¿Confirmamos inspección técnica gratuita esta semana?"
 
@@ -415,8 +412,8 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
     "¡Excelente! Con gusto aprovechamos la promoción para tu proyecto. Para coordinar tu inspección técnica gratuita y sin compromiso en tu domicilio, un asesor de nuestro equipo te contactará a la brevedad por este chat para confirmar el día y la hora. ¿En qué colonia o zona se encuentra tu propiedad?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_3".
   * Si elige OPCIÓN 2 ("cotización", "cotización estimada", "2"):
-    Pide amablemente los metros cuadrados aproximados para calcularle el presupuesto estimado:
-    "Con gusto te compartimos el presupuesto estimado. ¿Cuántos metros cuadrados aproximadamente tiene tu azotea o área a impermeabilizar?"
+    PROHIBIDO dar un precio o presupuesto en este mensaje. Pide amablemente los metros cuadrados aproximados para poder orientarlo y coordinar su inspección técnica gratuita (el costo exacto lo confirma un asesor en sitio):
+    "Con gusto te ayudamos. El costo exacto se confirma en una inspección técnica gratuita en tu domicilio, ya que depende del estado real de la superficie. ¿Cuántos metros cuadrados aproximadamente tiene tu azotea o área a impermeabilizar, para coordinarla?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_1".
   * Si elige OPCIÓN 3 ("no me interesa", "ya lo resolví", "3"):
     Despídete amablemente:
@@ -495,7 +492,7 @@ REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
   Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
 
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
-  NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y cotiza el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente.
+  NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y atiende el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente (sin mencionar precios: el costo lo confirma un asesor en la inspección técnica gratuita).
 
 REGLA CRÍTICA DE CONTINUIDAD Y PROHIBICIÓN DE RE-SALUDO:
 - Si en el historial de la conversación el asistente ya saludó previamente (o si la conversación ya está iniciada con mensajes previos), queda ESTRICTAMENTE PROHIBIDO volver a saludar (como "¡Hola [Nombre]!", "Hola 👋", "Gracias por contactarnos nuevamente...", "Vemos que ya nos comunicamos contigo...", etc.) y queda PROHIBIDO reiniciar la conversación con preguntas genéricas de apertura ("¿En qué te podemos ayudar hoy?", "¿Hay algo más en lo que podamos ayudarte?").
@@ -555,7 +552,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar información del servicio estándar para pedir metros), 'paso_2' (al presentar el presupuesto y condiciones de pago) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar información del servicio estándar para pedir metros), 'paso_2' (al presentar el servicio y ofrecer la inspección técnica gratuita, sin dar precio) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
@@ -1133,7 +1130,7 @@ export async function responderConIA(
       if (esImper && (datosExtraidos as any).metros) {
         const m = (datosExtraidos as any).metros;
         const col = (datosExtraidos as any).colonia || datosExtraidos.fraccionamiento || exp?.fraccionamiento || "";
-        updates.necesidad = `Impermeabilización de ${m} m² - Paquete Estándar ($210/m²)${col ? ` en col. ${col}` : ""}`;
+        updates.necesidad = `Impermeabilización de ${m} m² - Paquete Estándar${col ? ` en col. ${col}` : ""}`;
       }
 
       // --- CREACIÓN DE COTIZACIÓN AUTOMÁTICA (Supabase) Y REEMPLAZO DE LINKS ---
@@ -1163,26 +1160,31 @@ export async function responderConIA(
               const numeros = ids.map((id) => parseInt(id.replace(/\D/g, ""), 10)).filter((n) => !Number.isNaN(n));
               const max = numeros.length ? Math.max(...numeros) : 0;
               idCot = `COT-${String(max + 1).padStart(3, "0")}`;
-              const precioM2 = 210;
-              const precioTotal = Number(m) * precioM2;
 
-              // Consultar costo unitario en el catálogo
+              // Consultar precio y costo unitario vigentes en el catálogo
+              // (nunca se muestran al cliente en el chat; sólo alimentan el
+              // registro interno de la cotización para el asesor).
+              let precioM2 = 210; // fallback razonable si el catálogo no tiene el producto
               let costoM2 = 165; // fallback razonable
               try {
                 const { data: prodCatalog } = await sb
                   .from("productos_servicios")
-                  .select("costo_unitario")
+                  .select("costo_unitario, precio_unitario")
                   .ilike("nombre", "%Estándar%")
                   .eq("categoria", "impermeabilizacion")
                   .maybeSingle();
-                
+
                 if (prodCatalog?.costo_unitario) {
                   costoM2 = Number(prodCatalog.costo_unitario);
                 }
+                if (prodCatalog?.precio_unitario) {
+                  precioM2 = Number(prodCatalog.precio_unitario);
+                }
               } catch (errDb) {
-                console.error("IA: Error al buscar costo en catálogo:", errDb);
+                console.error("IA: Error al buscar precio/costo en catálogo:", errDb);
               }
 
+              const precioTotal = Number(m) * precioM2;
               const costoTotal = Number(m) * costoM2;
 
               // Insertar cotización
