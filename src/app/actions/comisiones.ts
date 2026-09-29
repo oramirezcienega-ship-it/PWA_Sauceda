@@ -480,6 +480,9 @@ export async function listarComisiones(filtros?: {
 
     if (filtros?.estatus && filtros.estatus !== "todas") {
       query = query.eq("estatus", filtros.estatus);
+    } else {
+      // Las canceladas se ocultan salvo que se filtren explícitamente
+      query = query.neq("estatus", "cancelada");
     }
 
     if (filtros?.fechaDesde) {
@@ -848,6 +851,49 @@ export async function ajustarComisionManual(datos: {
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err.message || "Error al ajustar la comisión." };
+  }
+}
+
+/**
+ * Cancela una comisión (p. ej. inspección reasignada o duplicada). Queda con
+ * estatus "cancelada", saldo 0 y marcada como ajuste manual para que las
+ * sincronizaciones automáticas no la regeneren ni la reasignen.
+ * No permite cancelar comisiones con pagos aplicados.
+ */
+export async function cancelarComision(datos: {
+  comisionId: string;
+  motivo: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: com, error: errBusq } = await sb
+      .from("comisiones")
+      .select("id, monto_pagado")
+      .eq("id", datos.comisionId)
+      .single();
+    if (errBusq || !com) return { ok: false, error: "Comisión no encontrada." };
+    if (Number(com.monto_pagado || 0) > 0) {
+      return { ok: false, error: "La comisión ya tiene pagos aplicados; no se puede cancelar." };
+    }
+
+    const { error: errUpd } = await sb
+      .from("comisiones")
+      .update({
+        estatus: "cancelada",
+        saldo_pendiente: 0,
+        es_ajuste_manual: true,
+        motivo_ajuste: `Cancelada: ${(datos.motivo || "").trim() || "sin motivo"}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", datos.comisionId);
+    if (errUpd) throw new Error(errUpd.message);
+
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al cancelar la comisión." };
   }
 }
 
