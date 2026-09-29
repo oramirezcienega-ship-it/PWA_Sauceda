@@ -330,7 +330,7 @@ async function registrarCompraProveedorEnFinanzas(documento: DocumentoProveedor)
       fecha: documento.fecha,
       estado: "pendiente",
       contraparte: documento.proveedorNombre || "Proveedor",
-      crmDealId: documento.id,
+      crmDealId: documento.expedienteId || null,
     });
   } catch (errFin) {
     console.error("Error al registrar movimiento financiero de compra a proveedor:", errFin);

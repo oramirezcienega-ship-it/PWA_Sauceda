@@ -978,16 +978,15 @@ export async function obtenerExpedientesCerradosSinComision(): Promise<
     if (errExp) throw errExp;
     if (!expedientes || expedientes.length === 0) return [];
 
-    // 2. Obtener IDs de expedientes que ya tengan ingresos/comisión asociados
-    const { data: transacciones, error: errTrans } = await sb
-      .from("transacciones_financieras")
-      .select("expediente_id")
-      .is("expediente_id", "not.null")
-      .eq("tipo", "ingreso");
+    // 2. Obtener IDs de expedientes que ya tengan ingresos/comisión asociados (en transactions y legacy)
+    const [resTx, resLegacy] = await Promise.all([
+      sb.from("transactions").select("crm_deal_id").is("crm_deal_id", "not.null").eq("tipo", "ingreso"),
+      sb.from("transacciones_financieras").select("expediente_id").is("expediente_id", "not.null").eq("tipo", "ingreso")
+    ]);
 
-    if (errTrans) throw errTrans;
-
-    const idsConComision = new Set((transacciones || []).map((t: any) => t.expediente_id));
+    const idsConComision = new Set<string>();
+    (resTx.data || []).forEach((t: any) => { if (t.crm_deal_id) idsConComision.add(t.crm_deal_id); });
+    (resLegacy.data || []).forEach((t: any) => { if (t.expediente_id) idsConComision.add(t.expediente_id); });
 
     // 3. Filtrar los que no tienen registro financiero
     return expedientes
