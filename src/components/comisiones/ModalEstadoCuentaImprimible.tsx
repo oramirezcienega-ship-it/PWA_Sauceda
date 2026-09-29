@@ -59,15 +59,21 @@ export function ModalEstadoCuentaImprimible({
   const saldoNeto = saldoPendiente - anticiposPendientes;
   const porLiquidar = comisiones.filter((c) => c.saldoPendiente > 0).length;
 
-  const handleImprimir = () => {
-    // El nombre sugerido del PDF sale del título del documento
+  // Nombre sugerido del PDF (sale del título del documento):
+  // "Reporte de Comisiones - <Asesor> - <Período> - Emitido AAAA-MM-DD".
+  // Se fija mientras el modal está abierto para que aplique también con Ctrl+P.
+  useEffect(() => {
     const tituloOriginal = document.title;
-    document.title = `Reporte de Comisiones - ${asesorNombre} - ${periodoTexto}`.replace(/[\\/:*?"<>|]/g, "-");
-    const restaurar = () => {
+    const hoy = new Date().toLocaleDateString("en-CA");
+    document.title = `Reporte de Comisiones - ${asesorNombre} - ${periodoTexto} - Emitido ${hoy}`
+      .replace(/[\\/:*?"<>|]/g, "-")
+      .replace(/\s+/g, " ");
+    return () => {
       document.title = tituloOriginal;
-      window.removeEventListener("afterprint", restaurar);
     };
-    window.addEventListener("afterprint", restaurar);
+  }, [asesorNombre, periodoTexto]);
+
+  const handleImprimir = () => {
     window.print();
   };
 
