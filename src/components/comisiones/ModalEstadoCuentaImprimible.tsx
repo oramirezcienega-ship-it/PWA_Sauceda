@@ -9,6 +9,8 @@ interface Props {
   periodoTexto: string;
   comisiones: Comision[];
   pagos: ComisionPago[];
+  /** Anticipos/préstamos activos a favor de SAUCEDA del asesor (o de todos si no hay filtro). */
+  anticiposPendientes?: number;
   alCerrar: () => void;
 }
 
@@ -18,6 +20,7 @@ export function ModalEstadoCuentaImprimible({
   periodoTexto,
   comisiones,
   pagos,
+  anticiposPendientes = 0,
   alCerrar,
 }: Props) {
   const formatoMoneda = (val: number) =>
@@ -30,6 +33,8 @@ export function ModalEstadoCuentaImprimible({
   const totalComisiones = comisiones.reduce((acc, c) => acc + c.montoComision, 0);
   const totalPagado = comisiones.reduce((acc, c) => acc + c.montoPagado, 0);
   const saldoPendiente = comisiones.reduce((acc, c) => acc + c.saldoPendiente, 0);
+
+  const saldoNeto = saldoPendiente - anticiposPendientes;
 
   const handleImprimir = () => {
     window.print();
@@ -219,11 +224,22 @@ export function ModalEstadoCuentaImprimible({
 
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-300">
               <span className="text-[10px] uppercase font-bold tracking-wider text-amber-900 block">
-                Saldo a Favor Asesor
+                Balance Pendiente por Liquidar
               </span>
               <span className="text-base font-mono font-bold text-amber-950 mt-1 block">
                 {formatoMoneda(saldoPendiente)}
               </span>
+              <span className="text-[10px] text-amber-900/80 block">
+                {comisiones.filter((c) => c.saldoPendiente > 0).length} comisión(es) por liquidar
+              </span>
+              {anticiposPendientes > 0 && (
+                <span className="text-[10px] text-blue-800 mt-1.5 pt-1.5 border-t border-amber-300/60 block font-semibold">
+                  💰 Anticipos a favor de SAUCEDA: {formatoMoneda(anticiposPendientes)}
+                  <span className={`block font-mono font-bold ${saldoNeto < 0 ? "text-red-700" : "text-blue-900"}`}>
+                    Saldo neto: {formatoMoneda(saldoNeto)}
+                  </span>
+                </span>
+              )}
             </div>
           </div>
 

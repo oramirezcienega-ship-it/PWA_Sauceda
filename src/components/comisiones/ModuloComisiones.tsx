@@ -1657,6 +1657,7 @@ export function ModuloComisiones({
           periodoTexto={textoPeriodo}
           comisiones={comisionesFiltradas}
           pagos={pagos}
+          anticiposPendientes={resumen.general.anticiposPendientes}
           alCerrar={() => setModalImprimirAbierto(false)}
         />
       )}
