@@ -24,6 +24,7 @@ export function ModalEstadoCuentaImprimible({
 
   // Totales
   const totalVentas = comisiones.reduce((acc, c) => acc + c.montoVenta, 0);
+  const totalBase = comisiones.reduce((acc, c) => acc + c.baseComisionable, 0);
   const totalComisiones = comisiones.reduce((acc, c) => acc + c.montoComision, 0);
   const totalPagado = comisiones.reduce((acc, c) => acc + c.montoPagado, 0);
   const saldoPendiente = comisiones.reduce((acc, c) => acc + c.saldoPendiente, 0);
@@ -222,11 +223,12 @@ export function ModalEstadoCuentaImprimible({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-carbon/20 text-carbon/70 text-[10px] uppercase">
-                      <th className="py-2 px-1">Fecha</th>
-                      <th className="py-2 px-1">Folio</th>
+                      <th className="py-2 px-1">Folio / Fecha</th>
+                      <th className="py-2 px-1">Asesor</th>
                       <th className="py-2 px-1">Cliente / Empresa</th>
                       <th className="py-2 px-1">Servicio</th>
                       <th className="py-2 px-1 text-right">Venta</th>
+                      <th className="py-2 px-1 text-right">Base Comisionable</th>
                       <th className="py-2 px-1 text-center">% Com.</th>
                       <th className="py-2 px-1 text-right">Comisión</th>
                       <th className="py-2 px-1 text-right">Pagado</th>
@@ -237,11 +239,16 @@ export function ModalEstadoCuentaImprimible({
                   <tbody className="divide-y divide-carbon/10 font-mono">
                     {comisiones.map((c) => (
                       <tr key={c.id} className="hover:bg-slate-50/50">
-                        <td className="py-2 px-1 text-[11px] text-carbon/70 font-sans whitespace-nowrap">
-                          {new Date(c.fecha).toLocaleDateString("es-MX")}
+                        <td className="py-2 px-1 whitespace-nowrap">
+                          <span className="font-bold text-verde-profundo block">
+                            {c.remisionFolio || (c.tipoComision === "inspeccion" ? "INSP" : "S/F")}
+                          </span>
+                          <span className="text-[10px] text-carbon/60 font-sans block">
+                            {new Date(c.fecha).toLocaleDateString("es-MX")}
+                          </span>
                         </td>
-                        <td className="py-2 px-1 font-bold text-verde-profundo whitespace-nowrap">
-                          {c.remisionFolio}
+                        <td className="py-2 px-1 font-sans font-semibold text-carbon whitespace-nowrap">
+                          {c.asesorNombre}
                         </td>
                         <td className="py-2 px-1 font-sans text-carbon max-w-[160px] truncate" title={c.clienteNombre}>
                           <span className="font-semibold block truncate">{c.clienteNombre}</span>
@@ -252,13 +259,27 @@ export function ModalEstadoCuentaImprimible({
                           )}
                         </td>
                         <td className="py-2 px-1 font-sans capitalize text-carbon/80 text-[11px] whitespace-nowrap">
-                          {c.servicioTipo?.replace(/_/g, " ") || "Construcción"}
+                          {c.tipoComision === "inspeccion"
+                            ? "Inspección Técnica"
+                            : c.servicioTipo?.replace(/_/g, " ") || "Construcción"}
                         </td>
                         <td className="py-2 px-1 text-right font-medium">
-                          {formatoMoneda(c.montoVenta)}
+                          {c.tipoComision === "inspeccion" ? (
+                            <span className="text-[10px] text-carbon/50 italic font-sans">Tarifa Fija</span>
+                          ) : (
+                            formatoMoneda(c.montoVenta)
+                          )}
+                        </td>
+                        <td className="py-2 px-1 text-right font-medium text-emerald-700">
+                          {formatoMoneda(c.baseComisionable)}
+                          {c.tipoComision !== "inspeccion" && (c.costoProveedor > 0 || c.comisionBancaria > 0) && (
+                            <span className="block text-[9px] text-carbon/40 font-normal">
+                              −{formatoMoneda(c.costoProveedor + c.comisionBancaria)}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-1 text-center text-carbon/70">
-                          {c.porcentajeComision}%
+                          {c.tipoComision === "inspeccion" ? "FIJA" : `${c.porcentajeComision}%`}
                           {c.esAjusteManual && <span className="text-[9px] text-amber-600 block">*manual</span>}
                         </td>
                         <td className="py-2 px-1 text-right font-bold text-blue-900">
@@ -292,6 +313,7 @@ export function ModalEstadoCuentaImprimible({
                         Totales Generales:
                       </td>
                       <td className="py-2 px-1 text-right">{formatoMoneda(totalVentas)}</td>
+                      <td className="py-2 px-1 text-right">{formatoMoneda(totalBase)}</td>
                       <td className="py-2 px-1 text-center">-</td>
                       <td className="py-2 px-1 text-right text-blue-900">{formatoMoneda(totalComisiones)}</td>
                       <td className="py-2 px-1 text-right text-emerald-800">{formatoMoneda(totalPagado)}</td>
