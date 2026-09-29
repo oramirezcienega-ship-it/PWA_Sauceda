@@ -17,8 +17,10 @@ export function TarjetaCotizacionOrigenOT({ cotizacionId, cotizacionToken, total
 
   if (!cotizacionId) return null;
 
-  const urlPdf = cotizacionToken ? `/api/cotizaciones/${cotizacionToken}/pdf` : null;
-  const urlPortal = cotizacionToken ? `/cotizacion/${cotizacionToken}` : null;
+  // Misma vista de impresión de la cotización (portal), aunque ya esté aceptada
+  const urlDocumento = cotizacionToken ? `/cotizacion/${cotizacionToken}?vista=documento` : null;
+  const urlImprimir = cotizacionToken ? `/cotizacion/${cotizacionToken}?vista=documento&imprimir=1` : null;
+  const urlPdf = urlDocumento;
 
   return (
     <section className="rounded-2xl border border-carbon/10 bg-white p-4 shadow-xs">
@@ -45,19 +47,13 @@ export function TarjetaCotizacionOrigenOT({ cotizacionId, cotizacionToken, total
         <div className="space-y-3 text-xs">
           <div className="flex flex-wrap gap-2">
             <a
-              href={urlPdf}
+              href={urlImprimir || undefined}
               target="_blank"
               rel="noreferrer"
               className="bg-verde-profundo text-crema px-3 py-1.5 rounded-lg font-bold"
+              title='Abre la cotización y el diálogo de impresión; elige "Guardar como PDF" para descargarla'
             >
-              🖨️ Ver / Imprimir PDF
-            </a>
-            <a
-              href={urlPdf}
-              download={`Cotizacion-${cotizacionId}.pdf`}
-              className="bg-slate-100 hover:bg-slate-200 text-carbon px-3 py-1.5 rounded-lg font-bold"
-            >
-              ⬇️ Descargar PDF
+              🖨️ Imprimir / Guardar PDF
             </a>
             <button
               type="button"
@@ -66,14 +62,14 @@ export function TarjetaCotizacionOrigenOT({ cotizacionId, cotizacionToken, total
             >
               {previa ? "🙈 Ocultar vista previa" : "👁️ Vista previa"}
             </button>
-            {urlPortal && (
+            {urlDocumento && (
               <a
-                href={urlPortal}
+                href={urlDocumento}
                 target="_blank"
                 rel="noreferrer"
                 className="bg-white hover:bg-slate-50 border border-carbon/20 text-carbon px-3 py-1.5 rounded-lg font-bold"
               >
-                🌐 Ver en el portal del cliente
+                🌐 Abrir en pestaña
               </a>
             )}
           </div>
