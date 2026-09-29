@@ -8,9 +8,25 @@ import {
   type ActividadSemanaItem,
   type DiaSemanaInfo,
 } from "@/app/actions/actividades-semana";
+import {
+  obtenerCoordinacionesPendientes,
+  recordarCoordinacionAsesores,
+  type CoordinacionPendienteItem,
+} from "@/app/actions/coordinaciones-seguimiento";
+
+function tiempoTranscurrido(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h`;
+  const d = Math.floor(h / 24);
+  return `${d} d`;
+}
 
 export function HeaderActividadesSemana() {
   const [datos, setDatos] = useState<ResumenSemanaActividades | null>(null);
+  const [coordinaciones, setCoordinaciones] = useState<CoordinacionPendienteItem[]>([]);
+  const [recordandoId, setRecordandoId] = useState<string | null>(null);
+  const [avisoCoord, setAvisoCoord] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [cargando, setCargando] = useState(true);
   // Regla: Siempre iniciar contraída por defecto
   const [colapsada, setColapsada] = useState(true);
@@ -26,8 +42,12 @@ export function HeaderActividadesSemana() {
   const cargar = useCallback(async (offset: number) => {
     setCargando(true);
     try {
-      const res = await obtenerActividadesSemana(offset);
+      const [res, coords] = await Promise.all([
+        obtenerActividadesSemana(offset),
+        obtenerCoordinacionesPendientes().catch(() => ({ ok: false, items: [] as CoordinacionPendienteItem[] })),
+      ]);
       setDatos(res);
+      setCoordinaciones(coords.items || []);
     } catch (err) {
       console.error("Error al cargar actividades de la semana en header:", err);
     } finally {
@@ -55,6 +75,20 @@ export function HeaderActividadesSemana() {
       window.removeEventListener("focus", onFocus);
     };
   }, [cargar, semanaOffset]);
+
+  const handleRecordar = async (id: string) => {
+    setRecordandoId(id);
+    setAvisoCoord(null);
+    const r = await recordarCoordinacionAsesores(id);
+    setRecordandoId(null);
+    setAvisoCoord(
+      r.ok
+        ? { tipo: "ok", texto: `Recordatorio enviado (${r.recordados} mensaje${r.recordados === 1 ? "" : "s"}).` }
+        : { tipo: "error", texto: r.error || "No se pudo enviar el recordatorio." }
+    );
+  };
+
+  const hayCoordUrgentes = coordinaciones.some((c) => c.urgente);
 
   // Filtrar actividades según selección
   const actividadesFiltradas = (datos?.actividades || []).filter((act) => {
@@ -113,6 +147,20 @@ export function HeaderActividadesSemana() {
                 <span className="inline-flex items-center gap-1 rounded-md bg-rojo/10 border border-rojo/30 px-2 py-0.5 font-mono text-[11px] font-bold text-rojo animate-pulse">
                   ⚡ {datos?.conteoHoy} Hoy
                 </span>
+              )}
+              {coordinaciones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleColapso}
+                  title="Coordinaciones solicitadas que siguen sin cerrarse: da clic para ver el seguimiento"
+                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11px] font-bold cursor-pointer ${
+                    hayCoordUrgentes
+                      ? "bg-rojo/10 border-rojo/30 text-rojo animate-pulse"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-800"
+                  }`}
+                >
+                  🔔 {coordinaciones.length} {coordinaciones.length === 1 ? "Coordinación pendiente" : "Coordinaciones pendientes"}
+                </button>
               )}
             </div>
           </div>
@@ -402,6 +450,92 @@ export function HeaderActividadesSemana() {
               );
             })}
           </div>
+
+          {/* ========================================================= */}
+          {/* Coordinaciones solicitadas pendientes de seguimiento       */}
+          {/* ========================================================= */}
+          {coordinaciones.length > 0 && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-indigo-900">
+                  🔔 Coordinaciones por dar seguimiento ({coordinaciones.length})
+                </span>
+                {avisoCoord && (
+                  <span className={`text-[11px] font-semibold ${avisoCoord.tipo === "ok" ? "text-emerald-700" : "text-rojo"}`}>
+                    {avisoCoord.texto}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[240px] overflow-y-auto pr-1">
+                {coordinaciones.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`rounded-lg border bg-white p-2.5 text-[11px] space-y-1.5 ${
+                      c.urgente ? "border-rojo/40" : "border-indigo-100"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-carbon truncate">🔍 {c.clienteNombre}</div>
+                        <div className="text-carbon/60 truncate">
+                          {c.servicioNombre} · {c.ubicacion}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                          c.urgente ? "bg-rojo/10 text-rojo" : "bg-slate-100 text-carbon/70"
+                        }`}
+                        title="Tiempo desde que se solicitó la coordinación"
+                      >
+                        ⏱ {tiempoTranscurrido(c.minutosPendiente)}
+                      </span>
+                    </div>
+
+                    <div className="font-semibold text-indigo-900">{c.etapaLabel}</div>
+
+                    <div className="flex flex-wrap gap-1">
+                      {c.asesores.map((a) => (
+                        <span
+                          key={a.id}
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px]"
+                          title={`${a.nombre}: ${a.recibido ? "recibió" : "sin confirmación de envío"} · ${a.leido ? "leyó" : "sin confirmar lectura"} · ${a.respondio ? "respondió" : "sin respuesta"}`}
+                        >
+                          <span className="font-semibold">{a.nombre.split(" ")[0]}</span>
+                          <span>{a.recibido ? "📨" : "⚠️"}</span>
+                          <span>{a.leido ? "👁️" : "⏳"}</span>
+                          <span>{a.respondio ? "✅" : "❔"}</span>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <Link
+                        href={`/prospectos/${c.prospectoId}`}
+                        className="rounded-md bg-verde-profundo text-crema px-2 py-1 font-semibold hover:bg-sauce transition"
+                      >
+                        Abrir cabina →
+                      </Link>
+                      {c.etapa === "esperando_asesores" && (
+                        <button
+                          type="button"
+                          onClick={() => handleRecordar(c.id)}
+                          disabled={recordandoId === c.id}
+                          className="rounded-md border border-amber-300 bg-amber-50 text-amber-900 px-2 py-1 font-semibold hover:bg-amber-100 transition disabled:opacity-50"
+                          title="Envía un recordatorio por WhatsApp y Telegram a los asesores que no han respondido"
+                        >
+                          {recordandoId === c.id ? "Enviando…" : "⏰ Recordar a los asesores"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-[10px] text-carbon/50">
+                📨 recibió · 👁️ leyó (botón Enterado, respuesta o marca manual) · ✅ respondió. Se muestran hasta que la cita queda confirmada o se cancela.
+              </div>
+            </div>
+          )}
 
           {/* ========================================================= */}
           {/* Contenedor de Tarjetas de Actividades                      */}
