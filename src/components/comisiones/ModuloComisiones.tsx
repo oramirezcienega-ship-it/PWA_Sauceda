@@ -23,6 +23,7 @@ import { ModalAjustarComision } from "./ModalAjustarComision";
 import { ModalRegistrarPagoComision } from "./ModalRegistrarPagoComision";
 import { ModalReglaComision } from "./ModalReglaComision";
 import { ModalEstadoCuentaImprimible } from "./ModalEstadoCuentaImprimible";
+import { calcularTotalesTarjetas } from "@/lib/comisiones-totales";
 
 interface Props {
   comisionesIniciales: Comision[];
@@ -382,6 +383,8 @@ export function ModuloComisiones({
     return lista;
   }, [comisiones, filtroTipo, filtroAsesor]);
 
+  const tarjetasExtra = useMemo(() => calcularTotalesTarjetas(comisionesFiltradas), [comisionesFiltradas]);
+
   // Totales generales de las comisiones mostradas en el desglose
   const totalesDesglose = useMemo(
     () =>
@@ -486,7 +489,7 @@ export function ModuloComisiones({
       </div>
 
       {/* TARJETAS DE BALANCE / KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
         <div className="bg-white border border-carbon/10 rounded-2xl p-4 sm:p-5 shadow-xs transition hover:shadow-md">
           <span className="text-[11px] font-bold uppercase tracking-wider text-carbon/50 block">
             Ventas Comisionables
@@ -496,6 +499,30 @@ export function ModuloComisiones({
           </span>
           <span className="text-[11px] text-carbon/60 mt-1 block">
             En {resumen.general.comisionesCount} ventas emitidas
+          </span>
+        </div>
+
+        <div className="bg-white border border-carbon/10 rounded-2xl p-4 sm:p-5 shadow-xs transition hover:shadow-md">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-carbon/50 block">
+            Base Comisionable
+          </span>
+          <span className="text-xl sm:text-2xl font-mono font-bold text-emerald-700 mt-1 block">
+            {formatoMoneda(tarjetasExtra.baseVentas)}
+          </span>
+          <span className="text-[11px] text-carbon/60 mt-1 block">
+            Sobre la que se calcula la comisión ({tarjetasExtra.ventasCount} ventas)
+          </span>
+        </div>
+
+        <div className="bg-white border border-amber-200 rounded-2xl p-4 sm:p-5 shadow-xs transition hover:shadow-md bg-amber-50/30">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 block">
+            Inspecciones
+          </span>
+          <span className="text-xl sm:text-2xl font-mono font-bold text-amber-950 mt-1 block">
+            {formatoMoneda(tarjetasExtra.inspeccionesMonto)}
+          </span>
+          <span className="text-[11px] text-amber-900/70 mt-1 block">
+            Tarifa fija en {tarjetasExtra.inspeccionesCount} inspecciones
           </span>
         </div>
 

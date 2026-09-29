@@ -1,6 +1,7 @@
 "use client";
 
 import type { Comision, ComisionPago } from "@/lib/types";
+import { calcularTotalesTarjetas } from "@/lib/comisiones-totales";
 
 interface Props {
   asesorNombre: string;
@@ -24,6 +25,7 @@ export function ModalEstadoCuentaImprimible({
 
   // Totales
   const totalVentas = comisiones.reduce((acc, c) => acc + c.montoVenta, 0);
+  const tarjetasExtra = calcularTotalesTarjetas(comisiones);
   const totalBase = comisiones.reduce((acc, c) => acc + c.baseComisionable, 0);
   const totalComisiones = comisiones.reduce((acc, c) => acc + c.montoComision, 0);
   const totalPagado = comisiones.reduce((acc, c) => acc + c.montoPagado, 0);
@@ -167,7 +169,7 @@ export function ModalEstadoCuentaImprimible({
           </div>
 
           {/* Cuadro de Balance */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 print:grid-cols-3 gap-3 mb-8">
             <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10">
               <span className="text-[10px] uppercase font-bold tracking-wider text-carbon/50 block">
                 Total Ventas
@@ -175,6 +177,26 @@ export function ModalEstadoCuentaImprimible({
               <span className="text-base font-mono font-bold text-carbon mt-1 block">
                 {formatoMoneda(totalVentas)}
               </span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-carbon/50 block">
+                Base Comisionable
+              </span>
+              <span className="text-base font-mono font-bold text-emerald-700 mt-1 block">
+                {formatoMoneda(tarjetasExtra.baseVentas)}
+              </span>
+              <span className="text-[10px] text-carbon/50 block">{tarjetasExtra.ventasCount} ventas</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-800 block">
+                Inspecciones
+              </span>
+              <span className="text-base font-mono font-bold text-amber-950 mt-1 block">
+                {formatoMoneda(tarjetasExtra.inspeccionesMonto)}
+              </span>
+              <span className="text-[10px] text-amber-900/70 block">{tarjetasExtra.inspeccionesCount} inspecciones</span>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10">
