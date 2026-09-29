@@ -558,32 +558,6 @@ export function DetalleOrdenTrabajo({
               </Link>
             )}
           </div>
-
-          {/* Subida rápida de fotos */}
-          <div className="flex items-center gap-2 text-xs">
-            <select
-              value={fotoEtapa}
-              onChange={(e) => setFotoEtapa(e.target.value as any)}
-              className="rounded-xl border border-carbon/20 px-2.5 py-1.5 text-xs text-carbon bg-white outline-none"
-            >
-              <option value="inicio">Foto: Inicio</option>
-              <option value="proceso">Foto: Proceso</option>
-              <option value="entrega">Foto: Entrega</option>
-            </select>
-
-            <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-carbon/20 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 text-xs font-bold text-carbon transition shadow-2xs">
-              <span>📷</span>
-              <span>{subiendoFoto ? "Subiendo..." : "+ Subir Fotos"}</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                disabled={subiendoFoto}
-                onChange={handleSubirFotos}
-                className="hidden"
-              />
-            </label>
-          </div>
         </div>
       )}
 
@@ -883,6 +857,16 @@ export function DetalleOrdenTrabajo({
 
           {!soloLectura && (
             <div className="flex items-center gap-2">
+              <select
+                value={fotoEtapa}
+                onChange={(e) => setFotoEtapa(e.target.value as any)}
+                className="rounded-xl border border-carbon/20 px-2.5 py-1.5 text-xs text-carbon bg-white outline-none"
+              >
+                <option value="inicio">Foto: Inicio</option>
+                <option value="proceso">Foto: Proceso</option>
+                <option value="entrega">Foto: Entrega</option>
+              </select>
+
               <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl bg-sauce hover:bg-verde-profundo px-3.5 py-1.5 text-xs font-bold text-white transition shadow-2xs">
                 <span>+</span>
                 <span>{subiendoFoto ? `Subiendo (${progresoFotos?.actual || 0}/${progresoFotos?.total || 0})...` : "Cargar Fotos"}</span>
