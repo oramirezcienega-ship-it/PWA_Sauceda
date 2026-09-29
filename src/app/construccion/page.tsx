@@ -3,7 +3,8 @@ import { TableroCotizaciones } from "@/components/TableroCotizaciones";
 import { TableroProductos } from "@/components/TableroProductos";
 import { listarCotizaciones } from "@/app/actions/cotizaciones";
 import { listarProspectos } from "@/app/actions/prospectos";
-import { obtenerUsuarioActual, listarAsesoresActivos } from "@/app/actions/usuarios";
+import { listarAsesoresActivos } from "@/app/actions/usuarios";
+import { usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { listarProductosServicios } from "@/app/actions/productos";
 import type { Cotizacion, Prospecto, ProductoServicio } from "@/lib/types";
 import Link from "next/link";
@@ -16,7 +17,10 @@ export default async function PaginaConstruccion({
 }: {
   searchParams: { tab?: string };
 }) {
-  const usuario = await obtenerUsuarioActual();
+  // Solo se manda a /login si de verdad no hay sesion. Antes, cualquier falla
+  // transitoria al leer el perfil devolvia null y el redireccionamiento a
+  // /login terminaba en /dashboard (el middleware lo reenvia si hay sesion).
+  const usuario = await usuarioActual().catch(() => null);
   if (!usuario) {
     redirect("/login");
   }
@@ -39,9 +43,8 @@ export default async function PaginaConstruccion({
   }
 
   if (errorMsj) {
-    if (errorMsj.includes("No autorizado")) {
-      redirect("/login");
-    }
+    // Ya se comprobó que hay sesión: no se redirige a /login (terminaría en
+    // /dashboard); se muestra el error con opción de reintentar.
     return (
       <main className="min-h-screen pb-10">
         <Encabezado />
@@ -53,6 +56,12 @@ export default async function PaginaConstruccion({
             No se pudo cargar el módulo de Construcción. Detalle: {errorMsj}.
             Si es la primera vez, asegúrate de correr las migraciones en Supabase.
           </p>
+          <Link
+            href="/construccion"
+            className="mt-3 inline-block rounded-lg bg-verde-profundo px-4 py-2 text-xs font-bold text-crema"
+          >
+            Reintentar
+          </Link>
         </div>
       </main>
     );
