@@ -17,6 +17,7 @@ import {
   eliminarReglaComision,
   guardarTarifaInspeccionGeneral,
   cancelarComision,
+  aplicarAnticiposAComisionesPendientes,
 } from "@/app/actions/comisiones";
 import { ModalAjustarComision } from "./ModalAjustarComision";
 import { ModalRegistrarPagoComision } from "./ModalRegistrarPagoComision";
@@ -239,6 +240,24 @@ export function ModuloComisiones({
       );
     } catch {}
   }, [filtrosRestaurados, pestana, filtroAsesor, filtroEstatus, filtroPeriodo, fechaDesde, fechaHasta, busqueda, filtroTipo]);
+
+  const handleAplicarAnticipo = async (a: { asesorId: string; asesorNombre?: string; anticiposPendientes: number; saldoPendiente: number }) => {
+    const maximo = Math.min(a.anticiposPendientes, a.saldoPendiente);
+    const ok = window.confirm(
+      `Se compensarán ${formatoMoneda(maximo)} del anticipo a favor de SAUCEDA (${formatoMoneda(a.anticiposPendientes)}) contra las comisiones pendientes${a.asesorNombre ? ` de ${a.asesorNombre}` : ""} (${formatoMoneda(a.saldoPendiente)}), de la más antigua a la más nueva.\n\nNo se registra un pago en efectivo. ¿Continuar?`
+    );
+    if (!ok) return;
+    const res = await aplicarAnticiposAComisionesPendientes(a.asesorId);
+    if (res.ok) {
+      setMensajeAlerta({
+        tipo: "ok",
+        texto: `Anticipo aplicado: ${formatoMoneda(res.aplicado || 0)} en ${res.comisionesAfectadas} comisión(es).`,
+      });
+      recargarDatos();
+    } else {
+      setMensajeAlerta({ tipo: "error", texto: res.error || "No se pudo aplicar el anticipo." });
+    }
+  };
 
   const handleCancelarComision = async (c: Comision) => {
     const motivo = window.prompt(
@@ -920,6 +939,14 @@ export function ModuloComisiones({
                         {/* Monto Pagado */}
                         <td className="py-3 px-2 text-right font-mono text-emerald-700 whitespace-nowrap">
                           {formatoMoneda(c.montoPagado)}
+                          {(c.montoNeteadoAnticipo || 0) > 0 && (
+                            <span
+                              className="block text-[9px] text-blue-700 font-sans font-semibold cursor-help"
+                              title={`Compensado con anticipo a favor de SAUCEDA: ${formatoMoneda(c.montoNeteadoAnticipo || 0)}`}
+                            >
+                              💰 {formatoMoneda(c.montoNeteadoAnticipo || 0)} c/anticipo
+                            </span>
+                          )}
                         </td>
 
                         {/* Saldo Pendiente */}
@@ -1513,6 +1540,17 @@ export function ModuloComisiones({
                     </>
                   )}
                 </div>
+
+                {a.anticiposPendientes > 0 && a.saldoPendiente > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleAplicarAnticipo(a)}
+                    className="w-full bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 py-2 rounded-xl text-xs font-bold transition text-center"
+                    title="Compensar el anticipo a favor de SAUCEDA contra las comisiones pendientes de este asesor"
+                  >
+                    💰 Aplicar anticipo a pendientes
+                  </button>
+                )}
 
                 <div className="pt-2 flex gap-2">
                   <button
