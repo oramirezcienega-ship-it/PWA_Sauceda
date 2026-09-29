@@ -2290,30 +2290,43 @@ export async function programarInstalacionYDetonarOT(datos: {
     const sb = supabaseServidor();
     const usuario = await usuarioActual();
 
-    // 1. Validar y obtener cotización completa
+    // 1. Validar y obtener cotización completa (consulta plana, sin joins
+    // embebidos de PostgREST: en este proyecto ya se identificó que fallan
+    // de forma intermitente en producción; ver listarComisiones,
+    // sincronizarComision* y obtenerDatosProgramacionInstalacion).
     const { data: cot, error: errCot } = await sb
       .from("cotizaciones")
-      .select(`
-        id,
-        token,
-        estatus,
-        servicio_tipo,
-        precio_final,
-        prospecto_id,
-        expediente_id,
-        prospectos(id, nombre, primer_apellido, segundo_apellido, telefono, email, direccion, fraccionamiento),
-        expedientes(id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, operador_id)
-      `)
+      .select("id, token, estatus, servicio_tipo, precio_final, prospecto_id, expediente_id")
       .eq("id", datos.cotizacionId)
-      .single();
+      .maybeSingle();
 
-    if (errCot || !cot) {
-      return { ok: false, error: "Cotización no encontrada para programar instalación." };
+    if (errCot) {
+      console.error("programarInstalacionYDetonarOT: error al consultar cotización", datos.cotizacionId, errCot.message);
+      return { ok: false, error: `Error al consultar la cotización: ${errCot.message}` };
+    }
+    if (!cot) {
+      return { ok: false, error: `Cotización "${datos.cotizacionId}" no encontrada para programar instalación.` };
     }
 
-    // 2. Resolver datos del cliente
-    const p = cot.prospectos as any;
-    const e = cot.expedientes as any;
+    // 2. Resolver datos del cliente (prospecto/expediente por separado)
+    const [prospectoRes, expedienteRes] = await Promise.all([
+      cot.prospecto_id
+        ? sb
+            .from("prospectos")
+            .select("id, nombre, primer_apellido, segundo_apellido, telefono, email, direccion, fraccionamiento")
+            .eq("id", cot.prospecto_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      cot.expediente_id
+        ? sb
+            .from("expedientes")
+            .select("id, cliente, primer_apellido, segundo_apellido, telefono, fraccionamiento, operador_id")
+            .eq("id", cot.expediente_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const p = prospectoRes.data as any;
+    const e = expedienteRes.data as any;
     const nombreCliente = [
       p?.nombre || e?.cliente,
       p?.primer_apellido || e?.primer_apellido,
