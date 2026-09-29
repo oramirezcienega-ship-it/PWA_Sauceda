@@ -43,6 +43,8 @@ interface Props {
   asesores: { id: string; nombre: string }[];
 }
 
+const CLAVE_FILTROS = "comisiones:filtros:v1";
+
 export function ModuloComisiones({
   comisionesIniciales,
   pagosIniciales,
@@ -64,6 +66,7 @@ export function ModuloComisiones({
   const [fechaHasta, setFechaHasta] = useState<string>("");
   const [busqueda, setBusqueda] = useState<string>("");
   const [filtroTipo, setFiltroTipo] = useState<"todas" | "venta" | "inspeccion">("todas");
+  const [filtrosRestaurados, setFiltrosRestaurados] = useState(false);
 
   // Modales
   const [comisionParaAjustar, setComisionParaAjustar] = useState<Comision | null>(null);
@@ -196,10 +199,46 @@ export function ModuloComisiones({
     });
   };
 
-  // Cargar datos frescos al montar en el cliente
+  // Cargar datos frescos al montar en el cliente, restaurando los filtros
+  // guardados de la sesión anterior (persisten al refrescar la página).
   useEffect(() => {
-    recargarDatos();
+    let g: any = null;
+    try {
+      const raw = window.localStorage.getItem(CLAVE_FILTROS);
+      g = raw ? JSON.parse(raw) : null;
+    } catch {}
+    if (g && typeof g === "object") {
+      if (g.pestana) setPestana(g.pestana);
+      if (g.filtroAsesor) setFiltroAsesor(g.filtroAsesor);
+      if (g.filtroEstatus) setFiltroEstatus(g.filtroEstatus);
+      if (g.filtroPeriodo) setFiltroPeriodo(g.filtroPeriodo);
+      if (typeof g.fechaDesde === "string") setFechaDesde(g.fechaDesde);
+      if (typeof g.fechaHasta === "string") setFechaHasta(g.fechaHasta);
+      if (typeof g.busqueda === "string") setBusqueda(g.busqueda);
+      if (g.filtroTipo) setFiltroTipo(g.filtroTipo);
+      recargarDatos({
+        asesor: g.filtroAsesor || "todos",
+        estatus: g.filtroEstatus || "todas",
+        fDesde: g.fechaDesde || "",
+        fHasta: g.fechaHasta || "",
+        q: g.busqueda || "",
+      });
+    } else {
+      recargarDatos();
+    }
+    setFiltrosRestaurados(true);
   }, []);
+
+  // Guardar filtros cada vez que cambian (solo tras restaurar los previos)
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
+    try {
+      window.localStorage.setItem(
+        CLAVE_FILTROS,
+        JSON.stringify({ pestana, filtroAsesor, filtroEstatus, filtroPeriodo, fechaDesde, fechaHasta, busqueda, filtroTipo })
+      );
+    } catch {}
+  }, [filtrosRestaurados, pestana, filtroAsesor, filtroEstatus, filtroPeriodo, fechaDesde, fechaHasta, busqueda, filtroTipo]);
 
   const handleCancelarComision = async (c: Comision) => {
     const motivo = window.prompt(
