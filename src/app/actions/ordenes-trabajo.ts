@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { estadoContratoDeOrden } from "@/app/actions/contratos";
+import { armarGarantiaDesdeCotizacion } from "@/lib/garantia-producto";
 import { numeroALetras } from "@/lib/numero-a-letras";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { normalizarTelefono } from "@/lib/telefono";
@@ -1221,7 +1222,8 @@ export async function guardarGarantiaOT(datos: {
     const fechaInicioStr = datos.fechaInicio || new Date().toISOString().split("T")[0];
     const fechaInicioDate = new Date(fechaInicioStr);
     const fechaVencimientoDate = new Date(fechaInicioDate);
-    fechaVencimientoDate.setFullYear(fechaVencimientoDate.getFullYear() + Math.floor(anos));
+    // Se suma en meses para admitir plazos menores a un año (p. ej. 6 meses)
+    fechaVencimientoDate.setMonth(fechaVencimientoDate.getMonth() + Math.round(anos * 12));
     const fechaVencimientoStr = fechaVencimientoDate.toISOString().split("T")[0];
 
     // Verificar si ya existe garantía para la OT
@@ -1592,6 +1594,60 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
   }
 }
 
+/**
+ * Vuelve a armar la póliza de garantía de una OT con la plantilla vigente del
+ * producto vendido (descripción de la cotización, características y plazo).
+ * Sustituye el contenido, el título y la vigencia de la póliza actual.
+ */
+export async function regenerarGarantiaDesdeProducto(
+  ordenId: string
+): Promise<{ ok: boolean; garantia?: CartaGarantiaOT; usoPlantillaProducto?: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: ot } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, cotizacion_id, prospecto_id")
+      .eq("id", ordenId)
+      .maybeSingle();
+    if (!ot) return { ok: false, error: "Orden de trabajo no encontrada." };
+    if (!ot.cotizacion_id) {
+      return { ok: false, error: "La orden no está ligada a una cotización; no hay producto del cual tomar la garantía." };
+    }
+
+    let clienteNombre = "Cliente Sauceda";
+    let direccion = "Domicilio en Obra";
+    if (ot.prospecto_id) {
+      const { data: pros } = await sb
+        .from("prospectos")
+        .select("nombre, direccion, fraccionamiento")
+        .eq("id", ot.prospecto_id)
+        .maybeSingle();
+      if (pros?.nombre) clienteNombre = pros.nombre;
+      direccion = pros?.direccion || pros?.fraccionamiento || direccion;
+    }
+
+    const g = await armarGarantiaDesdeCotizacion(sb, {
+      cotizacionId: ot.cotizacion_id,
+      ordenFolio: ot.folio,
+      clienteNombre,
+      direccion,
+    });
+
+    const res = await guardarGarantiaOT({
+      ordenTrabajoId: ordenId,
+      titulo: g.titulo,
+      contenido: g.contenido,
+      anosGarantia: g.anos,
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, garantia: res.garantia, usoPlantillaProducto: g.usoPlantillaProducto };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al regenerar la póliza de garantía." };
+  }
+}
+
 /** Texto por defecto de la póliza de garantía cuando se genera en automático al crear la OT. */
 function generarContenidoGarantiaPorDefecto(clienteNombre: string, direccion: string): string {
   const ahora = new Date();
@@ -1687,17 +1743,40 @@ async function generarDocumentosAutomaticosOT(
     }
   }
 
-  // 2. Póliza de garantía por defecto.
+  // 2. Póliza de garantía: si la OT nace de una cotización se arma con la
+  // plantilla del producto vendido (descripción, características y plazo);
+  // si no, se usa el texto genérico.
   try {
-    const contenido = generarContenidoGarantiaPorDefecto(
-      clienteNombre,
-      direccionCliente || "Domicilio en Obra"
-    );
-    await guardarGarantiaOT({
-      ordenTrabajoId,
-      titulo: "Póliza de Garantía por Servicio",
-      contenido,
-    });
+    const { data: otGar } = await sb
+      .from("ordenes_trabajo")
+      .select("cotizacion_id")
+      .eq("id", ordenTrabajoId)
+      .maybeSingle();
+
+    if (otGar?.cotizacion_id) {
+      const g = await armarGarantiaDesdeCotizacion(sb, {
+        cotizacionId: otGar.cotizacion_id,
+        ordenFolio,
+        clienteNombre,
+        direccion: direccionCliente || "Domicilio en Obra",
+      });
+      await guardarGarantiaOT({
+        ordenTrabajoId,
+        titulo: g.titulo,
+        contenido: g.contenido,
+        anosGarantia: g.anos,
+      });
+    } else {
+      const contenido = generarContenidoGarantiaPorDefecto(
+        clienteNombre,
+        direccionCliente || "Domicilio en Obra"
+      );
+      await guardarGarantiaOT({
+        ordenTrabajoId,
+        titulo: "Póliza de Garantía por Servicio",
+        contenido,
+      });
+    }
   } catch (errGar) {
     console.error("Aviso: no se pudo generar póliza automática para OT", ordenFolio, errGar);
   }
