@@ -425,6 +425,48 @@ export async function listarComisiones(filtros?: {
       console.warn("Aviso en auto-sync pasivo de comisiones de inspección:", eAutoSync);
     }
 
+    // 1c. Reasignación: toda comisión de inspección debe seguir al asesor actual
+    // de su cita, sin importar el estado de la cita ni el límite de la
+    // auto-sincronización anterior. Solo se mueven las que no tienen pagos
+    // ni ajuste manual.
+    try {
+      const { data: comsInsp } = await sb
+        .from("comisiones")
+        .select("id, cita_id, asesor_id")
+        .not("cita_id", "is", null)
+        .eq("tipo_comision", "inspeccion")
+        .eq("es_ajuste_manual", false)
+        .eq("monto_pagado", 0)
+        .neq("estatus", "cancelada");
+
+      const citaIds = Array.from(new Set((comsInsp || []).map((c: any) => c.cita_id)));
+      if (citaIds.length > 0) {
+        const { data: citasRe } = await sb
+          .from("agenda_citas")
+          .select("id, perfil_id, asignados_ids")
+          .in("id", citaIds);
+        const mapCitas = new Map<string, any>((citasRe || []).map((c: any) => [c.id, c]));
+
+        for (const com of comsInsp || []) {
+          const cita = mapCitas.get(com.cita_id);
+          if (!cita) continue;
+          const asignados: string[] = Array.isArray(cita.asignados_ids) ? cita.asignados_ids : [];
+          // Si el asesor de la comisión sigue asignado a la cita, no se toca.
+          if (com.asesor_id && (com.asesor_id === cita.perfil_id || asignados.includes(com.asesor_id))) continue;
+          const nuevoAsesor = cita.perfil_id || asignados[0];
+          if (!nuevoAsesor || nuevoAsesor === com.asesor_id) continue;
+
+          const { error: errRe } = await sb
+            .from("comisiones")
+            .update({ asesor_id: nuevoAsesor, updated_at: new Date().toISOString() })
+            .eq("id", com.id);
+          if (errRe) console.warn("Aviso al reasignar comisión de inspección:", errRe.message);
+        }
+      }
+    } catch (eReasig) {
+      console.warn("Aviso al reconciliar asesores de comisiones de inspección:", eReasig);
+    }
+
     // 2. Consultar comisiones directamente (100% plano, sin ningún join en PostgREST)
     let query = sb
       .from("comisiones")
