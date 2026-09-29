@@ -722,6 +722,20 @@ export interface IniciarPropuestaInput {
   canalNotificacion?: "whatsapp" | "telegram";
 }
 
+/** Resultado del envío de la propuesta a un asesor por un canal. */
+export interface EntregaCanalPropuesta {
+  ok: boolean;
+  enviadoAt: string;
+  /** Id del mensaje en el canal (Telegram message_id / WhatsApp wamid). */
+  messageId?: string | number;
+  error?: string;
+}
+
+export interface EntregaPropuestaAsesor {
+  whatsapp?: EntregaCanalPropuesta;
+  telegram?: EntregaCanalPropuesta;
+}
+
 export interface CoordinacionInspeccionDetalle {
   id: string;
   prospectoId: string;
@@ -744,6 +758,11 @@ export interface CoordinacionInspeccionDetalle {
       votos: Record<string, boolean>;
       respondidoAt: string | null;
       notas?: string;
+      /** Envío de la propuesta por canal (para saber si le llegó). */
+      entrega?: EntregaPropuestaAsesor;
+      /** Cuándo confirmó que leyó la propuesta (botón "Enterado", voto o marca manual). */
+      enteradoAt?: string | null;
+      enteradoVia?: "telegram" | "voto" | "manual" | null;
     }
   >;
   opcionesValidadas: string[];
@@ -830,9 +849,17 @@ export async function iniciarPropuestaCoordinacion(
 
     // Despachar alertas a los asesores
     const nombresEquipo = (perfiles || []).map((p) => p.nombre).join(" y ");
+    // Registro de a quién le llegó la propuesta y por qué canal
+    const entregas: Record<string, EntregaPropuestaAsesor> = {};
     for (const asesor of perfiles || []) {
       const telDestino = normalizarTelefono(asesor.telefono_whatsapp || asesor.telefono || "");
-      if (!telDestino) continue;
+      if (!telDestino) {
+        entregas[asesor.id] = {
+          ...(entregas[asesor.id] || {}),
+          whatsapp: { ok: false, enviadoAt: new Date().toISOString(), error: "Sin teléfono registrado" },
+        };
+        continue;
+      }
 
       const primerNombre = asesor.nombre?.split(" ")[0] || "Asesor";
       const listaOpcionesTexto = input.opcionesHorarios
@@ -842,15 +869,28 @@ export async function iniciarPropuestaCoordinacion(
       const msgAsesor = `🚨 *PROPUESTA DE INSPECCIÓN TÉCNICA*\n\nHola ${primerNombre}, necesitamos validar tu disponibilidad para una inspección presencial junto con *${nombresEquipo}*:\n\n🛠️ *Servicio / Negocio:* ${input.servicioNombre}\n📍 *Ubicación:* ${input.ubicacion}\n👤 *Cliente:* ${input.clienteNombre}\n📝 *Detalle:* ${input.detallesTecnicos || "Revisión técnica en sitio"}\n\n📅 *Opciones tentativas propuestas:*\n${listaOpcionesTexto}\n\n⏱️ *SLA:* Tienen *${slaMinutos} minutos* para responder.\nFavor de responder indicando las opciones que tienes libres (ej. "puedo A y C" o "todas").`;
 
       try {
-        await enviarWhatsAppTexto(telDestino, msgAsesor);
+        const rWsp = await enviarWhatsAppTexto(telDestino, msgAsesor);
+        entregas[asesor.id] = {
+          ...(entregas[asesor.id] || {}),
+          whatsapp: {
+            ok: Boolean(rWsp?.ok),
+            enviadoAt: new Date().toISOString(),
+            messageId: rWsp?.messageId,
+            error: rWsp?.ok ? undefined : rWsp?.error || "No se pudo enviar",
+          },
+        };
       } catch (errWsp) {
         console.warn(`[Coordinación] Error enviando WhatsApp al asesor ${asesor.nombre}:`, errWsp);
+        entregas[asesor.id] = {
+          ...(entregas[asesor.id] || {}),
+          whatsapp: { ok: false, enviadoAt: new Date().toISOString(), error: "Error al enviar" },
+        };
       }
     }
 
     // Despacho a Telegram (Bot y Grupo Operativo con botones interactivos)
     try {
-      await despacharPropuestaInspeccionTelegram(sb, {
+      const resTg = await despacharPropuestaInspeccionTelegram(sb, {
         coordinacionId,
         servicioNombre: input.servicioNombre,
         ubicacion: input.ubicacion,
@@ -861,8 +901,25 @@ export async function iniciarPropuestaCoordinacion(
         opciones: input.opcionesHorarios,
         slaMinutos,
       });
+      for (const [aId, r] of Object.entries(resTg.porAsesor || {})) {
+        entregas[aId] = { ...(entregas[aId] || {}), telegram: r };
+      }
     } catch (errTg) {
       console.warn("[Coordinación] Error despachando a Telegram:", errTg);
+    }
+
+    // Guardar el detalle de entrega por asesor para mostrarlo en la cabina
+    try {
+      const conEntrega: Record<string, any> = { ...respuestasIniciales };
+      for (const aId of input.asesoresIds) {
+        conEntrega[aId] = { ...conEntrega[aId], entrega: entregas[aId] || {}, enteradoAt: null, enteradoVia: null };
+      }
+      await sb
+        .from("coordinaciones_inspeccion")
+        .update({ respuestas_asesores: conEntrega })
+        .eq("id", coordinacionId);
+    } catch (errEnt) {
+      console.warn("[Coordinación] No se pudo guardar el detalle de entrega:", errEnt);
     }
 
     return { ok: true, coordinacionId };
@@ -897,6 +954,11 @@ export async function registrarVotosAsesorCoordinacion(
     const asesorData = respuestas[asesorId] || {};
     asesorData.votos = { ...(asesorData.votos || {}), ...votos };
     asesorData.respondidoAt = new Date().toISOString();
+    // Responder implica que leyó la propuesta
+    if (!asesorData.enteradoAt) {
+      asesorData.enteradoAt = asesorData.respondidoAt;
+      asesorData.enteradoVia = "voto";
+    }
     if (notas) asesorData.notas = notas;
     respuestas[asesorId] = asesorData;
 
@@ -925,6 +987,45 @@ export async function registrarVotosAsesorCoordinacion(
   } catch (err: any) {
     console.error("[Coordinación] Error en registrarVotosAsesorCoordinacion:", err);
     return { ok: false, opcionesValidadas: [], error: err.message };
+  }
+}
+
+/**
+ * Marca que un asesor leyó la propuesta (botón "Enterado" de Telegram o marca
+ * manual del administrador cuando se enteró por llamada / voz).
+ */
+export async function marcarAsesorEnteradoCoordinacion(
+  sb: SupabaseClient,
+  coordinacionId: string,
+  asesorId: string,
+  via: "telegram" | "manual"
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { data: coord } = await sb
+      .from("coordinaciones_inspeccion")
+      .select("respuestas_asesores, asesores_ids")
+      .eq("id", coordinacionId)
+      .single();
+    if (!coord) return { ok: false, error: "Coordinación no encontrada." };
+    if (!(coord.asesores_ids || []).includes(asesorId)) {
+      return { ok: false, error: "El asesor no pertenece a esta coordinación." };
+    }
+
+    const respuestas = (coord.respuestas_asesores as Record<string, any>) || {};
+    const asesorData = respuestas[asesorId] || {};
+    if (!asesorData.enteradoAt) {
+      asesorData.enteradoAt = new Date().toISOString();
+      asesorData.enteradoVia = via;
+    }
+    respuestas[asesorId] = asesorData;
+
+    await sb
+      .from("coordinaciones_inspeccion")
+      .update({ respuestas_asesores: respuestas, updated_at: new Date().toISOString() })
+      .eq("id", coordinacionId);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al marcar como enterado." };
   }
 }
 

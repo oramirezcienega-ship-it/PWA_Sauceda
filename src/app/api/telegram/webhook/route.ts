@@ -5,7 +5,10 @@ import {
   enviarMensajeTelegram,
   responderCallbackQueryTelegram,
 } from "@/lib/telegram";
-import { registrarVotosAsesorCoordinacion } from "@/lib/coordinacion-inspecciones";
+import {
+  registrarVotosAsesorCoordinacion,
+  marcarAsesorEnteradoCoordinacion,
+} from "@/lib/coordinacion-inspecciones";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +54,47 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Acuse de lectura: e:{coordinacionId}  (botón "Enterado")
+      if (data.startsWith("e:")) {
+        const [, coordId] = data.split(":");
+        const { data: coord } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("asesores_ids, cliente_nombre")
+          .eq("id", coordId)
+          .single();
+
+        if (!coord) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta propuesta ya no está activa.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: perfilesE = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", coord.asesores_ids || []);
+
+        // Solo se registra si se puede identificar al asesor (sin asignar por suposición)
+        const match = (perfilesE || []).find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+
+        if (!match) {
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            "No pude identificarte como uno de los asesores de esta inspección. Pide que vinculen tu Telegram en tu perfil.",
+            true
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        await marcarAsesorEnteradoCoordinacion(sb, coordId, match.id, "telegram");
+        await responderCallbackQueryTelegram(botToken, cb.id, "👀 Registrado: quedaste enterado de la propuesta.");
+        return NextResponse.json({ ok: true });
+      }
 
       // Formato esperado: v:{coordinacionId}:{opcId}:{valor}
       if (data.startsWith("v:")) {

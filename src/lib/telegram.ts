@@ -151,10 +151,21 @@ export async function despacharPropuestaInspeccionTelegram(
     opciones: Array<{ id: string; label: string }>;
     slaMinutos: number;
   }
-): Promise<{ ok: boolean; despachados: number; error?: string }> {
+): Promise<{
+  ok: boolean;
+  despachados: number;
+  error?: string;
+  /** Resultado del envío personal a cada asesor (para saber a quién le llegó). */
+  porAsesor?: Record<string, { ok: boolean; enviadoAt: string; messageId?: number; error?: string }>;
+}> {
   const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
+  const porAsesor: Record<string, { ok: boolean; enviadoAt: string; messageId?: number; error?: string }> = {};
   if (!botToken) {
-    return { ok: false, despachados: 0, error: "Bot token de Telegram no configurado." };
+    const ahora = new Date().toISOString();
+    for (const aId of ctx.asesoresIds) {
+      porAsesor[aId] = { ok: false, enviadoAt: ahora, error: "Bot de Telegram no configurado" };
+    }
+    return { ok: false, despachados: 0, error: "Bot token de Telegram no configurado.", porAsesor };
   }
 
   // Obtener perfiles de los asesores
@@ -190,13 +201,22 @@ export async function despacharPropuestaInspeccionTelegram(
     },
   ];
 
-  const inlineKeyboard = [fila1, fila2];
+  // Fila 3: acuse de lectura (Telegram no informa si un mensaje fue leído; este botón lo registra)
+  const fila3 = [
+    {
+      text: "👀 Enterado (ya lo leí)",
+      callback_data: `e:${ctx.coordinacionId}`,
+    },
+  ];
+
+  const inlineKeyboard = [fila1, fila2, fila3];
 
   let despachados = 0;
 
   // 1. Enviar al grupo técnico si está configurado
+  let resGrupo: { ok: boolean; messageId?: number; error?: string } | null = null;
   if (chatIdGrupo) {
-    const resGrupo = await enviarMensajeTelegram({
+    resGrupo = await enviarMensajeTelegram({
       botToken,
       chatId: chatIdGrupo,
       texto: textoMensaje,
@@ -207,18 +227,37 @@ export async function despacharPropuestaInspeccionTelegram(
 
   // 2. Enviar a cada asesor a su chat personal de Telegram si tiene telegram_chat_id
   for (const asesor of perfiles || []) {
-    if (asesor.telegram_chat_id && asesor.telegram_chat_id !== chatIdGrupo) {
-      const resPersonal = await enviarMensajeTelegram({
-        botToken,
-        chatId: asesor.telegram_chat_id,
-        texto: textoMensaje,
-        inlineKeyboard,
-      });
-      if (resPersonal.ok) despachados++;
+    const ahora = new Date().toISOString();
+    if (!asesor.telegram_chat_id) {
+      porAsesor[asesor.id] = { ok: false, enviadoAt: ahora, error: "Sin Telegram vinculado" };
+      continue;
     }
+    if (asesor.telegram_chat_id === chatIdGrupo) {
+      // Su chat es el grupo: la entrega es la del mensaje al grupo
+      porAsesor[asesor.id] = {
+        ok: Boolean(resGrupo?.ok),
+        enviadoAt: ahora,
+        messageId: resGrupo?.messageId,
+        error: resGrupo?.ok ? undefined : resGrupo?.error,
+      };
+      continue;
+    }
+    const resPersonal = await enviarMensajeTelegram({
+      botToken,
+      chatId: asesor.telegram_chat_id,
+      texto: textoMensaje,
+      inlineKeyboard,
+    });
+    if (resPersonal.ok) despachados++;
+    porAsesor[asesor.id] = {
+      ok: resPersonal.ok,
+      enviadoAt: ahora,
+      messageId: resPersonal.messageId,
+      error: resPersonal.ok ? undefined : resPersonal.error,
+    };
   }
 
-  return { ok: despachados > 0, despachados };
+  return { ok: despachados > 0, despachados, porAsesor };
 }
 
 /**
