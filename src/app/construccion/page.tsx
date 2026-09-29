@@ -1,12 +1,10 @@
 import { Encabezado } from "@/components/Encabezado";
 import { TableroCotizaciones } from "@/components/TableroCotizaciones";
-import { TableroProductos } from "@/components/TableroProductos";
 import { listarCotizaciones } from "@/app/actions/cotizaciones";
 import { listarProspectos } from "@/app/actions/prospectos";
 import { listarAsesoresActivos } from "@/app/actions/usuarios";
 import { usuarioActual } from "@/lib/supabase/cliente-sesion";
-import { listarProductosServicios } from "@/app/actions/productos";
-import type { Cotizacion, Prospecto, ProductoServicio } from "@/lib/types";
+import type { Cotizacion, Prospecto } from "@/lib/types";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -26,18 +24,19 @@ export default async function PaginaConstruccion({
   }
 
   const tab = searchParams?.tab || "cotizaciones";
+  if (tab === "catalogo") {
+    redirect("/productos");
+  }
 
   let cotizaciones: Cotizacion[] = [];
   let prospectos: Prospecto[] = [];
   let inspectores: { id: string; nombre: string }[] = [];
-  let productos: ProductoServicio[] = [];
   let errorMsj = "";
 
   try {
     cotizaciones = await listarCotizaciones();
     prospectos = await listarProspectos();
     inspectores = await listarAsesoresActivos();
-    productos = await listarProductosServicios();
   } catch (err) {
     errorMsj = err instanceof Error ? err.message : "Error desconocido al cargar datos.";
   }
@@ -85,30 +84,22 @@ export default async function PaginaConstruccion({
               Sauceda Construye
             </h1>
             <p className="mt-1 text-sm text-carbon/60 font-cuerpo">
-              Gestión de cotizaciones, inspecciones físicas y catálogo de precios.
+              Presupuestos de obra por APU, cotizaciones, inspecciones físicas y seguimiento.
             </p>
           </div>
           
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-carbon/5 self-start sm:self-center font-cuerpo text-xs font-semibold">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-carbon/5 self-start sm:self-center font-cuerpo text-xs font-semibold flex-wrap gap-1">
             <Link
-              href="/construccion?tab=cotizaciones"
-              className={`px-4 py-2 rounded-lg transition-all ${
-                tab === "cotizaciones"
-                  ? "bg-white text-sauce shadow-sm"
-                  : "text-carbon/60 hover:text-carbon"
-              }`}
+              href="/construccion"
+              className="px-4 py-2 rounded-lg transition-all bg-white text-sauce shadow-sm flex items-center gap-1.5"
             >
-              📋 Cotizaciones e Inspecciones
+              <span>📋</span> Cotizaciones y Presupuestos
             </Link>
             <Link
-              href="/construccion?tab=catalogo"
-              className={`px-4 py-2 rounded-lg transition-all ${
-                tab === "catalogo"
-                  ? "bg-white text-sauce shadow-sm"
-                  : "text-carbon/60 hover:text-carbon"
-              }`}
+              href="/productos"
+              className="px-4 py-2 rounded-lg transition-all text-carbon/70 hover:text-sauce hover:bg-white/60 flex items-center gap-1.5"
             >
-              📦 Catálogo de Conceptos
+              <span>📦</span> Catálogo de Productos y Servicios
             </Link>
             <Link
               href="/comisiones"
@@ -126,17 +117,14 @@ export default async function PaginaConstruccion({
           </div>
         </div>
 
-        {tab === "catalogo" ? (
-          <TableroProductos productosIniciales={productos} />
-        ) : (
-          <TableroCotizaciones
-            cotizacionesIniciales={cotizaciones}
-            prospectos={prospectosSimples}
-            inspectores={inspectores}
-          />
-        )}
+        <TableroCotizaciones
+          cotizacionesIniciales={cotizaciones}
+          prospectos={prospectosSimples}
+          inspectores={inspectores}
+        />
       </div>
     </main>
   );
+}
 }
 

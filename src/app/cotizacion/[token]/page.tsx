@@ -1,6 +1,7 @@
 import { obtenerCotizacionPorToken } from "@/app/actions/cotizaciones";
 import { VisualizadorCotizacionCliente } from "@/components/VisualizadorCotizacionCliente";
 import { VisualizadorCotizacionModular } from "@/components/VisualizadorCotizacionModular";
+import { VisualizadorCotizacionApu } from "@/components/VisualizadorCotizacionApu";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -63,12 +64,20 @@ export default async function PaginaPropuestaCliente({ params }: PaginaPropuesta
     notFound();
   }
 
-  const { cotizacion, conceptos, reporteVisita } = datos;
+  const { cotizacion, conceptos, partidas, espacios, reporteVisita } = datos;
 
   return (
     <main className="min-h-screen bg-slate-50/50 py-6">
       {cotizacion.modalidad === "modular" ? (
         <VisualizadorCotizacionModular cotizacion={cotizacion} />
+      ) : cotizacion.modalidad === "obra_apu" ? (
+        <VisualizadorCotizacionApu
+          cotizacion={cotizacion}
+          conceptos={conceptos}
+          partidas={partidas || []}
+          espacios={espacios || []}
+          reporteVisita={reporteVisita}
+        />
       ) : (
         <VisualizadorCotizacionCliente
           cotizacion={cotizacion}
