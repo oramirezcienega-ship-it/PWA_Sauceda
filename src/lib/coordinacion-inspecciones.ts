@@ -783,15 +783,21 @@ export interface CoordinacionInspeccionDetalle {
 export async function iniciarPropuestaCoordinacion(
   sb: SupabaseClient,
   input: IniciarPropuestaInput
-): Promise<{ ok: boolean; coordinacionId?: string; error?: string }> {
+): Promise<{ ok: boolean; coordinacionId?: string; error?: string; sinEntrega?: string[] }> {
   try {
     const slaMinutos = input.slaMinutos || 15;
     const slaLimiteAt = new Date(Date.now() + slaMinutos * 60 * 1000).toISOString();
 
-    const { data: perfiles = [] } = await sb
+    const { data: perfiles = [], error: errPerfiles } = await sb
       .from("perfiles")
       .select("id, nombre, telefono, telefono_whatsapp")
       .in("id", input.asesoresIds);
+
+    // Sin los datos de los asesores no se puede avisar a nadie: no se crea la coordinación en falso
+    if (errPerfiles) {
+      console.error("[Coordinación] No se pudieron leer los asesores:", errPerfiles);
+      return { ok: false, error: `No se pudieron leer los datos de los asesores: ${errPerfiles.message}` };
+    }
 
     const perfilesMap = new Map((perfiles || []).map((p) => [p.id, p]));
 
@@ -922,7 +928,12 @@ export async function iniciarPropuestaCoordinacion(
       console.warn("[Coordinación] No se pudo guardar el detalle de entrega:", errEnt);
     }
 
-    return { ok: true, coordinacionId };
+    // Asesores a quienes no les llegó por ningún canal
+    const sinEntrega = input.asesoresIds
+      .filter((aId) => !(entregas[aId]?.whatsapp?.ok || entregas[aId]?.telegram?.ok))
+      .map((aId) => perfilesMap.get(aId)?.nombre || "Asesor");
+
+    return { ok: true, coordinacionId, sinEntrega };
   } catch (err: any) {
     console.error("[Coordinación] Error inesperado en iniciarPropuestaCoordinacion:", err);
     return { ok: false, error: err.message || "Error al iniciar propuesta de coordinación." };

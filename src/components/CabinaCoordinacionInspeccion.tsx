@@ -245,7 +245,14 @@ export function CabinaCoordinacionInspeccion({
         canalNotificacion: canalNotif,
       });
 
-      if (res.ok) {
+      if (res.ok && res.sinEntrega && res.sinEntrega.length > 0) {
+        // La coordinación se creó, pero a alguien no le llegó el aviso: no se debe decir que se envió
+        setMensaje({
+          tipo: "error",
+          texto: `⚠️ La coordinación se creó, pero NO se pudo avisar a: ${res.sinEntrega.join(", ")} (sin teléfono o sin Telegram vinculado). Avísales por otro medio o corrige sus datos en Usuarios y usa "⏰ Recordar" en Actividades de la Semana.`,
+        });
+        await cargarCoordinacion();
+      } else if (res.ok) {
         setMensaje({
           tipo: "ok",
           texto:

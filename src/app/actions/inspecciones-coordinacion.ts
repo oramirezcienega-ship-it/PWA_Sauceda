@@ -135,7 +135,7 @@ export async function obtenerTableroInspeccionesSLAAction(): Promise<{
  */
 export async function iniciarPropuestaCoordinacionAction(
   input: IniciarPropuestaInput
-): Promise<{ ok: boolean; coordinacionId?: string; error?: string }> {
+): Promise<{ ok: boolean; coordinacionId?: string; error?: string; sinEntrega?: string[] }> {
   try {
     const sb = supabaseServidor();
     const res = await iniciarPropuestaCoordinacion(sb, input);
