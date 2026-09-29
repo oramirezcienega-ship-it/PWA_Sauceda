@@ -1639,11 +1639,17 @@ export async function sincronizarComisionParaInspeccion(
     }
 
     // 4. Verificar si ya existe comisión para esta cita
-    const { data: comisionExistente } = await sb
+    const { data: comisionesExistentes } = await sb
       .from("comisiones")
-      .select("id, es_ajuste_manual, monto_comision, monto_pagado, estatus")
+      .select("id, es_ajuste_manual, monto_comision, monto_pagado, estatus, asesor_id")
       .eq("cita_id", cita.id)
-      .maybeSingle();
+      .order("created_at", { ascending: false });
+
+    let comisionExistente = null;
+    if (comisionesExistentes && comisionesExistentes.length > 0) {
+      const matchAsesor = comisionesExistentes.find((c: any) => c.asesor_id === asesorId);
+      comisionExistente = matchAsesor || comisionesExistentes[0];
+    }
 
     const fechaComision = cita.fecha || new Date().toISOString().split("T")[0];
 
@@ -1661,7 +1667,7 @@ export async function sincronizarComisionParaInspeccion(
         else nuevoEstatus = "pendiente";
       }
 
-      await sb
+      const { error: errUpd } = await sb
         .from("comisiones")
         .update({
           asesor_id: asesorId,
@@ -1688,6 +1694,10 @@ export async function sincronizarComisionParaInspeccion(
           updated_at: new Date().toISOString(),
         })
         .eq("id", comisionExistente.id);
+
+      if (errUpd) {
+        console.warn("Aviso al actualizar comisión existente de inspección:", errUpd.message);
+      }
 
       revalidatePath("/comisiones");
       if (cita.expediente_id) revalidatePath(`/expediente/${cita.expediente_id}`);
@@ -1728,9 +1738,66 @@ export async function sincronizarComisionParaInspeccion(
         updated_at: new Date().toISOString(),
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (errIns) {
+      // Manejar gracefully colisiones de clave única uq_comisiones_cita_asesor
+      // (ocurre si el trigger trg_comision_inspeccion o un proceso paralelo ya insertó la comisión)
+      if (
+        errIns.code === "23505" ||
+        errIns.message?.includes("uq_comisiones_cita_asesor") ||
+        errIns.message?.includes("duplicate key")
+      ) {
+        const { data: comsRecuperadas } = await sb
+          .from("comisiones")
+          .select("id, monto_pagado, es_ajuste_manual, estatus")
+          .eq("cita_id", cita.id)
+          .order("created_at", { ascending: false });
+
+        const comRecuperada = comsRecuperadas && comsRecuperadas.length > 0 ? comsRecuperadas[0] : null;
+        if (comRecuperada) {
+          if (!comRecuperada.es_ajuste_manual) {
+            const pagado = Number(comRecuperada.monto_pagado || 0);
+            const nuevoSaldo = Math.max(0, montoTarifa - pagado);
+            let nuevoEstatus = comRecuperada.estatus;
+            if (nuevoEstatus !== "cancelada") {
+              if (pagado >= montoTarifa) nuevoEstatus = "pagada";
+              else if (pagado > 0) nuevoEstatus = "parcial";
+              else nuevoEstatus = "pendiente";
+            }
+
+            await sb
+              .from("comisiones")
+              .update({
+                asesor_id: asesorId,
+                expediente_id: cita.expediente_id || null,
+                tipo_comision: "inspeccion",
+                base_comisionable: montoTarifa,
+                porcentaje_comision: 100,
+                monto_comision: montoTarifa,
+                saldo_pendiente: nuevoSaldo,
+                estatus: nuevoEstatus,
+                detalles_calculo: {
+                  reglaOrigen,
+                  origen: "inspeccion_tecnica",
+                  citaId: cita.id,
+                  folioInspeccion: `INSP-${String(cita.id).slice(0, 6).toUpperCase()}`,
+                  clienteNombre: cita.cliente_nombre || null,
+                  fechaInspeccion: cita.fecha,
+                  fechaCalculo: new Date().toISOString(),
+                },
+                notas: opciones?.notas || cita.notas || "Comisión fija por inspección técnica ejecutada",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", comRecuperada.id);
+          }
+
+          revalidatePath("/comisiones");
+          if (cita.expediente_id) revalidatePath(`/expediente/${cita.expediente_id}`);
+          return { ok: true, comisionId: comRecuperada.id };
+        }
+      }
+
       console.error("Error al insertar comisión de inspección:", errIns);
       if (
         errIns.message?.includes('column "cita_id"') || 
@@ -1744,7 +1811,7 @@ export async function sincronizarComisionParaInspeccion(
 
     revalidatePath("/comisiones");
     if (cita.expediente_id) revalidatePath(`/expediente/${cita.expediente_id}`);
-    return { ok: true, comisionId: nuevaCom.id };
+    return { ok: true, comisionId: nuevaCom?.id };
   } catch (err: any) {
     console.error("Error al sincronizar comisión de inspección:", err);
     return { ok: false, error: err.message || "Error al sincronizar comisión de inspección." };
@@ -1888,19 +1955,24 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
       console.warn("Aviso al consultar citas de inspección:", eInspQuery);
     }
 
-    const inspeccionesEjecutadas = citasInsp.filter((c: any) => {
+    const inspeccionesUnicasMap = new Map<string, any>();
+    for (const c of citasInsp) {
       const est = (c.estado || "").toLowerCase();
       const not = (c.notas || "").toLowerCase();
-      return (
+      const esEjecutada =
         est === "completada" ||
         est === "confirmada" ||
         est === "realizada" ||
         est === "finalizada" ||
         not.includes("finalizada") ||
         not.includes("retro") ||
-        not.includes("ejecutada")
-      );
-    });
+        not.includes("ejecutada");
+
+      if (esEjecutada && c.id && !inspeccionesUnicasMap.has(c.id)) {
+        inspeccionesUnicasMap.set(c.id, c);
+      }
+    }
+    const inspeccionesEjecutadas = Array.from(inspeccionesUnicasMap.values());
 
     const errores: string[] = [];
     for (const insp of inspeccionesEjecutadas) {
