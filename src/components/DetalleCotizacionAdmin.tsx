@@ -33,6 +33,7 @@ import { listarEmpresasMin } from "@/app/actions/empresas";
 import { formatoPesos } from "@/lib/formato";
 import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
+import { EditorPresupuestoApu } from "./construccion/EditorPresupuestoApu";
 import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
@@ -1726,8 +1727,53 @@ export function DetalleCotizacionAdmin({
               )}
             </div>
 
-            {/* Banner Informativo de Cotización Modular */}
-            {cotizacion.modalidad === "modular" ? (
+            {/* Selector y Vistas por Modalidad de Presupuesto */}
+            {cotizacion.modalidad === "obra_apu" ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between bg-emerald-50/80 border border-emerald-300 p-3.5 rounded-2xl text-xs gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-verde-profundo text-white text-base shadow-xs">
+                      📐
+                    </span>
+                    <div>
+                      <h4 className="font-titular text-sm font-bold text-verde-profundo">
+                        Presupuesto de Obra (APU Paramétrico por Espacios y Partidas)
+                      </h4>
+                      <p className="text-xs text-carbon/60">
+                        Cálculo matricial con rendimiento de jornales, materiales y cascada de costos.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`/cotizacion/${cotizacion.token}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-xl bg-verde-profundo hover:bg-sauce text-white font-bold px-3.5 py-2 text-xs transition flex items-center gap-1.5 shadow-xs"
+                    >
+                      <span>👁️ Vista Interactiva del Cliente</span>
+                      <span>↗</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setModalModalidad(true)}
+                      className="rounded-xl border border-carbon/20 bg-white hover:bg-slate-50 text-carbon text-xs font-semibold px-3 py-2 transition"
+                    >
+                      ⚙️ Cambiar Modalidad
+                    </button>
+                  </div>
+                </div>
+
+                <EditorPresupuestoApu
+                  cotizacionId={cotizacion.id}
+                  puedeEditar={puedeCostear}
+                  onActualizado={(actualizada) => {
+                    setCotizacion((prev) => ({ ...prev, ...actualizada }));
+                  }}
+                />
+              </div>
+            ) : cotizacion.modalidad === "modular" ? (
               <div className="rounded-2xl border-2 border-[#1E3A2F]/20 bg-emerald-50/40 p-5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center gap-2.5">
@@ -1794,21 +1840,31 @@ export function DetalleCotizacionAdmin({
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs">
+              <div className="flex flex-wrap items-center justify-between bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-xs gap-3">
                 <span className="text-slate-600">
                   Modalidad actual: <strong className="text-slate-800">Estática (Tradicional)</strong>.
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setModalModalidad(true)}
-                  className="rounded-lg bg-[#1E3A2F]/10 hover:bg-[#1E3A2F]/20 text-[#1E3A2F] font-bold px-2.5 py-1 text-xs transition flex items-center gap-1"
-                >
-                  🧩 Convertir a Cotización Modular con Opcionales
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleEjecutarCambioModalidad("obra_apu")}
+                    className="rounded-lg bg-verde-profundo hover:bg-sauce text-white font-bold px-3 py-1.5 text-xs transition flex items-center gap-1.5 shadow-xs"
+                  >
+                    <span>📐</span> Convertir a Presupuesto de Obra (APU)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalModalidad(true)}
+                    className="rounded-lg bg-[#1E3A2F]/10 hover:bg-[#1E3A2F]/20 text-[#1E3A2F] font-bold px-2.5 py-1.5 text-xs transition flex items-center gap-1"
+                  >
+                    <span>🧩</span> Opciones Modulares
+                  </button>
+                </div>
               </div>
             )}
 
-            {!puedeCostear ? (
+            {/* Si NO es obra_apu, mostrar tabla tradicional de conceptos */}
+            {cotizacion.modalidad !== "obra_apu" && (!puedeCostear ? (
               <p className="text-sm text-carbon/50 py-6 text-center">Tu rol no tiene permisos para cotizar conceptos financieros.</p>
             ) : (
               <div className="space-y-6 font-sans">
@@ -3273,11 +3329,37 @@ export function DetalleCotizacionAdmin({
             </p>
 
             <div className="space-y-3 pt-1">
+              {/* Opción APU: Presupuesto de Obra */}
+              <div
+                className={`p-4 rounded-xl border-2 transition cursor-pointer ${
+                  cotizacion.modalidad === "obra_apu"
+                    ? "border-verde-profundo bg-emerald-50/40 shadow-xs"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
+                onClick={() => handleEjecutarCambioModalidad("obra_apu")}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-800">📐 Presupuesto de Obra (APU Paramétrico)</span>
+                      {cotizacion.modalidad === "obra_apu" && (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          Actual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Recomendado para remodelaciones, baños, cocinas y obras complejas. Agrupado por espacios, partidas y cascada de costos.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Opción 1: Estática */}
               <div
                 className={`p-4 rounded-xl border-2 transition cursor-pointer ${
-                  cotizacion.modalidad !== "modular"
-                    ? "border-verde-profundo bg-emerald-50/30"
+                  cotizacion.modalidad === "estatica"
+                    ? "border-verde-profundo bg-emerald-50/30 shadow-xs"
                     : "border-slate-200 hover:border-slate-300"
                 }`}
                 onClick={() => handleEjecutarCambioModalidad("estatica")}
@@ -3286,7 +3368,7 @@ export function DetalleCotizacionAdmin({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-800">📄 Modalidad Estática (Tradicional)</span>
-                      {cotizacion.modalidad !== "modular" && (
+                      {cotizacion.modalidad === "estatica" && (
                         <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                           Actual
                         </span>
