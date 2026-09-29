@@ -17,6 +17,7 @@ import type {
   CoordinacionInspeccionDetalle,
 } from "@/lib/coordinacion-inspecciones";
 import { labelTipoNegocio } from "@/lib/types";
+import { PanelVinculacionTelegram } from "./PanelVinculacionTelegram";
 
 interface PerfilSimple {
   id: string;
@@ -520,6 +521,8 @@ export function CabinaCoordinacionInspeccion({
                     Guardar Configuración
                   </button>
                 </div>
+
+                <PanelVinculacionTelegram tokenGuardado={Boolean(telegramToken.trim())} />
               </div>
             )}
           </div>

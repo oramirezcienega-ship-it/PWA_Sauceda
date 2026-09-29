@@ -139,7 +139,10 @@ export async function recordarCoordinacionAsesores(
     const lista = opciones.map((o) => `👉 *Opción ${o.id}:* ${o.label}`).join("\n");
 
     let recordados = 0;
-    for (const p of perfiles || []) {
+    // Telegram primero (sin costo); WhatsApp solo para quien no tiene Telegram vinculado
+    const conTelegram = (perfiles || []).filter((p: any) => p.telegram_chat_id);
+    const sinTelegram = (perfiles || []).filter((p: any) => !p.telegram_chat_id);
+    for (const p of sinTelegram) {
       const tel = normalizarTelefono(p.telefono_whatsapp || p.telefono || "");
       const primer = (p.nombre || "").split(" ")[0] || "Asesor";
       const texto =
@@ -159,7 +162,7 @@ export async function recordarCoordinacionAsesores(
       servicioNombre: c.servicio_nombre,
       ubicacion: c.ubicacion,
       opciones,
-      asesoresIds: pendientes,
+      asesoresIds: conTelegram.map((p: any) => p.id),
     }).catch(() => ({ enviados: 0 }));
     recordados += tg.enviados;
 

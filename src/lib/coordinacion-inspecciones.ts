@@ -857,7 +857,9 @@ export async function iniciarPropuestaCoordinacion(
     const nombresEquipo = (perfiles || []).map((p) => p.nombre).join(" y ");
     // Registro de a quién le llegó la propuesta y por qué canal
     const entregas: Record<string, EntregaPropuestaAsesor> = {};
-    for (const asesor of perfiles || []) {
+    // Con canal "telegram" NO se manda WhatsApp (los mensajes de negocio de WhatsApp tienen costo)
+    const asesoresPorWhatsApp = input.canalNotificacion === "telegram" ? [] : perfiles || [];
+    for (const asesor of asesoresPorWhatsApp) {
       const telDestino = normalizarTelefono(asesor.telefono_whatsapp || asesor.telefono || "");
       if (!telDestino) {
         entregas[asesor.id] = {

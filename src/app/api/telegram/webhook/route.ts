@@ -26,6 +26,36 @@ export async function POST(req: NextRequest) {
       const text = msg.text || "";
       const from = msg.from;
 
+      // Vinculación por enlace personal: https://t.me/<bot>?start=<id del usuario>
+      const payload = text.startsWith("/start") ? text.split(/\s+/)[1] || "" : "";
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload)) {
+        const { data: perfil } = await sb
+          .from("perfiles")
+          .select("id, nombre")
+          .eq("id", payload)
+          .maybeSingle();
+
+        if (perfil) {
+          await sb
+            .from("perfiles")
+            .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })
+            .eq("id", perfil.id);
+
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: `✅ *¡Listo, ${perfil.nombre}!* Tu Telegram quedó vinculado con SAUCEDA.\n\nAquí recibirás las propuestas de inspección con botones para responder (Puedo / No puedo / Enterado).`,
+          });
+        } else {
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: "No pude vincular este enlace: el usuario no existe. Pide a tu administrador un enlace nuevo.",
+          });
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       if (text.startsWith("/start") || text.startsWith("/id")) {
         const respuesta = `👋 *¡Hola ${from?.first_name || ""}!*\n\nSoy el asistente operativo de *SAUCEDA*.\n\n📱 *Tu Telegram Chat ID es:* \`${chatId}\`\n👤 *Usuario:* @${from?.username || "sin_usuario"}\n\nCopia y proporciona este Chat ID a tu administrador para vincular tus alertas de inspecciones técnicas en sitio.`;
 
