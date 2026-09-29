@@ -62,6 +62,7 @@ export function ModuloComisiones({
   const [fechaDesde, setFechaDesde] = useState<string>("");
   const [fechaHasta, setFechaHasta] = useState<string>("");
   const [busqueda, setBusqueda] = useState<string>("");
+  const [filtroTipo, setFiltroTipo] = useState<"todas" | "venta" | "inspeccion">("todas");
 
   // Modales
   const [comisionParaAjustar, setComisionParaAjustar] = useState<Comision | null>(null);
@@ -228,7 +229,7 @@ export function ModuloComisiones({
 
   // Exportar a Excel (CSV con formato)
   const handleExportarCSV = () => {
-    if (comisiones.length === 0) {
+    if (comisionesFiltradas.length === 0) {
       alert("No hay registros disponibles para exportar con los filtros actuales.");
       return;
     }
@@ -255,7 +256,7 @@ export function ModuloComisiones({
       "Notas",
     ];
 
-    const filas = comisiones.map((c) => [
+    const filas = comisionesFiltradas.map((c) => [
       `"${c.remisionFolio || ""}"`,
       `"${c.remisionTipo || ""}"`,
       `"${c.fecha || ""}"`,
@@ -290,6 +291,12 @@ export function ModuloComisiones({
     link.click();
     document.body.removeChild(link);
   };
+
+  const comisionesFiltradas = useMemo(() => {
+    if (filtroTipo === "todas") return comisiones;
+    if (filtroTipo === "inspeccion") return comisiones.filter((c) => c.tipoComision === "inspeccion");
+    return comisiones.filter((c) => c.tipoComision !== "inspeccion");
+  }, [comisiones, filtroTipo]);
 
   const asesorSeleccionadoNombre = useMemo(() => {
     if (filtroAsesor === "todos") return "Todos los Asesores";
@@ -577,6 +584,22 @@ export function ModuloComisiones({
                 </select>
               </div>
 
+              {/* Tipo de comisión */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60 mb-1">
+                  Tipo de Comisión
+                </label>
+                <select
+                  value={filtroTipo}
+                  onChange={(e) => setFiltroTipo(e.target.value as "todas" | "venta" | "inspeccion")}
+                  className="w-full border border-carbon/20 rounded-xl px-3 py-2 bg-white text-xs focus:border-verde-profundo outline-none"
+                >
+                  <option value="todas">Todas</option>
+                  <option value="venta">Ventas / Instalación</option>
+                  <option value="inspeccion">Inspección</option>
+                </select>
+              </div>
+
               {/* Búsqueda rápida */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-carbon/60 mb-1">
@@ -627,7 +650,7 @@ export function ModuloComisiones({
             {/* Botones de Exportación y Envío */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-carbon/5">
               <span className="text-xs text-carbon/60">
-                Mostrando <strong>{comisiones.length}</strong> comisiones en el desglose
+                Mostrando <strong>{comisionesFiltradas.length}</strong> comisiones en el desglose
                 {isPending && <span className="ml-2 text-dorado animate-pulse">Cargando...</span>}
               </span>
 
@@ -676,7 +699,7 @@ export function ModuloComisiones({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-carbon/5">
-                  {comisiones.length === 0 ? (
+                  {comisionesFiltradas.length === 0 ? (
                     <tr>
                       <td colSpan={11} className="py-12 text-center text-carbon/50">
                         <div className="max-w-sm mx-auto space-y-2">
@@ -696,7 +719,7 @@ export function ModuloComisiones({
                       </td>
                     </tr>
                   ) : (
-                    comisiones.map((c) => (
+                    comisionesFiltradas.map((c) => (
                       <tr key={c.id} className={`hover:bg-slate-50/70 transition ${c.tipoComision === "inspeccion" ? "bg-amber-50/20" : ""}`}>
                         {/* Folio / Fecha */}
                         <td className="py-3 px-4">
@@ -1426,7 +1449,7 @@ export function ModuloComisiones({
       {modalPagoAbierto && (
         <ModalRegistrarPagoComision
           asesores={asesores}
-          comisionesPendientes={comisiones}
+          comisionesPendientes={comisionesFiltradas}
           asesorIdInicial={pagoAsesorId}
           comisionInicialId={pagoComisionId}
           alCerrar={() => setModalPagoAbierto(false)}
@@ -1454,7 +1477,7 @@ export function ModuloComisiones({
           asesorNombre={asesorSeleccionadoNombre}
           asesorTelefono={asesorSeleccionadoTelefono}
           periodoTexto={textoPeriodo}
-          comisiones={comisiones}
+          comisiones={comisionesFiltradas}
           pagos={pagos}
           alCerrar={() => setModalImprimirAbierto(false)}
         />
