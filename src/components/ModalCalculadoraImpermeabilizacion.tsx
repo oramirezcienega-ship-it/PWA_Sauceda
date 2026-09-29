@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { obtenerPreciosImpermeabilizacionCatalogo } from "@/app/actions/productos";
 
 export interface ModalCalculadoraProps {
   abierto: boolean;
@@ -25,7 +26,9 @@ interface PaqueteInfo {
   incluye: string[];
 }
 
-const PAQUETES: PaqueteInfo[] = [
+// Precios por defecto: se usan sólo mientras se resuelven (o si faltan) los
+// precios vigentes del catálogo de Productos y Servicios.
+const PAQUETES_DEFAULT: PaqueteInfo[] = [
   {
     id: "acrilico",
     badge: "ACRÍLICO",
@@ -99,6 +102,7 @@ export function ModalCalculadoraImpermeabilizacion({
   const [copiado, setCopiado] = useState<string | null>(null);
   const [generandoImagen, setGenerandoImagen] = useState<boolean>(false);
   const [enviandoImagenChat, setEnviandoImagenChat] = useState<boolean>(false);
+  const [paquetes, setPaquetes] = useState<PaqueteInfo[]>(PAQUETES_DEFAULT);
   const cardsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -107,12 +111,32 @@ export function ModalCalculadoraImpermeabilizacion({
     }
   }, [abierto, metrosIniciales]);
 
+  // Traer los precios vigentes del catálogo de Productos y Servicios cada
+  // vez que se abre la calculadora, para no mostrar precios desactualizados
+  // si ya se editaron en el catálogo.
+  useEffect(() => {
+    if (!abierto) return;
+    obtenerPreciosImpermeabilizacionCatalogo()
+      .then((precios) => {
+        setPaquetes((prev) =>
+          prev.map((pkg) => {
+            const precioCatalogo =
+              pkg.id === "acrilico" ? precios.acrilico : pkg.id === "estandar" ? precios.estandar : precios.premium;
+            return precioCatalogo && precioCatalogo > 0 ? { ...pkg, precioM2: precioCatalogo } : pkg;
+          })
+        );
+      })
+      .catch((err) => {
+        console.error("No se pudieron cargar los precios del catálogo para la calculadora:", err);
+      });
+  }, [abierto]);
+
   if (!abierto) return null;
 
   const m2Val = Math.max(1, isNaN(metros) ? 0 : metros);
-  const totalAcrilico = m2Val * 170;
-  const totalEstandar = m2Val * 210;
-  const totalPremium = m2Val * 260;
+  const totalAcrilico = m2Val * paquetes[0].precioM2;
+  const totalEstandar = m2Val * paquetes[1].precioM2;
+  const totalPremium = m2Val * paquetes[2].precioM2;
 
   function formatearDinero(monto: number) {
     return monto.toLocaleString("es-MX", {
@@ -131,21 +155,21 @@ Metros a impermeabilizar: *${m2Val} m²*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🟢 *1. PAQUETE ACRÍLICO*
-• Precio: *$170 / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*
+• Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*
 • Garantía: 2 años | Ejecución: 1-2 días
 • Incluye: Acrílico elastomérico con malla de refuerzo, sellado de grietas y limpieza final.
 • Ideal para: Mantenimiento preventivo y azoteas con poco tráfico.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌿 *2. PAQUETE ESTÁNDAR (3.5)*
-• Precio: *$210 / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*
+• Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*
 • Garantía: 5 años | Ejecución: 2-3 días
 • Incluye: Impermeabilizante 3.5 con gravilla (roja/gris), sellado de bordes y boquillas.
 • Ideal para: Solución eficaz y económica para azoteas en buen estado.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *3. PAQUETE PREMIUM (4.0 POLIÉSTER)* — 🏆 *10 Años Garantía*
-• Precio: *$260 / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*
+• Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*
 • Garantía: 10 años por escrito | Ejecución: 2-3 días
 • Incluye: Impermeabilizante 4.0 poliéster con gravilla, sellado reforzado y reporte fotográfico.
 • Ideal para: Máxima durabilidad y tranquilidad a largo plazo.
@@ -278,7 +302,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     const gap = 27;
     const startY = 145;
 
-    PAQUETES.forEach((pkg, index) => {
+    paquetes.forEach((pkg, index) => {
       const x = startX + index * (cardWidth + gap);
       const y = startY;
       const total = m2Val * pkg.precioM2;
@@ -663,7 +687,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
         <div ref={cardsRef} className="p-3 sm:p-5 overflow-y-auto flex-1 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-stretch">
             
-            {PAQUETES.map((pkg) => {
+            {paquetes.map((pkg) => {
               const total = m2Val * pkg.precioM2;
               const esPremium = pkg.destacado;
 
