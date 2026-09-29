@@ -1363,6 +1363,19 @@ export async function editarCita(data: {
       return { ok: false, error: errUpdate.message };
     }
 
+    // 3b. Si es una inspección y cambió el asesor responsable, re-sincronizar
+    // su comisión para que "siga" al asesor actual (si ya se había generado
+    // una comisión con el asesor anterior, se actualiza en vez de quedar
+    // asignada al asesor equivocado).
+    if (data.tipoCita === "inspeccion" && citaActual.perfil_id !== data.perfilId) {
+      try {
+        const { sincronizarComisionParaInspeccion } = await import("@/app/actions/comisiones");
+        await sincronizarComisionParaInspeccion(idCita);
+      } catch (errSyncCom) {
+        console.warn("Aviso al re-sincronizar comisión de inspección tras reasignar asesor:", errSyncCom);
+      }
+    }
+
     // 4. Si la cita es instalación y tiene expediente_id, sincronizar fecha_instalacion
     if (data.tipoCita === "instalacion" && citaActual.expediente_id) {
       const fechaISO = `${data.fecha}T${data.horaInicio}:00`;

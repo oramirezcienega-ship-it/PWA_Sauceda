@@ -391,12 +391,32 @@ export async function listarComisiones(filtros?: {
         const ids = citasInspCandidatas.map((c: any) => c.id);
         const { data: comsExistentes } = await sb
           .from("comisiones")
-          .select("cita_id")
+          .select("cita_id, asesor_id, es_ajuste_manual")
           .in("cita_id", ids);
 
-        const setExistentes = new Set((comsExistentes || []).map((x: any) => x.cita_id).filter(Boolean));
+        const mapExistentes = new Map<string, { asesorId: string | null; ajusteManual: boolean }>(
+          (comsExistentes || [])
+            .filter((x: any) => x.cita_id)
+            .map((x: any) => [x.cita_id, { asesorId: x.asesor_id || null, ajusteManual: Boolean(x.es_ajuste_manual) }])
+        );
+
         for (const cita of citasInspCandidatas) {
-          if (!setExistentes.has(cita.id)) {
+          const existente = mapExistentes.get(cita.id);
+          if (!existente) {
+            // Sin comisión aún: crearla.
+            await sincronizarComisionParaInspeccion(cita.id, { citaData: cita });
+            continue;
+          }
+          if (existente.ajusteManual) continue; // respetar ajustes manuales del admin
+
+          // Si el asesor responsable de la cita cambió después de generada la
+          // comisión (reasignación de inspección), volver a sincronizar para
+          // que la comisión "siga" al asesor actual en vez de quedar
+          // "pegada" al asesor original.
+          const asesorActual =
+            cita.perfil_id ||
+            (Array.isArray(cita.asignados_ids) && cita.asignados_ids.length > 0 ? cita.asignados_ids[0] : null);
+          if (asesorActual && asesorActual !== existente.asesorId) {
             await sincronizarComisionParaInspeccion(cita.id, { citaData: cita });
           }
         }

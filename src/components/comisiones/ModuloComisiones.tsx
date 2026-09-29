@@ -293,10 +293,21 @@ export function ModuloComisiones({
   };
 
   const comisionesFiltradas = useMemo(() => {
-    if (filtroTipo === "todas") return comisiones;
-    if (filtroTipo === "inspeccion") return comisiones.filter((c) => c.tipoComision === "inspeccion");
-    return comisiones.filter((c) => c.tipoComision !== "inspeccion");
-  }, [comisiones, filtroTipo]);
+    let lista = comisiones;
+    // Filtro defensivo por asesor en el cliente: el servidor ya filtra por
+    // asesor_id, pero se refuerza aquí para que la lista mostrada nunca
+    // contradiga el selector, incluso si algún registro llega con datos
+    // desincronizados (p. ej. una inspección reasignada de asesor).
+    if (filtroAsesor !== "todos") {
+      lista = lista.filter((c) => c.asesorId === filtroAsesor);
+    }
+    if (filtroTipo === "inspeccion") {
+      lista = lista.filter((c) => c.tipoComision === "inspeccion");
+    } else if (filtroTipo === "venta") {
+      lista = lista.filter((c) => c.tipoComision !== "inspeccion");
+    }
+    return lista;
+  }, [comisiones, filtroTipo, filtroAsesor]);
 
   const asesorSeleccionadoNombre = useMemo(() => {
     if (filtroAsesor === "todos") return "Todos los Asesores";
