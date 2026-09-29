@@ -354,21 +354,26 @@ export async function listarComisiones(filtros?: {
 
     // 1b. Auto-sincronización pasiva de inspecciones ejecutadas que no tengan comisión aún
     try {
-      const { data: citasInspCandidatas } = await sb
+      const { data: citasInsp } = await sb
         .from("agenda_citas")
-        .select("id, estado, notas")
-        .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%")
-        .or("estado.eq.completada,notas.ilike.%Finalizada%,notas.ilike.%Retro%")
-        .limit(30);
+        .select("id, tipo_cita, estado, notas")
+        .eq("tipo_cita", "inspeccion")
+        .limit(50);
 
-      if (citasInspCandidatas && citasInspCandidatas.length > 0) {
-        const ids = citasInspCandidatas.map((c) => c.id);
+      const citasInspCandidatas = (citasInsp || []).filter((c: any) => {
+        const est = (c.estado || "").toLowerCase();
+        const not = (c.notas || "").toLowerCase();
+        return est === "completada" || est === "confirmada" || not.includes("finalizada") || not.includes("retro") || not.includes("ejecutada");
+      });
+
+      if (citasInspCandidatas.length > 0) {
+        const ids = citasInspCandidatas.map((c: any) => c.id);
         const { data: comsExistentes } = await sb
           .from("comisiones")
           .select("cita_id")
           .in("cita_id", ids);
 
-        const setExistentes = new Set((comsExistentes || []).map((x: any) => x.cita_id));
+        const setExistentes = new Set((comsExistentes || []).map((x: any) => x.cita_id).filter(Boolean));
         for (const cita of citasInspCandidatas) {
           if (!setExistentes.has(cita.id)) {
             await sincronizarComisionParaInspeccion(cita.id);
@@ -383,7 +388,6 @@ export async function listarComisiones(filtros?: {
     let query = sb
       .from("comisiones")
       .select("*")
-      .or("remision_factura_id.not.is.null,cita_id.not.is.null,tipo_comision.eq.inspeccion")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -1453,7 +1457,17 @@ export async function sincronizarComisionParaInspeccion(
       .select("id")
       .single();
 
-    if (errIns) throw new Error(errIns.message);
+    if (errIns) {
+      console.error("Error al insertar comisión de inspección:", errIns);
+      if (
+        errIns.message?.includes('column "cita_id"') || 
+        errIns.message?.includes('column "tipo_comision"') ||
+        errIns.code === "42703"
+      ) {
+        throw new Error("Falta ejecutar la migración 0101 en el SQL Editor de Supabase (las columnas cita_id y tipo_comision no existen en la tabla comisiones de esta base de datos).");
+      }
+      throw new Error(errIns.message);
+    }
 
     revalidatePath("/comisiones");
     if (cita.expediente_id) revalidatePath(`/expediente/${cita.expediente_id}`);
@@ -1568,18 +1582,44 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
     }
 
     // 4. Procesar inspecciones ejecutadas de expedientes
-    const { data: inspecciones } = await sb
-      .from("agenda_citas")
-      .select("id")
-      .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%")
-      .or("estado.eq.completada,notas.ilike.%Finalizada%,notas.ilike.%Retro%");
+    let citasInsp: any[] = [];
+    try {
+      const { data: cData } = await sb
+        .from("agenda_citas")
+        .select("id, tipo_cita, estado, notas")
+        .eq("tipo_cita", "inspeccion");
+      citasInsp = cData || [];
+    } catch (eInspQuery) {
+      console.warn("Aviso al consultar citas de inspección:", eInspQuery);
+    }
 
-    for (const insp of inspecciones || []) {
+    const inspeccionesEjecutadas = citasInsp.filter((c: any) => {
+      const est = (c.estado || "").toLowerCase();
+      const not = (c.notas || "").toLowerCase();
+      return est === "completada" || est === "confirmada" || not.includes("finalizada") || not.includes("retro") || not.includes("ejecutada");
+    });
+
+    const errores: string[] = [];
+    for (const insp of inspeccionesEjecutadas) {
       const res = await sincronizarComisionParaInspeccion(insp.id);
-      if (res.ok) procesadas++;
+      if (res.ok) {
+        procesadas++;
+      } else {
+        errores.push(res.error || `Error en cita ${insp.id}`);
+      }
     }
 
     revalidatePath("/comisiones");
+
+    if (errores.length > 0) {
+      return {
+        ok: false,
+        creadas: procesadas,
+        actualizadas: 0,
+        error: `Se procesaron ${procesadas} comisiones de venta, pero falló la sincronización de inspecciones: ${errores[0]}`,
+      };
+    }
+
     return { ok: true, creadas: procesadas, actualizadas: 0 };
   } catch (err: any) {
     return { ok: false, creadas: 0, actualizadas: 0, error: err.message };
