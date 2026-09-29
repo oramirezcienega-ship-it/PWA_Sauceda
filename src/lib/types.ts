@@ -803,21 +803,6 @@ export interface Cotizacion {
   aprobadoOperativo: boolean;
   aprobadoOperativoBy?: string | null;
   aprobadoOperativoByNombre?: string | null;
-  costoDirecto?: number;
-  indirectosPct?: number;
-  indirectosMonto?: number;
-  imprevistosPct?: number;
-  imprevistosMonto?: number;
-  utilidadPct?: number;
-  utilidadMonto?: number;
-  ivaPct?: number;
-  ivaMonto?: number;
-  incluyeIva?: boolean;
-  alcances?: string;
-  exclusiones?: string;
-  esquemaPagos?: EsquemaPagoHito[];
-  versionNumero?: number;
-  versionPadreId?: string | null;
   modalidad?: CotizacionModalidad;
   datosModulares?: CotizacionModularData | null;
   opcionesSeleccionadas?: OpcionesSeleccionadasModular | null;
@@ -829,14 +814,7 @@ export interface Cotizacion {
   updatedAt: string;
 }
 
-export type CotizacionModalidad = 'estatica' | 'modular' | 'obra_apu';
-
-export interface EsquemaPagoHito {
-  etapa: string;
-  porcentaje: number;
-  monto: number;
-  condicion: string;
-}
+export type CotizacionModalidad = 'estatica' | 'modular';
 
 export interface ModularDimensiones {
   titulo?: string;
@@ -949,124 +927,9 @@ export interface VisitaReporte {
   createdAt: string;
 }
 
-export interface FotoProducto {
-  id?: string;
-  url: string;
-  tipo: 'producto' | 'aplicacion' | 'antes_despues';
-  titulo?: string;
-  descripcion?: string;
-}
-
-export interface Insumo {
-  id: string;
-  codigo?: string | null;
-  nombre: string;
-  tipo: 'material' | 'mano_obra' | 'herramienta_equipo' | 'flete' | 'subcontrato';
-  unidad: string;
-  costoProveedor: number;
-  precioInterno: number;
-  proveedorId?: string | null;
-  proveedorNombre?: string | null;
-  oficio?: string | null;
-  notas?: string | null;
-  activo: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface InsumoHistorialPrecio {
-  id: string;
-  insumoId: string;
-  costoAnterior: number;
-  costoNuevo: number;
-  precioInternoAnterior: number;
-  precioInternoNuevo: number;
-  fecha: string;
-  usuarioId?: string | null;
-  motivo?: string | null;
-}
-
-export interface ConceptoApuComposicion {
-  id: string;
-  conceptoId: string;
-  insumoId: string;
-  insumo?: Insumo;
-  cantidad: number;
-  desperdicioPct: number;
-  rendimiento: number;
-  costoUnitarioInsumo: number;
-  importeCosto: number;
-  notas?: string | null;
-  createdAt: string;
-}
-
-export interface CotizacionPartida {
-  id: string;
-  cotizacionId: string;
-  nombre: string;
-  orden: number;
-  subtotalCostoDirecto: number;
-  subtotalPrecioCliente: number;
-  createdAt?: string;
-}
-
-export interface CotizacionEspacio {
-  id: string;
-  cotizacionId: string;
-  nombre: string;
-  tipoEspacio: string;
-  largo: number;
-  ancho: number;
-  alto: number;
-  m2Piso: number;
-  m2Muros: number;
-  parametros: Record<string, any>;
-  gamaSeleccionada: 'economica' | 'media' | 'premium';
-  fotos: string[];
-  notas?: string | null;
-  orden: number;
-  createdAt?: string;
-}
-
-export interface PlantillaEspacio {
-  id: string;
-  slug: string;
-  nombre: string;
-  descripcion: string;
-  parametrosSchema: Array<{
-    key: string;
-    label: string;
-    tipo: 'number' | 'boolean' | 'select' | 'text';
-    opciones?: string[];
-    default?: any;
-  }>;
-  orden: number;
-  activo: boolean;
-  createdAt?: string;
-  conceptos?: PlantillaEspacioConcepto[];
-}
-
-export interface PlantillaEspacioConcepto {
-  id: string;
-  plantillaId: string;
-  partidaNombre: string;
-  productoServicioId: string;
-  productoServicio?: ProductoServicio;
-  formulaCantidad: string;
-  gama: 'economica' | 'media' | 'premium' | 'todas';
-  condicion?: string | null;
-  orden: number;
-}
-
 export interface CotizacionConcepto {
   id: string;
   cotizacionId: string;
-  productoServicioId?: string | null;
-  partidaId?: string | null;
-  espacioId?: string | null;
-  gama?: string;
-  orden?: number;
-  apuDetallado?: any[];
   descripcion: string;
   cantidad: number;
   unidad: string;
@@ -1086,17 +949,6 @@ export interface ProductoServicio {
   precioUnitario: number;
   porcentajeComision?: number;
   plantillaGarantia?: string;
-  tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
-  centroCostoId?: string | null;
-  centroCostoNombre?: string | null;
-  categoria?: string;
-  fotos?: FotoProducto[];
-  descripcionValor?: string;
-  especificaciones?: string;
-  gama?: 'economica' | 'media' | 'premium' | 'estandar';
-  activo?: boolean;
-  aptoParaIa?: boolean;
-  composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }
 

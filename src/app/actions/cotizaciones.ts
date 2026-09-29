@@ -10,7 +10,7 @@ import { formatoPesos } from "@/lib/formato";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { generarPdfCotizacion } from "@/lib/cotizacionPdf";
 import { aCotizacion, aVisitaReporte, aCotizacionConcepto } from "@/lib/cotizacionesMappers";
-import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento, CotizacionModalidad, CotizacionModularData, OpcionesSeleccionadasModular, CotizacionPartida, CotizacionEspacio } from "@/lib/types";
+import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, CotizacionEstatus, RemisionFactura, GarantiaDocumento, CotizacionModalidad, CotizacionModularData, OpcionesSeleccionadasModular } from "@/lib/types";
 import { PLANTILLAS_MODULARES_DISPONIBLES, PLANTILLA_PERGOLA_AZOTEA_3X3 } from "@/lib/plantillasModulares";
 
 // Helper para generar el siguiente folio correlativo (COT-001)
@@ -257,13 +257,7 @@ export async function obtenerCotizacionPorId(
 // 4. Obtener Cotización por Token (Acceso público cliente)
 export async function obtenerCotizacionPorToken(
   token: string
-): Promise<{
-  cotizacion: Omit<Cotizacion, 'notasInternas' | 'costoEstimado'>;
-  conceptos: Omit<CotizacionConcepto, 'costoUnitario'>[];
-  partidas?: CotizacionPartida[];
-  espacios?: CotizacionEspacio[];
-  reporteVisita: Omit<VisitaReporte, 'inspectorId'> | null;
-} | null> {
+): Promise<{ cotizacion: Omit<Cotizacion, 'notasInternas' | 'costoEstimado'>; conceptos: Omit<CotizacionConcepto, 'costoUnitario'>[]; reporteVisita: Omit<VisitaReporte, 'inspectorId'> | null } | null> {
   const sb = supabaseServidor();
 
   const { data: filaCot, error: errCot } = await sb
@@ -301,57 +295,11 @@ export async function obtenerCotizacionPorToken(
 
   const { data: filasConceptos, error: errCon } = await sb
     .from("cotizacion_conceptos")
-    .select("id, cotizacion_id, partida_id, espacio_id, gama, orden, descripcion, cantidad, unidad, precio_unitario, descuento, importe, created_at")
+    .select("id, cotizacion_id, descripcion, cantidad, unidad, precio_unitario, descuento, importe, created_at")
     .eq("cotizacion_id", cot.id)
-    .order("orden", { ascending: true })
     .order("created_at", { ascending: true });
 
   if (errCon) throw new Error(errCon.message);
-
-  let partidas: CotizacionPartida[] = [];
-  let espacios: CotizacionEspacio[] = [];
-
-  if (cot.modalidad === 'obra_apu') {
-    const { data: filasPartidas } = await sb
-      .from("cotizacion_partidas")
-      .select("id, cotizacion_id, nombre, orden, subtotal_precio_cliente, created_at")
-      .eq("cotizacion_id", cot.id)
-      .order("orden", { ascending: true });
-
-    partidas = (filasPartidas ?? []).map((p: any) => ({
-      id: p.id,
-      cotizacionId: p.cotizacion_id,
-      nombre: p.nombre,
-      orden: p.orden,
-      subtotalCostoDirecto: 0,
-      subtotalPrecioCliente: Number(p.subtotal_precio_cliente || 0),
-      createdAt: p.created_at,
-    }));
-
-    const { data: filasEspacios } = await sb
-      .from("cotizacion_espacios")
-      .select("id, cotizacion_id, nombre, tipo_espacio, largo, ancho, alto, m2_piso, m2_muros, parametros, gama_seleccionada, fotos, notas, orden, created_at")
-      .eq("cotizacion_id", cot.id)
-      .order("orden", { ascending: true });
-
-    espacios = (filasEspacios ?? []).map((e: any) => ({
-      id: e.id,
-      cotizacionId: e.cotizacion_id,
-      nombre: e.nombre,
-      tipoEspacio: e.tipo_espacio,
-      largo: Number(e.largo || 0),
-      ancho: Number(e.ancho || 0),
-      alto: Number(e.alto || 2.4),
-      m2Piso: Number(e.m2_piso || 0),
-      m2Muros: Number(e.m2_muros || 0),
-      parametros: e.parametros || {},
-      gamaSeleccionada: e.gama_seleccionada || "media",
-      fotos: Array.isArray(e.fotos) ? e.fotos : [],
-      notas: e.notas || null,
-      orden: e.orden || 0,
-      createdAt: e.created_at,
-    }));
-  }
 
   const { data: filaReporte, error: errRep } = await sb
     .from("visitas_reportes")
@@ -364,10 +312,6 @@ export async function obtenerCotizacionPorToken(
   const conceptos = (filasConceptos ?? []).map(f => ({
     id: f.id,
     cotizacionId: f.cotizacion_id,
-    partidaId: f.partida_id || null,
-    espacioId: f.espacio_id || null,
-    gama: f.gama || undefined,
-    orden: Number(f.orden || 0),
     descripcion: f.descripcion,
     cantidad: Number(f.cantidad || 0),
     unidad: f.unidad,
@@ -378,11 +322,7 @@ export async function obtenerCotizacionPorToken(
   }));
 
   const totalConceptos = conceptos.reduce((sum, c) => sum + c.importe, 0);
-  const finalPrecio = cot.modalidad === 'obra_apu' && cot.precioFinal > 0
-    ? cot.precioFinal
-    : totalConceptos > 0
-    ? totalConceptos
-    : cot.precioFinal;
+  const finalPrecio = totalConceptos > 0 ? totalConceptos : cot.precioFinal;
 
   return {
     cotizacion: {
@@ -411,21 +351,12 @@ export async function obtenerCotizacionPorToken(
       datosModulares: cot.datosModulares || null,
       opcionesSeleccionadas: cot.opcionesSeleccionadas || null,
       token: cot.token,
-      ivaPct: cot.ivaPct ?? 16,
-      ivaMonto: cot.ivaMonto || 0,
-      incluyeIva: Boolean(cot.incluyeIva),
-      alcances: cot.alcances || "",
-      exclusiones: cot.exclusiones || "",
-      esquemaPagos: cot.esquemaPagos || [],
-      versionNumero: cot.versionNumero || 1,
       condicionesPago: cot.condicionesPago,
       garantia: cot.garantia,
       createdAt: cot.createdAt,
       updatedAt: cot.updatedAt
     },
     conceptos,
-    partidas,
-    espacios,
     reporteVisita: filaReporte ? {
       id: filaReporte.id,
       cotizacionId: filaReporte.cotizacion_id,

@@ -58,21 +58,6 @@ export function aCotizacion(fila: any): Cotizacion {
     aprobadoComercialByNombre: fila.perfiles_comercial?.nombre || "",
     aprobadoOperativo: fila.aprobado_operativo,
     aprobadoOperativoBy: fila.aprobado_operativo_by,
-    costoDirecto: Number(fila.costo_directo || 0),
-    indirectosPct: Number(fila.indirectos_pct || 0),
-    indirectosMonto: Number(fila.indirectos_monto || 0),
-    imprevistosPct: Number(fila.imprevistos_pct || 0),
-    imprevistosMonto: Number(fila.imprevistos_monto || 0),
-    utilidadPct: Number(fila.utilidad_pct || 0),
-    utilidadMonto: Number(fila.utilidad_monto || 0),
-    ivaPct: Number(fila.iva_pct ?? 16),
-    ivaMonto: Number(fila.iva_monto || 0),
-    incluyeIva: Boolean(fila.incluye_iva),
-    alcances: fila.alcances || "",
-    exclusiones: fila.exclusiones || "",
-    esquemaPagos: fila.esquema_pagos || [],
-    versionNumero: Number(fila.version_numero || 1),
-    versionPadreId: fila.version_padre_id || null,
     modalidad: fila.modalidad || 'estatica',
     datosModulares: fila.datos_modulares || null,
     opcionesSeleccionadas: fila.opciones_seleccionadas || null,
@@ -104,12 +89,6 @@ export function aCotizacionConcepto(fila: any): CotizacionConcepto {
   return {
     id: fila.id,
     cotizacionId: fila.cotizacion_id,
-    productoServicioId: fila.producto_servicio_id || null,
-    partidaId: fila.partida_id || null,
-    espacioId: fila.espacio_id || null,
-    gama: fila.gama || undefined,
-    orden: Number(fila.orden || 0),
-    apuDetallado: fila.apu_detallado || [],
     descripcion: fila.descripcion,
     cantidad: Number(fila.cantidad || 0),
     unidad: fila.unidad,
@@ -120,4 +99,3 @@ export function aCotizacionConcepto(fila: any): CotizacionConcepto {
     createdAt: fila.created_at
   };
 }
-

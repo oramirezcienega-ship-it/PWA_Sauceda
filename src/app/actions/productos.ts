@@ -2,15 +2,9 @@
 
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { supabaseServidor } from "@/lib/supabase/server";
-import type { 
-  ProductoServicio, 
-  Insumo, 
-  ConceptoApuComposicion, 
-  InsumoHistorialPrecio,
-  FotoProducto 
-} from "@/lib/types";
+import type { ProductoServicio } from "@/lib/types";
 
-// Mapeador de ProductoServicio
+// Mapeador
 function aProductoServicio(fila: any): ProductoServicio {
   return {
     id: fila.id,
@@ -19,156 +13,47 @@ function aProductoServicio(fila: any): ProductoServicio {
     unidad: fila.unidad || "m2",
     costoUnitario: Number(fila.costo_unitario || 0),
     precioUnitario: Number(fila.precio_unitario || 0),
-    porcentajeComision: Number(
-      fila.porcentaje_comision !== undefined && fila.porcentaje_comision !== null 
-        ? fila.porcentaje_comision 
-        : 5.0
-    ),
+    porcentajeComision: Number(fila.porcentaje_comision !== undefined && fila.porcentaje_comision !== null ? fila.porcentaje_comision : 5.0),
     plantillaGarantia: fila.plantilla_garantia || "",
-    tipo: fila.tipo || "servicio",
-    centroCostoId: fila.centro_costo_id || null,
-    centroCostoNombre: fila.business_units?.nombre || fila.centro_costo_nombre || null,
-    categoria: fila.categoria || "General",
-    fotos: Array.isArray(fila.fotos) ? fila.fotos : [],
-    descripcionValor: fila.descripcion_valor || "",
-    especificaciones: fila.especificaciones || "",
-    gama: fila.gama || "estandar",
-    activo: fila.activo !== false,
-    aptoParaIa: fila.apto_para_ia !== false,
     createdAt: fila.created_at,
   };
 }
 
-// Mapeador de Insumo
-function aInsumo(fila: any): Insumo {
-  return {
-    id: fila.id,
-    codigo: fila.codigo || null,
-    nombre: fila.nombre,
-    tipo: fila.tipo || "material",
-    unidad: fila.unidad || "pza",
-    costoProveedor: Number(fila.costo_proveedor || 0),
-    precioInterno: Number(fila.precio_interno || 0),
-    proveedorId: fila.proveedor_id || null,
-    proveedorNombre: fila.proveedores?.nombre || fila.proveedor_nombre || null,
-    oficio: fila.oficio || null,
-    notas: fila.notas || null,
-    activo: fila.activo !== false,
-    createdAt: fila.created_at,
-    updatedAt: fila.updated_at,
-  };
-}
-
-// Generador de IDs secuenciales CAT-001, CAT-002... o PROD-001
-function siguienteId(ids: string[], prefijo = "CAT"): string {
-  const regex = new RegExp(`^${prefijo}-(\\d+)$`);
+// Generador de IDs secuenciales CAT-001, CAT-002...
+function siguienteId(ids: string[]): string {
   const nums = ids
     .map((id) => {
-      const match = id.match(regex);
+      const match = id.match(/^CAT-(\d+)$/);
       return match ? parseInt(match[1], 10) : 0;
     })
     .filter((n) => n > 0);
   const max = nums.length > 0 ? Math.max(...nums) : 0;
-  return `${prefijo}-${String(max + 1).padStart(3, "0")}`;
+  return `CAT-${String(max + 1).padStart(3, "0")}`;
 }
 
-// ============================================================
-// 1. PRODUCTOS Y SERVICIOS
-// ============================================================
-
-/** Listar Productos y Servicios enriquecidos */
-export async function listarProductosServicios(filtros?: {
-  tipo?: string;
-  centroCostoId?: string;
-  categoria?: string;
-  soloActivos?: boolean;
-}): Promise<ProductoServicio[]> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  let query = sb
-    .from("productos_servicios")
-    .select("*, business_units ( id, nombre )")
-    .order("created_at", { ascending: false });
-
-  if (filtros?.tipo && filtros.tipo !== "todos") {
-    query = query.eq("tipo", filtros.tipo);
-  }
-  if (filtros?.centroCostoId && filtros.centroCostoId !== "todos") {
-    query = query.eq("centro_costo_id", filtros.centroCostoId);
-  }
-  if (filtros?.categoria && filtros.categoria !== "todas") {
-    query = query.eq("categoria", filtros.categoria);
-  }
-  if (filtros?.soloActivos) {
-    query = query.eq("activo", true);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(aProductoServicio);
-}
-
-/** Obtener Detalle de Producto con su Receta APU */
-export async function obtenerProductoDetalleConApu(id: string): Promise<ProductoServicio | null> {
+/** 1. Listar Productos y Servicios */
+export async function listarProductosServicios(): Promise<ProductoServicio[]> {
   await requireAdmin();
   const sb = supabaseServidor();
 
   const { data, error } = await sb
     .from("productos_servicios")
-    .select("*, business_units ( id, nombre )")
-    .eq("id", id)
-    .maybeSingle();
+    .select("*")
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  if (!data) return null;
-
-  const prod = aProductoServicio(data);
-
-  // Cargar ingredientes APU
-  const { data: composicion, error: errApu } = await sb
-    .from("conceptos_apu_composicion")
-    .select("*, insumos (*)")
-    .eq("concepto_id", id)
-    .order("created_at", { ascending: true });
-
-  if (!errApu && composicion) {
-    prod.composicionApu = composicion.map((item: any) => ({
-      id: item.id,
-      conceptoId: item.concepto_id,
-      insumoId: item.insumo_id,
-      insumo: item.insumos ? aInsumo(item.insumos) : undefined,
-      cantidad: Number(item.cantidad || 0),
-      desperdicioPct: Number(item.desperdicio_pct || 0),
-      rendimiento: Number(item.rendimiento || 1),
-      costoUnitarioInsumo: Number(item.costo_unitario_insumo || 0),
-      importeCosto: Number(item.importe_costo || 0),
-      notas: item.notas || null,
-      createdAt: item.created_at,
-    }));
-  }
-
-  return prod;
+  return (data ?? []).map(aProductoServicio);
 }
 
-/** Crear Producto o Servicio */
+/** 2. Crear Producto o Servicio */
 export async function crearProductoServicio(datos: {
   nombre: string;
-  descripcion?: string;
-  unidad?: string;
-  costoUnitario?: number;
-  precioUnitario?: number;
+  descripcion: string;
+  unidad: string;
+  costoUnitario: number;
+  precioUnitario: number;
   porcentajeComision?: number;
   plantillaGarantia?: string;
-  tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
-  centroCostoId?: string | null;
-  categoria?: string;
-  fotos?: FotoProducto[];
-  descripcionValor?: string;
-  especificaciones?: string;
-  gama?: 'economica' | 'media' | 'premium' | 'estandar';
-  activo?: boolean;
-  aptoParaIa?: boolean;
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -177,374 +62,34 @@ export async function crearProductoServicio(datos: {
     .from("productos_servicios")
     .select("id");
   if (errLista) throw new Error(errLista.message);
-
-  const prefijo = datos.tipo === "concepto_obra" ? "OBRA" : "CAT";
-  const id = siguienteId((existentes ?? []).map((r) => r.id as string), prefijo);
+  const id = siguienteId((existentes ?? []).map((r) => r.id as string));
 
   const { data, error } = await sb
     .from("productos_servicios")
     .insert({
       id,
-      nombre: datos.nombre.trim(),
-      descripcion: datos.descripcion?.trim() || "",
-      unidad: datos.unidad || "m2",
-      costo_unitario: Number(datos.costoUnitario || 0),
-      precio_unitario: Number(datos.precioUnitario || 0),
+      nombre: datos.nombre,
+      descripcion: datos.descripcion,
+      unidad: datos.unidad,
+      costo_unitario: datos.costoUnitario,
+      precio_unitario: datos.precioUnitario,
       porcentaje_comision: Number(datos.porcentajeComision ?? 5.0),
       plantilla_garantia: datos.plantillaGarantia || "",
-      tipo: datos.tipo || "servicio",
-      centro_costo_id: datos.centroCostoId || null,
-      categoria: datos.categoria?.trim() || "General",
-      fotos: Array.isArray(datos.fotos) ? datos.fotos : [],
-      descripcion_valor: datos.descripcionValor?.trim() || "",
-      especificaciones: datos.especificaciones?.trim() || "",
-      gama: datos.gama || "estandar",
-      activo: datos.activo !== false,
-      apto_para_ia: datos.aptoParaIa !== false,
     })
-    .select("*, business_units ( id, nombre )")
-    .single();
-
-  if (error) throw new Error(error.message);
-  return aProductoServicio(data);
-}
-
-/** Editar Producto o Servicio */
-export async function editarProductoServicio(
-  id: string,
-  datos: {
-    nombre: string;
-    descripcion?: string;
-    unidad?: string;
-    costoUnitario?: number;
-    precioUnitario?: number;
-    porcentajeComision?: number;
-    plantillaGarantia?: string;
-    tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
-    centroCostoId?: string | null;
-    categoria?: string;
-    fotos?: FotoProducto[];
-    descripcionValor?: string;
-    especificaciones?: string;
-    gama?: 'economica' | 'media' | 'premium' | 'estandar';
-    activo?: boolean;
-    aptoParaIa?: boolean;
-  }
-): Promise<ProductoServicio> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const updatePayload: any = {
-    nombre: datos.nombre.trim(),
-    descripcion: datos.descripcion?.trim() || "",
-    unidad: datos.unidad || "m2",
-    costo_unitario: Number(datos.costoUnitario || 0),
-    precio_unitario: Number(datos.precioUnitario || 0),
-    porcentaje_comision: Number(datos.porcentajeComision ?? 5.0),
-    plantilla_garantia: datos.plantillaGarantia || "",
-    tipo: datos.tipo || "servicio",
-    centro_costo_id: datos.centroCostoId || null,
-    categoria: datos.categoria?.trim() || "General",
-    fotos: Array.isArray(datos.fotos) ? datos.fotos : [],
-    descripcion_valor: datos.descripcionValor?.trim() || "",
-    especificaciones: datos.especificaciones?.trim() || "",
-    gama: datos.gama || "estandar",
-    activo: datos.activo !== false,
-    apto_para_ia: datos.aptoParaIa !== false,
-  };
-
-  const { data, error } = await sb
-    .from("productos_servicios")
-    .update(updatePayload)
-    .eq("id", id)
-    .select("*, business_units ( id, nombre )")
-    .single();
-
-  if (error) throw new Error(error.message);
-  return aProductoServicio(data);
-}
-
-/** Eliminar Producto o Servicio */
-export async function eliminarProductoServicio(id: string): Promise<{ ok: boolean }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const { error } = await sb
-    .from("productos_servicios")
-    .delete()
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
-  return { ok: true };
-}
-
-// ============================================================
-// 2. RECETAS APU (ANÁLISIS DE PRECIOS UNITARIOS)
-// ============================================================
-
-/** Guardar Composición APU y Recalcular Costo del Concepto */
-export async function guardarComposicionApu(
-  conceptoId: string,
-  items: Array<{
-    insumoId: string;
-    cantidad: number;
-    desperdicioPct: number;
-    rendimiento: number;
-    costoUnitarioInsumo: number;
-    importeCosto: number;
-    notas?: string;
-  }>
-): Promise<{ ok: boolean; costoCalculado: number }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  // Borrar composición anterior
-  const { error: errDel } = await sb
-    .from("conceptos_apu_composicion")
-    .delete()
-    .eq("concepto_id", conceptoId);
-  if (errDel) throw new Error(errDel.message);
-
-  let costoTotalCalculado = 0;
-
-  if (items.length > 0) {
-    const filasParaInsertar = items.map((it) => {
-      // Cálculo estándar de importe APU
-      const factorDesperdicio = 1 + (Number(it.desperdicioPct || 0) / 100);
-      const rendimiento = Number(it.rendimiento || 1) <= 0 ? 1 : Number(it.rendimiento || 1);
-      // Para mano de obra: cantidad / rendimiento * costo
-      // Para materiales: cantidad * factorDesperdicio * costo
-      const imp = Number(it.importeCosto) || 
-        ((Number(it.cantidad) / rendimiento) * factorDesperdicio * Number(it.costoUnitarioInsumo));
-
-      costoTotalCalculado += imp;
-
-      return {
-        concepto_id: conceptoId,
-        insumo_id: it.insumoId,
-        cantidad: Number(it.cantidad || 1),
-        desperdicio_pct: Number(it.desperdicioPct || 0),
-        rendimiento: rendimiento,
-        costo_unitario_insumo: Number(it.costoUnitarioInsumo || 0),
-        importe_costo: Math.round(imp * 100) / 100,
-        notas: it.notas || null,
-      };
-    });
-
-    const { error: errIns } = await sb
-      .from("conceptos_apu_composicion")
-      .insert(filasParaInsertar);
-
-    if (errIns) throw new Error(errIns.message);
-  }
-
-  // Actualizar costo_unitario en el concepto
-  const costoRedondeado = Math.round(costoTotalCalculado * 100) / 100;
-  await sb
-    .from("productos_servicios")
-    .update({ costo_unitario: costoRedondeado })
-    .eq("id", conceptoId);
-
-  return { ok: true, costoCalculado: costoRedondeado };
-}
-
-// ============================================================
-// 3. CATÁLOGO DE INSUMOS BASE
-// ============================================================
-
-/** Listar Insumos */
-export async function listarInsumos(filtros?: {
-  tipo?: string;
-  oficio?: string;
-  soloActivos?: boolean;
-}): Promise<Insumo[]> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  let query = sb
-    .from("insumos")
-    .select("*, proveedores ( id, nombre )")
-    .order("tipo", { ascending: true })
-    .order("nombre", { ascending: true });
-
-  if (filtros?.tipo && filtros.tipo !== "todos") {
-    query = query.eq("tipo", filtros.tipo);
-  }
-  if (filtros?.oficio && filtros.oficio !== "todos") {
-    query = query.eq("oficio", filtros.oficio);
-  }
-  if (filtros?.soloActivos) {
-    query = query.eq("activo", true);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(aInsumo);
-}
-
-/** Crear Insumo */
-export async function crearInsumo(datos: {
-  codigo?: string;
-  nombre: string;
-  tipo: 'material' | 'mano_obra' | 'herramienta_equipo' | 'flete' | 'subcontrato';
-  unidad: string;
-  costoProveedor: number;
-  precioInterno: number;
-  proveedorId?: string | null;
-  oficio?: string | null;
-  notas?: string | null;
-}): Promise<Insumo> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const { data, error } = await sb
-    .from("insumos")
-    .insert({
-      codigo: datos.codigo?.trim() || null,
-      nombre: datos.nombre.trim(),
-      tipo: datos.tipo,
-      unidad: datos.unidad || "pza",
-      costo_proveedor: Number(datos.costoProveedor || 0),
-      precio_interno: Number(datos.precioInterno || 0),
-      proveedor_id: datos.proveedorId || null,
-      oficio: datos.oficio || null,
-      notas: datos.notas?.trim() || null,
-      activo: true,
-    })
-    .select("*, proveedores ( id, nombre )")
-    .single();
-
-  if (error) throw new Error(error.message);
-  return aInsumo(data);
-}
-
-/** Editar Insumo (registrando historial si cambió el precio) */
-export async function editarInsumo(
-  id: string,
-  datos: {
-    codigo?: string;
-    nombre: string;
-    tipo: 'material' | 'mano_obra' | 'herramienta_equipo' | 'flete' | 'subcontrato';
-    unidad: string;
-    costoProveedor: number;
-    precioInterno: number;
-    proveedorId?: string | null;
-    oficio?: string | null;
-    notas?: string | null;
-    activo?: boolean;
-    motivoCambio?: string;
-  }
-): Promise<Insumo> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  // Obtener valor actual para historial
-  const { data: actual } = await sb
-    .from("insumos")
-    .select("costo_proveedor, precio_interno")
-    .eq("id", id)
-    .single();
-
-  const nuevoCosto = Number(datos.costoProveedor || 0);
-  const nuevoInterno = Number(datos.precioInterno || 0);
-
-  // Si cambió alguno de los precios, guardar en historial
-  if (
-    actual && 
-    (Number(actual.costo_proveedor) !== nuevoCosto || Number(actual.precio_interno) !== nuevoInterno)
-  ) {
-    await sb.from("insumos_historial_precios").insert({
-      insumo_id: id,
-      costo_anterior: Number(actual.costo_proveedor),
-      costo_nuevo: nuevoCosto,
-      precio_interno_anterior: Number(actual.precio_interno),
-      precio_interno_nuevo: nuevoInterno,
-      motivo: datos.motivoCambio || "Ajuste de precio en catálogo",
-    });
-  }
-
-  const { data, error } = await sb
-    .from("insumos")
-    .update({
-      codigo: datos.codigo?.trim() || null,
-      nombre: datos.nombre.trim(),
-      tipo: datos.tipo,
-      unidad: datos.unidad || "pza",
-      costo_proveedor: nuevoCosto,
-      precio_interno: nuevoInterno,
-      proveedor_id: datos.proveedorId || null,
-      oficio: datos.oficio || null,
-      notas: datos.notas?.trim() || null,
-      activo: datos.activo !== false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .select("*, proveedores ( id, nombre )")
-    .single();
-
-  if (error) throw new Error(error.message);
-  return aInsumo(data);
-}
-
-/** Eliminar Insumo */
-export async function eliminarInsumo(id: string): Promise<{ ok: boolean }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const { error } = await sb
-    .from("insumos")
-    .delete()
-    .eq("id", id);
-
-  if (error) throw new Error(error.message);
-  return { ok: true };
-}
-
-/** Historial de Precios de un Insumo */
-export async function obtenerHistorialPreciosInsumo(insumoId: string): Promise<InsumoHistorialPrecio[]> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const { data, error } = await sb
-    .from("insumos_historial_precios")
     .select("*")
-    .eq("insumo_id", insumoId)
-    .order("fecha", { ascending: false });
+    .single();
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map((h: any) => ({
-    id: h.id,
-    insumoId: h.insumo_id,
-    costoAnterior: Number(h.costo_anterior || 0),
-    costoNuevo: Number(h.costo_nuevo || 0),
-    precioInternoAnterior: Number(h.precio_interno_anterior || 0),
-    precioInternoNuevo: Number(h.precio_interno_nuevo || 0),
-    fecha: h.fecha,
-    usuarioId: h.usuario_id || null,
-    motivo: h.motivo || null,
-  }));
+  return aProductoServicio(data);
 }
 
-// ============================================================
-// 4. CENTROS DE COSTO Y METADATA
-// ============================================================
-
-/** Listar Centros de Costo disponibles desde Finanzas */
-export async function obtenerCentrosCosto(): Promise<Array<{ id: string; nombre: string; descripcion: string }>> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  const { data, error } = await sb
-    .from("business_units")
-    .select("id, nombre, descripcion")
-    .eq("activo", true)
-    .order("nombre", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
-}
-
-/** Precios de Impermeabilización para calculadora rápida de Conversaciones */
+/**
+ * Resuelve el precio por m² vigente en el catálogo para los 3 paquetes de
+ * impermeabilización (Acrílico, Estándar 3.5, Premium 4.0 Poliéster) que se
+ * usan en la calculadora comparativa de precios de Conversaciones. Devuelve
+ * null en el paquete que no encuentre coincidencia en el catálogo, para que
+ * el llamador pueda conservar su valor por defecto en ese caso.
+ */
 export async function obtenerPreciosImpermeabilizacionCatalogo(): Promise<{
   acrilico: number | null;
   estandar: number | null;
@@ -582,183 +127,53 @@ export async function obtenerPreciosImpermeabilizacionCatalogo(): Promise<{
   return { acrilico, estandar, premium };
 }
 
-// ============================================================
-// 5. REPORTE DE VENTAS POR PRODUCTO Y CENTRO DE COSTOS
-// ============================================================
-
-export interface MetricaVentaProducto {
-  productoId: string;
-  productoNombre: string;
-  tipo: string;
-  centroCosto: string;
-  categoria: string;
-  unidadesDesplazadas: number;
-  ingresosTotales: number;
-  costoTotal: number;
-  utilidadBruta: number;
-  margenPct: number;
-  cotizacionesCount: number;
-}
-
-export async function obtenerReporteVentasProductos(filtro?: {
-  fechaDesde?: string;
-  fechaHasta?: string;
-  centroCostoId?: string;
-}): Promise<{
-  metricas: MetricaVentaProducto[];
-  resumen: {
-    totalUnidades: number;
-    totalIngresos: number;
-    totalCosto: number;
-    totalUtilidad: number;
-    margenPromedioPct: number;
-  };
-}> {
+/** 3. Editar Producto o Servicio */
+export async function editarProductoServicio(
+  id: string,
+  datos: {
+    nombre: string;
+    descripcion: string;
+    unidad: string;
+    costoUnitario: number;
+    precioUnitario: number;
+    porcentajeComision?: number;
+    plantillaGarantia?: string;
+  }
+): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  // Obtener conceptos de cotizaciones aprobadas o aceptadas que tienen producto_servicio_id
-  let query = sb
-    .from("cotizacion_conceptos")
-    .select(`
-      id,
-      cantidad,
-      precio_unitario,
-      costo_unitario,
-      importe,
-      producto_servicio_id,
-      cotizaciones!inner (
-        id,
-        estatus,
-        created_at
-      ),
-      productos_servicios (
-        id,
-        nombre,
-        tipo,
-        categoria,
-        centro_costo_id,
-        business_units (
-          nombre
-        )
-      )
-    `)
-    .not("producto_servicio_id", "is", null)
-    .in("cotizaciones.estatus", ["aprobada", "aceptada", "instalacion"]);
+  const { data, error } = await sb
+    .from("productos_servicios")
+    .update({
+      nombre: datos.nombre,
+      descripcion: datos.descripcion,
+      unidad: datos.unidad,
+      costo_unitario: datos.costoUnitario,
+      precio_unitario: datos.precioUnitario,
+      porcentaje_comision: Number(datos.porcentajeComision ?? 5.0),
+      plantilla_garantia: datos.plantillaGarantia || "",
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
 
-  if (filtro?.fechaDesde) {
-    query = query.gte("cotizaciones.created_at", filtro.fechaDesde);
-  }
-  if (filtro?.fechaHasta) {
-    query = query.lte("cotizaciones.created_at", filtro.fechaHasta);
-  }
-
-  const { data, error } = await query;
   if (error) throw new Error(error.message);
-
-  const mapa = new Map<string, MetricaVentaProducto>();
-
-  let totalUnidades = 0;
-  let totalIngresos = 0;
-  let totalCosto = 0;
-
-  for (const fila of data ?? []) {
-    const prod = fila.productos_servicios;
-    if (!prod) continue;
-
-    if (filtro?.centroCostoId && filtro.centroCostoId !== "todos") {
-      if (prod.centro_costo_id !== filtro.centroCostoId) continue;
-    }
-
-    const prodId = prod.id;
-    const cant = Number(fila.cantidad || 0);
-    const imp = Number(fila.importe || 0);
-    const cUnit = Number(fila.costo_unitario || 0);
-    const costo = cUnit * cant;
-
-    totalUnidades += cant;
-    totalIngresos += imp;
-    totalCosto += costo;
-
-    const actual = mapa.get(prodId) || {
-      productoId: prodId,
-      productoNombre: prod.nombre,
-      tipo: prod.tipo || "servicio",
-      centroCosto: prod.business_units?.nombre || "Sin Centro Asignado",
-      categoria: prod.categoria || "General",
-      unidadesDesplazadas: 0,
-      ingresosTotales: 0,
-      costoTotal: 0,
-      utilidadBruta: 0,
-      margenPct: 0,
-      cotizacionesCount: 0,
-    };
-
-    actual.unidadesDesplazadas += cant;
-    actual.ingresosTotales += imp;
-    actual.costoTotal += costo;
-    actual.utilidadBruta = actual.ingresosTotales - actual.costoTotal;
-    actual.margenPct = actual.ingresosTotales > 0 
-      ? Math.round((actual.utilidadBruta / actual.ingresosTotales) * 1000) / 10 
-      : 0;
-    actual.cotizacionesCount += 1;
-
-    mapa.set(prodId, actual);
-  }
-
-  const metricas = Array.from(mapa.values()).sort(
-    (a, b) => b.ingresosTotales - a.ingresosTotales
-  );
-  const totalUtilidad = totalIngresos - totalCosto;
-  const margenPromedioPct = totalIngresos > 0 
-    ? Math.round((totalUtilidad / totalIngresos) * 1000) / 10 
-    : 0;
-
-  return {
-    metricas,
-    resumen: {
-      totalUnidades,
-      totalIngresos,
-      totalCosto,
-      totalUtilidad,
-      margenPromedioPct,
-    },
-  };
+  return aProductoServicio(data);
 }
 
-// ============================================================
-// 6. SUBIDA DE FOTOS DE PRODUCTO Y EJEMPLOS DE APLICACIÓN
-// ============================================================
-
-export async function subirImagenProducto(formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
+/** 4. Eliminar Producto o Servicio */
+export async function eliminarProductoServicio(
+  id: string
+): Promise<{ ok: boolean }> {
   await requireAdmin();
   const sb = supabaseServidor();
 
-  const archivo = formData.get("archivo") as File | null;
-  if (!archivo) {
-    return { ok: false, error: "No se proporcionó ningún archivo." };
-  }
+  const { error } = await sb
+    .from("productos_servicios")
+    .delete()
+    .eq("id", id);
 
-  const ext = (archivo.name.split(".").pop() || "jpg").toLowerCase();
-  const timestamp = Date.now();
-  const randomStr = Math.random().toString(36).substring(2, 8);
-  const path = `catalogo/${timestamp}-${randomStr}.${ext}`;
-
-  const buffer = Buffer.from(await archivo.arrayBuffer());
-
-  // Intentar subir a expedientes-fotos (bucket público existente)
-  const { data: uploadData, error: uploadError } = await sb.storage
-    .from("expedientes-fotos")
-    .upload(path, buffer, {
-      contentType: archivo.type || "image/jpeg",
-      upsert: true,
-    });
-
-  if (uploadError || !uploadData) {
-    return { ok: false, error: uploadError?.message || "Error al subir la imagen." };
-  }
-
-  const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(uploadData.path);
-  return { ok: true, url: urlData.publicUrl };
+  if (error) throw new Error(error.message);
+  return { ok: true };
 }
-
