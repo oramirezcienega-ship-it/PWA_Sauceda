@@ -629,6 +629,7 @@ export async function listarComisiones(filtros?: {
         saldoPendiente: Number(row.saldo_pendiente || 0),
         estatus: row.estatus as EstatusComision,
         esAjusteManual: Boolean(row.es_ajuste_manual),
+        montoNeteadoAnticipo: Number(row.monto_neteado_anticipo || 0),
         motivoAjuste: row.motivo_ajuste || "",
         detallesCalculo: row.detalles_calculo || {},
         notas: row.notas || "",
@@ -1013,6 +1014,109 @@ export async function registrarPagoComisiones(datos: {
     return { ok: true, pagoId: pago.id };
   } catch (err: any) {
     return { ok: false, error: err.message || "Error al registrar el pago." };
+  }
+}
+
+/**
+ * Compensa los anticipos/préstamos activos de un asesor contra sus comisiones
+ * ya pendientes (de la más antigua a la más nueva) hasta agotar el anticipo o
+ * los saldos. No genera un pago: las comisiones quedan con
+ * monto_neteado_anticipo para distinguirlas de pagos en efectivo.
+ */
+export async function aplicarAnticiposAComisionesPendientes(
+  asesorId: string
+): Promise<{ ok: boolean; aplicado?: number; comisionesAfectadas?: number; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: anticipos, error: errAnt } = await sb
+      .from("comisiones_anticipos")
+      .select("id, saldo_restante")
+      .eq("asesor_id", asesorId)
+      .eq("estatus", "activo")
+      .gt("saldo_restante", 0)
+      .order("fecha", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (errAnt) throw new Error(errAnt.message);
+    if (!anticipos || anticipos.length === 0) {
+      return { ok: false, error: "Este asesor no tiene anticipos a favor de SAUCEDA pendientes." };
+    }
+
+    const { data: pendientes, error: errPend } = await sb
+      .from("comisiones")
+      .select("id, monto_comision, monto_pagado, saldo_pendiente, monto_neteado_anticipo, anticipo_aplicado_id")
+      .eq("asesor_id", asesorId)
+      .in("estatus", ["pendiente", "parcial"])
+      .gt("saldo_pendiente", 0)
+      .order("fecha", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (errPend) throw new Error(errPend.message);
+    if (!pendientes || pendientes.length === 0) {
+      return { ok: false, error: "Este asesor no tiene comisiones pendientes a las que aplicar el anticipo." };
+    }
+
+    const redondear = (n: number) => Math.round(n * 100) / 100;
+    let idxAnt = 0;
+    const saldosAnt = anticipos.map((a: any) => Number(a.saldo_restante || 0));
+    let totalAplicado = 0;
+    let afectadas = 0;
+
+    for (const com of pendientes) {
+      let saldoCom = Number(com.saldo_pendiente || 0);
+      let aplicadoCom = 0;
+      let primerAnticipoId: string | null = com.anticipo_aplicado_id || null;
+
+      while (saldoCom > 0 && idxAnt < anticipos.length) {
+        const aplicar = Math.min(saldosAnt[idxAnt], saldoCom);
+        if (aplicar > 0) {
+          if (!primerAnticipoId) primerAnticipoId = anticipos[idxAnt].id;
+          saldosAnt[idxAnt] = redondear(saldosAnt[idxAnt] - aplicar);
+          saldoCom = redondear(saldoCom - aplicar);
+          aplicadoCom = redondear(aplicadoCom + aplicar);
+        }
+        if (saldosAnt[idxAnt] <= 0) idxAnt++;
+      }
+
+      if (aplicadoCom > 0) {
+        const nuevoPagado = redondear(Number(com.monto_pagado || 0) + aplicadoCom);
+        const { error: errUpd } = await sb
+          .from("comisiones")
+          .update({
+            monto_pagado: nuevoPagado,
+            saldo_pendiente: saldoCom,
+            estatus: saldoCom <= 0 ? "pagada" : "parcial",
+            anticipo_aplicado_id: primerAnticipoId,
+            monto_neteado_anticipo: redondear(Number(com.monto_neteado_anticipo || 0) + aplicadoCom),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", com.id);
+        if (errUpd) throw new Error(errUpd.message);
+        totalAplicado = redondear(totalAplicado + aplicadoCom);
+        afectadas++;
+      }
+      if (idxAnt >= anticipos.length) break;
+    }
+
+    // Persistir el saldo restante de cada anticipo tocado
+    for (let i = 0; i < anticipos.length; i++) {
+      const original = Number(anticipos[i].saldo_restante || 0);
+      if (saldosAnt[i] === original) continue;
+      const { error: errA } = await sb
+        .from("comisiones_anticipos")
+        .update({
+          saldo_restante: saldosAnt[i],
+          estatus: saldosAnt[i] <= 0 ? "liquidado" : "activo",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", anticipos[i].id);
+      if (errA) throw new Error(errA.message);
+    }
+
+    revalidatePath("/comisiones");
+    return { ok: true, aplicado: totalAplicado, comisionesAfectadas: afectadas };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al aplicar el anticipo." };
   }
 }
 

@@ -1182,6 +1182,8 @@ export interface Comision {
   saldoPendiente: number;
   estatus: EstatusComision;
   esAjusteManual: boolean;
+  /** Monto de esta comisión cubierto por compensación con anticipos a favor de SAUCEDA. */
+  montoNeteadoAnticipo?: number;
   motivoAjuste?: string;
   detallesCalculo?: Record<string, any>;
   notas?: string;
