@@ -138,9 +138,17 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     const rangoTexto = `${dias[0].diaNumero} ${dias[0].mesNombre} — ${dias[6].diaNumero} ${dias[6].mesNombre} ${dias[6].fecha.slice(0, 4)}`;
 
     // 2. Consultar agenda_citas en el rango de la semana (excluyendo canceladas y completadas para enfocar próximos)
+    // Consulta plana, SIN joins embebidos de PostgREST ("*, perfiles(nombre)"):
+    // en este proyecto ya se identificó que ese tipo de embed falla de forma
+    // intermitente en producción (ver el mismo fix en listarComisiones,
+    // sincronizarComision*, obtenerDatosProgramacionInstalacion y
+    // programarInstalacionYDetonarOT). Cuando fallaba aquí, se perdían TODAS
+    // las citas de agenda_citas de la semana (instalaciones e inspecciones
+    // agendadas ahí), dejando sólo las actividades que vienen de
+    // ordenes_trabajo (fuente de datos independiente).
     const { data: citasRaw, error: errCitas } = await sb
       .from("agenda_citas")
-      .select("*, perfiles(nombre)")
+      .select("*")
       .gte("fecha", fechaInicio)
       .lte("fecha", fechaFin)
       .neq("estado", "cancelada")
@@ -290,13 +298,9 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       const idsResp: string[] = Array.isArray(c.asignados_ids) && c.asignados_ids.length > 0
         ? c.asignados_ids
         : (c.perfil_id ? [c.perfil_id] : []);
-      let responsables = idsResp
+      const responsables = idsResp
         .map((id) => mapaPerfiles.get(id))
         .filter(Boolean) as string[];
-
-      if (responsables.length === 0 && c.perfiles?.nombre) {
-        responsables = [c.perfiles.nombre];
-      }
 
       // Buscar si tiene OT vinculada
       const otMatch = (otsRaw || []).find((ot: any) =>
