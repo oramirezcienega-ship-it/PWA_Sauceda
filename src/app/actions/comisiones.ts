@@ -354,16 +354,36 @@ export async function listarComisiones(filtros?: {
 
     // 1b. Auto-sincronización pasiva de inspecciones ejecutadas que no tengan comisión aún
     try {
-      const { data: citasInsp } = await sb
+      let citasInsp: any[] = [];
+      const { data: cData, error: errCData } = await sb
         .from("agenda_citas")
-        .select("id, tipo_cita, estado, notas")
-        .eq("tipo_cita", "inspeccion")
+        .select("*")
+        .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%")
         .limit(50);
+
+      if (errCData) {
+        const { data: cDataFallback } = await sb
+          .from("agenda_citas")
+          .select("*")
+          .eq("tipo_cita", "inspeccion")
+          .limit(50);
+        citasInsp = cDataFallback || [];
+      } else {
+        citasInsp = cData || [];
+      }
 
       const citasInspCandidatas = (citasInsp || []).filter((c: any) => {
         const est = (c.estado || "").toLowerCase();
         const not = (c.notas || "").toLowerCase();
-        return est === "completada" || est === "confirmada" || not.includes("finalizada") || not.includes("retro") || not.includes("ejecutada");
+        return (
+          est === "completada" ||
+          est === "confirmada" ||
+          est === "realizada" ||
+          est === "finalizada" ||
+          not.includes("finalizada") ||
+          not.includes("retro") ||
+          not.includes("ejecutada")
+        );
       });
 
       if (citasInspCandidatas.length > 0) {
@@ -376,7 +396,7 @@ export async function listarComisiones(filtros?: {
         const setExistentes = new Set((comsExistentes || []).map((x: any) => x.cita_id).filter(Boolean));
         for (const cita of citasInspCandidatas) {
           if (!setExistentes.has(cita.id)) {
-            await sincronizarComisionParaInspeccion(cita.id);
+            await sincronizarComisionParaInspeccion(cita.id, { citaData: cita });
           }
         }
       }
@@ -443,7 +463,7 @@ export async function listarComisiones(filtros?: {
         ? sb.from("ordenes_trabajo").select("id, folio, titulo").in("id", ordenTrabajoIds)
         : Promise.resolve({ data: [] }),
       citaIds.length > 0
-        ? sb.from("agenda_citas").select("id, fecha, hora_inicio, tipo_cita, cliente_nombre, direccion, fraccionamiento, expediente_id, prospecto_id").in("id", citaIds)
+        ? sb.from("agenda_citas").select("id, fecha, hora_inicio, tipo_cita, cliente_nombre, fraccionamiento, expediente_id, prospecto_id, notas").in("id", citaIds)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -1284,20 +1304,30 @@ export async function sincronizarComisionParaInspeccion(
   opciones?: {
     montoFijoCustom?: number;
     notas?: string;
+    citaData?: any;
   }
 ): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
   try {
     const sb = supabaseServidor();
 
-    // 1. Obtener la cita de inspección
-    const { data: cita, error: errCita } = await sb
-      .from("agenda_citas")
-      .select("id, tipo_cita, estado, fecha, hora_inicio, hora_fin, perfil_id, expediente_id, prospecto_id, asignados_ids, notas")
-      .eq("id", citaId)
-      .single();
+    // 1. Obtener la cita de inspección (usar citaData si ya fue provista o consultar con select("*"))
+    let cita = opciones?.citaData || null;
 
-    if (errCita || !cita) {
-      return { ok: false, error: "Cita de inspección no encontrada." };
+    if (!cita) {
+      const { data: c, error: errCita } = await sb
+        .from("agenda_citas")
+        .select("*")
+        .eq("id", citaId)
+        .maybeSingle();
+
+      if (errCita) {
+        console.error("Error al consultar cita en agenda_citas:", errCita);
+        return { ok: false, error: errCita.message || "Error al consultar cita de inspección." };
+      }
+      if (!c) {
+        return { ok: false, error: `Cita de inspección (${citaId}) no encontrada en agenda_citas.` };
+      }
+      cita = c;
     }
 
     const esTipoInspeccion = 
@@ -1311,7 +1341,7 @@ export async function sincronizarComisionParaInspeccion(
 
     if (cita.estado !== "completada") {
       try {
-        await sb.from("agenda_citas").update({ estado: "completada" }).eq("id", citaId);
+        await sb.from("agenda_citas").update({ estado: "completada" }).eq("id", cita.id);
       } catch {}
     }
 
@@ -1369,12 +1399,11 @@ export async function sincronizarComisionParaInspeccion(
       reglaOrigen = resRegla.reglaOrigen;
     }
 
-    // 4. Verificar si ya existe comisión para esta cita y asesor
+    // 4. Verificar si ya existe comisión para esta cita
     const { data: comisionExistente } = await sb
       .from("comisiones")
       .select("id, es_ajuste_manual, monto_comision, monto_pagado, estatus")
-      .eq("cita_id", citaId)
-      .eq("asesor_id", asesorId)
+      .eq("cita_id", cita.id)
       .maybeSingle();
 
     const fechaComision = cita.fecha || new Date().toISOString().split("T")[0];
@@ -1396,6 +1425,7 @@ export async function sincronizarComisionParaInspeccion(
       await sb
         .from("comisiones")
         .update({
+          asesor_id: asesorId,
           expediente_id: cita.expediente_id || null,
           tipo_comision: "inspeccion",
           monto_venta: 0,
@@ -1410,6 +1440,8 @@ export async function sincronizarComisionParaInspeccion(
             reglaOrigen,
             origen: "inspeccion_tecnica",
             citaId: cita.id,
+            folioInspeccion: `INSP-${String(cita.id).slice(0, 6).toUpperCase()}`,
+            clienteNombre: cita.cliente_nombre || null,
             fechaInspeccion: cita.fecha,
             fechaCalculo: new Date().toISOString(),
           },
@@ -1447,6 +1479,8 @@ export async function sincronizarComisionParaInspeccion(
           reglaOrigen,
           origen: "inspeccion_tecnica",
           citaId: cita.id,
+          folioInspeccion: `INSP-${String(cita.id).slice(0, 6).toUpperCase()}`,
+          clienteNombre: cita.cliente_nombre || null,
           fechaInspeccion: cita.fecha,
           fechaCalculo: new Date().toISOString(),
         },
@@ -1464,9 +1498,9 @@ export async function sincronizarComisionParaInspeccion(
         errIns.message?.includes('column "tipo_comision"') ||
         errIns.code === "42703"
       ) {
-        throw new Error("Falta ejecutar la migración 0101 en el SQL Editor de Supabase (las columnas cita_id y tipo_comision no existen en la tabla comisiones de esta base de datos).");
+        return { ok: false, error: "Faltan las columnas cita_id y tipo_comision en la tabla comisiones de la base de datos (aplica la migración 0101)." };
       }
-      throw new Error(errIns.message);
+      return { ok: false, error: `Error al registrar comisión: ${errIns.message}` };
     }
 
     revalidatePath("/comisiones");
@@ -1489,12 +1523,15 @@ export async function marcarInspeccionEjecutada(datos: {
     // 1. Obtener cita y validar
     const { data: citaActual, error: errCita } = await sb
       .from("agenda_citas")
-      .select("id, tipo_cita, estado, expediente_id, prospecto_id, perfil_id, notas")
+      .select("*")
       .eq("id", datos.citaId)
-      .single();
+      .maybeSingle();
 
-    if (errCita || !citaActual) {
-      return { ok: false, error: "Cita no encontrada." };
+    if (errCita) {
+      return { ok: false, error: `Error al consultar cita: ${errCita.message}` };
+    }
+    if (!citaActual) {
+      return { ok: false, error: "Cita no encontrada en agenda_citas." };
     }
 
     // 2. Marcar como completada en agenda_citas
@@ -1523,11 +1560,20 @@ export async function marcarInspeccionEjecutada(datos: {
       }
     }
 
-    // 4. Generar/sincronizar la comisión fija
+    // 4. Generar/sincronizar la comisión fija pasando citaActual precargada
     const resCom = await sincronizarComisionParaInspeccion(datos.citaId, {
       montoFijoCustom: datos.montoFijoCustom,
       notas: datos.notas,
+      citaData: {
+        ...citaActual,
+        estado: "completada",
+        notas: datos.notas !== undefined ? datos.notas : citaActual.notas,
+      },
     });
+
+    if (!resCom.ok) {
+      return { ok: false, error: resCom.error };
+    }
 
     revalidatePath("/agenda");
     revalidatePath("/comisiones");
@@ -1584,11 +1630,21 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
     // 4. Procesar inspecciones ejecutadas de expedientes
     let citasInsp: any[] = [];
     try {
-      const { data: cData } = await sb
+      const { data: cData, error: errCData } = await sb
         .from("agenda_citas")
-        .select("id, tipo_cita, estado, notas")
-        .eq("tipo_cita", "inspeccion");
-      citasInsp = cData || [];
+        .select("*")
+        .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%");
+
+      if (errCData) {
+        console.warn("Aviso al consultar citas con filtro OR:", errCData.message);
+        const { data: cDataFallback } = await sb
+          .from("agenda_citas")
+          .select("*")
+          .eq("tipo_cita", "inspeccion");
+        citasInsp = cDataFallback || [];
+      } else {
+        citasInsp = cData || [];
+      }
     } catch (eInspQuery) {
       console.warn("Aviso al consultar citas de inspección:", eInspQuery);
     }
@@ -1596,12 +1652,20 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
     const inspeccionesEjecutadas = citasInsp.filter((c: any) => {
       const est = (c.estado || "").toLowerCase();
       const not = (c.notas || "").toLowerCase();
-      return est === "completada" || est === "confirmada" || not.includes("finalizada") || not.includes("retro") || not.includes("ejecutada");
+      return (
+        est === "completada" ||
+        est === "confirmada" ||
+        est === "realizada" ||
+        est === "finalizada" ||
+        not.includes("finalizada") ||
+        not.includes("retro") ||
+        not.includes("ejecutada")
+      );
     });
 
     const errores: string[] = [];
     for (const insp of inspeccionesEjecutadas) {
-      const res = await sincronizarComisionParaInspeccion(insp.id);
+      const res = await sincronizarComisionParaInspeccion(insp.id, { citaData: insp });
       if (res.ok) {
         procesadas++;
       } else {
