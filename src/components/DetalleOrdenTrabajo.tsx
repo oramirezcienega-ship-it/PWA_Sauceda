@@ -655,7 +655,7 @@ export function DetalleOrdenTrabajo({
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <a
-                      href={`/recibo/${r.id}`}
+                      href={`/recibo/${r.token}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="rounded-lg border border-carbon/15 bg-slate-50 hover:bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-carbon transition"
