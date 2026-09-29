@@ -247,6 +247,31 @@ export async function crearOrdenTrabajo(datos: {
       return { ok: false, error: error.message };
     }
 
+    // Documentos base en automático (recibo si aplica, póliza de garantía,
+    // remisión de venta si hay cotización con precio). Best-effort: si algo
+    // falla aquí no debe impedir que la OT quede creada.
+    try {
+      let clienteNombre = "Cliente Sauceda";
+      let direccionClienteOT: string | null = null;
+      if (prospectoId) {
+        const { data: prospecto } = await sb
+          .from("prospectos")
+          .select("nombre, direccion, fraccionamiento")
+          .eq("id", prospectoId)
+          .maybeSingle();
+        if (prospecto?.nombre) clienteNombre = prospecto.nombre;
+        direccionClienteOT = prospecto?.direccion || prospecto?.fraccionamiento || null;
+      }
+      await generarDocumentosAutomaticosOT(sb, {
+        ordenTrabajoId: nuevaOT.id,
+        ordenFolio: nuevaOT.folio,
+        clienteNombre,
+        direccionCliente: direccionClienteOT || undefined,
+      });
+    } catch (errAuto) {
+      console.error("Aviso: no se pudieron generar documentos automáticos de la OT:", errAuto);
+    }
+
     // Revalidaciones
     revalidatePath("/ordenes-trabajo");
     if (expedienteId) revalidatePath(`/expediente/${expedienteId}`);
@@ -678,6 +703,39 @@ export async function actualizarEstatusOrdenTrabajo(
       }
     }
 
+    // Al cancelar la orden, borrar los documentos auto-generados que no
+    // tienen movimiento financiero propio (recibos y póliza de garantía).
+    // La remisión/factura y el documento de proveedor, al tener movimientos
+    // de Finanzas y comisiones ya sincronizados, sólo se desvinculan de la
+    // OT en vez de borrarse, para no dejar huecos contables.
+    if (nuevoEstatus === "cancelada") {
+      try {
+        await sb.from("recibos_pago").delete().eq("orden_trabajo_id", ordenId);
+
+        await sb
+          .from("garantias_documentos")
+          .delete()
+          .eq("orden_trabajo_id", ordenId)
+          .is("cotizacion_id", null);
+        await sb
+          .from("garantias_documentos")
+          .update({ orden_trabajo_id: null })
+          .eq("orden_trabajo_id", ordenId);
+
+        await sb
+          .from("remisiones_facturas")
+          .update({ orden_trabajo_id: null })
+          .eq("orden_trabajo_id", ordenId);
+
+        await sb
+          .from("documentos_proveedores")
+          .update({ orden_trabajo_id: null })
+          .eq("orden_trabajo_id", ordenId);
+      } catch (errCancel) {
+        console.error("Aviso: no se pudieron limpiar los documentos de la OT cancelada:", errCancel);
+      }
+    }
+
     revalidatePath("/ordenes-trabajo");
     return { ok: true };
   } catch (err: any) {
@@ -725,6 +783,12 @@ export async function eliminarOrdenTrabajo(
     // 4. Desvincular remisión o factura asociada a esta OT
     await sb
       .from("remisiones_facturas")
+      .update({ orden_trabajo_id: null })
+      .eq("orden_trabajo_id", ordenId);
+
+    // 4b. Desvincular documento de proveedor (costo pactado) asociado a esta OT
+    await sb
+      .from("documentos_proveedores")
       .update({ orden_trabajo_id: null })
       .eq("orden_trabajo_id", ordenId);
 
@@ -932,30 +996,33 @@ export async function crearReciboPago(datos: {
     const sb = supabaseServidor();
     const usuario = await usuarioActual();
 
-    // Obtener orden y cotización vinculada para calcular saldos
+    // Obtener orden y cotización vinculada para calcular saldos (consulta
+    // plana, sin joins embebidos de PostgREST: ver nota en
+    // obtenerDatosProgramacionInstalacion / programarInstalacionYDetonarOT
+    // sobre por qué fallan de forma intermitente en producción).
     const { data: ot, error: otErr } = await sb
       .from("ordenes_trabajo")
-      .select(`
-        id,
-        expediente_id,
-        cotizacion_id,
-        prospecto_id,
-        titulo,
-        prospectos(nombre, telefono),
-        cotizaciones(precio_final)
-      `)
+      .select("id, expediente_id, cotizacion_id, prospecto_id, titulo")
       .eq("id", datos.ordenTrabajoId)
-      .single();
+      .maybeSingle();
 
-    if (otErr || !ot) return { ok: false, error: "Orden de trabajo no encontrada." };
+    if (otErr) return { ok: false, error: `Error al consultar la orden de trabajo: ${otErr.message}` };
+    if (!ot) return { ok: false, error: "Orden de trabajo no encontrada." };
 
-    // Obtener recibos previos para saldo anterior
-    const { data: recibosPrevios } = await sb
-      .from("recibos_pago")
-      .select("monto")
-      .eq("orden_trabajo_id", datos.ordenTrabajoId);
+    const [prospectoRes, cotizacionRes, recibosPreviosRes] = await Promise.all([
+      ot.prospecto_id
+        ? sb.from("prospectos").select("nombre, telefono").eq("id", ot.prospecto_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      ot.cotizacion_id
+        ? sb.from("cotizaciones").select("precio_final").eq("id", ot.cotizacion_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      sb.from("recibos_pago").select("monto").eq("orden_trabajo_id", datos.ordenTrabajoId),
+    ]);
+    const prospecto = prospectoRes.data as any;
+    const cotizacion = cotizacionRes.data as any;
+    const recibosPrevios = recibosPreviosRes.data;
 
-    const totalCotizado = Number(ot.cotizaciones?.precio_final || 0);
+    const totalCotizado = Number(cotizacion?.precio_final || 0);
     const pagadoHastaAhora = (recibosPrevios || []).reduce(
       (acc: number, curr: any) => acc + Number(curr.monto || 0),
       0
@@ -987,8 +1054,8 @@ export async function crearReciboPago(datos: {
         orden_trabajo_id: datos.ordenTrabajoId,
         expediente_id: ot.expediente_id,
         cotizacion_id: ot.cotizacion_id,
-        cliente_nombre: ot.prospectos?.nombre || "Cliente Sauceda",
-        cliente_telefono: ot.prospectos?.telefono || null,
+        cliente_nombre: prospecto?.nombre || "Cliente Sauceda",
+        cliente_telefono: prospecto?.telefono || null,
         cliente_direccion: null,
         monto,
         monto_letra: montoLetra,
@@ -1471,6 +1538,141 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
     };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al generar remisión/factura." };
+  }
+}
+
+/** Texto por defecto de la póliza de garantía cuando se genera en automático al crear la OT. */
+function generarContenidoGarantiaPorDefecto(clienteNombre: string, direccion: string): string {
+  const ahora = new Date();
+  const meses = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+  ];
+  const fechaTexto = `${ahora.getDate()} de ${meses[ahora.getMonth()]} de ${ahora.getFullYear()}`;
+
+  return `SAUCEDA CONSTRUYE
+PÓLIZA DE GARANTÍA POR SERVICIO
+
+Por la presente garantizamos los trabajos realizados en la siguiente propiedad:
+
+Cliente: ${clienteNombre}
+Ubicación: ${direccion}
+Fecha de inicio de garantía: ${fechaTexto}
+
+CONDICIONES DE GARANTÍA:
+
+Cobertura de defectos
+Si se detecta cualquier defecto de mano de obra o material relacionado con los trabajos realizados, SAUCEDA Construye se compromete a rectificar dichas fallas sin cargo extra por mano de obra ni materiales.
+
+Tramitación de reclamaciones
+SAUCEDA Construye se compromete a tramitar cualquier reclamación bajo garantía de forma rápida y justa. Para reportar un problema, contáctanos al +52 477 465 4700 o a través de WhatsApp.
+
+Limitaciones de la garantía
+SAUCEDA Construye no será responsable de daños ocasionados por manipulación del trabajo, negligencia del cliente o fenómenos naturales fuera de nuestro control.
+
+Esta garantía es válida únicamente en la propiedad especificada y no es transferible.
+
+SAUCEDA Construye · Tradición con tecnología · +52 477 465 4700 · saucedamx.com`;
+}
+
+/**
+ * Genera en automático los documentos base de una Orden de Trabajo recién
+ * creada: recibo(s) de cobro, póliza de garantía y remisión de venta.
+ * Cada paso es "best effort": si uno falla no debe impedir que la OT quede
+ * creada, sólo se registra un aviso en consola.
+ */
+async function generarDocumentosAutomaticosOT(
+  sb: any,
+  params: {
+    ordenTrabajoId: string;
+    ordenFolio: string;
+    clienteNombre: string;
+    montoCobro?: number | null;
+    metodoPago?: string | null;
+    direccionCliente?: string;
+  }
+): Promise<void> {
+  const { ordenTrabajoId, ordenFolio, clienteNombre, montoCobro, metodoPago, direccionCliente } = params;
+
+  // 1. Recibo(s) de pago: un único recibo si el monto a cobrar es <= $10,000;
+  // si es mayor, se divide en dos recibos iguales (50% / 50%).
+  const monto = Number(montoCobro || 0);
+  if (monto > 0) {
+    try {
+      const metodoRecibo: "transferencia" | "efectivo" | "tarjeta" | "otro" =
+        metodoPago === "efectivo"
+          ? "efectivo"
+          : metodoPago === "transferencia"
+          ? "transferencia"
+          : metodoPago === "terminal_tarjeta" || metodoPago === "meses_sin_intereses"
+          ? "tarjeta"
+          : "otro";
+
+      if (monto <= 10000) {
+        await crearReciboPago({
+          ordenTrabajoId,
+          monto,
+          metodoPago: metodoRecibo,
+          concepto: `Pago único - Orden de Trabajo ${ordenFolio}`,
+        });
+      } else {
+        const primeraParte = Math.round((monto / 2) * 100) / 100;
+        const segundaParte = Math.round((monto - primeraParte) * 100) / 100;
+        await crearReciboPago({
+          ordenTrabajoId,
+          monto: primeraParte,
+          metodoPago: metodoRecibo,
+          concepto: `Pago 1 de 2 (50%) - Orden de Trabajo ${ordenFolio}`,
+        });
+        await crearReciboPago({
+          ordenTrabajoId,
+          monto: segundaParte,
+          metodoPago: metodoRecibo,
+          concepto: `Pago 2 de 2 (50%) - Orden de Trabajo ${ordenFolio}`,
+        });
+      }
+    } catch (errRec) {
+      console.error("Aviso: no se pudo generar recibo(s) automático(s) para OT", ordenFolio, errRec);
+    }
+  }
+
+  // 2. Póliza de garantía por defecto.
+  try {
+    const contenido = generarContenidoGarantiaPorDefecto(
+      clienteNombre,
+      direccionCliente || "Domicilio en Obra"
+    );
+    await guardarGarantiaOT({
+      ordenTrabajoId,
+      titulo: "Póliza de Garantía por Servicio",
+      contenido,
+    });
+  } catch (errGar) {
+    console.error("Aviso: no se pudo generar póliza automática para OT", ordenFolio, errGar);
+  }
+
+  // 3. Remisión de venta: sólo si hay un precio real que facturar (evita
+  // generar remisiones en $0 para OTs manuales sin cotización).
+  try {
+    const { data: otCheck } = await sb
+      .from("ordenes_trabajo")
+      .select("cotizacion_id")
+      .eq("id", ordenTrabajoId)
+      .maybeSingle();
+    let precioFinal = 0;
+    if (otCheck?.cotizacion_id) {
+      const { data: cotCheck } = await sb
+        .from("cotizaciones")
+        .select("precio_final")
+        .eq("id", otCheck.cotizacion_id)
+        .maybeSingle();
+      precioFinal = Number(cotCheck?.precio_final || 0);
+    }
+    if (otCheck?.cotizacion_id && precioFinal > 0) {
+      await generarRemisionDesdeOrdenTrabajo({ ordenTrabajoId, tipo: "remision" });
+    }
+  } catch (errRem) {
+    console.error("Aviso: no se pudo generar remisión automática para OT", ordenFolio, errRem);
   }
 }
 
@@ -2531,15 +2733,28 @@ export async function programarInstalacionYDetonarOT(datos: {
     // Si se asignó proveedor y costo, asegurar documento de proveedor
     if (datos.proveedorId && datos.costoProveedor && datos.costoProveedor > 0) {
       try {
-        await generarDocumentoProveedorAutomatico(
-          sb,
-          otId,
-          datos.proveedorId,
-          datos.costoProveedor,
-          datos.proveedorConcepto || `Instalación OT ${otFolio}`
-        );
+        await generarDocumentoProveedorAutomatico(otId);
       } catch (errProvDoc) {
         console.warn("Aviso al generar documento proveedor automático:", errProvDoc);
+      }
+    }
+
+    // Documentos base en automático (recibo del saldo, póliza de garantía y
+    // remisión de venta), únicamente cuando la OT se acaba de crear: si ya
+    // existía (re-programación), no se vuelven a generar para no duplicar
+    // recibos ni remisiones.
+    if (!otExistente) {
+      try {
+        await generarDocumentosAutomaticosOT(sb, {
+          ordenTrabajoId: otId,
+          ordenFolio: otFolio,
+          clienteNombre: nombreCliente,
+          montoCobro: montoSaldo,
+          metodoPago,
+          direccionCliente,
+        });
+      } catch (errAuto) {
+        console.error("Aviso: no se pudieron generar documentos automáticos de la OT:", errAuto);
       }
     }
 
