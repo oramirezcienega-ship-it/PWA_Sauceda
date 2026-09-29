@@ -1313,7 +1313,7 @@ export async function sincronizarComisionParaRemision(
         fecha: rem.fecha || new Date().toISOString().split("T")[0],
         estado: "pendiente",
         contraparte: asesor?.nombre || "Asesor",
-        crmDealId: nuevaCom.id,
+        crmDealId: rem.expediente_id || null,
       });
     } catch (errFin) {
       console.error("Error al registrar movimiento financiero de comisión (remisión):", errFin);
@@ -1582,7 +1582,7 @@ export async function sincronizarComisionParaRecibo(
         fecha: rec.fecha_pago || new Date().toISOString().split("T")[0],
         estado: "pendiente",
         contraparte: asesor?.nombre || "Asesor",
-        crmDealId: nuevaCom.id,
+        crmDealId: rec.expediente_id || null,
       });
     } catch (errFin) {
       console.error("Error al registrar movimiento financiero de comisión (recibo):", errFin);
@@ -1869,6 +1869,24 @@ export async function sincronizarComisionParaInspeccion(
         return { ok: false, error: "Faltan las columnas cita_id y tipo_comision en la tabla comisiones de la base de datos (aplica la migración 0101)." };
       }
       return { ok: false, error: `Error al registrar comisión: ${errIns.message}` };
+    }
+
+    // Reflejar automáticamente la comisión devengada por inspección en Finanzas (opex_nomina)
+    try {
+      const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
+      const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
+      await registrarMovimientoAutomaticoCRM({
+        tipo: "egreso",
+        lineaPnl: "opex_nomina",
+        monto: montoTarifa,
+        concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${cita.cliente_nombre || "Inspección Técnica"}`,
+        fecha: fechaComision,
+        estado: "pendiente",
+        contraparte: asesor?.nombre || "Asesor",
+        crmDealId: cita.expediente_id || null,
+      });
+    } catch (errFin) {
+      console.error("Error al registrar movimiento financiero de comisión (inspección):", errFin);
     }
 
     revalidatePath("/comisiones");

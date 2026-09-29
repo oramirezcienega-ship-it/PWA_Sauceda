@@ -949,6 +949,19 @@ export async function registrarMovimientoAutomaticoCRM(datos: {
 
     const estado = datos.estado || "pendiente";
 
+    // Validar crmDealId contra expedientes para evitar violación de llave foránea (transactions_crm_deal_id_fkey)
+    let safeCrmDealId: string | null = null;
+    if (datos.crmDealId && typeof datos.crmDealId === "string" && datos.crmDealId.trim()) {
+      const { data: exp } = await sb
+        .from("expedientes")
+        .select("id")
+        .eq("id", datos.crmDealId.trim())
+        .maybeSingle();
+      if (exp?.id) {
+        safeCrmDealId = exp.id;
+      }
+    }
+
     const { data: inserted, error } = await sb
       .from("transactions")
       .insert({
@@ -959,7 +972,7 @@ export async function registrarMovimientoAutomaticoCRM(datos: {
         monto_total: monto,
         concepto: datos.concepto,
         contraparte: datos.contraparte || "",
-        crm_deal_id: datos.crmDealId || null,
+        crm_deal_id: safeCrmDealId,
         estado,
         is_demo: false,
       })
@@ -972,6 +985,228 @@ export async function registrarMovimientoAutomaticoCRM(datos: {
   } catch (err: any) {
     console.error("Error al registrar movimiento financiero automático:", err?.message);
     return { ok: false, error: err?.message || "Error al registrar movimiento financiero." };
+  }
+}
+
+/**
+ * Sincroniza retroactivamente remisiones/facturas de ventas, comisiones de asesores
+ * y compras a proveedores que aún no tienen su movimiento correspondiente en transactions.
+ * Es completamente idempotente: busca por folio o concepto identificable para evitar duplicados.
+ */
+export async function sincronizarMovimientosHistoricosCRM(): Promise<{
+  ok: boolean;
+  resumen: {
+    ventas: number;
+    comisiones: number;
+    proveedores: number;
+    total: number;
+  };
+  mensaje: string;
+}> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  let sincronizadasVentas = 0;
+  let sincronizadasComisiones = 0;
+  let sincronizadasProveedores = 0;
+
+  try {
+    // 1. SINCRONIZAR REMISIONES Y FACTURAS DE VENTA
+    const { data: remisiones, error: errRem } = await sb
+      .from("remisiones_facturas")
+      .select(`
+        id, folio, fecha, monto_total, expediente_id, orden_trabajo_id, cotizacion_id,
+        expedientes:expediente_id(id, cliente),
+        ordenes_trabajo:orden_trabajo_id(id, titulo, folio, prospectos(nombre))
+      `);
+
+    if (!errRem && remisiones && remisiones.length > 0) {
+      const { data: existingVentas } = await sb
+        .from("transactions")
+        .select("concepto, crm_deal_id, monto_total")
+        .eq("tipo", "ingreso");
+
+      const conceptosVentasSet = new Set((existingVentas || []).map((t: any) => t.concepto));
+
+      for (const rem of remisiones) {
+        const monto = Number(rem.monto_total || 0);
+        if (monto <= 0) continue;
+
+        const tituloOt = (rem.ordenes_trabajo as any)?.titulo || "Obra / Servicio";
+        const clienteNombre =
+          (rem.expedientes as any)?.cliente ||
+          (rem.ordenes_trabajo as any)?.prospectos?.nombre ||
+          "Cliente Sauceda";
+        const concepto = `Venta - ${rem.folio} - ${tituloOt}`;
+
+        const yaExiste = (existingVentas || []).some(
+          (t: any) =>
+            (rem.folio && t.concepto?.includes(rem.folio)) ||
+            conceptosVentasSet.has(concepto)
+        );
+        if (yaExiste) continue;
+
+        let pagado = false;
+        let ultimaFechaCobro: string | undefined = undefined;
+        if (rem.orden_trabajo_id) {
+          const { data: recs } = await sb
+            .from("recibos_pago")
+            .select("monto, fecha_pago")
+            .eq("orden_trabajo_id", rem.orden_trabajo_id);
+          const totalRecibos = (recs || []).reduce((acc, r: any) => acc + Number(r.monto || 0), 0);
+          if (totalRecibos >= monto && monto > 0) {
+            pagado = true;
+            ultimaFechaCobro = (recs || [])
+              .map((r: any) => r.fecha_pago)
+              .filter(Boolean)
+              .sort()
+              .pop();
+          }
+        }
+
+        const resReg = await registrarMovimientoAutomaticoCRM({
+          tipo: "ingreso",
+          lineaPnl: "ingresos_ventas",
+          monto,
+          concepto,
+          fecha: rem.fecha || new Date().toISOString().split("T")[0],
+          fechaPago: pagado ? ultimaFechaCobro || rem.fecha : undefined,
+          estado: pagado ? "pagado" : "pendiente",
+          contraparte: clienteNombre,
+          crmDealId: rem.expediente_id || null,
+        });
+
+        if (resReg.ok) {
+          sincronizadasVentas++;
+          conceptosVentasSet.add(concepto);
+        }
+      }
+    }
+
+    // 2. SINCRONIZAR COMISIONES DE ASESORES (remisiones e inspecciones técnicas)
+    const { data: comisiones, error: errCom } = await sb
+      .from("comisiones")
+      .select(`
+        id, fecha, monto_comision, estatus, tipo_comision, expediente_id,
+        perfiles:asesor_id(nombre),
+        remisiones_facturas:remision_factura_id(folio),
+        expedientes:expediente_id(cliente)
+      `)
+      .neq("estatus", "cancelada");
+
+    if (!errCom && comisiones && comisiones.length > 0) {
+      const { data: existingComs } = await sb
+        .from("transactions")
+        .select("concepto, monto_total")
+        .eq("tipo", "egreso");
+
+      for (const com of comisiones) {
+        const monto = Number(com.monto_comision || 0);
+        if (monto <= 0) continue;
+
+        const asesorNombre = (com.perfiles as any)?.nombre || "Asesor";
+        const remFolio = (com.remisiones_facturas as any)?.folio;
+        const clienteExp = (com.expedientes as any)?.cliente;
+
+        let concepto = "";
+        if (com.tipo_comision === "inspeccion") {
+          concepto = `Comisión ${asesorNombre} - ${clienteExp || "Inspección Técnica"}`;
+        } else {
+          concepto = `Comisión ${asesorNombre} - ${remFolio || "Venta de Obra"}`;
+        }
+
+        const yaExiste = (existingComs || []).some(
+          (t: any) =>
+            t.concepto === concepto ||
+            (remFolio && t.concepto?.includes(remFolio)) ||
+            (com.tipo_comision === "inspeccion" && clienteExp && t.concepto?.includes(clienteExp) && t.concepto?.includes(asesorNombre))
+        );
+        if (yaExiste) continue;
+
+        const resReg = await registrarMovimientoAutomaticoCRM({
+          tipo: "egreso",
+          lineaPnl: "opex_nomina",
+          monto,
+          concepto,
+          fecha: com.fecha || new Date().toISOString().split("T")[0],
+          estado: com.estatus === "pagada" ? "pagado" : "pendiente",
+          contraparte: asesorNombre,
+          crmDealId: com.expediente_id || null,
+        });
+
+        if (resReg.ok) {
+          sincronizadasComisiones++;
+        }
+      }
+    }
+
+    // 3. SINCRONIZAR COMPRAS A PROVEEDORES
+    const { data: docProveedores, error: errProv } = await sb
+      .from("documentos_proveedores")
+      .select(`
+        id, folio, folio_proveedor, fecha, monto, concepto, expediente_id,
+        proveedores:proveedor_id(nombre)
+      `);
+
+    if (!errProv && docProveedores && docProveedores.length > 0) {
+      const { data: existingProvs } = await sb
+        .from("transactions")
+        .select("concepto")
+        .eq("tipo", "egreso");
+
+      for (const doc of docProveedores) {
+        const monto = Number(doc.monto || 0);
+        if (monto <= 0) continue;
+
+        const provNombre = (doc.proveedores as any)?.nombre || "Proveedor";
+        const folioStr = doc.folio_proveedor || doc.folio || "s/folio";
+        const concepto = `Compra a Proveedor - ${provNombre} - ${folioStr}`;
+
+        const yaExiste = (existingProvs || []).some(
+          (t: any) => (folioStr && t.concepto?.includes(folioStr)) || t.concepto === concepto
+        );
+        if (yaExiste) continue;
+
+        const resReg = await registrarMovimientoAutomaticoCRM({
+          tipo: "egreso",
+          lineaPnl: "costo_directo",
+          monto,
+          concepto,
+          fecha: doc.fecha || new Date().toISOString().split("T")[0],
+          estado: "pendiente",
+          contraparte: provNombre,
+          crmDealId: doc.expediente_id || null,
+        });
+
+        if (resReg.ok) {
+          sincronizadasProveedores++;
+        }
+      }
+    }
+
+    const total = sincronizadasVentas + sincronizadasComisiones + sincronizadasProveedores;
+    return {
+      ok: true,
+      resumen: {
+        ventas: sincronizadasVentas,
+        comisiones: sincronizadasComisiones,
+        proveedores: sincronizadasProveedores,
+        total,
+      },
+      mensaje: `Sincronización exitosa: ${sincronizadasVentas} ventas, ${sincronizadasComisiones} comisiones y ${sincronizadasProveedores} compras a proveedores incorporadas a Finanzas.`,
+    };
+  } catch (err: any) {
+    console.error("Error en sincronizarMovimientosHistoricosCRM:", err);
+    return {
+      ok: false,
+      resumen: {
+        ventas: sincronizadasVentas,
+        comisiones: sincronizadasComisiones,
+        proveedores: sincronizadasProveedores,
+        total: 0,
+      },
+      mensaje: err?.message || "Error al sincronizar movimientos del CRM con Finanzas.",
+    };
   }
 }
 

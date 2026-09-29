@@ -1495,7 +1495,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         fechaPago: yaLiquidada ? ultimaFechaCobro || undefined : undefined,
         estado: yaLiquidada ? "pagado" : "pendiente",
         contraparte: ot.prospectos?.nombre || "Cliente",
-        crmDealId: nuevaRem.id,
+        crmDealId: ot.expediente_id || null,
       });
     } catch (errFin) {
       console.error("Error al registrar movimiento financiero de venta desde OT:", errFin);

@@ -5,7 +5,8 @@ import type { BusinessUnit, MoneyAccount, Category, Transaction } from "@/app/ac
 import {
   obtenerMovimientosFinanzas,
   eliminarMovimientoFinanzas,
-  marcarMovimientoPagado
+  marcarMovimientoPagado,
+  sincronizarMovimientosHistoricosCRM
 } from "@/app/actions/finanzas";
 import { obtenerExpedientesCerradosSinComision } from "@/app/actions/reportes-ia";
 import { ModalNuevoMovimiento } from "./ModalNuevoMovimiento";
@@ -51,6 +52,7 @@ export function TabMovimientos({
     Array<{ id: string; cliente: string; valor_estimado: number; ultimo_movimiento: string }>
   >([]);
   const [cargandoExpedientes, setCargandoExpedientes] = useState(false);
+  const [sincronizandoCRM, setSincronizandoCRM] = useState(false);
 
   const cargarMovimientos = async () => {
     setCargando(true);
@@ -90,6 +92,25 @@ export function TabMovimientos({
     cargarMovimientos();
     cargarExpedientesCRM();
   }, [fechaInicio, fechaFin, businessUnitId, tipoFiltro, categoriaFiltro, cuentaFiltro, estadoFiltro, busqueda]);
+
+  const handleSincronizarCRM = async () => {
+    setSincronizandoCRM(true);
+    try {
+      const res = await sincronizarMovimientosHistoricosCRM();
+      if (res.ok) {
+        alert(res.mensaje);
+        await cargarMovimientos();
+        await cargarExpedientesCRM();
+        onMovimientoModificado();
+      } else {
+        alert("Error al sincronizar: " + res.mensaje);
+      }
+    } catch (err: any) {
+      alert("Error inesperado al sincronizar con Finanzas: " + (err?.message || ""));
+    } finally {
+      setSincronizandoCRM(false);
+    }
+  };
 
   const handleEliminar = async (id: string) => {
     if (!confirm("¿Seguro que deseas eliminar este movimiento contable? Se anularán sus asientos en automático.")) {
@@ -131,7 +152,17 @@ export function TabMovimientos({
               Registros detallados de ingresos, egresos y traspasos con conciliación automática
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSincronizarCRM}
+              disabled={sincronizandoCRM}
+              className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Sincroniza y refleja en Finanzas todas las remisiones, comisiones y compras a proveedores existentes en el CRM"
+            >
+              <span>{sincronizandoCRM ? "⏳" : "🔄"}</span>
+              {sincronizandoCRM ? "Sincronizando..." : "Sincronizar CRM"}
+            </button>
             <button
               type="button"
               onClick={() => setShowImportarModal(true)}

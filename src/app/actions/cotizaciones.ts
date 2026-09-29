@@ -1581,8 +1581,30 @@ export async function crearRemisionFactura(
 
   if (errDoc) throw new Error(errDoc.message);
 
-  // 4. Registrar transacciones financieras
-  // Registro de Ingreso (Venta)
+  // 4. Registrar transacciones financieras (compatibilidad y nuevo módulo de Finanzas)
+  // Reflejar venta en nuevo módulo de Finanzas & Contabilidad (partida doble)
+  try {
+    const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
+    let clienteNombre = "Cliente";
+    if (cot.prospecto_id) {
+      const { data: pr } = await sb.from("prospectos").select("nombre").eq("id", cot.prospecto_id).maybeSingle();
+      if (pr?.nombre) clienteNombre = pr.nombre;
+    }
+    await registrarMovimientoAutomaticoCRM({
+      tipo: "ingreso",
+      lineaPnl: "ingresos_ventas",
+      monto: total,
+      concepto: `Venta - ${datos.folio} - Cotización ${cotizacionId}`,
+      fecha: datos.fecha || new Date().toISOString().split("T")[0],
+      estado: "pendiente",
+      contraparte: clienteNombre,
+      crmDealId: cot.expediente_id || null,
+    });
+  } catch (errFin) {
+    console.error("Error al registrar movimiento financiero de venta en Finanzas:", errFin);
+  }
+
+  // Registro legado en transacciones_financieras
   const transIngreso = {
     fecha: datos.fecha || new Date().toISOString().split("T")[0],
     tipo: "ingreso",
