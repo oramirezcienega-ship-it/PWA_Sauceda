@@ -353,6 +353,33 @@ export async function listarComisiones(filtros?: {
       console.warn("Aviso al depurar comisiones huérfanas de recibos:", eDel);
     }
 
+    // 1b. Auto-sincronización pasiva de inspecciones ejecutadas que no tengan comisión aún
+    try {
+      const { data: citasInspCandidatas } = await sb
+        .from("agenda_citas")
+        .select("id, estado, notas")
+        .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%")
+        .or("estado.eq.completada,notas.ilike.%Finalizada%,notas.ilike.%Retro%")
+        .limit(30);
+
+      if (citasInspCandidatas && citasInspCandidatas.length > 0) {
+        const ids = citasInspCandidatas.map((c) => c.id);
+        const { data: comsExistentes } = await sb
+          .from("comisiones")
+          .select("cita_id")
+          .in("cita_id", ids);
+
+        const setExistentes = new Set((comsExistentes || []).map((x: any) => x.cita_id));
+        for (const cita of citasInspCandidatas) {
+          if (!setExistentes.has(cita.id)) {
+            await sincronizarComisionParaInspeccion(cita.id);
+          }
+        }
+      }
+    } catch (eAutoSync) {
+      console.warn("Aviso en auto-sync pasivo de comisiones de inspección:", eAutoSync);
+    }
+
     // 2. Consultar comisiones directamente (100% plano, sin ningún join en PostgREST)
     let query = sb
       .from("comisiones")
@@ -1508,8 +1535,19 @@ export async function sincronizarComisionParaInspeccion(
       return { ok: false, error: "Cita de inspección no encontrada." };
     }
 
-    if (cita.tipo_cita !== "inspeccion") {
+    const esTipoInspeccion = 
+      cita.tipo_cita === "inspeccion" || 
+      cita.tipo_cita === "visita" || 
+      (cita.notas || "").toLowerCase().includes("inspecci");
+
+    if (!esTipoInspeccion) {
       return { ok: false, error: "La cita no es de tipo inspección técnica." };
+    }
+
+    if (cita.estado !== "completada") {
+      try {
+        await sb.from("agenda_citas").update({ estado: "completada" }).eq("id", citaId);
+      } catch {}
     }
 
     // 2. Resolver el asesor responsable de la inspección
@@ -1772,8 +1810,8 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
     const { data: inspecciones } = await sb
       .from("agenda_citas")
       .select("id")
-      .eq("tipo_cita", "inspeccion")
-      .eq("estado", "completada");
+      .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%")
+      .or("estado.eq.completada,notas.ilike.%Finalizada%,notas.ilike.%Retro%");
 
     for (const insp of inspecciones || []) {
       const res = await sincronizarComisionParaInspeccion(insp.id);

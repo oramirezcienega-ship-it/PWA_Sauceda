@@ -494,6 +494,36 @@ export async function concluirTareaYProgramarSiguiente(params: ConcluirTareaPara
     }
   }
 
+  // 1b. Si se concluyó una cita de inspección técnica o el expediente/prospecto tiene inspecciones asociadas, sincronizar comisión fija
+  try {
+    const { sincronizarComisionParaInspeccion } = await import("@/app/actions/comisiones");
+    if (params.citaId) {
+      await sincronizarComisionParaInspeccion(params.citaId);
+    }
+    if (params.expedienteId) {
+      const { data: citasInspExp } = await sb
+        .from("agenda_citas")
+        .select("id")
+        .eq("expediente_id", params.expedienteId)
+        .eq("tipo_cita", "inspeccion");
+      for (const c of citasInspExp || []) {
+        await sincronizarComisionParaInspeccion(c.id);
+      }
+    }
+    if (params.prospectoId) {
+      const { data: citasInspPros } = await sb
+        .from("agenda_citas")
+        .select("id")
+        .eq("prospecto_id", params.prospectoId)
+        .eq("tipo_cita", "inspeccion");
+      for (const c of citasInspPros || []) {
+        await sincronizarComisionParaInspeccion(c.id);
+      }
+    }
+  } catch (errCom) {
+    console.warn("Aviso al sincronizar comisión por inspección en bpm:", errCom);
+  }
+
   // 2. Registrar en la bitácora de actividades
   const textoActividad = params.resultadoNotas?.trim() 
     ? `✅ Actividad/Seguimiento concluido: "${params.resultadoNotas.trim()}"`
