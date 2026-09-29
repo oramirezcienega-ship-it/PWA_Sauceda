@@ -747,20 +747,20 @@ export function ModuloComisiones({
           {/* TABLA PRINCIPAL DE MOVIMIENTOS */}
           <div className="bg-white border border-carbon/10 rounded-2xl shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-[11px]">
                 <thead className="bg-slate-50 border-b border-carbon/10 text-carbon/70 uppercase text-[10px] tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Folio / Fecha</th>
-                    <th className="py-3 px-4">Asesor</th>
-                    <th className="py-3 px-4">Cliente / Empresa</th>
-                    <th className="py-3 px-4">Servicio</th>
-                    <th className="py-3 px-4 text-right">Venta</th>
-                    <th className="py-3 px-4 text-right">Base Comisionable</th>
-                    <th className="py-3 px-4 text-center">% Com.</th>
-                    <th className="py-3 px-4 text-right">Comisión</th>
-                    <th className="py-3 px-4 text-right">Pagado</th>
-                    <th className="py-3 px-4 text-right">Saldo Pend.</th>
-                    <th className="py-3 px-4 text-center">Estatus</th>
+                    <th className="py-3 px-2">Folio / Fecha</th>
+                    <th className="py-3 px-2">Asesor</th>
+                    <th className="py-3 px-2">Cliente / Empresa</th>
+                    <th className="py-3 px-2">Servicio</th>
+                    <th className="py-3 px-2 text-right">Venta</th>
+                    <th className="py-3 px-2 text-right">Base Comisionable</th>
+                    <th className="py-3 px-2 text-center">% Com.</th>
+                    <th className="py-3 px-2 text-right">Comisión</th>
+                    <th className="py-3 px-2 text-right">Pagado</th>
+                    <th className="py-3 px-2 text-right">Saldo Pend.</th>
+                    <th className="py-3 px-2 text-center">Estatus</th>
                     <th className="py-3 px-2 text-center sticky right-0 z-10 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">
                       Acciones
                     </th>
@@ -790,7 +790,7 @@ export function ModuloComisiones({
                     comisionesFiltradas.map((c) => (
                       <tr key={c.id} className={`hover:bg-slate-50/70 transition ${c.tipoComision === "inspeccion" ? "bg-amber-50/20" : ""}`}>
                         {/* Folio / Fecha */}
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-2">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold text-verde-profundo">
                               {c.remisionFolio || (c.tipoComision === "inspeccion" ? "INSP" : "S/F")}
@@ -821,12 +821,12 @@ export function ModuloComisiones({
                         </td>
 
                         {/* Asesor */}
-                        <td className="py-3 px-4 font-semibold text-carbon">
+                        <td className="py-3 px-2 font-semibold text-carbon">
                           {c.asesorNombre}
                         </td>
 
                         {/* Cliente / Empresa */}
-                        <td className="py-3 px-4 max-w-[180px]">
+                        <td className="py-3 px-2 max-w-[150px]">
                           <span className="font-medium text-carbon truncate block" title={c.clienteNombre}>
                             {c.clienteNombre}
                           </span>
@@ -849,14 +849,14 @@ export function ModuloComisiones({
                         </td>
 
                         {/* Servicio */}
-                        <td className="py-3 px-4 capitalize text-carbon/80 whitespace-nowrap">
+                        <td className="py-3 px-2 capitalize text-carbon/80 whitespace-nowrap">
                           {c.tipoComision === "inspeccion"
                             ? "🔍 Inspección Técnica"
                             : (c.servicioTipo?.replace(/_/g, " ") || "Construcción")}
                         </td>
 
                         {/* Venta */}
-                        <td className="py-3 px-4 text-right font-mono font-medium text-carbon whitespace-nowrap">
+                        <td className="py-3 px-2 text-right font-mono font-medium text-carbon whitespace-nowrap">
                           {c.tipoComision === "inspeccion" ? (
                             <span className="text-[11px] text-carbon/40 italic">Tarifa Fija</span>
                           ) : (
@@ -865,7 +865,7 @@ export function ModuloComisiones({
                         </td>
 
                         {/* Base Comisionable = Venta - Costo Proveedor - Comisión Bancaria */}
-                        <td className="py-3 px-4 text-right font-mono font-medium text-emerald-700 whitespace-nowrap">
+                        <td className="py-3 px-2 text-right font-mono font-medium text-emerald-700 whitespace-nowrap">
                           {formatoMoneda(c.baseComisionable)}
                           {c.tipoComision !== "inspeccion" && (c.costoProveedor > 0 || c.comisionBancaria > 0) && (
                             <span
@@ -878,7 +878,7 @@ export function ModuloComisiones({
                         </td>
 
                         {/* % Comisión */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <td className="py-3 px-2 text-center whitespace-nowrap">
                           {c.tipoComision === "inspeccion" ? (
                             <span className="font-mono font-bold text-amber-800 text-[10px] bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
                               FIJA
@@ -897,22 +897,22 @@ export function ModuloComisiones({
                         </td>
 
                         {/* Monto Comisión */}
-                        <td className="py-3 px-4 text-right font-mono font-bold text-blue-900 whitespace-nowrap">
+                        <td className="py-3 px-2 text-right font-mono font-bold text-blue-900 whitespace-nowrap">
                           {formatoMoneda(c.montoComision)}
                         </td>
 
                         {/* Monto Pagado */}
-                        <td className="py-3 px-4 text-right font-mono text-emerald-700 whitespace-nowrap">
+                        <td className="py-3 px-2 text-right font-mono text-emerald-700 whitespace-nowrap">
                           {formatoMoneda(c.montoPagado)}
                         </td>
 
                         {/* Saldo Pendiente */}
-                        <td className="py-3 px-4 text-right font-mono font-bold text-amber-950 whitespace-nowrap">
+                        <td className="py-3 px-2 text-right font-mono font-bold text-amber-950 whitespace-nowrap">
                           {formatoMoneda(c.saldoPendiente)}
                         </td>
 
                         {/* Estatus */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <td className="py-3 px-2 text-center whitespace-nowrap">
                           <span
                             className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                               c.estatus === "pagada"
