@@ -2598,6 +2598,7 @@ export async function programarInstalacionYDetonarOT(datos: {
             "524776735044",
           ]
         );
+        let textoRegistrado = `[plantilla: confirmacion_instalacion] ${mensajeCliente}`;
         if (!resCli.ok) {
           resCli = await enviarWhatsAppPlantilla(
             telefonoCliente,
@@ -2614,7 +2615,26 @@ export async function programarInstalacionYDetonarOT(datos: {
           );
         }
         if (!resCli.ok) {
-          await enviarWhatsAppTexto(telefonoCliente, mensajeCliente);
+          resCli = await enviarWhatsAppTexto(telefonoCliente, mensajeCliente);
+          textoRegistrado = mensajeCliente;
+        }
+
+        // Registrar el envío en el historial de conversaciones de WhatsApp,
+        // igual que el resto de los envíos del CRM, para que aparezca en la
+        // bandeja de Conversaciones y reciba las actualizaciones de estado
+        // (entregado/leído) del webhook de Meta.
+        const { error: errMsg } = await sb.from("mensajes_whatsapp").insert({
+          telefono: normalizarTelefono(telefonoCliente),
+          texto: textoRegistrado,
+          direccion: "out",
+          expediente_id: cot.expediente_id,
+          prospecto_id: cot.prospecto_id,
+          estado: resCli.ok ? "enviado" : `error:${(resCli as any).errorDetail || resCli.error || "desconocido"}`,
+          agente: usuario?.email || "",
+          wa_message_id: (resCli as any).messageId || null,
+        });
+        if (errMsg) {
+          console.error("Error al registrar en historial de WhatsApp la confirmación de instalación:", errMsg.message);
         }
       } catch (errW) {
         console.warn("Aviso WhatsApp cliente:", errW);
