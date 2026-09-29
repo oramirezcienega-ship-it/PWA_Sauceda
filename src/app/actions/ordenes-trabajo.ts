@@ -212,7 +212,7 @@ export async function crearOrdenTrabajo(datos: {
       if (!cotEstado) {
         return { ok: false, error: "La cotización indicada no existe." };
       }
-      if (cotEstado.estatus !== "aceptada") {
+      if (cotEstado.estatus !== "aceptada" && cotEstado.estatus !== "instalacion") {
         return {
           ok: false,
           error: `La cotización ${cotizacionId} está en estado "${cotEstado.estatus}". Solo se puede crear una orden de trabajo desde una cotización aceptada por el cliente.`,
