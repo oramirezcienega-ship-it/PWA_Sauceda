@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Comision, ComisionPago } from "@/lib/types";
 import { calcularTotalesTarjetas } from "@/lib/comisiones-totales";
 
@@ -14,6 +16,24 @@ interface Props {
   alCerrar: () => void;
 }
 
+// Al imprimir solo se muestra este documento (el resto de la página se oculta),
+// en hoja carta/A4 horizontal con márgenes chicos para aprovechar el espacio.
+const ESTILOS_IMPRESION = `
+@media print {
+  @page { size: landscape; margin: 8mm; }
+  body > *:not([data-print-root]) { display: none !important; }
+  html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
+  [data-print-root] { position: static !important; display: block !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+  [data-print-doc] { box-shadow: none !important; border: 0 !important; border-radius: 0 !important; max-width: none !important; width: 100% !important; overflow: visible !important; }
+  [data-print-body] { max-height: none !important; overflow: visible !important; padding: 0 !important; }
+  [data-print-doc] table { page-break-inside: auto; }
+  [data-print-doc] tr { page-break-inside: avoid; }
+  [data-print-doc] thead { display: table-header-group; }
+  [data-print-doc] tfoot { display: table-row-group; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+`;
+
 export function ModalEstadoCuentaImprimible({
   asesorNombre,
   asesorTelefono,
@@ -23,20 +43,31 @@ export function ModalEstadoCuentaImprimible({
   anticiposPendientes = 0,
   alCerrar,
 }: Props) {
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+
   const formatoMoneda = (val: number) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
 
   // Totales
-  const totalVentas = comisiones.reduce((acc, c) => acc + c.montoVenta, 0);
   const tarjetasExtra = calcularTotalesTarjetas(comisiones);
+  const totalVentas = comisiones.reduce((acc, c) => acc + c.montoVenta, 0);
   const totalBase = comisiones.reduce((acc, c) => acc + c.baseComisionable, 0);
   const totalComisiones = comisiones.reduce((acc, c) => acc + c.montoComision, 0);
   const totalPagado = comisiones.reduce((acc, c) => acc + c.montoPagado, 0);
   const saldoPendiente = comisiones.reduce((acc, c) => acc + c.saldoPendiente, 0);
-
   const saldoNeto = saldoPendiente - anticiposPendientes;
+  const porLiquidar = comisiones.filter((c) => c.saldoPendiente > 0).length;
 
   const handleImprimir = () => {
+    // El nombre sugerido del PDF sale del título del documento
+    const tituloOriginal = document.title;
+    document.title = `Reporte de Comisiones - ${asesorNombre} - ${periodoTexto}`.replace(/[\\/:*?"<>|]/g, "-");
+    const restaurar = () => {
+      document.title = tituloOriginal;
+      window.removeEventListener("afterprint", restaurar);
+    };
+    window.addEventListener("afterprint", restaurar);
     window.print();
   };
 
@@ -67,9 +98,38 @@ export function ModalEstadoCuentaImprimible({
     window.open(url, "_blank");
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:z-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden border border-carbon/10 text-carbon my-auto print:shadow-none print:border-none print:rounded-none print:max-w-none">
+  const Kpi = ({
+    titulo,
+    valor,
+    sub,
+    clases,
+    colorValor,
+  }: {
+    titulo: string;
+    valor: string;
+    sub?: React.ReactNode;
+    clases: string;
+    colorValor: string;
+  }) => (
+    <div className={`px-2.5 py-1.5 rounded-lg border ${clases}`}>
+      <span className="text-[8px] uppercase font-bold tracking-wider text-carbon/60 block leading-tight">
+        {titulo}
+      </span>
+      <span className={`text-[13px] font-mono font-bold block leading-tight mt-0.5 ${colorValor}`}>{valor}</span>
+      {sub && <span className="text-[8px] text-carbon/60 block leading-tight mt-0.5">{sub}</span>}
+    </div>
+  );
+
+  const contenido = (
+    <div
+      data-print-root
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
+    >
+      <style>{ESTILOS_IMPRESION}</style>
+      <div
+        data-print-doc
+        className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full overflow-hidden border border-carbon/10 text-carbon my-auto"
+      >
         {/* Barra superior de acciones (oculta al imprimir) */}
         <div className="bg-verde-profundo text-crema px-6 py-3 flex items-center justify-between border-b border-dorado/30 print:hidden">
           <div className="flex items-center gap-2">
@@ -110,284 +170,237 @@ export function ModalEstadoCuentaImprimible({
           </div>
         </div>
 
-        {/* DOCUMENTO MEMBRETADO OFICIAL */}
-        <div className="p-8 sm:p-12 print:p-8 max-h-[85vh] print:max-h-none overflow-y-auto print:overflow-visible">
-          {/* Encabezado membretado */}
-          <div className="border-b-2 border-verde-profundo pb-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.svg" alt="Sauceda" className="h-10 w-10" />
-                <div>
-                  <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo leading-none">
-                    SAUCEDA
-                  </h1>
-                  <p className="font-titular text-[11px] font-semibold tracking-widest text-sauce uppercase mt-1">
-                    Bienes Raíces & Construcción
-                  </p>
-                </div>
+        {/* DOCUMENTO */}
+        <div data-print-body className="p-6 max-h-[85vh] overflow-y-auto">
+          {/* Encabezado compacto: marca a la izquierda, asesor y período a la derecha */}
+          <div className="border-b-2 border-verde-profundo pb-3 mb-3 flex items-end justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="Sauceda" className="h-8 w-8" />
+              <div>
+                <h1 className="font-titular text-lg font-bold tracking-tight text-verde-profundo leading-none">
+                  SAUCEDA
+                </h1>
+                <p className="font-titular text-[9px] font-semibold tracking-widest text-sauce uppercase mt-0.5">
+                  Bienes Raíces & Construcción · Administración y Finanzas
+                </p>
               </div>
-              <p className="text-[11px] text-carbon/60 mt-2">
-                León, Guanajuato · Departamento de Administración y Finanzas
-              </p>
             </div>
 
-            <div className="text-left sm:text-right">
-              <span className="inline-block bg-verde-profundo text-crema text-[11px] font-bold px-3 py-1 rounded-md uppercase tracking-wider">
-                Estado de Cuenta de Comisiones
+            <div className="text-right">
+              <span className="inline-block bg-verde-profundo text-crema text-[10px] font-bold px-2.5 py-0.5 rounded uppercase tracking-wider">
+                Reporte de Comisiones
               </span>
-              <div className="font-mono text-xs text-carbon/60 mt-2">
+              <div className="text-[13px] font-bold text-verde-profundo mt-1 leading-tight">{asesorNombre}</div>
+              <div className="text-[10px] text-carbon/70 leading-tight">
                 Período: <span className="font-bold text-carbon">{periodoTexto}</span>
               </div>
-              <div className="text-[11px] text-carbon/50 mt-0.5">
-                Fecha de Emisión: {new Date().toLocaleDateString("es-MX", { dateStyle: "long" })}
+              <div className="text-[9px] text-carbon/50 leading-tight">
+                Emitido el {new Date().toLocaleDateString("es-MX", { dateStyle: "long" })}
+                {asesorTelefono ? ` · Tel. ${asesorTelefono}` : ""}
               </div>
             </div>
           </div>
 
-          {/* Datos del Asesor */}
-          <div className="bg-slate-50 border border-carbon/10 rounded-xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div>
-              <span className="text-carbon/50 block text-[10px] uppercase font-bold tracking-wider">
-                Asesor Comercial
-              </span>
-              <span className="font-bold text-sm text-verde-profundo block mt-0.5">
-                {asesorNombre}
-              </span>
-            </div>
-            <div>
-              <span className="text-carbon/50 block text-[10px] uppercase font-bold tracking-wider">
-                Teléfono de Contacto
-              </span>
-              <span className="font-mono text-carbon font-semibold block mt-0.5">
-                {asesorTelefono || "No registrado"}
-              </span>
-            </div>
-            <div>
-              <span className="text-carbon/50 block text-[10px] uppercase font-bold tracking-wider">
-                Ventas Comisionadas
-              </span>
-              <span className="font-bold text-carbon block mt-0.5">
-                {comisiones.length} documento(s)
-              </span>
-            </div>
+          {/* Resumen: una sola fila de tarjetas compactas */}
+          <div className="grid grid-cols-3 sm:grid-cols-6 print:grid-cols-6 gap-2 mb-3">
+            <Kpi
+              titulo="Total Ventas"
+              valor={formatoMoneda(totalVentas)}
+              clases="bg-slate-50 border-carbon/10"
+              colorValor="text-carbon"
+            />
+            <Kpi
+              titulo="Base Comisionable"
+              valor={formatoMoneda(tarjetasExtra.baseVentas)}
+              sub={`${tarjetasExtra.ventasCount} ventas`}
+              clases="bg-slate-50 border-carbon/10"
+              colorValor="text-emerald-700"
+            />
+            <Kpi
+              titulo="Inspecciones"
+              valor={formatoMoneda(tarjetasExtra.inspeccionesMonto)}
+              sub={`${tarjetasExtra.inspeccionesCount} inspecciones`}
+              clases="bg-amber-50/60 border-amber-200"
+              colorValor="text-amber-950"
+            />
+            <Kpi
+              titulo="Comisión Generada"
+              valor={formatoMoneda(totalComisiones)}
+              clases="bg-slate-50 border-carbon/10"
+              colorValor="text-blue-900"
+            />
+            <Kpi
+              titulo="Comisión Pagada"
+              valor={formatoMoneda(totalPagado)}
+              clases="bg-emerald-50/70 border-emerald-200"
+              colorValor="text-emerald-900"
+            />
+            <Kpi
+              titulo="Balance Pendiente"
+              valor={formatoMoneda(saldoPendiente)}
+              sub={
+                <>
+                  {porLiquidar} comisión(es) por liquidar
+                  {anticiposPendientes > 0 && (
+                    <span className="block text-blue-800 font-semibold border-t border-amber-300/60 mt-0.5 pt-0.5">
+                      💰 Anticipos a favor de SAUCEDA: {formatoMoneda(anticiposPendientes)}
+                      <span className={`block font-mono font-bold ${saldoNeto < 0 ? "text-red-700" : "text-blue-900"}`}>
+                        Saldo neto: {formatoMoneda(saldoNeto)}
+                      </span>
+                    </span>
+                  )}
+                </>
+              }
+              clases="bg-amber-50 border-amber-300"
+              colorValor="text-amber-950"
+            />
           </div>
 
-          {/* Cuadro de Balance */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 print:grid-cols-3 gap-3 mb-8">
-            <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-carbon/50 block">
-                Total Ventas
-              </span>
-              <span className="text-base font-mono font-bold text-carbon mt-1 block">
-                {formatoMoneda(totalVentas)}
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-carbon/50 block">
-                Base Comisionable
-              </span>
-              <span className="text-base font-mono font-bold text-emerald-700 mt-1 block">
-                {formatoMoneda(tarjetasExtra.baseVentas)}
-              </span>
-              <span className="text-[10px] text-carbon/50 block">{tarjetasExtra.ventasCount} ventas</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-800 block">
-                Inspecciones
-              </span>
-              <span className="text-base font-mono font-bold text-amber-950 mt-1 block">
-                {formatoMoneda(tarjetasExtra.inspeccionesMonto)}
-              </span>
-              <span className="text-[10px] text-amber-900/70 block">{tarjetasExtra.inspeccionesCount} inspecciones</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-carbon/50 block">
-                Comisión Generada
-              </span>
-              <span className="text-base font-mono font-bold text-blue-900 mt-1 block">
-                {formatoMoneda(totalComisiones)}
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-800 block">
-                Comisión Pagada
-              </span>
-              <span className="text-base font-mono font-bold text-emerald-900 mt-1 block">
-                {formatoMoneda(totalPagado)}
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-300">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-900 block">
-                Balance Pendiente por Liquidar
-              </span>
-              <span className="text-base font-mono font-bold text-amber-950 mt-1 block">
-                {formatoMoneda(saldoPendiente)}
-              </span>
-              <span className="text-[10px] text-amber-900/80 block">
-                {comisiones.filter((c) => c.saldoPendiente > 0).length} comisión(es) por liquidar
-              </span>
-              {anticiposPendientes > 0 && (
-                <span className="text-[10px] text-blue-800 mt-1.5 pt-1.5 border-t border-amber-300/60 block font-semibold">
-                  💰 Anticipos a favor de SAUCEDA: {formatoMoneda(anticiposPendientes)}
-                  <span className={`block font-mono font-bold ${saldoNeto < 0 ? "text-red-700" : "text-blue-900"}`}>
-                    Saldo neto: {formatoMoneda(saldoNeto)}
-                  </span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Tabla de Desglose de Ventas */}
-          <div className="mb-8">
-            <h3 className="font-titular text-sm font-bold text-carbon uppercase tracking-wider mb-3 flex items-center justify-between border-b pb-1">
-              <span>Relación Detallada de Ventas y Remisiones</span>
-              <span className="text-[11px] font-mono font-normal text-carbon/50">
-                {comisiones.length} registros
-              </span>
+          {/* Tabla de desglose */}
+          <div className="mb-3">
+            <h3 className="font-titular text-[10px] font-bold text-carbon uppercase tracking-wider mb-1 flex items-center justify-between border-b pb-0.5">
+              <span>Relación Detallada de Ventas, Remisiones e Inspecciones</span>
+              <span className="font-mono font-normal text-carbon/50">{comisiones.length} registros</span>
             </h3>
 
             {comisiones.length === 0 ? (
-              <p className="text-xs text-carbon/50 italic py-4 text-center">
-                No hay ventas comisionables registradas en el período seleccionado.
+              <p className="text-xs text-carbon/50 italic py-3 text-center">
+                No hay comisiones registradas en el período seleccionado.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-carbon/20 text-carbon/70 text-[10px] uppercase">
-                      <th className="py-2 px-1">Folio / Fecha</th>
-                      <th className="py-2 px-1">Asesor</th>
-                      <th className="py-2 px-1">Cliente / Empresa</th>
-                      <th className="py-2 px-1">Servicio</th>
-                      <th className="py-2 px-1 text-right">Venta</th>
-                      <th className="py-2 px-1 text-right">Base Comisionable</th>
-                      <th className="py-2 px-1 text-center">% Com.</th>
-                      <th className="py-2 px-1 text-right">Comisión</th>
-                      <th className="py-2 px-1 text-right">Pagado</th>
-                      <th className="py-2 px-1 text-right">Saldo</th>
-                      <th className="py-2 px-1 text-center">Estatus</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-carbon/10 font-mono">
-                    {comisiones.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-50/50">
-                        <td className="py-2 px-1 whitespace-nowrap">
-                          <span className="font-bold text-verde-profundo block">
-                            {c.remisionFolio || (c.tipoComision === "inspeccion" ? "INSP" : "S/F")}
-                          </span>
-                          <span className="text-[10px] text-carbon/60 font-sans block">
-                            {new Date(c.fecha).toLocaleDateString("es-MX")}
-                          </span>
-                        </td>
-                        <td className="py-2 px-1 font-sans font-semibold text-carbon whitespace-nowrap">
-                          {c.asesorNombre}
-                        </td>
-                        <td className="py-2 px-1 font-sans text-carbon max-w-[160px] truncate" title={c.clienteNombre}>
-                          <span className="font-semibold block truncate">{c.clienteNombre}</span>
-                          {c.clienteEmpresa && (
-                            <span className="text-[10px] text-carbon/50 block truncate">
-                              🏢 {c.clienteEmpresa}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-1 font-sans capitalize text-carbon/80 text-[11px] whitespace-nowrap">
-                          {c.tipoComision === "inspeccion"
-                            ? "Inspección Técnica"
-                            : c.servicioTipo?.replace(/_/g, " ") || "Construcción"}
-                        </td>
-                        <td className="py-2 px-1 text-right font-medium">
-                          {c.tipoComision === "inspeccion" ? (
-                            <span className="text-[10px] text-carbon/50 italic font-sans">Tarifa Fija</span>
-                          ) : (
-                            formatoMoneda(c.montoVenta)
-                          )}
-                        </td>
-                        <td className="py-2 px-1 text-right font-medium text-emerald-700">
-                          {formatoMoneda(c.baseComisionable)}
-                          {c.tipoComision !== "inspeccion" && (c.costoProveedor > 0 || c.comisionBancaria > 0) && (
-                            <span className="block text-[9px] text-carbon/40 font-normal">
-                              −{formatoMoneda(c.costoProveedor + c.comisionBancaria)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 px-1 text-center text-carbon/70">
-                          {c.tipoComision === "inspeccion" ? "FIJA" : `${c.porcentajeComision}%`}
-                          {c.esAjusteManual && <span className="text-[9px] text-amber-600 block">*manual</span>}
-                        </td>
-                        <td className="py-2 px-1 text-right font-bold text-blue-900">
-                          {formatoMoneda(c.montoComision)}
-                        </td>
-                        <td className="py-2 px-1 text-right text-emerald-700">
-                          {formatoMoneda(c.montoPagado)}
-                        </td>
-                        <td className="py-2 px-1 text-right font-bold text-amber-950">
-                          {formatoMoneda(c.saldoPendiente)}
-                        </td>
-                        <td className="py-2 px-1 text-center font-sans">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              c.estatus === "pagada"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : c.estatus === "parcial"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-amber-100 text-amber-800"
-                            }`}
-                          >
-                            {c.estatus}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-carbon/20 font-bold text-xs bg-slate-50 font-mono">
-                      <td colSpan={4} className="py-2 px-1 font-sans uppercase">
-                        Totales Generales:
+              <table className="w-full text-left text-[9px] leading-tight border-collapse">
+                <thead>
+                  <tr className="border-b border-carbon/30 text-carbon/70 text-[8px] uppercase bg-slate-50">
+                    <th className="py-1 px-1">Folio / Fecha</th>
+                    <th className="py-1 px-1">Asesor</th>
+                    <th className="py-1 px-1">Cliente / Empresa</th>
+                    <th className="py-1 px-1">Servicio</th>
+                    <th className="py-1 px-1 text-right">Venta</th>
+                    <th className="py-1 px-1 text-right">Base Com.</th>
+                    <th className="py-1 px-1 text-center">% Com.</th>
+                    <th className="py-1 px-1 text-right">Comisión</th>
+                    <th className="py-1 px-1 text-right">Pagado</th>
+                    <th className="py-1 px-1 text-right">Saldo</th>
+                    <th className="py-1 px-1 text-center">Estatus</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-carbon/10 font-mono">
+                  {comisiones.map((c) => (
+                    <tr key={c.id}>
+                      <td className="py-0.5 px-1 whitespace-nowrap">
+                        <span className="font-bold text-verde-profundo">
+                          {c.remisionFolio || (c.tipoComision === "inspeccion" ? "INSP" : "S/F")}
+                        </span>
+                        <span className="text-[8px] text-carbon/60 font-sans block">
+                          {new Date(c.fecha).toLocaleDateString("es-MX")}
+                        </span>
                       </td>
-                      <td className="py-2 px-1 text-right">{formatoMoneda(totalVentas)}</td>
-                      <td className="py-2 px-1 text-right">{formatoMoneda(totalBase)}</td>
-                      <td className="py-2 px-1 text-center">-</td>
-                      <td className="py-2 px-1 text-right text-blue-900">{formatoMoneda(totalComisiones)}</td>
-                      <td className="py-2 px-1 text-right text-emerald-800">{formatoMoneda(totalPagado)}</td>
-                      <td className="py-2 px-1 text-right text-amber-950">{formatoMoneda(saldoPendiente)}</td>
-                      <td className="py-2 px-1 text-center">-</td>
+                      <td className="py-0.5 px-1 font-sans font-semibold whitespace-nowrap">{c.asesorNombre}</td>
+                      <td className="py-0.5 px-1 font-sans max-w-[150px]">
+                        <span className="font-semibold block truncate">{c.clienteNombre}</span>
+                        {c.clienteEmpresa && (
+                          <span className="text-[8px] text-carbon/50 block truncate">{c.clienteEmpresa}</span>
+                        )}
+                      </td>
+                      <td className="py-0.5 px-1 font-sans capitalize text-carbon/80 whitespace-nowrap">
+                        {c.tipoComision === "inspeccion"
+                          ? "Inspección Técnica"
+                          : c.servicioTipo?.replace(/_/g, " ") || "Construcción"}
+                      </td>
+                      <td className="py-0.5 px-1 text-right whitespace-nowrap">
+                        {c.tipoComision === "inspeccion" ? (
+                          <span className="text-[8px] text-carbon/50 italic font-sans">Tarifa Fija</span>
+                        ) : (
+                          formatoMoneda(c.montoVenta)
+                        )}
+                      </td>
+                      <td className="py-0.5 px-1 text-right text-emerald-700 whitespace-nowrap">
+                        {formatoMoneda(c.baseComisionable)}
+                        {c.tipoComision !== "inspeccion" && (c.costoProveedor > 0 || c.comisionBancaria > 0) && (
+                          <span className="block text-[7px] text-carbon/40">
+                            −{formatoMoneda(c.costoProveedor + c.comisionBancaria)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-0.5 px-1 text-center text-carbon/70 whitespace-nowrap">
+                        {c.tipoComision === "inspeccion" ? "FIJA" : `${c.porcentajeComision}%`}
+                        {c.esAjusteManual && <span className="text-[7px] text-amber-600 block">*manual</span>}
+                      </td>
+                      <td className="py-0.5 px-1 text-right font-bold text-blue-900 whitespace-nowrap">
+                        {formatoMoneda(c.montoComision)}
+                      </td>
+                      <td className="py-0.5 px-1 text-right text-emerald-700 whitespace-nowrap">
+                        {formatoMoneda(c.montoPagado)}
+                        {(c.montoNeteadoAnticipo || 0) > 0 && (
+                          <span className="block text-[7px] text-blue-700 font-sans">
+                            {formatoMoneda(c.montoNeteadoAnticipo || 0)} c/anticipo
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-0.5 px-1 text-right font-bold text-amber-950 whitespace-nowrap">
+                        {formatoMoneda(c.saldoPendiente)}
+                      </td>
+                      <td className="py-0.5 px-1 text-center font-sans">
+                        <span
+                          className={`inline-block px-1.5 py-px rounded text-[8px] font-bold uppercase ${
+                            c.estatus === "pagada"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : c.estatus === "parcial"
+                              ? "bg-blue-100 text-blue-800"
+                              : c.estatus === "cancelada"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {c.estatus}
+                        </span>
+                      </td>
                     </tr>
-                  </tfoot>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-carbon/30 font-bold bg-slate-50 font-mono text-[9px]">
+                    <td colSpan={4} className="py-1 px-1 font-sans uppercase">
+                      Totales generales
+                    </td>
+                    <td className="py-1 px-1 text-right whitespace-nowrap">{formatoMoneda(totalVentas)}</td>
+                    <td className="py-1 px-1 text-right whitespace-nowrap">{formatoMoneda(totalBase)}</td>
+                    <td className="py-1 px-1 text-center">-</td>
+                    <td className="py-1 px-1 text-right text-blue-900 whitespace-nowrap">{formatoMoneda(totalComisiones)}</td>
+                    <td className="py-1 px-1 text-right text-emerald-800 whitespace-nowrap">{formatoMoneda(totalPagado)}</td>
+                    <td className="py-1 px-1 text-right text-amber-950 whitespace-nowrap">{formatoMoneda(saldoPendiente)}</td>
+                    <td className="py-1 px-1 text-center">-</td>
+                  </tr>
+                </tfoot>
+              </table>
             )}
           </div>
 
-          {/* Historial de Pagos aplicados si existen */}
+          {/* Historial de pagos aplicados */}
           {pagos.length > 0 && (
-            <div className="mb-8 print:break-inside-avoid">
-              <h3 className="font-titular text-sm font-bold text-carbon uppercase tracking-wider mb-2 border-b pb-1">
-                Pagos y Dispersiones Aplicadas en el Período
+            <div className="mb-3 print:break-inside-avoid">
+              <h3 className="font-titular text-[10px] font-bold text-carbon uppercase tracking-wider mb-1 border-b pb-0.5">
+                Historial de Pagos y Liquidaciones Recibidas
               </h3>
-              <table className="w-full text-left text-xs border-collapse font-mono">
+              <table className="w-full text-left text-[9px] leading-tight border-collapse font-mono">
                 <thead>
-                  <tr className="text-carbon/60 text-[10px] uppercase border-b">
-                    <th className="py-1">Fecha</th>
-                    <th className="py-1">Método</th>
-                    <th className="py-1">Referencia</th>
-                    <th className="py-1">Notas</th>
-                    <th className="py-1 text-right">Monto Pagado</th>
+                  <tr className="text-carbon/60 text-[8px] uppercase border-b bg-slate-50">
+                    <th className="py-0.5 px-1">Fecha</th>
+                    <th className="py-0.5 px-1">Método</th>
+                    <th className="py-0.5 px-1">Referencia</th>
+                    <th className="py-0.5 px-1">Notas</th>
+                    <th className="py-0.5 px-1 text-right">Monto Pagado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-carbon/5">
                   {pagos.map((p) => (
                     <tr key={p.id}>
-                      <td className="py-1 font-sans">{new Date(p.fechaPago).toLocaleDateString("es-MX")}</td>
-                      <td className="py-1 capitalize font-sans">{p.metodoPago}</td>
-                      <td className="py-1">{p.referencia || "S/Ref"}</td>
-                      <td className="py-1 font-sans text-carbon/70">{p.notas || "-"}</td>
-                      <td className="py-1 text-right font-bold text-emerald-800">{formatoMoneda(p.monto)}</td>
+                      <td className="py-0.5 px-1 font-sans">{new Date(p.fechaPago).toLocaleDateString("es-MX")}</td>
+                      <td className="py-0.5 px-1 capitalize font-sans">{p.metodoPago}</td>
+                      <td className="py-0.5 px-1">{p.referencia || "S/Ref"}</td>
+                      <td className="py-0.5 px-1 font-sans text-carbon/70">{p.notas || "-"}</td>
+                      <td className="py-0.5 px-1 text-right font-bold text-emerald-800">{formatoMoneda(p.monto)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -395,21 +408,24 @@ export function ModalEstadoCuentaImprimible({
             </div>
           )}
 
-          {/* Bloque de Firmas y Validación */}
-          <div className="border-t border-carbon/20 pt-10 mt-12 grid grid-cols-2 gap-12 text-center text-xs print:break-inside-avoid">
+          {/* Firmas */}
+          <div className="border-t border-carbon/20 pt-5 mt-4 grid grid-cols-2 gap-10 text-center text-[10px] print:break-inside-avoid">
             <div>
-              <div className="border-b border-carbon/40 w-48 mx-auto mb-2" />
+              <div className="border-b border-carbon/40 w-44 mx-auto mb-1" />
               <p className="font-bold text-carbon">{asesorNombre}</p>
-              <p className="text-[10px] text-carbon/50 uppercase">Asesor Comisionista</p>
+              <p className="text-[8px] text-carbon/50 uppercase">Asesor Comisionista</p>
             </div>
             <div>
-              <div className="border-b border-carbon/40 w-48 mx-auto mb-2" />
+              <div className="border-b border-carbon/40 w-44 mx-auto mb-1" />
               <p className="font-bold text-carbon">Dirección Administrativa</p>
-              <p className="text-[10px] text-carbon/50 uppercase">Sauceda Bienes Raíces & Construcción</p>
+              <p className="text-[8px] text-carbon/50 uppercase">Sauceda Bienes Raíces & Construcción</p>
             </div>
           </div>
         </div>
       </div>
     </div>
   );
+
+  // Se monta directamente en <body> para poder imprimir solo este documento
+  return montado ? createPortal(contenido, document.body) : null;
 }

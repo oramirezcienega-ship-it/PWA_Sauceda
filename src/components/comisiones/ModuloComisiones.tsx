@@ -412,11 +412,23 @@ export function ModuloComisiones({
   }, [filtroAsesor, comisiones]);
 
   const textoPeriodo = useMemo(() => {
-    if (filtroPeriodo === "mes_actual") return "Mes Actual";
-    if (filtroPeriodo === "mes_anterior") return "Mes Anterior";
-    if (filtroPeriodo === "anio_actual") return "Año Actual";
+    const fmt = (f: string) => {
+      const [y, m, d] = f.split("-");
+      return y && m && d ? `${d}/${m}/${y}` : f;
+    };
+    const rango =
+      fechaDesde || fechaHasta ? `${fechaDesde ? fmt(fechaDesde) : "Inicio"} al ${fechaHasta ? fmt(fechaHasta) : "Presente"}` : "";
     if (filtroPeriodo === "historico") return "Histórico Completo";
-    return `${fechaDesde || "Inicio"} a ${fechaHasta || "Presente"}`;
+    const etiqueta =
+      filtroPeriodo === "mes_actual"
+        ? "Mes Actual"
+        : filtroPeriodo === "mes_anterior"
+        ? "Mes Anterior"
+        : filtroPeriodo === "anio_actual"
+        ? "Año Actual"
+        : "";
+    if (etiqueta) return rango ? `${etiqueta} (${rango})` : etiqueta;
+    return rango || "Histórico Completo";
   }, [filtroPeriodo, fechaDesde, fechaHasta]);
 
   return (
