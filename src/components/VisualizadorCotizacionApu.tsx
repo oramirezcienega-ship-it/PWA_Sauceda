@@ -34,12 +34,11 @@ export function VisualizadorCotizacionApu({
   const [cargando, setCargando] = useState(false);
   const [errorFirma, setErrorFirma] = useState("");
   const [exito, setExito] = useState(cotizacion.estatus === "aceptada");
-  const [slideActivo, setSlideActivo] = useState(0);
 
   // Estados interactivos para gamas
   const [espacios, setEspacios] = useState<CotizacionEspacio[]>(initialEspacios);
-  const [conceptos, setConceptos] = useState(initialConceptos);
-  const [partidas, setPartidas] = useState<CotizacionPartida[]>(initialPartidas);
+  const conceptos = initialConceptos;
+  const partidas = initialPartidas;
   const [precioFinal, setPrecioFinal] = useState<number>(cotizacion.precioFinal);
   const [isPendingGama, startTransitionGama] = useTransition();
   const [gamaCambiandoId, setGamaCambiandoId] = useState<string | null>(null);

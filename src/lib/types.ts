@@ -1058,6 +1058,41 @@ export interface PlantillaEspacioConcepto {
   orden: number;
 }
 
+export interface PresupuestoApuCompleto {
+  cotizacion: any;
+  partidas: CotizacionPartida[];
+  espacios: CotizacionEspacio[];
+  conceptos: CotizacionConcepto[];
+  esquemaPagos: EsquemaPagoHito[];
+  cascada: {
+    costoDirecto: number;
+    indirectosPct: number;
+    indirectosMonto: number;
+    imprevistosPct: number;
+    imprevistosMonto: number;
+    utilidadPct: number;
+    utilidadMonto: number;
+    subtotal: number;
+    ivaPct: number;
+    ivaMonto: number;
+    incluyeIva: boolean;
+    precioFinal: number;
+  };
+}
+
+export interface ItemExplosionInsumo {
+  insumoId: string;
+  codigo: string;
+  nombre: string;
+  tipo: string;
+  unidad: string;
+  cantidadTotal: number;
+  costoUnitario: number;
+  importeTotal: number;
+  oficio?: string | null;
+  partidasDondeSeUsa: string[];
+}
+
 export interface CotizacionConcepto {
   id: string;
   cotizacionId: string;
