@@ -137,7 +137,10 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
     const fechaFin = dias[6].fecha;
     const rangoTexto = `${dias[0].diaNumero} ${dias[0].mesNombre} — ${dias[6].diaNumero} ${dias[6].mesNombre} ${dias[6].fecha.slice(0, 4)}`;
 
-    // 2. Consultar agenda_citas en el rango de la semana (excluyendo canceladas y completadas para enfocar próximos)
+    // 2. Consultar agenda_citas en el rango de la semana (excluyendo sólo
+    // canceladas: las ya ejecutadas/completadas SÍ se incluyen, para que el
+    // tablero muestre todo lo de la semana -pasado y próximo-, no sólo lo
+    // pendiente. El estado se refleja en la tarjeta con su propio badge.
     // Consulta plana, SIN joins embebidos de PostgREST ("*, perfiles(nombre)"):
     // en este proyecto ya se identificó que ese tipo de embed falla de forma
     // intermitente en producción (ver el mismo fix en listarComisiones,
@@ -152,7 +155,6 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       .gte("fecha", fechaInicio)
       .lte("fecha", fechaFin)
       .neq("estado", "cancelada")
-      .neq("estado", "completada")
       .order("fecha", { ascending: true })
       .order("hora_inicio", { ascending: true });
 
@@ -160,7 +162,8 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       console.error("Error al consultar agenda_citas para actividades de la semana:", errCitas);
     }
 
-    // 3. Consultar ordenes_trabajo en el rango de la semana (excluyendo canceladas y completadas)
+    // 3. Consultar ordenes_trabajo en el rango de la semana (excluyendo sólo
+    // canceladas, por la misma razón que en agenda_citas arriba).
     const { data: otsRaw, error: errOTs } = await sb
       .from("ordenes_trabajo")
       .select(`
@@ -179,7 +182,6 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       .gte("fecha_programada", fechaInicio)
       .lte("fecha_programada", fechaFin)
       .neq("estatus", "cancelada")
-      .neq("estatus", "completada")
       .order("fecha_programada", { ascending: true });
 
     if (errOTs) {
