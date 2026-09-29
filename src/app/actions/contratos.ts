@@ -207,6 +207,35 @@ export async function obtenerDatosPrecargadosContrato(ordenId: string): Promise<
   }
 }
 
+/**
+ * Datos para EDITAR el contrato vigente: parte de lo que ya se capturó
+ * (snapshot), no de los valores por defecto de la cotización. Si no hay
+ * contrato vigente, cae a los datos precargados.
+ */
+export async function obtenerDatosEdicionContrato(ordenId: string): Promise<{
+  ok: boolean;
+  error?: string;
+  datos?: Omit<DatosContrato, "folio" | "version" | "fechaGeneracion">;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: vigente } = await sb
+      .from("contratos")
+      .select("datos_snapshot")
+      .eq("orden_trabajo_id", ordenId)
+      .neq("estado", "cancelado")
+      .maybeSingle();
+    if (vigente?.datos_snapshot) {
+      return { ok: true, datos: vigente.datos_snapshot as DatosContrato };
+    }
+    const r = await armarDatosBase(sb, ordenId);
+    return r.ok ? { ok: true, datos: r.datos } : { ok: false, error: r.error };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al preparar los datos del contrato." };
+  }
+}
+
 /** Contratos de una OT (el vigente primero, luego versiones anteriores). */
 export async function listarContratosOT(ordenId: string): Promise<ContratoRegistro[]> {
   try {

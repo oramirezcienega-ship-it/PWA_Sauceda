@@ -5,6 +5,7 @@ import {
   generarContrato,
   listarContratosOT,
   marcarContratoFirmado,
+  obtenerDatosEdicionContrato,
   obtenerDatosPrecargadosContrato,
   obtenerDefaultsTipoServicio,
   urlContratoFirmado,
@@ -35,6 +36,7 @@ export function SeccionContratoOT({ ordenId, tieneCotizacion, soloLectura = fals
   const [cargando, setCargando] = useState(true);
   const [modalRevisar, setModalRevisar] = useState<null | "generar" | "regenerar">(null);
   const [modalFirma, setModalFirma] = useState(false);
+  const [previa, setPrevia] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   const recargar = useCallback(async () => {
@@ -119,6 +121,13 @@ export function SeccionContratoOT({ ordenId, tieneCotizacion, soloLectura = fals
             >
               🖨️ Ver / Imprimir
             </a>
+            <button
+              type="button"
+              onClick={() => setPrevia((v) => !v)}
+              className="bg-white hover:bg-slate-50 border border-carbon/20 text-carbon px-3 py-1.5 rounded-lg font-bold"
+            >
+              {previa ? "🙈 Ocultar vista previa" : "👁️ Vista previa"}
+            </button>
             {!soloLectura && vigente.estado !== "firmado" && (
               <>
                 <button
@@ -126,7 +135,7 @@ export function SeccionContratoOT({ ordenId, tieneCotizacion, soloLectura = fals
                   onClick={() => setModalRevisar("regenerar")}
                   className="bg-slate-100 hover:bg-slate-200 text-carbon px-3 py-1.5 rounded-lg font-bold"
                 >
-                  🔄 Regenerar
+                  ✏️ Editar / Regenerar
                 </button>
                 <button
                   type="button"
@@ -147,6 +156,15 @@ export function SeccionContratoOT({ ordenId, tieneCotizacion, soloLectura = fals
               </button>
             )}
           </div>
+
+          {previa && (
+            <iframe
+              key={vigente.id}
+              src={urlVer(vigente)}
+              title={`Contrato ${vigente.folio}`}
+              className="w-full h-[70vh] rounded-xl border border-carbon/15 bg-slate-100"
+            />
+          )}
 
           {anteriores.length > 0 && (
             <details className="text-carbon/60">
@@ -220,7 +238,7 @@ function ModalRevisarContrato({
   const [resumen, setResumen] = useState({ cliente: "", cotizacion: "", total: 0 });
 
   useEffect(() => {
-    obtenerDatosPrecargadosContrato(ordenId).then((r) => {
+    (regenerar ? obtenerDatosEdicionContrato(ordenId) : obtenerDatosPrecargadosContrato(ordenId)).then((r) => {
       if (!r.ok || !r.datos) {
         setError(r.error || "No se pudieron cargar los datos.");
       } else {
@@ -276,7 +294,7 @@ function ModalRevisarContrato({
         <div className="flex items-center justify-between border-b border-carbon/10 pb-3 mb-4">
           <div>
             <h3 className="font-titular text-lg font-bold text-verde-profundo">
-              {regenerar ? "Regenerar contrato" : "Revisar datos del contrato"}
+              {regenerar ? "Editar contrato (se genera una nueva versión)" : "Revisar datos del contrato"}
             </h3>
             {f && (
               <p className="text-xs text-carbon/60">
