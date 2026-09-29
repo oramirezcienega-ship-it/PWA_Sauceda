@@ -2195,7 +2195,7 @@ export function DetalleCotizacionAdmin({
                   </div>
                 </div>
               </div>
-            )}
+            ))}
           </div>
         )}
 

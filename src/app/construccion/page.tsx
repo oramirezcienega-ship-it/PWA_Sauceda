@@ -126,5 +126,4 @@ export default async function PaginaConstruccion({
     </main>
   );
 }
-}
 
