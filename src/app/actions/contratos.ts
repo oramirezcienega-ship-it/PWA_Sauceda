@@ -292,13 +292,13 @@ export async function estadoContratoDeOrden(ordenId: string): Promise<{
 
 /**
  * Genera el contrato de una OT. Idempotente: si ya hay uno vigente y no se
- * pide `regenerar`, devuelve el existente. Al regenerar (solo si no está
- * firmado) se crea una nueva versión y la anterior queda "cancelado".
+ * pide `regenerar`, devuelve el existente. Al regenerar (si está firmado,
+ * solo con `permitirFirmado`) se crea una nueva versión y la anterior queda "cancelado".
  */
 export async function generarContrato(
   ordenId: string,
   overrides?: OverridesContrato,
-  opciones?: { regenerar?: boolean }
+  opciones?: { regenerar?: boolean; permitirFirmado?: boolean }
 ): Promise<{ ok: boolean; contratoId?: string; folio?: string; version?: number; yaExistia?: boolean; faltantes?: string[]; error?: string }> {
   try {
     await requireAdmin();
@@ -315,7 +315,7 @@ export async function generarContrato(
     if (vigente && !opciones?.regenerar) {
       return { ok: true, contratoId: vigente.id, folio: vigente.folio, version: vigente.version, yaExistia: true };
     }
-    if (vigente && vigente.estado === "firmado") {
+    if (vigente && vigente.estado === "firmado" && !opciones?.permitirFirmado) {
       return { ok: false, error: "El contrato ya está firmado; no se puede regenerar." };
     }
 
