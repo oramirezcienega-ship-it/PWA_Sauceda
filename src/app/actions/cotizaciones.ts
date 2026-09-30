@@ -31,9 +31,40 @@ export async function crearCotizacion(datos: {
   fechaVisita?: string | null;
   inspectorId?: string | null;
   notasInternas?: string;
+  /** Cita de inspección ya agendada en el expediente sobre la que se basa la cotización. */
+  citaId?: string | null;
 }): Promise<Cotizacion> {
   await requireAdmin();
   const sb = supabaseServidor();
+
+  // Si la cotización nace de una inspección ya agendada, heredamos fecha e inspector de la cita
+  let fechaVisita = datos.fechaVisita || null;
+  let inspectorId = datos.inspectorId || null;
+  let requiereVisita = datos.requiereVisita;
+  let citaId: string | null = null;
+  if (datos.citaId) {
+    const { data: cita, error: errCita } = await sb
+      .from("agenda_citas")
+      .select("id, tipo_cita, estado, fecha, hora_inicio, perfil_id")
+      .eq("id", datos.citaId)
+      .maybeSingle();
+    if (errCita || !cita) throw new Error("La inspección seleccionada no existe.");
+    if (cita.tipo_cita !== "inspeccion") throw new Error("La cita seleccionada no es una inspección.");
+    if (cita.estado === "cancelada") throw new Error("La inspección seleccionada está cancelada.");
+
+    const { data: yaVinculada } = await sb
+      .from("cotizaciones")
+      .select("id")
+      .eq("cita_id", cita.id)
+      .limit(1)
+      .maybeSingle();
+    if (yaVinculada) throw new Error(`Esta inspección ya está vinculada a la cotización ${yaVinculada.id}.`);
+
+    citaId = cita.id;
+    requiereVisita = true;
+    fechaVisita = new Date(`${cita.fecha}T${String(cita.hora_inicio).slice(0, 8)}`).toISOString();
+    inspectorId = cita.perfil_id || inspectorId;
+  }
 
   const { data: existentes, error: errLista } = await sb
     .from("cotizaciones")
@@ -41,7 +72,7 @@ export async function crearCotizacion(datos: {
   if (errLista) throw new Error(errLista.message);
   const id = siguienteId((existentes ?? []).map((r) => r.id as string));
 
-  const estatus: CotizacionEstatus = datos.requiereVisita ? "esperando_visita" : "calculando_costo";
+  const estatus: CotizacionEstatus = requiereVisita ? "esperando_visita" : "calculando_costo";
 
   let resolvedExpedienteId = datos.expedienteId || null;
   if (!resolvedExpedienteId && datos.prospectoId) {
@@ -63,9 +94,10 @@ export async function crearCotizacion(datos: {
       expediente_id: resolvedExpedienteId,
       servicio_tipo: datos.servicioTipo,
       estatus,
-      requiere_visita: datos.requiereVisita,
-      fecha_visita: datos.fechaVisita || null,
-      inspector_id: datos.inspectorId || null,
+      requiere_visita: requiereVisita,
+      fecha_visita: fechaVisita,
+      inspector_id: inspectorId,
+      cita_id: citaId,
       notas_internas: datos.notasInternas || ""
     })
     .select("*, prospectos(nombre, telefono)")
@@ -92,7 +124,7 @@ export async function crearCotizacion(datos: {
     await sb
       .from("expedientes")
       .update({
-        etapa: datos.requiereVisita ? "visita" : "cotizacion",
+        etapa: requiereVisita ? "visita" : "cotizacion",
         ultimo_movimiento: new Date().toISOString().split("T")[0]
       })
       .eq("id", resolvedExpedienteId);
@@ -1315,6 +1347,49 @@ export async function guardarDatosModulares(datos: {
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al guardar datos modulares." };
   }
+}
+
+/**
+ * Inspecciones (citas tipo "inspeccion") del prospecto/expediente que aún no
+ * tienen una cotización vinculada. Sirven de base para generar la cotización.
+ */
+export async function obtenerInspeccionesSinCotizar(
+  prospectoId?: string | null,
+  expedienteId?: string | null
+): Promise<{ id: string; fecha: string; horaInicio: string; horaFin: string; estado: string; asignado: string }[]> {
+  await requireAdmin();
+  if (!prospectoId && !expedienteId) return [];
+  const sb = supabaseServidor();
+
+  let q = sb
+    .from("agenda_citas")
+    .select("id, fecha, hora_inicio, hora_fin, estado, perfiles(nombre)")
+    .eq("tipo_cita", "inspeccion")
+    .neq("estado", "cancelada")
+    .order("fecha", { ascending: false });
+  if (prospectoId && expedienteId) q = q.or(`prospecto_id.eq.${prospectoId},expediente_id.eq.${expedienteId}`);
+  else if (prospectoId) q = q.eq("prospecto_id", prospectoId);
+  else q = q.eq("expediente_id", expedienteId as string);
+
+  const { data: citas, error } = await q;
+  if (error || !citas?.length) return [];
+
+  const { data: vinculadas } = await sb
+    .from("cotizaciones")
+    .select("cita_id")
+    .in("cita_id", citas.map((c: any) => c.id));
+  const usadas = new Set((vinculadas ?? []).map((v: any) => v.cita_id));
+
+  return citas
+    .filter((c: any) => !usadas.has(c.id))
+    .map((c: any) => ({
+      id: c.id,
+      fecha: c.fecha,
+      horaInicio: String(c.hora_inicio).slice(0, 5),
+      horaFin: String(c.hora_fin).slice(0, 5),
+      estado: c.estado,
+      asignado: c.perfiles?.nombre || "Sin asignar",
+    }));
 }
 
 /** 11. Listar Cotizaciones de un Expediente */
