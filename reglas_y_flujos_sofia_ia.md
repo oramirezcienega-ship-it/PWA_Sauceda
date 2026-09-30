@@ -75,7 +75,7 @@ Para proyectos de obra mayor o diseño arquitectónico:
 ---
 
 ## ☔ 4. Flujo Conversacional Estricto de Impermeabilización (`construccion-impermeabilizacion`)
-Embudo lineal (Versión 5.0) con **tres opciones**: Acrílico (garantía 2 años), Estándar 3.5 con gravilla (5 años) y Premium 4.0 poliéster con gravilla (10 años). **PROHIBIDO enviar enlaces o URLs.** **PROHIBIDO** hablar de días/tiempos de instalación, de meses sin intereses o de pago con tarjeta: las formas de pago son **efectivo o transferencia**.
+Embudo lineal (Versión 5.0) con **tres opciones**: Acrílico (garantía 2 años), Estándar 3.5 con gravilla (5 años) y Premium 4.0 poliéster con gravilla (10 años). **PROHIBIDO enviar enlaces o URLs.** **PROHIBIDO** hablar de días/tiempos de instalación y ofrecer meses sin intereses. Pago: Sofía menciona solo **efectivo o transferencia**; la tarjeta NO se ofrece, pero si el cliente pregunta específicamente por pago con tarjeta, responde que sí (Mercado Pago, todas las tarjetas de crédito).
 
 ### 📍 PASO 1: Saludo y presentación de las 3 opciones
 Sin metros en el historial, Sofía presenta las 3 opciones (garantía y uso ideal de cada una) y pregunta cuántos m² tiene la azotea.
@@ -117,7 +117,7 @@ Si el cliente menciona que no conoce los metros cuadrados, no tiene las medidas 
 Dos tipos de negocio separados: `construccion-mantenimiento-tinacos` y `construccion-mantenimiento-cisternas`. Si el cliente llega de la campaña "Cisternas, Aljibes y Tinacos" sin aclarar, Sofía pregunta cuál es. Sofía arma su script con el producto del catálogo (qué incluye / no incluye, propuesta de valor, datos técnicos, garantía, fotos y precio): editar el producto cambia lo que dice.
 * **Precio:** se da después de explicar el servicio. Con *Tarifas por capacidad* (litros) cotiza el escalón que cubre la capacidad del cliente (multiplica por cantidad); sin capacidad, dice "desde" el escalón menor; sin tarifas, usa el precio base. Pago sólo en efectivo o transferencia.
 * **Inspección:** NO se ofrece por iniciativa de Sofía. Solo se coordina cuando el cliente muestra intención clara o la pide.
-* Se prohíben meses sin intereses, tarjeta, descuentos y prometer días de ejecución.
+* Se prohíben meses sin intereses, descuentos y prometer días de ejecución. Tarjeta: no se ofrece; si el cliente pregunta específicamente, sí se acepta (Mercado Pago, todas las tarjetas de crédito).
 * Si el producto tiene fotos, se envían una vez al presentar servicio y precio.
 
 ---
