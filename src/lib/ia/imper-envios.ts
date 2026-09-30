@@ -3,6 +3,7 @@ import { enviarWhatsAppDocumento, subirMediaMeta } from "@/lib/whatsapp";
 import { registrarActividad } from "@/lib/actividades";
 import { generarImagenComparativaImper } from "@/lib/ia/imagen-comparativa-imper";
 import { paquetesConPreciosVigentes } from "@/lib/ia/precios-imper";
+import { cargarServiciosMantenimiento, ETIQUETA_SERVICIO_MANT, type ServicioMant } from "@/lib/ia/catalogo-mantenimiento";
 import { cargarProductosImper, ETIQUETA_PAQUETE, type PaqueteImper, type ProductoImper } from "@/lib/ia/catalogo-imper";
 
 /**
@@ -207,5 +208,43 @@ export async function enviarFichaTecnicaImper(
   } catch (err) {
     console.error("[Imper] Error al enviar la ficha técnica:", err);
     return false;
+  }
+}
+
+/** Envía las fotos del servicio de mantenimiento (cisternas/tinacos) del catálogo, una sola vez por expediente. */
+export async function enviarFotosMantenimiento(
+  sb: SupabaseClient,
+  ctx: { canal: string; telefono: string; expedienteId?: string | null; agente: string; servicio: ServicioMant }
+): Promise<number> {
+  try {
+    const prod = (await cargarServiciosMantenimiento(sb))[ctx.servicio];
+    if (!prod || !prod.aptoParaIa) return 0;
+    const fotos = prod.fotos.slice(0, MAX_IMAGENES_POR_PAQUETE);
+    const marca = `Referencia ${ETIQUETA_SERVICIO_MANT[ctx.servicio]}`;
+    if (fotos.length === 0 || (await yaEnviado(sb, ctx.expedienteId, marca))) return 0;
+
+    let enviadas = 0;
+    for (const f of fotos) {
+      const res = await fetch(f.url);
+      if (!res.ok) continue;
+      const mime = res.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+      if (!mime.startsWith("image/")) continue;
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const pie = [f.titulo, f.descripcion].filter(Boolean).join(" · ");
+      const ext = mime.includes("png") ? "png" : "jpg";
+      if (await enviarYRegistrar(sb, ctx, buffer, mime, `${ctx.servicio}-${enviadas + 1}.${ext}`, `${marca}${pie ? ` — ${pie}` : ""}`)) enviadas++;
+    }
+    if (enviadas > 0 && ctx.expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId: ctx.expedienteId,
+        tipo: "mensaje",
+        titulo: `Sofía envió fotos: ${ETIQUETA_SERVICIO_MANT[ctx.servicio]}`,
+        detalle: `${enviadas} foto(s) del catálogo.`,
+      });
+    }
+    return enviadas;
+  } catch (err) {
+    console.error("[Mantenimiento] Error al enviar fotos:", err);
+    return 0;
   }
 }

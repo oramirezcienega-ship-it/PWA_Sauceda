@@ -7,10 +7,12 @@ import {
   esPaqueteImper,
   hayFotosEnCatalogo,
   enviarFichaTecnicaImper,
+  enviarFotosMantenimiento,
   metrosClaros,
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
+import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
@@ -314,6 +316,11 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
   const hayFotosImper = hayFotosEnCatalogo(productosImper);
   const fichaImper = fichaProductosParaPrompt(productosImper);
+  const serviciosMant = await cargarServiciosMantenimiento(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarServiciosMantenimiento>>);
+  const fichaTinacos = fichaServicioParaPrompt(serviciosMant.tinacos);
+  const fichaCisternas = fichaServicioParaPrompt(serviciosMant.cisternas);
+  const fotosCisternas = Boolean(serviciosMant.cisternas?.aptoParaIa && serviciosMant.cisternas.fotos.length > 0);
+  const fotosTinacos = Boolean(serviciosMant.tinacos?.aptoParaIa && serviciosMant.tinacos.fotos.length > 0);
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
 
   // 1. Encontrar el operador asignado o el fallback a Alex
@@ -497,16 +504,23 @@ I) Si está interesado en HERRERÍA o viene de campaña de HERRERÍA (tipo_negoc
      d) Nombre y número de teléfono de contacto (si aún no figura registrado).
   3. Menciona cálidamente que un asesor técnico especializado le contactará a la brevedad para coordinar una visita técnica en su domicilio, tomar medidas exactas y entregarle un presupuesto detallado sin ningún compromiso.
 
-J) Si viene de la CAMPAÑA DE CISTERNAS, ALJIBES Y TINACOS o está interesado en MANTENIMIENTO DE CISTERNAS (tipo_negocio: 'construccion-mantenimiento-cisternas'):
-  Debes enfocar la conversación con profesionalismo y calidez en el mantenimiento, lavado profundo, sellado y desinfección de depósitos de agua (cisternas subterráneas, aljibes de concreto y tinacos de azotea).
-  1. Si es el primer mensaje o saludo inicial para un lead de cisternas:
-     "¡Hola! 👋 Te damos la bienvenida a SAUCEDA Construye. Especialistas en mantenimiento, lavado profundo, sellado y desinfección de cisternas, aljibes y tinacos para garantizar agua limpia y libre de bacterias en tu hogar. ¿Qué servicio necesitas en tu depósito? (Por ejemplo: lavado y desinfección profunda, sellado de grietas/fugas de agua, o revisión de bomba y flotador)"
-  2. Recopila la información de forma progresiva (una sola pregunta a la vez):
-     a) Tipo de depósito y capacidad aproximada: Pregunta si es cisterna subterránea de concreto/aljibe o tinaco en azotea, y su capacidad aproximada en litros si la conoce (ej. 2,500 L, 5,000 L, 10,000 L, o tinaco 1,100 L).
-     b) Diagnóstico o motivo del servicio: Identifica si es mantenimiento preventivo/limpieza de rutina, o si presenta suciedad acumulada, sarro, filtración/fuga de agua o fallo en la bomba.
-     c) Colonia o zona de la propiedad en León, Gto.
-     d) Nombre y número de teléfono de contacto (si aún no figura registrado).
-  3. Menciona cálidamente que un asesor técnico del equipo de Mantenimiento le contactará a la brevedad por este chat para coordinar la visita técnica y entregarle su cotización detallada sin ningún compromiso.
+J) MANTENIMIENTO DE CISTERNAS/ALJIBES y de TINACOS (tipo_negocio: 'construccion-mantenimiento-cisternas' o 'construccion-mantenimiento-tinacos'):
+  Son servicios sencillos y de margen bajo. Usa SOLO la información oficial del catálogo que aparece abajo (qué incluye, qué no incluye, precio, garantía y datos técnicos); NUNCA inventes alcances, materiales ni precios. Tono cálido y breve (máximo 6 líneas por mensaje, 1-2 emojis).
+
+  CLASIFICACIÓN: si el cliente habla sólo de TINACO, el tipo_negocio es 'construccion-mantenimiento-tinacos'. Si habla de CISTERNA o ALJIBE, es 'construccion-mantenimiento-cisternas'. Si llegó de la campaña "Cisternas, Aljibes y Tinacos" y no ha dicho de cuál se trata, pregúntale primero: "¿El servicio es para una cisterna/aljibe o para un tinaco?" y asigna el tipo_negocio según su respuesta (si cambia de tema, corrígelo en "datosExtraidos").
+
+  INFORMACIÓN OFICIAL — TINACOS:
+${fichaTinacos}
+
+  INFORMACIÓN OFICIAL — CISTERNAS Y ALJIBES:
+${fichaCisternas}
+
+  FLUJO (igual para ambos servicios):
+  1. PRIMER MENSAJE: saluda y, en el MISMO mensaje, explica en 3-4 líneas en qué consiste el servicio (resume "qué incluye" del producto correspondiente) y DESPUÉS da el precio base: "El servicio tiene un costo desde [PRECIO] MXN" (si hay TARIFAS POR CAPACIDAD y el cliente ya dijo los litros, da el precio exacto de su escalón; si aún no los dice, da el "desde"). Si el cliente ya preguntó el precio, respóndelo en este mensaje; primero explica qué incluye y luego el monto. Aclara brevemente lo que NO incluye (según el producto). Indica que el pago es en efectivo o transferencia. Si aún no sabes la capacidad, termina pidiendo UN dato: capacidad aproximada en litros (y cuántos son, en tinacos; tipo de depósito, en cisternas), aclarando que si no la sabe no hay problema. Asigna "paso_flujo": "paso_2" en este mensaje.${fotosCisternas ? `\n     Para CISTERNAS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos de obras terminadas; menciónalo ("te comparto unas fotos de trabajos que hemos hecho 👇").` : ""}${fotosTinacos ? `\n     Para TINACOS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos del servicio; menciónalo.` : ""}
+  2. Cuando el cliente te dé la capacidad (litros) o la cantidad, confirma el precio exacto con la tabla de TARIFAS POR CAPACIDAD (si existe) y deja claro el total. Responde sus dudas con la información oficial. Si el dato no está ahí, no lo inventes: dile que un asesor lo confirma. Si menciona fugas, grietas o daños en el depósito o pregunta por reparaciones que el servicio no cubre, acláralo con honestidad (el mantenimiento no incluye reparaciones estructurales ni de piezas, según el producto) sin ofrecer otra cosa por tu cuenta.
+  3. NO OFRECER INSPECCIÓN NI VISITA por iniciativa propia, ni insistir en agendar. Primero busca señales de INTENCIÓN. Cuando el cliente ya tenga la información y quieras saber si le interesa, puedes preguntar de forma abierta y sin presión: "¿Te gustaría que lo programemos?".
+  4. SOLO cuando el cliente muestre intención clara ("sí me interesa", "¿cuándo pueden venir?", "agéndame", "quiero contratarlo", pide fecha), pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos) y dile que un asesor del equipo le contactará por este chat para coordinar la fecha del servicio. Si el cliente pide expresamente una inspección o visita, entonces sí se la coordinas.
+  5. PROHIBIDO: ofrecer inspección sin intención del cliente, ofrecer meses sin intereses o pago con tarjeta (sólo efectivo o transferencia), prometer tiempos o días de ejecución (los define el asesor al coordinar) y dar descuentos.
 
 REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   Si el cliente no conoce las medidas de su azotea, no tiene las dimensiones exactas, o menciona que no puede obtenerlas (por ejemplo, porque no vive en el domicilio o tiene la casa rentada), bajo NINGUNA circunstancia debes sugerirle que mida él mismo, ni pedirle largo y ancho, ni compartirle enlaces a la calculadora.
@@ -572,7 +586,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
-    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
+    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
     "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
@@ -1512,6 +1526,20 @@ export async function responderConIA(
       wa_message_id: (r as any).messageId || null,
       agente: NOMBRE_AGENTE,
     });
+
+    // --- MANTENIMIENTO (cisternas/tinacos): fotos del servicio cuando se presenta servicio + precio ---
+    {
+      const servicioMant = servicioDeTipoNegocio((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio);
+      if (r.ok && !esMessenger && !esInstagram && servicioMant && (datosExtraidos as any).paso_flujo === "paso_2") {
+        await enviarFotosMantenimiento(sb, {
+          canal,
+          telefono: ctx.telefono,
+          expedienteId: ctx.expedienteId ?? null,
+          agente: NOMBRE_AGENTE,
+          servicio: servicioMant,
+        });
+      }
+    }
 
     // --- IMPERMEABILIZACIÓN: comparativa de precios e imágenes de referencia (sólo WhatsApp) ---
     if (r.ok && !esMessenger && !esInstagram && (exp?.tipo_negocio === "construccion-impermeabilizacion" || (datosExtraidos as any).paso_flujo)) {
