@@ -6,10 +6,11 @@ import {
   enviarMediosPaqueteImper,
   esPaqueteImper,
   hayFotosEnCatalogo,
+  enviarFichaTecnicaImper,
   metrosClaros,
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
-import { cargarProductosImper, fichaProductosParaPrompt } from "@/lib/ia/catalogo-imper";
+import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
@@ -313,6 +314,7 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
   const hayFotosImper = hayFotosEnCatalogo(productosImper);
   const fichaImper = fichaProductosParaPrompt(productosImper);
+  const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
 
   // 1. Encontrar el operador asignado o el fallback a Alex
   let operadorId = exp?.asesor_id || exp?.operador_id;
@@ -419,6 +421,12 @@ ${fichaImper
   ? `  Si el cliente pregunta por materiales, durabilidad, diferencias entre opciones, cómo se aplica, garantía u otros detalles técnicos, responde SOLO con la siguiente información oficial del catálogo (puedes resumirla y adaptarla a un tono cercano). Si el dato no está aquí, NO lo inventes: dile que un asesor lo confirma en la inspección técnica gratuita.
 ${fichaImper}`
   : "  Si el cliente pregunta detalles técnicos que no aparecen en este flujo, NO los inventes: dile que un asesor los confirma en la inspección técnica gratuita."}
+
+- FICHA TÉCNICA EN PDF:
+  Solo si el cliente la pide EXPRESAMENTE en su mensaje actual ("ficha técnica", "me mandas el PDF", "quiero ver las especificaciones en documento"), asigna en "datosExtraidos": "ficha_tecnica_de": "acrilico" | "estandar" | "premium" según el producto que eligió o del que está hablando. Si no queda claro de cuál, NO lo asignes y pregúntale de cuál opción la quiere. NUNCA la ofrezcas por iniciativa propia ni la envíes si no la pidió.
+${fichasPdf.length > 0
+  ? `  Fichas disponibles para enviar: ${fichasPdf.join(", ")}. Cuando la asignes, avísale brevemente que se la compartes en este chat (el sistema la envía justo después de tu mensaje). Para un producto que no está en esa lista, dile que un asesor se la comparte.`
+  : "  Por ahora no hay fichas técnicas en PDF cargadas: si la piden, dile que un asesor se la comparte."}
 
 - PASO 3: CONFIRMACIÓN DE INSPECCIÓN (Al aceptar la visita)
   Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
@@ -569,6 +577,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
     "paquete_elegido": "El paquete de impermeabilización que el cliente eligió CLARAMENTE: 'acrilico', 'estandar' o 'premium'. Si aún no ha elegido, null (no asumas uno)",
+    "ficha_tecnica_de": "'acrilico', 'estandar' o 'premium' SOLO si en el mensaje actual el cliente pidió expresamente la ficha técnica (PDF) de ese producto; en cualquier otro caso null",
     "metros_claros": "true SOLO si el cliente dio de forma clara los metros cuadrados de su azotea en el mensaje actual o antes (un número); false o null en cualquier otro caso",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
@@ -973,6 +982,7 @@ export async function responderConIA(
       metros?: number | string | null;
       metros_claros?: boolean | string | null;
       paquete_elegido?: string | null;
+      ficha_tecnica_de?: string | null;
       cliente_nombre?: string | null;
       telefono_real?: string | null;
     } = {};
@@ -1514,6 +1524,10 @@ export async function responderConIA(
       const elegido = (datosExtraidos as any).paquete_elegido;
       if (esPaqueteImper(elegido)) {
         await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: elegido });
+      }
+      const fichaDe = (datosExtraidos as any).ficha_tecnica_de;
+      if (esPaqueteImper(fichaDe)) {
+        await enviarFichaTecnicaImper(sb, { ...ctxEnvio, paquete: fichaDe });
       }
     }
 
