@@ -282,11 +282,11 @@ export const CATALOGO_CATEGORIAS_MARKETING: Record<string, CategoriaMarketingPar
       "manto prefabricado", "manto asfaltico", "manto asfáltico", "soplete", "termofusion", "termofusión",
       "gotera", "goteras", "filtracion", "filtración", "humedad en techo", "azotea"
     ],
-    ofertaPrincipal: "Impermeabilización profesional con rollo de membrana asfáltica prefabricada con gravilla blanca termo-fusionada con soplete. $210/m² con 5 a 10 años de garantía por escrito.",
+    ofertaPrincipal: "Impermeabilización profesional de azoteas en 3 opciones: Acrílico (2 años de garantía), Estándar 3.5 con gravilla (5 años) y Premium 4.0 poliéster con gravilla (10 años). Garantía por escrito e inspección técnica gratuita.",
     ganchosComerciales: [
-      "Antes de que la lluvia dañe tus muebles y techos: impermeabilización profesional con soplete y garantía de hasta 10 años.",
-      "¡No más goteras ni humedad! Sistema prefabricado termo-fusionado a $210/m² instalado en 1 día.",
-      "Garantía por escrito de 5 a 10 años en impermeabilización de azoteas en León Gto."
+      "Antes de que la lluvia dañe tus muebles y techos: impermeabilización profesional con garantía de hasta 10 años.",
+      "¡No más goteras ni humedad! Elige entre Acrílico, Estándar o Premium, con garantía por escrito e inspección gratuita.",
+      "Garantía por escrito de 2, 5 o 10 años en impermeabilización de azoteas en León Gto."
     ],
     elementosPermitidos: [
       "Skilled Mexican roofing technician in clean navy blue workwear, heat-resistant gloves, and helmet",

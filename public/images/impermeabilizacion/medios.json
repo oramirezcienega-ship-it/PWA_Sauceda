@@ -1,0 +1,6 @@
+{
+  "_ayuda": "Sofía envía estas imágenes cuando el cliente elige un paquete. Sube las fotos a esta carpeta (JPG o PNG, máx. 5 MB c/u, hasta 5 por paquete) y lístalas aquí. 'texto' es opcional: se agrega al pie de la imagen. Ejemplo: { \"archivo\": \"premium-aplicacion.jpg\", \"texto\": \"Aplicación del sistema 4.0 poliéster\" }",
+  "acrilico": [],
+  "estandar": [],
+  "premium": []
+}
