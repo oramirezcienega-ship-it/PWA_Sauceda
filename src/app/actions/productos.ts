@@ -8,7 +8,8 @@ import type {
   Insumo, 
   ConceptoApuComposicion, 
   InsumoHistorialPrecio,
-  FotoProducto 
+  FotoProducto,
+  TarifaCapacidad
 } from "@/lib/types";
 
 // Mapeador de ProductoServicio
@@ -38,8 +39,25 @@ function aProductoServicio(fila: any): ProductoServicio {
     aptoParaIa: fila.apto_para_ia !== false,
     fichaTecnicaUrl: fila.ficha_tecnica_url || null,
     fichaTecnicaNombre: fila.ficha_tecnica_nombre || null,
+    tarifasCapacidad: normalizarTarifasCapacidad(fila.tarifas_capacidad),
     createdAt: fila.created_at,
   };
+}
+
+/** Normaliza el JSON de tarifas por capacidad (orden ascendente, sin escalones inválidos). */
+function normalizarTarifasCapacidad(raw: any): TarifaCapacidad[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((t: any) => ({
+      hastaLitros: Math.round(Number(t?.hasta_litros ?? t?.hastaLitros)),
+      precio: t?.precio === null || t?.precio === undefined || t?.precio === "" ? null : Number(t.precio),
+    }))
+    .filter((t) => Number.isFinite(t.hastaLitros) && t.hastaLitros > 0 && (t.precio === null || Number.isFinite(t.precio)))
+    .sort((a, b) => a.hastaLitros - b.hastaLitros);
+}
+
+function tarifasAJson(t?: TarifaCapacidad[]) {
+  return normalizarTarifasCapacidad(t).map((x) => ({ hasta_litros: x.hastaLitros, precio: x.precio }));
 }
 
 // Mapeador de Insumo
@@ -174,6 +192,7 @@ export async function crearProductoServicio(datos: {
   aptoParaIa?: boolean;
   fichaTecnicaUrl?: string | null;
   fichaTecnicaNombre?: string | null;
+  tarifasCapacidad?: TarifaCapacidad[];
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -208,6 +227,7 @@ export async function crearProductoServicio(datos: {
       apto_para_ia: datos.aptoParaIa !== false,
       ficha_tecnica_url: datos.fichaTecnicaUrl || null,
       ficha_tecnica_nombre: datos.fichaTecnicaUrl ? datos.fichaTecnicaNombre || null : null,
+      tarifas_capacidad: tarifasAJson(datos.tarifasCapacidad),
     })
     .select("*, business_units ( id, nombre )")
     .single();
@@ -238,6 +258,7 @@ export async function editarProductoServicio(
     aptoParaIa?: boolean;
     fichaTecnicaUrl?: string | null;
     fichaTecnicaNombre?: string | null;
+    tarifasCapacidad?: TarifaCapacidad[];
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -261,6 +282,9 @@ export async function editarProductoServicio(
     activo: datos.activo !== false,
     apto_para_ia: datos.aptoParaIa !== false,
   };
+  if (datos.tarifasCapacidad !== undefined) {
+    updatePayload.tarifas_capacidad = tarifasAJson(datos.tarifasCapacidad);
+  }
   // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
   if (datos.fichaTecnicaUrl !== undefined) {
     updatePayload.ficha_tecnica_url = datos.fichaTecnicaUrl || null;

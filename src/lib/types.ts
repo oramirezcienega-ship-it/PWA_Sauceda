@@ -43,6 +43,7 @@ export type TipoNegocioId =
   | "construccion-piso-estampado"
   | "construccion-mantenimiento-postventa"
   | "construccion-mantenimiento-cisternas"
+  | "construccion-mantenimiento-tinacos"
   | "construccion-herreria"
   | "otro";
 
@@ -66,6 +67,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Mantenimiento Postventa)";
     case "construccion-mantenimiento-cisternas":
       return "Sauceda Construye (Mantenimiento Cisternas)";
+    case "construccion-mantenimiento-tinacos":
+      return "Sauceda Construye (Mantenimiento Tinacos)";
     case "construccion-herreria":
       return "Sauceda Construye (Herrería)";
     case "otro":
@@ -118,36 +121,20 @@ export function detectarTipoNegocio(
     return "construccion-piso-estampado";
   }
 
-  // 3. Mantenimiento de Cisternas, Aljibes y Tinacos (Alta prioridad por Campaña de Meta / Lead Ads / Palabras Clave)
-  if (
-    campLower.includes("cisterna") ||
-    campLower.includes("aljibe") ||
-    campLower.includes("tinaco") ||
-    campLower.includes("rotoplas") ||
-    texto.includes("cisterna") ||
-    texto.includes("cisternas") ||
-    texto.includes("aljibe") ||
-    texto.includes("aljibes") ||
-    texto.includes("tinaco") ||
-    texto.includes("tinacos") ||
-    texto.includes("rotoplas") ||
-    texto.includes("lavado de cisterna") ||
-    texto.includes("lavado de aljibe") ||
-    texto.includes("lavado de tinaco") ||
-    texto.includes("limpieza de cisterna") ||
-    texto.includes("limpieza de aljibe") ||
-    texto.includes("limpieza de tinaco") ||
-    texto.includes("mantenimiento de cisterna") ||
-    texto.includes("mantenimiento de aljibe") ||
-    texto.includes("mantenimiento de tinaco") ||
-    texto.includes("desinfeccion de cisterna") ||
-    texto.includes("desinfección de cisterna") ||
-    texto.includes("fuga en cisterna") ||
-    texto.includes("filtracion en cisterna") ||
-    texto.includes("filtración en cisterna") ||
-    texto.includes("grieta en cisterna") ||
-    texto.includes("bomba de cisterna")
-  ) {
+  // 3. Mantenimiento de Tinacos vs. Cisternas/Aljibes (alta prioridad por Campaña de Meta / palabras clave).
+  // La campaña suele llamarse "Cisternas, Aljibes y Tinacos", así que lo que escribe el cliente
+  // manda: si habla sólo de tinaco es Tinacos; sólo de cisterna/aljibe es Cisternas.
+  // Si no aclara (o menciona ambos), queda en Cisternas y Sofía le pregunta cuál es.
+  const msgLower = (mensaje || "").toLowerCase();
+  const menciona = (t: string, re: RegExp) => re.test(t);
+  const reTinaco = /tinaco|rotoplas/;
+  const reCisterna = /cisterna|aljibe/;
+  const clienteTinaco = menciona(msgLower, reTinaco);
+  const clienteCisterna = menciona(msgLower, reCisterna);
+  if (clienteTinaco && !clienteCisterna) {
+    return "construccion-mantenimiento-tinacos";
+  }
+  if (clienteCisterna || menciona(texto, reCisterna) || menciona(texto, reTinaco)) {
     return "construccion-mantenimiento-cisternas";
   }
 
@@ -1119,6 +1106,12 @@ export interface CotizacionConcepto {
   createdAt: string;
 }
 
+export interface TarifaCapacidad {
+  hastaLitros: number;
+  /** null = escalón sin precio capturado (Sofía lo ignora). */
+  precio: number | null;
+}
+
 export interface ProductoServicio {
   id: string;
   nombre: string;
@@ -1141,6 +1134,8 @@ export interface ProductoServicio {
   /** PDF de la ficha técnica (Sofía lo envía sólo si el cliente lo pide). */
   fichaTecnicaUrl?: string | null;
   fichaTecnicaNombre?: string | null;
+  /** Precio por escalón de capacidad (litros), para servicios como limpieza de tinacos/cisternas. */
+  tarifasCapacidad?: TarifaCapacidad[];
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }
