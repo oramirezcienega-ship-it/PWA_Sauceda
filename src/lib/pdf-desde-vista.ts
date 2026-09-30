@@ -45,6 +45,12 @@ export interface VistaPdf {
   ruta: string;
   /** Texto que, si aparece en la página, indica que no es el documento (p. ej. "no está disponible"). */
   textosDeError?: string[];
+  /** Cookies de sesión a enviar (páginas que exigen login, como el contrato). Solo se mandan a las bases indicadas. */
+  cookies?: { name: string; value: string }[];
+  /** Usar el tamaño y los márgenes del CSS de la página (@page), p. ej. el contrato con su paginación. */
+  usarPaginaCss?: boolean;
+  /** Selector que debe existir antes de imprimir (páginas que se montan en el cliente). */
+  esperarSelector?: string;
   /** Si el documento debe quedar en UNA sola hoja (se reduce la escala solo lo necesario). */
   unaHoja?: boolean;
 }
@@ -99,6 +105,9 @@ async function renderizar(navegador: Browser, url: string, v: VistaPdf): Promise
       window.print = () => {};
     });
     await pagina.setViewport({ width: 1200, height: 1600, deviceScaleFactor: 1 });
+    if (v.cookies?.length) {
+      await pagina.setCookie(...v.cookies.map((c) => ({ name: c.name, value: c.value, url })));
+    }
     const resp = await pagina.goto(url, { waitUntil: "networkidle0", timeout: TIMEOUT_CARGA_MS });
     if (!resp) return { pdf: null, motivo: "sin respuesta" };
     if (resp.status() >= 400) return { pdf: null, motivo: `HTTP ${resp.status()}` };
@@ -112,6 +121,9 @@ async function renderizar(navegador: Browser, url: string, v: VistaPdf): Promise
     }
     if (rutaFinal.startsWith("/login")) return { pdf: null, motivo: `redirigido a ${rutaFinal}` };
 
+    if (v.esperarSelector) {
+      await pagina.waitForSelector(v.esperarSelector, { timeout: 15_000 }).catch(() => {});
+    }
     await pagina.evaluate(() => (document as any).fonts?.ready);
     const texto: string = await pagina.evaluate(() => document.body?.innerText || "");
     const errores = [...TEXTOS_ERROR_COMUNES, ...(v.textosDeError || [])];
@@ -122,7 +134,10 @@ async function renderizar(navegador: Browser, url: string, v: VistaPdf): Promise
 
     const generar = async (escala: number) =>
       Buffer.from(
-        await pagina.pdf({
+        await pagina.pdf(
+          v.usarPaginaCss
+            ? { printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false, margin: { top: 0, right: 0, bottom: 0, left: 0 } }
+            : {
           width: "8.5in",
           height: "11in",
           scale: escala,
@@ -130,7 +145,8 @@ async function renderizar(navegador: Browser, url: string, v: VistaPdf): Promise
           preferCSSPageSize: false,
           displayHeaderFooter: false,
           margin: { top: "10mm", right: "10mm", bottom: "10mm", left: "10mm" },
-        })
+        }
+        )
       );
 
     if (!v.unaHoja) return { pdf: await generar(1) };
