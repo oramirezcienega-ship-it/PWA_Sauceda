@@ -51,6 +51,7 @@ export function ProductosClient({
   const [busquedaProd, setBusquedaProd] = useState("");
   const [filtroTipoProd, setFiltroTipoProd] = useState("todos");
   const [filtroCentroCosto, setFiltroCentroCosto] = useState("todos");
+  const [modoVistaProd, setModoVistaProd] = useState<"tabla" | "cuadricula">("tabla");
   const [modalProdAbierto, setModalProdAbierto] = useState(false);
   const [tabModalProd, setTabModalProd] = useState<"general" | "fotos" | "sofia" | "apu">("general");
   const [prodEditando, setProdEditando] = useState<ProductoServicio | null>(null);
@@ -548,53 +549,298 @@ export function ProductosClient({
       {/* ============================================================ */}
       {tabActiva === "productos" && (
         <div className="space-y-4">
-          {/* Barra de Filtros */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-3 bg-white p-3.5 rounded-xl border border-carbon/10 shadow-xs">
-            <div className="relative sm:col-span-2">
-              <input
-                type="text"
-                placeholder="Buscar por código, nombre, categoría o beneficios..."
-                value={busquedaProd}
-                onChange={(e) => setBusquedaProd(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-cuerpo"
-              />
-              <span className="absolute left-3 top-2.5 text-xs text-carbon/40">🔍</span>
+          {/* Barra de Filtros y Selector de Modo de Vista */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-carbon/10 shadow-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Buscar por código, nombre, categoría o beneficios..."
+                  value={busquedaProd}
+                  onChange={(e) => setBusquedaProd(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-cuerpo"
+                />
+                <span className="absolute left-3 top-2.5 text-xs text-carbon/40">🔍</span>
+              </div>
+
+              <div>
+                <select
+                  value={filtroCentroCosto}
+                  onChange={(e) => setFiltroCentroCosto(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-cuerpo bg-white"
+                >
+                  <option value="todos">Todos los Centros de Costo</option>
+                  {centrosCosto.map((cc) => (
+                    <option key={cc.id} value={cc.id}>
+                      {cc.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <select
+                  value={filtroTipoProd}
+                  onChange={(e) => setFiltroTipoProd(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-cuerpo bg-white"
+                >
+                  <option value="todos">Todos los Tipos</option>
+                  <option value="servicio">Servicios (Impermeabilización, etc.)</option>
+                  <option value="concepto_obra">Conceptos de Obra (APU)</option>
+                  <option value="producto">Productos y Acabados</option>
+                  <option value="insumo">Insumos de Venta Directa</option>
+                </select>
+              </div>
             </div>
 
-            <div>
-              <select
-                value={filtroCentroCosto}
-                onChange={(e) => setFiltroCentroCosto(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-cuerpo bg-white"
+            {/* Alternador de Modo de Vista: Filas (Excel) vs Cuadrícula (Tarjetas) */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-carbon/10 shrink-0 self-end lg:self-auto">
+              <button
+                type="button"
+                onClick={() => setModoVistaProd("tabla")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                  modoVistaProd === "tabla"
+                    ? "bg-white text-sauce shadow-xs font-bold"
+                    : "text-carbon/60 hover:text-carbon"
+                }`}
+                title="Vista estructurada en filas y columnas tipo Excel"
               >
-                <option value="todos">Todos los Centros de Costo</option>
-                {centrosCosto.map((cc) => (
-                  <option key={cc.id} value={cc.id}>
-                    {cc.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={filtroTipoProd}
-                onChange={(e) => setFiltroTipoProd(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-cuerpo bg-white"
+                <span>📊</span>
+                <span>Filas / Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoVistaProd("cuadricula")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                  modoVistaProd === "cuadricula"
+                    ? "bg-white text-sauce shadow-xs font-bold"
+                    : "text-carbon/60 hover:text-carbon"
+                }`}
+                title="Vista en cuadrícula de tarjetas"
               >
-                <option value="todos">Todos los Tipos</option>
-                <option value="servicio">Servicios (Impermeabilización, etc.)</option>
-                <option value="concepto_obra">Conceptos de Obra (APU)</option>
-                <option value="producto">Productos y Acabados</option>
-                <option value="insumo">Insumos de Venta Directa</option>
-              </select>
+                <span>🎴</span>
+                <span>Tarjetas</span>
+              </button>
             </div>
           </div>
 
-          {/* Grid de Productos */}
+          {/* Visualización de Productos */}
           {productosFiltrados.length === 0 ? (
             <div className="bg-white p-12 text-center rounded-xl border border-carbon/10 text-carbon/40 font-cuerpo text-sm">
               No se encontraron productos o servicios que coincidan con la búsqueda.
+            </div>
+          ) : modoVistaProd === "tabla" ? (
+            /* Vista Retícula / Tabla tipo Excel */
+            <div className="bg-white rounded-xl border border-carbon/10 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead className="bg-slate-100/90 border-b border-carbon/15 font-titular font-bold text-carbon/70 uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="px-3 py-3 text-center w-14">Foto</th>
+                      <th className="px-3.5 py-3 w-24">Código</th>
+                      <th className="px-3.5 py-3 min-w-[240px]">Producto / Concepto</th>
+                      <th className="px-3.5 py-3 min-w-[150px]">Centro de Costo / Cat.</th>
+                      <th className="px-3.5 py-3 text-center min-w-[120px]">Gama & Sofía</th>
+                      <th className="px-3.5 py-3 text-center w-16">Unidad</th>
+                      <th className="px-3.5 py-3 text-right w-28">Costo Base</th>
+                      <th className="px-3.5 py-3 text-center w-24">Margen</th>
+                      <th className="px-3.5 py-3 text-right w-32">Precio Venta</th>
+                      <th className="px-3.5 py-3 text-center w-20">Comisión</th>
+                      <th className="px-3.5 py-3 text-center w-28">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-carbon/5 font-cuerpo text-carbon">
+                    {productosFiltrados.map((p) => {
+                      const fotoPrincipal = p.fotos?.[0]?.url;
+                      const margen = p.precioUnitario > 0 
+                        ? Math.round(((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100) 
+                        : 0;
+
+                      return (
+                        <tr 
+                          key={p.id} 
+                          className="hover:bg-sauce/5 transition-colors group"
+                        >
+                          {/* Foto miniatura */}
+                          <td className="px-3 py-2 text-center">
+                            {fotoPrincipal ? (
+                              <img
+                                src={fotoPrincipal}
+                                alt={p.nombre}
+                                className="h-10 w-10 rounded-lg object-cover mx-auto border border-carbon/10 shadow-2xs group-hover:scale-105 transition"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center mx-auto text-carbon/30 border border-carbon/5 text-sm" title="Sin foto">
+                                🏗️
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Código */}
+                          <td className="px-3.5 py-2 font-mono font-bold text-sauce whitespace-nowrap">
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs">
+                              {p.id}
+                            </span>
+                          </td>
+
+                          {/* Producto / Concepto */}
+                          <td className="px-3.5 py-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditarProd(p)}
+                              className="font-bold text-carbon text-left hover:text-sauce transition leading-snug line-clamp-1 block text-[13px]"
+                            >
+                              {p.nombre}
+                            </button>
+                            <p className="text-[11px] text-carbon/50 line-clamp-1 font-cuerpo mt-0.5">
+                              {p.descripcionValor || p.descripcion || "Sin descripción registrada"}
+                            </p>
+                          </td>
+
+                          {/* Centro de Costo / Categoría */}
+                          <td className="px-3.5 py-2 whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5 items-start">
+                              {p.centroCostoNombre ? (
+                                <span className="rounded-md bg-verde-profundo/10 text-verde-profundo px-2 py-0.5 text-[10px] font-semibold">
+                                  {p.centroCostoNombre}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-carbon/40 italic">General</span>
+                              )}
+                              {p.categoria && p.categoria !== "General" && (
+                                <span className="rounded-md bg-slate-100 text-carbon/70 px-1.5 py-0.5 text-[10px]">
+                                  {p.categoria}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Gama & Sofía (IA) */}
+                          <td className="px-3.5 py-2 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span
+                                className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase shadow-2xs ${
+                                  p.gama === "premium"
+                                    ? "bg-purple-100 text-purple-700 border border-purple-200"
+                                    : p.gama === "media"
+                                    ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                    : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                {p.gama || "estándar"}
+                              </span>
+                              {p.aptoParaIa && (
+                                <span
+                                  className="rounded-md bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold flex items-center gap-0.5"
+                                  title="Sofía (IA) puede consultar esta ficha para recomendarla a clientes"
+                                >
+                                  ✨ Sofía
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Unidad */}
+                          <td className="px-3.5 py-2 text-center font-mono text-xs text-carbon/70 whitespace-nowrap">
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5">
+                              {p.unidad || "m2"}
+                            </span>
+                          </td>
+
+                          {/* Costo Base */}
+                          <td className="px-3.5 py-2 text-right font-mono text-xs text-carbon/70 whitespace-nowrap">
+                            {formatMoneda(p.costoUnitario)}
+                          </td>
+
+                          {/* Margen */}
+                          <td className="px-3.5 py-2 text-center whitespace-nowrap">
+                            <span
+                              className={`inline-block font-mono font-bold text-[11px] px-2 py-0.5 rounded-full ${
+                                margen >= 30
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : margen > 0
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {margen}%
+                            </span>
+                          </td>
+
+                          {/* Precio Venta */}
+                          <td className="px-3.5 py-2 text-right font-mono font-bold text-sauce text-[13px] whitespace-nowrap">
+                            {formatMoneda(p.precioUnitario)}
+                          </td>
+
+                          {/* Comisión Asesor */}
+                          <td className="px-3.5 py-2 text-center font-mono text-xs text-carbon/60 whitespace-nowrap">
+                            {p.porcentajeComision ? `${p.porcentajeComision}%` : "5%"}
+                          </td>
+
+                          {/* Acciones */}
+                          <td className="px-3.5 py-2 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditarProd(p)}
+                                className="rounded-lg bg-slate-100 hover:bg-sauce hover:text-white px-2.5 py-1 text-xs font-semibold text-carbon transition flex items-center gap-1 font-cuerpo"
+                                title="Editar Ficha técnica y Análisis de Precios Unitarios (APU)"
+                              >
+                                <span>✏️</span>
+                                <span>Ficha & APU</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarProducto(p.id)}
+                                className="rounded-lg bg-red-50 hover:bg-red-100 p-1 text-xs text-rojo transition"
+                                title="Eliminar producto"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {/* Resumen al pie de la tabla tipo Excel */}
+                  <tfoot className="bg-slate-50/90 border-t border-carbon/10 font-mono text-xs text-carbon/70">
+                    <tr>
+                      <td colSpan={3} className="px-3.5 py-2.5 font-bold font-cuerpo">
+                        Total: {productosFiltrados.length} concepto{productosFiltrados.length === 1 ? "" : "s"}
+                      </td>
+                      <td colSpan={3} className="px-3.5 py-2.5 text-center font-cuerpo text-[11px] text-carbon/50">
+                        Estructura reticular tipo Excel
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-bold text-carbon/80 whitespace-nowrap">
+                        {formatMoneda(
+                          productosFiltrados.length > 0
+                            ? productosFiltrados.reduce((acc, p) => acc + (p.costoUnitario || 0), 0) / productosFiltrados.length
+                            : 0
+                        )} <span className="text-[10px] text-carbon/40 font-normal">prom.</span>
+                      </td>
+                      <td className="px-3.5 py-2.5 text-center font-bold text-emerald-700 whitespace-nowrap">
+                        {productosFiltrados.length > 0
+                          ? Math.round(
+                              productosFiltrados.reduce((acc, p) => {
+                                const m = p.precioUnitario > 0 ? ((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100 : 0;
+                                return acc + m;
+                              }, 0) / productosFiltrados.length
+                            )
+                          : 0}% <span className="text-[10px] text-carbon/40 font-normal">prom.</span>
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right font-bold text-sauce whitespace-nowrap">
+                        {formatMoneda(
+                          productosFiltrados.length > 0
+                            ? productosFiltrados.reduce((acc, p) => acc + (p.precioUnitario || 0), 0) / productosFiltrados.length
+                            : 0
+                        )} <span className="text-[10px] text-carbon/40 font-normal">prom.</span>
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
