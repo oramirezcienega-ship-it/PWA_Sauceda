@@ -1108,8 +1108,10 @@ export interface CotizacionConcepto {
 
 export interface TarifaCapacidad {
   hastaLitros: number;
-  /** null = escalón sin precio capturado (Sofía lo ignora). */
+  /** Precio de venta al cliente. null = escalón sin precio capturado (Sofía lo ignora). */
   precio: number | null;
+  /** Precio del proveedor (costo). Interno: Sofía nunca lo ve ni lo menciona. */
+  costo: number | null;
 }
 
 export interface ProductoServicio {
