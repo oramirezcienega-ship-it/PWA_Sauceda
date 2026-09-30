@@ -1,5 +1,5 @@
 -- ============================================================
--- Migración 0106: Módulo de Gestión de Compraventa INFONAVIT
+-- Migración 0108: Módulo de Gestión de Compraventa INFONAVIT
 -- ============================================================
 -- Servicio integral de gestión y acompañamiento en compraventa
 -- con crédito INFONAVIT ($15,000 MXN: 50% anticipo, 50% liquidación).

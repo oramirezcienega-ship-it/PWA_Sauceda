@@ -15,7 +15,7 @@ if (-not $url) {
     exit 1
 }
 
-$sql = Get-Content "supabase/migrations/0107_mensajes_whatsapp_mautic_tracking.sql" -Raw -Encoding UTF8
+$sql = Get-Content "supabase/migrations/0109_mensajes_whatsapp_mautic_tracking.sql" -Raw -Encoding UTF8
 
 $headers = @{
     "apikey" = $key
@@ -24,6 +24,6 @@ $headers = @{
 
 $jsonBody = @{ query = $sql } | ConvertTo-Json
 
-Write-Host "Aplicando migracion 0107 a Staging: $url ..."
+Write-Host "Aplicando migracion 0109 a Staging: $url ..."
 $response = Invoke-RestMethod -Uri "$url/pg/query" -Method Post -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($jsonBody)) -ContentType "application/json; charset=utf-8"
 $response | ConvertTo-Json -Depth 5
