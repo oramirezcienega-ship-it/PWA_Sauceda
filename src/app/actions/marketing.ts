@@ -297,7 +297,7 @@ function detectarCategoriaPublicacion(pub: PublicacionProgramada): string {
   const encabezado = `${campana} ${titulo}`.trim();
   const query = `${encabezado} ${contenido} ${sugerencia} ${notas}`.trim();
 
-  return resolverCategoriaMarketing(query || "general").id;
+  return resolverCategoriaMarketing(query || "general", encabezado).id;
 }
 
 /**
@@ -759,8 +759,9 @@ export async function regenerarCreativoPublicacion(
     const { data, error } = await sb
       .from("publicaciones_programadas")
       .update({
+        // Sólo se regenera la imagen: el estado NO cambia. Antes se forzaba "aprobado" y el
+        // cron publicaba en Meta cualquier post aprobado con fecha vencida sin que nadie lo aprobara.
         url_imagen: null,
-        estado: "aprobado",
         prompt_imagen_flux: nuevoPrompt,
         diseno_banner: nuevoDisenoBanner,
         updated_at: new Date().toISOString(),
@@ -775,7 +776,12 @@ export async function regenerarCreativoPublicacion(
       ...(data as PublicacionProgramada),
       prompt_imagen_flux: nuevoPrompt,
     };
-    const wh = await dispararWebhookN8N(result, "aprobar");
+    // "aprobar" es el evento con el que n8n genera el creativo; se marca explícitamente que
+    // esto es sólo generación de imagen y que NO debe publicarse ni cambiar el estado.
+    const wh = await dispararWebhookN8N(result, "aprobar", {
+      solo_generar_creativo: true,
+      no_publicar: true,
+    });
 
     return { success: true, data: result, aviso: wh.aviso };
   } catch (err: any) {
