@@ -69,6 +69,7 @@ function esRutaPublica(path: string | null): boolean {
     // cliente ve la página y segundos después lo manda a /login al no poder cargar expedientes.
     path.startsWith("/visualizador") ||
     path.startsWith("/recibo/") ||
+    path.startsWith("/contrato-pdf/") ||
     path.startsWith("/garantia/") ||
     path.startsWith("/orden-trabajo/entrega/") ||
     path.startsWith("/orden-trabajo/remision/") ||
