@@ -35,6 +35,7 @@ import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
 import { EditorPresupuestoApu } from "./construccion/EditorPresupuestoApu";
 import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
+import { PanelAutorizacionCostosTelegram } from "./PanelAutorizacionCostosTelegram";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
@@ -2346,6 +2347,8 @@ export function DetalleCotizacionAdmin({
                 )}
               </div>
             </div>
+
+            <PanelAutorizacionCostosTelegram cotizacionId={cotizacion.id} />
 
             {/* Sección de Envío al Cliente */}
             <div className="border-t pt-6 space-y-4">
