@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/telegram";
@@ -186,34 +187,53 @@ async function armarPaqueteOT(ordenId: string) {
     });
   }
 
-  // Contrato firmado (PDF escaneado cargado al sistema)
+  // Contrato: versión vigente (generado o firmado) impresa desde su página, y el PDF firmado escaneado
   try {
     const { data: contratos } = await sb
       .from("contratos")
-      .select("id, folio, version, pdf_firmado_url")
+      .select("id, folio, version, estado, pdf_firmado_url")
       .eq("orden_trabajo_id", ordenId)
-      .eq("estado", "firmado")
-      .not("pdf_firmado_url", "is", null)
+      .in("estado", ["generado", "firmado"])
       .order("version", { ascending: false })
       .limit(1);
     const c = contratos?.[0];
-    if (c?.pdf_firmado_url) {
+    if (c) {
+      // La página del contrato exige sesión: se reenvía la del usuario solo al propio servidor
+      const sesion = cookies()
+        .getAll()
+        .filter((k) => k.name.startsWith("sb-"))
+        .map((k) => ({ name: k.name, value: k.value }));
       bloques.push({
         clave: `contrato:${c.id}`,
-        nombre: `Contrato firmado ${c.folio}`,
-        detalle: "PDF firmado por el cliente",
-        archivo: async () => {
-          const { data, error } = await sb.storage.from("contratos").download(c.pdf_firmado_url as string);
-          if (error || !data) return null;
-          return {
-            buffer: Buffer.from(await data.arrayBuffer()),
-            nombreArchivo: `${limpiarNombre(`Contrato ${c.folio} - ${orden.clienteNombre || "Cliente"}`)}.pdf`,
-          };
+        nombre: `Contrato ${c.folio}`,
+        detalle: c.estado === "firmado" ? "Firmado · versión vigente" : `Generado · versión ${c.version}`,
+        vista: {
+          ruta: `/ordenes-trabajo/${ordenId}/contrato/${c.id}`,
+          cookies: sesion,
+          usarPaginaCss: true,
+          esperarSelector: "[data-contrato-root]",
         },
+        nombreArchivo: `${limpiarNombre(`Contrato ${c.folio} - ${orden.clienteNombre || "Cliente"}`)}.pdf`,
+        archivo: async () => null,
       });
+      if (c.estado === "firmado" && c.pdf_firmado_url) {
+        bloques.push({
+          clave: `contrato-firmado:${c.id}`,
+          nombre: `Contrato firmado ${c.folio} (escaneado)`,
+          detalle: "PDF firmado por el cliente",
+          archivo: async () => {
+            const { data, error } = await sb.storage.from("contratos").download(c.pdf_firmado_url as string);
+            if (error || !data) return null;
+            return {
+              buffer: Buffer.from(await data.arrayBuffer()),
+              nombreArchivo: `${limpiarNombre(`Contrato firmado ${c.folio} - ${orden.clienteNombre || "Cliente"}`)}.pdf`,
+            };
+          },
+        });
+      }
     }
   } catch {
-    /* sin contrato firmado */
+    /* sin contrato */
   }
 
   const lineas: string[] = [
@@ -300,6 +320,8 @@ export interface ResultadoEnvioOT {
   error?: string;
   /** Documentos que no se pudieron generar idénticos a la página impresa y salieron en formato alterno. */
   enFormatoAlterno?: string[];
+  /** Documentos que no se pudieron generar y NO se enviaron. */
+  noGenerados?: string[];
 
   enviados: { nombre: string; ok: boolean; documentos: number; error?: string }[];
 }
@@ -327,6 +349,7 @@ export async function enviarOTPorTelegramAction(
     const elegidos = bloques.filter((b) => clavesDocumentos.includes(b.clave));
     const archivos: { nombre: string; buffer: Buffer; nombreArchivo: string }[] = [];
     const enFormatoAlterno: string[] = [];
+    const noGenerados: string[] = [];
 
     // 1) PDF idéntico al que se imprime (se renderiza la misma página pública). Se pide primero al
     //    propio servidor (sin pasar por el dominio público) y luego a la URL pública.
@@ -358,6 +381,8 @@ export async function enviarOTPorTelegramAction(
         if (a) {
           archivos.push({ nombre: b.nombre, ...a });
           if (b.vista) enFormatoAlterno.push(`${b.nombre} — ${motivosFallo.get(b.clave) || "sin detalle"}`);
+        } else if (b.vista) {
+          noGenerados.push(`${b.nombre} — ${motivosFallo.get(b.clave) || "sin detalle"}`);
         }
       } catch (e) {
         console.warn(`[OT Telegram] No se pudo generar "${b.nombre}":`, e);
@@ -417,6 +442,7 @@ export async function enviarOTPorTelegramAction(
       ok: okNombres.length > 0,
       error: okNombres.length > 0 ? undefined : enviados.map((e) => `${e.nombre}: ${e.error}`).join(" · "),
       enFormatoAlterno,
+      noGenerados,
       enviados,
     };
   } catch (err: any) {
