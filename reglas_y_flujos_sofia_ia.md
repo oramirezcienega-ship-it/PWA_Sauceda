@@ -75,46 +75,29 @@ Para proyectos de obra mayor o diseño arquitectónico:
 ---
 
 ## ☔ 4. Flujo Conversacional Estricto de Impermeabilización (`construccion-impermeabilizacion`)
-Sofía cuenta con un embudo conversacional lineal optimizado en 3 pasos para la venta de impermeabilización profesional en León, Gto (Versión 4.0). **PROHIBIDO enviar enlaces, links, URLs o archivos en las respuestas de la IA:**
+Embudo lineal (Versión 5.0) con **tres opciones**: Acrílico (garantía 2 años), Estándar 3.5 con gravilla (5 años) y Premium 4.0 poliéster con gravilla (10 años). **PROHIBIDO enviar enlaces o URLs.** **PROHIBIDO** hablar de días/tiempos de instalación, de meses sin intereses o de pago con tarjeta: las formas de pago son **efectivo o transferencia**.
 
-### 📍 PASO 1: Saludo e Información del Servicio (Detección de Interés)
-Si el cliente muestra interés en impermeabilización o goteras y **no** tenemos los metros cuadrados en el historial, Sofía envía exactamente este texto:
-> *"¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción. Somos especialistas en impermeabilización profesional en León y alrededores.
-> 
-> 🟡 NUESTRO SERVICIO:
-> Aplicamos Impermeabilizante Profesional Estándar de 3.5 mm con acabado de gravilla protectora (roja o gris a tu elección).
-> ⏱️ INSTALACIÓN EN 1 DÍA: Realizamos todo el trabajo de instalación en tan solo 1 día.
-> 🛠️ ¿QUÉ INCLUYE?: Diagnóstico técnico, limpieza profunda de la superficie, resane y sellado de grietas, y la aplicación profesional.
-> 🏆 ¿POR QUÉ ELEGIRNOS?: Te entregamos una garantía de 5 años por escrito, utilizamos materiales de primera y contamos con mano de obra altamente capacitada para proteger tu azotea de goteras y filtraciones.
-> 
-> Para darte una cotización personalizada de inmediato, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?"*
+### 📍 PASO 1: Saludo y presentación de las 3 opciones
+Sin metros en el historial, Sofía presenta las 3 opciones (garantía y uso ideal de cada una) y pregunta cuántos m² tiene la azotea.
 
----
+### 🖼️ PASO 2: Metros claros → imagen comparativa
+Sólo si el cliente da los metros con claridad (`metros_claros = true`, entre 5 y 5,000 m²), Sofía anuncia la comparativa y el **sistema envía automáticamente la imagen** (la misma de "Enviar Imagen Comparativa" del CRM) con la inversión de las 3 opciones para esos metros, con los precios vigentes del catálogo. El texto de Sofía no lleva montos. La imagen se envía una sola vez por expediente y cantidad de metros. Si los metros no son claros, no se envía imagen y se ofrece la inspección para medir.
 
-### 💵 PASO 2: Presentación Única de Presupuesto y Pago
-Una vez que el cliente responde los **metros cuadrados (@metros)**, Sofía realiza los cálculos automáticos:
-* `TOTAL_SIN_IVA = @metros × $210`
+### ✅ PASO 2B: El cliente elige un paquete
+Sofía registra `paquete_elegido` (`acrilico` | `estandar` | `premium`) sólo si lo dijo claramente, confirma la elección y ofrece la inspección gratuita. Si el producto del catálogo tiene fotos cargadas (y "Apto para Sofía" activo), el sistema las envía (máx. 5, primero foto de producto/técnica y luego obra aplicada; una sola vez por paquete).
 
-Envía exactamente esta plantilla con los cálculos dinámicos (solo para el producto Estándar, sin mencionar paquetes Premium):
-> *"Perfecto. Para [METROS] m², aquí están los detalles de nuestro servicio:
-> 
-> 🟡 IMPERMEABILIZACIÓN ESTÁNDAR
-> • Impermeabilizante 3.5 mm + gravilla (roja o gris a tu elección)
-> • ✓ Garantía de 5 años por escrito
-> • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
-> • Tiempo de ejecución: 1 día
-> 
-> 💰 PRESUPUESTO: $210/m² × [METROS] m² = $[TOTAL_SIN_IVA] MXN (Precios más IVA)
-> 
-> 💳 Ofrecemos opción de pago con tarjeta de crédito. [Nota: Si el presupuesto total es mayor a $10,000 MXN, agrega este texto adicional: « ¡Y contamos con 3 meses sin intereses!»] 
-> 
-> ¿Confirmamos inspección técnica gratuita esta semana?"*
-
----
+### 📚 Catálogo de Productos como fuente de verdad
+Sofía toma de **Productos y Servicios** (los 3 productos de impermeabilización, identificados por nombre: "3.5", "4.0/poliéster", "acrílico"):
+* **Precio por m²** → imagen comparativa y cotización automática.
+* **Fotos y Ejemplos de Obra** → fotos que se envían al elegir paquete (el título/descripción de la foto va como pie).
+* **Argumentos de Venta & Sofía** → "Propuesta de Valor" y "Ficha Técnica, Facts y Garantía" (un dato por línea) para contestar dudas técnicas. Si un dato no está ahí, Sofía no lo inventa y remite a la inspección.
+* **"Apto para Sofía"** desactivado = Sofía no usa su pitch, ficha ni fotos.
 
 ### 📅 PASO 3: Confirmación de Contacto para Inspección
-Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Sofía responde exactamente:
+Se activa cuando el cliente acepta la inspección. Sofía responde:
 > *"¡Excelente! Un asesor te contactará vía telefónica o por WhatsApp para agendar la cita de inspección técnica si es necesario. ¡Que tengas un excelente día! 👍"*
+
+La cotización automática usa el paquete elegido (Estándar si aún no eligió).
 
 ---
 

@@ -1,6 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import {
+  enviarComparativaImper,
+  enviarMediosPaqueteImper,
+  esPaqueteImper,
+  hayFotosEnCatalogo,
+  metrosClaros,
+  ETIQUETA_PAQUETE,
+} from "@/lib/ia/imper-envios";
+import { cargarProductosImper, fichaProductosParaPrompt } from "@/lib/ia/catalogo-imper";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
@@ -299,6 +308,12 @@ async function obtenerSiguientesTresSlots(operadorId: string, sb: SupabaseClient
 
 /** Construye las instrucciones (system prompt) del asistente. */
 async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<string> {
+  // Productos de impermeabilización del catálogo: ficha técnica / facts para responder dudas y
+  // fotos para enviar. Sofía sólo anuncia imágenes si hay fotos cargadas y habilitadas.
+  const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
+  const hayFotosImper = hayFotosEnCatalogo(productosImper);
+  const fichaImper = fichaProductosParaPrompt(productosImper);
+
   // 1. Encontrar el operador asignado o el fallback a Alex
   let operadorId = exp?.asesor_id || exp?.operador_id;
   if (!operadorId) {
@@ -373,33 +388,37 @@ D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'co
 Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces, archivos, links o páginas web de cotización o cita en tu respuesta:
 
 - PASO 1: SALUDO E INFORMACIÓN DEL SERVICIO (Al detectar el negocio o si no tenemos los metros)
-  Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía exactamente este mensaje:
-  "¡Hola! 👋 Gracias por contactar a SAUCEDA Construcción. Somos especialistas en impermeabilización profesional.
+  Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía este mensaje (breve, sin mencionar días ni tiempos de instalación):
+  "¡Hola! 👋 Gracias por escribir a SAUCEDA Construye. Somos especialistas en impermeabilización de azoteas en León y alrededores.
 
-  🟡 NUESTRO SERVICIO:
-  Aplicamos Impermeabilizante Profesional Estándar de 3.5 mm con acabado de gravilla protectora (roja o gris a tu elección).
-  ⏱️ INSTALACIÓN EN 1 DÍA: Realizamos todo el trabajo de instalación en tan solo 1 día.
-  🛠️ ¿QUÉ INCLUYE?: Diagnóstico técnico, limpieza profunda de la superficie, resane y sellado de grietas, y la aplicación profesional.
-  🏆 ¿POR QUÉ ELEGIRNOS?: Te entregamos una garantía de 5 años por escrito, utilizamos materiales de primera y contamos con mano de obra altamente capacitada para proteger tu azotea de goteras y filtraciones.
+  Trabajamos con 3 opciones, todas con garantía por escrito, limpieza de la superficie y sellado de grietas incluidos:
+  🔹 *Acrílico*: garantía de 2 años. Ideal para mantenimiento o azoteas de poco tráfico.
+  🔸 *Estándar 3.5 con gravilla*: garantía de 5 años. La más solicitada.
+  ⭐ *Premium 4.0 poliéster con gravilla*: garantía de 10 años. La de mayor duración.
 
-  Para poder orientarte mejor y coordinar tu inspección técnica gratuita, ¿me podrías compartir cuántos metros cuadrados aproximadamente tiene tu azotea/área a impermeabilizar?"
+  Para orientarte mejor, ¿cuántos metros cuadrados aproximados tiene tu azotea?"
+  Asigna "paso_flujo": "paso_1".
 
-- PASO 2: PRESENTACIÓN DEL SERVICIO Y AGENDA DE INSPECCIÓN (Al tener los metros cuadrados)
-  Se activa en cuanto el cliente proporciona los metros cuadrados aproximados (@metros) (o si ya los conocemos por los "Datos del cliente").
-  PROHIBIDO calcular, mencionar o dar cualquier precio, presupuesto, monto en pesos o rango de precios en tu respuesta, aunque el cliente lo pida directamente: el precio depende de las condiciones reales de la azotea y SIEMPRE lo confirma un asesor humano tras la inspección técnica gratuita. Si el cliente insiste en un precio exacto o estimado, explícale amablemente que el costo se determina en la inspección gratuita (varía según el estado de la superficie) y ofrécele agendarla.
-  Construye tu respuesta incluyendo exactamente la siguiente estructura (solo para el producto Estándar, sin mencionar paquetes Premium, sin cifras en pesos ni enviar links):
+- PASO 2: METROS CLAROS → COMPARATIVA DE OPCIONES (Al tener los metros cuadrados)
+  Se activa en cuanto el cliente indica de forma CLARA los metros cuadrados de su azotea (un número, aunque sea aproximado: "80", "unos 80 m2", "como 60 metros"), o si ya los conocemos por los "Datos del cliente".
+  - Si los metros son claros: en "datosExtraidos" pon "metros" (número entero) y "metros_claros": true. El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con la inversión de las 3 opciones para esos metros. Por eso NO escribas montos, precios ni totales en tu texto: solo anúnciala. Responde con este mensaje:
+  "Perfecto, para tu azotea de [METROS] m² te comparto a continuación la comparativa de nuestras 3 opciones con su inversión (precios más IVA) 👇
 
-  "Perfecto. Para [METROS] m², contamos con:
+  Aceptamos pago en efectivo o transferencia. ¿Cuál de las 3 te interesa más? Si quieres, coordinamos una inspección técnica gratuita para confirmar medidas y afinar el detalle."
+  - Si el cliente NO da metros claros (dice "no sé", "es grande", "una casa normal", etc.): NO pongas "metros_claros" (déjalo false/null) y NO anuncies ninguna imagen. Pídele un aproximado o, si no puede medirlo, ofrécele la inspección técnica gratuita para medir (ver caso especial de medidas).
+  Asigna "paso_flujo": "paso_2".
 
-  🟡 IMPERMEABILIZACIÓN ESTÁNDAR
-  • Impermeabilizante 3.5 mm + gravilla (roja o gris a tu elección)
-  • ✓ Garantía de 5 años por escrito
-  • Incluye: Limpieza profunda + resane de grietas + aplicación profesional
-  • Tiempo de ejecución: 1 día
+- PASO 2B: EL CLIENTE ELIGE UN PAQUETE
+  Cuando el cliente indique cuál opción le interesa ("el premium", "el de 10 años", "el más barato", "el acrílico", "el estándar", "el de 5 años"), asigna en "datosExtraidos": "paquete_elegido": "acrilico" | "estandar" | "premium" (solo si lo dijo claramente; si duda entre varias, NO lo asignes y ayúdale a decidir según garantía y uso). Confirma su elección con calidez en 2-3 líneas y avanza a la inspección.${hayFotosImper ? "\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, algunas imágenes de referencia del paquete elegido; menciónalo (\"te comparto unas imágenes de referencia 👇\")." : "\n  No menciones imágenes ni fotos (por ahora no hay material para enviar)."}
+  Ejemplo: "¡Excelente elección! El [PAQUETE] te da [GARANTÍA] de garantía por escrito.${hayFotosImper ? " Te comparto unas imágenes de referencia 👇" : ""} ¿Coordinamos la inspección técnica gratuita esta semana para confirmar medidas y dejar todo listo?"
+  Mantén "paso_flujo": "paso_2". Si el cliente pregunta por precio otra vez, remítelo a la imagen comparativa ya enviada (no repitas cifras en texto) y recuerda que el monto final se confirma en la inspección.
+  PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución, ofrecer meses sin intereses o pago con tarjeta. Si el cliente pregunta por formas de pago, responde que se paga en efectivo o transferencia. Si pregunta cuánto tarda, responde que el técnico lo define en la inspección según los metros y el estado de la azotea.
 
-  El costo exacto se confirma en la inspección técnica gratuita, ya que depende del estado real de tu azotea. También contamos con opción de pago con tarjeta de crédito y meses sin intereses.
-
-  ¿Confirmamos inspección técnica gratuita esta semana?"
+- DUDAS TÉCNICAS SOBRE LOS PRODUCTOS:
+${fichaImper
+  ? `  Si el cliente pregunta por materiales, durabilidad, diferencias entre opciones, cómo se aplica, garantía u otros detalles técnicos, responde SOLO con la siguiente información oficial del catálogo (puedes resumirla y adaptarla a un tono cercano). Si el dato no está aquí, NO lo inventes: dile que un asesor lo confirma en la inspección técnica gratuita.
+${fichaImper}`
+  : "  Si el cliente pregunta detalles técnicos que no aparecen en este flujo, NO los inventes: dile que un asesor los confirma en la inspección técnica gratuita."}
 
 - PASO 3: CONFIRMACIÓN DE INSPECCIÓN (Al aceptar la visita)
   Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
@@ -492,7 +511,7 @@ REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
   Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
 
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
-  NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y atiende el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente (sin mencionar precios: el costo lo confirma un asesor en la inspección técnica gratuita).
+  NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y atiende el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente (el costo final lo confirma un asesor en la inspección técnica gratuita).
 
 REGLA CRÍTICA DE CONTINUIDAD Y PROHIBICIÓN DE RE-SALUDO:
 - Si en el historial de la conversación el asistente ya saludó previamente (o si la conversación ya está iniciada con mensajes previos), queda ESTRICTAMENTE PROHIBIDO volver a saludar (como "¡Hola [Nombre]!", "Hola 👋", "Gracias por contactarnos nuevamente...", "Vemos que ya nos comunicamos contigo...", etc.) y queda PROHIBIDO reiniciar la conversación con preguntas genéricas de apertura ("¿En qué te podemos ayudar hoy?", "¿Hay algo más en lo que podamos ayudarte?").
@@ -549,10 +568,11 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
     "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
-    "paquete_elegido": "El paquete de impermeabilización. Asigna siempre 'estandar' si se trata de impermeabilización, de lo contrario null",
+    "paquete_elegido": "El paquete de impermeabilización que el cliente eligió CLARAMENTE: 'acrilico', 'estandar' o 'premium'. Si aún no ha elegido, null (no asumas uno)",
+    "metros_claros": "true SOLO si el cliente dio de forma clara los metros cuadrados de su azotea en el mensaje actual o antes (un número); false o null en cualquier otro caso",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar información del servicio estándar para pedir metros), 'paso_2' (al presentar el servicio y ofrecer la inspección técnica gratuita, sin dar precio) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar las 3 opciones para pedir metros), 'paso_2' (al anunciar la comparativa de opciones, o al confirmar el paquete elegido, y ofrecer la inspección técnica gratuita) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
@@ -950,6 +970,9 @@ export async function responderConIA(
       habitada?: string | null;
       fuera_de_zona?: boolean | null;
       paso_flujo?: string | null;
+      metros?: number | string | null;
+      metros_claros?: boolean | string | null;
+      paquete_elegido?: string | null;
       cliente_nombre?: string | null;
       telefono_real?: string | null;
     } = {};
@@ -1130,7 +1153,8 @@ export async function responderConIA(
       if (esImper && (datosExtraidos as any).metros) {
         const m = (datosExtraidos as any).metros;
         const col = (datosExtraidos as any).colonia || datosExtraidos.fraccionamiento || exp?.fraccionamiento || "";
-        updates.necesidad = `Impermeabilización de ${m} m² - Paquete Estándar${col ? ` en col. ${col}` : ""}`;
+        const elegido = esPaqueteImper((datosExtraidos as any).paquete_elegido) ? ETIQUETA_PAQUETE[(datosExtraidos as any).paquete_elegido as "acrilico" | "estandar" | "premium"] : null;
+        updates.necesidad = `Impermeabilización de ${m} m² - ${elegido ? `Paquete ${elegido}` : "Paquete por definir (Acrílico / Estándar / Premium)"}${col ? ` en col. ${col}` : ""}`;
       }
 
       // --- CREACIÓN DE COTIZACIÓN AUTOMÁTICA (Supabase) Y REEMPLAZO DE LINKS ---
@@ -1164,25 +1188,14 @@ export async function responderConIA(
               // Consultar precio y costo unitario vigentes en el catálogo
               // (nunca se muestran al cliente en el chat; sólo alimentan el
               // registro interno de la cotización para el asesor).
-              let precioM2 = 210; // fallback razonable si el catálogo no tiene el producto
-              let costoM2 = 165; // fallback razonable
-              try {
-                const { data: prodCatalog } = await sb
-                  .from("productos_servicios")
-                  .select("costo_unitario, precio_unitario")
-                  .ilike("nombre", "%Estándar%")
-                  .eq("categoria", "impermeabilizacion")
-                  .maybeSingle();
-
-                if (prodCatalog?.costo_unitario) {
-                  costoM2 = Number(prodCatalog.costo_unitario);
-                }
-                if (prodCatalog?.precio_unitario) {
-                  precioM2 = Number(prodCatalog.precio_unitario);
-                }
-              } catch (errDb) {
-                console.error("IA: Error al buscar precio/costo en catálogo:", errDb);
-              }
+              const paqueteCot = esPaqueteImper((datosExtraidos as any).paquete_elegido)
+                ? ((datosExtraidos as any).paquete_elegido as "acrilico" | "estandar" | "premium")
+                : "estandar";
+              const prodCat = (await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>))[paqueteCot];
+              let precioM2 = paqueteCot === "acrilico" ? 170 : paqueteCot === "premium" ? 260 : 210; // fallback si el catálogo no tiene el producto
+              let costoM2 = paqueteCot === "acrilico" ? 130 : paqueteCot === "premium" ? 205 : 165; // fallback razonable
+              if (prodCat?.costoM2) costoM2 = prodCat.costoM2;
+              if (prodCat?.precioM2) precioM2 = prodCat.precioM2;
 
               const precioTotal = Number(m) * precioM2;
               const costoTotal = Number(m) * costoM2;
@@ -1210,7 +1223,11 @@ export async function responderConIA(
                 tokenCot = nuevaCot.token;
 
                 // Insertar concepto
-                const descConcepto = "Impermeabilización Profesional - Impermeabilizante 3.5 mm + gravilla (5 años de garantía)";
+                const descConcepto = paqueteCot === "acrilico"
+                  ? "Impermeabilización Profesional - Acrílico elastomérico con malla de refuerzo (2 años de garantía)"
+                  : paqueteCot === "premium"
+                  ? "Impermeabilización Profesional - Impermeabilizante 4.0 poliéster + gravilla (10 años de garantía)"
+                  : "Impermeabilización Profesional - Impermeabilizante 3.5 mm + gravilla (5 años de garantía)";
 
                 const { error: errInsertConcepto } = await sb
                   .from("cotizacion_conceptos")
@@ -1232,7 +1249,7 @@ export async function responderConIA(
                   expedienteId: ctx.expedienteId,
                   tipo: "construccion",
                   titulo: `Cotización automática creada (${idCot})`,
-                  detalle: `Impermeabilización Profesional 3.5 mm. Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita.`,
+                  detalle: `Impermeabilización Profesional (${ETIQUETA_PAQUETE[paqueteCot]}). Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita.`,
                 });
               }
             }
@@ -1485,6 +1502,20 @@ export async function responderConIA(
       wa_message_id: (r as any).messageId || null,
       agente: NOMBRE_AGENTE,
     });
+
+    // --- IMPERMEABILIZACIÓN: comparativa de precios e imágenes de referencia (sólo WhatsApp) ---
+    if (r.ok && !esMessenger && !esInstagram && (exp?.tipo_negocio === "construccion-impermeabilizacion" || (datosExtraidos as any).paso_flujo)) {
+      const ctxEnvio = { canal, telefono: ctx.telefono, expedienteId: ctx.expedienteId ?? null, agente: NOMBRE_AGENTE };
+      const claros = (datosExtraidos as any).metros_claros === true || (datosExtraidos as any).metros_claros === "true";
+      const metrosImper = metrosClaros((datosExtraidos as any).metros);
+      if (claros && metrosImper && (datosExtraidos as any).paso_flujo === "paso_2") {
+        await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper });
+      }
+      const elegido = (datosExtraidos as any).paquete_elegido;
+      if (esPaqueteImper(elegido)) {
+        await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: elegido });
+      }
+    }
 
     if (r.ok && ctx.expedienteId) {
       let canalLabel = "WhatsApp";

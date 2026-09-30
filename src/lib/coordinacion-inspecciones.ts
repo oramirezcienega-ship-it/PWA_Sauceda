@@ -767,6 +767,16 @@ export interface CoordinacionInspeccionDetalle {
   >;
   opcionesValidadas: string[];
   opcionSeleccionadaId: string | null;
+  /** Negociación por etapas (día → franja → hora) cuando las opciones no acomodan. */
+  negociacion: {
+    etapa?: "opciones" | "dias" | "franjas" | "horas" | "sin_coincidencia";
+    ronda?: number;
+    diasOfrecidos?: string[];
+    dias?: Record<string, { fechas: string[]; listo: boolean }>;
+    paresOfrecidos?: string[];
+    franjas?: Record<string, { claves: string[]; listo: boolean }>;
+    motivo?: string;
+  };
   estado: "propuesta_enviada" | "evaluando" | "enviado_cliente" | "confirmada" | "cancelada";
   slaMinutos: number;
   slaLimiteAt: string;
@@ -1278,6 +1288,7 @@ export async function obtenerCoordinacionActivaProspecto(
     respuestasAsesores: coord.respuestas_asesores || {},
     opcionesValidadas: coord.opciones_validadas || [],
     opcionSeleccionadaId: coord.opcion_seleccionada_id,
+    negociacion: coord.negociacion || {},
     estado: coord.estado,
     slaMinutos: coord.sla_minutos || 15,
     slaLimiteAt: coord.sla_limite_at || "",

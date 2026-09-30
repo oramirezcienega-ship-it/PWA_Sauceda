@@ -286,6 +286,26 @@ export async function guardarConfiguracionTelegramAction(
 }
 
 /**
+ * 15. Inicia la negociación por etapas (día → franja → hora) cuando las opciones
+ * propuestas no acomodan. Manda a los asesores la lista de días por Telegram.
+ */
+export async function iniciarNegociacionDiasAction(
+  coordinacionId: string,
+  prospectoId?: string
+): Promise<{ ok: boolean; enviados: string[]; sinTelegram: string[]; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { iniciarNegociacionDias } = await import("@/lib/coordinacion-negociacion");
+    const res = await iniciarNegociacionDias(sb, coordinacionId, 1);
+    if (prospectoId) revalidatePath(`/prospectos/${prospectoId}`);
+    return res;
+  } catch (err: any) {
+    return { ok: false, enviados: [], sinTelegram: [], error: err?.message || "Error al iniciar la negociación." };
+  }
+}
+
+/**
  * 14. Marca manualmente que un asesor leyó la propuesta (p. ej. se enteró por llamada o voz).
  */
 export async function marcarAsesorEnteradoAction(

@@ -993,7 +993,7 @@ INFORMACIÓN CLAVE DE LA MARCA SAUCEDA (7 LÍNEAS DE NEGOCIO):
 1. Pintura y Mantenimiento del Hogar (Sauceda Construye):
    - Pintura vinílica lavable y esmalte para fachadas e interiores. Reparación previa de grietas, resane profesional, sellado y acabados limpios de larga duración.
 2. Impermeabilización Profesional (Sauceda Construye):
-   - Aplicación con rollo de membrana asfáltica prefabricada con gravilla blanca reflectiva termo-fusionada con soplete de gas propano a flama controlada. $210/m². Garantía de 5 a 10 años por escrito.
+   - Tres opciones para azoteas: Acrílico elastomérico con malla (garantía 2 años), Impermeabilizante 3.5 con gravilla roja o gris (garantía 5 años) y Premium 4.0 poliéster con gravilla (garantía 10 años). Garantía por escrito e inspección técnica gratuita. No mencionar precios por m² ni tiempos de instalación en los anuncios.
 3. Herrería Residencial y Comercial (Sauceda Construye):
    - Portones automatizados modernos (corredizos, abatibles, levadizos), cancelería, protecciones de herrería para ventanas y barandales minimalistas. Diseños contemporáneos en León Gto.
 4. Concreto y Pisos Estampados (Sauceda Construye):

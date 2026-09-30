@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { obtenerPreciosImpermeabilizacionCatalogo } from "@/app/actions/productos";
+import { PAQUETES_DEFAULT, type PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
 
 export interface ModalCalculadoraProps {
   abierto: boolean;
@@ -12,81 +13,7 @@ export interface ModalCalculadoraProps {
   onEnviarImagenDirecta?: (file: File, caption?: string) => Promise<boolean | void>;
 }
 
-interface PaqueteInfo {
-  id: "acrilico" | "estandar" | "premium";
-  badge: string;
-  titulo: string;
-  subtitulo: string;
-  precioM2: number;
-  garantia: string;
-  ejecucion: string;
-  mejorPara: string;
-  destacado?: boolean;
-  colorRibbon?: string;
-  incluye: string[];
-}
 
-// Precios por defecto: se usan sólo mientras se resuelven (o si faltan) los
-// precios vigentes del catálogo de Productos y Servicios.
-const PAQUETES_DEFAULT: PaqueteInfo[] = [
-  {
-    id: "acrilico",
-    badge: "ACRÍLICO",
-    titulo: "Impermeabilizante Acrílico",
-    subtitulo: "Acrílico elastomérico con malla de refuerzo",
-    precioM2: 170,
-    garantia: "2 años",
-    ejecucion: "1-2 días",
-    mejorPara: "Mantenimiento preventivo, azoteas con poco tráfico y presupuesto accesible.",
-    incluye: [
-      "Diagnóstico técnico gratuito",
-      "Preparación y limpieza de superficie",
-      "Sellado de grietas y fisuras",
-      "Aplicación de acrílico elastomérico",
-      "Malla de refuerzo intermedio",
-      "Limpieza final de la zona",
-    ],
-  },
-  {
-    id: "estandar",
-    badge: "ESTÁNDAR",
-    titulo: "Impermeabilizante 3.5",
-    subtitulo: "Con gravilla roja o gris a elegir",
-    precioM2: 210,
-    garantia: "5 años",
-    ejecucion: "2-3 días",
-    mejorPara: "Solución eficaz y económica para azoteas con buen estado estructural.",
-    incluye: [
-      "Diagnóstico técnico gratuito",
-      "Preparación y limpieza de superficie",
-      "Aplicación profesional de impermeabilizante 3.5",
-      "Gravilla (roja o gris, a elegir)",
-      "Sellado de bordes y boquillas",
-      "Limpieza final de la zona",
-    ],
-  },
-  {
-    id: "premium",
-    badge: "PREMIUM",
-    titulo: "Impermeabilizante 4.0 Poliéster",
-    subtitulo: "Con gravilla roja o gris a elegir",
-    precioM2: 260,
-    garantia: "10 años",
-    ejecucion: "2-3 días",
-    mejorPara: "Máxima durabilidad y tranquilidad a largo plazo. La elección más inteligente.",
-    destacado: true,
-    colorRibbon: "#C9A961",
-    incluye: [
-      "Diagnóstico técnico gratuito",
-      "Preparación y limpieza de superficie",
-      "Aplicación profesional de impermeabilizante 4.0 poliéster",
-      "Gravilla (roja o gris, a elegir)",
-      "Sellado reforzado de bordes y boquillas",
-      "Limpieza final y documentación fotográfica",
-      "Garantía escrita de 10 años",
-    ],
-  },
-];
 
 const PRESETS = [30, 45, 60, 80, 100, 120, 150, 200];
 
@@ -156,21 +83,21 @@ Metros a impermeabilizar: *${m2Val} m²*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🟢 *1. PAQUETE ACRÍLICO*
 • Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*
-• Garantía: 2 años | Ejecución: 1-2 días
+• Garantía: 2 años
 • Incluye: Acrílico elastomérico con malla de refuerzo, sellado de grietas y limpieza final.
 • Ideal para: Mantenimiento preventivo y azoteas con poco tráfico.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌿 *2. PAQUETE ESTÁNDAR (3.5)*
 • Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*
-• Garantía: 5 años | Ejecución: 2-3 días
+• Garantía: 5 años
 • Incluye: Impermeabilizante 3.5 con gravilla (roja/gris), sellado de bordes y boquillas.
 • Ideal para: Solución eficaz y económica para azoteas en buen estado.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *3. PAQUETE PREMIUM (4.0 POLIÉSTER)* — 🏆 *10 Años Garantía*
 • Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*
-• Garantía: 10 años por escrito | Ejecución: 2-3 días
+• Garantía: 10 años por escrito
 • Incluye: Impermeabilizante 4.0 poliéster con gravilla, sellado reforzado y reporte fotográfico.
 • Ideal para: Máxima durabilidad y tranquilidad a largo plazo.
 
@@ -193,7 +120,6 @@ ${paquete.subtitulo}
 
 💰 *Inversión:* ${formatearDinero(total)} MXN (*$${paquete.precioM2} / m²*)
 🛡️ *Garantía:* ${paquete.garantia}
-⏱️ *Tiempo de ejecución:* ${paquete.ejecucion}
 
 📋 *¿Qué incluye tu servicio?*
 ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
@@ -407,32 +333,21 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
         listY += Math.max(18, itemLines.length * 14 + 4);
       });
 
-      // 10. Bloque Garantía y Ejecución
+      // 10. Bloque Garantía
       const metricsY = y + cardHeight - 188;
-      const colW = (cardWidth - 54) / 2;
+      const colW = cardWidth - 44;
       const metricsBg = esPremium ? "#FAF0D7" : "#F8FAFC";
       const metricsBorder = esPremium ? "#E2D7BE" : "#E2E8F0";
 
       drawRoundedRect(ctx, x + 22, metricsY, colW, 52, 7, metricsBg, metricsBorder, 1);
-      drawRoundedRect(ctx, x + 22 + colW + 10, metricsY, colW, 52, 7, metricsBg, metricsBorder, 1);
 
-      // Textos Garantía
       ctx.fillStyle = "#64748B";
       ctx.font = "bold 8.5px sans-serif";
-      ctx.fillText("GARANTÍA", x + 30, metricsY + 9);
+      ctx.fillText("GARANTÍA POR ESCRITO", x + 30, metricsY + 9);
 
       ctx.fillStyle = "#2D4A2B";
       ctx.font = "bold 13.5px sans-serif";
       ctx.fillText(pkg.garantia, x + 30, metricsY + 26);
-
-      // Textos Ejecución
-      ctx.fillStyle = "#64748B";
-      ctx.font = "bold 8.5px sans-serif";
-      ctx.fillText("EJECUCIÓN", x + 30 + colW + 10, metricsY + 9);
-
-      ctx.fillStyle = "#0F172A";
-      ctx.font = "bold 13.5px sans-serif";
-      ctx.fillText(pkg.ejecucion, x + 30 + colW + 10, metricsY + 26);
 
       // 11. Bloque "Mejor para"
       const mejorY = metricsY + 58;
@@ -770,33 +685,18 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
                   {/* Cuerpo Inferior (Métricas y Botón) */}
                   <div className="pt-4 mt-4 border-t border-carbon/10 space-y-3">
-                    {/* Grilla Garantía / Ejecución */}
-                    <div className="grid grid-cols-2 gap-2 text-center">
-                      <div
-                        className={`p-2 rounded-lg ${
-                          esPremium ? "bg-dorado/10" : "bg-slate-50"
-                        } border border-carbon/5`}
-                      >
-                        <span className="block text-[9px] uppercase font-bold text-carbon/40 tracking-wider">
-                          Garantía
-                        </span>
-                        <span className="text-xs font-extrabold text-verde-profundo">
-                          {pkg.garantia}
-                        </span>
-                      </div>
-
-                      <div
-                        className={`p-2 rounded-lg ${
-                          esPremium ? "bg-dorado/10" : "bg-slate-50"
-                        } border border-carbon/5`}
-                      >
-                        <span className="block text-[9px] uppercase font-bold text-carbon/40 tracking-wider">
-                          Ejecución
-                        </span>
-                        <span className="text-xs font-extrabold text-carbon/80">
-                          {pkg.ejecucion}
-                        </span>
-                      </div>
+                    {/* Garantía */}
+                    <div
+                      className={`p-2 rounded-lg text-center ${
+                        esPremium ? "bg-dorado/10" : "bg-slate-50"
+                      } border border-carbon/5`}
+                    >
+                      <span className="block text-[9px] uppercase font-bold text-carbon/40 tracking-wider">
+                        Garantía por escrito
+                      </span>
+                      <span className="text-xs font-extrabold text-verde-profundo">
+                        {pkg.garantia}
+                      </span>
                     </div>
 
                     {/* Bloque "Mejor para" */}

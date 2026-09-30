@@ -9,7 +9,19 @@ import {
   registrarVotosAsesorCoordinacion,
   marcarAsesorEnteradoCoordinacion,
 } from "@/lib/coordinacion-inspecciones";
+import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
+import { registrarActividad } from "@/lib/actividades";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
+import {
+  iniciarNegociacionDias,
+  alternarDiaAsesor,
+  marcarDiasListo,
+  alternarFranjaAsesor,
+  marcarFranjasListo,
+  armarTecladoDias,
+  armarTecladoFranjas,
+  actualizarTecladoTelegram,
+} from "@/lib/coordinacion-negociacion";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +69,26 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // Vinculación de un proveedor: https://t.me/<bot>?start=prov_<id del proveedor>
+      const mProv = payload.match(/^prov_([0-9a-f-]{36})$/i);
+      if (mProv) {
+        const { data: prov } = await sb.from("proveedores").select("id, nombre").eq("id", mProv[1]).maybeSingle();
+        if (prov) {
+          await sb
+            .from("proveedores")
+            .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })
+            .eq("id", prov.id);
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: `✅ *¡Listo, ${prov.nombre}!* Tu Telegram quedó vinculado con SAUCEDA.\n\nAquí recibirás las cotizaciones para autorizar costos, con botones para responder.`,
+          });
+        } else {
+          await enviarMensajeTelegram({ botToken, chatId, texto: "No pude vincular este enlace: el proveedor no existe. Pide un enlace nuevo." });
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       if (text.startsWith("/start") || text.startsWith("/id")) {
         const respuesta = `👋 *¡Hola ${from?.first_name || ""}!*\n\nSoy el asistente operativo de *SAUCEDA*.\n\n📱 *Tu Telegram Chat ID es:* \`${chatId}\`\n👤 *Usuario:* @${from?.username || "sin_usuario"}\n\nCopia y proporciona este Chat ID a tu administrador para vincular tus alertas de inspecciones técnicas en sitio.`;
 
@@ -85,6 +117,128 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Negociación por etapas cuando las opciones no acomodan: día → franja → hora
+      //   n:{coord} (ninguna me acomoda)  d:{coord}:{YYYYMMDD}  dl|dn:{coord}
+      //   f:{coord}:{YYYYMMDD}{M|T}  fl|fn:{coord}
+      const mNeg = data.match(/^(n|d|dl|dn|f|fl|fn):([0-9a-f-]{36})(?::(\d{8}[MT]?))?$/i);
+      if (mNeg) {
+        const [, tipo, coordId, extra] = mNeg;
+        const { data: coordN } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("asesores_ids, estado")
+          .eq("id", coordId)
+          .maybeSingle();
+
+        if (!coordN || ["confirmada", "cancelada"].includes(coordN.estado)) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta propuesta ya no está activa.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: perfilesN = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", coordN.asesores_ids || []);
+        const asesor = (perfilesN || []).find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+        if (!asesor) {
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            "No pude identificarte como uno de los asesores de esta inspección.",
+            true
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        const chatMsg = cb.message?.chat?.id;
+        const msgId = cb.message?.message_id;
+
+        if (tipo === "n") {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Entendido: busquemos otro día. Te llega la lista en un momento.");
+          await iniciarNegociacionDias(sb, coordId, 1);
+        } else if (tipo === "d") {
+          const r = await alternarDiaAsesor(sb, coordId, asesor.id, extra);
+          if (r.ok && chatMsg && msgId) {
+            await actualizarTecladoTelegram(botToken, chatMsg, msgId, armarTecladoDias(coordId, r.ofrecidos, r.seleccion));
+          }
+          await responderCallbackQueryTelegram(botToken, cb.id, r.ok ? "Marcado" : "Esta consulta ya no está activa.");
+        } else if (tipo === "dl" || tipo === "dn") {
+          const r = await marcarDiasListo(sb, coordId, asesor.id, tipo === "dn");
+          if (r.ok && chatMsg && msgId) await actualizarTecladoTelegram(botToken, chatMsg, msgId, []);
+          await responderCallbackQueryTelegram(botToken, cb.id, r.mensaje);
+        } else if (tipo === "f") {
+          const r = await alternarFranjaAsesor(sb, coordId, asesor.id, extra);
+          if (r.ok && chatMsg && msgId) {
+            await actualizarTecladoTelegram(botToken, chatMsg, msgId, armarTecladoFranjas(coordId, r.pares, r.seleccion));
+          }
+          await responderCallbackQueryTelegram(botToken, cb.id, r.ok ? "Marcado" : "Esta consulta ya no está activa.");
+        } else if (tipo === "fl" || tipo === "fn") {
+          const r = await marcarFranjasListo(sb, coordId, asesor.id, tipo === "fn");
+          if (r.ok && chatMsg && msgId) await actualizarTecladoTelegram(botToken, chatMsg, msgId, []);
+          await responderCallbackQueryTelegram(botToken, cb.id, r.mensaje);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Autorización de costo de una cotización: k:{cotizacionId}:{1|0}
+      const mCosto = data.match(/^k:([^:]+):([01])$/);
+      if (mCosto) {
+        const [, cotId, val] = mCosto;
+        const respuesta = val === "1" ? "autorizado" : "rechazado";
+        const { data: cot } = await sb
+          .from("cotizaciones")
+          .select("autorizacion_costos, prospecto_id, expediente_id")
+          .eq("id", cotId)
+          .maybeSingle();
+        const registros: Record<string, any> = (cot?.autorizacion_costos as Record<string, any>) || {};
+        const claves = Object.keys(registros);
+        if (!cot || claves.length === 0) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta cotización ya no está disponible.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const idsProv = claves.filter((k) => k.startsWith("prov:")).map((k) => k.slice(5));
+        const idsPerf = claves.filter((k) => k.startsWith("perf:")).map((k) => k.slice(5));
+        const [{ data: provs = [] }, { data: perfs = [] }] = await Promise.all([
+          idsProv.length ? sb.from("proveedores").select("id, telegram_chat_id, telegram_username").in("id", idsProv) : Promise.resolve({ data: [] as any[] }),
+          idsPerf.length ? sb.from("perfiles").select("id, telegram_chat_id, telegram_username").in("id", idsPerf) : Promise.resolve({ data: [] as any[] }),
+        ]);
+        const coincide = (p: any) =>
+          p.telegram_chat_id === fromId ||
+          (username && p.telegram_username?.toLowerCase() === username.toLowerCase());
+        const claveMatch =
+          (provs || []).filter(coincide).map((p: any) => `prov:${p.id}`)[0] ||
+          (perfs || []).filter(coincide).map((p: any) => `perf:${p.id}`)[0];
+
+        if (!claveMatch) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "No pude identificarte como destinatario de esta cotización.", true);
+          return NextResponse.json({ ok: true });
+        }
+
+        const r = await registrarRespuestaAutorizacion(sb, cotId, claveMatch, respuesta);
+        if (r.ok && r.registro) {
+          const chatMsg = cb.message?.chat?.id;
+          const msgId = cb.message?.message_id;
+          if (chatMsg && msgId) await actualizarTecladoTelegram(botToken, chatMsg, msgId, []);
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            respuesta === "autorizado" ? "✅ Costo autorizado. ¡Gracias!" : "❌ Costo rechazado. Quedó registrado."
+          );
+          await registrarActividad(sb, {
+            prospectoId: cot.prospecto_id,
+            expedienteId: cot.expediente_id || undefined,
+            tipo: "construccion",
+            titulo: `Costo ${respuesta} por ${r.registro.nombre} (${cotId})`,
+            detalle: `Respuesta recibida por Telegram.`,
+          });
+        }
+        return NextResponse.json({ ok: true });
+      }
 
       // Acuse de lectura de una inspección compartida: c:{citaId}  (botón "Enterado")
       if (data.startsWith("c:")) {
