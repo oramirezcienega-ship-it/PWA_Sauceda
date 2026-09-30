@@ -91,6 +91,7 @@ Sofía toma de **Productos y Servicios** (los 3 productos de impermeabilización
 * **Precio por m²** → imagen comparativa y cotización automática.
 * **Fotos y Ejemplos de Obra** → fotos que se envían al elegir paquete (el título/descripción de la foto va como pie).
 * **Argumentos de Venta & Sofía** → "Propuesta de Valor" y "Ficha Técnica, Facts y Garantía" (un dato por línea) para contestar dudas técnicas. Si un dato no está ahí, Sofía no lo inventa y remite a la inspección.
+* **Ficha técnica en PDF** (pestaña "Argumentos de Venta & Sofía"): Sofía la envía por WhatsApp **solo si el cliente la pide expresamente** y queda claro de qué producto. Nunca la ofrece por iniciativa propia; si no hay PDF cargado, dice que un asesor se la comparte.
 * **"Apto para Sofía"** desactivado = Sofía no usa su pitch, ficha ni fotos.
 
 ### 📅 PASO 3: Confirmación de Contacto para Inspección

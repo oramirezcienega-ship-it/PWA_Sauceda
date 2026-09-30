@@ -19,6 +19,7 @@ import {
   eliminarInsumo,
   obtenerHistorialPreciosInsumo,
   subirImagenProducto,
+  subirFichaTecnicaProducto,
   type MetricaVentaProducto,
 } from "@/app/actions/productos";
 
@@ -70,6 +71,9 @@ export function ProductosClient({
   const [formEspecificaciones, setFormEspecificaciones] = useState("");
   const [formAptoParaIa, setFormAptoParaIa] = useState(true);
   const [formFotos, setFormFotos] = useState<FotoProducto[]>([]);
+  const [formFichaUrl, setFormFichaUrl] = useState("");
+  const [formFichaNombre, setFormFichaNombre] = useState("");
+  const [subiendoFicha, setSubiendoFicha] = useState(false);
   const [formComposicionApu, setFormComposicionApu] = useState<Array<{
     insumoId: string;
     insumoNombre: string;
@@ -137,6 +141,8 @@ export function ProductosClient({
     setFormEspecificaciones("");
     setFormAptoParaIa(true);
     setFormFotos([]);
+    setFormFichaUrl("");
+    setFormFichaNombre("");
     setFormComposicionApu([]);
     setTabModalProd("general");
     setErrorMsg("");
@@ -159,6 +165,8 @@ export function ProductosClient({
     setFormEspecificaciones(p.especificaciones || "");
     setFormAptoParaIa(p.aptoParaIa !== false);
     setFormFotos(p.fotos || []);
+    setFormFichaUrl(p.fichaTecnicaUrl || "");
+    setFormFichaNombre(p.fichaTecnicaNombre || "");
     setTabModalProd("general");
     setErrorMsg("");
     setModalProdAbierto(true);
@@ -212,6 +220,8 @@ export function ProductosClient({
         especificaciones: formEspecificaciones.trim(),
         aptoParaIa: formAptoParaIa,
         fotos: formFotos,
+        fichaTecnicaUrl: formFichaUrl || null,
+        fichaTecnicaNombre: formFichaNombre || null,
       };
 
       let guardado: ProductoServicio;
@@ -294,6 +304,28 @@ export function ProductosClient({
       alert("Error al subir archivo: " + err.message);
     } finally {
       setSubiendoFoto(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleSubirFichaTecnica = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setSubiendoFicha(true);
+      const fd = new FormData();
+      fd.append("archivo", file);
+      const res = await subirFichaTecnicaProducto(fd);
+      if (res.ok && res.url) {
+        setFormFichaUrl(res.url);
+        setFormFichaNombre(res.nombre || file.name);
+      } else {
+        alert("Error al subir la ficha técnica: " + (res.error || "Falla desconocida"));
+      }
+    } catch (err: any) {
+      alert("Error al subir la ficha técnica: " + err.message);
+    } finally {
+      setSubiendoFicha(false);
       e.target.value = "";
     }
   };
@@ -1338,12 +1370,50 @@ export function ProductosClient({
                       Ficha Técnica, Facts y Términos de Garantía
                     </label>
                     <textarea
-                      rows={3}
+                      rows={7}
                       placeholder="Un dato por línea. Ej.: Espesor 3.5 mm · Gravilla roja o gris · Garantía de 5 años por escrito. Sofía los usa para responder dudas técnicas."
                       value={formEspecificaciones}
                       onChange={(e) => setFormEspecificaciones(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none"
                     />
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
+                    <div>
+                      <span className="font-semibold text-carbon block">📄 Ficha técnica en PDF</span>
+                      <p className="text-[11px] text-carbon/60 mt-0.5">
+                        Sofía solo la envía por WhatsApp si el cliente la pide y ya eligió (o preguntó por) este producto.
+                      </p>
+                    </div>
+                    {formFichaUrl ? (
+                      <div className="flex items-center justify-between gap-3 rounded-lg bg-white border border-carbon/15 px-3 py-2">
+                        <a href={formFichaUrl} target="_blank" rel="noopener noreferrer" className="truncate font-semibold text-sauce hover:underline">
+                          📎 {formFichaNombre || "Ficha técnica.pdf"}
+                        </a>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <label className="cursor-pointer text-[11px] font-bold text-carbon/70 hover:text-sauce">
+                            Reemplazar
+                            <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={subiendoFicha} onChange={handleSubirFichaTecnica} />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => { setFormFichaUrl(""); setFormFichaNombre(""); }}
+                            className="text-[11px] font-bold text-rojo hover:underline"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <input
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        disabled={subiendoFicha}
+                        onChange={handleSubirFichaTecnica}
+                        className="block w-full text-xs text-carbon/70 file:mr-3 file:rounded-lg file:border-0 file:bg-sauce file:px-3 file:py-1.5 file:text-white file:font-semibold"
+                      />
+                    )}
+                    {subiendoFicha && <p className="text-xs text-sauce animate-pulse">Subiendo PDF al servidor...</p>}
                   </div>
                 </div>
               )}

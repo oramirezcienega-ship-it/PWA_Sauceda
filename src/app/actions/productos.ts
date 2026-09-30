@@ -36,6 +36,8 @@ function aProductoServicio(fila: any): ProductoServicio {
     gama: fila.gama || "estandar",
     activo: fila.activo !== false,
     aptoParaIa: fila.apto_para_ia !== false,
+    fichaTecnicaUrl: fila.ficha_tecnica_url || null,
+    fichaTecnicaNombre: fila.ficha_tecnica_nombre || null,
     createdAt: fila.created_at,
   };
 }
@@ -170,6 +172,8 @@ export async function crearProductoServicio(datos: {
   gama?: 'economica' | 'media' | 'premium' | 'estandar';
   activo?: boolean;
   aptoParaIa?: boolean;
+  fichaTecnicaUrl?: string | null;
+  fichaTecnicaNombre?: string | null;
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -202,6 +206,8 @@ export async function crearProductoServicio(datos: {
       gama: datos.gama || "estandar",
       activo: datos.activo !== false,
       apto_para_ia: datos.aptoParaIa !== false,
+      ficha_tecnica_url: datos.fichaTecnicaUrl || null,
+      ficha_tecnica_nombre: datos.fichaTecnicaUrl ? datos.fichaTecnicaNombre || null : null,
     })
     .select("*, business_units ( id, nombre )")
     .single();
@@ -230,6 +236,8 @@ export async function editarProductoServicio(
     gama?: 'economica' | 'media' | 'premium' | 'estandar';
     activo?: boolean;
     aptoParaIa?: boolean;
+    fichaTecnicaUrl?: string | null;
+    fichaTecnicaNombre?: string | null;
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -253,6 +261,11 @@ export async function editarProductoServicio(
     activo: datos.activo !== false,
     apto_para_ia: datos.aptoParaIa !== false,
   };
+  // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
+  if (datos.fichaTecnicaUrl !== undefined) {
+    updatePayload.ficha_tecnica_url = datos.fichaTecnicaUrl || null;
+    updatePayload.ficha_tecnica_nombre = datos.fichaTecnicaUrl ? datos.fichaTecnicaNombre || null : null;
+  }
 
   const { data, error } = await sb
     .from("productos_servicios")
@@ -735,3 +748,29 @@ export async function subirImagenProducto(formData: FormData): Promise<{ ok: boo
   return { ok: true, url: urlData.publicUrl };
 }
 
+/** Sube el PDF de la ficha técnica de un producto (bucket público del catálogo). */
+export async function subirFichaTecnicaProducto(
+  formData: FormData
+): Promise<{ ok: boolean; url?: string; nombre?: string; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const archivo = formData.get("archivo") as File | null;
+  if (!archivo || archivo.size === 0) return { ok: false, error: "No se proporcionó ningún archivo." };
+  if (archivo.type !== "application/pdf" && !/\.pdf$/i.test(archivo.name)) {
+    return { ok: false, error: "La ficha técnica debe ser un archivo PDF." };
+  }
+  if (archivo.size > 15 * 1024 * 1024) return { ok: false, error: "El PDF supera el límite de 15 MB." };
+
+  const limpio = archivo.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
+  const path = `catalogo/fichas/${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${limpio}`;
+  const buffer = Buffer.from(await archivo.arrayBuffer());
+
+  const { data, error } = await sb.storage
+    .from("expedientes-fotos")
+    .upload(path, buffer, { contentType: "application/pdf", upsert: true });
+  if (error || !data) return { ok: false, error: error?.message || "Error al subir el PDF." };
+
+  const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(data.path);
+  return { ok: true, url: urlData.publicUrl, nombre: archivo.name };
+}

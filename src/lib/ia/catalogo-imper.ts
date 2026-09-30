@@ -31,6 +31,8 @@ export interface ProductoImper {
   especificaciones: string;
   plantillaGarantia: string;
   fotos: FotoCatalogo[];
+  fichaTecnicaUrl: string;
+  fichaTecnicaNombre: string;
   /** Si es false, Sofía no usa su información (pitch, ficha ni fotos). */
   aptoParaIa: boolean;
 }
@@ -49,7 +51,7 @@ export function paqueteDeNombre(nombre: string): PaqueteImper | null {
 export async function cargarProductosImper(sb: SupabaseClient): Promise<Partial<Record<PaqueteImper, ProductoImper>>> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, precio_unitario, costo_unitario, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo")
+    .select("id, nombre, precio_unitario, costo_unitario, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, ficha_tecnica_url, ficha_tecnica_nombre")
     .ilike("nombre", "%imperme%");
 
   const out: Partial<Record<PaqueteImper, ProductoImper>> = {};
@@ -68,6 +70,8 @@ export async function cargarProductosImper(sb: SupabaseClient): Promise<Partial<
       plantillaGarantia: f.plantilla_garantia || "",
       fotos: (Array.isArray(f.fotos) ? f.fotos : []).filter((x: any) => x && /^https?:\/\//i.test(x.url || "")),
       aptoParaIa: f.apto_para_ia !== false,
+      fichaTecnicaUrl: /^https?:\/\//i.test(f.ficha_tecnica_url || "") ? f.ficha_tecnica_url : "",
+      fichaTecnicaNombre: f.ficha_tecnica_nombre || "",
     };
   }
   return out;
@@ -91,4 +95,9 @@ export function fichaProductosParaPrompt(productos: Partial<Record<PaqueteImper,
     );
   }
   return bloques.join("\n");
+}
+
+/** Paquetes cuya ficha técnica en PDF Sofía puede enviar (con producto apto para IA). */
+export function paquetesConFicha(productos: Partial<Record<PaqueteImper, ProductoImper>>): PaqueteImper[] {
+  return (["acrilico", "estandar", "premium"] as const).filter((p) => productos[p]?.aptoParaIa && productos[p]?.fichaTecnicaUrl);
 }

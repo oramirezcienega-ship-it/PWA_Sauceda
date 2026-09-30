@@ -146,3 +146,66 @@ export async function enviarMediosPaqueteImper(
     return 0;
   }
 }
+
+/** Envía el PDF de la ficha técnica del producto (sólo cuando el cliente la pidió). */
+export async function enviarFichaTecnicaImper(
+  sb: SupabaseClient,
+  ctx: { canal: string; telefono: string; expedienteId?: string | null; agente: string; paquete: PaqueteImper }
+): Promise<boolean> {
+  try {
+    const prod = (await cargarProductosImper(sb))[ctx.paquete];
+    if (!prod || !prod.aptoParaIa || !prod.fichaTecnicaUrl) return false;
+
+    // Evita reenviar el mismo PDF en turnos consecutivos si el modelo mantiene la marca
+    const marca = `Ficha técnica ${ETIQUETA_PAQUETE[ctx.paquete]}`;
+    if (ctx.expedienteId) {
+      const desde = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: recientes } = await sb
+        .from("mensajes_whatsapp")
+        .select("id")
+        .eq("expediente_id", ctx.expedienteId)
+        .eq("direccion", "out")
+        .gte("created_at", desde)
+        .ilike("texto", `%${marca}%`)
+        .limit(1);
+      if (recientes && recientes.length > 0) return false;
+    }
+
+    const res = await fetch(prod.fichaTecnicaUrl);
+    if (!res.ok) {
+      console.warn(`[Imper] No se pudo descargar la ficha técnica (${res.status}).`);
+      return false;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const nombre = (prod.fichaTecnicaNombre || `Ficha-tecnica-${ctx.paquete}.pdf`).replace(/[^\w.\- áéíóúñÁÉÍÓÚÑ]+/g, "_");
+    const caption = marca;
+
+    const up = await subirMediaMeta(buffer, "application/pdf", nombre, "document");
+    if (!up.mediaId) {
+      console.warn("[Imper] No se pudo subir la ficha a Meta:", up.error);
+      return false;
+    }
+    const r = await enviarWhatsAppDocumento(ctx.canal, up.mediaId, nombre, caption, "application/pdf");
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: ctx.telefono,
+      texto: `[document:${up.mediaId}] ${nombre} — "${caption}"`,
+      direccion: "out",
+      expediente_id: ctx.expedienteId ?? null,
+      estado: r.ok ? "enviado" : `error:${r.error || "error"}`,
+      wa_message_id: r.messageId ?? null,
+      agente: ctx.agente,
+    });
+    if (r.ok && ctx.expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId: ctx.expedienteId,
+        tipo: "mensaje",
+        titulo: `Sofía envió la ficha técnica: ${ETIQUETA_PAQUETE[ctx.paquete]}`,
+        detalle: `El cliente solicitó la ficha técnica (${nombre}).`,
+      });
+    }
+    return r.ok;
+  } catch (err) {
+    console.error("[Imper] Error al enviar la ficha técnica:", err);
+    return false;
+  }
+}
