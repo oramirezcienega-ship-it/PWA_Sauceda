@@ -15,6 +15,7 @@ import {
   type DatosPrevisualizacionInspeccion 
 } from "./ModalPrevisualizarInspeccion";
 import { marcarInspeccionEjecutada } from "@/app/actions/comisiones";
+import { compartirInspeccionPorTelegramAction } from "@/app/actions/inspecciones-compartir";
 
 interface WidgetAgendaCitasProps {
   prospectoId?: string | null;
@@ -43,6 +44,24 @@ export function WidgetAgendaCitas({
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipoForm, setTipoForm] = useState<"inspeccion" | "instalacion">("inspeccion");
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null);
+  const [compartiendoId, setCompartiendoId] = useState<string | null>(null);
+  const [avisoCompartir, setAvisoCompartir] = useState<Record<string, { tipo: "ok" | "error"; texto: string }>>({});
+
+  // Envía la información completa de la inspección al asesor asignado por Telegram
+  const handleCompartirTelegram = async (citaId: string) => {
+    setCompartiendoId(citaId);
+    const r = await compartirInspeccionPorTelegramAction(citaId);
+    setCompartiendoId(null);
+    const enviadosOk = r.enviados.filter((e) => e.ok).map((e) => e.nombre);
+    let texto = "";
+    if (enviadosOk.length > 0) {
+      texto = `Enviado por Telegram a ${enviadosOk.join(", ")}${r.fotosEnviadas > 0 ? ` (${r.fotosEnviadas} foto${r.fotosEnviadas === 1 ? "" : "s"})` : ""}.`;
+      if (r.sinTelegram.length > 0) texto += ` Sin Telegram vinculado: ${r.sinTelegram.join(", ")}.`;
+    } else {
+      texto = r.error || "No se pudo enviar.";
+    }
+    setAvisoCompartir((prev) => ({ ...prev, [citaId]: { tipo: enviadosOk.length > 0 ? "ok" : "error", texto } }));
+  };
 
   // Form states
   const [fecha, setFecha] = useState("");
@@ -718,6 +737,19 @@ export function WidgetAgendaCitas({
                     </button>
                   )}
 
+                  {isInspeccion && !isCancelada && (
+                    <button
+                      type="button"
+                      onClick={() => handleCompartirTelegram(c.id)}
+                      disabled={compartiendoId === c.id}
+                      className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      title="Enviar al asesor asignado, por Telegram, todos los datos de la visita: cliente, dirección, colonia, teléfono, mapa, tipo, fecha y hora, medidas y fotos"
+                    >
+                      <span>✈️</span>
+                      <span>{compartiendoId === c.id ? "Enviando…" : "Compartir por Telegram"}</span>
+                    </button>
+                  )}
+
                   {!isCancelada && (
                     <div className="flex items-center gap-2">
                       <button
@@ -738,6 +770,18 @@ export function WidgetAgendaCitas({
                     </div>
                   )}
                 </div>
+
+                {avisoCompartir[c.id] && (
+                  <div
+                    className={`w-full rounded-lg border px-3 py-1.5 text-[11px] font-semibold ${
+                      avisoCompartir[c.id].tipo === "ok"
+                        ? "bg-sky-50 border-sky-200 text-sky-800"
+                        : "bg-rose-50 border-rose-200 text-rose-800"
+                    }`}
+                  >
+                    {avisoCompartir[c.id].texto}
+                  </div>
+                )}
               </div>
             );
           })}
