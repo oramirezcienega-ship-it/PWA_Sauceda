@@ -143,8 +143,11 @@ export function PanelEnvioOTTelegram({ ordenId }: { ordenId: string }) {
           ))}
           {!resultado.ok && resultado.error && <div>{resultado.error}</div>}
           {resultado.enFormatoAlterno && resultado.enFormatoAlterno.length > 0 && (
-            <div className="text-amber-800">
-              ⚠️ {resultado.enFormatoAlterno.join(", ")}: se envió en formato alterno (no idéntico al que se imprime), porque no se pudo generar desde la página.
+            <div className="text-amber-800 space-y-0.5">
+              <div>⚠️ Estos documentos se enviaron en formato alterno (no idéntico al que se imprime) porque no se pudieron generar desde su página:</div>
+              {resultado.enFormatoAlterno.map((d) => (
+                <div key={d} className="pl-4 font-mono text-[10px]">• {d}</div>
+              ))}
             </div>
           )}
         </div>
