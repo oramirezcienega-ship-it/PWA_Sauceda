@@ -9,6 +9,8 @@ interface Props {
   /** Texto corto a la derecha del título (p. ej. una cantidad). */
   insignia?: string;
   abiertoInicial?: boolean;
+  /** Clases del contenedor (por omisión deja un margen superior). */
+  className?: string;
   children: ReactNode;
 }
 
@@ -25,6 +27,7 @@ export function WidgetColapsable({
   descripcion,
   insignia,
   abiertoInicial = false,
+  className = "mt-6",
   children,
 }: Props) {
   const [abierto, setAbierto] = useState(abiertoInicial);
@@ -36,7 +39,7 @@ export function WidgetColapsable({
   };
 
   return (
-    <section className="mt-6">
+    <section className={className}>
       <button
         type="button"
         onClick={alternar}
