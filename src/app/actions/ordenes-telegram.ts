@@ -11,6 +11,7 @@ import { labelTipoNegocio } from "@/lib/types";
 import { obtenerOrdenTrabajoPorId } from "@/app/actions/ordenes-trabajo";
 import { armarPaqueteAutorizacion } from "@/lib/cotizacion-telegram";
 import { generarPdfPolizaGarantia, generarPdfRecibo } from "@/lib/pdfDocumentosOT";
+import { pdfsDesdeVistas, type VistaPdf } from "@/lib/pdf-desde-vista";
 
 /** Escapa texto de usuario para el HTML de Telegram. */
 const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -57,7 +58,17 @@ export interface EstadoEnvioOTTelegram {
   destinatarios: DestinatarioOT[];
 }
 
-type Bloque = { clave: string; nombre: string; detalle: string; archivo: () => Promise<{ buffer: Buffer; nombreArchivo: string } | null> };
+type Bloque = {
+  clave: string;
+  nombre: string;
+  detalle: string;
+  /** Página pública que se imprime normalmente: de ahí sale el PDF idéntico (Chromium). */
+  vista?: VistaPdf;
+  /** PDF de respaldo (jsPDF) si no se puede generar desde la página. */
+  archivo: () => Promise<{ buffer: Buffer; nombreArchivo: string } | null>;
+  /** Nombre del archivo cuando se genera desde la página. */
+  nombreArchivo?: string;
+};
 
 const limpiarNombre = (s: string) => s.replace(/[\\/:*?"<>|]/g, "-");
 
@@ -93,12 +104,20 @@ async function armarPaqueteOT(ordenId: string) {
     : "";
 
   const bloques: Bloque[] = [];
+  const base = siteUrl();
 
   if (orden.cotizacionId) {
     bloques.push({
       clave: "cotizacion",
       nombre: `Cotización ${orden.cotizacionId}`,
       detalle: orden.totalCotizado ? `Total ${formatoPesos(orden.totalCotizado)}` : "Propuesta del cliente",
+      vista: orden.cotizacionToken
+        ? {
+            url: `${base}/cotizacion/${orden.cotizacionToken}?vista=documento&imprimir=1`,
+            textosDeError: ["aún no está disponible", "no está disponible para su visualización"],
+          }
+        : undefined,
+      nombreArchivo: `${limpiarNombre(`Propuesta Comercial ${orden.cotizacionId} - ${orden.clienteNombre || "Cliente"}`)}.pdf`,
       archivo: async () => {
         const p = await armarPaqueteAutorizacion(sb, orden.cotizacionId as string);
         if (!p.ok) return null;
@@ -115,6 +134,8 @@ async function armarPaqueteOT(ordenId: string) {
       clave: "garantia",
       nombre: "Póliza de garantía",
       detalle: `${garantia.anosGarantia} años de cobertura`,
+      vista: garantia.token ? { url: `${base}/garantia/${garantia.token}`, unaHoja: true } : undefined,
+      nombreArchivo: `${limpiarNombre(`Póliza de garantía - ${orden.clienteNombre || "Cliente"} - ${orden.folio}`)}.pdf`,
       archivo: async () => {
         const doc = generarPdfPolizaGarantia({
           titulo: garantia.titulo,
@@ -140,6 +161,8 @@ async function armarPaqueteOT(ordenId: string) {
       clave: `recibo:${r.id}`,
       nombre: `Recibo ${r.folio}`,
       detalle: formatoPesos(r.monto),
+      vista: r.token ? { url: `${base}/recibo/${r.token}`, unaHoja: true } : undefined,
+      nombreArchivo: `${limpiarNombre(`Recibo ${r.folio} - ${r.clienteNombre || orden.clienteNombre || "Cliente"}`)}.pdf`,
       archivo: async () => {
         const doc = generarPdfRecibo({
           folio: r.folio,
@@ -276,6 +299,9 @@ export async function obtenerEstadoEnvioOTTelegramAction(ordenId: string): Promi
 export interface ResultadoEnvioOT {
   ok: boolean;
   error?: string;
+  /** Documentos que no se pudieron generar idénticos a la página impresa y salieron en formato alterno. */
+  enFormatoAlterno?: string[];
+
   enviados: { nombre: string; ok: boolean; documentos: number; error?: string }[];
 }
 
@@ -301,10 +327,32 @@ export async function enviarOTPorTelegramAction(
     // Se generan los PDF una sola vez y se reutilizan para cada asesor
     const elegidos = bloques.filter((b) => clavesDocumentos.includes(b.clave));
     const archivos: { nombre: string; buffer: Buffer; nombreArchivo: string }[] = [];
+    const enFormatoAlterno: string[] = [];
+
+    // 1) PDF idéntico al que se imprime (se renderiza la misma página pública)
+    const conVista = elegidos.filter((b) => b.vista);
+    const desdeVista = new Map<string, Buffer>();
+    if (conVista.length > 0) {
+      const pdfs = await pdfsDesdeVistas(conVista.map((b) => b.vista as VistaPdf));
+      conVista.forEach((b, i) => {
+        const pdf = pdfs[i];
+        if (pdf) desdeVista.set(b.clave, pdf);
+      });
+    }
+
+    // 2) Respaldo (jsPDF) para lo que no se pudo renderizar
     for (const b of elegidos) {
       try {
+        const pdf = desdeVista.get(b.clave);
+        if (pdf && b.nombreArchivo) {
+          archivos.push({ nombre: b.nombre, buffer: pdf, nombreArchivo: b.nombreArchivo });
+          continue;
+        }
         const a = await b.archivo();
-        if (a) archivos.push({ nombre: b.nombre, ...a });
+        if (a) {
+          archivos.push({ nombre: b.nombre, ...a });
+          if (b.vista) enFormatoAlterno.push(b.nombre);
+        }
       } catch (e) {
         console.warn(`[OT Telegram] No se pudo generar "${b.nombre}":`, e);
       }
@@ -362,6 +410,7 @@ export async function enviarOTPorTelegramAction(
     return {
       ok: okNombres.length > 0,
       error: okNombres.length > 0 ? undefined : enviados.map((e) => `${e.nombre}: ${e.error}`).join(" · "),
+      enFormatoAlterno,
       enviados,
     };
   } catch (err: any) {
