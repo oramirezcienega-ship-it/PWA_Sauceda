@@ -2,6 +2,7 @@ import { obtenerCotizacionPorToken } from "@/app/actions/cotizaciones";
 import { VisualizadorCotizacionCliente } from "@/components/VisualizadorCotizacionCliente";
 import { VisualizadorCotizacionModular } from "@/components/VisualizadorCotizacionModular";
 import { VisualizadorCotizacionApu } from "@/components/VisualizadorCotizacionApu";
+import { AutoImprimirAlCargar } from "@/components/AutoImprimirAlCargar";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -11,6 +12,12 @@ export const revalidate = 0;
 interface PaginaPropuestaProps {
   params: {
     token: string;
+  };
+  searchParams?: {
+    /** "documento": muestra la cotización completa aunque ya esté aceptada. */
+    vista?: string;
+    /** "1": abre el diálogo de impresión al cargar. */
+    imprimir?: string;
   };
 }
 
@@ -39,7 +46,9 @@ export async function generateMetadata({ params }: PaginaPropuestaProps): Promis
   };
 }
 
-export default async function PaginaPropuestaCliente({ params }: PaginaPropuestaProps) {
+export default async function PaginaPropuestaCliente({ params, searchParams }: PaginaPropuestaProps) {
+  const modoDocumento = searchParams?.vista === "documento";
+  const autoImprimir = modoDocumento && searchParams?.imprimir === "1";
   let datos = null;
   try {
     datos = await obtenerCotizacionPorToken(params.token);
@@ -83,8 +92,10 @@ export default async function PaginaPropuestaCliente({ params }: PaginaPropuesta
           cotizacion={cotizacion}
           conceptos={conceptos}
           reporteVisita={reporteVisita}
+          modoDocumento={modoDocumento}
         />
       )}
+      {autoImprimir && <AutoImprimirAlCargar />}
     </main>
   );
 }

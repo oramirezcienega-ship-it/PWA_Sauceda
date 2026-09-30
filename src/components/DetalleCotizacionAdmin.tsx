@@ -269,7 +269,7 @@ export function DetalleCotizacionAdmin({
   const [cambiandoModalidad, setCambiandoModalidad] = useState(false);
   const [mensajeModalidad, setMensajeModalidad] = useState({ tipo: "", texto: "" });
 
-  const handleEjecutarCambioModalidad = async (nuevaModalidad: "estatica" | "modular") => {
+  const handleEjecutarCambioModalidad = async (nuevaModalidad: "estatica" | "modular" | "obra_apu") => {
     try {
       setCambiandoModalidad(true);
       setMensajeModalidad({ tipo: "", texto: "" });
@@ -298,7 +298,13 @@ export function DetalleCotizacionAdmin({
       }));
       setMensajeModalidad({
         tipo: "ok",
-        texto: `Modalidad cambiada a ${nuevaModalidad === "modular" ? "Modular / Configurable" : "Estática tradicional"}.`,
+        texto: `Modalidad cambiada a ${
+          nuevaModalidad === "modular"
+            ? "Modular / Configurable"
+            : nuevaModalidad === "obra_apu"
+            ? "Presupuesto de Obra (APU)"
+            : "Estática tradicional"
+        }.`,
       });
       setTimeout(() => {
         setModalModalidad(false);
@@ -1847,10 +1853,11 @@ export function DetalleCotizacionAdmin({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    disabled={cambiandoModalidad}
                     onClick={() => handleEjecutarCambioModalidad("obra_apu")}
-                    className="rounded-lg bg-verde-profundo hover:bg-sauce text-white font-bold px-3 py-1.5 text-xs transition flex items-center gap-1.5 shadow-xs"
+                    className="rounded-lg bg-verde-profundo hover:bg-sauce text-white font-bold px-3 py-1.5 text-xs transition flex items-center gap-1.5 shadow-xs disabled:opacity-60"
                   >
-                    <span>📐</span> Convertir a Presupuesto de Obra (APU)
+                    <span>📐</span> {cambiandoModalidad ? "Convirtiendo…" : "Convertir a Presupuesto de Obra (APU)"}
                   </button>
                   <button
                     type="button"
@@ -1860,6 +1867,18 @@ export function DetalleCotizacionAdmin({
                     <span>🧩</span> Opciones Modulares
                   </button>
                 </div>
+                {/* El error de este botón debe verse aquí: la ventana de modalidad no está abierta */}
+                {mensajeModalidad.texto && !modalModalidad && (
+                  <div
+                    className={`w-full rounded-lg border px-3 py-2 text-xs font-semibold ${
+                      mensajeModalidad.tipo === "ok"
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : "bg-rose-50 border-rose-200 text-rose-800"
+                    }`}
+                  >
+                    {mensajeModalidad.texto}
+                  </div>
+                )}
               </div>
             )}
 

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { obtenerReciboPorToken } from "@/app/actions/ordenes-trabajo";
 import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 
@@ -9,6 +10,20 @@ interface ReciboPageProps {
   params: {
     token: string;
   };
+}
+
+/**
+ * El título de la página es el nombre que propone el navegador al guardar como PDF:
+ * "Recibo <folio> - <nombre del cliente>".
+ */
+export async function generateMetadata({ params }: ReciboPageProps): Promise<Metadata> {
+  const recibo = await obtenerReciboPorToken(params.token).catch(() => null);
+  if (!recibo) return { title: "Recibo de pago · SAUCEDA" };
+  const nombre = `Recibo ${recibo.folio} - ${recibo.clienteNombre || "Cliente"}`
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { title: nombre };
 }
 
 export default async function PaginaReciboPublico({ params }: ReciboPageProps) {

@@ -8,12 +8,15 @@ interface VisualizadorCotizacionClienteProps {
   cotizacion: Omit<Cotizacion, "notasInternas" | "costoEstimado">;
   conceptos: Omit<CotizacionConcepto, "costoUnitario">[];
   reporteVisita: Omit<VisitaReporte, "inspectorId"> | null;
+  /** Muestra siempre el documento completo (sin pantalla de "aceptada" ni bloque de firma). Para imprimir. */
+  modoDocumento?: boolean;
 }
 
 export function VisualizadorCotizacionCliente({
   cotizacion,
   conceptos,
   reporteVisita,
+  modoDocumento = false,
 }: VisualizadorCotizacionClienteProps) {
   const [estatus, setEstatus] = useState(cotizacion.estatus);
   const [nombreFirma, setNombreFirma] = useState("");
@@ -159,7 +162,7 @@ export function VisualizadorCotizacionCliente({
         <p className="font-mono text-[10px] tracking-[0.2em] text-dorado uppercase">Construye</p>
       </div>
 
-      {exito || estatus === "aceptada" ? (
+      {!modoDocumento && (exito || estatus === "aceptada") ? (
         /* --- VISTA ÉXITO / YA ACEPTADA --- */
         <div className="bg-white p-8 rounded-3xl border border-green-200 shadow-xl text-center space-y-4 max-w-lg mx-auto animate-in fade-in duration-300">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl">
@@ -471,7 +474,7 @@ export function VisualizadorCotizacionCliente({
               </div>
 
               {/* 4. Firma y Autorización */}
-              <div className="border-t pt-6 space-y-4 print-break-inside-avoid">
+              <div className={`border-t pt-6 space-y-4 print-break-inside-avoid ${modoDocumento ? "hidden" : ""}`}>
                 <h3 className="font-titular text-lg font-bold text-verde-profundo flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce/10 text-sauce text-xs font-bold">3</span>
                   Firma y Autorización de Orden de Trabajo

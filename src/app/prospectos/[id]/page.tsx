@@ -24,6 +24,7 @@ import { EmpresaSelector } from "@/components/EmpresaSelector";
 import { CabinaCoordinacionInspeccion } from "@/components/CabinaCoordinacionInspeccion";
 import { ModuloOrdenesTrabajo } from "@/components/ModuloOrdenesTrabajo";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
+import { WidgetColapsable } from "@/components/WidgetColapsable";
 
 export const dynamic = "force-dynamic";
 
@@ -263,7 +264,11 @@ export default async function PaginaProspecto({
         </div>
 
         {/* Cabina de Coordinación de Inspección Técnica (2 Asesores + SLA) */}
-        <div className="mt-6">
+        <WidgetColapsable
+          icono="⚡"
+          titulo="Coordinación de Inspección (2 asesores + SLA)"
+          descripcion="Proponer horarios a los asesores y confirmar la cita con el cliente"
+        >
           <CabinaCoordinacionInspeccion
             prospectoId={prospecto.id}
             expedienteId={expedientes[0]?.id ?? null}
@@ -281,10 +286,14 @@ export default async function PaginaProspecto({
             asesorPredefinidoId={prospecto.asesorId ?? null}
             operadorPredefinidoId={prospecto.operadorId ?? null}
           />
-        </div>
+        </WidgetColapsable>
 
         {/* Widget de Agendamiento Directo e Historial de Citas */}
-        <div className="mt-6">
+        <WidgetColapsable
+          icono="📅"
+          titulo="Agenda y Programaciones"
+          descripcion="Agendar citas e historial de visitas e instalaciones"
+        >
           <WidgetAgendaCitas
             prospectoId={prospecto.id}
             asesorId={prospecto.asesorId ?? null}
@@ -293,10 +302,16 @@ export default async function PaginaProspecto({
             clienteTelefono={prospecto.telefono || ""}
             clienteEmail={prospecto.correo || null}
           />
-        </div>
+        </WidgetColapsable>
 
         {/* Módulo de Cotizaciones y Propuesta Comercial (Sauceda Construye) */}
-        <div className="mt-6 rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
+        <WidgetColapsable
+          icono="📋"
+          titulo="Cotizaciones y Propuestas"
+          descripcion="Propuestas comerciales y visitas técnicas asociadas"
+          insignia={`${cotizaciones.length}`}
+        >
+        <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h3 className="font-titular text-base sm:text-lg font-semibold text-carbon flex items-center gap-1.5">
@@ -390,9 +405,14 @@ export default async function PaginaProspecto({
             </div>
           )}
         </div>
+        </WidgetColapsable>
 
         {/* Órdenes de Trabajo y Documentos de Entrega (OT, Recibos y Garantías) */}
-        <div className="mt-6">
+        <WidgetColapsable
+          icono="🛠️"
+          titulo="Órdenes de Trabajo y Entrega"
+          descripcion="Órdenes, recibos, garantías y documentos de entrega"
+        >
           <ModuloOrdenesTrabajo
             prospectoId={prospecto.id}
             expedienteId={expedientes[0]?.id ?? null}
@@ -400,7 +420,7 @@ export default async function PaginaProspecto({
             clienteTelefonoDefault={prospecto.telefono || ""}
             tipoNegocioDefault={prospecto.tipoNegocioPrincipal || expedientes[0]?.tipoNegocio || "construccion"}
           />
-        </div>
+        </WidgetColapsable>
 
         {/* Expedientes relacionados */}
         <div className="mt-6 flex items-center justify-between">
@@ -439,20 +459,28 @@ export default async function PaginaProspecto({
         </div>
 
         {/* Línea de tiempo de la Secuencia de Automatización */}
-        <TimelineSecuencia phoneOrId={prospecto.id} />
+        <WidgetColapsable icono="⏱️" titulo="Secuencia de Automatización" descripcion="Línea de tiempo de mensajes automáticos">
+          <TimelineSecuencia phoneOrId={prospecto.id} />
+        </WidgetColapsable>
 
         {/* Historial de conversaciones de WhatsApp */}
         {prospecto.telefono && (
-          <ConversacionHistorica telefono={prospecto.telefono} />
+          <WidgetColapsable icono="💬" titulo="Historial de WhatsApp" descripcion="Conversaciones con este prospecto">
+            <ConversacionHistorica telefono={prospecto.telefono} />
+          </WidgetColapsable>
         )}
 
         {/* Historial de llamadas telefónicas y grabaciones */}
         {prospecto.telefono && (
-          <LlamadasHistoricas telefono={prospecto.telefono} />
+          <WidgetColapsable icono="📞" titulo="Historial de Llamadas" descripcion="Llamadas y grabaciones">
+            <LlamadasHistoricas telefono={prospecto.telefono} />
+          </WidgetColapsable>
         )}
 
         {/* Bitácora de actividades del prospecto */}
-        <Actividades prospectoId={prospecto.id} />
+        <WidgetColapsable icono="📝" titulo="Bitácora de Actividades" descripcion="Notas, llamadas, citas y movimientos del prospecto">
+          <Actividades prospectoId={prospecto.id} />
+        </WidgetColapsable>
       </div>
     </main>
   );

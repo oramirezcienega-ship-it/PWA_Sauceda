@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { estadoContratoDeOrden } from "@/app/actions/contratos";
+import { armarGarantiaDesdeCotizacion } from "@/lib/garantia-producto";
 import { numeroALetras } from "@/lib/numero-a-letras";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { normalizarTelefono } from "@/lib/telefono";
@@ -222,7 +223,7 @@ export async function crearOrdenTrabajo(datos: {
       if (!cotEstado) {
         return { ok: false, error: "La cotización indicada no existe." };
       }
-      if (cotEstado.estatus !== "aceptada") {
+      if (cotEstado.estatus !== "aceptada" && cotEstado.estatus !== "instalacion") {
         return {
           ok: false,
           error: `La cotización ${cotizacionId} está en estado "${cotEstado.estatus}". Solo se puede crear una orden de trabajo desde una cotización aceptada por el cliente.`,
@@ -1072,6 +1073,8 @@ export async function crearReciboPago(datos: {
   concepto: string;
   fechaPago?: string;
   notas?: string;
+  /** Persona (perfil) que recibe el dinero. Si no se indica, el usuario en sesión. */
+  recibidoPorId?: string | null;
 }): Promise<{ ok: boolean; recibo?: ReciboPago; error?: string }> {
   try {
     await requireAdmin();
@@ -1120,13 +1123,20 @@ export async function crearReciboPago(datos: {
 
     // Obtener nombre del perfil que recibe el pago
     let recibidoPorNombre = "Asesor Sauceda";
-    if (usuario?.id) {
+    let recibidoPorId: string | null = usuario?.id || null;
+    const quienRecibe = datos.recibidoPorId || usuario?.id;
+    if (quienRecibe) {
       const { data: perf } = await sb
         .from("perfiles")
-        .select("nombre")
-        .eq("id", usuario.id)
+        .select("id, nombre")
+        .eq("id", quienRecibe)
         .maybeSingle();
-      if (perf?.nombre) recibidoPorNombre = perf.nombre;
+      if (perf?.nombre) {
+        recibidoPorNombre = perf.nombre;
+        recibidoPorId = perf.id;
+      } else if (datos.recibidoPorId) {
+        return { ok: false, error: "La persona seleccionada para recibir el dinero no existe en el sistema." };
+      }
     }
 
     const { data: nuevo, error: insertError } = await sb
@@ -1146,7 +1156,7 @@ export async function crearReciboPago(datos: {
         concepto: datos.concepto.trim(),
         saldo_anterior: saldoAnterior,
         saldo_restante: saldoRestante,
-        recibido_por: usuario?.id || null,
+        recibido_por: recibidoPorId,
         recibido_por_nombre: recibidoPorNombre,
         fecha_pago: datos.fechaPago || new Date().toISOString().split("T")[0],
         notas: datos.notas?.trim() || null,
@@ -1191,6 +1201,263 @@ export async function crearReciboPago(datos: {
     };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al registrar recibo de pago." };
+  }
+}
+
+/** Personas que pueden recibir dinero: todos los usuarios activos (admin, asesor, operaciones/instalador). */
+export async function listarReceptoresRecibo(): Promise<
+  { id: string; nombre: string; rol: string }[]
+> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("perfiles")
+      .select("id, nombre, rol")
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
+    return (data || []).map((p: any) => ({ id: p.id, nombre: p.nombre, rol: p.rol || "" }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Reparte un monto total en N recibos de igual importe (el último absorbe el
+ * redondeo). N = 1 emite un solo recibo con el concepto tal cual.
+ */
+async function repartirEnRecibos(datos: {
+  ordenTrabajoId: string;
+  ordenFolio: string;
+  montoTotal: number;
+  numRecibos: number;
+  metodoPago: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  recibidoPorId?: string | null;
+  fechaPago?: string;
+  conceptoBase?: string;
+  referenciaPago?: string;
+  notas?: string;
+}): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
+  const n = Math.min(12, Math.max(1, Math.floor(Number(datos.numRecibos) || 1)));
+  const total = Math.round(Number(datos.montoTotal) * 100) / 100;
+  if (!(total > 0)) return { ok: false, recibos: [], error: "El monto total debe ser mayor a cero." };
+
+  const base = Math.floor((total / n) * 100) / 100;
+  const recibos: ReciboPago[] = [];
+  let acumulado = 0;
+
+  for (let i = 1; i <= n; i++) {
+    const monto = i === n ? Math.round((total - acumulado) * 100) / 100 : base;
+    acumulado = Math.round((acumulado + monto) * 100) / 100;
+    const pct = Math.round((monto / total) * 1000) / 10;
+    const concepto =
+      n === 1
+        ? datos.conceptoBase?.trim() || `Pago único - Orden de Trabajo ${datos.ordenFolio}`
+        : `${datos.conceptoBase?.trim() ? datos.conceptoBase.trim() + " · " : ""}Pago ${i} de ${n} (${pct}%) - Orden de Trabajo ${datos.ordenFolio}`;
+
+    const res = await crearReciboPago({
+      ordenTrabajoId: datos.ordenTrabajoId,
+      monto,
+      metodoPago: datos.metodoPago,
+      referenciaPago: datos.referenciaPago,
+      concepto,
+      fechaPago: datos.fechaPago,
+      notas: datos.notas,
+      recibidoPorId: datos.recibidoPorId,
+    });
+    if (!res.ok || !res.recibo) {
+      return {
+        ok: false,
+        recibos,
+        error: `${res.error || "No se pudo crear el recibo"} (se alcanzaron a emitir ${recibos.length} de ${n}).`,
+      };
+    }
+    recibos.push(res.recibo);
+  }
+  return { ok: true, recibos };
+}
+
+/** Emite 1..N recibos repartiendo un monto total; permite elegir quién recibe el dinero. */
+export async function emitirRecibosEnPartes(datos: {
+  ordenTrabajoId: string;
+  montoTotal: number;
+  numRecibos: number;
+  metodoPago: "transferencia" | "efectivo" | "tarjeta" | "otro";
+  recibidoPorId?: string | null;
+  fechaPago?: string;
+  concepto?: string;
+  referenciaPago?: string;
+  notas?: string;
+}): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: ot } = await sb
+      .from("ordenes_trabajo")
+      .select("folio")
+      .eq("id", datos.ordenTrabajoId)
+      .maybeSingle();
+    if (!ot) return { ok: false, recibos: [], error: "Orden de trabajo no encontrada." };
+
+    return await repartirEnRecibos({
+      ordenTrabajoId: datos.ordenTrabajoId,
+      ordenFolio: ot.folio,
+      montoTotal: datos.montoTotal,
+      numRecibos: datos.numRecibos,
+      metodoPago: datos.metodoPago,
+      recibidoPorId: datos.recibidoPorId,
+      fechaPago: datos.fechaPago,
+      conceptoBase: datos.concepto,
+      referenciaPago: datos.referenciaPago,
+      notas: datos.notas,
+    });
+  } catch (err: any) {
+    return { ok: false, recibos: [], error: err?.message || "Error al emitir los recibos." };
+  }
+}
+
+/**
+ * Recalcula saldo anterior / saldo restante de todos los recibos de una OT
+ * en orden cronológico, para que sigan siendo coherentes tras editar o
+ * eliminar alguno.
+ */
+async function recalcularSaldosRecibosOT(sb: any, ordenTrabajoId: string): Promise<void> {
+  const { data: ot } = await sb
+    .from("ordenes_trabajo")
+    .select("cotizacion_id")
+    .eq("id", ordenTrabajoId)
+    .maybeSingle();
+
+  let total = 0;
+  if (ot?.cotizacion_id) {
+    const { data: cot } = await sb
+      .from("cotizaciones")
+      .select("precio_final")
+      .eq("id", ot.cotizacion_id)
+      .maybeSingle();
+    total = Number(cot?.precio_final || 0);
+  }
+
+  const { data: recibos } = await sb
+    .from("recibos_pago")
+    .select("id, monto")
+    .eq("orden_trabajo_id", ordenTrabajoId)
+    .order("fecha_pago", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  let pagado = 0;
+  for (const r of recibos || []) {
+    const saldoAnterior = total > 0 ? Math.max(0, Math.round((total - pagado) * 100) / 100) : 0;
+    const monto = Number(r.monto || 0);
+    const saldoRestante = total > 0 ? Math.max(0, Math.round((saldoAnterior - monto) * 100) / 100) : 0;
+    await sb
+      .from("recibos_pago")
+      .update({ saldo_anterior: saldoAnterior, saldo_restante: saldoRestante })
+      .eq("id", r.id);
+    pagado += monto;
+  }
+}
+
+/** Edita un recibo ya emitido (monto, método, concepto, referencia, fecha, quién recibió, notas). */
+export async function actualizarReciboPago(
+  reciboId: string,
+  datos: {
+    monto?: number;
+    metodoPago?: "transferencia" | "efectivo" | "tarjeta" | "otro";
+    referenciaPago?: string;
+    concepto?: string;
+    fechaPago?: string;
+    notas?: string;
+    recibidoPorId?: string | null;
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: actual } = await sb
+      .from("recibos_pago")
+      .select("id, orden_trabajo_id")
+      .eq("id", reciboId)
+      .maybeSingle();
+    if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    const cambios: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (datos.monto !== undefined) {
+      const monto = Math.round(Number(datos.monto) * 100) / 100;
+      if (!(monto > 0)) return { ok: false, error: "El monto debe ser mayor a cero." };
+      cambios.monto = monto;
+      cambios.monto_letra = numeroALetras(monto);
+    }
+    if (datos.metodoPago) cambios.metodo_pago = datos.metodoPago;
+    if (datos.referenciaPago !== undefined) cambios.referencia_pago = datos.referenciaPago.trim() || null;
+    if (datos.concepto !== undefined) {
+      if (!datos.concepto.trim()) return { ok: false, error: "El concepto no puede estar vacío." };
+      cambios.concepto = datos.concepto.trim();
+    }
+    if (datos.fechaPago) cambios.fecha_pago = datos.fechaPago;
+    if (datos.notas !== undefined) cambios.notas = datos.notas.trim() || null;
+
+    if (datos.recibidoPorId) {
+      const { data: perf } = await sb
+        .from("perfiles")
+        .select("id, nombre")
+        .eq("id", datos.recibidoPorId)
+        .maybeSingle();
+      if (!perf) return { ok: false, error: "La persona seleccionada no existe en el sistema." };
+      cambios.recibido_por = perf.id;
+      cambios.recibido_por_nombre = perf.nombre;
+    }
+
+    const { error } = await sb.from("recibos_pago").update(cambios).eq("id", reciboId);
+    if (error) return { ok: false, error: error.message };
+
+    await recalcularSaldosRecibosOT(sb, actual.orden_trabajo_id);
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al editar el recibo." };
+  }
+}
+
+/** Elimina un recibo emitido (p. ej. para rehacerlo). Recalcula los saldos de los demás. */
+export async function eliminarReciboPago(reciboId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: actual } = await sb
+      .from("recibos_pago")
+      .select("id, orden_trabajo_id, folio")
+      .eq("id", reciboId)
+      .maybeSingle();
+    if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    // No se elimina si una comisión ligada a este recibo ya tiene pagos aplicados
+    const { data: coms } = await sb
+      .from("comisiones")
+      .select("id, monto_pagado")
+      .eq("recibo_pago_id", reciboId);
+    if ((coms || []).some((c: any) => Number(c.monto_pagado || 0) > 0)) {
+      return {
+        ok: false,
+        error: `El recibo ${actual.folio} tiene una comisión con pagos aplicados; primero cancela o ajusta esa comisión.`,
+      };
+    }
+
+    const { error } = await sb.from("recibos_pago").delete().eq("id", reciboId);
+    if (error) return { ok: false, error: error.message };
+
+    await recalcularSaldosRecibosOT(sb, actual.orden_trabajo_id);
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al eliminar el recibo." };
   }
 }
 
@@ -1252,7 +1519,8 @@ export async function guardarGarantiaOT(datos: {
     const fechaInicioStr = datos.fechaInicio || new Date().toISOString().split("T")[0];
     const fechaInicioDate = new Date(fechaInicioStr);
     const fechaVencimientoDate = new Date(fechaInicioDate);
-    fechaVencimientoDate.setFullYear(fechaVencimientoDate.getFullYear() + Math.floor(anos));
+    // Se suma en meses para admitir plazos menores a un año (p. ej. 6 meses)
+    fechaVencimientoDate.setMonth(fechaVencimientoDate.getMonth() + Math.round(anos * 12));
     const fechaVencimientoStr = fechaVencimientoDate.toISOString().split("T")[0];
 
     // Verificar si ya existe garantía para la OT
@@ -1623,6 +1891,60 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
   }
 }
 
+/**
+ * Vuelve a armar la póliza de garantía de una OT con la plantilla vigente del
+ * producto vendido (descripción de la cotización, características y plazo).
+ * Sustituye el contenido, el título y la vigencia de la póliza actual.
+ */
+export async function regenerarGarantiaDesdeProducto(
+  ordenId: string
+): Promise<{ ok: boolean; garantia?: CartaGarantiaOT; usoPlantillaProducto?: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: ot } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, cotizacion_id, prospecto_id")
+      .eq("id", ordenId)
+      .maybeSingle();
+    if (!ot) return { ok: false, error: "Orden de trabajo no encontrada." };
+    if (!ot.cotizacion_id) {
+      return { ok: false, error: "La orden no está ligada a una cotización; no hay producto del cual tomar la garantía." };
+    }
+
+    let clienteNombre = "Cliente Sauceda";
+    let direccion = "Domicilio en Obra";
+    if (ot.prospecto_id) {
+      const { data: pros } = await sb
+        .from("prospectos")
+        .select("nombre, direccion, fraccionamiento")
+        .eq("id", ot.prospecto_id)
+        .maybeSingle();
+      if (pros?.nombre) clienteNombre = pros.nombre;
+      direccion = pros?.direccion || pros?.fraccionamiento || direccion;
+    }
+
+    const g = await armarGarantiaDesdeCotizacion(sb, {
+      cotizacionId: ot.cotizacion_id,
+      ordenFolio: ot.folio,
+      clienteNombre,
+      direccion,
+    });
+
+    const res = await guardarGarantiaOT({
+      ordenTrabajoId: ordenId,
+      titulo: g.titulo,
+      contenido: g.contenido,
+      anosGarantia: g.anos,
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, garantia: res.garantia, usoPlantillaProducto: g.usoPlantillaProducto };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al regenerar la póliza de garantía." };
+  }
+}
+
 /** Texto por defecto de la póliza de garantía cuando se genera en automático al crear la OT. */
 function generarContenidoGarantiaPorDefecto(clienteNombre: string, direccion: string): string {
   const ahora = new Date();
@@ -1672,12 +1994,16 @@ async function generarDocumentosAutomaticosOT(
     montoCobro?: number | null;
     metodoPago?: string | null;
     direccionCliente?: string;
+    /** Cantidad de recibos en que se reparte el cobro. Por omisión: 1 si el monto es <= $10,000; 2 si es mayor. */
+    numRecibos?: number | null;
+    /** Persona que recibe el dinero (perfil). Por omisión, el usuario en sesión. */
+    recibidoPorId?: string | null;
   }
 ): Promise<void> {
   const { ordenTrabajoId, ordenFolio, clienteNombre, montoCobro, metodoPago, direccionCliente } = params;
 
-  // 1. Recibo(s) de pago: un único recibo si el monto a cobrar es <= $10,000;
-  // si es mayor, se divide en dos recibos iguales (50% / 50%).
+  // 1. Recibo(s) de pago: la cantidad es parametrizable; si no se indica,
+  // un único recibo si el monto es <= $10,000 y dos (50% / 50%) si es mayor.
   const monto = Number(montoCobro || 0);
   if (monto > 0) {
     try {
@@ -1690,45 +2016,58 @@ async function generarDocumentosAutomaticosOT(
           ? "tarjeta"
           : "otro";
 
-      if (monto <= 10000) {
-        await crearReciboPago({
-          ordenTrabajoId,
-          monto,
-          metodoPago: metodoRecibo,
-          concepto: `Pago único - Orden de Trabajo ${ordenFolio}`,
-        });
-      } else {
-        const primeraParte = Math.round((monto / 2) * 100) / 100;
-        const segundaParte = Math.round((monto - primeraParte) * 100) / 100;
-        await crearReciboPago({
-          ordenTrabajoId,
-          monto: primeraParte,
-          metodoPago: metodoRecibo,
-          concepto: `Pago 1 de 2 (50%) - Orden de Trabajo ${ordenFolio}`,
-        });
-        await crearReciboPago({
-          ordenTrabajoId,
-          monto: segundaParte,
-          metodoPago: metodoRecibo,
-          concepto: `Pago 2 de 2 (50%) - Orden de Trabajo ${ordenFolio}`,
-        });
+      const numRecibos =
+        params.numRecibos && params.numRecibos > 0 ? params.numRecibos : monto <= 10000 ? 1 : 2;
+      const resRec = await repartirEnRecibos({
+        ordenTrabajoId,
+        ordenFolio,
+        montoTotal: monto,
+        numRecibos,
+        metodoPago: metodoRecibo,
+        recibidoPorId: params.recibidoPorId,
+      });
+      if (!resRec.ok) {
+        console.error("Aviso: recibos automáticos incompletos para OT", ordenFolio, resRec.error);
       }
     } catch (errRec) {
       console.error("Aviso: no se pudo generar recibo(s) automático(s) para OT", ordenFolio, errRec);
     }
   }
 
-  // 2. Póliza de garantía por defecto.
+  // 2. Póliza de garantía: si la OT nace de una cotización se arma con la
+  // plantilla del producto vendido (descripción, características y plazo);
+  // si no, se usa el texto genérico.
   try {
-    const contenido = generarContenidoGarantiaPorDefecto(
-      clienteNombre,
-      direccionCliente || "Domicilio en Obra"
-    );
-    await guardarGarantiaOT({
-      ordenTrabajoId,
-      titulo: "Póliza de Garantía por Servicio",
-      contenido,
-    });
+    const { data: otGar } = await sb
+      .from("ordenes_trabajo")
+      .select("cotizacion_id")
+      .eq("id", ordenTrabajoId)
+      .maybeSingle();
+
+    if (otGar?.cotizacion_id) {
+      const g = await armarGarantiaDesdeCotizacion(sb, {
+        cotizacionId: otGar.cotizacion_id,
+        ordenFolio,
+        clienteNombre,
+        direccion: direccionCliente || "Domicilio en Obra",
+      });
+      await guardarGarantiaOT({
+        ordenTrabajoId,
+        titulo: g.titulo,
+        contenido: g.contenido,
+        anosGarantia: g.anos,
+      });
+    } else {
+      const contenido = generarContenidoGarantiaPorDefecto(
+        clienteNombre,
+        direccionCliente || "Domicilio en Obra"
+      );
+      await guardarGarantiaOT({
+        ordenTrabajoId,
+        titulo: "Póliza de Garantía por Servicio",
+        contenido,
+      });
+    }
   } catch (errGar) {
     console.error("Aviso: no se pudo generar póliza automática para OT", ordenFolio, errGar);
   }
@@ -2555,6 +2894,10 @@ export async function programarInstalacionYDetonarOT(datos: {
   mesesSinIntereses?: number | null;
   comisionBancariaPct?: number;
   montoSaldo?: number;
+  /** Cantidad de recibos en que se reparte el saldo (por omisión 1 si <= $10,000; 2 si es mayor). */
+  numRecibos?: number | null;
+  /** Persona (perfil) que recibe el dinero. */
+  recibidoPorId?: string | null;
   notasInstalacion?: string;
   notificarClienteWhatsApp?: boolean;
   notificarProveedorWhatsApp?: boolean;
@@ -2834,6 +3177,8 @@ export async function programarInstalacionYDetonarOT(datos: {
           montoCobro: montoSaldo,
           metodoPago,
           direccionCliente,
+          numRecibos: datos.numRecibos,
+          recibidoPorId: datos.recibidoPorId,
         });
       } catch (errAuto) {
         console.error("Aviso: no se pudieron generar documentos automáticos de la OT:", errAuto);

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useTransition } from "react";
 import {
   iniciarPropuestaCoordinacionAction,
   registrarVotosAsesorAction,
+  marcarAsesorEnteradoAction,
   enviarOpcionesClienteAction,
   confirmarCitaFinalCoordinacionAction,
   obtenerCoordinacionActivaProspectoAction,
@@ -16,6 +17,7 @@ import type {
   CoordinacionInspeccionDetalle,
 } from "@/lib/coordinacion-inspecciones";
 import { labelTipoNegocio } from "@/lib/types";
+import { PanelVinculacionTelegram } from "./PanelVinculacionTelegram";
 
 interface PerfilSimple {
   id: string;
@@ -244,7 +246,14 @@ export function CabinaCoordinacionInspeccion({
         canalNotificacion: canalNotif,
       });
 
-      if (res.ok) {
+      if (res.ok && res.sinEntrega && res.sinEntrega.length > 0) {
+        // La coordinación se creó, pero a alguien no le llegó el aviso: no se debe decir que se envió
+        setMensaje({
+          tipo: "error",
+          texto: `⚠️ La coordinación se creó, pero NO se pudo avisar a: ${res.sinEntrega.join(", ")} (sin teléfono o sin Telegram vinculado). Avísales por otro medio o corrige sus datos en Usuarios y usa "⏰ Recordar" en Actividades de la Semana.`,
+        });
+        await cargarCoordinacion();
+      } else if (res.ok) {
         setMensaje({
           tipo: "ok",
           texto:
@@ -273,6 +282,15 @@ export function CabinaCoordinacionInspeccion({
       if (res.ok) {
         await cargarCoordinacion();
       }
+    });
+  };
+
+  // Marca manual de "enterado" (se enteró por llamada, voz o en persona)
+  const handleMarcarEnterado = (asesorId: string) => {
+    if (!coordinacion) return;
+    startTransition(async () => {
+      const res = await marcarAsesorEnteradoAction(coordinacion.id, asesorId, prospectoId);
+      if (res.ok) await cargarCoordinacion();
     });
   };
 
@@ -503,6 +521,8 @@ export function CabinaCoordinacionInspeccion({
                     Guardar Configuración
                   </button>
                 </div>
+
+                <PanelVinculacionTelegram tokenGuardado={Boolean(telegramToken.trim())} />
               </div>
             )}
           </div>
@@ -701,6 +721,29 @@ export function CabinaCoordinacionInspeccion({
               </span>
             </h4>
 
+            {/* Resumen de recepción y lectura */}
+            {(() => {
+              const ids = coordinacion.asesoresIds;
+              const recibieron = ids.filter((id) => {
+                const e = coordinacion.respuestasAsesores[id]?.entrega;
+                return e?.whatsapp?.ok || e?.telegram?.ok;
+              }).length;
+              const leyeron = ids.filter((id) => coordinacion.respuestasAsesores[id]?.enteradoAt).length;
+              return (
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+                  <span className={`px-2 py-0.5 rounded-full border ${recibieron === ids.length ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
+                    📨 Recibieron: {recibieron}/{ids.length}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full border ${leyeron === ids.length ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}>
+                    👁️ Leyeron: {leyeron}/{ids.length}
+                  </span>
+                  <span className="text-slate-400 font-normal">
+                    Telegram no informa si un mensaje fue leído: la lectura se confirma con el botón "Enterado", al responder, o marcándolo a mano.
+                  </span>
+                </div>
+              );
+            })()}
+
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
@@ -724,6 +767,63 @@ export function CabinaCoordinacionInspeccion({
                       <tr key={aId} className="hover:bg-slate-50/50">
                         <td className="p-2.5 font-medium text-slate-800">
                           <div>👷 {nombre}</div>
+
+                          {/* Recibido: resultado del envío por canal */}
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(["whatsapp", "telegram"] as const).map((canal) => {
+                              const e = asesorData?.entrega?.[canal];
+                              if (!e) return null;
+                              const hora = new Date(e.enviadoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+                              return (
+                                <span
+                                  key={canal}
+                                  title={e.ok ? `Enviado a las ${hora}` : `No se pudo enviar: ${e.error || "error"}`}
+                                  className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold ${
+                                    e.ok
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-rose-50 text-rose-700 border-rose-200"
+                                  }`}
+                                >
+                                  {canal === "whatsapp" ? "📲 WhatsApp" : "✈️ Telegram"} {e.ok ? `✓ ${hora}` : `✗ ${e.error || "falló"}`}
+                                </span>
+                              );
+                            })}
+                            {!asesorData?.entrega && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500">
+                                Sin registro de envío
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Leído: acuse de lectura (botón Enterado, voto o marca manual) */}
+                          {asesorData?.enteradoAt ? (
+                            <div className="text-[9px] text-indigo-700 font-semibold mt-1">
+                              👁️ Leyó{" "}
+                              {new Date(asesorData.enteradoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                              {" · "}
+                              {asesorData.enteradoVia === "telegram"
+                                ? "botón Enterado"
+                                : asesorData.enteradoVia === "voto"
+                                ? "al responder"
+                                : "marcado a mano"}
+                            </div>
+                          ) : (
+                            <div className="text-[9px] text-amber-700 mt-1 flex items-center gap-1.5">
+                              <span>⏳ Sin confirmar lectura</span>
+                              {coordinacion.estado !== "confirmada" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarcarEnterado(aId)}
+                                  disabled={isPending}
+                                  className="underline text-slate-500 hover:text-indigo-700"
+                                  title="Márcalo si se enteró por llamada, voz o en persona"
+                                >
+                                  marcar enterado
+                                </button>
+                              )}
+                            </div>
+                          )}
+
                           {asesorData?.respondidoAt && (
                             <div className="text-[9px] text-emerald-600 font-mono">
                               ✓ Respondió {new Date(asesorData.respondidoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}

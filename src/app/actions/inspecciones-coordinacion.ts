@@ -11,6 +11,7 @@ import {
   obtenerCitasInspeccionSLA,
   iniciarPropuestaCoordinacion,
   registrarVotosAsesorCoordinacion,
+  marcarAsesorEnteradoCoordinacion,
   enviarOpcionesAClienteCoordinacion,
   confirmarCitaFinalCoordinacion,
   obtenerCoordinacionActivaProspecto,
@@ -134,7 +135,7 @@ export async function obtenerTableroInspeccionesSLAAction(): Promise<{
  */
 export async function iniciarPropuestaCoordinacionAction(
   input: IniciarPropuestaInput
-): Promise<{ ok: boolean; coordinacionId?: string; error?: string }> {
+): Promise<{ ok: boolean; coordinacionId?: string; error?: string; sinEntrega?: string[] }> {
   try {
     const sb = supabaseServidor();
     const res = await iniciarPropuestaCoordinacion(sb, input);
@@ -281,5 +282,24 @@ export async function guardarConfiguracionTelegramAction(
     return await guardarConfiguracionTelegram(sb, botToken.trim(), chatIdGrupo.trim());
   } catch (err: any) {
     return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * 14. Marca manualmente que un asesor leyó la propuesta (p. ej. se enteró por llamada o voz).
+ */
+export async function marcarAsesorEnteradoAction(
+  coordinacionId: string,
+  asesorId: string,
+  prospectoId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const res = await marcarAsesorEnteradoCoordinacion(sb, coordinacionId, asesorId, "manual");
+    if (prospectoId) revalidatePath(`/prospectos/${prospectoId}`);
+    return res;
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al marcar como enterado." };
   }
 }

@@ -29,6 +29,7 @@ import { WidgetAgendaCitas } from "./WidgetAgendaCitas";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { EmpresaSelector } from "./EmpresaSelector";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
+import { WidgetColapsable } from "./WidgetColapsable";
 
 /**
  * Vista de detalle de un expediente.
@@ -465,18 +466,25 @@ export function DetalleExpediente({ id }: { id: string }) {
         </div>
 
         {/* 2. Agenda & Programaciones */}
-        <WidgetAgendaCitas
-          prospectoId={expediente.prospectoId}
-          expedienteId={expediente.id}
-          asesorId={expediente.asesorId ?? null}
-          operadorId={expediente.operadorId ?? null}
-          clienteNombre={expediente.nombreCompleto || expediente.cliente}
-          clienteTelefono={expediente.telefono || ""}
-          clienteEmail={expediente.prospectoCorreo || null}
-          onRefresh={async () => {
-            await recargar();
-          }}
-        />
+        <WidgetColapsable
+          className=""
+          icono="📅"
+          titulo="Agenda y Programaciones"
+          descripcion="Agendar citas e historial de visitas e instalaciones"
+        >
+          <WidgetAgendaCitas
+            prospectoId={expediente.prospectoId}
+            expedienteId={expediente.id}
+            asesorId={expediente.asesorId ?? null}
+            operadorId={expediente.operadorId ?? null}
+            clienteNombre={expediente.nombreCompleto || expediente.cliente}
+            clienteTelefono={expediente.telefono || ""}
+            clienteEmail={expediente.prospectoCorreo || null}
+            onRefresh={async () => {
+              await recargar();
+            }}
+          />
+        </WidgetColapsable>
 
         {/* Enlaces de Agendamiento Directo */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -504,10 +512,18 @@ export function DetalleExpediente({ id }: { id: string }) {
 
         {/* 3. Historial de conversaciones de WhatsApp */}
         {expediente.telefono && (
-          <ConversacionHistorica telefono={expediente.telefono} />
+          <WidgetColapsable className="" icono="💬" titulo="Historial de WhatsApp" descripcion="Conversaciones con este cliente">
+            <ConversacionHistorica telefono={expediente.telefono} />
+          </WidgetColapsable>
         )}
 
         {/* 4. Cotizaciones y Propuestas */}
+        <WidgetColapsable
+          className=""
+          icono="📋"
+          titulo="Cotizaciones y Propuestas"
+          descripcion="Propuestas comerciales y visitas técnicas asociadas"
+        >
         <div className="rounded-2xl border border-carbon/10 bg-white p-4 sm:p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
@@ -595,6 +611,7 @@ export function DetalleExpediente({ id }: { id: string }) {
             </div>
           )}
         </div>
+        </WidgetColapsable>
 
         {/* 4. Origen y Atribución de Campaña Publicitaria */}
         <div className="rounded-xl border border-carbon/10 bg-white p-4 sm:p-5 shadow-xs space-y-3">
@@ -749,12 +766,19 @@ export function DetalleExpediente({ id }: { id: string }) {
         </div>
 
         {/* 6. Actividades con el expediente */}
-        <ActividadesConExpediente
-          expedienteId={expediente.id}
-          prospectoId={expediente.prospectoId}
-          asesorNombreDefault={expediente.asesorNombre}
-          operadorNombreDefault={expediente.operadorNombre}
-        />
+        <WidgetColapsable
+          className=""
+          icono="🗓️"
+          titulo="Actividades con el expediente"
+          descripcion="Seguimiento y actividades programadas con el cliente"
+        >
+          <ActividadesConExpediente
+            expedienteId={expediente.id}
+            prospectoId={expediente.prospectoId}
+            asesorNombreDefault={expediente.asesorNombre}
+            operadorNombreDefault={expediente.operadorNombre}
+          />
+        </WidgetColapsable>
 
         {/* Avance por etapas (Solo visible para Traspaso / Compra de casa) */}
         {(!expediente.tipoNegocio || expediente.tipoNegocio === "traspaso_compra" || (expediente.tipoNegocio as string) === "compra" || (expediente.tipoNegocio as string) === "traspaso") && (
@@ -1084,26 +1108,37 @@ export function DetalleExpediente({ id }: { id: string }) {
           <Bloque titulo="Notas del asesor">{expediente.notas || "—"}</Bloque>
 
           {/* Línea de tiempo de la Secuencia de Automatización */}
-          <TimelineSecuencia
-            phoneOrId={expediente.id}
-            datosEnrolamiento={{
-              phone: expediente.telefono || "",
-              nombre: [expediente.cliente, expediente.primerApellido, expediente.segundoApellido].filter(Boolean).join(" "),
-              prospectoId: expediente.prospectoId || undefined,
-              expedienteId: expediente.id,
-            }}
-          />
+          <WidgetColapsable className="" icono="⏱️" titulo="Secuencia de Automatización" descripcion="Línea de tiempo de mensajes automáticos">
+            <TimelineSecuencia
+              phoneOrId={expediente.id}
+              datosEnrolamiento={{
+                phone: expediente.telefono || "",
+                nombre: [expediente.cliente, expediente.primerApellido, expediente.segundoApellido].filter(Boolean).join(" "),
+                prospectoId: expediente.prospectoId || undefined,
+                expedienteId: expediente.id,
+              }}
+            />
+          </WidgetColapsable>
 
           {/* Historial de llamadas telefónicas y grabaciones */}
           {expediente.telefono && (
-            <LlamadasHistoricas telefono={expediente.telefono} />
+            <WidgetColapsable className="" icono="📞" titulo="Historial de Llamadas" descripcion="Llamadas y grabaciones">
+              <LlamadasHistoricas telefono={expediente.telefono} />
+            </WidgetColapsable>
           )}
 
           {/* Bitácora de actividades */}
-          <Actividades expedienteId={expediente.id} />
+          <WidgetColapsable className="" icono="📝" titulo="Bitácora de Actividades" descripcion="Notas, llamadas, citas y movimientos del expediente">
+            <Actividades expedienteId={expediente.id} />
+          </WidgetColapsable>
 
           {/* Órdenes de Trabajo y Documentos de Entrega (OT, Recibos y Garantías) */}
-          <div className="mt-2">
+          <WidgetColapsable
+            className="mt-2"
+            icono="🛠️"
+            titulo="Órdenes de Trabajo y Entrega"
+            descripcion="Órdenes, recibos, garantías y documentos de entrega"
+          >
             <ModuloOrdenesTrabajo
               expedienteId={expediente.id}
               prospectoId={expediente.prospectoId}
@@ -1111,7 +1146,7 @@ export function DetalleExpediente({ id }: { id: string }) {
               clienteTelefonoDefault={expediente.telefono || ""}
               tipoNegocioDefault={expediente.tipoNegocio || "construccion"}
             />
-          </div>
+          </WidgetColapsable>
 
           {/* Checklist de Flujo de Trabajo Operativo (BPM) — Último widget del expediente, contraído por defecto */}
           <WidgetBpmTareas 

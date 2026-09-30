@@ -12,16 +12,19 @@ import {
   eliminarEvidenciaFotoOT,
   obtenerOrdenTrabajoPorId,
   enviarReciboPorWhatsApp,
+  eliminarReciboPago,
   type OrdenTrabajo,
   type ReciboPago,
   type CartaGarantiaOT,
 } from "@/app/actions/ordenes-trabajo";
 import { ModalRegistrarRecibo } from "./ModalRegistrarRecibo";
+import { ModalEditarRecibo } from "./ModalEditarRecibo";
 import { ModalGestionarGarantia } from "./ModalGestionarGarantia";
 import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { SeccionContratoOT } from "./SeccionContratoOT";
+import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
@@ -52,6 +55,7 @@ export function DetalleOrdenTrabajo({
   const [documentoProveedor, setDocumentoProveedor] = useState<DocumentoProveedor | null>(documentoProveedorInicial);
 
   const [cargando, setCargando] = useState(false);
+  const [reciboEditando, setReciboEditando] = useState<ReciboPago | null>(null);
 
   // Modales
   const [modalRecibo, setModalRecibo] = useState(false);
@@ -110,6 +114,22 @@ export function DetalleOrdenTrabajo({
       console.error("Error al recargar detalle:", e);
     } finally {
       setCargando(false);
+    }
+  };
+
+  const handleEliminarRecibo = async (r: ReciboPago) => {
+    if (
+      !window.confirm(
+        `¿Eliminar el recibo ${r.folio} por ${formatMoneda(r.monto)}?\n\nSe recalcularán los saldos de los demás recibos. Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    const res = await eliminarReciboPago(r.id);
+    if (res.ok) {
+      await recargarDetalle();
+    } else {
+      alert(res.error || "No se pudo eliminar el recibo.");
     }
   };
 
@@ -603,6 +623,9 @@ export function DetalleOrdenTrabajo({
         </div>
       </div>
 
+      {/* 3a. Cotización de origen */}
+      <TarjetaCotizacionOrigenOT cotizacionId={orden.cotizacionId} cotizacionToken={orden.cotizacionToken} totalCotizado={orden.totalCotizado} />
+
       {/* 3b. Panel Especializado de Gestión Compraventa INFONAVIT */}
       {orden.tipoNegocio === "infonavit_compraventa" && (
         <PanelInfonavitCompraventa
@@ -663,7 +686,7 @@ export function DetalleOrdenTrabajo({
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <a
-                      href={`/recibo/${r.id}`}
+                      href={`/recibo/${r.token}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="rounded-lg border border-carbon/15 bg-slate-50 hover:bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-carbon transition"
@@ -671,6 +694,26 @@ export function DetalleOrdenTrabajo({
                     >
                       PDF
                     </a>
+                    {!soloLectura && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setReciboEditando(r)}
+                          className="rounded-lg border border-carbon/15 bg-white hover:bg-slate-50 px-2 py-1 text-[11px] transition"
+                          title="Editar recibo"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarRecibo(r)}
+                          className="rounded-lg border border-rojo/20 bg-white hover:bg-rojo/10 px-2 py-1 text-[11px] transition"
+                          title="Eliminar recibo"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
                     {r.clienteTelefono && (
                       <button
                         type="button"
@@ -1061,6 +1104,17 @@ export function DetalleOrdenTrabajo({
         totalCotizado={orden.totalCotizado || 0}
         saldoRestante={orden.saldoRestante || 0}
       />
+
+      {reciboEditando && (
+        <ModalEditarRecibo
+          recibo={reciboEditando}
+          alCerrar={() => setReciboEditando(null)}
+          alGuardado={async () => {
+            setReciboEditando(null);
+            await recargarDetalle();
+          }}
+        />
+      )}
 
       <ModalGestionarGarantia
         abierto={modalGarantia}

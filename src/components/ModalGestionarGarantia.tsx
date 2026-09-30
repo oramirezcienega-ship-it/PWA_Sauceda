@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { guardarGarantiaOT, type CartaGarantiaOT } from "@/app/actions/ordenes-trabajo";
+import { guardarGarantiaOT, regenerarGarantiaDesdeProducto, type CartaGarantiaOT } from "@/app/actions/ordenes-trabajo";
 
 interface ModalGestionarGarantiaProps {
   abierto: boolean;
@@ -62,6 +62,7 @@ Sauceda Construye · León, Guanajuato`;
     garantiaActual?.contenido || generarTextoPorDefecto(defaultAnos)
   );
   const [cargando, setCargando] = useState(false);
+  const [regenerando, setRegenerando] = useState(false);
   const [error, setError] = useState("");
   const [garantiaGuardada, setGarantiaGuardada] = useState<CartaGarantiaOT | null>(
     garantiaActual
@@ -73,6 +74,39 @@ Sauceda Construye · León, Guanajuato`;
     setAnosGarantia(nuevosAnos);
     if (!garantiaActual) {
       setContenido(generarTextoPorDefecto(nuevosAnos));
+    }
+  };
+
+  const handleRegenerarDesdeProducto = async () => {
+    if (
+      !window.confirm(
+        "Se reemplazará el texto, el título y la vigencia de la póliza con la plantilla actual del producto vendido. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    try {
+      setRegenerando(true);
+      setError("");
+      const res = await regenerarGarantiaDesdeProducto(ordenId);
+      if (res.ok && res.garantia) {
+        setContenido(res.garantia.contenido);
+        setTitulo(res.garantia.titulo);
+        setAnosGarantia(res.garantia.anosGarantia);
+        setGarantiaGuardada(res.garantia);
+        if (res.usoPlantillaProducto === false) {
+          setError(
+            "El producto vendido no tiene plantilla de garantía en el catálogo; se usó el texto genérico con la descripción de la cotización."
+          );
+        }
+        alGuardar(res.garantia);
+      } else {
+        setError(res.error || "No se pudo regenerar la póliza.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Error al regenerar la póliza.");
+    } finally {
+      setRegenerando(false);
     }
   };
 
@@ -174,6 +208,10 @@ Sauceda Construye · León, Guanajuato`;
                 onChange={(e) => handleCambiarAnos(Number(e.target.value))}
                 className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none bg-white font-bold"
               >
+                {![0.5, 1, 2, 3, 5, 10].includes(anosGarantia) && (
+                  <option value={anosGarantia}>{anosGarantia} Años (según producto)</option>
+                )}
+                <option value={0.5}>6 Meses</option>
                 <option value={1}>1 Año</option>
                 <option value={2}>2 Años</option>
                 <option value={3}>3 Años (Estándar)</option>
@@ -203,7 +241,7 @@ Sauceda Construye · León, Guanajuato`;
                 <span>📅</span>
                 {(() => {
                   const d = new Date(fechaInicio || new Date());
-                  d.setFullYear(d.getFullYear() + Math.floor(anosGarantia));
+                  d.setMonth(d.getMonth() + Math.round(anosGarantia * 12));
                   return d.toLocaleDateString("es-MX", {
                     year: "numeric",
                     month: "long",
@@ -219,13 +257,24 @@ Sauceda Construye · León, Guanajuato`;
               <label className="block font-semibold text-carbon/80">
                 Términos y Cláusulas de Garantía
               </label>
-              <button
-                type="button"
-                onClick={() => setContenido(generarTextoPorDefecto(anosGarantia))}
-                className="text-[10px] text-sauce hover:underline font-semibold"
-              >
-                ↺ Restaurar plantilla sugerida
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={regenerando}
+                  onClick={handleRegenerarDesdeProducto}
+                  className="text-[10px] text-verde-profundo hover:underline font-bold disabled:opacity-50"
+                  title="Vuelve a armar la póliza con la plantilla vigente del producto vendido, la descripción de la cotización y su plazo de garantía"
+                >
+                  {regenerando ? "Regenerando…" : "🔄 Regenerar desde el producto"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setContenido(generarTextoPorDefecto(anosGarantia))}
+                  className="text-[10px] text-sauce hover:underline font-semibold"
+                >
+                  ↺ Restaurar plantilla sugerida
+                </button>
+              </div>
             </div>
             <textarea
               rows={8}

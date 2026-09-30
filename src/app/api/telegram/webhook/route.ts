@@ -5,7 +5,11 @@ import {
   enviarMensajeTelegram,
   responderCallbackQueryTelegram,
 } from "@/lib/telegram";
-import { registrarVotosAsesorCoordinacion } from "@/lib/coordinacion-inspecciones";
+import {
+  registrarVotosAsesorCoordinacion,
+  marcarAsesorEnteradoCoordinacion,
+} from "@/lib/coordinacion-inspecciones";
+import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +26,36 @@ export async function POST(req: NextRequest) {
       const chatId = String(msg.chat.id);
       const text = msg.text || "";
       const from = msg.from;
+
+      // Vinculación por enlace personal: https://t.me/<bot>?start=<id del usuario>
+      const payload = text.startsWith("/start") ? text.split(/\s+/)[1] || "" : "";
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload)) {
+        const { data: perfil } = await sb
+          .from("perfiles")
+          .select("id, nombre")
+          .eq("id", payload)
+          .maybeSingle();
+
+        if (perfil) {
+          await sb
+            .from("perfiles")
+            .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })
+            .eq("id", perfil.id);
+
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: `✅ *¡Listo, ${perfil.nombre}!* Tu Telegram quedó vinculado con SAUCEDA.\n\nAquí recibirás las propuestas de inspección con botones para responder (Puedo / No puedo / Enterado).`,
+          });
+        } else {
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: "No pude vincular este enlace: el usuario no existe. Pide a tu administrador un enlace nuevo.",
+          });
+        }
+        return NextResponse.json({ ok: true });
+      }
 
       if (text.startsWith("/start") || text.startsWith("/id")) {
         const respuesta = `👋 *¡Hola ${from?.first_name || ""}!*\n\nSoy el asistente operativo de *SAUCEDA*.\n\n📱 *Tu Telegram Chat ID es:* \`${chatId}\`\n👤 *Usuario:* @${from?.username || "sin_usuario"}\n\nCopia y proporciona este Chat ID a tu administrador para vincular tus alertas de inspecciones técnicas en sitio.`;
@@ -51,6 +85,88 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Acuse de lectura de una inspección compartida: c:{citaId}  (botón "Enterado")
+      if (data.startsWith("c:")) {
+        const [, citaId] = data.split(":");
+        const { data: cita } = await sb
+          .from("agenda_citas")
+          .select("telegram_compartido")
+          .eq("id", citaId)
+          .maybeSingle();
+
+        const compartido: Record<string, any> = (cita?.telegram_compartido as Record<string, any>) || {};
+        const ids = Object.keys(compartido);
+        if (!cita || ids.length === 0) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta inspección ya no está disponible.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: perfilesC = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", ids);
+        const match = (perfilesC || []).find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+
+        if (!match) {
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            "No pude identificarte como el asesor de esta inspección.",
+            true
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        await marcarCitaEnteradaTelegram(sb, citaId, match.id, "telegram");
+        await responderCallbackQueryTelegram(botToken, cb.id, "👀 Registrado: quedaste enterado de la inspección.");
+        return NextResponse.json({ ok: true });
+      }
+
+      // Acuse de lectura: e:{coordinacionId}  (botón "Enterado")
+      if (data.startsWith("e:")) {
+        const [, coordId] = data.split(":");
+        const { data: coord } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("asesores_ids, cliente_nombre")
+          .eq("id", coordId)
+          .single();
+
+        if (!coord) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta propuesta ya no está activa.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: perfilesE = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", coord.asesores_ids || []);
+
+        // Solo se registra si se puede identificar al asesor (sin asignar por suposición)
+        const match = (perfilesE || []).find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+
+        if (!match) {
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            "No pude identificarte como uno de los asesores de esta inspección. Pide que vinculen tu Telegram en tu perfil.",
+            true
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        await marcarAsesorEnteradoCoordinacion(sb, coordId, match.id, "telegram");
+        await responderCallbackQueryTelegram(botToken, cb.id, "👀 Registrado: quedaste enterado de la propuesta.");
+        return NextResponse.json({ ok: true });
+      }
 
       // Formato esperado: v:{coordinacionId}:{opcId}:{valor}
       if (data.startsWith("v:")) {

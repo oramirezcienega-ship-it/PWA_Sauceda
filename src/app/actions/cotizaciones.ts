@@ -294,9 +294,14 @@ export async function obtenerCotizacionPorToken(
   const cot = aCotizacion(filaCot);
 
   // El cliente solo puede verla si ya fue procesada, aprobada, o está en espera de visita (preliminar)
-  const estatusPermitidos: CotizacionEstatus[] = ['aprobada', 'enviada', 'aceptada', 'rechazada', 'esperando_visita'];
+  const estatusPermitidos: CotizacionEstatus[] = ['aprobada', 'enviada', 'aceptada', 'instalacion', 'rechazada', 'esperando_visita'];
   if (!estatusPermitidos.includes(cot.estatus)) {
     throw new Error("Esta propuesta aún no está disponible para su visualización.");
+  }
+  // "instalacion" es una etapa posterior a la aceptación: en el portal se
+  // muestra como aceptada (sin formulario de firma).
+  if (cot.estatus === 'instalacion') {
+    cot.estatus = 'aceptada';
   }
 
   const { data: filasConceptos, error: errCon } = await sb

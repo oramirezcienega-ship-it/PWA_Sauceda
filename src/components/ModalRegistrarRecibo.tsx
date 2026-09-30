@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   crearReciboPago,
+  emitirRecibosEnPartes,
+  listarReceptoresRecibo,
   enviarReciboPorWhatsApp,
   type ReciboPago,
 } from "@/app/actions/ordenes-trabajo";
@@ -50,11 +52,19 @@ export function ModalRegistrarRecibo({
     new Date().toISOString().split("T")[0]
   );
   const [notas, setNotas] = useState("");
+  const [recibidoPorId, setRecibidoPorId] = useState("");
+  const [numRecibos, setNumRecibos] = useState(1);
+  const [receptores, setReceptores] = useState<{ id: string; nombre: string; rol: string }[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [reciboCreado, setReciboCreado] = useState<ReciboPago | null>(null);
   const [enviandoMeta, setEnviandoMeta] = useState(false);
   const [resultadoMeta, setResultadoMeta] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  useEffect(() => {
+    if (!abierto) return;
+    listarReceptoresRecibo().then(setReceptores).catch(() => setReceptores([]));
+  }, [abierto]);
 
   if (!abierto) return null;
 
@@ -89,6 +99,28 @@ export function ModalRegistrarRecibo({
       setCargando(true);
       setError("");
 
+      if (numRecibos > 1) {
+        const resVarios = await emitirRecibosEnPartes({
+          ordenTrabajoId: ordenId,
+          montoTotal: montoNum,
+          numRecibos,
+          metodoPago,
+          recibidoPorId: recibidoPorId || null,
+          fechaPago,
+          concepto: concepto.trim() || "Pago de servicios",
+          referenciaPago,
+          notas,
+        });
+        // Se agregan a la lista los que sí se emitieron, aunque alguno falle
+        resVarios.recibos.forEach((r) => alCrear(r));
+        if (resVarios.ok) {
+          alCerrar();
+        } else {
+          setError(resVarios.error || "No se pudieron emitir todos los recibos.");
+        }
+        return;
+      }
+
       const res = await crearReciboPago({
         ordenTrabajoId: ordenId,
         monto: montoNum,
@@ -97,6 +129,7 @@ export function ModalRegistrarRecibo({
         concepto: concepto.trim() || "Pago de servicios",
         fechaPago,
         notas,
+        recibidoPorId: recibidoPorId || null,
       });
 
       if (res.ok && res.recibo) {
@@ -364,6 +397,47 @@ export function ModalRegistrarRecibo({
                 className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none"
               />
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-carbon/80 mb-1">
+                  Recibe el dinero *
+                </label>
+                <select
+                  value={recibidoPorId}
+                  onChange={(e) => setRecibidoPorId(e.target.value)}
+                  className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none bg-white"
+                >
+                  <option value="">Yo (usuario en sesión)</option>
+                  {receptores.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} · {p.rol === "admin" ? "Administrador" : p.rol === "asesor" ? "Asesor" : p.rol === "operaciones" ? "Operaciones / Instalador" : p.rol}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-carbon/80 mb-1">
+                  Cantidad de recibos
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={numRecibos}
+                  onChange={(e) => setNumRecibos(Math.max(1, Math.min(12, Math.floor(Number(e.target.value) || 1))))}
+                  className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-sm font-mono font-bold text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none"
+                />
+              </div>
+            </div>
+
+            {numRecibos > 1 && parseFloat(monto) > 0 && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 text-[11px] text-emerald-900">
+                El monto de {formatMoneda(parseFloat(monto))} se reparte en {numRecibos} recibos de{" "}
+                <strong>{formatMoneda(Math.floor((parseFloat(monto) / numRecibos) * 100) / 100)}</strong> (el último absorbe el redondeo), todos a nombre de quien recibe el dinero.
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

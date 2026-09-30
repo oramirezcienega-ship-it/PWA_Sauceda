@@ -28,6 +28,19 @@ export interface Cita {
   email_destinatario?: string | null;
   asignados_ids?: string[] | null;
   asignados_nombres?: string[] | null;
+  /** Envío de la información de la inspección por Telegram, por asesor (perfil_id). */
+  telegram_compartido?: Record<
+    string,
+    {
+      nombre: string;
+      ok: boolean;
+      enviadoAt: string;
+      messageId?: number;
+      error?: string;
+      enteradoAt?: string | null;
+      enteradoVia?: "telegram" | "manual" | null;
+    }
+  > | null;
 }
 
 export interface Bloqueo {

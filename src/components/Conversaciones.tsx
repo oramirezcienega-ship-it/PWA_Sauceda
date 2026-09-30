@@ -31,6 +31,7 @@ import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expediente
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
+import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -716,6 +717,7 @@ export function Conversaciones() {
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
+  const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -2310,6 +2312,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         <span>🧮</span>
                         <span>Cotizador Impermeabilización</span>
                       </button>
+                      {/* Botón: Coordinar inspección con 2 asesores (Cabina de Coordinación) */}
+                      {detalle?.prospectoId && (
+                        <button
+                          type="button"
+                          onClick={() => setMostrarCoordinacion(true)}
+                          title="Proponer horarios de inspección a 2 asesores por Telegram y coordinar la cita con el cliente"
+                          className="flex items-center gap-1 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 text-indigo-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>🔍</span>
+                          <span>Coordinar Inspección</span>
+                        </button>
+                      )}
                       {detalle?.prospectoId && (
                         <button
                           type="button"
@@ -2534,6 +2548,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         </div>
       </div>
       </> /* fin tab bandeja */}
+
+      {/* Modal de Coordinación de Inspección (desde el chat) */}
+      {mostrarCoordinacion && detalle?.prospectoId && (
+        <ModalCoordinarInspeccion
+          prospectoId={detalle.prospectoId}
+          alCerrar={() => setMostrarCoordinacion(false)}
+        />
+      )}
 
       {/* Modal de Calculadora de Impermeabilización */}
       <ModalCalculadoraImpermeabilizacion
