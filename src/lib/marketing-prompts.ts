@@ -38,7 +38,7 @@ export const CATALOGO_CATEGORIAS_MARKETING: Record<string, CategoriaMarketingPar
     palabrasClave: [
       "pintura", "pintar", "pintores", "esmalte", "vinilica", "vinílica",
       "brocha", "rodillo", "mantenimiento del hogar", "mantenimiento integral",
-      "resane", "sellador", "acabados de pintura", "fachada renovada"
+      "resane", "acabados de pintura", "fachada renovada"
     ],
     ofertaPrincipal: "Pintura vinílica lavable y esmalte anticorrosivo para fachadas e interiores con preparación y resane profesional.",
     ganchosComerciales: [
@@ -485,10 +485,48 @@ export const CATALOGO_CATEGORIAS_MARKETING: Record<string, CategoriaMarketingPar
   }
 };
 
+/** Orden de desempate entre categorías (de la más específica a la más genérica). */
+const ORDEN_CATEGORIAS = [
+  "pintura",
+  "herreria",
+  "mantenimiento_cisternas",
+  "concreto_estampado",
+  "concreto_premezclado",
+  "impermeabilizacion",
+  "traspasos_infonavit",
+  "expediente_infonavit",
+  "catalogo_inmuebles",
+  "remodelacion",
+];
+
+/** Categoría con más coincidencias de palabras clave en `texto` (las frases largas pesan más). */
+function categoriaPorPuntaje(texto: string): CategoriaMarketingParametrizada | null {
+  const t = texto.toLowerCase();
+  if (!t.trim()) return null;
+  let mejor: CategoriaMarketingParametrizada | null = null;
+  let mejorPuntaje = 0;
+  for (const catId of ORDEN_CATEGORIAS) {
+    const cat = CATALOGO_CATEGORIAS_MARKETING[catId];
+    if (!cat) continue;
+    let puntaje = 0;
+    for (const palabra of cat.palabrasClave) {
+      if (t.includes(palabra.toLowerCase())) puntaje += palabra.trim().split(/\s+/).length;
+    }
+    if (puntaje > mejorPuntaje) {
+      mejor = cat;
+      mejorPuntaje = puntaje;
+    }
+  }
+  return mejor;
+}
+
 /**
  * Resuelve la categoría de marketing más adecuada a partir de cualquier texto o ID.
+ * Si se da `encabezado` (campaña + título), manda: el tema de la publicación se decide por
+ * su título antes que por palabras sueltas del cuerpo (p. ej. "sellador" en un post de piso estampado).
+ * Sin coincidencias en el encabezado, gana la categoría con más coincidencias en todo el texto.
  */
-export function resolverCategoriaMarketing(textoOCategoria: string): CategoriaMarketingParametrizada {
+export function resolverCategoriaMarketing(textoOCategoria: string, encabezado?: string): CategoriaMarketingParametrizada {
   const query = (textoOCategoria || "").trim().toLowerCase();
 
   // 1. Coincidencia directa por ID
@@ -496,32 +534,13 @@ export function resolverCategoriaMarketing(textoOCategoria: string): CategoriaMa
     return CATALOGO_CATEGORIAS_MARKETING[query];
   }
 
-  // 2. Coincidencia por palabras clave en orden de especificidad
-  // Nota: Pintura y Herrería se evalúan antes de términos genéricos como "fachada" o "azotea"
-  const categoriasOrdenadas: Array<keyof typeof CATALOGO_CATEGORIAS_MARKETING> = [
-    "pintura",
-    "herreria",
-    "mantenimiento_cisternas",
-    "concreto_estampado",
-    "concreto_premezclado",
-    "impermeabilizacion",
-    "traspasos_infonavit",
-    "expediente_infonavit",
-    "catalogo_inmuebles",
-    "remodelacion"
-  ];
-
-  for (const catId of categoriasOrdenadas) {
-    const cat = CATALOGO_CATEGORIAS_MARKETING[catId];
-    for (const palabra of cat.palabrasClave) {
-      if (query.includes(palabra.toLowerCase())) {
-        return cat;
-      }
-    }
-  }
-
-  // Fallback por defecto si no hay coincidencia
-  return CATALOGO_CATEGORIAS_MARKETING.pintura;
+  // 2. Encabezado (título/campaña) primero; luego el texto completo por puntaje
+  return (
+    (encabezado ? categoriaPorPuntaje(encabezado) : null) ||
+    categoriaPorPuntaje(query) ||
+    // Fallback por defecto si no hay coincidencia
+    CATALOGO_CATEGORIAS_MARKETING.pintura
+  );
 }
 
 /**
