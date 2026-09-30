@@ -316,6 +316,7 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
   const hayFotosImper = hayFotosEnCatalogo(productosImper);
   const fichaImper = fichaProductosParaPrompt(productosImper);
+  const hayFotosEstandar = Boolean(productosImper.estandar?.aptoParaIa && productosImper.estandar.fotos.length > 0);
   const serviciosMant = await cargarServiciosMantenimiento(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarServiciosMantenimiento>>);
   const fichaTinacos = fichaServicioParaPrompt(serviciosMant.tinacos);
   const fichaCisternas = fichaServicioParaPrompt(serviciosMant.cisternas);
@@ -394,7 +395,7 @@ C) Si está interesado en el ARMADO DE EXPEDIENTE O ASESORÍA DE TRÁMITES (Serv
   3. Menciona que nosotros nos encargamos del armado del expediente y trámite integral, y que un asesor le contactará para cotizar el servicio.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
-Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces, archivos, links o páginas web de cotización o cita en tu respuesta:
+Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, que se recomienda en el PASO 1:
 
 - PASO 1: SALUDO E INFORMACIÓN DEL SERVICIO (Al detectar el negocio o si no tenemos los metros)
   Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía este mensaje (breve, sin mencionar días ni tiempos de instalación):
@@ -405,7 +406,10 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   🔸 *Estándar 3.5 con gravilla*: garantía de 5 años. La más solicitada.
   ⭐ *Premium 4.0 poliéster con gravilla*: garantía de 10 años. La de mayor duración.
 
+  Puedes ver más información y ejemplos en nuestro sitio: https://saucedamx.com/impermeabilizacion.html${hayFotosEstandar ? "\n\n  Te comparto también unas fotos de nuestra impermeabilización estándar 👇" : ""}
+
   Para orientarte mejor, ¿cuántos metros cuadrados aproximados tiene tu azotea?"
+  Incluye SIEMPRE la línea del sitio web tal cual (URL completa, sin acortarla ni modificarla) y ninguna otra URL.${hayFotosEstandar ? '\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, las fotos de la impermeabilización estándar; por eso se anuncian en el texto.' : ''}
   Asigna "paso_flujo": "paso_1".
 
 - PASO 2: METROS CLAROS → COMPARATIVA DE OPCIONES (Al tener los metros cuadrados)
@@ -413,7 +417,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   - Si los metros son claros: en "datosExtraidos" pon "metros" (número entero) y "metros_claros": true. El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con la inversión de las 3 opciones para esos metros. Por eso NO escribas montos, precios ni totales en tu texto: solo anúnciala. Responde con este mensaje:
   "Perfecto, para tu azotea de [METROS] m² te comparto a continuación la comparativa de nuestras 3 opciones con su inversión (precios más IVA) 👇
 
-  Aceptamos pago en efectivo o transferencia. ¿Cuál de las 3 te interesa más? Si quieres, coordinamos una inspección técnica gratuita para confirmar medidas y afinar el detalle."
+  El pago puede ser en efectivo o transferencia. ¿Cuál de las 3 te interesa más? Si quieres, coordinamos una inspección técnica gratuita para confirmar medidas y afinar el detalle."
   - Si el cliente NO da metros claros (dice "no sé", "es grande", "una casa normal", etc.): NO pongas "metros_claros" (déjalo false/null) y NO anuncies ninguna imagen. Pídele un aproximado o, si no puede medirlo, ofrécele la inspección técnica gratuita para medir (ver caso especial de medidas).
   Asigna "paso_flujo": "paso_2".
 
@@ -421,7 +425,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Cuando el cliente indique cuál opción le interesa ("el premium", "el de 10 años", "el más barato", "el acrílico", "el estándar", "el de 5 años"), asigna en "datosExtraidos": "paquete_elegido": "acrilico" | "estandar" | "premium" (solo si lo dijo claramente; si duda entre varias, NO lo asignes y ayúdale a decidir según garantía y uso). Confirma su elección con calidez en 2-3 líneas y avanza a la inspección.${hayFotosImper ? "\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, algunas imágenes de referencia del paquete elegido; menciónalo (\"te comparto unas imágenes de referencia 👇\")." : "\n  No menciones imágenes ni fotos (por ahora no hay material para enviar)."}
   Ejemplo: "¡Excelente elección! El [PAQUETE] te da [GARANTÍA] de garantía por escrito.${hayFotosImper ? " Te comparto unas imágenes de referencia 👇" : ""} ¿Coordinamos la inspección técnica gratuita esta semana para confirmar medidas y dejar todo listo?"
   Mantén "paso_flujo": "paso_2". Si el cliente pregunta por precio otra vez, remítelo a la imagen comparativa ya enviada (no repitas cifras en texto) y recuerda que el monto final se confirma en la inspección.
-  PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución, ofrecer meses sin intereses o pago con tarjeta. Si el cliente pregunta por formas de pago, responde que se paga en efectivo o transferencia. Si pregunta cuánto tarda, responde que el técnico lo define en la inspección según los metros y el estado de la azotea.
+  PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución y ofrecer meses sin intereses. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo). Si pregunta cuánto tarda, responde que el técnico lo define en la inspección según los metros y el estado de la azotea.
 
 - DUDAS TÉCNICAS SOBRE LOS PRODUCTOS:
 ${fichaImper
@@ -520,7 +524,7 @@ ${fichaCisternas}
   2. Cuando el cliente te dé la capacidad (litros) o la cantidad, confirma el precio exacto con la tabla de TARIFAS POR CAPACIDAD (si existe) y deja claro el total. Responde sus dudas con la información oficial. Si el dato no está ahí, no lo inventes: dile que un asesor lo confirma. Si menciona fugas, grietas o daños en el depósito o pregunta por reparaciones que el servicio no cubre, acláralo con honestidad (el mantenimiento no incluye reparaciones estructurales ni de piezas, según el producto) sin ofrecer otra cosa por tu cuenta.
   3. NO OFRECER INSPECCIÓN NI VISITA por iniciativa propia, ni insistir en agendar. Primero busca señales de INTENCIÓN. Cuando el cliente ya tenga la información y quieras saber si le interesa, puedes preguntar de forma abierta y sin presión: "¿Te gustaría que lo programemos?".
   4. SOLO cuando el cliente muestre intención clara ("sí me interesa", "¿cuándo pueden venir?", "agéndame", "quiero contratarlo", pide fecha), pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos) y dile que un asesor del equipo le contactará por este chat para coordinar la fecha del servicio. Si el cliente pide expresamente una inspección o visita, entonces sí se la coordinas.
-  5. PROHIBIDO: ofrecer inspección sin intención del cliente, ofrecer meses sin intereses o pago con tarjeta (sólo efectivo o transferencia), prometer tiempos o días de ejecución (los define el asesor al coordinar) y dar descuentos.
+  5. PROHIBIDO: ofrecer inspección sin intención del cliente, ofrecer meses sin intereses, prometer tiempos o días de ejecución (los define el asesor al coordinar) y dar descuentos. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo).
 
 REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   Si el cliente no conoce las medidas de su azotea, no tiene las dimensiones exactas, o menciona que no puede obtenerlas (por ejemplo, porque no vive en el domicilio o tiene la casa rentada), bajo NINGUNA circunstancia debes sugerirle que mida él mismo, ni pedirle largo y ancho, ni compartirle enlaces a la calculadora.
@@ -528,6 +532,11 @@ REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   1. El nombre del prospecto (si aún no se ha registrado).
   2. La dirección o ubicación completa de la propiedad (calle, colonia o ciudad) para dar seguimiento.
   Menciona que con estos datos, un asesor le contactará para coordinar los detalles de la visita e inspección.
+
+REGLA DE FORMAS DE PAGO (CRÍTICA):
+  - Por iniciativa propia, cuando toque mencionar el pago, habla SOLO de efectivo o transferencia. NUNCA ofrezcas ni menciones la tarjeta de crédito/débito por tu cuenta.
+  - SOLO si el cliente pregunta específicamente si se puede pagar con tarjeta (de crédito o débito), respóndele que SÍ: "Sí, contamos con Mercado Pago y aceptamos todas las tarjetas de crédito". Nunca digas que no se acepta tarjeta.
+  - No ofrezcas ni prometas meses sin intereses. Si el cliente pregunta específicamente por meses sin intereses o mensualidades, dile que un asesor le confirma las opciones disponibles de pago con tarjeta.
 
 REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
   Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
@@ -701,7 +710,7 @@ async function generarRespuesta(
 
   let systemFinal = system;
   if (system.includes("JSON")) {
-    systemFinal = `${system}\n\nREGLA CRÍTICA DE RESPUESTA: Tu salida debe ser ESTRICTAMENTE un objeto JSON válido con la estructura solicitada. No agregues introducciones, comentarios ni bloques markdown fuera del JSON. Si estás confirmando una cita (Paso 5), debes incluir en "datosExtraidos" los campos "fecha_inspeccion_confirmada" (YYYY-MM-DD) y "hora_inspeccion_confirmada" (HH:MM). NUNCA escribas o inventes URLs estáticas genéricas de cotización o cita (como saucedamx.com/cotizacion o saucedamx.com/cita-confirmada) ni copies URLs previas del historial. Deja que el sistema use los marcadores [LINK_COTIZACION] y [LINK_CITA_CONFIRMADA] tal cual.`;
+    systemFinal = `${system}\n\nREGLA CRÍTICA DE RESPUESTA: Tu salida debe ser ESTRICTAMENTE un objeto JSON válido con la estructura solicitada. No agregues introducciones, comentarios ni bloques markdown fuera del JSON. Si estás confirmando una cita (Paso 5), debes incluir en "datosExtraidos" los campos "fecha_inspeccion_confirmada" (YYYY-MM-DD) y "hora_inspeccion_confirmada" (HH:MM). NUNCA escribas o inventes URLs estáticas genéricas de cotización o cita (como saucedamx.com/cotizacion o saucedamx.com/cita-confirmada); la única URL permitida es https://saucedamx.com/impermeabilizacion.html, y sólo donde el flujo de impermeabilización la indica ni copies URLs previas del historial. Deja que el sistema use los marcadores [LINK_COTIZACION] y [LINK_CITA_CONFIRMADA] tal cual.`;
   }
 
   let proveedorOriginal = process.env.IA_PROVEEDOR || "anthropic";
@@ -1548,6 +1557,10 @@ export async function responderConIA(
       const metrosImper = metrosClaros((datosExtraidos as any).metros);
       if (claros && metrosImper && (datosExtraidos as any).paso_flujo === "paso_2") {
         await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper });
+      }
+      if ((datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
+        // Tras la información básica se comparten fotos de la impermeabilización estándar (una sola vez)
+        await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: "estandar" });
       }
       const elegido = (datosExtraidos as any).paquete_elegido;
       if (esPaqueteImper(elegido)) {

@@ -72,7 +72,7 @@ export function ProductosClient({
   const [formEspecificaciones, setFormEspecificaciones] = useState("");
   const [formAptoParaIa, setFormAptoParaIa] = useState(true);
   const [formFotos, setFormFotos] = useState<FotoProducto[]>([]);
-  const [formTarifas, setFormTarifas] = useState<{ hastaLitros: string; precio: string }[]>([]);
+  const [formTarifas, setFormTarifas] = useState<{ hastaLitros: string; costo: string; precio: string }[]>([]);
   const [formFichaUrl, setFormFichaUrl] = useState("");
   const [formFichaNombre, setFormFichaNombre] = useState("");
   const [subiendoFicha, setSubiendoFicha] = useState(false);
@@ -169,7 +169,7 @@ export function ProductosClient({
     setFormAptoParaIa(p.aptoParaIa !== false);
     setFormFotos(p.fotos || []);
     setFormFichaUrl(p.fichaTecnicaUrl || "");
-    setFormTarifas((p.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), precio: t.precio === null ? "" : String(t.precio) })));
+    setFormTarifas((p.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), costo: t.costo === null || t.costo === undefined ? "" : String(t.costo), precio: t.precio === null ? "" : String(t.precio) })));
     setFormFichaNombre(p.fichaTecnicaNombre || "");
     setTabModalProd("general");
     setErrorMsg("");
@@ -226,7 +226,11 @@ export function ProductosClient({
         fotos: formFotos,
         tarifasCapacidad: formTarifas
           .filter((t) => Number(t.hastaLitros) > 0)
-          .map((t) => ({ hastaLitros: Math.round(Number(t.hastaLitros)), precio: t.precio.trim() === "" ? null : Number(t.precio) })),
+          .map((t) => ({
+            hastaLitros: Math.round(Number(t.hastaLitros)),
+            costo: t.costo.trim() === "" ? null : Number(t.costo),
+            precio: t.precio.trim() === "" ? null : Number(t.precio),
+          })),
         fichaTecnicaUrl: formFichaUrl || null,
         fichaTecnicaNombre: formFichaNombre || null,
       };
@@ -335,6 +339,10 @@ export function ProductosClient({
       setSubiendoFicha(false);
       e.target.value = "";
     }
+  };
+
+  const handleEditarFoto = (idx: number, cambios: Partial<FotoProducto>) => {
+    setFormFotos((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
   };
 
   const handleEliminarFoto = (idx: number) => {
@@ -1561,21 +1569,52 @@ export function ProductosClient({
                         No hay fotos cargadas. Agrega fotos para que los asesores y Sofía puedan mostrarlas a los prospectos.
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {formFotos.map((f, idx) => (
-                          <div key={idx} className="relative rounded-lg overflow-hidden border border-carbon/15 group">
-                            <img src={f.url} alt={f.titulo || "Foto"} className="h-28 w-full object-cover" />
-                            <div className="p-2 bg-white text-[11px]">
-                              <p className="font-semibold text-carbon truncate">{f.titulo || "Foto"}</p>
-                              <span className="text-[10px] text-carbon/50 capitalize">{f.tipo}</span>
-                            </div>
+                          <div key={idx} className="relative rounded-lg overflow-hidden border border-carbon/15 bg-white group">
+                            <img src={f.url} alt={f.titulo || "Foto"} className="h-36 w-full object-cover" />
                             <button
                               type="button"
                               onClick={() => handleEliminarFoto(idx)}
-                              className="absolute top-1 right-1 bg-red-600 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm"
+                              title="Eliminar foto"
+                              className="absolute top-1.5 right-1.5 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 focus:opacity-100 transition shadow-sm"
                             >
                               ✕
                             </button>
+                            <div className="p-2.5 space-y-1.5 text-[11px]">
+                              <div>
+                                <label className="block text-[10px] font-semibold text-carbon/50 mb-0.5">Título / Pie de foto</label>
+                                <input
+                                  type="text"
+                                  value={f.titulo || ""}
+                                  placeholder="Ej. Azotea de 80 m² con gravilla gris"
+                                  onChange={(e) => handleEditarFoto(idx, { titulo: e.target.value })}
+                                  className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-carbon/50 mb-0.5">Descripción (Sofía la envía con la foto)</label>
+                                <textarea
+                                  rows={2}
+                                  value={f.descripcion || ""}
+                                  placeholder="Ej. Sistema 3.5 terminado, listo para recibir lluvias"
+                                  onChange={(e) => handleEditarFoto(idx, { descripcion: e.target.value })}
+                                  className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none resize-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-carbon/50 mb-0.5">Tipo</label>
+                                <select
+                                  value={f.tipo}
+                                  onChange={(e) => handleEditarFoto(idx, { tipo: e.target.value as FotoProducto["tipo"] })}
+                                  className="w-full px-2 py-1.5 rounded-md border border-carbon/20 bg-white"
+                                >
+                                  <option value="aplicacion">Obra terminada</option>
+                                  <option value="producto">Producto / Muestra</option>
+                                  <option value="antes_despues">Antes y después</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1636,7 +1675,7 @@ export function ProductosClient({
                         <span className="font-semibold text-carbon block">📏 Tarifas por capacidad (litros)</span>
                         <p className="text-[11px] text-carbon/60 mt-0.5">
                           Para servicios cuyo precio depende del tamaño (tinacos, cisternas). Sofía cotiza el primer escalón cuya capacidad
-                          cubra los litros del cliente. Escalones sin precio se ignoran; si no hay tarifas usa el precio base.
+                          cubra los litros del cliente. El costo del proveedor es interno: Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
                         </p>
                       </div>
                       <button
@@ -1645,7 +1684,7 @@ export function ProductosClient({
                           setFormTarifas((prev) => {
                             const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
                             const comunes = [450, 750, 1100, 1500, 2500, 5000].filter((l) => !existentes.has(l));
-                            return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
+                            return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
                           })
                         }
                         className="shrink-0 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
@@ -1655,39 +1694,66 @@ export function ProductosClient({
                     </div>
                     {formTarifas.length > 0 && (
                       <div className="space-y-1.5">
-                        {formTarifas.map((t, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            <span className="text-[11px] text-carbon/60 w-14">Hasta</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={t.hastaLitros}
-                              onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
-                              className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                            />
-                            <span className="text-[11px] text-carbon/60">litros →  $</span>
-                            <input
-                              type="number"
-                              min={0}
-                              placeholder="Precio"
-                              value={t.precio}
-                              onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
-                              className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setFormTarifas((prev) => prev.filter((_, i) => i !== idx))}
-                              className="text-[11px] font-bold text-rojo hover:underline"
-                            >
-                              Quitar
-                            </button>
-                          </div>
-                        ))}
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
+                          <span className="w-14" />
+                          <span className="w-28">Capacidad (L)</span>
+                          <span className="w-[4.5rem]" />
+                          <span className="w-32">Precio proveedor</span>
+                          <span className="w-32">Precio de venta</span>
+                          <span className="w-16">Margen</span>
+                        </div>
+                        {formTarifas.map((t, idx) => {
+                          const costo = Number(t.costo);
+                          const venta = Number(t.precio);
+                          const margen = t.costo.trim() !== "" && t.precio.trim() !== "" && venta > 0 ? ((venta - costo) / venta) * 100 : null;
+                          return (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-[11px] text-carbon/60 w-14">Hasta</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={t.hastaLitros}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
+                                className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">litros → $</span>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="Costo"
+                                value={t.costo}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, costo: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="Venta"
+                                value={t.precio}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <span
+                                className={`w-16 text-[11px] font-bold ${margen === null ? "text-carbon/30" : margen < 0 ? "text-rojo" : "text-verde-profundo"}`}
+                                title="Margen = (venta − costo) / venta"
+                              >
+                                {margen === null ? "—" : `${margen.toFixed(0)}%`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFormTarifas((prev) => prev.filter((_, i) => i !== idx))}
+                                className="text-[11px] font-bold text-rojo hover:underline"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <button
                       type="button"
-                      onClick={() => setFormTarifas((prev) => [...prev, { hastaLitros: "", precio: "" }])}
+                      onClick={() => setFormTarifas((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
                       className="text-[11px] font-bold text-sauce hover:underline"
                     >
                       + Agregar escalón

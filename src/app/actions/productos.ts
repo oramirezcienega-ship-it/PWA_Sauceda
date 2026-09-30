@@ -51,13 +51,20 @@ function normalizarTarifasCapacidad(raw: any): TarifaCapacidad[] {
     .map((t: any) => ({
       hastaLitros: Math.round(Number(t?.hasta_litros ?? t?.hastaLitros)),
       precio: t?.precio === null || t?.precio === undefined || t?.precio === "" ? null : Number(t.precio),
+      costo: t?.costo === null || t?.costo === undefined || t?.costo === "" ? null : Number(t.costo),
     }))
-    .filter((t) => Number.isFinite(t.hastaLitros) && t.hastaLitros > 0 && (t.precio === null || Number.isFinite(t.precio)))
+    .filter(
+      (t) =>
+        Number.isFinite(t.hastaLitros) &&
+        t.hastaLitros > 0 &&
+        (t.precio === null || Number.isFinite(t.precio)) &&
+        (t.costo === null || Number.isFinite(t.costo))
+    )
     .sort((a, b) => a.hastaLitros - b.hastaLitros);
 }
 
 function tarifasAJson(t?: TarifaCapacidad[]) {
-  return normalizarTarifasCapacidad(t).map((x) => ({ hasta_litros: x.hastaLitros, precio: x.precio }));
+  return normalizarTarifasCapacidad(t).map((x) => ({ hasta_litros: x.hastaLitros, precio: x.precio, costo: x.costo }));
 }
 
 // Mapeador de Insumo
