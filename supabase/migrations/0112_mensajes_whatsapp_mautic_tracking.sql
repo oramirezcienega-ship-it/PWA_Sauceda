@@ -1,5 +1,5 @@
 -- ============================================================
--- MIGRACIÓN 0111: Tracking de Campañas Mautic en WhatsApp
+-- MIGRACIÓN 0112: Tracking de Campañas Mautic en WhatsApp
 -- ------------------------------------------------------------
 -- Agrega columnas para registrar:
 -- 1. campana_origen: Nombre de la campaña (ej. "Reactivación 3 MSI")

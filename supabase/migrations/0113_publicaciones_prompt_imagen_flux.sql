@@ -1,5 +1,5 @@
 -- ==============================================================================
--- MIGRACIÓN 0112: Agregar columna prompt_imagen_flux a publicaciones_programadas
+-- MIGRACIÓN 0113: Agregar columna prompt_imagen_flux a publicaciones_programadas
 -- Compatible con: Supabase Producción y Staging
 -- Permite almacenar y consultar el prompt fotorrealista para IA (Flux)
 -- ==============================================================================
