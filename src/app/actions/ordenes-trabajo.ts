@@ -111,6 +111,9 @@ export interface CartaGarantiaOT {
   anosGarantia: number;
   fechaInicio: string | null;
   fechaVencimiento: string | null;
+  /** Asesor que entrega la instalación y nombre completo tal como sale en la póliza. */
+  entregadoPorId?: string | null;
+  entregadoPorNombre?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -630,6 +633,8 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
           anosGarantia: Number(gar.anos_garantia || 3),
           fechaInicio: gar.fecha_inicio,
           fechaVencimiento: gar.fecha_vencimiento,
+          entregadoPorId: gar.entregado_por_id ?? null,
+          entregadoPorNombre: gar.entregado_por_nombre ?? null,
           createdAt: gar.created_at,
           updatedAt: gar.updated_at,
         }
@@ -1510,6 +1515,10 @@ export async function guardarGarantiaOT(datos: {
   contenido: string;
   anosGarantia?: number;
   fechaInicio?: string;
+  /** Asesor que entrega la instalación. undefined = no modificar lo ya guardado. */
+  entregadoPorId?: string | null;
+  /** Nombre completo con el que firma en la póliza. */
+  entregadoPorNombre?: string | null;
 }): Promise<{ ok: boolean; garantia?: CartaGarantiaOT; error?: string }> {
   try {
     await requireAdmin();
@@ -1532,6 +1541,17 @@ export async function guardarGarantiaOT(datos: {
 
     const token = existente?.token || crypto.randomBytes(24).toString("hex");
 
+    // Quién entrega la instalación (solo se toca si viene en la petición)
+    const extraEntrega: Record<string, unknown> = {};
+    if (datos.entregadoPorId !== undefined) {
+      extraEntrega.entregado_por_id = datos.entregadoPorId || null;
+      extraEntrega.entregado_por_nombre = datos.entregadoPorId ? (datos.entregadoPorNombre || "").trim() || null : null;
+      // El nombre completo capturado queda en el perfil para precargarlo la próxima vez
+      if (datos.entregadoPorId && extraEntrega.entregado_por_nombre) {
+        await sb.from("perfiles").update({ nombre_completo: extraEntrega.entregado_por_nombre }).eq("id", datos.entregadoPorId);
+      }
+    }
+
     if (existente?.id) {
       const { data: actualizada, error: upErr } = await sb
         .from("garantias_documentos")
@@ -1542,6 +1562,7 @@ export async function guardarGarantiaOT(datos: {
           fecha_inicio: fechaInicioStr,
           fecha_vencimiento: fechaVencimientoStr,
           token,
+          ...extraEntrega,
           updated_at: new Date().toISOString(),
         })
         .eq("id", existente.id)
@@ -1563,6 +1584,8 @@ export async function guardarGarantiaOT(datos: {
           anosGarantia: Number(actualizada.anos_garantia),
           fechaInicio: actualizada.fecha_inicio,
           fechaVencimiento: actualizada.fecha_vencimiento,
+          entregadoPorId: actualizada.entregado_por_id ?? null,
+          entregadoPorNombre: actualizada.entregado_por_nombre ?? null,
           createdAt: actualizada.created_at,
           updatedAt: actualizada.updated_at,
         },
@@ -1586,6 +1609,7 @@ export async function guardarGarantiaOT(datos: {
           fecha_inicio: fechaInicioStr,
           fecha_vencimiento: fechaVencimientoStr,
           token,
+          ...extraEntrega,
         })
         .select("*")
         .single();
@@ -1605,6 +1629,8 @@ export async function guardarGarantiaOT(datos: {
           anosGarantia: Number(nueva.anos_garantia),
           fechaInicio: nueva.fecha_inicio,
           fechaVencimiento: nueva.fecha_vencimiento,
+          entregadoPorId: nueva.entregado_por_id ?? null,
+          entregadoPorNombre: nueva.entregado_por_nombre ?? null,
           createdAt: nueva.created_at,
           updatedAt: nueva.updated_at,
         },
@@ -1612,6 +1638,22 @@ export async function guardarGarantiaOT(datos: {
     }
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al guardar póliza de garantía." };
+  }
+}
+
+/** Asesores activos con su nombre completo (si está capturado) para elegir quién entrega la instalación. */
+export async function listarEntregadoresGarantia(): Promise<{ id: string; nombre: string; nombreCompleto: string }[]> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data } = await sb
+      .from("perfiles")
+      .select("id, nombre, nombre_completo")
+      .neq("activo", false)
+      .order("nombre", { ascending: true });
+    return (data || []).map((p: any) => ({ id: p.id, nombre: p.nombre, nombreCompleto: (p.nombre_completo || "").trim() }));
+  } catch {
+    return [];
   }
 }
 
@@ -1653,6 +1695,8 @@ export async function obtenerGarantiaOTPorToken(
         anosGarantia: Number(gar.anos_garantia || 3),
         fechaInicio: gar.fecha_inicio,
         fechaVencimiento: gar.fecha_vencimiento,
+          entregadoPorId: gar.entregado_por_id ?? null,
+          entregadoPorNombre: gar.entregado_por_nombre ?? null,
         createdAt: gar.created_at,
         updatedAt: gar.updated_at,
       },
@@ -2262,6 +2306,8 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
           anosGarantia: gar.anos_garantia || 1,
           fechaInicio: gar.fecha_inicio,
           fechaVencimiento: gar.fecha_vencimiento,
+          entregadoPorId: gar.entregado_por_id ?? null,
+          entregadoPorNombre: gar.entregado_por_nombre ?? null,
           createdAt: gar.created_at,
           updatedAt: gar.updated_at,
         }

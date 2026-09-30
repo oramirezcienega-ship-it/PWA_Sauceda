@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelEnvioOTTelegram } from "./PanelEnvioOTTelegram";
 import { cambiarEstatusOTConContrato } from "@/lib/estatus-ot-cliente";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -623,6 +624,9 @@ export function DetalleOrdenTrabajo({
         </div>
       </div>
 
+      {/* 3.b Envío interno a asesores por Telegram (resumen + documentos PDF) */}
+      <PanelEnvioOTTelegram ordenId={orden.id} />
+
       {/* 3a. Cotización de origen */}
       <TarjetaCotizacionOrigenOT cotizacionId={orden.cotizacionId} cotizacionToken={orden.cotizacionToken} totalCotizado={orden.totalCotizado} />
 
@@ -1130,6 +1134,8 @@ export function DetalleOrdenTrabajo({
         clienteTelefono={orden.clienteTelefono}
         garantiaActual={garantia}
         tipoNegocio={orden.tipoNegocio || "construccion"}
+        asesorEjecutorId={orden.asesorEjecutorId}
+        asesorEjecutorNombre={orden.asesorEjecutorNombre}
       />
 
       <ModalGenerarRemisionOT

@@ -1318,6 +1318,8 @@ export function ModuloOrdenesTrabajo({
           clienteTelefono={ordenParaGarantia.orden.clienteTelefono || clienteTelefonoDefault}
           garantiaActual={ordenParaGarantia.garantia}
           tipoNegocio={ordenParaGarantia.orden.tipoNegocio}
+          asesorEjecutorId={ordenParaGarantia.orden.asesorEjecutorId}
+          asesorEjecutorNombre={ordenParaGarantia.orden.asesorEjecutorNombre}
         />
       )}
 
