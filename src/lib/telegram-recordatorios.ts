@@ -34,6 +34,7 @@ export async function recordarPropuestaInspeccionTelegram(
       { text: "🔴 No Puedo Ninguna", callback_data: `v:${ctx.coordinacionId}:ALL:0` },
     ],
     [{ text: "👀 Enterado (ya lo leí)", callback_data: `e:${ctx.coordinacionId}` }],
+    [{ text: "📅 Ninguna me acomoda · proponer otro día", callback_data: `n:${ctx.coordinacionId}` }],
   ];
 
   let enviados = 0;

@@ -42,7 +42,7 @@ export async function obtenerCoordinacionesPendientes(): Promise<{
     const { data, error } = await sb
       .from("coordinaciones_inspeccion")
       .select(
-        "id, prospecto_id, cliente_nombre, servicio_nombre, ubicacion, estado, asesores_ids, respuestas_asesores, opciones_validadas, sla_limite_at, created_at"
+        "id, prospecto_id, cliente_nombre, servicio_nombre, ubicacion, estado, asesores_ids, respuestas_asesores, opciones_validadas, negociacion, sla_limite_at, created_at"
       )
       .in("estado", ["propuesta_enviada", "evaluando", "enviado_cliente"])
       .order("created_at", { ascending: true });
@@ -66,11 +66,24 @@ export async function obtenerCoordinacionesPendientes(): Promise<{
 
       const faltan = asesores.filter((a) => !a.respondio);
       const validadas: string[] = c.opciones_validadas || [];
+      const neg = (c.negociacion as any) || {};
       let etapa: CoordinacionPendienteItem["etapa"];
       let etapaLabel: string;
       if (c.estado === "enviado_cliente") {
         etapa = "esperando_cliente";
         etapaLabel = "Esperando que el cliente elija horario";
+      } else if (neg.etapa === "dias" || neg.etapa === "franjas") {
+        // Negociación por etapas: falta que los asesores elijan día o franja
+        const marcados: Record<string, { listo: boolean }> = (neg.etapa === "dias" ? neg.dias : neg.franjas) || {};
+        const pendientes = ids.filter((id) => !marcados[id]?.listo).map((id) => (respuestas[id]?.nombre || "Asesor").split(" ")[0]);
+        etapa = "esperando_asesores";
+        etapaLabel =
+          pendientes.length > 0
+            ? `Negociando ${neg.etapa === "dias" ? "el día" : "la franja"}: falta ${pendientes.join(", ")}`
+            : `Negociando ${neg.etapa === "dias" ? "el día" : "la franja"}`;
+      } else if (neg.etapa === "sin_coincidencia") {
+        etapa = "sin_coincidencia";
+        etapaLabel = "Sin acuerdo entre asesores: llamar para acordar";
       } else if (faltan.length > 0) {
         etapa = "esperando_asesores";
         etapaLabel = `Falta respuesta de: ${faltan.map((a) => a.nombre.split(" ")[0]).join(", ")}`;

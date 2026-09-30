@@ -5,6 +5,7 @@ import {
   iniciarPropuestaCoordinacionAction,
   registrarVotosAsesorAction,
   marcarAsesorEnteradoAction,
+  iniciarNegociacionDiasAction,
   enviarOpcionesClienteAction,
   confirmarCitaFinalCoordinacionAction,
   obtenerCoordinacionActivaProspectoAction,
@@ -18,6 +19,7 @@ import type {
 } from "@/lib/coordinacion-inspecciones";
 import { labelTipoNegocio } from "@/lib/types";
 import { PanelVinculacionTelegram } from "./PanelVinculacionTelegram";
+import { PanelNegociacionCoordinacion } from "./PanelNegociacionCoordinacion";
 
 interface PerfilSimple {
   id: string;
@@ -282,6 +284,25 @@ export function CabinaCoordinacionInspeccion({
       if (res.ok) {
         await cargarCoordinacion();
       }
+    });
+  };
+
+  // Ninguna opción acomoda: se negocia por etapas (día → franja → hora) por Telegram
+  const handleIniciarNegociacion = () => {
+    if (!coordinacion) return;
+    startTransition(async () => {
+      const res = await iniciarNegociacionDiasAction(coordinacion.id, prospectoId);
+      if (!res.ok) {
+        setMensaje({ tipo: "error", texto: res.error || "No se pudo iniciar la negociación." });
+      } else if (res.sinTelegram.length > 0) {
+        setMensaje({
+          tipo: "error",
+          texto: `Se pidieron los días por Telegram, pero no se pudo avisar a: ${res.sinTelegram.join(", ")} (sin Telegram vinculado).`,
+        });
+      } else {
+        setMensaje({ tipo: "ok", texto: "Se pidió a los asesores que elijan los días que pueden, por Telegram." });
+      }
+      await cargarCoordinacion();
     });
   };
 
@@ -711,6 +732,13 @@ export function CabinaCoordinacionInspeccion({
               </span>
             </div>
           </div>
+
+          {/* Negociación por etapas: día → franja → hora */}
+          <PanelNegociacionCoordinacion
+            coordinacion={coordinacion}
+            ocupado={isPending}
+            onIniciar={handleIniciarNegociacion}
+          />
 
           {/* Semáforo de Validación por Asesor */}
           <div>

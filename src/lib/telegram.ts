@@ -209,7 +209,15 @@ export async function despacharPropuestaInspeccionTelegram(
     },
   ];
 
-  const inlineKeyboard = [fila1, fila2, fila3];
+  // Fila 4: si ninguna opción acomoda, se pasa a negociar día → franja → hora
+  const fila4 = [
+    {
+      text: "📅 Ninguna me acomoda · proponer otro día",
+      callback_data: `n:${ctx.coordinacionId}`,
+    },
+  ];
+
+  const inlineKeyboard = [fila1, fila2, fila3, fila4];
 
   let despachados = 0;
 

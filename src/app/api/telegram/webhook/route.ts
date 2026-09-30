@@ -10,6 +10,16 @@ import {
   marcarAsesorEnteradoCoordinacion,
 } from "@/lib/coordinacion-inspecciones";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
+import {
+  iniciarNegociacionDias,
+  alternarDiaAsesor,
+  marcarDiasListo,
+  alternarFranjaAsesor,
+  marcarFranjasListo,
+  armarTecladoDias,
+  armarTecladoFranjas,
+  actualizarTecladoTelegram,
+} from "@/lib/coordinacion-negociacion";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +95,72 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Negociación por etapas cuando las opciones no acomodan: día → franja → hora
+      //   n:{coord} (ninguna me acomoda)  d:{coord}:{YYYYMMDD}  dl|dn:{coord}
+      //   f:{coord}:{YYYYMMDD}{M|T}  fl|fn:{coord}
+      const mNeg = data.match(/^(n|d|dl|dn|f|fl|fn):([0-9a-f-]{36})(?::(\d{8}[MT]?))?$/i);
+      if (mNeg) {
+        const [, tipo, coordId, extra] = mNeg;
+        const { data: coordN } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("asesores_ids, estado")
+          .eq("id", coordId)
+          .maybeSingle();
+
+        if (!coordN || ["confirmada", "cancelada"].includes(coordN.estado)) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta propuesta ya no está activa.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: perfilesN = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", coordN.asesores_ids || []);
+        const asesor = (perfilesN || []).find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+        if (!asesor) {
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            "No pude identificarte como uno de los asesores de esta inspección.",
+            true
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        const chatMsg = cb.message?.chat?.id;
+        const msgId = cb.message?.message_id;
+
+        if (tipo === "n") {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Entendido: busquemos otro día. Te llega la lista en un momento.");
+          await iniciarNegociacionDias(sb, coordId, 1);
+        } else if (tipo === "d") {
+          const r = await alternarDiaAsesor(sb, coordId, asesor.id, extra);
+          if (r.ok && chatMsg && msgId) {
+            await actualizarTecladoTelegram(botToken, chatMsg, msgId, armarTecladoDias(coordId, r.ofrecidos, r.seleccion));
+          }
+          await responderCallbackQueryTelegram(botToken, cb.id, r.ok ? "Marcado" : "Esta consulta ya no está activa.");
+        } else if (tipo === "dl" || tipo === "dn") {
+          const r = await marcarDiasListo(sb, coordId, asesor.id, tipo === "dn");
+          if (r.ok && chatMsg && msgId) await actualizarTecladoTelegram(botToken, chatMsg, msgId, []);
+          await responderCallbackQueryTelegram(botToken, cb.id, r.mensaje);
+        } else if (tipo === "f") {
+          const r = await alternarFranjaAsesor(sb, coordId, asesor.id, extra);
+          if (r.ok && chatMsg && msgId) {
+            await actualizarTecladoTelegram(botToken, chatMsg, msgId, armarTecladoFranjas(coordId, r.pares, r.seleccion));
+          }
+          await responderCallbackQueryTelegram(botToken, cb.id, r.ok ? "Marcado" : "Esta consulta ya no está activa.");
+        } else if (tipo === "fl" || tipo === "fn") {
+          const r = await marcarFranjasListo(sb, coordId, asesor.id, tipo === "fn");
+          if (r.ok && chatMsg && msgId) await actualizarTecladoTelegram(botToken, chatMsg, msgId, []);
+          await responderCallbackQueryTelegram(botToken, cb.id, r.mensaje);
+        }
+        return NextResponse.json({ ok: true });
+      }
 
       // Acuse de lectura de una inspección compartida: c:{citaId}  (botón "Enterado")
       if (data.startsWith("c:")) {
