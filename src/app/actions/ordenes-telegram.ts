@@ -124,7 +124,7 @@ async function armarPaqueteOT(ordenId: string) {
           anosGarantia: garantia.anosGarantia,
           fechaInicio: garantia.fechaInicio,
           fechaVencimiento: garantia.fechaVencimiento,
-          responsable: orden.asesorEjecutorNombre || "Sauceda Construye",
+          responsable: garantia.entregadoPorNombre || orden.asesorEjecutorNombre || "Sauceda Construye",
           token: garantia.token,
         });
         return {

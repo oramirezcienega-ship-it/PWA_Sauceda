@@ -144,7 +144,7 @@ export function generarPdfPolizaGarantia(d: {
   lineas.forEach((l, i) => doc.text(l, MARGEN, y + i * paso));
   const yFirmas = Math.min(maxY + 12, y + lineas.length * paso + 14);
 
-  firmas(doc, yFirmas, [d.responsable || "Sauceda Construye", "Responsable técnico de ejecución"], [d.clienteNombre, "Cliente titular · Recepción a entera satisfacción"]);
+  firmas(doc, yFirmas, [d.responsable || "Sauceda Construye", "Asesor que entrega la instalación"], [d.clienteNombre, "Cliente titular · Recepción a entera satisfacción"]);
   pie(doc, `${d.token ? `Token de verificación: ${d.token} · ` : ""}Póliza digital emitida por Sauceda Soluciones Inmobiliarias y Construcción.`);
   return doc;
 }

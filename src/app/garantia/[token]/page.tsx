@@ -106,11 +106,11 @@ export default async function PaginaGarantiaOTPublica({ params }: GarantiaOTPage
           <div>
             <div className="border-b border-carbon/30 pb-2 mb-2 h-16 flex items-end justify-center">
               <span className="font-mono text-xs text-carbon/60">
-                {orden.asesorEjecutorNombre || "Sauceda Construye"}
+                {garantia.entregadoPorNombre || orden.asesorEjecutorNombre || "Sauceda Construye"}
               </span>
             </div>
             <p className="font-semibold text-carbon">Por Sauceda Construye</p>
-            <p className="text-[10px] text-carbon/50">Responsable Técnico de Ejecución</p>
+            <p className="text-[10px] text-carbon/50">Asesor que entrega la instalación</p>
           </div>
 
           <div>

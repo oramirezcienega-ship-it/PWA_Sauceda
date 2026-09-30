@@ -1134,6 +1134,8 @@ export function DetalleOrdenTrabajo({
         clienteTelefono={orden.clienteTelefono}
         garantiaActual={garantia}
         tipoNegocio={orden.tipoNegocio || "construccion"}
+        asesorEjecutorId={orden.asesorEjecutorId}
+        asesorEjecutorNombre={orden.asesorEjecutorNombre}
       />
 
       <ModalGenerarRemisionOT
