@@ -9,6 +9,7 @@ import {
   registrarVotosAsesorCoordinacion,
   marcarAsesorEnteradoCoordinacion,
 } from "@/lib/coordinacion-inspecciones";
+import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,47 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Acuse de lectura de una inspección compartida: c:{citaId}  (botón "Enterado")
+      if (data.startsWith("c:")) {
+        const [, citaId] = data.split(":");
+        const { data: cita } = await sb
+          .from("agenda_citas")
+          .select("telegram_compartido")
+          .eq("id", citaId)
+          .maybeSingle();
+
+        const compartido: Record<string, any> = (cita?.telegram_compartido as Record<string, any>) || {};
+        const ids = Object.keys(compartido);
+        if (!cita || ids.length === 0) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta inspección ya no está disponible.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: perfilesC = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", ids);
+        const match = (perfilesC || []).find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+
+        if (!match) {
+          await responderCallbackQueryTelegram(
+            botToken,
+            cb.id,
+            "No pude identificarte como el asesor de esta inspección.",
+            true
+          );
+          return NextResponse.json({ ok: true });
+        }
+
+        await marcarCitaEnteradaTelegram(sb, citaId, match.id, "telegram");
+        await responderCallbackQueryTelegram(botToken, cb.id, "👀 Registrado: quedaste enterado de la inspección.");
+        return NextResponse.json({ ok: true });
+      }
 
       // Acuse de lectura: e:{coordinacionId}  (botón "Enterado")
       if (data.startsWith("e:")) {

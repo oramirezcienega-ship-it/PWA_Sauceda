@@ -15,7 +15,8 @@ import {
   type DatosPrevisualizacionInspeccion 
 } from "./ModalPrevisualizarInspeccion";
 import { marcarInspeccionEjecutada } from "@/app/actions/comisiones";
-import { compartirInspeccionPorTelegramAction } from "@/app/actions/inspecciones-compartir";
+import { marcarInspeccionEnteradaManualAction } from "@/app/actions/inspecciones-compartir";
+import { ModalCompartirInspeccion } from "./ModalCompartirInspeccion";
 
 interface WidgetAgendaCitasProps {
   prospectoId?: string | null;
@@ -44,23 +45,12 @@ export function WidgetAgendaCitas({
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipoForm, setTipoForm] = useState<"inspeccion" | "instalacion">("inspeccion");
   const [citaEditando, setCitaEditando] = useState<Cita | null>(null);
-  const [compartiendoId, setCompartiendoId] = useState<string | null>(null);
-  const [avisoCompartir, setAvisoCompartir] = useState<Record<string, { tipo: "ok" | "error"; texto: string }>>({});
+  // Cita cuya información se está compartiendo por Telegram (abre la vista previa)
+  const [citaCompartiendo, setCitaCompartiendo] = useState<Cita | null>(null);
 
-  // Envía la información completa de la inspección al asesor asignado por Telegram
-  const handleCompartirTelegram = async (citaId: string) => {
-    setCompartiendoId(citaId);
-    const r = await compartirInspeccionPorTelegramAction(citaId);
-    setCompartiendoId(null);
-    const enviadosOk = r.enviados.filter((e) => e.ok).map((e) => e.nombre);
-    let texto = "";
-    if (enviadosOk.length > 0) {
-      texto = `Enviado por Telegram a ${enviadosOk.join(", ")}${r.fotosEnviadas > 0 ? ` (${r.fotosEnviadas} foto${r.fotosEnviadas === 1 ? "" : "s"})` : ""}.`;
-      if (r.sinTelegram.length > 0) texto += ` Sin Telegram vinculado: ${r.sinTelegram.join(", ")}.`;
-    } else {
-      texto = r.error || "No se pudo enviar.";
-    }
-    setAvisoCompartir((prev) => ({ ...prev, [citaId]: { tipo: enviadosOk.length > 0 ? "ok" : "error", texto } }));
+  const handleMarcarEnterado = async (citaId: string, perfilId: string) => {
+    await marcarInspeccionEnteradaManualAction(citaId, perfilId);
+    await cargarDatos();
   };
 
   // Form states
@@ -740,13 +730,12 @@ export function WidgetAgendaCitas({
                   {isInspeccion && !isCancelada && (
                     <button
                       type="button"
-                      onClick={() => handleCompartirTelegram(c.id)}
-                      disabled={compartiendoId === c.id}
-                      className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                      title="Enviar al asesor asignado, por Telegram, todos los datos de la visita: cliente, dirección, colonia, teléfono, mapa, tipo, fecha y hora, medidas y fotos"
+                      onClick={() => setCitaCompartiendo(c)}
+                      className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 text-[11px] font-bold transition shadow-xs flex items-center gap-1 cursor-pointer"
+                      title="Ver la información de la visita y enviarla por Telegram al asesor asignado"
                     >
                       <span>✈️</span>
-                      <span>{compartiendoId === c.id ? "Enviando…" : "Compartir por Telegram"}</span>
+                      <span>{Object.keys(c.telegram_compartido || {}).length > 0 ? "Reenviar por Telegram" : "Compartir por Telegram"}</span>
                     </button>
                   )}
 
@@ -771,21 +760,71 @@ export function WidgetAgendaCitas({
                   )}
                 </div>
 
-                {avisoCompartir[c.id] && (
-                  <div
-                    className={`w-full rounded-lg border px-3 py-1.5 text-[11px] font-semibold ${
-                      avisoCompartir[c.id].tipo === "ok"
-                        ? "bg-sky-50 border-sky-200 text-sky-800"
-                        : "bg-rose-50 border-rose-200 text-rose-800"
-                    }`}
-                  >
-                    {avisoCompartir[c.id].texto}
+                {/* Estado del envío por Telegram al asesor: enviado y leído */}
+                {isInspeccion && Object.keys(c.telegram_compartido || {}).length > 0 && (
+                  <div className="w-full flex flex-col gap-1 rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2 text-[11px]">
+                    {Object.entries(c.telegram_compartido || {}).map(([perfilId, e]) => (
+                      <div key={perfilId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-bold text-carbon/80">✈️ {e.nombre}:</span>
+                        {e.ok ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-800"
+                            title="Telegram confirmó la entrega del mensaje"
+                          >
+                            ✓ Enviado{" "}
+                            {new Date(e.enviadoAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700"
+                            title={e.error || "No se pudo enviar"}
+                          >
+                            ⚠️ No enviado: {e.error || "error"}
+                          </span>
+                        )}
+                        {e.ok &&
+                          (e.enteradoAt ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-800">
+                              👁️ Leído{" "}
+                              {new Date(e.enteradoAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                              {e.enteradoVia === "manual" ? " (marcado a mano)" : " (botón Enterado)"}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-semibold text-amber-800">
+                              ⏳ Sin confirmar lectura
+                              <button
+                                type="button"
+                                onClick={() => handleMarcarEnterado(c.id, perfilId)}
+                                className="underline font-medium text-amber-900 hover:text-amber-700"
+                                title="Márcalo si el asesor confirmó por llamada o en persona"
+                              >
+                                marcar leído
+                              </button>
+                            </span>
+                          ))}
+                      </div>
+                    ))}
+                    <span className="text-[10px] text-carbon/45">
+                      Telegram no informa cuándo se abre un mensaje: "leído" se confirma cuando el asesor pulsa el botón "Enterado" del mensaje.
+                    </span>
                   </div>
                 )}
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Vista previa y envío de la información de la inspección al asesor por Telegram */}
+      {citaCompartiendo && (
+        <ModalCompartirInspeccion
+          citaId={citaCompartiendo.id}
+          yaCompartida={Object.keys(citaCompartiendo.telegram_compartido || {}).length > 0}
+          alCerrar={() => setCitaCompartiendo(null)}
+          alEnviado={async () => {
+            await cargarDatos();
+          }}
+        />
       )}
 
       {/* Modal de Previsualización antes de Enviar */}
