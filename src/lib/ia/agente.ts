@@ -316,6 +316,7 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
   const hayFotosImper = hayFotosEnCatalogo(productosImper);
   const fichaImper = fichaProductosParaPrompt(productosImper);
+  const hayFotosEstandar = Boolean(productosImper.estandar?.aptoParaIa && productosImper.estandar.fotos.length > 0);
   const serviciosMant = await cargarServiciosMantenimiento(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarServiciosMantenimiento>>);
   const fichaTinacos = fichaServicioParaPrompt(serviciosMant.tinacos);
   const fichaCisternas = fichaServicioParaPrompt(serviciosMant.cisternas);
@@ -394,7 +395,7 @@ C) Si está interesado en el ARMADO DE EXPEDIENTE O ASESORÍA DE TRÁMITES (Serv
   3. Menciona que nosotros nos encargamos del armado del expediente y trámite integral, y que un asesor le contactará para cotizar el servicio.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
-Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces, archivos, links o páginas web de cotización o cita en tu respuesta:
+Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, que se recomienda en el PASO 1:
 
 - PASO 1: SALUDO E INFORMACIÓN DEL SERVICIO (Al detectar el negocio o si no tenemos los metros)
   Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía este mensaje (breve, sin mencionar días ni tiempos de instalación):
@@ -405,7 +406,10 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   🔸 *Estándar 3.5 con gravilla*: garantía de 5 años. La más solicitada.
   ⭐ *Premium 4.0 poliéster con gravilla*: garantía de 10 años. La de mayor duración.
 
+  Puedes ver más información y ejemplos en nuestro sitio: https://saucedamx.com/impermeabilizacion.html${hayFotosEstandar ? "\n\n  Te comparto también unas fotos de nuestra impermeabilización estándar 👇" : ""}
+
   Para orientarte mejor, ¿cuántos metros cuadrados aproximados tiene tu azotea?"
+  Incluye SIEMPRE la línea del sitio web tal cual (URL completa, sin acortarla ni modificarla) y ninguna otra URL.${hayFotosEstandar ? '\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, las fotos de la impermeabilización estándar; por eso se anuncian en el texto.' : ''}
   Asigna "paso_flujo": "paso_1".
 
 - PASO 2: METROS CLAROS → COMPARATIVA DE OPCIONES (Al tener los metros cuadrados)
@@ -706,7 +710,7 @@ async function generarRespuesta(
 
   let systemFinal = system;
   if (system.includes("JSON")) {
-    systemFinal = `${system}\n\nREGLA CRÍTICA DE RESPUESTA: Tu salida debe ser ESTRICTAMENTE un objeto JSON válido con la estructura solicitada. No agregues introducciones, comentarios ni bloques markdown fuera del JSON. Si estás confirmando una cita (Paso 5), debes incluir en "datosExtraidos" los campos "fecha_inspeccion_confirmada" (YYYY-MM-DD) y "hora_inspeccion_confirmada" (HH:MM). NUNCA escribas o inventes URLs estáticas genéricas de cotización o cita (como saucedamx.com/cotizacion o saucedamx.com/cita-confirmada) ni copies URLs previas del historial. Deja que el sistema use los marcadores [LINK_COTIZACION] y [LINK_CITA_CONFIRMADA] tal cual.`;
+    systemFinal = `${system}\n\nREGLA CRÍTICA DE RESPUESTA: Tu salida debe ser ESTRICTAMENTE un objeto JSON válido con la estructura solicitada. No agregues introducciones, comentarios ni bloques markdown fuera del JSON. Si estás confirmando una cita (Paso 5), debes incluir en "datosExtraidos" los campos "fecha_inspeccion_confirmada" (YYYY-MM-DD) y "hora_inspeccion_confirmada" (HH:MM). NUNCA escribas o inventes URLs estáticas genéricas de cotización o cita (como saucedamx.com/cotizacion o saucedamx.com/cita-confirmada); la única URL permitida es https://saucedamx.com/impermeabilizacion.html, y sólo donde el flujo de impermeabilización la indica ni copies URLs previas del historial. Deja que el sistema use los marcadores [LINK_COTIZACION] y [LINK_CITA_CONFIRMADA] tal cual.`;
   }
 
   let proveedorOriginal = process.env.IA_PROVEEDOR || "anthropic";
@@ -1553,6 +1557,10 @@ export async function responderConIA(
       const metrosImper = metrosClaros((datosExtraidos as any).metros);
       if (claros && metrosImper && (datosExtraidos as any).paso_flujo === "paso_2") {
         await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper });
+      }
+      if ((datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
+        // Tras la información básica se comparten fotos de la impermeabilización estándar (una sola vez)
+        await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: "estandar" });
       }
       const elegido = (datosExtraidos as any).paquete_elegido;
       if (esPaqueteImper(elegido)) {
