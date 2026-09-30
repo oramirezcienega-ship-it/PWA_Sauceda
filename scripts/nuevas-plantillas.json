@@ -1,0 +1,213 @@
+[
+  {
+    "name": "seguimiento_cotizacion_vigencia",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "¡Hola {{1}}! Te saluda Sofía de SAUCEDA. 📋\n\nDando seguimiento a tu cotización para el servicio de *{{2}}*, queremos confirmar si tuviste oportunidad de revisarla.\n\nCon gusto podemos apartar el precio y los materiales cotizados esta semana, o bien coordinar la visita técnica para resolver cualquier detalle en sitio.\n\n¿Te gustaría que afinemos alguna duda o programamos la visita de un técnico?",
+        "example": {
+          "body_text": [
+            [
+              "Carlos",
+              "Impermeabilización de azotea"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar visita técnica"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Tengo dudas del costo"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver opciones de pago"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "reactivacion_herreria_sauceda",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te saluda Sofía de SAUCEDA Herrería y Estructuras. 🛠️\n\nNos quedamos al pendiente de tu proyecto de herrería (portón, protecciones o estructura). Para brindarte un presupuesto exacto y opciones de diseño a la medida, tenemos disponibilidad para que un técnico pase a tomar medidas sin costo ni compromiso.\n\nAdemás, contamos con pago con tarjeta de crédito y opción a meses. ¿Te gustaría coordinar la toma de medidas esta semana?",
+        "example": {
+          "body_text": [
+            [
+              "Roberto"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar toma de medidas"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver fotos de trabajos"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Más adelante, gracias"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "reactivacion_cisternas_aljibes",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te saluda Sofía del equipo de Mantenimiento SAUCEDA. 💧\n\nTe contactamos en relación a tu solicitud sobre el mantenimiento o reparación de tu cisterna / aljibe. Las filtraciones o acumulación de sedimentos pueden afectar la calidad del agua de tu hogar.\n\nPodemos realizar un diagnóstico técnico en tu domicilio para evaluar si requiere lavado, sellado de fisuras o impermeabilización de grado sanitario. ¿Te gustaría agendar una visita de valoración?",
+        "example": {
+          "body_text": [
+            [
+              "Mariana"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar diagnóstico"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Costos aproximados"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ya lo resolví"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "reactivacion_imper_ruta_tecnica",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "¡Hola {{1}}! Te saluda Sofía de SAUCEDA Construye. 🏠\n\nNuestro equipo técnico tendrá ruta de inspecciones y mediciones en tu zona estos próximos días.\n\nSi aún deseas proteger tu losa con garantía por escrito de 3, 5 o 10 años y aprovechar nuestra promoción a 3 Meses Sin Intereses, podemos aprovechar la ruta para visitarte sin costo. ¿Qué día y horario te acomoda mejor?",
+        "example": {
+          "body_text": [
+            [
+              "Oscar"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Mañana por la mañana"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Por la tarde"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver cotización"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "reactivacion_piso_estampado_v2",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te saluda Sofía de SAUCEDA. 🏡\n\nDando seguimiento a tu interés en renovar tu cochera o patio con concreto estampado: contamos con catálogo digital de texturas (tipo piedra, madera o laja) y opciones de pago con tarjeta.\n\n¿Deseas que te enviemos el catálogo digital de acabados o prefieres que un asesor técnico acuda a medir los metros cuadrados para darte el presupuesto cerrado?",
+        "example": {
+          "body_text": [
+            [
+              "Fernando"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Ver catálogo texturas"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar visita técnica"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Más adelante, gracias"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "reactivacion_remodelacion_presup",
+    "category": "MARKETING",
+    "language": "es_MX",
+    "components": [
+      {
+        "type": "BODY",
+        "text": "Hola {{1}}, te saluda Sofía de SAUCEDA Remodelaciones. 🔨\n\nSabemos que planear una remodelación o ampliación requiere tiempo y evaluación de opciones. En SAUCEDA trabajamos presupuestos desglosados por etapas para adaptarnos a tu ritmo y presupuesto.\n\n¿Aún tienes en mente el proyecto para tu hogar? Podemos agendar una visita técnica para revisar el espacio y proponerte la mejor solución.",
+        "example": {
+          "body_text": [
+            [
+              "Andrea"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "QUICK_REPLY",
+            "text": "Agendar visita técnica"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Presupuesto por etapas"
+          },
+          {
+            "type": "QUICK_REPLY",
+            "text": "Hablar con asesor"
+          }
+        ]
+      }
+    ]
+  }
+]
