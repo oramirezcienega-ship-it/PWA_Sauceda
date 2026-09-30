@@ -1,5 +1,6 @@
 import { obtenerGarantiaPorToken } from "@/app/actions/cotizaciones";
 import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
+import { PolizaHoja } from "@/components/PolizaHoja";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -35,9 +36,12 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
       </div>
 
       {/* Contenedor de la carta de garantía - Formato A4/Carta */}
-      <div className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg print:shadow-none print:border-none print:p-0 print:max-w-none text-carbon">
+      <PolizaHoja
+        tituloArchivo={`Póliza de garantía - ${cotizacion.prospectoNombre || "Cliente"} - ${cotizacion.id}`}
+        className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg text-carbon"
+      >
         {/* Encabezado Opcional/Identidad */}
-        <div className="border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
+        <div className="poliza-encabezado border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
           <div>
             <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo uppercase">SAUCEDA</h1>
             <p className="font-titular text-xs font-semibold tracking-wider text-sauce uppercase mt-0.5">Construye</p>
@@ -57,7 +61,7 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
         </article>
 
         {/* Firmas / Cierre */}
-        <div className="mt-16 pt-8 border-t border-carbon/10 grid grid-cols-2 gap-8 text-center text-xs print:mt-24">
+        <div className="poliza-firmas mt-16 pt-8 border-t border-carbon/10 grid grid-cols-2 gap-8 text-center text-xs">
           <div className="space-y-1">
             <div className="h-16 flex items-end justify-center">
               {/* Espacio para firma */}
@@ -73,7 +77,7 @@ export default async function GarantiaPublicPage({ params }: GarantiaPageProps) 
             <div className="text-[10px] text-carbon/50 uppercase">Firma del Cliente</div>
           </div>
         </div>
-      </div>
+      </PolizaHoja>
     </main>
   );
 }
