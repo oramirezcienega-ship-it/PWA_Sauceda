@@ -181,7 +181,7 @@ export default function PaginaRemisionesFacturas() {
     <main className="min-h-screen pb-16 bg-slate-50/50">
       <Encabezado />
 
-      <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+      <div className="mx-auto w-full max-w-[1920px] px-4 sm:px-6 xl:px-8 py-6 space-y-6">
         {/* Banner Superior de Identidad */}
         <div className="rounded-2xl border border-sauce/30 bg-gradient-to-r from-verde-profundo via-verde-profundo to-emerald-950 p-6 text-crema shadow-lg flex flex-wrap items-center justify-between gap-4">
           <div>

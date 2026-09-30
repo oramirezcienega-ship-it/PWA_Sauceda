@@ -189,7 +189,7 @@ export function TablaOrdenesTrabajo({
                   </td>
 
                   {/* Cliente */}
-                  <td className="px-5 py-4 max-w-[200px]">
+                  <td className="px-5 py-4 max-w-[200px] xl:max-w-[300px] 2xl:max-w-[380px]">
                     <div className="font-semibold text-carbon text-xs truncate">
                       {ot.clienteNombre || "Cliente General"}
                     </div>
@@ -228,7 +228,7 @@ export function TablaOrdenesTrabajo({
                   </td>
 
                   {/* Trabajo / Servicio */}
-                  <td className="px-5 py-4 max-w-[240px]">
+                  <td className="px-5 py-4 max-w-[240px] xl:max-w-[360px] 2xl:max-w-[460px]">
                     <div className="font-semibold text-carbon text-xs line-clamp-1 group-hover:text-verde-profundo transition-colors">
                       {ot.titulo || "Orden de Trabajo"}
                     </div>
@@ -262,7 +262,7 @@ export function TablaOrdenesTrabajo({
                   <td className="px-5 py-4 whitespace-nowrap text-xs">
                     <div className="flex items-center gap-1.5 text-carbon font-medium">
                       <span className="text-xs">👤</span>
-                      <span className="truncate max-w-[130px]">{ot.asesorEjecutorNombre || "Sin asignar"}</span>
+                      <span className="truncate max-w-[130px] xl:max-w-[200px]">{ot.asesorEjecutorNombre || "Sin asignar"}</span>
                     </div>
                   </td>
 

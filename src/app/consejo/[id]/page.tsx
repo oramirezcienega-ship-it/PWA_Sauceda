@@ -91,7 +91,7 @@ export default async function PaginaDetalleProyecto({ params }: PaginaDetallePro
 
   return (
     <main className="min-h-screen pb-10 bg-[#F8FAFC]">
-      <div className="mx-auto max-w-6xl px-4 pt-8">
+      <div className="mx-auto w-full max-w-[1920px] px-4 sm:px-6 xl:px-8 pt-8">
         <DetalleProyecto
           proyecto={data.proyecto}
           asesores={data.asesores}
