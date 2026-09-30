@@ -64,7 +64,17 @@ function esRutaPublica(path: string | null): boolean {
     path.startsWith("/privacidad") ||
     path.startsWith("/cotizacion") ||
     path.startsWith("/reporte-visita") ||
-    path.startsWith("/agenda/")
+    path.startsWith("/agenda/") ||
+    // Páginas públicas del cliente (mismas rutas que permite el middleware). Si faltan aquí, el
+    // cliente ve la página y segundos después lo manda a /login al no poder cargar expedientes.
+    path.startsWith("/visualizador") ||
+    path.startsWith("/recibo/") ||
+    path.startsWith("/garantia/") ||
+    path.startsWith("/orden-trabajo/entrega/") ||
+    path.startsWith("/orden-trabajo/remision/") ||
+    path.startsWith("/c/") ||
+    path.startsWith("/a/") ||
+    (path.startsWith("/expediente/") && path.replace("/expediente/", "").length >= 24)
   );
 }
 
