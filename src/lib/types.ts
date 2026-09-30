@@ -1427,3 +1427,130 @@ export interface ComisionAnticipo {
   createdAt: string;
 }
 
+// ============================================================
+// Módulo: Gestión de Compraventa INFONAVIT ($15,000 MXN)
+// ============================================================
+
+export type RolParteInfonavit = "comprador" | "vendedor" | "conyuge_vendedor" | "conyuge_comprador";
+export type EstadoCivilInfonavit = "soltero" | "casado" | "union_libre" | "divorciado" | "viudo";
+export type RegimenMatrimonialInfonavit = "separacion_bienes" | "sociedad_conyugal" | "no_aplica";
+export type EstatusDocumentoInfonavit = "pendiente" | "recibido" | "validado" | "rechazado";
+
+export interface OtInfonavitEtapa {
+  id: string;
+  orden: number;
+  nombre: string;
+  descripcion?: string | null;
+  requiereDocsValidados: boolean;
+  activo: boolean;
+  createdAt: string;
+}
+
+export interface OtInfonavitParte {
+  id: string;
+  ordenTrabajoId: string;
+  rol: RolParteInfonavit;
+  nombre: string;
+  telefono: string;
+  email?: string | null;
+  curp?: string | null;
+  rfc?: string | null;
+  estadoCivil?: EstadoCivilInfonavit | null;
+  regimenMatrimonial?: RegimenMatrimonialInfonavit | null;
+  tokenFormulario: string;
+  tokenExpiraAt: string;
+  formularioCompletado: boolean;
+  formularioCompletadoAt?: string | null;
+  avisoPrivacidadAceptado: boolean;
+  avisoPrivacidadAceptadoAt?: string | null;
+  notas?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OtInfonavitInmueble {
+  id: string;
+  ordenTrabajoId: string;
+  direccion?: string | null;
+  fraccionamiento?: string | null;
+  ciudad?: string | null;
+  cuentaPredial?: string | null;
+  tieneCreditoVigente: boolean;
+  institucionAcreedora?: string | null;
+  saldoCreditoAprox?: number;
+  esRegimenCondominio: boolean;
+  estaHabitada: boolean;
+  nombreContactoVisita?: string | null;
+  telefonoContactoVisita?: string | null;
+  notasAcceso?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OtCatalogoDocumento {
+  id: string;
+  nombre: string;
+  descripcion?: string | null;
+  rolAplicable: RolParteInfonavit | "inmueble";
+  obligatorio: boolean;
+  tieneVigencia: boolean;
+  diasVigenciaDefault?: number | null;
+  condicionRegla?: string | null;
+  orden: number;
+  activo: boolean;
+  createdAt: string;
+}
+
+export interface OtInfonavitDocumento {
+  id: string;
+  ordenTrabajoId: string;
+  parteId?: string | null;
+  tipoDocumentoId: string;
+  archivoPath: string;
+  archivoNombreOriginal?: string | null;
+  archivoTipo?: string | null;
+  tamanoBytes?: number;
+  estatus: EstatusDocumentoInfonavit;
+  motivoRechazo?: string | null;
+  fechaVigencia?: string | null;
+  validadoPor?: string | null;
+  validadoAt?: string | null;
+  notas?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  tipoDocumento?: OtCatalogoDocumento;
+  parte?: OtInfonavitParte;
+  urlFirmada?: string | null;
+}
+
+export interface OtInfonavitHistorial {
+  id: string;
+  ordenTrabajoId: string;
+  etapaAnterior?: string | null;
+  etapaNueva: string;
+  motivo?: string | null;
+  usuarioId?: string | null;
+  usuarioNombre?: string | null;
+  createdAt: string;
+}
+
+export interface OtInfonavitEvento {
+  id: string;
+  ordenTrabajoId: string;
+  evento: string;
+  payload: Record<string, any>;
+  procesado: boolean;
+  procesadoAt?: string | null;
+  error?: string | null;
+  createdAt: string;
+}
+
+export interface ExpedienteInfonavitDetalle {
+  partes: OtInfonavitParte[];
+  inmueble: OtInfonavitInmueble | null;
+  documentos: OtInfonavitDocumento[];
+  etapas: OtInfonavitEtapa[];
+  catalogoDocs: OtCatalogoDocumento[];
+  historial: OtInfonavitHistorial[];
+}
+

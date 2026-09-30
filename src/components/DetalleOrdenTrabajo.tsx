@@ -22,6 +22,7 @@ import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { SeccionContratoOT } from "./SeccionContratoOT";
+import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface DetalleOrdenTrabajoProps {
@@ -602,7 +603,18 @@ export function DetalleOrdenTrabajo({
         </div>
       </div>
 
-      {/* 3b. Contrato de Prestación de Servicios */}
+      {/* 3b. Panel Especializado de Gestión Compraventa INFONAVIT */}
+      {orden.tipoNegocio === "infonavit_compraventa" && (
+        <PanelInfonavitCompraventa
+          ordenTrabajoId={orden.id}
+          folioOT={orden.folio}
+          clienteNombreOT={orden.clienteNombre}
+          clienteTelefonoOT={orden.clienteTelefono}
+          soloLectura={soloLectura}
+        />
+      )}
+
+      {/* 3c. Contrato de Prestación de Servicios */}
       <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
 
       {/* 4. Grid de Módulos: Recibos Oficiales & Póliza de Garantía */}

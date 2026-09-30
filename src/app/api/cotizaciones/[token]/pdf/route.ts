@@ -66,6 +66,22 @@ export async function GET(
     }
 
     // CASO B: Cotización / Propuesta Comercial
+    if (cotizacion.servicioTipo === "infonavit_compraventa" || (cotizacion as any).modalidad === "infonavit_compraventa") {
+      const { generarPdfCotizacionInfonavit } = await import("@/lib/cotizacionPdfInfonavit");
+      const docInfonavit = generarPdfCotizacionInfonavit(cotizacion, siteUrl);
+      const pdfArrayBuffer = docInfonavit.output("arraybuffer");
+      const pdfBuffer = Buffer.from(pdfArrayBuffer);
+
+      return new NextResponse(pdfBuffer, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="Cotizacion-INFONAVIT-${cotizacion.id}.pdf"`,
+          "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        },
+      });
+    }
+
     const { data: repFilaVisita } = await sb
       .from("visitas_reportes")
       .select("id")

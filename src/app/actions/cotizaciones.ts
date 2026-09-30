@@ -1046,7 +1046,7 @@ export async function aceptarCotizacionCliente(
 
   const { data: cot, error: errCot } = await sb
     .from("cotizaciones")
-    .select("id, prospecto_id, estatus, modalidad, datos_modulares")
+    .select("id, prospecto_id, estatus, modalidad, datos_modulares, servicio_tipo")
     .eq("token", token)
     .maybeSingle();
 
@@ -1159,6 +1159,51 @@ export async function aceptarCotizacionCliente(
     titulo: `Cotización Aceptada por el Cliente 🎉 (${cot.id})`,
     detalle: `Aceptada formalmente por: ${firmaNombre} a través del portal de cliente (Modalidad: ${cot.modalidad || "estatica"}).`,
   });
+
+  // Si es cotización de gestión compraventa INFONAVIT, crear orden de trabajo y partes automáticamente
+  if (cot.servicio_tipo === "infonavit_compraventa" || (cot as any).modalidad === "infonavit_compraventa") {
+    try {
+      const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
+      const { inicializarPartesOTInfonavit } = await import("@/app/actions/infonavit-compraventa");
+
+      const resOT = await crearOrdenTrabajo({
+        cotizacionId: cot.id,
+        prospectoId: cot.prospecto_id,
+        tipoNegocio: "infonavit_compraventa",
+        titulo: `Gestión Compraventa INFONAVIT - ${firmaNombre}`,
+        descripcion: "Acompañamiento integral en compraventa, avalúo, certificados y notaría.",
+      });
+
+      if (resOT.ok && resOT.id) {
+        const { data: prospecto } = await sb
+          .from("prospectos")
+          .select("nombre, telefono, correo, direccion, fraccionamiento")
+          .eq("id", cot.prospecto_id)
+          .maybeSingle();
+
+        await inicializarPartesOTInfonavit(resOT.id, {
+          compradorNombre: firmaNombre || prospecto?.nombre || "Comprador",
+          compradorTelefono: prospecto?.telefono || "",
+          compradorEmail: prospecto?.correo || undefined,
+          vendedorNombre: "Propietario / Vendedor",
+          vendedorTelefono: "",
+          direccionInmueble: prospecto?.direccion || undefined,
+          fraccionamientoInmueble: prospecto?.fraccionamiento || undefined,
+        });
+
+        await sb
+          .from("ordenes_trabajo")
+          .update({
+            etapa_infonavit_id: "2_aceptada_anticipo",
+            anticipo_pagado: true,
+            anticipo_pagado_at: new Date().toISOString(),
+          })
+          .eq("id", resOT.id);
+      }
+    } catch (errOT) {
+      console.error("Error creando OT de compraventa INFONAVIT automática:", errOT);
+    }
+  }
 
   // Sincronizar etapa del expediente
   await sincronizarEtapaExpediente(sb, cot.id);

@@ -42,6 +42,17 @@ export interface OrdenTrabajo {
   fotosEvidencia: EvidenciaFoto[];
   createdAt: string;
   updatedAt: string;
+  // Campos de Gestión Compraventa INFONAVIT
+  etapaInfonavitId?: string | null;
+  motivoDetencion?: string | null;
+  anticipoPagado?: boolean;
+  anticipoPagadoAt?: string | null;
+  liquidacionPagada?: boolean;
+  liquidacionPagadaAt?: string | null;
+  fechaFirmaEscritura?: string | null;
+  notariaNumero?: string | null;
+  notariaNombre?: string | null;
+  politicaCancelacion?: string | null;
   // Proveedor asignado a esta orden de trabajo
   proveedorId: string | null;
   proveedorNombre?: string | null;
@@ -477,6 +488,16 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         saldoRestante,
         cotizacionToken: d.cotizaciones?.token,
         remisionFactura: remisionPorOT.get(d.id) || null,
+        etapaInfonavitId: d.etapa_infonavit_id || null,
+        motivoDetencion: d.motivo_detencion || null,
+        anticipoPagado: Boolean(d.anticipo_pagado),
+        anticipoPagadoAt: d.anticipo_pagado_at || null,
+        liquidacionPagada: Boolean(d.liquidacion_pagada),
+        liquidacionPagadaAt: d.liquidacion_pagada_at || null,
+        fechaFirmaEscritura: d.fecha_firma_escritura || null,
+        notariaNumero: d.notaria_numero || null,
+        notariaNombre: d.notaria_nombre || null,
+        politicaCancelacion: d.politica_cancelacion || null,
       };
     });
   } catch (err) {
@@ -674,6 +695,16 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       saldoRestante,
       cotizacionToken: d.cotizaciones?.token,
       remisionFactura,
+      etapaInfonavitId: d.etapa_infonavit_id || null,
+      motivoDetencion: d.motivo_detencion || null,
+      anticipoPagado: Boolean(d.anticipo_pagado),
+      anticipoPagadoAt: d.anticipo_pagado_at || null,
+      liquidacionPagada: Boolean(d.liquidacion_pagada),
+      liquidacionPagadaAt: d.liquidacion_pagada_at || null,
+      fechaFirmaEscritura: d.fecha_firma_escritura || null,
+      notariaNumero: d.notaria_numero || null,
+      notariaNombre: d.notaria_nombre || null,
+      politicaCancelacion: d.politica_cancelacion || null,
     };
 
     return { orden, recibos, garantia, remisionFactura, documentoProveedor };

@@ -60,6 +60,7 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/login") ||
     path.startsWith("/seguimiento") ||
     path.startsWith("/expediente-cliente") ||
+    (path.startsWith("/expediente/") && path.replace("/expediente/", "").length >= 24) ||
     path.startsWith("/privacidad") ||
     path.startsWith("/cotizacion") ||
     path.startsWith("/reporte-visita") ||

@@ -147,6 +147,7 @@ export function ModalCrearOrdenTrabajo({
                 <option value="herreria">Herrería y Estructuras</option>
                 <option value="piso_estampado">Piso Estampado</option>
                 <option value="traspaso_compra">Inmobiliaria / Traspaso</option>
+                <option value="infonavit_compraventa">Gestión Compraventa INFONAVIT ($15k)</option>
               </select>
             </div>
 
