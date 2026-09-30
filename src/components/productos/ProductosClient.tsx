@@ -341,6 +341,10 @@ export function ProductosClient({
     }
   };
 
+  const handleEditarFoto = (idx: number, cambios: Partial<FotoProducto>) => {
+    setFormFotos((prev) => prev.map((f, i) => (i === idx ? { ...f, ...cambios } : f)));
+  };
+
   const handleEliminarFoto = (idx: number) => {
     setFormFotos((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -1565,21 +1569,52 @@ export function ProductosClient({
                         No hay fotos cargadas. Agrega fotos para que los asesores y Sofía puedan mostrarlas a los prospectos.
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {formFotos.map((f, idx) => (
-                          <div key={idx} className="relative rounded-lg overflow-hidden border border-carbon/15 group">
-                            <img src={f.url} alt={f.titulo || "Foto"} className="h-28 w-full object-cover" />
-                            <div className="p-2 bg-white text-[11px]">
-                              <p className="font-semibold text-carbon truncate">{f.titulo || "Foto"}</p>
-                              <span className="text-[10px] text-carbon/50 capitalize">{f.tipo}</span>
-                            </div>
+                          <div key={idx} className="relative rounded-lg overflow-hidden border border-carbon/15 bg-white group">
+                            <img src={f.url} alt={f.titulo || "Foto"} className="h-36 w-full object-cover" />
                             <button
                               type="button"
                               onClick={() => handleEliminarFoto(idx)}
-                              className="absolute top-1 right-1 bg-red-600 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm"
+                              title="Eliminar foto"
+                              className="absolute top-1.5 right-1.5 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 focus:opacity-100 transition shadow-sm"
                             >
                               ✕
                             </button>
+                            <div className="p-2.5 space-y-1.5 text-[11px]">
+                              <div>
+                                <label className="block text-[10px] font-semibold text-carbon/50 mb-0.5">Título / Pie de foto</label>
+                                <input
+                                  type="text"
+                                  value={f.titulo || ""}
+                                  placeholder="Ej. Azotea de 80 m² con gravilla gris"
+                                  onChange={(e) => handleEditarFoto(idx, { titulo: e.target.value })}
+                                  className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-carbon/50 mb-0.5">Descripción (Sofía la envía con la foto)</label>
+                                <textarea
+                                  rows={2}
+                                  value={f.descripcion || ""}
+                                  placeholder="Ej. Sistema 3.5 terminado, listo para recibir lluvias"
+                                  onChange={(e) => handleEditarFoto(idx, { descripcion: e.target.value })}
+                                  className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none resize-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-carbon/50 mb-0.5">Tipo</label>
+                                <select
+                                  value={f.tipo}
+                                  onChange={(e) => handleEditarFoto(idx, { tipo: e.target.value as FotoProducto["tipo"] })}
+                                  className="w-full px-2 py-1.5 rounded-md border border-carbon/20 bg-white"
+                                >
+                                  <option value="aplicacion">Obra terminada</option>
+                                  <option value="producto">Producto / Muestra</option>
+                                  <option value="antes_despues">Antes y después</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
