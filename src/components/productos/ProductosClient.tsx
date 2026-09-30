@@ -1335,11 +1335,11 @@ export function ProductosClient({
 
                   <div>
                     <label className="block font-semibold text-carbon mb-1">
-                      Ficha Técnica y Términos de Garantía
+                      Ficha Técnica, Facts y Términos de Garantía
                     </label>
                     <textarea
                       rows={3}
-                      placeholder="Espesores, marcas de adhesivo, normativas Conagua, años de garantía por escrito, etc."
+                      placeholder="Un dato por línea. Ej.: Espesor 3.5 mm · Gravilla roja o gris · Garantía de 5 años por escrito. Sofía los usa para responder dudas técnicas."
                       value={formEspecificaciones}
                       onChange={(e) => setFormEspecificaciones(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none"

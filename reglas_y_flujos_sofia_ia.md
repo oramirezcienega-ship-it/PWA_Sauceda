@@ -84,7 +84,14 @@ Sin metros en el historial, Sofía presenta las 3 opciones (garantía y uso idea
 Sólo si el cliente da los metros con claridad (`metros_claros = true`, entre 5 y 5,000 m²), Sofía anuncia la comparativa y el **sistema envía automáticamente la imagen** (la misma de "Enviar Imagen Comparativa" del CRM) con la inversión de las 3 opciones para esos metros, con los precios vigentes del catálogo. El texto de Sofía no lleva montos. La imagen se envía una sola vez por expediente y cantidad de metros. Si los metros no son claros, no se envía imagen y se ofrece la inspección para medir.
 
 ### ✅ PASO 2B: El cliente elige un paquete
-Sofía registra `paquete_elegido` (`acrilico` | `estandar` | `premium`) sólo si lo dijo claramente, confirma la elección y ofrece la inspección gratuita. Si hay imágenes cargadas para ese paquete, el sistema las envía (una sola vez por paquete). Las imágenes se administran en `public/images/impermeabilizacion/` y se listan en `medios.json` (ver instrucciones dentro del archivo).
+Sofía registra `paquete_elegido` (`acrilico` | `estandar` | `premium`) sólo si lo dijo claramente, confirma la elección y ofrece la inspección gratuita. Si el producto del catálogo tiene fotos cargadas (y "Apto para Sofía" activo), el sistema las envía (máx. 5, primero foto de producto/técnica y luego obra aplicada; una sola vez por paquete).
+
+### 📚 Catálogo de Productos como fuente de verdad
+Sofía toma de **Productos y Servicios** (los 3 productos de impermeabilización, identificados por nombre: "3.5", "4.0/poliéster", "acrílico"):
+* **Precio por m²** → imagen comparativa y cotización automática.
+* **Fotos y Ejemplos de Obra** → fotos que se envían al elegir paquete (el título/descripción de la foto va como pie).
+* **Argumentos de Venta & Sofía** → "Propuesta de Valor" y "Ficha Técnica, Facts y Garantía" (un dato por línea) para contestar dudas técnicas. Si un dato no está ahí, Sofía no lo inventa y remite a la inspección.
+* **"Apto para Sofía"** desactivado = Sofía no usa su pitch, ficha ni fotos.
 
 ### 📅 PASO 3: Confirmación de Contacto para Inspección
 Se activa cuando el cliente acepta la inspección. Sofía responde:

@@ -3,6 +3,7 @@ import { enviarWhatsAppDocumento, subirMediaMeta } from "@/lib/whatsapp";
 import { registrarActividad } from "@/lib/actividades";
 import { generarImagenComparativaImper } from "@/lib/ia/imagen-comparativa-imper";
 import { paquetesConPreciosVigentes } from "@/lib/ia/precios-imper";
+import { cargarProductosImper, ETIQUETA_PAQUETE, type PaqueteImper, type ProductoImper } from "@/lib/ia/catalogo-imper";
 
 /**
  * Envíos multimedia de Sofía en el flujo de impermeabilización:
@@ -11,19 +12,12 @@ import { paquetesConPreciosVigentes } from "@/lib/ia/precios-imper";
  * Todo es best-effort: si algo falla, la conversación de texto no se ve afectada.
  */
 
-export type PaqueteImper = "acrilico" | "estandar" | "premium";
-
-export const ETIQUETA_PAQUETE: Record<PaqueteImper, string> = {
-  acrilico: "Acrílico",
-  estandar: "Estándar 3.5",
-  premium: "Premium 4.0 Poliéster",
-};
+export { ETIQUETA_PAQUETE, type PaqueteImper };
 
 const METROS_MIN = 5;
 const METROS_MAX = 5000;
 const MAX_IMAGENES_POR_PAQUETE = 5;
-
-const siteUrl = () => (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+const ORDEN_TIPO: Record<string, number> = { producto: 0, aplicacion: 1, antes_despues: 2 };
 
 export function esPaqueteImper(v: unknown): v is PaqueteImper {
   return v === "acrilico" || v === "estandar" || v === "premium";
@@ -35,25 +29,17 @@ export function metrosClaros(v: unknown): number | null {
   return Number.isFinite(n) && n >= METROS_MIN && n <= METROS_MAX ? n : null;
 }
 
-type Medio = { archivo: string; texto?: string };
-let cacheManifiesto: { at: number; data: Partial<Record<PaqueteImper, Medio[]>> } | null = null;
-
-/** Lista de imágenes de referencia por paquete (public/images/impermeabilizacion/medios.json). */
-async function leerManifiesto(): Promise<Partial<Record<PaqueteImper, Medio[]>>> {
-  if (cacheManifiesto && Date.now() - cacheManifiesto.at < 60_000) return cacheManifiesto.data;
-  try {
-    const r = await fetch(`${siteUrl()}/images/impermeabilizacion/medios.json`, { cache: "no-store" });
-    const data = r.ok ? await r.json() : {};
-    cacheManifiesto = { at: Date.now(), data };
-    return data;
-  } catch {
-    return {};
-  }
+/** Fotos del producto del catálogo (técnica primero, luego obra aplicada), listas para enviar. */
+function fotosParaEnviar(prod: ProductoImper | undefined) {
+  if (!prod || !prod.aptoParaIa) return [];
+  return [...prod.fotos]
+    .sort((a, b) => (ORDEN_TIPO[a.tipo || "producto"] ?? 9) - (ORDEN_TIPO[b.tipo || "producto"] ?? 9))
+    .slice(0, MAX_IMAGENES_POR_PAQUETE);
 }
 
-export async function hayMediosImper(paquete: PaqueteImper): Promise<boolean> {
-  const m = await leerManifiesto();
-  return (m[paquete] || []).length > 0;
+/** ¿Algún producto de impermeabilización tiene fotos cargadas y habilitadas para Sofía? */
+export function hayFotosEnCatalogo(productos: Partial<Record<PaqueteImper, ProductoImper>>): boolean {
+  return (["acrilico", "estandar", "premium"] as const).some((p) => fotosParaEnviar(productos[p]).length > 0);
 }
 
 async function yaEnviado(sb: SupabaseClient, expedienteId: string | null | undefined, marca: string): Promise<boolean> {
@@ -121,7 +107,7 @@ export async function enviarComparativaImper(
   }
 }
 
-/** Envía las imágenes de referencia del paquete elegido (una sola vez por expediente y paquete). */
+/** Envía las fotos del producto elegido (cargadas en el catálogo), una sola vez por expediente y paquete. */
 export async function enviarMediosPaqueteImper(
   sb: SupabaseClient,
   ctx: { canal: string; telefono: string; expedienteId?: string | null; agente: string; paquete: PaqueteImper }
@@ -129,32 +115,34 @@ export async function enviarMediosPaqueteImper(
   try {
     const etiqueta = ETIQUETA_PAQUETE[ctx.paquete];
     const marca = `Referencia ${etiqueta}`;
-    const medios = ((await leerManifiesto())[ctx.paquete] || []).slice(0, MAX_IMAGENES_POR_PAQUETE);
-    if (medios.length === 0 || (await yaEnviado(sb, ctx.expedienteId, marca))) return 0;
+    const fotos = fotosParaEnviar((await cargarProductosImper(sb))[ctx.paquete]);
+    if (fotos.length === 0 || (await yaEnviado(sb, ctx.expedienteId, marca))) return 0;
 
     let enviadas = 0;
-    for (const m of medios) {
-      const res = await fetch(`${siteUrl()}/images/impermeabilizacion/${encodeURIComponent(m.archivo)}`);
+    for (const f of fotos) {
+      const res = await fetch(f.url);
       if (!res.ok) {
-        console.warn(`[Imper] No se encontró la imagen ${m.archivo} (${res.status}).`);
+        console.warn(`[Imper] No se pudo descargar la foto ${f.url} (${res.status}).`);
         continue;
       }
-      const mime = res.headers.get("content-type")?.split(";")[0] || (/\.png$/i.test(m.archivo) ? "image/png" : "image/jpeg");
+      const mime = res.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+      if (!mime.startsWith("image/")) continue;
       const buffer = Buffer.from(await res.arrayBuffer());
-      const caption = `${marca}${m.texto ? ` — ${m.texto}` : ""}`;
-      if (await enviarYRegistrar(sb, ctx, buffer, mime, m.archivo, caption)) enviadas++;
+      const pie = [f.titulo, f.descripcion].filter(Boolean).join(" · ");
+      const ext = mime.includes("png") ? "png" : "jpg";
+      if (await enviarYRegistrar(sb, ctx, buffer, mime, `${ctx.paquete}-${enviadas + 1}.${ext}`, `${marca}${pie ? ` — ${pie}` : ""}`)) enviadas++;
     }
     if (enviadas > 0 && ctx.expedienteId) {
       await registrarActividad(sb, {
         expedienteId: ctx.expedienteId,
         tipo: "mensaje",
-        titulo: `Sofía envió imágenes de referencia: ${etiqueta}`,
-        detalle: `${enviadas} imagen(es) enviadas al elegir el paquete.`,
+        titulo: `Sofía envió fotos del producto: ${etiqueta}`,
+        detalle: `${enviadas} foto(s) del catálogo enviadas al elegir el paquete.`,
       });
     }
     return enviadas;
   } catch (err) {
-    console.error("[Imper] Error al enviar imágenes de referencia:", err);
+    console.error("[Imper] Error al enviar fotos del producto:", err);
     return 0;
   }
 }
