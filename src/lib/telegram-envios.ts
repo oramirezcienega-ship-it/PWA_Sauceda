@@ -53,3 +53,34 @@ export async function enviarFotosTelegram(params: {
     return { enviadas: 0, error: err?.message };
   }
 }
+
+/**
+ * Envía un documento (p. ej. un PDF generado en memoria) como archivo adjunto.
+ * El caption admite HTML de Telegram (máx. 1024 caracteres).
+ */
+export async function enviarDocumentoTelegram(params: {
+  botToken: string;
+  chatId: string;
+  contenido: Buffer;
+  nombreArchivo: string;
+  caption?: string;
+  inlineKeyboard?: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
+}): Promise<{ ok: boolean; messageId?: number; error?: string }> {
+  try {
+    const form = new FormData();
+    form.append("chat_id", params.chatId);
+    form.append("document", new Blob([new Uint8Array(params.contenido)], { type: "application/pdf" }), params.nombreArchivo);
+    if (params.caption) {
+      form.append("caption", params.caption);
+      form.append("parse_mode", "HTML");
+    }
+    if (params.inlineKeyboard?.length) {
+      form.append("reply_markup", JSON.stringify({ inline_keyboard: params.inlineKeyboard }));
+    }
+    const r = await fetch(`https://api.telegram.org/bot${params.botToken}/sendDocument`, { method: "POST", body: form });
+    const d = await r.json();
+    return d.ok ? { ok: true, messageId: d.result?.message_id } : { ok: false, error: d.description || "Error al enviar el documento." };
+  } catch (err: any) {
+    return { ok: false, error: err?.message };
+  }
+}
