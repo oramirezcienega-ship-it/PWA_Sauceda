@@ -221,8 +221,8 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                                   📝 Plantilla: {nombrePlantilla}
                                 </span>
                                 {campana && (
-                                  <span className={`px-1.5 py-0.5 rounded font-semibold ${esCliente ? "bg-amber-100 text-amber-800" : "bg-amber-400/20 text-amber-200"}`}>
-                                    📢 {campana}
+                                  <span className={`px-2 py-0.5 rounded-md font-bold border ${esCliente ? "bg-purple-100 text-purple-900 border-purple-300" : "bg-purple-900/50 text-purple-200 border-purple-400/50"}`}>
+                                    📢 Campaña: {campana.replace(/^Campaña:\s*/i, "")}
                                   </span>
                                 )}
                               </div>
@@ -268,8 +268,8 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                                       📝 Plantilla: {nombreP}
                                     </span>
                                     {camp && (
-                                      <span className={`px-1.5 py-0.5 rounded font-semibold ${esCliente ? "bg-amber-100 text-amber-800" : "bg-amber-400/20 text-amber-200"}`}>
-                                        📢 {camp}
+                                      <span className={`px-2 py-0.5 rounded-md font-bold border ${esCliente ? "bg-purple-100 text-purple-900 border-purple-300" : "bg-purple-900/50 text-purple-200 border-purple-400/50"}`}>
+                                        📢 Campaña: {camp.replace(/^Campaña:\s*/i, "")}
                                       </span>
                                     )}
                                   </div>
@@ -400,14 +400,44 @@ export function ConversacionHistorica({ telefono }: { telefono: string }) {
                   })}
                   {!esCliente && m.estado && (
                     <span
-                      className={`ml-1 text-[8px] font-sans font-semibold uppercase ${
+                      className={`ml-1 text-[9px] font-sans font-semibold uppercase inline-flex items-center gap-0.5 ${
                         m.estado === "error"
                           ? "text-red-700 font-bold bg-red-50 px-1 py-0.5 rounded border border-red-200 cursor-help"
+                          : m.estado === "read"
+                          ? "text-sky-600 font-bold cursor-help"
                           : "opacity-75"
                       }`}
-                      title={m.errorDetalle || (m.estado === "error" ? "Error al enviar mensaje" : "")}
+                      title={
+                        m.estado === "read" && m.leidoAt
+                          ? `Leído a las ${new Date(m.leidoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: true })}`
+                          : m.estado === "delivered" && m.entregadoAt
+                          ? `Entregado a las ${new Date(m.entregadoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: true })}`
+                          : m.errorDetalle || (m.estado === "error" ? "Error al enviar mensaje" : "")
+                      }
                     >
-                      · {m.estado === "read" ? "leído" : m.estado === "delivered" ? "entregado" : m.estado === "error" ? (m.errorDetalle ? `error: ${m.errorDetalle}` : "error") : "enviado"}
+                      {m.estado === "read" ? (
+                        <>
+                          <span className="text-sky-600 font-bold">✓✓</span>
+                          <span>leído</span>
+                          {m.leidoAt && (
+                            <span className="font-mono text-[8px] text-sky-700 font-normal">
+                              ({new Date(m.leidoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: true })})
+                            </span>
+                          )}
+                        </>
+                      ) : m.estado === "delivered" ? (
+                        <>
+                          <span className="font-bold">✓✓</span>
+                          <span>entregado</span>
+                        </>
+                      ) : m.estado === "error" ? (
+                        m.errorDetalle ? `error: ${m.errorDetalle}` : "error"
+                      ) : (
+                        <>
+                          <span>✓</span>
+                          <span>enviado</span>
+                        </>
+                      )}
                     </span>
                   )}
                 </span>

@@ -93,6 +93,20 @@ function horaCorta(iso: string): string {
   });
 }
 
+function horaSolo(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("es-MX", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "";
+  }
+}
+
 function Countdown24h({
   ultimoInboundFecha,
   ventanaAbierta,
@@ -212,8 +226,8 @@ function renderizarPlantillaBlock(
           📝 Plantilla: {plantillaObj ? plantillaObj.nombre : nombrePlantilla}
         </span>
         {campana && (
-          <span className="text-sauce bg-sauce/10 px-1.5 py-0.5 rounded border border-sauce/20 font-semibold">
-            📢 {campana}
+          <span className="bg-purple-100 text-purple-900 border border-purple-300 px-2 py-0.5 rounded-md font-bold shadow-2xs">
+            📢 Campaña: {campana.replace(/^Campaña:\s*/i, "")}
           </span>
         )}
       </div>
@@ -2000,6 +2014,13 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           : "bg-white border border-carbon/5 text-carbon"
                       }`}
                     >
+                      {m.campanaOrigen && !m.texto.startsWith("[plantilla:") && !m.texto.startsWith("[Plantilla:") && !m.texto.includes("[Campaña:") && (
+                        <div className="mb-1.5 select-none">
+                          <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-2xs">
+                            📢 Campaña: {m.campanaOrigen}
+                          </span>
+                        </div>
+                      )}
                       {renderizarContenidoMensaje(m.texto, plantillas, (url, caption) =>
                         setFotoAmpliada({ url, caption, rotacion: 0 })
                       )}
@@ -2015,17 +2036,33 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         {m.direccion === "out" && m.agente && `${m.agente} · `}
                         {horaCorta(m.fecha)}
                         {m.direccion === "out" && m.estado === "read" && (
-                          <span className="ml-1 font-bold text-sky-300" title="Leído">
-                            ✓✓
+                          <span
+                            className="ml-1 font-bold text-sky-300 inline-flex items-center gap-0.5 cursor-help"
+                            title={m.leidoAt ? `Leído a las ${horaSolo(m.leidoAt)}` : "Leído"}
+                          >
+                            <span>✓✓</span>
+                            {m.leidoAt && (
+                              <span className="text-[9px] opacity-90 font-normal font-sans ml-0.5">
+                                ({horaSolo(m.leidoAt)})
+                              </span>
+                            )}
                           </span>
                         )}
                         {m.direccion === "out" && m.estado === "delivered" && (
-                          <span className="ml-1 font-bold text-crema/70" title="Entregado">
-                            ✓✓
+                          <span
+                            className="ml-1 font-bold text-crema/70 inline-flex items-center gap-0.5 cursor-help"
+                            title={m.entregadoAt ? `Entregado a las ${horaSolo(m.entregadoAt)}` : "Entregado"}
+                          >
+                            <span>✓✓</span>
+                            {m.entregadoAt && (
+                              <span className="text-[9px] opacity-75 font-normal font-sans ml-0.5">
+                                ({horaSolo(m.entregadoAt)})
+                              </span>
+                            )}
                           </span>
                         )}
                         {m.direccion === "out" && m.estado === "enviado" && (
-                          <span className="ml-1 font-bold text-crema/70" title="Enviado">
+                          <span className="ml-1 font-bold text-crema/70 cursor-help" title="Enviado a Meta">
                             ✓
                           </span>
                         )}

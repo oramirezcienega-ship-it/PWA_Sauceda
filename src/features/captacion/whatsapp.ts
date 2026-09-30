@@ -659,21 +659,47 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
         if (estadoMeta === "delivered") nuevoEstado = "delivered";
         if (estadoMeta === "read") nuevoEstado = "read";
         let errorTxt = "";
+        let errorCode: number | null = null;
         if (estadoMeta === "failed") {
           if (status.errors && status.errors.length > 0) {
             const errObj = status.errors[0];
-            const errorCode = errObj.code || null;
+            errorCode = errObj.code || null;
             errorTxt = interpretarErrorMeta(errorCode ?? undefined, errObj.message || errObj.title);
           }
           nuevoEstado = errorTxt ? `error:${errorTxt}` : "error";
         }
 
-        // 1. Actualizar en mensajes_whatsapp
+        // 1. Actualizar en mensajes_whatsapp con trazabilidad de lectura y entrega
+        const updatePayload: Record<string, any> = { estado: nuevoEstado };
+        if (estadoMeta === "read") {
+          if (status.timestamp) {
+            const unixSec = parseInt(status.timestamp, 10);
+            updatePayload.leido_at = !isNaN(unixSec)
+              ? new Date(unixSec * 1000).toISOString()
+              : new Date().toISOString();
+          } else {
+            updatePayload.leido_at = new Date().toISOString();
+          }
+        } else if (estadoMeta === "delivered") {
+          if (status.timestamp) {
+            const unixSec = parseInt(status.timestamp, 10);
+            updatePayload.entregado_at = !isNaN(unixSec)
+              ? new Date(unixSec * 1000).toISOString()
+              : new Date().toISOString();
+          } else {
+            updatePayload.entregado_at = new Date().toISOString();
+          }
+        }
+        if (estadoMeta === "failed") {
+          if (errorTxt) updatePayload.error_detalle = errorTxt;
+          if (errorCode) updatePayload.error_codigo = errorCode;
+        }
+
         const { data: msgActualizado } = await sb
           .from("mensajes_whatsapp")
-          .update({ estado: nuevoEstado })
+          .update(updatePayload)
           .eq("wa_message_id", waMessageId)
-          .select("telefono, expediente_id, prospecto_id")
+          .select("telefono, expediente_id, prospecto_id, campana_origen, leido_at, entregado_at")
           .maybeSingle();
 
         // 1.1 Si la cita está vinculada por wa_message_id, actualizar su estado directamente

@@ -695,6 +695,12 @@ export interface MensajeChat {
   errorDetalle?: string | null;
   /** Código numérico de error retornado por Meta Graph API. */
   errorCodigo?: number | null;
+  /** Nombre de la campaña de Mautic o automatización que originó el mensaje. */
+  campanaOrigen?: string | null;
+  /** Fecha y hora exacta de lectura en WhatsApp (estado read). */
+  leidoAt?: string | null;
+  /** Fecha y hora exacta de entrega en WhatsApp (estado delivered). */
+  entregadoAt?: string | null;
 }
 
 /** Resumen de una conversación (para la lista de la bandeja). */

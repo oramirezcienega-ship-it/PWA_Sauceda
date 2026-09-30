@@ -5,6 +5,7 @@ import {
   crearActividadManual,
   listarActividadesDeExpediente,
   listarActividadesDeProspecto,
+  listarCampanasWhatsAppDeEntidad,
 } from "@/app/actions/actividades";
 import { obtenerCitasDeEntidad, type Cita } from "@/app/actions/agenda";
 import { marcarInspeccionEjecutada } from "@/app/actions/comisiones";
@@ -39,6 +40,7 @@ const ICONO_TIPO: Record<string, string> = {
   nota: "📝",
   correo: "✉️",
   mensaje: "💬",
+  campana: "📢",
   etapa: "🔀",
   creacion: "✨",
   construccion: "🏗️",
@@ -54,6 +56,7 @@ const NOMBRES_TIPO: Record<string, string> = {
   nota: "Nota / Bitácora",
   correo: "Correo Electrónico",
   mensaje: "Mensaje WhatsApp",
+  campana: "Campaña Mautic",
 };
 
 export function formatoFechaHoraSegundo(iso: string): string {
@@ -170,6 +173,59 @@ export function ActividadesConExpediente({
           estatus: estatusFinal,
         });
       });
+
+      // 3. Obtener Mensajes de Campaña (Mautic / WhatsApp)
+      try {
+        const campanasData = await listarCampanasWhatsAppDeEntidad(prospectoId, expedienteId);
+        campanasData.forEach((c) => {
+          let nombreCampana = c.campana_origen || "";
+          if (!nombreCampana) {
+            const match = c.texto.match(/\[(?:Campaña|campaña):\s*([^\]]+)\]/);
+            if (match) nombreCampana = match[1].trim();
+          }
+          if (!nombreCampana) nombreCampana = "Campaña";
+
+          const horaEnvio = new Date(c.created_at).toLocaleTimeString("es-MX", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          });
+
+          let textoTracking = "";
+          if (c.leido_at) {
+            const horaLectura = new Date(c.leido_at).toLocaleTimeString("es-MX", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            });
+            textoTracking = ` | Leído a las ${horaLectura}`;
+          } else if (c.entregado_at) {
+            const horaEntrega = new Date(c.entregado_at).toLocaleTimeString("es-MX", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            });
+            textoTracking = ` | Entregado a las ${horaEntrega}`;
+          } else {
+            textoTracking = " | Enviado";
+          }
+
+          const detalleEvento = `Mensaje de campaña [${nombreCampana}] enviado a las ${horaEnvio}${textoTracking}`;
+
+          unificadas.push({
+            id: `camp-${c.id}`,
+            origen: "actividad",
+            tipo: "campana",
+            titulo: `📢 Campaña: ${nombreCampana}`,
+            detalle: detalleEvento,
+            fechaISO: c.created_at,
+            responsable: c.agente || "Mautic Automatización",
+            estatus: c.leido_at ? "completada" : "pendiente",
+          });
+        });
+      } catch (errCamp) {
+        console.warn("No se pudieron cargar eventos de campaña para el timeline:", errCamp);
+      }
 
       // Ordenar cronológicamente descendente (más recientes / próximas primero)
       unificadas.sort((a, b) => new Date(b.fechaISO).getTime() - new Date(a.fechaISO).getTime());
@@ -437,21 +493,33 @@ export function ActividadesConExpediente({
                     </h4>
 
                     {/* Badge Tipo */}
-                    <span className="rounded-md bg-carbon/5 px-2 py-0.5 text-[10px] font-semibold text-carbon/70 uppercase">
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                        item.tipo === "campana"
+                          ? "bg-purple-100 text-purple-900 border border-purple-300 font-bold"
+                          : "bg-carbon/5 text-carbon/70"
+                      }`}
+                    >
                       {NOMBRES_TIPO[item.tipo] || item.tipo}
                     </span>
 
                     {/* Badge Estatus */}
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                        item.estatus === "completada"
+                        item.tipo === "campana" && item.estatus === "completada"
+                          ? "bg-sky-100 text-sky-800 border border-sky-300"
+                          : item.estatus === "completada"
                           ? "bg-emerald-100 text-emerald-800"
                           : item.estatus === "cancelada"
                           ? "bg-rose-100 text-rose-800"
-                          : "bg-amber-100 text-amber-800 animate-pulse"
+                          : "bg-amber-100 text-amber-800"
                       }`}
                     >
-                      {item.estatus === "completada"
+                      {item.tipo === "campana"
+                        ? item.estatus === "completada"
+                          ? "✓✓ Leído por el cliente"
+                          : "⏳ Enviado / Pendiente lectura"
+                        : item.estatus === "completada"
                         ? "🟢 Completada"
                         : item.estatus === "cancelada"
                         ? "🔴 Cancelada"

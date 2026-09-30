@@ -45,6 +45,9 @@ interface FilaMsg {
   agente: string;
   created_at: string;
   finalizado?: boolean;
+  campana_origen?: string | null;
+  leido_at?: string | null;
+  entregado_at?: string | null;
 }
 
 /** Extrae el estado limpio y el motivo de error codificado en la columna estado. */
@@ -599,6 +602,9 @@ export async function obtenerConversacion(
       agente: f.agente ?? "",
       fecha: f.created_at,
       errorDetalle: parsed.errorDetalle,
+      campanaOrigen: f.campana_origen || null,
+      leidoAt: f.leido_at || null,
+      entregadoAt: f.entregado_at || null,
     };
   });
 

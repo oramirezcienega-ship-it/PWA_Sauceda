@@ -82,3 +82,53 @@ export async function crearActividadManual(datos: {
   const sb = supabaseServidor();
   await registrarActividad(sb, datos);
 }
+
+export interface MensajeCampanaTimeline {
+  id: string;
+  campana_origen: string | null;
+  texto: string;
+  created_at: string;
+  leido_at: string | null;
+  entregado_at: string | null;
+  estado: string;
+  agente: string;
+}
+
+/** Devuelve los mensajes de campañas de WhatsApp (Mautic / automatizaciones) vinculados a la entidad */
+export async function listarCampanasWhatsAppDeEntidad(
+  prospectoId?: string | null,
+  expedienteId?: string | null,
+): Promise<MensajeCampanaTimeline[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  const filtros: string[] = [];
+  if (expedienteId) filtros.push(`expediente_id.eq.${expedienteId}`);
+  if (prospectoId) filtros.push(`prospecto_id.eq.${prospectoId}`);
+
+  if (filtros.length === 0) return [];
+
+  const { data, error } = await sb
+    .from("mensajes_whatsapp")
+    .select("id, campana_origen, texto, created_at, leido_at, entregado_at, estado, agente")
+    .eq("direccion", "out")
+    .or(filtros.join(","))
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.warn("No se pudieron cargar mensajes de campaña:", error.message);
+    return [];
+  }
+
+  // Filtrar los que tengan campana_origen o contengan la etiqueta [Campaña:
+  const items = (data || []).filter(
+    (m: any) =>
+      Boolean(m.campana_origen) ||
+      m.texto?.includes("[Campaña:") ||
+      m.texto?.includes("[campaña:")
+  );
+
+  return items as MensajeCampanaTimeline[];
+}
+
