@@ -37,6 +37,7 @@ import type {
   ConversacionResumen,
 } from "@/lib/types";
 import { labelTipoNegocio } from "@/lib/types";
+import { visualNegocio } from "@/lib/negocios-visual";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
@@ -108,12 +109,32 @@ function horaSolo(iso: string): string {
   }
 }
 
+/** Milisegundos que le quedan a la ventana de 24 h (Infinity si no aplica o ya expiró). */
+function msRestantesVentana(c: { ultimoInboundFecha: string | null; ventanaAbierta: boolean }): number {
+  if (!c.ventanaAbierta || !c.ultimoInboundFecha) return Infinity;
+  const t = new Date(c.ultimoInboundFecha).getTime();
+  if (Number.isNaN(t)) return Infinity;
+  const resto = t + 24 * 60 * 60 * 1000 - Date.now();
+  return resto > 0 ? resto : Infinity;
+}
+
+/** Nivel de urgencia según lo que falta para que venza la ventana de 24 h. */
+function nivelUrgencia(ms: number): "critica" | "alta" | "media" | "normal" {
+  const h = ms / 3_600_000;
+  if (h < 2) return "critica";
+  if (h < 6) return "alta";
+  if (h < 12) return "media";
+  return "normal";
+}
+
 function Countdown24h({
   ultimoInboundFecha,
   ventanaAbierta,
+  grande = false,
 }: {
   ultimoInboundFecha: string | null;
   ventanaAbierta: boolean;
+  grande?: boolean;
 }) {
   const [tiempoRestante, setTiempoRestante] = useState<string>("");
   const [colorClass, setColorClass] = useState<string>("bg-carbon/10 text-carbon/50");
@@ -160,14 +181,16 @@ function Countdown24h({
 
   return (
     <span
-      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] tracking-wide uppercase ${colorClass}`}
+      className={`shrink-0 rounded-full tracking-wide uppercase ${
+        grande ? "px-2.5 py-1 text-xs font-bold" : "px-2 py-0.5 text-[10px]"
+      } ${colorClass}`}
       title={
         ultimoInboundFecha
-          ? `Último mensaje recibido: ${new Date(ultimoInboundFecha).toLocaleString("es-MX")}`
+          ? `Último mensaje recibido: ${new Date(ultimoInboundFecha).toLocaleString("es-MX")}. La ventana de 24 h vence ${tiempoRestante === "Expirada" ? "ya" : `en ${tiempoRestante}`}.`
           : ""
       }
     >
-      {tiempoRestante}
+      {grande && tiempoRestante !== "Expirada" ? `⏳ Vence en ${tiempoRestante}` : tiempoRestante}
     </span>
   );
 }
@@ -1096,11 +1119,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       return c.finalizado || !c.ventanaAbierta;
     }
   }).sort((a, b) => {
-    // Pendientes (último mensaje entrante sin responder) siempre primero
+    if (filtro === "abiertas") {
+      // Las ventanas de 24 h que están por vencer van siempre arriba
+      const ra = msRestantesVentana(a);
+      const rb = msRestantesVentana(b);
+      if (ra !== rb) return ra - rb;
+    }
+    // Empate (o pestaña de terminadas): pendientes primero y luego más reciente
     const aPendiente = !a.finalizado && a.ultimaDireccion === "in" ? 0 : 1;
     const bPendiente = !b.finalizado && b.ultimaDireccion === "in" ? 0 : 1;
     if (aPendiente !== bPendiente) return aPendiente - bPendiente;
-    // Dentro de cada grupo, más reciente primero
     return b.ultimaFecha.localeCompare(a.ultimaFecha);
   });
 
@@ -1436,7 +1464,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         </div>
       )}
 
-      <div className="grid h-[calc(100dvh-180px)] sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[320px_1fr]">
+      <div className="grid h-[calc(100dvh-180px)] sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[340px_1fr] lg:grid-cols-[400px_1fr] 2xl:grid-cols-[460px_1fr]">
         {/* Lista de conversaciones */}
         <div className={`overflow-y-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-2 shadow-sm ${
           sel ? "hidden sm:flex" : "flex"
@@ -1549,21 +1577,43 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 No hay conversaciones en esta pestaña.
               </p>
             ) : (
-              conversacionesFiltradas.map((c) => {
+              <>
+              {filtro === "abiertas" && (
+                <p className="px-1 pb-1.5 text-[10px] font-medium text-carbon/45 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span>↑ Ordenadas por vencimiento de la ventana de 24 h</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-600" />&lt;2h</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500" />&lt;6h</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />&lt;12h</span>
+                </p>
+              )}
+              {conversacionesFiltradas.map((c) => {
                 const fechaLeida = leidasHasta[c.telefono];
                 const leidaReciente = fechaLeida && (!c.ultimoInboundFecha || fechaLeida >= c.ultimoInboundFecha);
                 const pendiente = !c.finalizado && c.ultimaDireccion === "in" && !leidaReciente;
+                const restante = msRestantesVentana(c);
+                const urgencia = !c.finalizado && restante !== Infinity ? nivelUrgencia(restante) : "normal";
+                const negocio = visualNegocio(c.tipoNegocio);
+                const bordeUrgencia =
+                  urgencia === "critica"
+                    ? "border-l-red-600"
+                    : urgencia === "alta"
+                    ? "border-l-orange-500"
+                    : urgencia === "media"
+                    ? "border-l-amber-400"
+                    : negocio.acento;
                 return (
                 <button
                   key={c.telefono}
                   type="button"
                   onClick={() => abrir(c.telefono)}
-                  className={`flex w-full flex-col items-start px-3 py-2.5 text-left transition rounded-lg ${
+                  className={`flex w-full flex-col items-start gap-1 px-3 py-2.5 text-left transition rounded-lg border-l-4 mb-1 ${bordeUrgencia} ${
                     sel === c.telefono
-                      ? "bg-sauce/10 border-l-4 border-l-sauce"
+                      ? "bg-sauce/10 ring-1 ring-sauce/40"
+                      : urgencia === "critica"
+                      ? "bg-red-50/70 hover:bg-red-100/70"
                       : pendiente
-                      ? "bg-red-50 border-l-4 border-l-red-500 hover:bg-red-100 shadow-sm"
-                      : "border-b border-carbon/5 hover:bg-crema/40"
+                      ? "bg-rose-50 hover:bg-rose-100 shadow-sm"
+                      : "bg-white border-b border-carbon/5 hover:bg-crema/40"
                   }`}
                 >
                   <span className="flex w-full items-center justify-between gap-2">
@@ -1578,50 +1628,55 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     <Countdown24h
                       ultimoInboundFecha={c.ultimoInboundFecha}
                       ventanaAbierta={c.ventanaAbierta}
+                      grande={urgencia === "critica" || urgencia === "alta"}
                     />
                   </span>
+
+                  {/* Negocio: ícono + nombre completo (sin recortar) */}
+                  <span
+                    className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold leading-tight ${negocio.clases}`}
+                    title={`${negocio.linea} · ${negocio.nombre}`}
+                  >
+                    <span className="text-sm leading-none">{negocio.icono}</span>
+                    <span className="whitespace-normal break-words">{negocio.nombre}</span>
+                  </span>
+
                   {pendiente && (
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
                       ● Pendiente de respuesta
                     </span>
                   )}
-                  <span className={`mt-0.5 w-full truncate text-xs font-normal ${pendiente ? "text-red-600 font-medium" : "text-carbon/50"}`}>
+                  <span className={`w-full text-xs font-normal line-clamp-2 ${pendiente ? "text-red-700 font-medium" : "text-carbon/60"}`}>
                     {c.ultimoTexto || "—"}
                   </span>
-                  
-                  {/* Badges de expediente / prospecto */}
-                  <span className="flex flex-wrap gap-1 mt-1.5">
-                    {c.expedienteId && (
-                      <Link
-                        href={`/expediente/${c.expedienteId}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-sauce/10 text-verde-profundo border border-sauce/20 hover:bg-sauce/20 rounded-md px-1.5 py-0.5 text-[9px] font-mono font-medium transition cursor-pointer"
-                        title="Ver detalle del expediente"
-                      >
-                        📁 {c.expedienteId}
-                      </Link>
-                    )}
-                    {c.prospectoId && (
-                      <Link
-                        href={`/prospectos/${c.prospectoId}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-cielo/10 text-cielo border border-cielo/20 hover:bg-cielo/20 rounded-md px-1.5 py-0.5 text-[9px] font-mono font-medium transition cursor-pointer"
-                        title="Ver detalle del prospecto"
-                      >
-                        👤 {c.prospectoId}
-                      </Link>
-                    )}
-                    {c.tipoNegocio && (
-                      <span
-                        className="bg-amber-50 text-amber-900 border border-amber-200/80 rounded-md px-1.5 py-0.5 text-[9px] font-semibold truncate max-w-[150px]"
-                        title={`Tipo de negocio: ${labelTipoNegocio(c.tipoNegocio)}`}
-                      >
-                        🏷️ {labelTipoNegocio(c.tipoNegocio)}
-                      </span>
-                    )}
-                  </span>
 
-                  <span className="flex w-full items-center justify-between gap-2 mt-2">
+                  {/* Expediente / prospecto */}
+                  {(c.expedienteId || c.prospectoId) && (
+                    <span className="flex flex-wrap gap-1">
+                      {c.expedienteId && (
+                        <Link
+                          href={`/expediente/${c.expedienteId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-sauce/10 text-verde-profundo border border-sauce/20 hover:bg-sauce/20 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-medium transition cursor-pointer"
+                          title="Ver detalle del expediente"
+                        >
+                          📁 {c.expedienteId}
+                        </Link>
+                      )}
+                      {c.prospectoId && (
+                        <Link
+                          href={`/prospectos/${c.prospectoId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-cielo/10 text-cielo border border-cielo/20 hover:bg-cielo/20 rounded-md px-1.5 py-0.5 text-[10px] font-mono font-medium transition cursor-pointer"
+                          title="Ver detalle del prospecto"
+                        >
+                          👤 {c.prospectoId}
+                        </Link>
+                      )}
+                    </span>
+                  )}
+
+                  <span className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <span className="flex items-center gap-1.5 min-w-0">
                       <CanalBadge telefono={c.telefono} size="sm" />
                       <span className="font-mono text-xs font-bold text-carbon truncate">
@@ -1633,19 +1688,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     </span>
                     <span className="shrink-0">
                       {c.ultimaDireccion === "out" ? (
-                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                           ✓ {c.atiende ? `RESPONDIDO (${c.atiende})` : "RESPONDIDO"}
                         </span>
                       ) : !c.atiende || c.atiende === "" ? (
-                        <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                        <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                           NUEVA / SIN ATENDER
                         </span>
                       ) : c.atiende.toLowerCase() === "ia" ? (
-                        <span className="bg-purple-100 text-purple-800 border border-purple-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                        <span className="bg-purple-100 text-purple-800 border border-purple-200 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                           🤖 ATIENDE IA
                         </span>
                       ) : (
-                        <span className="bg-green-100 text-green-800 border border-green-200 text-[8px] px-1 rounded font-bold uppercase tracking-wider">
+                        <span className="bg-green-100 text-green-800 border border-green-200 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                           👤 {c.atiende}
                         </span>
                       )}
@@ -1653,7 +1708,8 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   </span>
                 </button>
               );
-              })
+              })}
+              </>
             )}
           </div>
         </div>
@@ -1731,21 +1787,22 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   {/* Tipo de Negocio / Servicio clasificado por Sofía */}
                   <span className="text-carbon/30 text-xs font-mono">·</span>
                   <div className="inline-flex items-center gap-1.5 flex-wrap">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs border ${
-                        detalle.tipoNegocio
-                          ? "bg-amber-50 text-amber-900 border-amber-300"
-                          : "bg-slate-100 text-carbon/50 border-carbon/15"
-                      }`}
-                      title={
-                        detalle.tipoNegocio
-                          ? `Tipo de negocio detectado por Sofía: ${detalle.tipoNegocio}`
-                          : "Sofía aún no ha clasificado el tipo de negocio"
-                      }
-                    >
-                      <span>🏷️</span>
-                      <span>{detalle.tipoNegocio ? labelTipoNegocio(detalle.tipoNegocio) : "Sin clasificar"}</span>
-                    </span>
+                    {(() => {
+                      const neg = visualNegocio(detalle.tipoNegocio);
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold shadow-2xs border ${neg.clases}`}
+                          title={
+                            detalle.tipoNegocio
+                              ? `${neg.linea} · tipo de negocio detectado por Sofía: ${neg.nombre}`
+                              : "Sofía aún no ha clasificado el tipo de negocio"
+                          }
+                        >
+                          <span className="text-sm leading-none">{neg.icono}</span>
+                          <span>{neg.nombre}</span>
+                        </span>
+                      );
+                    })()}
 
                     {/* Selector interactivo para cambiar tipo de negocio si el asesor lo requiere */}
                     <select
