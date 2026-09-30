@@ -38,7 +38,7 @@ export default async function PaginaConsejo() {
 
   return (
     <main className="min-h-screen pb-10 bg-[#F8FAFC]">
-      <div className="mx-auto max-w-6xl px-4 pt-8">
+      <div className="mx-auto w-full max-w-[1920px] px-4 sm:px-6 xl:px-8 pt-8">
         {/* Encabezado Principal */}
         <div className="mb-8">
           <h1 className="font-titular text-3xl font-black text-carbon tracking-tight flex items-center gap-2">
