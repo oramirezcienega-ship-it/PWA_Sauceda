@@ -1,7 +1,7 @@
 "use server";
 
+import { claveContratoPdf } from "@/lib/contrato-firma";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/telegram";
@@ -198,18 +198,12 @@ async function armarPaqueteOT(ordenId: string) {
       .limit(1);
     const c = contratos?.[0];
     if (c) {
-      // La página del contrato exige sesión: se reenvía la del usuario solo al propio servidor
-      const sesion = cookies()
-        .getAll()
-        .filter((k) => k.name.startsWith("sb-"))
-        .map((k) => ({ name: k.name, value: k.value }));
       bloques.push({
         clave: `contrato:${c.id}`,
         nombre: `Contrato ${c.folio}`,
         detalle: c.estado === "firmado" ? "Firmado · versión vigente" : `Generado · versión ${c.version}`,
         vista: {
-          ruta: `/ordenes-trabajo/${ordenId}/contrato/${c.id}`,
-          cookies: sesion,
+          ruta: `/contrato-pdf/${c.id}?k=${claveContratoPdf(c.id)}`,
           usarPaginaCss: true,
           esperarSelector: "[data-contrato-root]",
         },
