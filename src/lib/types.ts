@@ -1138,6 +1138,9 @@ export interface ProductoServicio {
   gama?: 'economica' | 'media' | 'premium' | 'estandar';
   activo?: boolean;
   aptoParaIa?: boolean;
+  /** PDF de la ficha técnica (Sofía lo envía sólo si el cliente lo pide). */
+  fichaTecnicaUrl?: string | null;
+  fichaTecnicaNombre?: string | null;
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }

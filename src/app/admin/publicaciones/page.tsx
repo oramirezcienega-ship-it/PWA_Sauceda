@@ -1912,7 +1912,8 @@ notify pgrst, 'reload schema';`;
                     <div>
                       {(() => {
                         const catDetectada = resolverCategoriaMarketing(
-                          `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`
+                          `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`,
+                          `${(pub.diseno_banner as any)?.campana_nombre || ""} ${pub.titulo || ""}`
                         );
                         return (
                           <div className="flex items-center justify-between gap-1 mb-1">
@@ -1985,7 +1986,8 @@ notify pgrst, 'reload schema';`;
                     {/* Sugerencia Visual (Prompt / Canva, colapsable) */}
                     {(pub.sugerencia_visual || pub.prompt_imagen_flux || (pub.diseno_banner as any)?.prompt_imagen_flux) && (() => {
                       const catDetectada = resolverCategoriaMarketing(
-                        `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`
+                        `${pub.titulo || ""} ${pub.contenido || ""} ${pub.sugerencia_visual || ""}`,
+                        `${(pub.diseno_banner as any)?.campana_nombre || ""} ${pub.titulo || ""}`
                       );
                       return (
                         <div className="border border-amber-500/20 rounded-lg overflow-hidden bg-amber-50/20">
