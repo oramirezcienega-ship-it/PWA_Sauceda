@@ -5,10 +5,11 @@ import {
   enviarComparativaImper,
   enviarMediosPaqueteImper,
   esPaqueteImper,
-  hayMediosImper,
+  hayFotosEnCatalogo,
   metrosClaros,
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
+import { cargarProductosImper, fichaProductosParaPrompt } from "@/lib/ia/catalogo-imper";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
@@ -307,8 +308,11 @@ async function obtenerSiguientesTresSlots(operadorId: string, sb: SupabaseClient
 
 /** Construye las instrucciones (system prompt) del asistente. */
 async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<string> {
-  // ¿Hay imágenes de referencia cargadas? Sólo entonces Sofía las anuncia al confirmar el paquete.
-  const hayFotosImper = (await Promise.all((["acrilico", "estandar", "premium"] as const).map((p) => hayMediosImper(p)))).some(Boolean);
+  // Productos de impermeabilización del catálogo: ficha técnica / facts para responder dudas y
+  // fotos para enviar. Sofía sólo anuncia imágenes si hay fotos cargadas y habilitadas.
+  const productosImper = await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>);
+  const hayFotosImper = hayFotosEnCatalogo(productosImper);
+  const fichaImper = fichaProductosParaPrompt(productosImper);
 
   // 1. Encontrar el operador asignado o el fallback a Alex
   let operadorId = exp?.asesor_id || exp?.operador_id;
@@ -409,6 +413,12 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Ejemplo: "¡Excelente elección! El [PAQUETE] te da [GARANTÍA] de garantía por escrito.${hayFotosImper ? " Te comparto unas imágenes de referencia 👇" : ""} ¿Coordinamos la inspección técnica gratuita esta semana para confirmar medidas y dejar todo listo?"
   Mantén "paso_flujo": "paso_2". Si el cliente pregunta por precio otra vez, remítelo a la imagen comparativa ya enviada (no repitas cifras en texto) y recuerda que el monto final se confirma en la inspección.
   PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución, ofrecer meses sin intereses o pago con tarjeta. Si el cliente pregunta por formas de pago, responde que se paga en efectivo o transferencia. Si pregunta cuánto tarda, responde que el técnico lo define en la inspección según los metros y el estado de la azotea.
+
+- DUDAS TÉCNICAS SOBRE LOS PRODUCTOS:
+${fichaImper
+  ? `  Si el cliente pregunta por materiales, durabilidad, diferencias entre opciones, cómo se aplica, garantía u otros detalles técnicos, responde SOLO con la siguiente información oficial del catálogo (puedes resumirla y adaptarla a un tono cercano). Si el dato no está aquí, NO lo inventes: dile que un asesor lo confirma en la inspección técnica gratuita.
+${fichaImper}`
+  : "  Si el cliente pregunta detalles técnicos que no aparecen en este flujo, NO los inventes: dile que un asesor los confirma en la inspección técnica gratuita."}
 
 - PASO 3: CONFIRMACIÓN DE INSPECCIÓN (Al aceptar la visita)
   Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
@@ -1181,26 +1191,11 @@ export async function responderConIA(
               const paqueteCot = esPaqueteImper((datosExtraidos as any).paquete_elegido)
                 ? ((datosExtraidos as any).paquete_elegido as "acrilico" | "estandar" | "premium")
                 : "estandar";
-              const patronCatalogo = paqueteCot === "acrilico" ? "%Acríl%" : paqueteCot === "premium" ? "%4.0%" : "%Estándar%";
+              const prodCat = (await cargarProductosImper(sb).catch(() => ({}) as Awaited<ReturnType<typeof cargarProductosImper>>))[paqueteCot];
               let precioM2 = paqueteCot === "acrilico" ? 170 : paqueteCot === "premium" ? 260 : 210; // fallback si el catálogo no tiene el producto
               let costoM2 = paqueteCot === "acrilico" ? 130 : paqueteCot === "premium" ? 205 : 165; // fallback razonable
-              try {
-                const { data: prodCatalog } = await sb
-                  .from("productos_servicios")
-                  .select("costo_unitario, precio_unitario")
-                  .ilike("nombre", patronCatalogo)
-                  .eq("categoria", "impermeabilizacion")
-                  .maybeSingle();
-
-                if (prodCatalog?.costo_unitario) {
-                  costoM2 = Number(prodCatalog.costo_unitario);
-                }
-                if (prodCatalog?.precio_unitario) {
-                  precioM2 = Number(prodCatalog.precio_unitario);
-                }
-              } catch (errDb) {
-                console.error("IA: Error al buscar precio/costo en catálogo:", errDb);
-              }
+              if (prodCat?.costoM2) costoM2 = prodCat.costoM2;
+              if (prodCat?.precioM2) precioM2 = prodCat.precioM2;
 
               const precioTotal = Number(m) * precioM2;
               const costoTotal = Number(m) * costoM2;
