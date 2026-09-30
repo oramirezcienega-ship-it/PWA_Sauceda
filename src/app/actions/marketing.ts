@@ -86,7 +86,12 @@ export interface ActionResult<T> {
 
 function formatearErrorBDMarketing(err: any): string {
   const msg = err?.message || String(err || "");
-  if (msg.includes("publicaciones_programadas") || msg.includes("schema cache")) {
+  if (
+    msg.includes('relation "publicaciones_programadas" does not exist') ||
+    msg.includes('relation "public.publicaciones_programadas" does not exist') ||
+    msg.includes("table 'publicaciones_programadas' does not exist") ||
+    (msg.includes("publicaciones_programadas") && msg.includes("does not exist") && !msg.includes("column"))
+  ) {
     return "La tabla 'publicaciones_programadas' no existe en la base de datos de este entorno. Es necesario ejecutar la migración consolidada de marketing en el SQL Editor de tu Supabase.";
   }
   return msg;
@@ -517,17 +522,29 @@ export async function guardarPublicacion(
 
     let result: PublicacionProgramada;
     if (pub.id) {
-      const { data, error } = await sb
+      let { data, error } = await sb
         .from("publicaciones_programadas")
         .update(payload)
         .eq("id", pub.id)
         .select()
         .single();
 
+      if (error && (error.message?.includes("prompt_imagen_flux") || error.message?.includes("schema cache"))) {
+        const { prompt_imagen_flux, ...payloadFallback } = payload;
+        const resFallback = await sb
+          .from("publicaciones_programadas")
+          .update(payloadFallback)
+          .eq("id", pub.id)
+          .select()
+          .single();
+        data = resFallback.data;
+        error = resFallback.error;
+      }
+
       if (error) throw error;
       result = data as PublicacionProgramada;
     } else {
-      const { data, error } = await sb
+      let { data, error } = await sb
         .from("publicaciones_programadas")
         .insert({
           ...payload,
@@ -535,6 +552,20 @@ export async function guardarPublicacion(
         })
         .select()
         .single();
+
+      if (error && (error.message?.includes("prompt_imagen_flux") || error.message?.includes("schema cache"))) {
+        const { prompt_imagen_flux, ...payloadFallback } = payload;
+        const resFallback = await sb
+          .from("publicaciones_programadas")
+          .insert({
+            ...payloadFallback,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        data = resFallback.data;
+        error = resFallback.error;
+      }
 
       if (error) throw error;
       result = data as PublicacionProgramada;
@@ -756,7 +787,8 @@ export async function regenerarCreativoPublicacion(
       };
     }
 
-    const { data, error } = await sb
+    let dataActualizada: any = null;
+    const resUpdate = await sb
       .from("publicaciones_programadas")
       .update({
         url_imagen: null,
@@ -769,10 +801,33 @@ export async function regenerarCreativoPublicacion(
       .select()
       .single();
 
-    if (error) throw error;
+    if (resUpdate.error) {
+      const msg = resUpdate.error.message || "";
+      if (msg.includes("prompt_imagen_flux") || msg.includes("schema cache")) {
+        // Fallback: el prompt ya está preservado dentro de diseno_banner (JSONB)
+        const fallback = await sb
+          .from("publicaciones_programadas")
+          .update({
+            url_imagen: null,
+            estado: "aprobado",
+            diseno_banner: nuevoDisenoBanner,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (fallback.error) throw fallback.error;
+        dataActualizada = fallback.data;
+      } else {
+        throw resUpdate.error;
+      }
+    } else {
+      dataActualizada = resUpdate.data;
+    }
 
     const result: PublicacionProgramada = {
-      ...(data as PublicacionProgramada),
+      ...(dataActualizada as PublicacionProgramada),
       prompt_imagen_flux: nuevoPrompt,
     };
     const wh = await dispararWebhookN8N(result, "aprobar");
@@ -1231,11 +1286,22 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         updated_at: new Date().toISOString()
       };
 
-      const { data, error } = await sb
+      let { data, error } = await sb
         .from("publicaciones_programadas")
         .insert(payload)
         .select()
         .single();
+
+      if (error && (error.message?.includes("prompt_imagen_flux") || error.message?.includes("schema cache"))) {
+        const { prompt_imagen_flux, ...payloadFallback } = payload;
+        const resFallback = await sb
+          .from("publicaciones_programadas")
+          .insert(payloadFallback)
+          .select()
+          .single();
+        data = resFallback.data;
+        error = resFallback.error;
+      }
 
       if (error) throw error;
       publicacionesCreadas.push(data as PublicacionProgramada);
