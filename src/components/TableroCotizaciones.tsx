@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { crearCotizacion, duplicarCotizacion } from "@/app/actions/cotizaciones";
+import { crearCotizacion, duplicarCotizacion, obtenerInspeccionesSinCotizar } from "@/app/actions/cotizaciones";
 import type { Cotizacion, ServicioConstruccionTipo, CotizacionEstatus } from "@/lib/types";
 
 interface TableroCotizacionesProps {
@@ -22,6 +22,7 @@ export function TableroCotizaciones({
   
   const queryProspectoId = searchParams?.get("prospectoId") || "";
   const queryExpedienteId = searchParams?.get("expedienteId") || "";
+  const queryCitaId = searchParams?.get("citaId") || "";
   const queryCrear = searchParams?.get("crear") === "true" || searchParams?.get("crear") === "1";
 
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(cotizacionesIniciales);
@@ -38,6 +39,8 @@ export function TableroCotizaciones({
   const [fechaVisita, setFechaVisita] = useState("");
   const [inspectorId, setInspectorId] = useState("");
   const [notasInternas, setNotasInternas] = useState("");
+  const [citaId, setCitaId] = useState("");
+  const [inspecciones, setInspecciones] = useState<Awaited<ReturnType<typeof obtenerInspeccionesSinCotizar>>>([]);
   const [cargando, setCargando] = useState(false);
   const [errorForm, setErrorForm] = useState("");
   const [duplicandoId, setDuplicandoId] = useState<string | null>(null);
@@ -62,10 +65,30 @@ export function TableroCotizaciones({
     if (queryExpedienteId) {
       setExpedienteId(queryExpedienteId);
     }
+    if (queryCitaId) {
+      setCitaId(queryCitaId);
+    }
     if (queryCrear) {
       setModalAbierto(true);
     }
-  }, [queryProspectoId, queryExpedienteId, queryCrear]);
+  }, [queryProspectoId, queryExpedienteId, queryCitaId, queryCrear]);
+
+  // Inspecciones del cliente que aún no tienen cotización: la cotización debe basarse en ellas
+  useEffect(() => {
+    if (!modalAbierto || !prospectoId) {
+      setInspecciones([]);
+      return;
+    }
+    let vigente = true;
+    obtenerInspeccionesSinCotizar(prospectoId, expedienteId || null)
+      .then((lista) => {
+        if (!vigente) return;
+        setInspecciones(lista);
+        setCitaId((actual) => (lista.some((i) => i.id === actual) ? actual : (lista.length === 1 ? lista[0].id : "")));
+      })
+      .catch(() => vigente && setInspecciones([]));
+    return () => { vigente = false; };
+  }, [modalAbierto, prospectoId, expedienteId]);
 
   const handleCrear = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +96,7 @@ export function TableroCotizaciones({
       setErrorForm("Por favor, selecciona un prospecto.");
       return;
     }
-    if (requiereVisita && (!fechaVisita || !inspectorId)) {
+    if (!citaId && requiereVisita && (!fechaVisita || !inspectorId)) {
       setErrorForm("Por favor, especifica la fecha de visita y asigna un inspector.");
       return;
     }
@@ -86,9 +109,10 @@ export function TableroCotizaciones({
         expedienteId: expedienteId || null,
         servicioTipo,
         requiereVisita,
-        fechaVisita: requiereVisita ? new Date(fechaVisita).toISOString() : null,
-        inspectorId: requiereVisita ? inspectorId : null,
+        fechaVisita: !citaId && requiereVisita ? new Date(fechaVisita).toISOString() : null,
+        inspectorId: !citaId && requiereVisita ? inspectorId : null,
         notasInternas,
+        citaId: citaId || null,
       });
 
       setCotizaciones((prev) => [nueva, ...prev]);
@@ -102,6 +126,7 @@ export function TableroCotizaciones({
       setFechaVisita("");
       setInspectorId("");
       setNotasInternas("");
+      setCitaId("");
 
       // Redirect to detail page
       router.push(`/construccion/${nueva.id}`);
@@ -397,6 +422,34 @@ export function TableroCotizaciones({
                 </select>
               </div>
 
+              {inspecciones.length > 0 && (
+                <div className="border border-sauce/30 bg-sauce/5 p-4 rounded-xl space-y-2">
+                  <label className="block text-xs font-semibold text-verde-profundo uppercase">
+                    🔍 Basar en inspección del expediente
+                  </label>
+                  <select
+                    value={citaId}
+                    onChange={(e) => setCitaId(e.target.value)}
+                    className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-2 text-sm focus:border-sauce focus:outline-none"
+                  >
+                    <option value="">-- No, programar una inspección nueva --</option>
+                    {inspecciones.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {new Date(i.fecha + "T00:00:00").toLocaleDateString("es-MX", { dateStyle: "long" })} · {i.horaInicio} hrs · {i.asignado}
+                        {i.estado === "completada" ? " (realizada)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {citaId && (
+                    <p className="text-[11px] text-carbon/60">
+                      La cotización quedará ligada a esta inspección (misma fecha e inspector). Captura el resultado en la pestaña
+                      de Inspección para continuar con el presupuesto.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!citaId && (<>
               <div className="flex items-center gap-2 py-2">
                 <input
                   type="checkbox"
@@ -438,6 +491,8 @@ export function TableroCotizaciones({
                   </div>
                 </div>
               )}
+
+              </>)}
 
               <div>
                 <label className="block text-xs font-semibold text-carbon/60 uppercase mb-1">Notas Internas Iniciales</label>

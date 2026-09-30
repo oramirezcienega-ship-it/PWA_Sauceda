@@ -9,6 +9,8 @@ import {
   obtenerEstadoNotificacionCita,
   type Cita 
 } from "@/app/actions/agenda";
+import Link from "next/link";
+import { obtenerCotizacionesDeProspecto, obtenerCotizacionesDeExpediente } from "@/app/actions/cotizaciones";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { 
   ModalPrevisualizarInspeccion, 
@@ -39,6 +41,7 @@ export function WidgetAgendaCitas({
 }: WidgetAgendaCitasProps) {
   const [citas, setCitas] = useState<Cita[]>([]);
   const [perfiles, setPerfiles] = useState<{ id: string; nombre: string; rol: string; telefono?: string | null }[]>([]);
+  const [cotizacionPorCita, setCotizacionPorCita] = useState<Record<string, string>>({});
   const [cargando, setCargando] = useState(true);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [tipoForm, setTipoForm] = useState<"inspeccion" | "instalacion">("inspeccion");
@@ -94,6 +97,18 @@ export function WidgetAgendaCitas({
       setCargando(true);
       const lista = await obtenerCitasDeEntidad(prospectoId, expedienteId);
       setCitas(lista);
+      try {
+        const cots = expedienteId
+          ? await obtenerCotizacionesDeExpediente(expedienteId)
+          : prospectoId
+            ? await obtenerCotizacionesDeProspecto(prospectoId)
+            : [];
+        const mapa: Record<string, string> = {};
+        cots.forEach((c) => { if (c.citaId) mapa[c.citaId] = c.id; });
+        setCotizacionPorCita(mapa);
+      } catch (e) {
+        console.error("Error al cargar cotizaciones ligadas a inspecciones:", e);
+      }
     } catch (err) {
       console.error("Error al cargar citas de la entidad:", err);
     } finally {
@@ -689,6 +704,29 @@ export function WidgetAgendaCitas({
                   }`}>
                     {c.estado === "completada" ? "✓ Ejecutada" : c.estado}
                   </span>
+
+                  {isInspeccion && !isCancelada && (
+                    cotizacionPorCita[c.id] ? (
+                      <Link
+                        href={`/construccion/${cotizacionPorCita[c.id]}`}
+                        className="rounded-lg bg-sauce/10 border border-sauce/30 px-2.5 py-1 text-[10px] font-bold text-sauce hover:bg-sauce hover:text-white transition"
+                      >
+                        📋 Ver cotización {cotizacionPorCita[c.id]}
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/construccion?${new URLSearchParams({
+                          ...(prospectoId ? { prospectoId } : {}),
+                          ...(expedienteId ? { expedienteId } : {}),
+                          citaId: c.id,
+                          crear: "1",
+                        }).toString()}`}
+                        className="rounded-lg bg-verde-profundo px-2.5 py-1 text-[10px] font-bold text-white hover:bg-sauce transition"
+                      >
+                        + Generar cotización
+                      </Link>
+                    )
+                  )}
 
                   {isInspeccion && c.estado === "completada" && (
                     <span className="inline-flex items-center gap-1 rounded-full text-[10px] font-bold px-2.5 py-0.5 bg-amber-100 border border-amber-300 text-amber-900 shadow-xs" title="Comisión fija de inspección devengada y acumulada en comisiones del asesor">
