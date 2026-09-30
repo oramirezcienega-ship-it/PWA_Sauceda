@@ -429,7 +429,7 @@ export function PipelineProspectosClient({
       {/* 1. PIPELINE DE PROSPECTOS */}
       {/* ========================================================================= */}
       {tipoPipeline === "prospectos" && (
-        <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)] w-full">
+        <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-3 pt-1 h-[calc(100vh-260px)] min-h-[420px] w-full items-stretch">
           {ETAPAS_PROSPECTO.map((etapa) => {
             const prospectosEtapa = prospectosFiltrados
               .filter((p) => p.estatus === etapa.id)
@@ -449,7 +449,7 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropProspecto(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-colors duration-150 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col min-h-0 rounded-2xl border p-3 transition-colors duration-150 ${
                   estaHover
                     ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30"
                     : esGanado
@@ -460,7 +460,7 @@ export function PipelineProspectosClient({
                 }`}
               >
                 {/* Encabezado de Columna */}
-                <div className="mb-2.5 border-b border-slate-200/80 pb-2.5 space-y-1">
+                <div className="mb-2.5 shrink-0 border-b border-slate-200/80 pb-2.5 space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <h2
                       className={`font-titular text-xs font-bold uppercase tracking-wider ${
@@ -488,7 +488,7 @@ export function PipelineProspectosClient({
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 leading-snug">
+                  <p className="text-[11px] text-slate-500 leading-snug min-h-[2.1rem] line-clamp-2" title={etapa.descripcion}>
                     {etapa.descripcion}
                   </p>
 
@@ -499,7 +499,7 @@ export function PipelineProspectosClient({
                 </div>
 
                 {/* Tarjetas de Prospectos */}
-                <div className="flex flex-1 flex-col gap-2.5 min-h-[200px]">
+                <div className="flex flex-1 flex-col gap-2.5 min-h-0 overflow-y-auto overscroll-contain scrollbar-sutil pr-1">
                   {prospectosEtapa.length === 0 && (
                     <div
                       className={`flex flex-1 items-center justify-center rounded-xl border border-dashed p-4 text-center text-xs transition ${
@@ -530,7 +530,7 @@ export function PipelineProspectosClient({
                         draggable
                         onDragStart={(e) => handleDragStart(e, p.id)}
                         onDragEnd={handleDragEnd}
-                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-colors duration-150 space-y-2 ${
+                        className={`group relative shrink-0 cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-colors duration-150 space-y-2 ${
                           siendoArrastrado
                             ? "opacity-30 border-dashed border-emerald-500 bg-emerald-50/40 shadow-none"
                             : "border-slate-200/80 hover:border-emerald-500/40 hover:shadow-md"
@@ -646,7 +646,7 @@ export function PipelineProspectosClient({
                 </div>
 
                 {/* Pie de Columna */}
-                <div className="mt-2.5 border-t border-slate-200/80 pt-1.5 text-center text-[10px] text-slate-500 font-mono">
+                <div className="mt-2.5 shrink-0 border-t border-slate-200/80 pt-1.5 text-center text-[10px] text-slate-500 font-mono">
                   Total: <span className="font-bold text-slate-800">{formatoPesos(totalValorCampana)}</span>
                 </div>
               </section>
@@ -659,7 +659,7 @@ export function PipelineProspectosClient({
       {/* 2. PIPELINE DE EXPEDIENTES */}
       {/* ========================================================================= */}
       {tipoPipeline === "expedientes" && (
-        <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-8 pt-1 min-h-[calc(100vh-280px)] w-full">
+        <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-3 pt-1 h-[calc(100vh-260px)] min-h-[420px] w-full items-stretch">
           {ETAPAS.map((etapa) => {
             const expedientesEtapa = expedientesFiltrados
               .filter((exp) => exp.etapa === etapa.id)
@@ -681,7 +681,7 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropExpediente(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col rounded-2xl border p-3 transition-colors duration-150 ${
+                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col min-h-0 rounded-2xl border p-3 transition-colors duration-150 ${
                   estaHover
                     ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30"
                     : esGanado
@@ -692,7 +692,7 @@ export function PipelineProspectosClient({
                 }`}
               >
                 {/* Encabezado de Columna */}
-                <div className="mb-2.5 border-b border-slate-200/80 pb-2.5 space-y-1">
+                <div className="mb-2.5 shrink-0 border-b border-slate-200/80 pb-2.5 space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <h2
                       className={`font-titular text-xs font-bold uppercase tracking-wider ${
@@ -720,7 +720,7 @@ export function PipelineProspectosClient({
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 leading-snug">
+                  <p className="text-[11px] text-slate-500 leading-snug min-h-[2.1rem] line-clamp-2" title={etapa.descripcion}>
                     {etapa.descripcion}
                   </p>
 
@@ -733,7 +733,7 @@ export function PipelineProspectosClient({
                 </div>
 
                 {/* Tarjetas de Expedientes */}
-                <div className="flex flex-1 flex-col gap-2.5 min-h-[200px]">
+                <div className="flex flex-1 flex-col gap-2.5 min-h-0 overflow-y-auto overscroll-contain scrollbar-sutil pr-1">
                   {expedientesEtapa.length === 0 && (
                     <div
                       className={`flex flex-1 items-center justify-center rounded-xl border border-dashed p-4 text-center text-xs transition ${
@@ -765,7 +765,7 @@ export function PipelineProspectosClient({
                         draggable
                         onDragStart={(e) => handleDragStart(e, exp.id)}
                         onDragEnd={handleDragEnd}
-                        className={`group relative cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-colors duration-150 space-y-2 ${
+                        className={`group relative shrink-0 cursor-grab active:cursor-grabbing rounded-xl border bg-white p-3 shadow-2xs transition-colors duration-150 space-y-2 ${
                           siendoArrastrado
                             ? "opacity-30 border-dashed border-emerald-500 bg-emerald-50/40 shadow-none"
                             : "border-slate-200/80 hover:border-emerald-500/40 hover:shadow-md"
@@ -890,7 +890,7 @@ export function PipelineProspectosClient({
                 </div>
 
                 {/* Pie de Columna */}
-                <div className="mt-2.5 border-t border-slate-200/80 pt-1.5 text-center text-[10px] text-slate-500 font-mono">
+                <div className="mt-2.5 shrink-0 border-t border-slate-200/80 pt-1.5 text-center text-[10px] text-slate-500 font-mono">
                   Total ({expedientesEtapa.length}):{" "}
                   <span className="font-bold text-slate-800">{formatoPesos(totalMonto)}</span>
                 </div>
