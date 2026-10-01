@@ -10,10 +10,17 @@ import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
  *
  * Los registros diarios de meta_ads_gastos son la capa de métricas. Solo al
  * aprobarse se convierten en movimientos contables (transactions): uno por mes
- * y subcuenta, ligados con origen 'meta_ads' para no duplicarse.
+ * y subcuenta, ligados con origen 'meta_ads' para no duplicarse. Los registros
+ * aplicados quedan en APLICADO_CRM con su transaction_id; los RECHAZADO no se importan.
  */
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Estatus de meta_ads_gastos (restricción meta_ads_gastos_estatus_contable_check). */
+const ESTATUS_APLICADO = "APLICADO_CRM";
+const ESTATUS_RECHAZADO = "RECHAZADO";
+const estaAplicado = (estatus: string | null, transactionId: string | null) =>
+  Boolean(transactionId) && (estatus === ESTATUS_APLICADO || estatus === "CONTABILIZADO");
 
 export interface CentroCostos {
   id: string;
@@ -88,7 +95,7 @@ export interface GrupoImportacionMeta {
   gasto: number;
   impresiones: number;
   clics: number;
-  /** Monto ya contabilizado en Finanzas para este mes y subcuenta. */
+  /** Monto ya aplicado (APLICADO_CRM) en Finanzas para este mes y subcuenta. */
   contabilizado: number;
   /** Registros diarios todavía sin contabilizar. */
   pendientes: number;
@@ -121,11 +128,11 @@ export async function listarMesesMetaAds(): Promise<MesMeta[]> {
   const meses = new Map<string, MesMeta>();
   for (const r of data || []) {
     const mes = String(r.fecha_inicio || "").slice(0, 7);
-    if (!mes) continue;
+    if (!mes || r.estatus_contable === ESTATUS_RECHAZADO) continue;
     const g = meses.get(mes) || { mes, gasto: 0, contabilizado: 0, registrosPendientes: 0 };
     const gasto = Number(r.gasto || 0);
     g.gasto += gasto;
-    if (r.estatus_contable === "CONTABILIZADO" && r.transaction_id) g.contabilizado += gasto;
+    if (estaAplicado(r.estatus_contable, r.transaction_id)) g.contabilizado += gasto;
     else g.registrosPendientes += 1;
     meses.set(mes, g);
   }
@@ -158,6 +165,7 @@ export async function previsualizarImportacionMeta(mes: string): Promise<GrupoIm
 
   const grupos = new Map<string, GrupoImportacionMeta & { _campanas: Set<string> }>();
   for (const f of filas || []) {
+    if (f.estatus_contable === ESTATUS_RECHAZADO) continue;
     const codigo = f.codigo_subcuenta || "SIN-SUBCUENTA";
     const sub = subPorCodigo.get(codigo);
     const g =
@@ -186,7 +194,7 @@ export async function previsualizarImportacionMeta(mes: string): Promise<GrupoIm
     g.impresiones += Number(f.impresiones || 0);
     g.clics += Number(f.clics || 0);
     if (f.campaign_name) g._campanas.add(f.campaign_name);
-    if (f.estatus_contable === "CONTABILIZADO" && f.transaction_id) {
+    if (estaAplicado(f.estatus_contable, f.transaction_id)) {
       g.contabilizado += gasto;
       g.transactionId = g.transactionId || f.transaction_id;
     } else {
@@ -208,7 +216,7 @@ export async function previsualizarImportacionMeta(mes: string): Promise<GrupoIm
 /**
  * Aprueba el gasto de Meta Ads de un mes: crea o actualiza un movimiento por
  * subcuenta (origen meta_ads, id "YYYY-MM|subcuenta") con el total del mes y
- * marca los registros diarios como CONTABILIZADO ligados a ese movimiento.
+ * marca los registros diarios como APLICADO_CRM ligados a ese movimiento.
  */
 export async function aprobarImportacionMeta(datos: {
   mes: string;
@@ -291,11 +299,12 @@ export async function aprobarImportacionMeta(datos: {
       const { error: errMeta } = await sb
         .from("meta_ads_gastos")
         .update({
-          estatus_contable: "CONTABILIZADO",
+          estatus_contable: ESTATUS_APLICADO,
           transaction_id: transactionId,
           updated_at: new Date().toISOString(),
         })
         .eq("codigo_subcuenta", g.codigoSubcuenta)
+        .neq("estatus_contable", ESTATUS_RECHAZADO)
         .gte("fecha_inicio", inicio)
         .lte("fecha_inicio", fin);
       if (errMeta) throw new Error(errMeta.message);

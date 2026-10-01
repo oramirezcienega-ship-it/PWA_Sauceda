@@ -230,7 +230,7 @@ export function ModalImportarMetaAds({ abierto, onCerrar, onImportado, moneyAcco
 
         <p className="text-[10px] text-slate-400 mt-2">
           Si ya existe el movimiento del mes para una subcuenta, se actualiza con el total (no se duplica) y los registros
-          diarios quedan marcados como CONTABILIZADO.
+          diarios quedan marcados como APLICADO_CRM (los RECHAZADO no se importan).
         </p>
 
         <div className="flex items-center justify-between gap-3 pt-4 mt-4 border-t border-slate-100">
