@@ -11,6 +11,8 @@ interface Props {
   estado: string;
   /** Clase de la fuente serif de títulos (Cormorant Garamond). */
   claseTitulos?: string;
+  /** A dónde regresar si la vista se abrió en una pestaña nueva (sin historial). */
+  urlRegreso?: string;
 }
 
 const ESTILOS = `
@@ -27,9 +29,19 @@ const ESTILOS = `
 }
 `;
 
-export function ContratoDocumento({ datos: d, estado, claseTitulos = "" }: Props) {
+export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegreso }: Props) {
   const [montado, setMontado] = useState(false);
-  useEffect(() => setMontado(true), []);
+  const [puedeRegresar, setPuedeRegresar] = useState(Boolean(urlRegreso));
+  useEffect(() => {
+    setMontado(true);
+    if (window.history.length > 1) setPuedeRegresar(true);
+  }, []);
+
+  // En móvil (sobre todo la app instalada) no hay barra del navegador para salir
+  const regresar = () => {
+    if (window.history.length > 1) window.history.back();
+    else if (urlRegreso) window.location.href = urlRegreso;
+  };
 
   // Nombre sugerido del PDF al guardar
   useEffect(() => {
@@ -55,15 +67,24 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "" }: Props
       <style>{ESTILOS}</style>
 
       {/* Barra (no se imprime) */}
-      <div data-contrato-barra className="sticky top-0 z-10 bg-verde-profundo text-crema px-4 py-2.5 flex items-center justify-between gap-3">
-        <div className="text-xs font-cuerpo">
+      <div data-contrato-barra className="sticky top-0 z-10 bg-verde-profundo text-crema px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] flex items-center justify-between gap-3">
+        {puedeRegresar && (
+          <button
+            type="button"
+            onClick={regresar}
+            className="shrink-0 border border-crema/40 px-3 py-1.5 rounded-lg text-xs font-bold"
+          >
+            ← Volver
+          </button>
+        )}
+        <div className="min-w-0 flex-1 text-xs font-cuerpo">
           <span className="font-bold">{d.folio}</span> · versión {d.version} ·{" "}
           <span className="uppercase tracking-wider text-dorado">{estado}</span>
         </div>
         <button
           type="button"
           onClick={() => window.print()}
-          className="bg-dorado text-verde-profundo px-4 py-1.5 rounded-lg text-xs font-bold"
+          className="shrink-0 bg-dorado text-verde-profundo px-4 py-1.5 rounded-lg text-xs font-bold"
         >
           🖨️ Imprimir / Guardar PDF
         </button>
