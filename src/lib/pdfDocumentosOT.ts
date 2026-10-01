@@ -223,3 +223,117 @@ export function generarPdfRecibo(r: {
   pie(doc, "Recibo digital emitido por Sauceda Soluciones Inmobiliarias y Construcción.");
   return doc;
 }
+
+/** Remisión / factura de la orden: datos de entrega, conceptos y total. */
+export function generarPdfRemision(r: {
+  folio: string;
+  tipo: string;
+  fecha: string;
+  clienteNombre: string;
+  folioOT: string;
+  cotizacionId?: string | null;
+  personaRecibe?: string | null;
+  direccionEntrega?: string | null;
+  fechaInstalacion?: string | null;
+  conceptos: Array<{ descripcion: string; cantidad: number; unidad: string; precioUnitario: number; importe: number }>;
+  subtotal: number;
+  serviciosExtra: number;
+  total: number;
+}): jsPDF {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+  const w = doc.internal.pageSize.getWidth();
+  const h = doc.internal.pageSize.getHeight();
+  const esFactura = r.tipo === "factura";
+
+  let y = encabezado(doc, esFactura ? "Factura" : "Remisión", r.folio);
+  y = cajaDatos(doc, y, [
+    ["Cliente", r.clienteNombre],
+    ["Fecha", fecha(/^\d{4}-\d{2}-\d{2}$/.test(r.fecha) ? `${r.fecha}T12:00:00` : r.fecha)],
+    ["Orden de trabajo", r.folioOT],
+    ["Cotización", r.cotizacionId || "—"],
+    ["Recibe", r.personaRecibe || r.clienteNombre],
+    ["Fecha de instalación", r.fechaInstalacion ? fecha(`${r.fechaInstalacion}T12:00:00`) : "—"],
+  ]);
+
+  if (r.direccionEntrega) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...MUTED);
+    doc.text("DIRECCIÓN DE ENTREGA / OBRA", MARGEN, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...CARBON);
+    const dir = doc.splitTextToSize(r.direccionEntrega, w - MARGEN * 2) as string[];
+    doc.text(dir, MARGEN, y + 5);
+    y += 5 + dir.length * 4.5 + 5;
+  }
+
+  // Tabla de conceptos
+  const colCant = w - MARGEN - 88;
+  const colUni = w - MARGEN - 70;
+  const colPrecio = w - MARGEN - 30;
+  const colImporte = w - MARGEN - 2;
+  const anchoDesc = colCant - MARGEN - 18;
+
+  const cabecera = () => {
+    doc.setFillColor(...VERDE_PROFUNDO);
+    doc.rect(MARGEN, y, w - MARGEN * 2, 8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text("CONCEPTO", MARGEN + 2, y + 5.3);
+    doc.text("CANT.", colCant, y + 5.3, { align: "right" });
+    doc.text("UNIDAD", colUni, y + 5.3);
+    doc.text("P. UNITARIO", colPrecio, y + 5.3, { align: "right" });
+    doc.text("IMPORTE", colImporte, y + 5.3, { align: "right" });
+    y += 11;
+  };
+  cabecera();
+
+  doc.setFontSize(8.5);
+  for (const c of r.conceptos) {
+    const lineas = doc.splitTextToSize(c.descripcion || "—", anchoDesc) as string[];
+    const alto = Math.max(1, lineas.length) * 4 + 3;
+    if (y + alto > h - 60) {
+      pie(doc, "Continúa en la siguiente hoja.");
+      doc.addPage();
+      y = 16;
+      cabecera();
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...CARBON);
+    doc.text(lineas, MARGEN + 2, y);
+    doc.text(String(c.cantidad), colCant, y, { align: "right" });
+    doc.text(c.unidad === "m2" ? "m²" : c.unidad === "m3" ? "m³" : c.unidad || "", colUni, y);
+    doc.text(pesos(c.precioUnitario), colPrecio, y, { align: "right" });
+    doc.text(pesos(c.importe), colImporte, y, { align: "right" });
+    y += alto;
+    doc.setDrawColor(...BORDE);
+    doc.line(MARGEN, y - 2, w - MARGEN, y - 2);
+    y += 1.5;
+  }
+
+  // Totales
+  y += 3;
+  const filaTotal = (etq: string, val: string, destacado = false) => {
+    doc.setFont("helvetica", destacado ? "bold" : "normal");
+    doc.setFontSize(destacado ? 11 : 9);
+    doc.setTextColor(...(destacado ? VERDE_PROFUNDO : CARBON));
+    doc.text(etq, colPrecio, y, { align: "right" });
+    doc.text(val, colImporte, y, { align: "right" });
+    y += destacado ? 7 : 5.5;
+  };
+  filaTotal("Subtotal", pesos(r.subtotal));
+  if (r.serviciosExtra) filaTotal("Servicios extra", pesos(r.serviciosExtra));
+  filaTotal("Total", pesos(r.total), true);
+
+  let yFirmas = Math.max(y + 30, h - 50);
+  if (yFirmas > h - 30) {
+    doc.addPage();
+    yFirmas = 50;
+  }
+  firmas(doc, yFirmas, ["Sauceda Construye", "Entregó"], [r.personaRecibe || r.clienteNombre, "Recibió de conformidad"]);
+  pie(doc, `${esFactura ? "Factura" : "Remisión"} emitida por Sauceda Soluciones Inmobiliarias y Construcción.`);
+  return doc;
+}

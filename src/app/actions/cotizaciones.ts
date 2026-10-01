@@ -804,11 +804,16 @@ export async function guardarConceptosCotizacion(
 
   const { data: cot, error: errCot } = await sb
     .from("cotizaciones")
-    .select("prospecto_id, token, expediente_id")
+    .select("prospecto_id, token, expediente_id, estatus")
     .eq("id", cotizacionId)
     .single();
 
   if (errCot || !cot) throw new Error("Cotización no encontrada.");
+
+  // Si ya se vendió (aceptada / en instalación), ajustar conceptos no debe
+  // regresarla a "pendiente de aprobación": rompería el enlace del cliente,
+  // el contrato y el envío de documentos de la orden.
+  const yaVendida = cot.estatus === "aceptada" || cot.estatus === "instalacion";
 
   const { error: errDel } = await sb
     .from("cotizacion_conceptos")
@@ -854,7 +859,7 @@ export async function guardarConceptosCotizacion(
       aprobado_comercial_by: null,
       aprobado_operativo: false,
       aprobado_operativo_by: null,
-      estatus: "pendiente_aprobacion",
+      ...(yaVendida ? {} : { estatus: "pendiente_aprobacion" }),
       updated_at: new Date().toISOString()
     })
     .eq("id", cotizacionId);
