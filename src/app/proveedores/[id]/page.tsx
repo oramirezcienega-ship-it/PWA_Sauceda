@@ -36,7 +36,7 @@ export default async function PaginaDetalleProveedor({ params }: PaginaDetallePr
   return (
     <main className="min-h-screen pb-10 bg-slate-50/30">
       <Encabezado />
-      <div className="mx-auto max-w-5xl px-4 pt-5">
+      <div className="mx-auto max-w-[1700px] px-4 sm:px-6 lg:px-8 pt-5">
         <div className="mb-4">
           <Link
             href="/proveedores"

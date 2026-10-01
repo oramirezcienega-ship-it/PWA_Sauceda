@@ -205,6 +205,30 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
     });
   }, [documentos, filtroTipo, busqueda]);
 
+  // Totales acumulados de los documentos visibles / filtrados
+  const totalesFiltrados = useMemo(() => {
+    let cantidadTotal = 0;
+    let montoTotalFiltrado = 0;
+
+    for (const d of documentosFiltrados) {
+      const cant = d.cantidad !== null && d.cantidad !== undefined ? Number(d.cantidad) : 0;
+      if (cant > 0) {
+        cantidadTotal += cant;
+      }
+      montoTotalFiltrado += Number(d.monto) || 0;
+    }
+
+    const costoPromPonderadoFiltrado =
+      cantidadTotal > 0 ? Math.round((montoTotalFiltrado / cantidadTotal) * 100) / 100 : 0;
+
+    return {
+      cantidadTotal: Math.round(cantidadTotal * 100) / 100,
+      montoTotalFiltrado,
+      costoPromPonderadoFiltrado,
+      count: documentosFiltrados.length,
+    };
+  }, [documentosFiltrados]);
+
   // Eventos de evolución cronológica
   const eventosEvolucion = useMemo(() => {
     const todosEventos: Array<{
@@ -424,10 +448,10 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                 <div className="flex items-center gap-2 flex-wrap">
                   <input
                     type="text"
-                    placeholder="Buscar folio, producto o cliente..."
+                    placeholder="Buscar folio, producto o cotización..."
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs text-carbon outline-none focus:border-sauce w-56"
+                    className="rounded-lg border border-carbon/20 px-3 py-1.5 text-xs text-carbon outline-none focus:border-sauce w-56 sm:w-72"
                   />
                   <select
                     value={filtroTipo}
@@ -461,18 +485,18 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-carbon/10">
+                <div className="overflow-x-auto rounded-xl border border-carbon/10 shadow-2xs">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-carbon/10 bg-slate-50 text-carbon/70 uppercase tracking-wider font-semibold">
-                        <th className="py-3 px-3">Tipo & Folio</th>
-                        <th className="py-3 px-3">Fecha</th>
-                        <th className="py-3 px-3">Orden / Cotización</th>
-                        <th className="py-3 px-3">Producto / Partida</th>
-                        <th className="py-3 px-3 text-right">Cantidad</th>
-                        <th className="py-3 px-3 text-right">Costo Unitario</th>
-                        <th className="py-3 px-3 text-right">Total ($ MXN)</th>
-                        <th className="py-3 px-3 text-right">Acciones</th>
+                        <th className="py-3 px-3.5 whitespace-nowrap min-w-[130px]">Tipo & Folio</th>
+                        <th className="py-3 px-3.5 whitespace-nowrap min-w-[100px]">Fecha</th>
+                        <th className="py-3 px-3.5 min-w-[140px]">Orden / Cotización</th>
+                        <th className="py-3 px-3.5 min-w-[260px]">Producto / Partida</th>
+                        <th className="py-3 px-3.5 text-right whitespace-nowrap min-w-[110px]">Cantidad</th>
+                        <th className="py-3 px-3.5 text-right whitespace-nowrap min-w-[130px]">Costo Unitario</th>
+                        <th className="py-3 px-3.5 text-right whitespace-nowrap min-w-[130px]">Total ($ MXN)</th>
+                        <th className="py-3 px-3.5 text-right whitespace-nowrap min-w-[110px]">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-carbon/10">
@@ -487,7 +511,7 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
 
                         return (
                           <tr key={d.id} className="hover:bg-sauce/5 transition-colors">
-                            <td className="py-3 px-3 whitespace-nowrap">
+                            <td className="py-3.5 px-3.5 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span
                                   className={`inline-block rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase ${
@@ -512,10 +536,10 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                                 <div className="text-[10px] text-carbon/50 font-mono">Prov: {d.folioProveedor}</div>
                               )}
                             </td>
-                            <td className="py-3 px-3 text-carbon/70 whitespace-nowrap">
+                            <td className="py-3.5 px-3.5 text-carbon/70 whitespace-nowrap font-medium">
                               {new Date(d.fecha).toLocaleDateString("es-MX")}
                             </td>
-                            <td className="py-3 px-3">
+                            <td className="py-3.5 px-3.5">
                               {d.ordenTrabajoId ? (
                                 <span className="font-mono font-semibold text-carbon/80 text-xs">
                                   {d.ordenTrabajoFolio || d.ordenTrabajoId}
@@ -531,26 +555,27 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                                 <span className="text-carbon/40 italic text-[11px]">Sin vincular</span>
                               )}
                             </td>
-                            <td className="py-3 px-3 max-w-[240px]">
-                              <div className="font-semibold text-carbon line-clamp-1" title={d.productoNombre || d.concepto}>
+                            <td className="py-3.5 px-3.5 min-w-[260px]">
+                              <div className="font-semibold text-carbon text-[13px] leading-snug" title={d.productoNombre || d.concepto}>
                                 {d.productoNombre || d.concepto || "Trabajo general"}
                               </div>
                               {d.notas && (
-                                <div className="text-[10px] text-carbon/50 line-clamp-1 italic">{d.notas}</div>
+                                <div className="text-[10.5px] text-carbon/50 line-clamp-2 italic mt-0.5">{d.notas}</div>
                               )}
                             </td>
-                            <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                            <td className="py-3.5 px-3.5 text-right font-mono whitespace-nowrap">
                               {cant !== null && cant > 0 ? (
-                                <span className="font-semibold text-carbon">
-                                  {cant} <span className="text-[10px] text-carbon/50">{d.unidad || "m²"}</span>
+                                <span className="font-semibold text-carbon text-[13px]">
+                                  {cant.toLocaleString("es-MX", { maximumFractionDigits: 2 })}{" "}
+                                  <span className="text-[10px] text-carbon/50">{d.unidad || "m²"}</span>
                                 </span>
                               ) : (
                                 <span className="text-carbon/40 text-[10px]">—</span>
                               )}
                             </td>
-                            <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                            <td className="py-3.5 px-3.5 text-right font-mono whitespace-nowrap">
                               {cUnit !== null && cUnit > 0 ? (
-                                <span className="text-emerald-800 font-semibold">
+                                <span className="text-emerald-800 font-semibold text-[13px]">
                                   ${cUnit.toFixed(2)}
                                   <span className="text-[10px] text-carbon/50">/{d.unidad || "m²"}</span>
                                 </span>
@@ -558,17 +583,17 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                                 <span className="text-carbon/40 text-[10px]">—</span>
                               )}
                             </td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-rojo whitespace-nowrap">
+                            <td className="py-3.5 px-3.5 text-right font-mono font-bold text-rojo whitespace-nowrap text-sm">
                               {formatoPesos(d.monto)}
                             </td>
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1.5">
                                 {d.archivoUrl && (
                                   <a
                                     href={d.archivoUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+                                    className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition shadow-2xs"
                                     title="Ver factura/remisión adjunta"
                                   >
                                     📎
@@ -576,13 +601,13 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                                 )}
                                 <button
                                   onClick={() => handleEditarDocumento(d)}
-                                  className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+                                  className="rounded-md bg-white border border-carbon/20 px-2.5 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition shadow-2xs"
                                 >
                                   Editar
                                 </button>
                                 <button
                                   onClick={() => handleEliminarDocumento(d.id)}
-                                  className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5 transition"
+                                  className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5 transition shadow-2xs"
                                 >
                                   ✕
                                 </button>
@@ -592,6 +617,44 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                         );
                       })}
                     </tbody>
+                    <tfoot className="border-t-2 border-carbon/20 bg-slate-100/80 font-semibold text-carbon">
+                      <tr>
+                        <td colSpan={4} className="py-3.5 px-3.5 text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="font-titular font-bold text-verde-profundo uppercase tracking-wider text-xs bg-verde-profundo/10 border border-verde-profundo/20 px-2.5 py-0.5 rounded">
+                              Totales
+                            </span>
+                            <span className="text-[11px] text-carbon/60 font-medium">
+                              {totalesFiltrados.count} {totalesFiltrados.count === 1 ? "documento" : "documentos"}
+                              {busqueda || filtroTipo !== "todos" ? " filtrados" : ""}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-3.5 text-right font-mono whitespace-nowrap">
+                          <div className="text-xs font-bold text-verde-profundo">
+                            {totalesFiltrados.cantidadTotal > 0
+                              ? `${totalesFiltrados.cantidadTotal.toLocaleString("es-MX", { maximumFractionDigits: 2 })} m²`
+                              : "—"}
+                          </div>
+                          <div className="text-[9.5px] text-carbon/50 font-normal">Superficie total</div>
+                        </td>
+                        <td className="py-3.5 px-3.5 text-right font-mono whitespace-nowrap">
+                          <div className="text-xs font-bold text-sauce">
+                            {totalesFiltrados.costoPromPonderadoFiltrado > 0
+                              ? `$${totalesFiltrados.costoPromPonderadoFiltrado.toFixed(2)}/m²`
+                              : "—"}
+                          </div>
+                          <div className="text-[9.5px] text-carbon/50 font-normal">Prom. ponderado</div>
+                        </td>
+                        <td className="py-3.5 px-3.5 text-right font-mono whitespace-nowrap">
+                          <div className="text-sm font-bold text-rojo">
+                            {formatoPesos(totalesFiltrados.montoTotalFiltrado)}
+                          </div>
+                          <div className="text-[9.5px] text-carbon/50 font-normal">Total acumulado</div>
+                        </td>
+                        <td className="py-3.5 px-3.5"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}
@@ -623,7 +686,7 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
                   {metricasProductos.map((m) => (
                     <div
                       key={m.productoNombre}
