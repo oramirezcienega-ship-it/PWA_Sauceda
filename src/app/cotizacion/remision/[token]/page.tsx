@@ -21,12 +21,21 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
 
   const { cotizacion, remision, conceptos } = data;
 
+  // Fechas "AAAA-MM-DD" a mediodía para que la zona horaria no las recorra un día
+  const formatFecha = (f?: string | null) => {
+    if (!f) return "";
+    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(f) ? `${f}T12:00:00` : f);
+    return Number.isNaN(d.getTime()) ? f : d.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  };
+
   const formatMoneda = (val: number) => {
     return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
   };
 
   return (
-    <main className="min-h-screen bg-slate-100 py-10 px-4 print:bg-white print:py-0 print:px-0 flex flex-col items-center">
+    <main className="min-h-screen bg-slate-100 py-10 px-4 print:min-h-0 print:bg-white print:py-0 print:px-0 flex flex-col items-center print:block">
+      {/* Una sola hoja carta al imprimir */}
+      <style>{`@page { size: letter; margin: 12mm 14mm; } @media print { html, body { background: #fff !important; } }`}</style>
       {/* Botón flotante para imprimir */}
       <div className="w-full max-w-3xl flex justify-between items-center mb-6 print:hidden">
         <Link
@@ -39,9 +48,9 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
       </div>
 
       {/* Contenedor de la remisión - Formato Carta */}
-      <div className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg print:shadow-none print:border-none print:p-0 print:max-w-none text-carbon font-cuerpo">
+      <div className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg print:shadow-none print:border-none print:p-0 print:max-w-none print:rounded-none text-carbon font-cuerpo">
         {/* Encabezado Opcional/Identidad */}
-        <div className="border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
+        <div className="border-b-2 border-sauce pb-6 mb-8 print:pb-4 print:mb-5 flex justify-between items-end">
           <div>
             <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo uppercase">SAUCEDA</h1>
             <p className="font-titular text-xs font-semibold tracking-wider text-sauce uppercase mt-0.5">Construye</p>
@@ -51,12 +60,12 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
               {remision.tipo === "factura" ? "FACTURA DE VENTA" : "REMISIÓN DE ENTREGA"}
             </h2>
             <div className="font-mono text-sm font-bold text-sauce mt-0.5">Folio: {remision.folio}</div>
-            <div className="text-xs text-carbon/50 mt-1">Fecha: {new Date(remision.fecha).toLocaleDateString()}</div>
+            <div className="text-xs text-carbon/50 mt-1">Fecha: {formatFecha(remision.fecha)}</div>
           </div>
         </div>
 
         {/* Datos del Cliente y Entrega */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs border-b pb-6 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 text-xs border-b pb-6 mb-6 print:pb-4 print:mb-4">
           <div className="space-y-1.5">
             <h4 className="font-bold text-carbon/50 uppercase text-[10px] tracking-wider">Cliente</h4>
             <div className="font-semibold text-sm text-verde-profundo">{cotizacion.prospectoNombre}</div>
@@ -71,13 +80,13 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
               <div className="text-carbon/70">Recibe: {remision.datosDocumento.personaRecibe}</div>
             )}
             {remision.datosDocumento.fechaInstalacion && (
-              <div className="text-carbon/70">Fecha programada: {new Date(remision.datosDocumento.fechaInstalacion).toLocaleDateString()}</div>
+              <div className="text-carbon/70">Fecha programada: {formatFecha(remision.datosDocumento.fechaInstalacion)}</div>
             )}
           </div>
         </div>
 
         {/* Tabla de Conceptos */}
-        <div className="mb-8">
+        <div className="mb-8 print:mb-4">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-carbon/10 text-carbon/60 uppercase font-semibold text-[10px] tracking-wider bg-slate-50 print:bg-transparent">
@@ -103,7 +112,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
         </div>
 
         {/* Desglose de Totales */}
-        <div className="flex justify-end mb-8">
+        <div className="flex justify-end mb-8 print:mb-5 break-inside-avoid">
           <div className="w-full max-w-xs space-y-2 text-xs border-t pt-4">
             <div className="flex justify-between text-carbon/60">
               <span>Subtotal Conceptos:</span>
@@ -124,14 +133,14 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
 
         {/* Condiciones de Pago */}
         {cotizacion.condicionesPago && (
-          <div className="bg-slate-50 p-4 rounded-xl border border-carbon/5 text-xs text-carbon/70 leading-relaxed mb-12 print:bg-transparent print:border-none print:px-0">
+          <div className="bg-slate-50 p-4 rounded-xl border border-carbon/5 text-xs text-carbon/70 leading-relaxed mb-12 print:mb-4 print:bg-transparent print:border-none print:px-0 break-inside-avoid">
             <h5 className="font-bold text-carbon/90 uppercase text-[9px] tracking-wider mb-1">Condiciones de Pago:</h5>
             {cotizacion.condicionesPago}
           </div>
         )}
 
         {/* Firmas de Conformidad */}
-        <div className="mt-16 pt-8 border-t border-carbon/10 grid grid-cols-2 gap-8 text-center text-xs print:mt-24">
+        <div className="mt-16 pt-8 border-t border-carbon/10 grid grid-cols-2 gap-8 text-center text-xs print:mt-10 print:pt-4 break-inside-avoid">
           <div className="space-y-1">
             <div className="h-16 flex items-end justify-center">
               {/* Espacio para firma */}
