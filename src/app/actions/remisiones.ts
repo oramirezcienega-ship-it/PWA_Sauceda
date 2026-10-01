@@ -36,6 +36,11 @@ export interface RemisionFacturaEnriquecida {
   baseGravableComision: number;
   comisionAsesorMonto?: number;
   comisionAsesorPorcentaje?: number;
+  comisionId?: string;
+  comisionEsAjusteManual?: boolean;
+  comisionAjusteModo?: "porcentaje" | "monto" | null;
+  comisionMotivoAjuste?: string;
+  comisionMontoPagado?: number;
 
   // Datos Enriquecidos del Cliente
   clienteNombre: string;
@@ -201,7 +206,7 @@ export async function listarRemisionesFacturas(
       remisionIds.length > 0
         ? sb
             .from("comisiones")
-            .select("remision_factura_id, porcentaje_comision, monto_comision, estatus")
+            .select("id, remision_factura_id, porcentaje_comision, monto_comision, monto_pagado, estatus, es_ajuste_manual, motivo_ajuste, detalles_calculo")
             .in("remision_factura_id", remisionIds)
         : Promise.resolve({ data: [] }),
     ]);
@@ -319,6 +324,15 @@ export async function listarRemisionesFacturas(
         baseGravableComision,
         comisionAsesorMonto: comData ? Number(comData.monto_comision) : undefined,
         comisionAsesorPorcentaje: comData ? Number(comData.porcentaje_comision) : undefined,
+        comisionId: comData?.id,
+        comisionEsAjusteManual: comData ? Boolean(comData.es_ajuste_manual) : undefined,
+        comisionAjusteModo: comData?.es_ajuste_manual
+          ? comData.detalles_calculo?.ajusteModo === "porcentaje"
+            ? "porcentaje"
+            : "monto"
+          : null,
+        comisionMotivoAjuste: comData?.motivo_ajuste || undefined,
+        comisionMontoPagado: comData ? Number(comData.monto_pagado || 0) : undefined,
 
         clienteNombre: nombreCliente,
         clienteTelefono: telefonoCliente,
@@ -458,17 +472,21 @@ export async function actualizarCostosRemision(datos: {
 
     const cFin = Math.max(0, Number(datos.costoFinanciero || 0));
     const cProv = Math.max(0, Number(datos.costoProveedor || 0));
-    const cOtros = Math.max(0, Number(datos.otrosGastos || 0));
 
-    // 2. Actualizar costos en remisiones_facturas
+    // 2. Actualizar únicamente las deducciones; el cobro y los montos del
+    // documento no se tocan. otros_gastos solo se escribe si se envía.
+    const cambios: Record<string, any> = {
+      costo_financiero: cFin,
+      costo_proveedor: cProv,
+      updated_at: new Date().toISOString(),
+    };
+    if (datos.otrosGastos !== undefined) {
+      cambios.otros_gastos = Math.max(0, Number(datos.otrosGastos || 0));
+    }
+
     const { error: errUpd } = await sb
       .from("remisiones_facturas")
-      .update({
-        costo_financiero: cFin,
-        costo_proveedor: cProv,
-        otros_gastos: cOtros,
-        updated_at: new Date().toISOString(),
-      })
+      .update(cambios)
       .eq("id", datos.remisionId);
 
     if (errUpd) throw new Error(errUpd.message);
@@ -501,6 +519,219 @@ export async function actualizarCostosRemision(datos: {
   } catch (err: any) {
     console.error("Error en actualizarCostosRemision:", err);
     return { ok: false, success: false, error: err?.message || "Error al actualizar costos." };
+  }
+}
+
+export interface TasaPasarela {
+  id: string;
+  clave: string;
+  etiqueta: string;
+  porcentaje: number;
+  notas: string;
+}
+
+/**
+ * Parámetros para el editor de deducciones y comisión de una remisión:
+ * tasas de pasarela configuradas (reglas tipo 'pasarela') y el porcentaje
+ * que la regla automática asignaría al asesor.
+ */
+export async function obtenerParametrosComisionRemision(remisionId: string): Promise<{
+  ok: boolean;
+  tasasPasarela: TasaPasarela[];
+  porcentajeRegla: number;
+  reglaOrigen: string;
+  error?: string;
+}> {
+  const tasasPorDefecto: TasaPasarela[] = [
+    { id: "default-clip", clave: "clip", etiqueta: "Clip", porcentaje: 4.18, notas: "3.6% Clip + IVA" },
+    { id: "default-bancaria", clave: "bancaria", etiqueta: "Bancaria", porcentaje: 3.5, notas: "Terminal bancaria" },
+  ];
+
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: reglasPasarela, error: errPas } = await sb
+      .from("comisiones_reglas")
+      .select("id, clave, etiqueta, porcentaje, notas")
+      .eq("tipo", "pasarela")
+      .eq("activo", true)
+      .order("etiqueta", { ascending: true });
+
+    // Si la migración aún no se aplica, se usan las tasas por defecto
+    const tasasPasarela: TasaPasarela[] =
+      !errPas && reglasPasarela && reglasPasarela.length > 0
+        ? reglasPasarela.map((r: any) => ({
+            id: r.id,
+            clave: r.clave,
+            etiqueta: r.etiqueta,
+            porcentaje: Number(r.porcentaje || 0),
+            notas: r.notas || "",
+          }))
+        : tasasPorDefecto;
+
+    // Resolver el % de la regla automática (asesor de la comisión o del prospecto)
+    const { data: rem } = await sb
+      .from("remisiones_facturas")
+      .select("id, cotizacion_id, orden_trabajo_id")
+      .eq("id", remisionId)
+      .maybeSingle();
+
+    let asesorId: string | null = null;
+    let servicioTipo: string | null = null;
+
+    const { data: com } = await sb
+      .from("comisiones")
+      .select("asesor_id")
+      .eq("remision_factura_id", remisionId)
+      .maybeSingle();
+    asesorId = com?.asesor_id || null;
+
+    if (rem?.cotizacion_id) {
+      const { data: cot } = await sb
+        .from("cotizaciones")
+        .select("servicio_tipo, prospecto_id")
+        .eq("id", rem.cotizacion_id)
+        .maybeSingle();
+      servicioTipo = cot?.servicio_tipo || null;
+      if (!asesorId && cot?.prospecto_id) {
+        const { data: pros } = await sb
+          .from("prospectos")
+          .select("asesor_id")
+          .eq("id", cot.prospecto_id)
+          .maybeSingle();
+        asesorId = pros?.asesor_id || null;
+      }
+    }
+
+    if (!asesorId && rem?.orden_trabajo_id) {
+      const { data: ot } = await sb
+        .from("ordenes_trabajo")
+        .select("asesor_responsable_id, asesor_ejecutor_id")
+        .eq("id", rem.orden_trabajo_id)
+        .maybeSingle();
+      asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+    }
+
+    const { resolverPorcentajeComision } = await import("@/app/actions/comisiones");
+    const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({ asesorId, servicioTipo });
+
+    return { ok: true, tasasPasarela, porcentajeRegla: porcentaje, reglaOrigen };
+  } catch (err: any) {
+    return {
+      ok: false,
+      tasasPasarela: tasasPorDefecto,
+      porcentajeRegla: 5,
+      reglaOrigen: "Regla por defecto de contingencia (5.0%)",
+      error: err?.message || "Error al cargar parámetros.",
+    };
+  }
+}
+
+/**
+ * Ajusta la comisión del asesor de una remisión en particular.
+ * - automatica: quita el ajuste manual y vuelve a aplicar la regla configurada.
+ * - porcentaje: fija un % propio para esta remisión (el monto sigue a la base gravable).
+ * - monto: fija un monto de comisión exacto para esta remisión.
+ * No modifica el cobro, los recibos ni los montos del documento.
+ */
+export async function ajustarComisionAsesorRemision(datos: {
+  remisionId: string;
+  modo: "automatica" | "porcentaje" | "monto";
+  porcentaje?: number;
+  monto?: number;
+  motivo?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { sincronizarComisionParaRemision } = await import("@/app/actions/comisiones");
+
+    // Asegurar que exista la comisión de la remisión
+    let { data: com } = await sb
+      .from("comisiones")
+      .select("id, base_comisionable, monto_pagado, estatus, detalles_calculo")
+      .eq("remision_factura_id", datos.remisionId)
+      .maybeSingle();
+
+    if (!com) {
+      const resSync = await sincronizarComisionParaRemision(datos.remisionId);
+      if (!resSync.ok) return { ok: false, error: resSync.error || "No se pudo generar la comisión." };
+      const { data: creada } = await sb
+        .from("comisiones")
+        .select("id, base_comisionable, monto_pagado, estatus, detalles_calculo")
+        .eq("remision_factura_id", datos.remisionId)
+        .maybeSingle();
+      com = creada;
+    }
+
+    if (!com) return { ok: false, error: "No se encontró la comisión de la remisión." };
+
+    if (datos.modo === "automatica") {
+      const detalles = { ...(com.detalles_calculo || {}) };
+      delete detalles.ajusteModo;
+      const { error } = await sb
+        .from("comisiones")
+        .update({
+          es_ajuste_manual: false,
+          motivo_ajuste: "",
+          detalles_calculo: detalles,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", com.id);
+      if (error) throw new Error(error.message);
+      await sincronizarComisionParaRemision(datos.remisionId);
+    } else {
+      const motivo = (datos.motivo || "").trim();
+      if (!motivo) return { ok: false, error: "Indique el motivo del ajuste de comisión." };
+
+      const base = Number(com.base_comisionable || 0);
+      let porcentaje: number;
+      let monto: number;
+
+      if (datos.modo === "porcentaje") {
+        porcentaje = Math.max(0, Math.min(100, Number(datos.porcentaje || 0)));
+        monto = Math.round(base * (porcentaje / 100) * 100) / 100;
+      } else {
+        monto = Math.max(0, Math.round(Number(datos.monto || 0) * 100) / 100);
+        porcentaje = base > 0 ? Math.min(100, Math.round((monto / base) * 10000) / 100) : 0;
+      }
+
+      const pagado = Number(com.monto_pagado || 0);
+      const estatus =
+        com.estatus === "cancelada"
+          ? "cancelada"
+          : pagado >= monto
+          ? "pagada"
+          : pagado > 0
+          ? "parcial"
+          : "pendiente";
+
+      const { error } = await sb
+        .from("comisiones")
+        .update({
+          porcentaje_comision: porcentaje,
+          monto_comision: monto,
+          saldo_pendiente: Math.max(0, monto - pagado),
+          estatus,
+          es_ajuste_manual: true,
+          motivo_ajuste: motivo,
+          detalles_calculo: {
+            ...(com.detalles_calculo || {}),
+            ajusteModo: datos.modo,
+            fechaAjuste: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", com.id);
+      if (error) throw new Error(error.message);
+    }
+
+    revalidatePath("/remisiones");
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al ajustar la comisión." };
   }
 }
 

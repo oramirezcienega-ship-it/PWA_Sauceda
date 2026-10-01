@@ -1,5 +1,6 @@
 "use client";
 
+import { PanelEnvioOTTelegram } from "./PanelEnvioOTTelegram";
 import { cambiarEstatusOTConContrato } from "@/lib/estatus-ot-cliente";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -217,27 +218,14 @@ export function DetalleOrdenTrabajo({
         setProgresoFotos({ actual: i + 1, total });
         const file = files[i];
         const formData = new FormData();
-        formData.append("file", file);
-        formData.append("ordenTrabajoId", orden.id);
+        formData.append("foto", file);
         formData.append("etapa", fotoEtapa);
-
-        const res = await fetch("/api/ordenes-trabajo/fotos", {
-          method: "POST",
-          body: formData,
-        });
-        if (!res.ok) {
-          throw new Error("Fallo al subir la fotografía");
-        }
-        const data = await res.json();
-        await agregarEvidenciaFotoOT(orden.id, {
-          url: data.url,
-          fecha: new Date().toISOString(),
-          etapa: fotoEtapa,
-        });
+        const res = await agregarEvidenciaFotoOT(orden.id, formData);
+        if (!res.ok) throw new Error(res.error || "Fallo al subir la fotografía");
       }
       await recargarDetalle();
-    } catch (err) {
-      alert("Error al subir una o más imágenes.");
+    } catch (err: any) {
+      alert(`Error al subir una o más imágenes${err?.message ? `: ${err.message}` : "."}`);
     } finally {
       setSubiendoFoto(false);
       setProgresoFotos(null);
@@ -622,6 +610,9 @@ export function DetalleOrdenTrabajo({
           )}
         </div>
       </div>
+
+      {/* 3.b Envío interno a asesores por Telegram (resumen + documentos PDF) */}
+      <PanelEnvioOTTelegram ordenId={orden.id} />
 
       {/* 3a. Cotización de origen */}
       <TarjetaCotizacionOrigenOT cotizacionId={orden.cotizacionId} cotizacionToken={orden.cotizacionToken} totalCotizado={orden.totalCotizado} />
@@ -1130,6 +1121,8 @@ export function DetalleOrdenTrabajo({
         clienteTelefono={orden.clienteTelefono}
         garantiaActual={garantia}
         tipoNegocio={orden.tipoNegocio || "construccion"}
+        asesorEjecutorId={orden.asesorEjecutorId}
+        asesorEjecutorNombre={orden.asesorEjecutorNombre}
       />
 
       <ModalGenerarRemisionOT

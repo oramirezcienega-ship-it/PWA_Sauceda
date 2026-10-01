@@ -146,6 +146,22 @@ export function SeccionContratoOT({ ordenId, tieneCotizacion, soloLectura = fals
                 </button>
               </>
             )}
+            {!soloLectura && vigente.estado === "firmado" && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Este contrato ya está firmado. Al editarlo se genera una nueva versión SIN firma (la firmada queda en versiones anteriores) y habrá que volver a firmarla. ¿Continuar?"
+                    )
+                  )
+                    setModalRevisar("regenerar");
+                }}
+                className="bg-slate-100 hover:bg-slate-200 text-carbon px-3 py-1.5 rounded-lg font-bold"
+              >
+                ✏️ Editar (nueva versión)
+              </button>
+            )}
             {vigente.pdfFirmadoUrl && (
               <button
                 type="button"
@@ -279,7 +295,7 @@ function ModalRevisarContrato({
       anticipoPct: Number(f.anticipoPct),
       duracionDias: Number(f.duracionDias),
     };
-    const r = await generarContrato(ordenId, overrides, { regenerar });
+    const r = await generarContrato(ordenId, overrides, { regenerar, permitirFirmado: regenerar });
     setGuardando(false);
     if (r.ok && r.folio) alGenerado(r.folio);
     else setError(r.error || "No se pudo generar el contrato.");

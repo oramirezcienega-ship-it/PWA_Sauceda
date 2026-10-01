@@ -1333,7 +1333,7 @@ export async function sincronizarComisionParaRemision(
     // 3. Verificar si ya existe comisión registrada
     const { data: comisionExistente } = await sb
       .from("comisiones")
-      .select("id, es_ajuste_manual, monto_comision, monto_pagado")
+      .select("id, es_ajuste_manual, monto_comision, monto_pagado, porcentaje_comision, estatus, detalles_calculo")
       .eq("remision_factura_id", remisionId)
       .maybeSingle();
 
@@ -1351,16 +1351,29 @@ export async function sincronizarComisionParaRemision(
       // (venta, costo de proveedor, comisión bancaria y base gravable), que
       // vienen de la orden/remisión y no dependen del ajuste manual.
       if (comisionExistente.es_ajuste_manual) {
-        await sb
-          .from("comisiones")
-          .update({
-            monto_venta: montoVenta,
-            costo_proveedor: costoProveedorRem,
-            comision_bancaria: comisionBancariaRem,
-            base_comisionable: baseComisionableRem,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", comisionExistente.id);
+        // Un ajuste por porcentaje personalizado sigue a la base gravable:
+        // si cambian las deducciones, se recalcula el monto con ese %.
+        const ajustePorPorcentaje = comisionExistente.detalles_calculo?.ajusteModo === "porcentaje";
+        const actualizacion: Record<string, any> = {
+          monto_venta: montoVenta,
+          costo_proveedor: costoProveedorRem,
+          comision_bancaria: comisionBancariaRem,
+          base_comisionable: baseComisionableRem,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (ajustePorPorcentaje) {
+          const pct = Number(comisionExistente.porcentaje_comision || 0);
+          const monto = Math.round(baseComisionableRem * (pct / 100) * 100) / 100;
+          const pagado = Number(comisionExistente.monto_pagado || 0);
+          actualizacion.monto_comision = monto;
+          actualizacion.saldo_pendiente = Math.max(0, monto - pagado);
+          if (comisionExistente.estatus !== "cancelada") {
+            actualizacion.estatus = pagado >= monto ? "pagada" : pagado > 0 ? "parcial" : "pendiente";
+          }
+        }
+
+        await sb.from("comisiones").update(actualizacion).eq("id", comisionExistente.id);
 
         return { ok: true, comisionId: comisionExistente.id };
       }

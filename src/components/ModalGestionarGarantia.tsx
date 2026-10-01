@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { guardarGarantiaOT, regenerarGarantiaDesdeProducto, type CartaGarantiaOT } from "@/app/actions/ordenes-trabajo";
+import { useEffect, useState } from "react";
+import {
+  guardarGarantiaOT,
+  regenerarGarantiaDesdeProducto,
+  listarEntregadoresGarantia,
+  type CartaGarantiaOT,
+} from "@/app/actions/ordenes-trabajo";
 
 interface ModalGestionarGarantiaProps {
   abierto: boolean;
@@ -13,6 +18,9 @@ interface ModalGestionarGarantiaProps {
   clienteTelefono?: string;
   garantiaActual: CartaGarantiaOT | null;
   tipoNegocio: string;
+  /** Asesor ejecutor de la orden: es quien entrega la instalación por defecto. */
+  asesorEjecutorId?: string | null;
+  asesorEjecutorNombre?: string | null;
 }
 
 export function ModalGestionarGarantia({
@@ -25,6 +33,8 @@ export function ModalGestionarGarantia({
   clienteTelefono,
   garantiaActual,
   tipoNegocio,
+  asesorEjecutorId,
+  asesorEjecutorNombre,
 }: ModalGestionarGarantiaProps) {
   const defaultAnos = garantiaActual?.anosGarantia || (tipoNegocio === "impermeabilizacion" ? 3 : 1);
   const defaultFechaInicio =
@@ -61,12 +71,37 @@ Sauceda Construye · León, Guanajuato`;
   const [contenido, setContenido] = useState(
     garantiaActual?.contenido || generarTextoPorDefecto(defaultAnos)
   );
+  // Asesor que entrega la instalación y nombre completo con el que firma la póliza
+  const [entregadores, setEntregadores] = useState<{ id: string; nombre: string; nombreCompleto: string }[]>([]);
+  const [entregadoPorId, setEntregadoPorId] = useState<string>(garantiaActual?.entregadoPorId || asesorEjecutorId || "");
+  const [entregadoPorNombre, setEntregadoPorNombre] = useState<string>(
+    garantiaActual?.entregadoPorNombre || asesorEjecutorNombre || ""
+  );
   const [cargando, setCargando] = useState(false);
   const [regenerando, setRegenerando] = useState(false);
   const [error, setError] = useState("");
   const [garantiaGuardada, setGarantiaGuardada] = useState<CartaGarantiaOT | null>(
     garantiaActual
   );
+
+  useEffect(() => {
+    if (!abierto) return;
+    listarEntregadoresGarantia().then((lista) => {
+      setEntregadores(lista);
+      // Si aún no hay nombre completo guardado en la póliza, precarga el del perfil
+      if (!garantiaActual?.entregadoPorNombre) {
+        const p = lista.find((x) => x.id === entregadoPorId);
+        if (p) setEntregadoPorNombre(p.nombreCompleto || p.nombre);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto]);
+
+  const handleCambiarEntregador = (id: string) => {
+    setEntregadoPorId(id);
+    const p = entregadores.find((x) => x.id === id);
+    setEntregadoPorNombre(p ? p.nombreCompleto || p.nombre : "");
+  };
 
   if (!abierto) return null;
 
@@ -127,6 +162,8 @@ Sauceda Construye · León, Guanajuato`;
         contenido: contenido.trim(),
         anosGarantia,
         fechaInicio,
+        entregadoPorId: entregadoPorId || null,
+        entregadoPorNombre: entregadoPorNombre.trim() || null,
       });
 
       if (res.ok && res.garantia) {
@@ -218,6 +255,40 @@ Sauceda Construye · León, Guanajuato`;
                 <option value={5}>5 Años</option>
                 <option value={10}>10 Años</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-sauce/25 bg-sauce/5 p-3">
+            <div>
+              <label className="block font-semibold text-carbon/80 mb-1">
+                Asesor que entrega la instalación
+              </label>
+              <select
+                value={entregadoPorId}
+                onChange={(e) => handleCambiarEntregador(e.target.value)}
+                className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none bg-white"
+              >
+                <option value="">— Sin asignar —</option>
+                {entregadores.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nombreCompleto || e.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-carbon/80 mb-1">
+                Nombre completo en la póliza
+              </label>
+              <input
+                type="text"
+                value={entregadoPorNombre}
+                onChange={(e) => setEntregadoPorNombre(e.target.value)}
+                disabled={!entregadoPorId}
+                placeholder="Nombre y apellidos"
+                className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none disabled:bg-slate-50"
+              />
+              <p className="mt-1 text-[10px] text-carbon/50">Se guarda en el perfil del asesor para las próximas pólizas.</p>
             </div>
           </div>
 

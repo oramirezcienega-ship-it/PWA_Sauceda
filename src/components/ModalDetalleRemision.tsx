@@ -2,7 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { type RemisionFacturaEnriquecida, actualizarCostosRemision } from "@/app/actions/remisiones";
+import {
+  type RemisionFacturaEnriquecida,
+  type TasaPasarela,
+  actualizarCostosRemision,
+  ajustarComisionAsesorRemision,
+  obtenerParametrosComisionRemision,
+} from "@/app/actions/remisiones";
+
+type ModoComision = "automatica" | "porcentaje" | "monto";
+
+const redondear = (n: number) => Math.round(n * 100) / 100;
 
 interface ModalDetalleRemisionProps {
   remision: RemisionFacturaEnriquecida | null;
@@ -25,13 +35,41 @@ export function ModalDetalleRemision({
   const [guardandoCostos, setGuardandoCostos] = useState(false);
   const [errorCostos, setErrorCostos] = useState("");
 
+  // Parámetros configurados (tasas de pasarela y regla de comisión)
+  const [tasasPasarela, setTasasPasarela] = useState<TasaPasarela[]>([]);
+  const [porcentajeRegla, setPorcentajeRegla] = useState<number | null>(null);
+  const [reglaOrigen, setReglaOrigen] = useState("");
+  const [pctPasarelaInput, setPctPasarelaInput] = useState<string>("");
+
+  // Ajuste particular de la comisión del asesor
+  const [modoComision, setModoComision] = useState<ModoComision>("automatica");
+  const [pctComisionInput, setPctComisionInput] = useState<string>("");
+  const [montoComisionInput, setMontoComisionInput] = useState<string>("");
+  const [motivoAjusteInput, setMotivoAjusteInput] = useState<string>("");
+
   useEffect(() => {
     setRemisionLocal(remision);
     if (remision) {
       setCostoFinancieroInput(String(remision.costoFinanciero || 0));
       setCostoProveedorInput(String(remision.costoProveedor || 0));
     }
+    setEditandoCostos(false);
+    setPorcentajeRegla(null);
   }, [remision]);
+
+  useEffect(() => {
+    if (!abierto || !remision) return;
+    let cancelado = false;
+    obtenerParametrosComisionRemision(remision.id).then((res) => {
+      if (cancelado) return;
+      setTasasPasarela(res.tasasPasarela);
+      setPorcentajeRegla(res.porcentajeRegla);
+      setReglaOrigen(res.reglaOrigen);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [abierto, remision]);
 
   if (!abierto || !remision || !remisionLocal) return null;
 
@@ -60,6 +98,53 @@ export function ModalDetalleRemision({
 
   const esFactura = remisionLocal.tipo === "factura";
 
+  // % vigente de la comisión: el registrado, o el de la regla si aún no existe
+  const porcentajeVigente = remisionLocal.comisionAsesorPorcentaje ?? porcentajeRegla ?? 5;
+
+  const iniciarEdicion = () => {
+    setCostoFinancieroInput(String(remisionLocal.costoFinanciero || 0));
+    setCostoProveedorInput(String(remisionLocal.costoProveedor || 0));
+    setPctPasarelaInput(
+      remisionLocal.montoTotal > 0 && remisionLocal.costoFinanciero > 0
+        ? String(redondear((remisionLocal.costoFinanciero / remisionLocal.montoTotal) * 100))
+        : ""
+    );
+    const modo: ModoComision = remisionLocal.comisionEsAjusteManual
+      ? remisionLocal.comisionAjusteModo || "monto"
+      : "automatica";
+    setModoComision(modo);
+    setPctComisionInput(String(porcentajeVigente));
+    setMontoComisionInput(String(remisionLocal.comisionAsesorMonto ?? ""));
+    setMotivoAjusteInput(remisionLocal.comisionMotivoAjuste || "");
+    setErrorCostos("");
+    setEditandoCostos(true);
+  };
+
+  const aplicarTasaPasarela = (pct: number) => {
+    setPctPasarelaInput(String(pct));
+    setCostoFinancieroInput(String(redondear(remisionLocal.montoTotal * (pct / 100))));
+  };
+
+  // Previsualización de base gravable y comisión con los valores capturados
+  const calcularPrevia = () => {
+    const cFin = Math.max(0, parseFloat(costoFinancieroInput) || 0);
+    const cProv = Math.max(0, parseFloat(costoProveedorInput) || 0);
+    const base = Math.max(0, remisionLocal.montoTotal - cFin - cProv);
+    let pct: number;
+    let monto: number;
+    if (modoComision === "porcentaje") {
+      pct = Math.max(0, Math.min(100, parseFloat(pctComisionInput) || 0));
+      monto = redondear(base * (pct / 100));
+    } else if (modoComision === "monto") {
+      monto = Math.max(0, redondear(parseFloat(montoComisionInput) || 0));
+      pct = base > 0 ? redondear((monto / base) * 100) : 0;
+    } else {
+      pct = porcentajeRegla ?? porcentajeVigente;
+      monto = redondear(base * (pct / 100));
+    }
+    return { cFin, cProv, base, pct, monto };
+  };
+
   // URL del portal público para compartir
   const urlPublica = remisionLocal.ordenEntregaToken
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/orden-trabajo/remision/${remisionLocal.ordenEntregaToken}`
@@ -81,11 +166,19 @@ export function ModalDetalleRemision({
   const handleGuardarCostos = async () => {
     if (!remisionLocal) return;
     setErrorCostos("");
+
+    const { cFin, cProv, base, pct, monto } = calcularPrevia();
+    const ajustaComision =
+      modoComision !== "automatica" || Boolean(remisionLocal.comisionEsAjusteManual);
+
+    if (modoComision !== "automatica" && !motivoAjusteInput.trim()) {
+      setErrorCostos("Indique el motivo del ajuste de comisión para esta remisión.");
+      return;
+    }
+
     setGuardandoCostos(true);
     try {
-      const cFin = Math.max(0, parseFloat(costoFinancieroInput) || 0);
-      const cProv = Math.max(0, parseFloat(costoProveedorInput) || 0);
-
+      // 1. Deducciones (pasarela y proveedor); el cobro no se modifica
       const res = await actualizarCostosRemision({
         remisionId: remisionLocal.id,
         costoFinanciero: cFin,
@@ -97,11 +190,20 @@ export function ModalDetalleRemision({
         return;
       }
 
-      // Recalcular base y comisión localmente para feedback inmediato
-      const nuevaBase = Math.max(0, remisionLocal.montoTotal - cFin - cProv);
-      const nuevoMontoCom =
-        (res as any)?.comision?.montoComision ??
-        Math.round(nuevaBase * ((remisionLocal.comisionAsesorPorcentaje || 5) / 100) * 100) / 100;
+      // 2. Comisión particular del asesor para esta remisión
+      if (ajustaComision) {
+        const resCom = await ajustarComisionAsesorRemision({
+          remisionId: remisionLocal.id,
+          modo: modoComision,
+          porcentaje: pct,
+          monto,
+          motivo: motivoAjusteInput,
+        });
+        if (!resCom.ok) {
+          setErrorCostos(resCom.error || "Error al ajustar la comisión");
+          return;
+        }
+      }
 
       setRemisionLocal((prev) =>
         prev
@@ -109,8 +211,13 @@ export function ModalDetalleRemision({
               ...prev,
               costoFinanciero: cFin,
               costoProveedor: cProv,
-              baseGravableComision: nuevaBase,
-              comisionAsesorMonto: nuevoMontoCom,
+              tienePasarela: prev.tienePasarela || cFin > 0,
+              baseGravableComision: base,
+              comisionAsesorPorcentaje: pct,
+              comisionAsesorMonto: monto,
+              comisionEsAjusteManual: modoComision !== "automatica",
+              comisionAjusteModo: modoComision === "automatica" ? null : modoComision,
+              comisionMotivoAjuste: modoComision === "automatica" ? undefined : motivoAjusteInput.trim(),
             }
           : prev
       );
@@ -362,15 +469,11 @@ export function ModalDetalleRemision({
               {!editandoCostos && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setCostoFinancieroInput(String(remisionLocal.costoFinanciero || 0));
-                    setCostoProveedorInput(String(remisionLocal.costoProveedor || 0));
-                    setEditandoCostos(true);
-                  }}
+                  onClick={iniciarEdicion}
                   className="rounded-lg border border-carbon/20 bg-white hover:bg-slate-100 text-carbon font-semibold px-2.5 py-1 text-[11px] transition shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Ajustar costos de pasarela y proveedor"
+                  title="Ajustar deducciones y comisión del asesor de esta remisión"
                 >
-                  <span>⚙️ Ajustar Costos</span>
+                  <span>⚙️ Ajustar Deducciones y Comisión</span>
                 </button>
               )}
             </div>
@@ -403,35 +506,56 @@ export function ModalDetalleRemision({
                         step="0.01"
                         min="0"
                         value={costoFinancieroInput}
-                        onChange={(e) => setCostoFinancieroInput(e.target.value)}
+                        onChange={(e) => {
+                          setCostoFinancieroInput(e.target.value);
+                          setPctPasarelaInput("");
+                        }}
                         className="w-full rounded-lg border border-carbon/20 bg-white pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:border-sauce"
                         placeholder="0.00"
                       />
                     </div>
-                    {/* Botones de sugerencia de pasarela */}
-                    <div className="flex items-center gap-1.5 mt-1.5">
+                    {/* Sugerencias de pasarela (parametrizadas en Comisiones → Parametrización) */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       <span className="text-[10px] text-carbon/50">Sugerir:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const val = Math.round(remisionLocal.montoTotal * 0.04176 * 100) / 100;
-                          setCostoFinancieroInput(String(val));
-                        }}
-                        className="text-[10px] bg-white border border-carbon/20 rounded px-1.5 py-0.5 text-carbon hover:bg-slate-50 cursor-pointer"
-                        title="3.6% Clip + IVA = 4.18%"
+                      {tasasPasarela.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => aplicarTasaPasarela(t.porcentaje)}
+                          className="text-[10px] bg-white border border-carbon/20 rounded px-1.5 py-0.5 text-carbon hover:bg-slate-50 cursor-pointer"
+                          title={t.notas || `${t.porcentaje}% sobre el total`}
+                        >
+                          {t.etiqueta} {t.porcentaje}%
+                        </button>
+                      ))}
+                      <div className="relative w-16">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={pctPasarelaInput}
+                          onChange={(e) => {
+                            setPctPasarelaInput(e.target.value);
+                            const pct = parseFloat(e.target.value);
+                            if (!isNaN(pct) && pct >= 0) {
+                              setCostoFinancieroInput(String(redondear(remisionLocal.montoTotal * (pct / 100))));
+                            }
+                          }}
+                          className="w-full rounded border border-carbon/20 bg-white pl-1.5 pr-4 py-0.5 text-[10px] font-mono focus:outline-none focus:border-sauce"
+                          placeholder="Otro"
+                          title="Tasa libre (%) sobre el total"
+                        />
+                        <span className="absolute right-1 top-0.5 text-[10px] text-carbon/40">%</span>
+                      </div>
+                      <Link
+                        href="/comisiones"
+                        prefetch={false}
+                        className="text-[10px] text-sauce hover:underline"
+                        title="Configurar tasas en Comisiones → Parametrización y Reglas"
                       >
-                        Clip 4.18%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const val = Math.round(remisionLocal.montoTotal * 0.035 * 100) / 100;
-                          setCostoFinancieroInput(String(val));
-                        }}
-                        className="text-[10px] bg-white border border-carbon/20 rounded px-1.5 py-0.5 text-carbon hover:bg-slate-50 cursor-pointer"
-                      >
-                        Bancaria 3.5%
-                      </button>
+                        Configurar tasas
+                      </Link>
                     </div>
                   </div>
 
@@ -459,13 +583,90 @@ export function ModalDetalleRemision({
                   </div>
                 </div>
 
+                {/* Comisión del asesor para esta remisión */}
+                <div className="border-t border-dorado/30 pt-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-carbon/70 uppercase">
+                      💼 Comisión del Asesor (esta remisión)
+                    </span>
+                    <div className="flex rounded-lg border border-carbon/20 bg-white overflow-hidden text-[10px] font-semibold">
+                      {([
+                        ["automatica", "Según regla"],
+                        ["porcentaje", "% propio"],
+                        ["monto", "Monto fijo"],
+                      ] as [ModoComision, string][]).map(([valor, etiqueta]) => (
+                        <button
+                          key={valor}
+                          type="button"
+                          onClick={() => setModoComision(valor)}
+                          className={`px-2 py-1 transition cursor-pointer ${
+                            modoComision === valor
+                              ? "bg-verde-profundo text-white"
+                              : "text-carbon hover:bg-slate-50"
+                          }`}
+                        >
+                          {etiqueta}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {modoComision === "automatica" ? (
+                    <p className="text-[10px] text-carbon/60">
+                      {porcentajeRegla !== null
+                        ? `${reglaOrigen} (${porcentajeRegla}%). Se recalcula sola al cambiar las deducciones.`
+                        : "Cargando regla configurada..."}
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {modoComision === "porcentaje" ? (
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={pctComisionInput}
+                            onChange={(e) => setPctComisionInput(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 bg-white pl-3 pr-6 py-1.5 text-xs font-mono focus:outline-none focus:border-sauce"
+                            placeholder="5.00"
+                          />
+                          <span className="absolute right-2.5 top-2 text-carbon/40 font-mono">%</span>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-2 text-carbon/40 font-mono">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={montoComisionInput}
+                            onChange={(e) => setMontoComisionInput(e.target.value)}
+                            className="w-full rounded-lg border border-carbon/20 bg-white pl-6 pr-3 py-1.5 text-xs font-mono focus:outline-none focus:border-sauce"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        value={motivoAjusteInput}
+                        onChange={(e) => setMotivoAjusteInput(e.target.value)}
+                        className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs focus:outline-none focus:border-sauce"
+                        placeholder="Motivo del ajuste (obligatorio)"
+                      />
+                    </div>
+                  )}
+
+                  {remisionLocal.comisionMontoPagado !== undefined && remisionLocal.comisionMontoPagado > 0 && (
+                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      Ya se pagaron {formatMoneda(remisionLocal.comisionMontoPagado)} de esta comisión; el saldo pendiente se recalcula con el nuevo monto.
+                    </p>
+                  )}
+                </div>
+
                 {/* Previsualización del recálculo */}
                 {(() => {
-                  const cFin = Math.max(0, parseFloat(costoFinancieroInput) || 0);
-                  const cProv = Math.max(0, parseFloat(costoProveedorInput) || 0);
-                  const basePrevia = Math.max(0, remisionLocal.montoTotal - cFin - cProv);
-                  const comPrevia = Math.round(basePrevia * ((remisionLocal.comisionAsesorPorcentaje || 5) / 100) * 100) / 100;
-
+                  const { base, pct, monto } = calcularPrevia();
                   return (
                     <div className="bg-white/80 border border-carbon/10 rounded-lg p-2.5 flex items-center justify-between text-xs">
                       <div>
@@ -473,15 +674,15 @@ export function ModalDetalleRemision({
                           Nueva Base Gravable Resultante
                         </span>
                         <span className="font-mono font-bold text-verde-profundo text-sm">
-                          {formatMoneda(basePrevia)}
+                          {formatMoneda(base)}
                         </span>
                       </div>
                       <div className="text-right">
                         <span className="text-[10px] uppercase font-bold text-carbon/50 block">
-                          Comisión Asesor ({remisionLocal.comisionAsesorPorcentaje || 5}%)
+                          Comisión Asesor ({pct}%)
                         </span>
                         <span className="font-mono font-bold text-sauce">
-                          {formatMoneda(comPrevia)}
+                          {formatMoneda(monto)}
                         </span>
                       </div>
                     </div>
@@ -515,7 +716,7 @@ export function ModalDetalleRemision({
                       </>
                     ) : (
                       <>
-                        <span>💾 Guardar & Recalcular Comisiones</span>
+                        <span>💾 Guardar Deducciones y Comisión</span>
                       </>
                     )}
                   </button>
@@ -604,15 +805,28 @@ export function ModalDetalleRemision({
 
                 <div className="border-t border-emerald-200/80 pt-1.5 flex justify-between items-center text-xs">
                   <span className="text-emerald-900 font-sans font-medium flex items-center gap-1">
-                    <span>💼 Comisión Asesor ({remisionLocal.comisionAsesorPorcentaje || 5}%):</span>
+                    <span>💼 Comisión Asesor ({porcentajeVigente}%):</span>
+                    {remisionLocal.comisionEsAjusteManual && (
+                      <span
+                        className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 rounded-full border border-amber-300"
+                        title={remisionLocal.comisionMotivoAjuste || "Ajuste manual"}
+                      >
+                        ✍️ Ajuste manual
+                      </span>
+                    )}
                   </span>
                   <span className="font-mono font-bold text-emerald-800">
                     {formatMoneda(
                       remisionLocal.comisionAsesorMonto ??
-                        Math.round(remisionLocal.baseGravableComision * ((remisionLocal.comisionAsesorPorcentaje || 5) / 100) * 100) / 100
+                        redondear(remisionLocal.baseGravableComision * (porcentajeVigente / 100))
                     )}
                   </span>
                 </div>
+                {remisionLocal.comisionEsAjusteManual && remisionLocal.comisionMotivoAjuste && (
+                  <p className="text-[10px] text-emerald-900/70 font-sans">
+                    Motivo: {remisionLocal.comisionMotivoAjuste}
+                  </p>
+                )}
               </div>
 
               {/* Cobranza */}

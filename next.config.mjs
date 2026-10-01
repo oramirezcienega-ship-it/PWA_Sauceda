@@ -49,7 +49,7 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ["@opentelemetry/api"],
+    serverComponentsExternalPackages: ["@opentelemetry/api", "@sparticuz/chromium", "puppeteer-core"],
     // Las fotos de evidencia (celular) suelen pesar varios MB; el límite
     // por defecto de 1MB para Server Actions las rechazaba silenciosamente.
     serverActions: {
