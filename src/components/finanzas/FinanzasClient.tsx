@@ -29,6 +29,7 @@ import { TabConfiguracion } from "./TabConfiguracion";
 import { TabRentabilidadProductos } from "./TabRentabilidadProductos";
 import { ModalNuevoMovimiento } from "./ModalNuevoMovimiento";
 import { ModalImportarExcel } from "./ModalImportarExcel";
+import { ModalImportarMetaAds } from "./ModalImportarMetaAds";
 
 type TabId =
   | "resumen"
@@ -58,6 +59,7 @@ export function FinanzasClient() {
   // Modales globales
   const [showNuevoModal, setShowNuevoModal] = useState(false);
   const [showImportarModal, setShowImportarModal] = useState(false);
+  const [showMetaModal, setShowMetaModal] = useState(false);
 
   // Estados de datos
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
@@ -191,6 +193,13 @@ export function FinanzasClient() {
               </button>
               <button
                 type="button"
+                onClick={() => setShowMetaModal(true)}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800 hover:bg-blue-100 transition shadow-xs flex items-center gap-1.5"
+              >
+                <span>📣</span> Importar Meta Ads
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowNuevoModal(true)}
                 className="rounded-xl bg-[#2D4A2B] px-3.5 py-1.5 text-xs font-bold text-[#F5F1E8] hover:bg-[#5C7A52] transition shadow-xs flex items-center gap-1.5"
               >
@@ -277,7 +286,7 @@ export function FinanzasClient() {
                 ["estado_resultados", "📑 Estado de Resultados"],
                 ["balance", "⚖️ Balance General"],
                 ["flujo", "🌊 Flujo de Efectivo"],
-                ["rentabilidad", "📦 Rentabilidad por Producto"],
+                ["rentabilidad", "📦 Rentabilidad"],
                 ["configuracion", "⚙️ Configuración"]
               ] as const
             ).map(([tab, label]) => (
@@ -400,6 +409,14 @@ export function FinanzasClient() {
           cargarDatos();
         }}
         catalogos={catalogos}
+      />
+
+      {/* MODAL IMPORTADOR META ADS */}
+      <ModalImportarMetaAds
+        abierto={showMetaModal}
+        onCerrar={() => setShowMetaModal(false)}
+        onImportado={cargarDatos}
+        moneyAccounts={catalogos.moneyAccounts}
       />
 
       {/* MODAL IMPORTADOR EXCEL GLOBAL */}

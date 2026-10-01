@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { BusinessUnit, MoneyAccount, Category, SubtipoNoPnL } from "@/app/actions/finanzas";
 import { crearMovimientoFinanzas } from "@/app/actions/finanzas";
+import {
+  obtenerCatalogoMarketing,
+  type SubcuentaMarketing,
+  type ProductoMarketing,
+} from "@/app/actions/marketing-contable";
 
 interface ModalNuevoMovimientoProps {
   abierto: boolean;
@@ -61,7 +66,28 @@ export function ModalNuevoMovimiento({
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Clasificación de publicidad: Centro de Costos → Subcuenta → Producto
+  const [subcuentas, setSubcuentas] = useState<SubcuentaMarketing[]>([]);
+  const [productos, setProductos] = useState<ProductoMarketing[]>([]);
+  const [codigoSubcuenta, setCodigoSubcuenta] = useState<string>("");
+  const [productoId, setProductoId] = useState<string>("");
+
+  useEffect(() => {
+    if (!abierto || subcuentas.length > 0) return;
+    obtenerCatalogoMarketing()
+      .then((cat) => {
+        setSubcuentas(cat.subcuentas);
+        setProductos(cat.productos);
+      })
+      .catch(() => {});
+  }, [abierto, subcuentas.length]);
+
   if (!abierto) return null;
+
+  const esMarketing =
+    tipo === "egreso" && catalogos.categories.find((c) => c.id === categoriaId)?.linea_pnl === "costo_marketing";
+  const subcuentasDelCentro = subcuentas.filter((s) => !businessUnitId || s.businessUnitId === businessUnitId);
+  const productosDeSubcuenta = productos.filter((p) => p.codigoSubcuenta === codigoSubcuenta);
 
   // Filtrar categorías según tipo
   const categoriasFiltradas = catalogos.categories.filter((c) =>
@@ -80,6 +106,16 @@ export function ModalNuevoMovimiento({
 
     if (tipo !== "traspaso" && !categoriaId) {
       setErrorMsg("Selecciona una categoría para el movimiento.");
+      return;
+    }
+
+    if (esMarketing && !businessUnitId) {
+      setErrorMsg("Selecciona el centro de costos de la publicidad.");
+      return;
+    }
+
+    if (esMarketing && !codigoSubcuenta) {
+      setErrorMsg("Selecciona la subcuenta (especialidad) de la publicidad.");
       return;
     }
 
@@ -115,7 +151,9 @@ export function ModalNuevoMovimiento({
         contraparte: contraparte.trim() || null,
         crm_deal_id: crmDealId.trim() || null,
         comprobante_url: comprobanteUrl.trim() || null,
-        estado: pendiente ? "pendiente" : "pagado"
+        estado: pendiente ? "pendiente" : "pagado",
+        codigo_subcuenta: esMarketing ? codigoSubcuenta || null : null,
+        producto_servicio_id: esMarketing ? productoId || null : null
       });
 
       if (!res.success) throw new Error(res.message);
@@ -296,11 +334,15 @@ export function ModalNuevoMovimiento({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                5. Unidad de Negocio *
+                {esMarketing ? "5. Centro de Costos *" : "5. Unidad de Negocio *"}
               </label>
               <select
                 value={businessUnitId}
-                onChange={(e) => setBusinessUnitId(e.target.value)}
+                onChange={(e) => {
+                  setBusinessUnitId(e.target.value);
+                  setCodigoSubcuenta("");
+                  setProductoId("");
+                }}
                 required
                 className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-700 bg-white focus:border-[#2D4A2B] focus:outline-none"
               >
@@ -331,6 +373,64 @@ export function ModalNuevoMovimiento({
               </select>
             </div>
           </div>
+
+          {/* CLASIFICACIÓN DE PUBLICIDAD */}
+          {esMarketing && (
+            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+              <span className="block text-[10px] font-bold text-amber-900 uppercase tracking-wider">
+                Clasificación de la publicidad
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Subcuenta / Especialidad *
+                  </label>
+                  <select
+                    value={codigoSubcuenta}
+                    onChange={(e) => {
+                      setCodigoSubcuenta(e.target.value);
+                      setProductoId("");
+                    }}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-700 bg-white focus:border-[#2D4A2B] focus:outline-none"
+                  >
+                    <option value="">-- Selecciona Subcuenta --</option>
+                    {subcuentasDelCentro.map((s) => (
+                      <option key={s.codigo} value={s.codigo}>
+                        {s.codigo} {s.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  {subcuentasDelCentro.length === 0 && subcuentas.length > 0 && (
+                    <span className="text-[10px] text-amber-800 block mt-1">
+                      Este centro de costos no tiene subcuentas de marketing.
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Producto o Servicio
+                  </label>
+                  <select
+                    value={productoId}
+                    onChange={(e) => setProductoId(e.target.value)}
+                    disabled={!codigoSubcuenta}
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-700 bg-white focus:border-[#2D4A2B] focus:outline-none disabled:bg-slate-100"
+                  >
+                    <option value="">Gasto general de la subcuenta / Prorratear</option>
+                    {productosDeSubcuenta.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                La póliza se carga a la subcuenta elegida. La publicidad institucional (Corporativo) se prorratea entre
+                todas las especialidades según sus ventas.
+              </p>
+            </div>
+          )}
 
           {/* CHECKBOX PENDIENTE (POR COBRAR / POR PAGAR) */}
           {tipo !== "traspaso" && (

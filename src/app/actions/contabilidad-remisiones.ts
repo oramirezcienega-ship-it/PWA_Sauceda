@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import {
+  subcuentaPorServicio,
+  subcuentaPorTexto,
+  type SubcuentaMarketingBase,
+} from "@/lib/subcuentas-marketing";
 
 /**
  * La remisión manda: una vez aplicada, sus importes definitivos se reflejan
@@ -78,7 +83,7 @@ export async function sincronizarFinanzasRemision(
     if (rem.orden_trabajo_id) {
       const { data, error: errOt } = await sb
         .from("ordenes_trabajo")
-        .select("id, titulo, costo_proveedor, proveedor_id, prospecto_id")
+        .select("id, titulo, costo_proveedor, proveedor_id, prospecto_id, tipo_negocio")
         .eq("id", rem.orden_trabajo_id)
         .maybeSingle();
       if (errOt) throw new Error(`Orden de trabajo: ${errOt.message}`);
@@ -95,6 +100,26 @@ export async function sincronizarFinanzasRemision(
         .maybeSingle();
       cot = data;
     }
+
+    // ---- Centro de costos y subcuenta (especialidad) de la venta ----
+    const { data: subcuentasData } = await sb
+      .from("marketing_subcuentas")
+      .select("codigo, business_unit_id, servicio_tipos, es_general")
+      .eq("activo", true);
+    const subcuentas = (subcuentasData || []) as SubcuentaMarketingBase[];
+    const { data: ccConstruccion } = await sb
+      .from("business_units")
+      .select("id")
+      .eq("codigo", "CC-CONSTRUCCION")
+      .maybeSingle();
+    const subcuentaVenta =
+      subcuentaPorServicio(cot?.servicio_tipo, subcuentas) ||
+      subcuentaPorServicio(ot?.tipo_negocio, subcuentas) ||
+      subcuentaPorTexto(ot?.titulo, subcuentas);
+    const unidadDeSubcuenta = (codigo: string | null) =>
+      (codigo && subcuentas.find((x) => x.codigo === codigo)?.business_unit_id) || null;
+    // Las remisiones de obra pertenecen a Construcción salvo que su subcuenta diga otra cosa
+    const businessUnitVenta = unidadDeSubcuenta(subcuentaVenta) || ccConstruccion?.id || null;
 
     let clienteNombre: string =
       rem.datos_documento?.razonSocial || rem.datos_documento?.personaRecibe || "";
@@ -248,6 +273,8 @@ export async function sincronizarFinanzasRemision(
         contraparte: p.contraparte,
         crm_deal_id: crmDealId,
         estado,
+        business_unit_id: businessUnitVenta,
+        codigo_subcuenta: subcuentaVenta,
         origen_modulo: ORIGEN,
         origen_id: remisionId,
         origen_concepto: p.concepto,
@@ -364,7 +391,7 @@ export async function sincronizarFinanzasRemision(
     });
 
     // ---- Centro de costos por producto ----
-    await recalcularRentabilidadProductos(sb, {
+    const subcuentaDominante = await recalcularRentabilidadProductos(sb, {
       remisionId,
       fecha,
       montoTotal,
@@ -377,7 +404,24 @@ export async function sincronizarFinanzasRemision(
       expedienteId: crmDealId,
       nombreSinDesglose: cot?.servicio_tipo || ot?.titulo || "Sin desglose de producto",
       docsObra,
+      subcuentas,
+      subcuentaVenta,
+      businessUnitVenta,
     });
+
+    // Si la remisión no traía especialidad por su tipo de servicio, se toma la de
+    // los conceptos con mayor venta para que sus movimientos queden clasificados.
+    if (!subcuentaVenta && subcuentaDominante) {
+      await sb
+        .from("transactions")
+        .update({
+          codigo_subcuenta: subcuentaDominante,
+          business_unit_id: unidadDeSubcuenta(subcuentaDominante) || businessUnitVenta,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("origen_modulo", ORIGEN)
+        .eq("origen_id", remisionId);
+    }
 
     return { ok: true };
   } catch (err: any) {
@@ -408,8 +452,11 @@ async function recalcularRentabilidadProductos(
     expedienteId: string | null;
     nombreSinDesglose: string;
     docsObra: any[];
+    subcuentas: SubcuentaMarketingBase[];
+    subcuentaVenta: string | null;
+    businessUnitVenta: string | null;
   }
-): Promise<void> {
+): Promise<string | null> {
   type Linea = {
     productoId: string | null;
     nombre: string;
@@ -420,6 +467,7 @@ async function recalcularRentabilidadProductos(
     costoProveedor: number;
     costoFinanciero: number;
     comision: number;
+    codigoSubcuenta: string | null;
   };
 
   const grupos = new Map<string, Linea>();
@@ -434,9 +482,16 @@ async function recalcularRentabilidadProductos(
       new Set((conceptos || []).map((c: any) => c.producto_servicio_id).filter(Boolean))
     ) as string[];
     const nombresProd = new Map<string, string>();
+    const subcuentaProd = new Map<string, string | null>();
     if (idsProd.length > 0) {
-      const { data: prods } = await sb.from("productos_servicios").select("id, nombre").in("id", idsProd);
-      (prods || []).forEach((pr: any) => nombresProd.set(pr.id, pr.nombre));
+      const { data: prods } = await sb
+        .from("productos_servicios")
+        .select("id, nombre, codigo_subcuenta")
+        .in("id", idsProd);
+      (prods || []).forEach((pr: any) => {
+        nombresProd.set(pr.id, pr.nombre);
+        subcuentaProd.set(pr.id, pr.codigo_subcuenta || null);
+      });
     }
 
     for (const c of conceptos || []) {
@@ -457,6 +512,11 @@ async function recalcularRentabilidadProductos(
         costoProveedor: 0,
         costoFinanciero: 0,
         comision: 0,
+        // Especialidad: la del producto del catálogo, la del texto del concepto o la de la remisión
+        codigoSubcuenta:
+          (c.producto_servicio_id && subcuentaProd.get(c.producto_servicio_id)) ||
+          subcuentaPorTexto(nombre, p.subcuentas) ||
+          p.subcuentaVenta,
       };
       g.cantidad += Number(c.cantidad || 0);
       g.importe += importe;
@@ -477,6 +537,7 @@ async function recalcularRentabilidadProductos(
         costoProveedor: 0,
         costoFinanciero: 0,
         comision: 0,
+        codigoSubcuenta: p.subcuentaVenta || subcuentaPorTexto(p.nombreSinDesglose, p.subcuentas),
       },
     ];
   }
@@ -523,7 +584,20 @@ async function recalcularRentabilidadProductos(
 
   await sb.from("remisiones_rentabilidad_productos").delete().eq("remision_factura_id", p.remisionId);
 
-  if (p.montoTotal <= 0) return;
+  // Especialidad con mayor venta dentro de la remisión
+  const ventaPorSubcuenta = new Map<string, number>();
+  lineas.forEach((l) => {
+    if (l.codigoSubcuenta) {
+      ventaPorSubcuenta.set(l.codigoSubcuenta, (ventaPorSubcuenta.get(l.codigoSubcuenta) || 0) + l.ingreso);
+    }
+  });
+  const subcuentaDominante =
+    Array.from(ventaPorSubcuenta.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+  if (p.montoTotal <= 0) return subcuentaDominante;
+
+  const unidadDe = (codigo: string | null) =>
+    (codigo && p.subcuentas.find((x) => x.codigo === codigo)?.business_unit_id) || p.businessUnitVenta;
 
   const filas = lineas.map((l) => ({
     remision_factura_id: p.remisionId,
@@ -539,10 +613,13 @@ async function recalcularRentabilidadProductos(
     utilidad: r2(l.ingreso - l.costoProveedor - l.costoFinanciero - l.comision),
     orden_trabajo_id: p.ordenTrabajoId,
     expediente_id: p.expedienteId,
+    codigo_subcuenta: l.codigoSubcuenta,
+    business_unit_id: unidadDe(l.codigoSubcuenta),
   }));
 
   const { error } = await sb.from("remisiones_rentabilidad_productos").insert(filas);
   if (error) console.warn("No se pudo registrar el centro de costos de la remisión:", error.message);
+  return subcuentaDominante;
 }
 
 /** Sincroniza las remisiones ligadas a una orden de trabajo (p. ej. tras registrar un cobro). */
@@ -586,9 +663,15 @@ export async function conciliarRemisionesPendientes(): Promise<{ ok: boolean; pr
     const sb = supabaseServidor();
     const [{ data: rems }, { data: ligadas }] = await Promise.all([
       sb.from("remisiones_facturas").select("id, monto_total").gt("monto_total", 0),
-      sb.from("transactions").select("origen_id").eq("origen_modulo", ORIGEN),
+      sb.from("transactions").select("origen_id, business_unit_id").eq("origen_modulo", ORIGEN),
     ]);
-    const conciliadas = new Set((ligadas || []).map((t: any) => t.origen_id));
+    // Conciliadas = con movimientos ligados y ya clasificados en un centro de costos
+    const sinCentro = new Set(
+      (ligadas || []).filter((t: any) => !t.business_unit_id).map((t: any) => t.origen_id)
+    );
+    const conciliadas = new Set(
+      (ligadas || []).map((t: any) => t.origen_id).filter((id: string) => !sinCentro.has(id))
+    );
     const pendientes = (rems || []).filter((r: any) => !conciliadas.has(r.id));
 
     let procesadas = 0;
@@ -629,149 +712,6 @@ export async function recalcularContabilidadRemisiones(): Promise<{
   } catch (err: any) {
     return { ok: false, procesadas: 0, errores: 0, error: err?.message || "Error al recalcular." };
   }
-}
-
-// ============================================================
-// Reporte: Rentabilidad y retorno por producto
-// ============================================================
-
-export interface RentabilidadProducto {
-  clave: string;
-  productoId: string | null;
-  productoNombre: string;
-  unidad: string;
-  remisiones: number;
-  cantidad: number;
-  ingreso: number;
-  costoProveedor: number;
-  costoFinanciero: number;
-  comision: number;
-  costoTotal: number;
-  utilidad: number;
-  /** Utilidad / ingreso (%) */
-  margen: number;
-  /** Utilidad / costo total invertido (%) */
-  roi: number;
-  precioPromedioUnidad: number | null;
-  costoProveedorPromedioUnidad: number | null;
-}
-
-export interface ReporteRentabilidadProductos {
-  productos: RentabilidadProducto[];
-  totales: {
-    remisiones: number;
-    ingreso: number;
-    costoProveedor: number;
-    costoFinanciero: number;
-    comision: number;
-    costoTotal: number;
-    utilidad: number;
-    margen: number;
-    roi: number;
-  };
-}
-
-export async function obtenerRentabilidadProductos(
-  fechaInicio?: string,
-  fechaFin?: string
-): Promise<ReporteRentabilidadProductos> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-
-  let query = sb
-    .from("remisiones_rentabilidad_productos")
-    .select("remision_factura_id, producto_servicio_id, producto_nombre, cantidad, unidad, ingreso, costo_proveedor, costo_financiero, comision, utilidad");
-  if (fechaInicio) query = query.gte("fecha", fechaInicio);
-  if (fechaFin) query = query.lte("fecha", fechaFin);
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const grupos = new Map<string, RentabilidadProducto & { _rems: Set<string> }>();
-  const remisionesTotales = new Set<string>();
-
-  for (const f of data || []) {
-    const clave = f.producto_servicio_id || `nombre:${(f.producto_nombre || "").toLowerCase()}`;
-    const g =
-      grupos.get(clave) ||
-      ({
-        clave,
-        productoId: f.producto_servicio_id || null,
-        productoNombre: f.producto_nombre || "Sin nombre",
-        unidad: f.unidad || "m2",
-        remisiones: 0,
-        cantidad: 0,
-        ingreso: 0,
-        costoProveedor: 0,
-        costoFinanciero: 0,
-        comision: 0,
-        costoTotal: 0,
-        utilidad: 0,
-        margen: 0,
-        roi: 0,
-        precioPromedioUnidad: null,
-        costoProveedorPromedioUnidad: null,
-        _rems: new Set<string>(),
-      } as RentabilidadProducto & { _rems: Set<string> });
-
-    g._rems.add(f.remision_factura_id);
-    remisionesTotales.add(f.remision_factura_id);
-    g.cantidad += Number(f.cantidad || 0);
-    g.ingreso += Number(f.ingreso || 0);
-    g.costoProveedor += Number(f.costo_proveedor || 0);
-    g.costoFinanciero += Number(f.costo_financiero || 0);
-    g.comision += Number(f.comision || 0);
-    g.utilidad += Number(f.utilidad || 0);
-    grupos.set(clave, g);
-  }
-
-  const productos: RentabilidadProducto[] = Array.from(grupos.values())
-    .map(({ _rems, ...g }) => {
-      const costoTotal = g.costoProveedor + g.costoFinanciero + g.comision;
-      return {
-        ...g,
-        remisiones: _rems.size,
-        cantidad: r2(g.cantidad),
-        ingreso: r2(g.ingreso),
-        costoProveedor: r2(g.costoProveedor),
-        costoFinanciero: r2(g.costoFinanciero),
-        comision: r2(g.comision),
-        costoTotal: r2(costoTotal),
-        utilidad: r2(g.utilidad),
-        margen: g.ingreso > 0 ? r2((g.utilidad / g.ingreso) * 100) : 0,
-        roi: costoTotal > 0 ? r2((g.utilidad / costoTotal) * 100) : 0,
-        precioPromedioUnidad: g.cantidad > 0 ? r2(g.ingreso / g.cantidad) : null,
-        costoProveedorPromedioUnidad: g.cantidad > 0 ? r2(g.costoProveedor / g.cantidad) : null,
-      };
-    })
-    .sort((a, b) => b.utilidad - a.utilidad);
-
-  const t = productos.reduce(
-    (acc, p) => ({
-      ingreso: acc.ingreso + p.ingreso,
-      costoProveedor: acc.costoProveedor + p.costoProveedor,
-      costoFinanciero: acc.costoFinanciero + p.costoFinanciero,
-      comision: acc.comision + p.comision,
-      utilidad: acc.utilidad + p.utilidad,
-    }),
-    { ingreso: 0, costoProveedor: 0, costoFinanciero: 0, comision: 0, utilidad: 0 }
-  );
-  const costoTotal = t.costoProveedor + t.costoFinanciero + t.comision;
-
-  return {
-    productos,
-    totales: {
-      remisiones: remisionesTotales.size,
-      ingreso: r2(t.ingreso),
-      costoProveedor: r2(t.costoProveedor),
-      costoFinanciero: r2(t.costoFinanciero),
-      comision: r2(t.comision),
-      costoTotal: r2(costoTotal),
-      utilidad: r2(t.utilidad),
-      margen: t.ingreso > 0 ? r2((t.utilidad / t.ingreso) * 100) : 0,
-      roi: costoTotal > 0 ? r2((t.utilidad / costoTotal) * 100) : 0,
-    },
-  };
 }
 
 // ============================================================
