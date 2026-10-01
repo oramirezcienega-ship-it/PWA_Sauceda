@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo, useEffect } from "react";
+import { ConfigAsesoresComisionables } from "./ConfigAsesoresComisionables";
 import type {
   Comision,
   ComisionPago,
@@ -1398,6 +1399,8 @@ export function ModuloComisiones({
               <span>+ Nueva Regla</span>
             </button>
           </div>
+
+          <ConfigAsesoresComisionables alCambiar={() => recargarDatos()} />
 
           {/* TARJETA DESTACADA: TARIFA FIJA POR INSPECCIÓN TÉCNICA */}
           <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-500/10 border-2 border-amber-300 rounded-2xl p-5 shadow-xs">
