@@ -993,7 +993,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           colapsada ? "md:pl-0" : "md:pl-64"
         }`}
       >
-        {/* Barra superior de actividades de la semana (solo en versión escritorio) */}
+        {/* Barra superior de actividades de la semana (móvil y escritorio) */}
         <HeaderActividadesSemana />
 
         {children}
