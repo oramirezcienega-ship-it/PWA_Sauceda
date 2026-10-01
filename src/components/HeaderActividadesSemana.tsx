@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   obtenerActividadesSemana,
@@ -32,6 +32,8 @@ export function HeaderActividadesSemana() {
   const [colapsada, setColapsada] = useState(true);
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [filtroTipo, setFiltroTipo] = useState<"todas" | "instalacion" | "inspeccion">("todas");
+  // Filtro de estado: por defecto SIEMPRE solo pendientes (las completadas ocultas salvo clic explícito)
+  const [filtroEstado, setFiltroEstado] = useState<"pendientes" | "completadas" | "todas">("pendientes");
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
 
   const toggleColapso = () => {
@@ -90,12 +92,50 @@ export function HeaderActividadesSemana() {
 
   const hayCoordUrgentes = coordinaciones.some((c) => c.urgente);
 
-  // Filtrar actividades según selección
-  const actividadesFiltradas = (datos?.actividades || []).filter((act) => {
-    if (filtroTipo !== "todas" && act.tipo !== filtroTipo) return false;
-    if (diaSeleccionado && act.fecha !== diaSeleccionado) return false;
-    return true;
-  });
+  // Conteos globales de estado para la semana
+  const conteos = useMemo(() => {
+    const acts = datos?.actividades || [];
+    const pendientes = acts.filter((a) => a.estado !== "completada" && a.estado !== "cancelada");
+    const completadas = acts.filter((a) => a.estado === "completada");
+
+    return {
+      total: acts.length,
+      pendientes: pendientes.length,
+      completadas: completadas.length,
+    };
+  }, [datos?.actividades]);
+
+  // Actividades filtradas primero por estado (pendientes / completadas / todas)
+  const actsSegunEstado = useMemo(() => {
+    const acts = datos?.actividades || [];
+    if (filtroEstado === "pendientes") {
+      return acts.filter((a) => a.estado !== "completada" && a.estado !== "cancelada");
+    }
+    if (filtroEstado === "completadas") {
+      return acts.filter((a) => a.estado === "completada");
+    }
+    return acts;
+  }, [datos?.actividades, filtroEstado]);
+
+  // Conteos de tipos según el filtro de estado activo
+  const conteoTipoSegunEstado = useMemo(() => {
+    const inst = actsSegunEstado.filter((a) => a.tipo === "instalacion").length;
+    const insp = actsSegunEstado.filter((a) => a.tipo === "inspeccion").length;
+    return {
+      total: actsSegunEstado.length,
+      instalaciones: inst,
+      inspecciones: insp,
+    };
+  }, [actsSegunEstado]);
+
+  // Filtrar actividades según selección final (estado + tipo + día)
+  const actividadesFiltradas = useMemo(() => {
+    return actsSegunEstado.filter((act) => {
+      if (filtroTipo !== "todas" && act.tipo !== filtroTipo) return false;
+      if (diaSeleccionado && act.fecha !== diaSeleccionado) return false;
+      return true;
+    });
+  }, [actsSegunEstado, filtroTipo, diaSeleccionado]);
 
   // Próxima actividad pendiente para el ticker
   const proximaActividad = (datos?.actividades || []).find((a) => {
@@ -106,60 +146,81 @@ export function HeaderActividadesSemana() {
   return (
     <aside
       aria-label="Barra de actividades de la semana"
-      className="hidden md:block sticky top-0 z-20 border-b border-carbon/10 bg-white/95 backdrop-blur-md text-carbon shadow-2xs transition-all duration-200"
+      className="sticky top-14 md:top-0 z-20 border-b border-carbon/10 bg-white/95 backdrop-blur-md text-carbon shadow-2xs transition-all duration-200"
     >
       {/* ========================================================= */}
       {/* 1. MODO CONTRAÍDO (Siempre activo por defecto)            */}
       {/* ========================================================= */}
       {colapsada ? (
-        <div className="flex h-10 items-center justify-between px-3 text-xs bg-gradient-to-r from-white via-slate-50/60 to-white">
+        <div className="flex h-10 items-center justify-between px-2 sm:px-3 text-xs bg-gradient-to-r from-white via-slate-50/60 to-white overflow-hidden">
           {/* Lado izquierdo: Título e indicadores */}
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 overflow-x-auto scrollbar-none py-0.5">
             <button
               type="button"
               onClick={toggleColapso}
-              className="flex items-center gap-1.5 font-display font-semibold text-verde-profundo hover:text-sauce transition cursor-pointer group"
+              className="flex items-center gap-1 sm:gap-1.5 font-display font-semibold text-verde-profundo hover:text-sauce transition cursor-pointer group shrink-0"
               title="Clic para desplegar las actividades de la semana"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-verde-profundo/10 text-verde-profundo text-xs group-hover:scale-105 transition-transform">
                 📅
               </span>
-              <span className="truncate font-bold tracking-tight">Actividades de la Semana</span>
+              <span className="font-bold tracking-tight">
+                <span className="hidden sm:inline">Actividades de la Semana</span>
+                <span className="sm:hidden">Actividades</span>
+              </span>
             </button>
 
             {datos?.rangoTexto && (
-              <span className="hidden xl:inline-block font-mono text-[10px] text-carbon/50 bg-carbon/5 px-1.5 py-0.5 rounded">
+              <span className="hidden xl:inline-block font-mono text-[10px] text-carbon/50 bg-carbon/5 px-1.5 py-0.5 rounded shrink-0">
                 {datos.rangoTexto}
               </span>
             )}
 
-            {/* Badges de conteo */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 font-mono text-[11px] font-semibold text-emerald-800">
+            {/* Badges de conteo responsivos (compactos en móvil, completos en escritorio) */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <span
+                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-1.5 sm:px-2 py-0.5 font-mono text-[10.5px] sm:text-[11px] font-semibold text-emerald-800"
+                title={`${datos?.conteoInstalaciones ?? 0} Instalaciones`}
+              >
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                🛠️ {datos?.conteoInstalaciones ?? 0} {datos?.conteoInstalaciones === 1 ? "Instalación" : "Instalaciones"}
+                🛠️ {datos?.conteoInstalaciones ?? 0}
+                <span className="hidden md:inline">
+                  {" "}{datos?.conteoInstalaciones === 1 ? "Instalación" : "Instalaciones"}
+                </span>
               </span>
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-800">
+              <span
+                className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 sm:px-2 py-0.5 font-mono text-[10.5px] sm:text-[11px] font-semibold text-amber-800"
+                title={`${datos?.conteoInspecciones ?? 0} Inspecciones`}
+              >
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
-                🔍 {datos?.conteoInspecciones ?? 0} {datos?.conteoInspecciones === 1 ? "Inspección" : "Inspecciones"}
+                🔍 {datos?.conteoInspecciones ?? 0}
+                <span className="hidden md:inline">
+                  {" "}{datos?.conteoInspecciones === 1 ? "Inspección" : "Inspecciones"}
+                </span>
               </span>
               {(datos?.conteoHoy ?? 0) > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-rojo/10 border border-rojo/30 px-2 py-0.5 font-mono text-[11px] font-bold text-rojo animate-pulse">
-                  ⚡ {datos?.conteoHoy} Hoy
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-rojo/10 border border-rojo/30 px-1.5 sm:px-2 py-0.5 font-mono text-[10.5px] sm:text-[11px] font-bold text-rojo animate-pulse"
+                  title={`${datos?.conteoHoy} actividades para hoy`}
+                >
+                  ⚡ {datos?.conteoHoy} <span className="hidden md:inline">Hoy</span>
                 </span>
               )}
               {coordinaciones.length > 0 && (
                 <button
                   type="button"
                   onClick={toggleColapso}
-                  title="Coordinaciones solicitadas que siguen sin cerrarse: da clic para ver el seguimiento"
-                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11px] font-bold cursor-pointer ${
+                  title="Coordinaciones solicitadas pendientes: da clic para ver el seguimiento"
+                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 sm:px-2 py-0.5 font-mono text-[10.5px] sm:text-[11px] font-bold cursor-pointer ${
                     hayCoordUrgentes
                       ? "bg-rojo/10 border-rojo/30 text-rojo animate-pulse"
                       : "bg-indigo-50 border-indigo-200 text-indigo-800"
                   }`}
                 >
-                  🔔 {coordinaciones.length} {coordinaciones.length === 1 ? "Coordinación pendiente" : "Coordinaciones pendientes"}
+                  🔔 {coordinaciones.length}
+                  <span className="hidden md:inline">
+                    {" "}{coordinaciones.length === 1 ? "Coordinación" : "Coordinaciones"}
+                  </span>
                 </button>
               )}
             </div>
@@ -187,7 +248,7 @@ export function HeaderActividadesSemana() {
           )}
 
           {/* Lado derecho: Acciones y botón desplegar */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-1">
             <Link
               href="/agenda"
               className="text-[11px] font-medium text-carbon/60 hover:text-verde-profundo hover:underline hidden sm:inline px-1"
@@ -221,9 +282,9 @@ export function HeaderActividadesSemana() {
             <button
               type="button"
               onClick={toggleColapso}
-              className="flex items-center gap-1 rounded-md bg-verde-profundo text-crema px-2.5 py-1 text-[11px] font-semibold hover:bg-sauce transition shadow-2xs cursor-pointer ml-1"
+              className="flex items-center gap-1 rounded-md bg-verde-profundo text-crema px-2 sm:px-2.5 py-1 text-[11px] font-semibold hover:bg-sauce transition shadow-2xs cursor-pointer"
             >
-              <span>Desplegar</span>
+              <span className="hidden xs:inline">Desplegar</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="m6 9 6 6 6-6" />
               </svg>
@@ -234,11 +295,11 @@ export function HeaderActividadesSemana() {
         /* ========================================================= */
         /* 2. MODO DESPLEGADO (Vista detallada temporal)             */
         /* ========================================================= */
-        <div className="p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="p-2.5 sm:p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200 max-h-[85vh] overflow-y-auto">
           {/* Fila superior: Título, rango de fechas, filtros y botón contraer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-carbon/10 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-carbon/10 pb-2">
             {/* Título & Rango */}
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-verde-profundo text-crema text-xs shadow-xs">
                   📅
@@ -288,50 +349,95 @@ export function HeaderActividadesSemana() {
               </div>
             </div>
 
-            {/* Pestañas de Filtro (Todas / Instalaciones / Inspecciones) */}
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-carbon/10 text-xs">
-              <button
-                type="button"
-                onClick={() => setFiltroTipo("todas")}
-                className={`px-2.5 py-1 rounded-md font-semibold transition ${
-                  filtroTipo === "todas"
-                    ? "bg-white text-verde-profundo shadow-xs border border-carbon/10"
-                    : "text-carbon/60 hover:text-carbon"
-                }`}
-              >
-                Todas ({datos?.conteoTotal ?? 0})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroTipo("instalacion")}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition ${
-                  filtroTipo === "instalacion"
-                    ? "bg-white text-emerald-800 shadow-xs border border-emerald-300"
-                    : "text-carbon/60 hover:text-emerald-800"
-                }`}
-              >
-                <span>🛠️</span>
-                <span>Instalaciones ({datos?.conteoInstalaciones ?? 0})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroTipo("inspeccion")}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition ${
-                  filtroTipo === "inspeccion"
-                    ? "bg-white text-amber-800 shadow-xs border border-amber-300"
-                    : "text-carbon/60 hover:text-amber-800"
-                }`}
-              >
-                <span>🔍</span>
-                <span>Inspecciones ({datos?.conteoInspecciones ?? 0})</span>
-              </button>
+            {/* Grupo de Filtros: Filtro de Estado (Solo Pendientes / Completadas / Todas) y Filtro de Tipo */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              {/* FILTRO DE ESTADO (Por defecto activo PENDIENTES) */}
+              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-carbon/10 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstado("pendientes")}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    filtroEstado === "pendientes"
+                      ? "bg-verde-profundo text-crema shadow-xs font-bold"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="Mostrar solo citas y trabajos pendientes (filtro por defecto)"
+                >
+                  <span>⏳</span>
+                  <span>Pendientes ({conteos.pendientes})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstado("completadas")}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    filtroEstado === "completadas"
+                      ? "bg-slate-700 text-white shadow-xs font-bold"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="Mostrar actividades ya concluidas"
+                >
+                  <span>✅</span>
+                  <span>Completadas ({conteos.completadas})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroEstado("todas")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    filtroEstado === "todas"
+                      ? "bg-white text-carbon shadow-xs border border-carbon/20 font-bold"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                  title="Mostrar todas las actividades (pendientes y completadas)"
+                >
+                  <span>Todas ({conteos.total})</span>
+                </button>
+              </div>
+
+              {/* FILTRO DE TIPO (Todas / Instalaciones / Inspecciones) */}
+              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-carbon/10 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("todas")}
+                  className={`px-2 sm:px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    filtroTipo === "todas"
+                      ? "bg-white text-verde-profundo shadow-xs border border-carbon/10 font-bold"
+                      : "text-carbon/60 hover:text-carbon"
+                  }`}
+                >
+                  Todas ({conteoTipoSegunEstado.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("instalacion")}
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    filtroTipo === "instalacion"
+                      ? "bg-white text-emerald-800 shadow-xs border border-emerald-300 font-bold"
+                      : "text-carbon/60 hover:text-emerald-800"
+                  }`}
+                >
+                  <span>🛠️</span>
+                  <span>Instalaciones ({conteoTipoSegunEstado.instalaciones})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroTipo("inspeccion")}
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                    filtroTipo === "inspeccion"
+                      ? "bg-white text-amber-800 shadow-xs border border-amber-300 font-bold"
+                      : "text-carbon/60 hover:text-amber-800"
+                  }`}
+                >
+                  <span>🔍</span>
+                  <span>Inspecciones ({conteoTipoSegunEstado.inspecciones})</span>
+                </button>
+              </div>
             </div>
 
             {/* Acciones del encabezado */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <Link
                 href="/agenda"
-                className="hidden lg:inline-flex items-center gap-1 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-xs font-medium text-carbon/80 hover:bg-carbon/5 hover:text-verde-profundo transition"
+                className="hidden xl:inline-flex items-center gap-1 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-xs font-medium text-carbon/80 hover:bg-carbon/5 hover:text-verde-profundo transition"
                 title="Abrir agenda completa"
               >
                 <span>Ver Agenda Completa</span>
@@ -343,7 +449,7 @@ export function HeaderActividadesSemana() {
                 onClick={() => cargar(semanaOffset)}
                 disabled={cargando}
                 title="Recargar actividades"
-                className="rounded-lg border border-carbon/20 bg-white p-1 text-carbon/60 hover:text-carbon transition"
+                className="rounded-lg border border-carbon/20 bg-white p-1 text-carbon/60 hover:text-carbon transition cursor-pointer"
               >
                 <svg
                   width="14"
@@ -389,18 +495,28 @@ export function HeaderActividadesSemana() {
               <span className={`text-[10px] rounded-full px-1.5 py-0.2 ${
                 diaSeleccionado === null ? "bg-white/20 text-white" : "bg-carbon/10 text-carbon"
               }`}>
-                {datos?.conteoTotal ?? 0}
+                {conteoTipoSegunEstado.total}
               </span>
             </button>
 
             {(datos?.dias || []).map((dia) => {
               const seleccionado = diaSeleccionado === dia.fecha;
+              const actsDia = actsSegunEstado.filter((a) => a.fecha === dia.fecha);
+              const totalDia = actsDia.length;
+              const instDia = actsDia.filter((a) => a.tipo === "instalacion").length;
+              const inspDia = actsDia.filter((a) => a.tipo === "inspeccion").length;
+
+              const totalDiaOriginal = (datos?.actividades || []).filter((a) => a.fecha === dia.fecha).length;
+              const completadasDia = (datos?.actividades || []).filter(
+                (a) => a.fecha === dia.fecha && a.estado === "completada"
+              ).length;
+
               return (
                 <button
                   key={dia.fecha}
                   type="button"
                   onClick={() => setDiaSeleccionado(dia.fecha)}
-                  className={`relative flex items-center gap-2 shrink-0 rounded-lg px-2.5 py-1 text-xs transition ${
+                  className={`relative flex items-center gap-1.5 shrink-0 rounded-lg px-2.5 py-1 text-xs transition ${
                     seleccionado
                       ? "bg-verde-profundo text-crema shadow-xs font-semibold ring-2 ring-dorado/50"
                       : dia.esHoy
@@ -420,29 +536,37 @@ export function HeaderActividadesSemana() {
                     )}
                   </div>
 
-                  {/* Indicadores de actividades en ese día */}
+                  {/* Indicadores de actividades en ese día según filtro activo */}
                   <div className="flex items-center gap-1">
-                    {dia.totalInstalaciones > 0 && (
+                    {instDia > 0 && (
                       <span
                         className={`flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
                           seleccionado ? "bg-emerald-400 text-verde-profundo" : "bg-emerald-100 text-emerald-800"
                         }`}
-                        title={`${dia.totalInstalaciones} instalación(es)`}
+                        title={`${instDia} instalación(es)`}
                       >
-                        🛠️{dia.totalInstalaciones}
+                        🛠️{instDia}
                       </span>
                     )}
-                    {dia.totalInspecciones > 0 && (
+                    {inspDia > 0 && (
                       <span
                         className={`flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
                           seleccionado ? "bg-amber-300 text-carbon" : "bg-amber-100 text-amber-900"
                         }`}
-                        title={`${dia.totalInspecciones} inspección(es)`}
+                        title={`${inspDia} inspección(es)`}
                       >
-                        🔍{dia.totalInspecciones}
+                        🔍{inspDia}
                       </span>
                     )}
-                    {dia.totalActividades === 0 && (
+                    {filtroEstado === "pendientes" && totalDia === 0 && completadasDia > 0 && (
+                      <span
+                        className="text-[10px]"
+                        title={`${completadasDia} actividad(es) completada(s)`}
+                      >
+                        ✅
+                      </span>
+                    )}
+                    {totalDia === 0 && (filtroEstado !== "pendientes" || completadasDia === 0) && (
                       <span className="h-1.5 w-1.5 rounded-full bg-carbon/20" />
                     )}
                   </div>
@@ -546,34 +670,56 @@ export function HeaderActividadesSemana() {
               Cargando actividades de la semana...
             </div>
           ) : actividadesFiltradas.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-center rounded-xl border border-dashed border-carbon/15 bg-slate-50/50">
-              <span className="text-2xl mb-1">📋</span>
+            <div className="flex flex-col items-center justify-center py-6 text-center rounded-xl border border-dashed border-carbon/15 bg-slate-50/50 p-4">
+              <span className="text-2xl mb-1">
+                {filtroEstado === "pendientes" ? "✨" : "📋"}
+              </span>
               <p className="text-xs font-semibold text-carbon/70">
                 {diaSeleccionado
-                  ? "Sin actividades para el día seleccionado"
+                  ? filtroEstado === "pendientes"
+                    ? "Sin actividades pendientes para el día seleccionado"
+                    : "Sin actividades para el día seleccionado"
+                  : filtroEstado === "pendientes"
+                  ? "¡No hay actividades pendientes para los filtros seleccionados!"
                   : filtroTipo !== "todas"
                   ? `Sin ${filtroTipo === "instalacion" ? "instalaciones" : "inspecciones"} esta semana`
                   : "Sin actividades programadas para esta semana"}
               </p>
               <p className="text-[11px] text-carbon/40 mt-0.5">
-                Las citas e instalaciones agendadas en el CRM aparecerán automáticamente aquí.
+                {filtroEstado === "pendientes" && conteos.completadas > 0
+                  ? `Hay ${conteos.completadas} actividad(es) completada(s) esta semana.`
+                  : "Las citas e instalaciones agendadas en el CRM aparecerán automáticamente aquí."}
               </p>
-              <Link
-                href="/agenda"
-                className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-verde-profundo text-crema px-3 py-1 text-xs font-semibold hover:bg-sauce transition shadow-2xs"
-              >
-                <span>+ Programar en Agenda</span>
-              </Link>
+              <div className="flex items-center gap-2 mt-2.5 flex-wrap justify-center">
+                {filtroEstado === "pendientes" && conteos.completadas > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFiltroEstado("completadas")}
+                    className="inline-flex items-center gap-1 rounded-lg bg-slate-700 text-white px-3 py-1 text-xs font-semibold hover:bg-slate-800 transition shadow-2xs cursor-pointer"
+                  >
+                    <span>✅ Ver actividades completadas ({conteos.completadas})</span>
+                  </button>
+                )}
+                <Link
+                  href="/agenda"
+                  className="inline-flex items-center gap-1 rounded-lg bg-verde-profundo text-crema px-3 py-1 text-xs font-semibold hover:bg-sauce transition shadow-2xs"
+                >
+                  <span>+ Programar en Agenda</span>
+                </Link>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 max-h-[320px] overflow-y-auto pr-1 scrollbar-sutil">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 max-h-[460px] overflow-y-auto pr-1 scrollbar-sutil">
               {actividadesFiltradas.map((act) => {
                 const esInst = act.tipo === "instalacion";
+                const esCompletada = act.estado === "completada";
                 return (
                   <div
                     key={act.id}
                     className={`group relative flex flex-col justify-between rounded-xl border p-2.5 text-xs transition-all hover:shadow-md ${
-                      act.esHoy
+                      esCompletada
+                        ? "bg-slate-50/80 border-slate-200 opacity-90 hover:opacity-100"
+                        : act.esHoy
                         ? "bg-white border-verde-profundo/40 shadow-xs ring-1 ring-verde-profundo/20"
                         : "bg-white border-carbon/10 hover:border-carbon/25"
                     }`}
@@ -597,11 +743,11 @@ export function HeaderActividadesSemana() {
                         <span
                           className={`rounded-full px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider ${
                             act.estado === "confirmada"
-                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold"
                               : act.estado === "en_proceso"
-                              ? "bg-blue-50 text-blue-800 border border-blue-200"
+                              ? "bg-blue-50 text-blue-800 border border-blue-200 font-semibold"
                               : act.estado === "completada"
-                              ? "bg-slate-100 text-slate-700"
+                              ? "bg-slate-200 text-slate-800 border border-slate-300 font-bold"
                               : "bg-amber-50 text-amber-800 border border-amber-200"
                           }`}
                         >
