@@ -209,34 +209,35 @@ export function PanelProveedoresCotizacion({
                     <td className="py-3 px-3 text-right font-mono font-semibold text-rojo whitespace-nowrap">
                       {formatoPesos(d.monto)}
                     </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {d.archivoUrl && (
-                        <a
-                          href={d.archivoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {d.archivoUrl && (
+                          <a
+                            href={d.archivoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
+                          >
+                            Ver archivo
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleEditar(d)}
                           className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
                         >
-                          Ver archivo
-                        </a>
-                      )}
-                      <button
-                        onClick={() => handleEditar(d)}
-                        className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce transition"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleEliminar(d.id)}
-                        className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5 transition"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleEliminar(d.id)}
+                          className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5 transition"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
                 </tr>
-              ))}
+              );
+            })}
             </tbody>
           </table>
         </div>
