@@ -133,46 +133,82 @@ export function PanelProveedoresCotizacion({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-carbon/10 bg-carbon/5 text-carbon/70 uppercase tracking-wider font-semibold">
-                <th className="py-3 px-4">Proveedor</th>
-                <th className="py-3 px-4">Tipo</th>
-                <th className="py-3 px-4">Folio</th>
-                <th className="py-3 px-4">Fecha</th>
-                <th className="py-3 px-4">Concepto</th>
-                <th className="py-3 px-4 text-right">Monto</th>
-                <th className="py-3 px-4 text-right">Acciones</th>
+                <th className="py-3 px-3">Proveedor</th>
+                <th className="py-3 px-3">Tipo & Folio</th>
+                <th className="py-3 px-3">Fecha</th>
+                <th className="py-3 px-3">Producto / Partida</th>
+                <th className="py-3 px-3 text-right">Cantidad</th>
+                <th className="py-3 px-3 text-right">Costo Unit.</th>
+                <th className="py-3 px-3 text-right">Monto</th>
+                <th className="py-3 px-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-carbon/10">
-              {(documentos || []).map((d) => (
-                <tr key={d.id} className="hover:bg-sauce/5 transition-colors">
-                  <td className="py-3 px-4 font-semibold text-carbon">{d.proveedorNombre || "—"}</td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                        d.tipo === "factura"
-                          ? "bg-indigo-100 text-indigo-700 border border-indigo-200"
-                          : "bg-amber-100 text-amber-700 border border-amber-200"
-                      }`}
-                    >
-                      {d.tipo}
-                    </span>
-                    {d.origen === "automatico" && (
-                      <span className="ml-1.5 inline-block rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700" title="Generado automáticamente al concluir la orden de trabajo">
-                        ⚡ auto
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-mono text-carbon/80">{d.folio || "—"}</div>
-                    {d.tipo === "factura" && d.folioProveedor && (
-                      <div className="text-[10px] text-carbon/50">Folio proveedor: {d.folioProveedor}</div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-carbon/70">{new Date(d.fecha).toLocaleDateString("es-MX")}</td>
-                  <td className="py-3 px-4 text-carbon/70 max-w-[220px] truncate" title={d.concepto}>
-                    {d.concepto || "—"}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold text-rojo">{formatoPesos(d.monto)}</td>
+              {(documentos || []).map((d) => {
+                const cant = d.cantidad !== null && d.cantidad !== undefined ? Number(d.cantidad) : null;
+                const cUnit =
+                  d.costoUnitario !== null && d.costoUnitario !== undefined
+                    ? Number(d.costoUnitario)
+                    : cant && cant > 0 && d.monto > 0
+                    ? Math.round((d.monto / cant) * 100) / 100
+                    : null;
+
+                return (
+                  <tr key={d.id} className="hover:bg-sauce/5 transition-colors">
+                    <td className="py-3 px-3 font-semibold text-carbon">{d.proveedorNombre || "—"}</td>
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase ${
+                            d.tipo === "factura"
+                              ? "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                              : "bg-amber-100 text-amber-700 border border-amber-200"
+                          }`}
+                        >
+                          {d.tipo}
+                        </span>
+                        {d.origen === "automatico" && (
+                          <span
+                            className="rounded-full bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700"
+                            title="Generado automáticamente al concluir la orden de trabajo"
+                          >
+                            ⚡ auto
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-mono text-carbon/80 mt-0.5">{d.folio || "—"}</div>
+                      {d.tipo === "factura" && d.folioProveedor && (
+                        <div className="text-[10px] text-carbon/50">Folio prov: {d.folioProveedor}</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-carbon/70">{new Date(d.fecha).toLocaleDateString("es-MX")}</td>
+                    <td className="py-3 px-3 max-w-[200px]" title={d.productoNombre || d.concepto}>
+                      <div className="font-medium text-carbon line-clamp-1">
+                        {d.productoNombre || d.concepto || "—"}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                      {cant !== null && cant > 0 ? (
+                        <span className="font-semibold text-carbon">
+                          {cant} <span className="text-[10px] text-carbon/50">{d.unidad || "m²"}</span>
+                        </span>
+                      ) : (
+                        <span className="text-carbon/40 text-[10px]">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                      {cUnit !== null && cUnit > 0 ? (
+                        <span className="text-emerald-800 font-semibold">
+                          ${cUnit.toFixed(2)}
+                          <span className="text-[10px] text-carbon/50">/{d.unidad || "m²"}</span>
+                        </span>
+                      ) : (
+                        <span className="text-carbon/40 text-[10px]">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-semibold text-rojo whitespace-nowrap">
+                      {formatoPesos(d.monto)}
+                    </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       {d.archivoUrl && (

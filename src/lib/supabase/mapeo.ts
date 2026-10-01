@@ -406,6 +406,12 @@ export interface FilaDocumentoProveedor {
   concepto: string;
   fecha: string;
   monto: number;
+  producto_id?: string | null;
+  producto_nombre?: string | null;
+  cantidad?: number | null;
+  unidad?: string | null;
+  costo_unitario?: number | null;
+  partidas?: any;
   archivo_url: string | null;
   archivo_nombre: string | null;
   notas: string;
@@ -430,6 +436,13 @@ export function aDocumentoProveedor(fila: FilaDocumentoProveedor): DocumentoProv
     concepto: fila.concepto ?? "",
     fecha: fila.fecha,
     monto: Number(fila.monto) || 0,
+    productoId: fila.producto_id ?? null,
+    productoNombre: fila.producto_nombre ?? null,
+    cantidad: fila.cantidad !== null && fila.cantidad !== undefined ? Number(fila.cantidad) : null,
+    unidad: fila.unidad ?? "m2",
+    costoUnitario:
+      fila.costo_unitario !== null && fila.costo_unitario !== undefined ? Number(fila.costo_unitario) : null,
+    partidas: Array.isArray(fila.partidas) ? fila.partidas : [],
     archivoUrl: fila.archivo_url ?? null,
     archivoNombre: fila.archivo_nombre ?? null,
     notas: fila.notas ?? "",
@@ -450,8 +463,16 @@ export function aFilaDocumentoProveedor(datos: DatosDocumentoProveedor) {
     concepto: datos.concepto || "",
     fecha: datos.fecha,
     monto: Number(datos.monto) || 0,
+    producto_id: datos.productoId || null,
+    producto_nombre: datos.productoNombre || null,
+    cantidad: datos.cantidad !== null && datos.cantidad !== undefined ? Number(datos.cantidad) : null,
+    unidad: datos.unidad || "m2",
+    costo_unitario:
+      datos.costoUnitario !== null && datos.costoUnitario !== undefined ? Number(datos.costoUnitario) : null,
+    partidas: datos.partidas || [],
     archivo_url: datos.archivoUrl || null,
     archivo_nombre: datos.archivoNombre || null,
     notas: datos.notas || "",
   };
 }
+

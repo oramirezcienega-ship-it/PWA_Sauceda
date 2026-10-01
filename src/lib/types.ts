@@ -1261,6 +1261,16 @@ export type TipoDocumentoProveedor = "remision" | "factura";
 /** Origen del documento: capturado a mano, o generado en automático al concluir una orden de trabajo. */
 export type OrigenDocumentoProveedor = "manual" | "automatico";
 
+export interface PartidaDocumentoProveedor {
+  id?: string;
+  productoId?: string | null;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  costoUnitario: number;
+  importe: number;
+}
+
 export interface DocumentoProveedor {
   id: string;
   proveedorId: string;
@@ -1279,6 +1289,18 @@ export interface DocumentoProveedor {
   concepto: string;
   fecha: string;
   monto: number;
+  /** Enlace al producto/servicio del catálogo maestro. */
+  productoId?: string | null;
+  /** Nombre del producto o partida trabajada. */
+  productoNombre?: string | null;
+  /** Cantidad de metros o unidades trabajadas. */
+  cantidad?: number | null;
+  /** Unidad de medida (ej. 'm2', 'pza', 'ml', 'lote'). */
+  unidad?: string | null;
+  /** Costo o precio unitario por metro/unidad pactado con el proveedor ($/m2). */
+  costoUnitario?: number | null;
+  /** Desglose de partidas si la orden o remisión incluye múltiples conceptos. */
+  partidas?: PartidaDocumentoProveedor[];
   archivoUrl?: string | null;
   archivoNombre?: string | null;
   notas: string;
@@ -1291,6 +1313,32 @@ export type DatosDocumentoProveedor = Omit<
   DocumentoProveedor,
   "id" | "proveedorNombre" | "cotizacionFolio" | "ordenTrabajoFolio" | "folio" | "origen" | "createdAt" | "updatedAt"
 >;
+
+export interface MetricaProductoProveedor {
+  productoId: string | null;
+  productoNombre: string;
+  unidad: string;
+  ultimoPrecio: number;
+  precioPromedio: number;
+  precioMinimo: number;
+  precioMaximo: number;
+  totalCantidad: number;
+  totalDocumentos: number;
+  ultimaFecha: string;
+  tendencia: "subio" | "bajo" | "mantuvo" | "unico";
+  diferenciaUltima: number;
+  historial: Array<{
+    id: string;
+    fecha: string;
+    costoUnitario: number;
+    cantidad: number;
+    monto: number;
+    folio: string;
+    ordenTrabajoFolio?: string | null;
+    cotizacionId?: string | null;
+    tipo: TipoDocumentoProveedor;
+  }>;
+}
 
 export const CATEGORIAS_PROVEEDOR = [
   "Materiales de construcción",

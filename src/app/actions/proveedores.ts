@@ -11,7 +11,13 @@ import {
   type FilaDocumentoProveedor,
 } from "@/lib/supabase/mapeo";
 import { registrarActividad } from "@/lib/actividades";
-import type { DatosProveedor, Proveedor, DatosDocumentoProveedor, DocumentoProveedor } from "@/lib/types";
+import type {
+  DatosProveedor,
+  Proveedor,
+  DatosDocumentoProveedor,
+  DocumentoProveedor,
+  MetricaProductoProveedor,
+} from "@/lib/types";
 
 export interface FiltrosProveedores {
   search?: string;
@@ -353,6 +359,22 @@ export async function actualizarDocumentoProveedor(
   if (datos.concepto !== undefined) camposActualizar.concepto = datos.concepto.trim();
   if (datos.fecha !== undefined) camposActualizar.fecha = datos.fecha;
   if (datos.monto !== undefined) camposActualizar.monto = Number(datos.monto) || 0;
+  if (datos.productoId !== undefined) camposActualizar.producto_id = datos.productoId || null;
+  if (datos.productoNombre !== undefined) camposActualizar.producto_nombre = (datos.productoNombre || "").trim() || null;
+  if (datos.cantidad !== undefined) {
+    camposActualizar.cantidad =
+      datos.cantidad !== null && datos.cantidad !== undefined && !isNaN(Number(datos.cantidad))
+        ? Number(datos.cantidad)
+        : null;
+  }
+  if (datos.unidad !== undefined) camposActualizar.unidad = (datos.unidad || "m2").trim();
+  if (datos.costoUnitario !== undefined) {
+    camposActualizar.costo_unitario =
+      datos.costoUnitario !== null && datos.costoUnitario !== undefined && !isNaN(Number(datos.costoUnitario))
+        ? Number(datos.costoUnitario)
+        : null;
+  }
+  if (datos.partidas !== undefined) camposActualizar.partidas = datos.partidas || [];
   if (datos.archivoUrl !== undefined) camposActualizar.archivo_url = datos.archivoUrl || null;
   if (datos.archivoNombre !== undefined) camposActualizar.archivo_nombre = datos.archivoNombre || null;
   if (datos.notas !== undefined) camposActualizar.notas = datos.notas.trim();
@@ -412,11 +434,94 @@ export async function listarCotizacionesMinParaProveedor(): Promise<
   }
 }
 
+/** Obtiene los conceptos de una cotización para que el proveedor los vincule con m2 y costos por m2. */
+export async function obtenerConceptosDeCotizacionParaProveedor(cotizacionId: string): Promise<{
+  conceptos: Array<{
+    id: string;
+    descripcion: string;
+    cantidad: number;
+    unidad: string;
+    costoUnitario: number;
+    precioUnitario: number;
+    productoServicioId: string | null;
+  }>;
+  costoProveedorSugerido: number;
+}> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    // Si pasaron un ID de OT en lugar de cotización, intentar resolver la cotización
+    let idCot = cotizacionId;
+    if (cotizacionId.startsWith("OT-") || cotizacionId.length === 36) {
+      const { data: otData } = await sb
+        .from("ordenes_trabajo")
+        .select("cotizacion_id")
+        .or(`id.eq.${cotizacionId},folio.eq.${cotizacionId}`)
+        .maybeSingle();
+      if (otData?.cotizacion_id) idCot = otData.cotizacion_id;
+    }
+
+    const { data, error } = await sb
+      .from("cotizacion_conceptos")
+      .select("id, descripcion, cantidad, unidad, costo_unitario, precio_unitario, producto_servicio_id")
+      .eq("cotizacion_id", idCot);
+
+    if (error || !data || data.length === 0) {
+      return { conceptos: [], costoProveedorSugerido: 0 };
+    }
+
+    const conceptos = data.map((c: any) => ({
+      id: c.id,
+      descripcion: c.descripcion || "",
+      cantidad: Number(c.cantidad) || 0,
+      unidad: c.unidad || "m2",
+      costoUnitario: Number(c.costo_unitario) || 0,
+      precioUnitario: Number(c.precio_unitario) || 0,
+      productoServicioId: c.producto_servicio_id || null,
+    }));
+
+    const costoProveedorSugerido = conceptos.reduce(
+      (acc, c) => acc + c.cantidad * c.costoUnitario,
+      0
+    );
+
+    return { conceptos, costoProveedorSugerido: Math.round(costoProveedorSugerido * 100) / 100 };
+  } catch {
+    return { conceptos: [], costoProveedorSugerido: 0 };
+  }
+}
+
+/** Lista los productos y servicios del catálogo maestro para asignación rápida. */
+export async function listarProductosParaProveedor(): Promise<
+  Array<{ id: string; nombre: string; unidad: string; costoUnitario: number }>
+> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data, error } = await sb
+      .from("productos_servicios")
+      .select("id, nombre, unidad, costo_unitario")
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
+
+    if (error || !data) return [];
+    return data.map((p: any) => ({
+      id: p.id,
+      nombre: p.nombre,
+      unidad: p.unidad || "m2",
+      costoUnitario: Number(p.costo_unitario) || 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Genera automáticamente la remisión de costo del proveedor asignado a una orden de
- * trabajo, jalando producto/cantidades de la cotización, cliente y folio de la orden.
- * Se llama al concluir la orden de trabajo. Es idempotente: si ya existe un documento
- * automático para esa orden, lo regresa en vez de duplicarlo.
+ * trabajo, estructurando el producto, cantidad de metros (m2), costo por m2 pactado,
+ * y desglose de partidas. Se llama al concluir la orden de trabajo.
  */
 export async function generarDocumentoProveedorAutomatico(
   ordenTrabajoId: string
@@ -447,22 +552,64 @@ export async function generarDocumentoProveedorAutomatico(
     return { ok: false, error: "La orden de trabajo no tiene un costo pactado con el proveedor." };
   }
 
-  // Jalar producto y cantidades de la cotización, si existe
+  const costoPactadoTotal = Number(ot.costo_proveedor);
+
+  // Jalar producto y cantidades estructuradas de la cotización, si existe
   let concepto = (ot.proveedor_concepto || "").trim();
-  if (!concepto && ot.cotizacion_id) {
+  let productoId: string | null = null;
+  let productoNombre: string | null = null;
+  let cantidadTotal: number | null = null;
+  let unidad: string = "m2";
+  let costoUnitario: number | null = null;
+  let partidasEstructuradas: any[] = [];
+
+  if (ot.cotizacion_id) {
     const { data: conceptos } = await sb
       .from("cotizacion_conceptos")
-      .select("descripcion, cantidad, unidad")
+      .select("id, descripcion, cantidad, unidad, costo_unitario, producto_servicio_id")
       .eq("cotizacion_id", ot.cotizacion_id);
 
     if (conceptos && conceptos.length > 0) {
-      concepto = conceptos
-        .map((c: any) => `${c.cantidad ?? ""}${c.unidad ? ` ${c.unidad}` : ""} ${c.descripcion ?? ""}`.trim())
-        .filter(Boolean)
-        .join("; ");
+      partidasEstructuradas = conceptos.map((c: any) => ({
+        id: c.id,
+        productoId: c.producto_servicio_id || null,
+        descripcion: c.descripcion || "",
+        cantidad: Number(c.cantidad) || 0,
+        unidad: c.unidad || "m2",
+        costoUnitario: Number(c.costo_unitario) || 0,
+        importe: (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0),
+      }));
+
+      const conceptoPrincipal = conceptos[0];
+      productoId = conceptoPrincipal.producto_servicio_id || null;
+      productoNombre = conceptoPrincipal.descripcion || null;
+      unidad = conceptoPrincipal.unidad || "m2";
+
+      const mismaUnidad = conceptos.every((c: any) => (c.unidad || "m2") === unidad);
+      if (mismaUnidad) {
+        cantidadTotal = conceptos.reduce((acc: number, c: any) => acc + (Number(c.cantidad) || 0), 0);
+      } else {
+        cantidadTotal = Number(conceptoPrincipal.cantidad) || null;
+      }
+
+      // Costo por m2 real pactado con el proveedor
+      if (cantidadTotal && cantidadTotal > 0 && costoPactadoTotal > 0) {
+        costoUnitario = Math.round((costoPactadoTotal / cantidadTotal) * 100) / 100;
+      } else if (conceptoPrincipal.costo_unitario) {
+        costoUnitario = Number(conceptoPrincipal.costo_unitario);
+      }
+
+      if (!concepto) {
+        concepto = conceptos
+          .map((c: any) => `${c.cantidad ?? ""}${c.unidad ? ` ${c.unidad}` : ""} ${c.descripcion ?? ""}`.trim())
+          .filter(Boolean)
+          .join("; ");
+      }
     }
   }
+
   if (!concepto) concepto = ot.titulo || "Trabajo realizado";
+  if (!productoNombre) productoNombre = concepto;
 
   const clienteNombre = (ot as any).prospectos?.nombre || "Cliente";
   const folio = await generarFolioDocumentoProveedor(sb, "remision");
@@ -477,8 +624,14 @@ export async function generarDocumentoProveedorAutomatico(
       tipo: "remision",
       folio,
       concepto,
+      producto_id: productoId,
+      producto_nombre: productoNombre,
+      cantidad: cantidadTotal,
+      unidad,
+      costo_unitario: costoUnitario,
+      partidas: partidasEstructuradas,
       fecha: new Date().toISOString().slice(0, 10),
-      monto: Number(ot.costo_proveedor),
+      monto: costoPactadoTotal,
       notas: `Generado automáticamente al concluir la orden de trabajo ${ot.folio} de ${clienteNombre}.`,
       origen: "automatico",
     })
@@ -493,6 +646,163 @@ export async function generarDocumentoProveedorAutomatico(
   await registrarCompraProveedorEnFinanzas(documento);
 
   return { ok: true, documento };
+}
+
+/** Obtiene el análisis y evolución de precios por producto/partida de un proveedor. */
+export async function obtenerHistorialPreciosProveedor(
+  proveedorId: string
+): Promise<MetricaProductoProveedor[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+
+  try {
+    const { data, error } = await sb
+      .from("documentos_proveedores")
+      .select("*, ordenes_trabajo:orden_trabajo_id(folio)")
+      .eq("proveedor_id", proveedorId)
+      .order("fecha", { ascending: true });
+
+    if (error || !data || data.length === 0) return [];
+
+    const agrupados: Record<
+      string,
+      {
+        productoId: string | null;
+        productoNombre: string;
+        unidad: string;
+        historial: Array<{
+          id: string;
+          fecha: string;
+          costoUnitario: number;
+          cantidad: number;
+          monto: number;
+          folio: string;
+          ordenTrabajoFolio?: string | null;
+          cotizacionId?: string | null;
+          tipo: TipoDocumentoProveedor;
+        }>;
+      }
+    > = {};
+
+    for (const doc of data) {
+      // Si el documento tiene partidas múltiples desglosadas
+      const partidas = Array.isArray(doc.partidas) && doc.partidas.length > 0 ? doc.partidas : null;
+
+      if (partidas) {
+        for (const p of partidas) {
+          const key = (p.descripcion || p.productoId || "Partida general").trim().toLowerCase();
+          if (!agrupados[key]) {
+            agrupados[key] = {
+              productoId: p.productoId || null,
+              productoNombre: p.descripcion || "Partida general",
+              unidad: p.unidad || "m2",
+              historial: [],
+            };
+          }
+          const cUnit = Number(p.costoUnitario || 0);
+          const cant = Number(p.cantidad || 0);
+          const mont = Number(p.importe || (cUnit * cant) || 0);
+
+          agrupados[key].historial.push({
+            id: doc.id,
+            fecha: doc.fecha,
+            costoUnitario: cUnit,
+            cantidad: cant,
+            monto: mont,
+            folio: doc.folio,
+            ordenTrabajoFolio: doc.ordenes_trabajo?.folio || null,
+            cotizacionId: doc.cotizacion_id || null,
+            tipo: doc.tipo,
+          });
+        }
+      } else {
+        // Documento con producto a nivel de encabezado o concepto
+        const nombreProd = (doc.producto_nombre || doc.concepto || "Trabajo general").trim();
+        const key = nombreProd.toLowerCase();
+        if (!agrupados[key]) {
+          agrupados[key] = {
+            productoId: doc.producto_id || null,
+            productoNombre: nombreProd,
+            unidad: doc.unidad || "m2",
+            historial: [],
+          };
+        }
+
+        let cUnit = doc.costo_unitario !== null ? Number(doc.costo_unitario) : 0;
+        const cant = doc.cantidad !== null ? Number(doc.cantidad) : 0;
+        const mont = Number(doc.monto) || 0;
+
+        if (cUnit <= 0 && cant > 0 && mont > 0) {
+          cUnit = Math.round((mont / cant) * 100) / 100;
+        }
+
+        agrupados[key].historial.push({
+          id: doc.id,
+          fecha: doc.fecha,
+          costoUnitario: cUnit,
+          cantidad: cant,
+          monto: mont,
+          folio: doc.folio,
+          ordenTrabajoFolio: doc.ordenes_trabajo?.folio || null,
+          cotizacionId: doc.cotizacion_id || null,
+          tipo: doc.tipo,
+        });
+      }
+    }
+
+    const metricas: MetricaProductoProveedor[] = Object.values(agrupados).map((item) => {
+      // Ordenar cronológicamente
+      const hist = item.historial.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+      const ultimosPreciosValidos = hist.filter((h) => h.costoUnitario > 0);
+
+      const ultimo = ultimosPreciosValidos[ultimosPreciosValidos.length - 1];
+      const penultimo = ultimosPreciosValidos[ultimosPreciosValidos.length - 2];
+
+      const precios = ultimosPreciosValidos.map((h) => h.costoUnitario);
+      const ultimoPrecio = ultimo ? ultimo.costoUnitario : 0;
+      const penultimoPrecio = penultimo ? penultimo.costoUnitario : ultimoPrecio;
+
+      const precioPromedio =
+        precios.length > 0
+          ? Math.round((precios.reduce((acc, p) => acc + p, 0) / precios.length) * 100) / 100
+          : 0;
+      const precioMinimo = precios.length > 0 ? Math.min(...precios) : 0;
+      const precioMaximo = precios.length > 0 ? Math.max(...precios) : 0;
+      const totalCantidad = hist.reduce((acc, h) => acc + h.cantidad, 0);
+
+      let tendencia: "subio" | "bajo" | "mantuvo" | "unico" = "unico";
+      let diferenciaUltima = 0;
+
+      if (penultimo && ultimo) {
+        diferenciaUltima = Math.round((ultimoPrecio - penultimoPrecio) * 100) / 100;
+        if (diferenciaUltima > 0.01) tendencia = "subio";
+        else if (diferenciaUltima < -0.01) tendencia = "bajo";
+        else tendencia = "mantuvo";
+      }
+
+      return {
+        productoId: item.productoId,
+        productoNombre: item.productoNombre,
+        unidad: item.unidad,
+        ultimoPrecio,
+        precioPromedio,
+        precioMinimo,
+        precioMaximo,
+        totalCantidad: Math.round(totalCantidad * 100) / 100,
+        totalDocumentos: hist.length,
+        ultimaFecha: hist[hist.length - 1]?.fecha || "",
+        tendencia,
+        diferenciaUltima,
+        historial: hist,
+      };
+    });
+
+    // Ordenar de los productos con más documentos y más recientes a los menos
+    return metricas.sort((a, b) => b.totalDocumentos - a.totalDocumentos);
+  } catch (err) {
+    console.error("Error al calcular historial de precios de proveedor:", err);
+    return [];
+  }
 }
 
 /** Lista los documentos (facturas/remisiones) de proveedores ligados a una orden de trabajo específica. */
@@ -515,3 +825,4 @@ export async function listarDocumentosProveedorPorOrdenTrabajo(
     return [];
   }
 }
+
