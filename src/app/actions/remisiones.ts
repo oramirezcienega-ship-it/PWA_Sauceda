@@ -510,8 +510,13 @@ export async function actualizarCostosRemision(datos: {
       console.warn("Aviso al recalcular comisión tras actualizar costos:", errCom);
     }
 
+    // 5. La remisión manda: actualizar sus movimientos definitivos en Finanzas
+    const { sincronizarFinanzasRemision } = await import("@/app/actions/contabilidad-remisiones");
+    await sincronizarFinanzasRemision(datos.remisionId);
+
     revalidatePath("/remisiones");
     revalidatePath("/comisiones");
+    revalidatePath("/finanzas");
     if (rem.orden_trabajo_id) revalidatePath(`/ordenes-trabajo/${rem.orden_trabajo_id}`);
     if (rem.cotizacion_id) revalidatePath(`/construccion/${rem.cotizacion_id}`);
 
@@ -540,6 +545,9 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
   tasasPasarela: TasaPasarela[];
   porcentajeRegla: number;
   reglaOrigen: string;
+  /** Suma de los documentos (facturas/remisiones) del proveedor registrados para esta obra. */
+  costoProveedorDocumentos: number;
+  documentosProveedor: number;
   error?: string;
 }> {
   const tasasPorDefecto: TasaPasarela[] = [
@@ -616,13 +624,38 @@ export async function obtenerParametrosComisionRemision(remisionId: string): Pro
     const { resolverPorcentajeComision } = await import("@/app/actions/comisiones");
     const { porcentaje, reglaOrigen } = await resolverPorcentajeComision({ asesorId, servicioTipo });
 
-    return { ok: true, tasasPasarela, porcentajeRegla: porcentaje, reglaOrigen };
+    // Costo real del proveedor según sus documentos registrados para la obra
+    const filtrosDocs: string[] = [];
+    if (rem?.orden_trabajo_id) filtrosDocs.push(`orden_trabajo_id.eq.${rem.orden_trabajo_id}`);
+    if (rem?.cotizacion_id) filtrosDocs.push(`cotizacion_id.eq.${rem.cotizacion_id}`);
+    let costoProveedorDocumentos = 0;
+    let documentosProveedor = 0;
+    if (filtrosDocs.length > 0) {
+      const { data: docs } = await sb
+        .from("documentos_proveedores")
+        .select("monto")
+        .or(filtrosDocs.join(","));
+      documentosProveedor = (docs || []).length;
+      costoProveedorDocumentos =
+        Math.round((docs || []).reduce((acc, d: any) => acc + Number(d.monto || 0), 0) * 100) / 100;
+    }
+
+    return {
+      ok: true,
+      tasasPasarela,
+      porcentajeRegla: porcentaje,
+      reglaOrigen,
+      costoProveedorDocumentos,
+      documentosProveedor,
+    };
   } catch (err: any) {
     return {
       ok: false,
       tasasPasarela: tasasPorDefecto,
       porcentajeRegla: 5,
       reglaOrigen: "Regla por defecto de contingencia (5.0%)",
+      costoProveedorDocumentos: 0,
+      documentosProveedor: 0,
       error: err?.message || "Error al cargar parámetros.",
     };
   }
@@ -727,8 +760,12 @@ export async function ajustarComisionAsesorRemision(datos: {
       if (error) throw new Error(error.message);
     }
 
+    const { sincronizarFinanzasRemision } = await import("@/app/actions/contabilidad-remisiones");
+    await sincronizarFinanzasRemision(datos.remisionId);
+
     revalidatePath("/remisiones");
     revalidatePath("/comisiones");
+    revalidatePath("/finanzas");
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al ajustar la comisión." };
@@ -748,6 +785,10 @@ export async function eliminarRemisionFactura(
     const { error } = await sb.from("remisiones_facturas").delete().eq("id", id);
     if (error) return { ok: false, error: error.message };
 
+    // Retirar de Finanzas los movimientos que originó la remisión
+    await sb.from("transactions").delete().eq("origen_modulo", "remision").eq("origen_id", id);
+
+    revalidatePath("/finanzas");
     revalidatePath("/remisiones");
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/comisiones");

@@ -1010,7 +1010,21 @@ export async function registrarPagoComisiones(datos: {
       if (errAnt) throw new Error(errAnt.message);
     }
 
+    // 5. Marcar como pagadas en Finanzas las comisiones de remisión liquidadas
+    if (aplicacionesFinales.length > 0) {
+      const { data: comsPagadas } = await sb
+        .from("comisiones")
+        .select("remision_factura_id")
+        .in("id", aplicacionesFinales.map((a) => a.comisionId))
+        .not("remision_factura_id", "is", null);
+      const remIds = Array.from(new Set((comsPagadas || []).map((c: any) => c.remision_factura_id)));
+      for (const remId of remIds) {
+        await reflejarRemisionEnFinanzas(remId as string);
+      }
+    }
+
     revalidatePath("/comisiones");
+    revalidatePath("/finanzas");
     return { ok: true, pagoId: pago.id };
   } catch (err: any) {
     return { ok: false, error: err.message || "Error al registrar el pago." };
@@ -1250,6 +1264,16 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
 // 6. SINCRONIZACIÓN AUTOMÁTICA DE REMISIONES/FACTURAS
 // ============================================================
 
+/** Refleja en Finanzas los importes definitivos de la remisión (no interrumpe si falla). */
+async function reflejarRemisionEnFinanzas(remisionId: string): Promise<void> {
+  try {
+    const { sincronizarFinanzasRemision } = await import("@/app/actions/contabilidad-remisiones");
+    await sincronizarFinanzasRemision(remisionId);
+  } catch (errFin) {
+    console.error("Error al reflejar la remisión en Finanzas:", errFin);
+  }
+}
+
 export async function sincronizarComisionParaRemision(
   remisionId: string
 ): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
@@ -1374,6 +1398,7 @@ export async function sincronizarComisionParaRemision(
         }
 
         await sb.from("comisiones").update(actualizacion).eq("id", comisionExistente.id);
+        await reflejarRemisionEnFinanzas(remisionId);
 
         return { ok: true, comisionId: comisionExistente.id };
       }
@@ -1415,6 +1440,7 @@ export async function sincronizarComisionParaRemision(
           updated_at: new Date().toISOString(),
         })
         .eq("id", comisionExistente.id);
+      await reflejarRemisionEnFinanzas(remisionId);
 
       return { ok: true, comisionId: comisionExistente.id };
     }
@@ -1464,23 +1490,9 @@ export async function sincronizarComisionParaRemision(
     // de esta comisión recién generada antes de que quede disponible para pago.
     await netearAnticiposContraComision(sb, asesorId, nuevaCom.id, montoComision);
 
-    // Reflejar automáticamente la comisión devengada en Finanzas (opex_nomina).
-    try {
-      const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
-      const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
-      await registrarMovimientoAutomaticoCRM({
-        tipo: "egreso",
-        lineaPnl: "opex_nomina",
-        monto: montoComision,
-        concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${rem.folio}`,
-        fecha: rem.fecha || new Date().toISOString().split("T")[0],
-        estado: "pendiente",
-        contraparte: asesor?.nombre || "Asesor",
-        crmDealId: rem.expediente_id || null,
-      });
-    } catch (errFin) {
-      console.error("Error al registrar movimiento financiero de comisión (remisión):", errFin);
-    }
+    // La comisión devengada se refleja en Finanzas (opex_nomina) junto con
+    // el resto de importes definitivos de la remisión.
+    await reflejarRemisionEnFinanzas(remisionId);
 
     return { ok: true, comisionId: nuevaCom.id };
   } catch (err: any) {

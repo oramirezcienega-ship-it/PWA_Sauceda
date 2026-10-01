@@ -25,6 +25,7 @@ import { TabEstadoResultados } from "./TabEstadoResultados";
 import { TabBalanceGeneral } from "./TabBalanceGeneral";
 import { TabFlujoEfectivo } from "./TabFlujoEfectivo";
 import { TabConfiguracion } from "./TabConfiguracion";
+import { TabRentabilidadProductos } from "./TabRentabilidadProductos";
 import { ModalNuevoMovimiento } from "./ModalNuevoMovimiento";
 import { ModalImportarExcel } from "./ModalImportarExcel";
 
@@ -35,6 +36,7 @@ type TabId =
   | "estado_resultados"
   | "balance"
   | "flujo"
+  | "rentabilidad"
   | "configuracion";
 
 export function FinanzasClient() {
@@ -253,7 +255,7 @@ export function FinanzasClient() {
             </div>
           </div>
 
-          {/* 7 SUB-PESTAÑAS DE NAVEGACIÓN */}
+          {/* SUB-PESTAÑAS DE NAVEGACIÓN */}
           <nav className="mt-3 flex items-center gap-1 overflow-x-auto scrollbar-none border-t border-slate-100 pt-2 text-xs font-bold">
             {(
               [
@@ -263,6 +265,7 @@ export function FinanzasClient() {
                 ["estado_resultados", "📑 Estado de Resultados"],
                 ["balance", "⚖️ Balance General"],
                 ["flujo", "🌊 Flujo de Efectivo"],
+                ["rentabilidad", "📦 Rentabilidad por Producto"],
                 ["configuracion", "⚙️ Configuración"]
               ] as const
             ).map(([tab, label]) => (
@@ -352,6 +355,14 @@ export function FinanzasClient() {
                 fechaInicio={fechaInicio}
                 fechaFin={fechaFin}
                 nombreUnidad={nombreUnidadSeleccionada}
+              />
+            )}
+
+            {activeTab === "rentabilidad" && (
+              <TabRentabilidadProductos
+                fechaInicio={fechaInicio}
+                fechaFin={fechaFin}
+                onRecalculado={cargarDatos}
               />
             )}
 

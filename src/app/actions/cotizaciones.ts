@@ -1775,73 +1775,14 @@ export async function crearRemisionFactura(
 
   if (errDoc) throw new Error(errDoc.message);
 
-  // 4. Registrar transacciones financieras (compatibilidad y nuevo módulo de Finanzas)
-  // Reflejar venta en nuevo módulo de Finanzas & Contabilidad (partida doble)
+  // 4. La remisión manda en Finanzas: movimientos definitivos (venta, proveedor,
+  // terminal, otros gastos y comisión) ligados a la remisión, sin duplicarse en
+  // el registro legado. La comisión se vuelve a reflejar al sincronizarse abajo.
   try {
-    const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
-    let clienteNombre = "Cliente";
-    if (cot.prospecto_id) {
-      const { data: pr } = await sb.from("prospectos").select("nombre").eq("id", cot.prospecto_id).maybeSingle();
-      if (pr?.nombre) clienteNombre = pr.nombre;
-    }
-    await registrarMovimientoAutomaticoCRM({
-      tipo: "ingreso",
-      lineaPnl: "ingresos_ventas",
-      monto: total,
-      concepto: `Venta - ${datos.folio} - Cotización ${cotizacionId}`,
-      fecha: datos.fecha || new Date().toISOString().split("T")[0],
-      estado: "pendiente",
-      contraparte: clienteNombre,
-      crmDealId: cot.expediente_id || null,
-    });
+    const { sincronizarFinanzasRemision } = await import("@/app/actions/contabilidad-remisiones");
+    await sincronizarFinanzasRemision(doc.id);
   } catch (errFin) {
-    console.error("Error al registrar movimiento financiero de venta en Finanzas:", errFin);
-  }
-
-  // Registro legado en transacciones_financieras
-  const transIngreso = {
-    fecha: datos.fecha || new Date().toISOString().split("T")[0],
-    tipo: "ingreso",
-    categoria: "venta",
-    concepto: `${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio} - Venta de Cotización ${cotizacionId}`,
-    monto: total,
-    expediente_id: cot.expediente_id
-  };
-
-  const { error: errIng } = await sb
-    .from("transacciones_financieras")
-    .insert([transIngreso]);
-
-  if (errIng) console.error("Error al registrar ingreso financiero:", errIng.message);
-
-  // Costo financiero
-  if (Number(datos.costoFinanciero || 0) > 0) {
-    const { error: errFin } = await sb
-      .from("transacciones_financieras")
-      .insert([{
-        fecha: datos.fecha || new Date().toISOString().split("T")[0],
-        tipo: "gasto",
-        categoria: "costo_venta",
-        concepto: `Costo Financiero de ${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio}`,
-        monto: Number(datos.costoFinanciero),
-        expediente_id: cot.expediente_id
-      }]);
-    if (errFin) console.error("Error al registrar costo financiero:", errFin.message);
-  }
-
-  // Otros gastos
-  if (Number(datos.otrosGastos || 0) > 0) {
-    const { error: errGas } = await sb
-      .from("transacciones_financieras")
-      .insert([{
-        fecha: datos.fecha || new Date().toISOString().split("T")[0],
-        tipo: "gasto",
-        categoria: "costo_venta",
-        concepto: `Otros Gastos de ${datos.tipo === "remision" ? "Remisión" : "Factura"} ${datos.folio}`,
-        monto: Number(datos.otrosGastos),
-        expediente_id: cot.expediente_id
-      }]);
-    if (errGas) console.error("Error al registrar otros gastos:", errGas.message);
+    console.error("Error al reflejar la remisión en Finanzas:", errFin);
   }
 
   // 5. Actualizar estatus de la cotización a 'instalacion'

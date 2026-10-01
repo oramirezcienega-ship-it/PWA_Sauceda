@@ -324,19 +324,32 @@ export async function registrarDocumentoProveedor(datos: DatosDocumentoProveedor
   return documento;
 }
 
-/** Reflejar automáticamente una compra/costo de proveedor en Finanzas (costo_directo). */
+/**
+ * Reflejar automáticamente una compra/costo de proveedor en Finanzas (costo_directo).
+ * Si la obra ya tiene remisión de venta, el costo definitivo lo manda la remisión:
+ * no se registra aparte (evita duplicar el costo) y solo se resincroniza la remisión.
+ */
 async function registrarCompraProveedorEnFinanzas(documento: DocumentoProveedor): Promise<void> {
   try {
+    const { obraTieneRemision, sincronizarFinanzasPorOrdenTrabajo } = await import(
+      "@/app/actions/contabilidad-remisiones"
+    );
+    if (await obraTieneRemision(documento.ordenTrabajoId, documento.cotizacionId)) {
+      if (documento.ordenTrabajoId) await sincronizarFinanzasPorOrdenTrabajo(documento.ordenTrabajoId);
+      return;
+    }
+
     const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
     await registrarMovimientoAutomaticoCRM({
       tipo: "egreso",
       lineaPnl: "costo_directo",
       monto: documento.monto,
-      concepto: `Compra a Proveedor - ${documento.proveedorNombre || "Proveedor"} - ${documento.folio || "s/folio"}`,
+      concepto: `Compra a Proveedor - ${documento.proveedorNombre || "Proveedor"} - ${documento.folioProveedor || documento.folio || "s/folio"}`,
       fecha: documento.fecha,
       estado: "pendiente",
       contraparte: documento.proveedorNombre || "Proveedor",
       crmDealId: documento.expedienteId || null,
+      origen: { modulo: "documento_proveedor", id: documento.id, concepto: "costo" },
     });
   } catch (errFin) {
     console.error("Error al registrar movimiento financiero de compra a proveedor:", errFin);
@@ -383,6 +396,18 @@ export async function actualizarDocumentoProveedor(
   if (error) {
     throw new Error(`Error al actualizar el documento: ${error.message}`);
   }
+
+  // Mantener al día su movimiento en Finanzas (si no lo sustituye una remisión)
+  const cambios: Record<string, any> = {};
+  if (camposActualizar.monto !== undefined) cambios.monto_total = camposActualizar.monto;
+  if (camposActualizar.fecha !== undefined) cambios.fecha_operacion = camposActualizar.fecha;
+  if (Object.keys(cambios).length > 0) {
+    await sb
+      .from("transactions")
+      .update({ ...cambios, updated_at: new Date().toISOString() })
+      .eq("origen_modulo", "documento_proveedor")
+      .eq("origen_id", id);
+  }
 }
 
 /** Elimina un documento (factura/remisión) de proveedor. */
@@ -407,6 +432,8 @@ export async function eliminarDocumentoProveedor(id: string): Promise<void> {
   if (error) {
     throw new Error(`Error al eliminar el documento: ${error.message}`);
   }
+
+  await sb.from("transactions").delete().eq("origen_modulo", "documento_proveedor").eq("origen_id", id);
 }
 
 /** Lista mínima de cotizaciones (órdenes de trabajo) para vincular un documento de proveedor. */

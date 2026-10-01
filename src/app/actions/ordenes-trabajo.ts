@@ -1172,6 +1172,8 @@ export async function crearReciboPago(datos: {
 
     if (insertError) return { ok: false, error: insertError.message };
 
+    await reflejarCobrosEnFinanzas(datos.ordenTrabajoId);
+
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/comisiones");
     if (ot.expediente_id) revalidatePath(`/expediente/${ot.expediente_id}`);
@@ -1326,6 +1328,16 @@ export async function emitirRecibosEnPartes(datos: {
  * en orden cronológico, para que sigan siendo coherentes tras editar o
  * eliminar alguno.
  */
+/** Los cobros de la OT liquidan la venta (y la terminal) de su remisión en Finanzas. */
+async function reflejarCobrosEnFinanzas(ordenTrabajoId: string): Promise<void> {
+  try {
+    const { sincronizarFinanzasPorOrdenTrabajo } = await import("@/app/actions/contabilidad-remisiones");
+    await sincronizarFinanzasPorOrdenTrabajo(ordenTrabajoId);
+  } catch (errFin) {
+    console.error("Error al reflejar cobros en Finanzas:", errFin);
+  }
+}
+
 async function recalcularSaldosRecibosOT(sb: any, ordenTrabajoId: string): Promise<void> {
   const { data: ot } = await sb
     .from("ordenes_trabajo")
@@ -1419,6 +1431,7 @@ export async function actualizarReciboPago(
     if (error) return { ok: false, error: error.message };
 
     await recalcularSaldosRecibosOT(sb, actual.orden_trabajo_id);
+    await reflejarCobrosEnFinanzas(actual.orden_trabajo_id);
 
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/comisiones");
@@ -1457,6 +1470,7 @@ export async function eliminarReciboPago(reciboId: string): Promise<{ ok: boolea
     if (error) return { ok: false, error: error.message };
 
     await recalcularSaldosRecibosOT(sb, actual.orden_trabajo_id);
+    await reflejarCobrosEnFinanzas(actual.orden_trabajo_id);
 
     revalidatePath("/ordenes-trabajo");
     revalidatePath("/comisiones");
@@ -1745,6 +1759,9 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
   razonSocial?: string;
   regimenFiscal?: string;
   usoCfdi?: string;
+  /** Costos definitivos validados al generar (si no vienen, se calculan). */
+  costoProveedor?: number;
+  costoFinanciero?: number;
 }): Promise<{ ok: boolean; remision?: RemisionFactura; error?: string }> {
   try {
     await requireAdmin();
@@ -1831,7 +1848,26 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
     // del % capturado en la orden de trabajo al programar la instalación
     // (terminal, meses sin intereses, etc.), en vez de partir siempre de $0.
     const comisionBancariaPctOt = Number(ot.comision_bancaria_pct || 0);
-    const costoFinancieroAuto = Math.round(montoBase * (comisionBancariaPctOt / 100) * 100) / 100;
+    const costoFinancieroAuto =
+      datos.costoFinanciero !== undefined
+        ? Math.max(0, Math.round(Number(datos.costoFinanciero) * 100) / 100)
+        : Math.round(montoBase * (comisionBancariaPctOt / 100) * 100) / 100;
+
+    // Costo real de proveedor: lo validado en pantalla; si no, lo que suman los
+    // documentos del proveedor de esta obra; si no hay, lo pactado en la OT.
+    let costoProveedorDefinitivo = Number(ot.costo_proveedor || 0);
+    if (datos.costoProveedor !== undefined) {
+      costoProveedorDefinitivo = Math.max(0, Math.round(Number(datos.costoProveedor) * 100) / 100);
+    } else {
+      const filtrosDocs = [`orden_trabajo_id.eq.${ot.id}`];
+      if (ot.cotizacion_id) filtrosDocs.push(`cotizacion_id.eq.${ot.cotizacion_id}`);
+      const { data: docsProv } = await sb
+        .from("documentos_proveedores")
+        .select("monto")
+        .or(filtrosDocs.join(","));
+      const sumaDocs = (docsProv || []).reduce((acc, d: any) => acc + Number(d.monto || 0), 0);
+      if (sumaDocs > 0) costoProveedorDefinitivo = Math.round(sumaDocs * 100) / 100;
+    }
 
     const { data: nuevaRem, error: insErr } = await sb
       .from("remisiones_facturas")
@@ -1846,7 +1882,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         datos_documento: datosDoc,
         servicios_extra: 0.0,
         costo_financiero: costoFinancieroAuto,
-        costo_proveedor: Number(ot.costo_proveedor || 0),
+        costo_proveedor: costoProveedorDefinitivo,
         otros_gastos: 0.0,
         monto_subtotal: montoBase,
         monto_total: montoBase,
@@ -1863,36 +1899,13 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
       console.error("Error al sincronizar comisión tras generar remisión desde OT:", errCom);
     }
 
-    // Reflejar automáticamente la venta en Finanzas (ingresos_ventas). Si ya
-    // se cobró por completo vía recibos_pago se registra como "pagado";
-    // de lo contrario queda como cuenta por cobrar pendiente.
+    // La remisión manda: venta, costo de proveedor, terminal y comisión pasan a
+    // Finanzas como importes definitivos, junto con su centro de costos por producto.
     try {
-      const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
-      const { data: recibosOt } = await sb
-        .from("recibos_pago")
-        .select("monto, fecha_pago")
-        .eq("orden_trabajo_id", ot.id);
-      const totalCobrado = (recibosOt || []).reduce((acc, r: any) => acc + Number(r.monto || 0), 0);
-      const yaLiquidada = montoBase > 0 && totalCobrado >= montoBase;
-      const ultimaFechaCobro = (recibosOt || [])
-        .map((r: any) => r.fecha_pago)
-        .filter(Boolean)
-        .sort()
-        .pop();
-
-      await registrarMovimientoAutomaticoCRM({
-        tipo: "ingreso",
-        lineaPnl: "ingresos_ventas",
-        monto: montoBase,
-        concepto: `Venta - ${folio} - ${ot.titulo}`,
-        fecha: datos.fecha || new Date().toISOString().split("T")[0],
-        fechaPago: yaLiquidada ? ultimaFechaCobro || undefined : undefined,
-        estado: yaLiquidada ? "pagado" : "pendiente",
-        contraparte: ot.prospectos?.nombre || "Cliente",
-        crmDealId: ot.expediente_id || null,
-      });
+      const { sincronizarFinanzasRemision } = await import("@/app/actions/contabilidad-remisiones");
+      await sincronizarFinanzasRemision(nuevaRem.id);
     } catch (errFin) {
-      console.error("Error al registrar movimiento financiero de venta desde OT:", errFin);
+      console.error("Error al reflejar la remisión de la OT en Finanzas:", errFin);
     }
 
     // Si tiene cotización, asegurar que pase a 'instalacion'

@@ -40,6 +40,10 @@ export function ModalDetalleRemision({
   const [porcentajeRegla, setPorcentajeRegla] = useState<number | null>(null);
   const [reglaOrigen, setReglaOrigen] = useState("");
   const [pctPasarelaInput, setPctPasarelaInput] = useState<string>("");
+  const [costoProveedorDocs, setCostoProveedorDocs] = useState<{ monto: number; documentos: number }>({
+    monto: 0,
+    documentos: 0,
+  });
 
   // Ajuste particular de la comisión del asesor
   const [modoComision, setModoComision] = useState<ModoComision>("automatica");
@@ -65,6 +69,7 @@ export function ModalDetalleRemision({
       setTasasPasarela(res.tasasPasarela);
       setPorcentajeRegla(res.porcentajeRegla);
       setReglaOrigen(res.reglaOrigen);
+      setCostoProveedorDocs({ monto: res.costoProveedorDocumentos, documentos: res.documentosProveedor });
     });
     return () => {
       cancelado = true;
@@ -580,6 +585,24 @@ export function ModalDetalleRemision({
                         Asignado a: <strong className="text-carbon">{remisionLocal.proveedorNombre}</strong>
                       </span>
                     )}
+                    {costoProveedorDocs.documentos > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px]">
+                        <span className="text-carbon/60">
+                          Costo real según {costoProveedorDocs.documentos}{" "}
+                          {costoProveedorDocs.documentos === 1 ? "documento" : "documentos"} del proveedor:{" "}
+                          <strong className="text-carbon font-mono">{formatMoneda(costoProveedorDocs.monto)}</strong>
+                        </span>
+                        {Math.abs(costoProveedorDocs.monto - (parseFloat(costoProveedorInput) || 0)) > 0.009 && (
+                          <button
+                            type="button"
+                            onClick={() => setCostoProveedorInput(String(costoProveedorDocs.monto))}
+                            className="bg-white border border-carbon/20 rounded px-1.5 py-0.5 text-carbon hover:bg-slate-50 cursor-pointer"
+                          >
+                            Usar costo real
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -688,6 +711,10 @@ export function ModalDetalleRemision({
                     </div>
                   );
                 })()}
+
+                <p className="text-[10px] text-carbon/60">
+                  Al guardar, la venta, el costo de proveedor, la terminal y la comisión se actualizan en Finanzas y en la rentabilidad por producto.
+                </p>
 
                 {errorCostos && (
                   <p className="text-[11px] text-red-600 bg-red-50 p-2 rounded border border-red-200">
