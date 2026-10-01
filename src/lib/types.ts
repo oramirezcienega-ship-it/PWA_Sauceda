@@ -1126,6 +1126,8 @@ export interface ProductoServicio {
   tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
   centroCostoId?: string | null;
   centroCostoNombre?: string | null;
+  /** Subcuenta de marketing / especialidad (ej. 601-01-001 Pub. Impermeabilización). */
+  codigoSubcuenta?: string | null;
   categoria?: string;
   fotos?: FotoProducto[];
   descripcionValor?: string;

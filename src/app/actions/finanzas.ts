@@ -32,6 +32,7 @@ export type SubtipoNoPnL =
 export interface BusinessUnit {
   id: string;
   nombre: string;
+  codigo?: string | null;
   descripcion?: string | null;
   activo: boolean;
   created_at?: string;
@@ -78,6 +79,8 @@ export interface Transaction {
   cfdi_uuid?: string | null;
   estado: "pagado" | "pendiente";
   is_demo: boolean;
+  codigo_subcuenta?: string | null;
+  producto_servicio_id?: string | null;
   created_by?: string | null;
   created_at: string;
   updated_at?: string;
@@ -425,18 +428,9 @@ export async function obtenerResumenFinanciero(
     .select("tipo, monto_total, fecha_operacion, estado")
     .eq("estado", "pendiente");
 
-  // 5. Marketing ads en analytics_marketing
-  const qMarketingActual = sb
-    .from("analytics_marketing")
-    .select("gasto_publicitario")
-    .gte("fecha", fInicio)
-    .lte("fecha", fFin);
-
-  const qMarketingPrev = sb
-    .from("analytics_marketing")
-    .select("gasto_publicitario")
-    .gte("fecha", fInicioPrev)
-    .lte("fecha", fFinPrev);
+  // 5. La publicidad solo cuenta en el P&L cuando ya es un movimiento contable
+  // (transactions). Las tablas de campañas (analytics_marketing / meta_ads_gastos)
+  // son la capa de métricas y se contabilizan con el importador de Meta Ads.
 
   // 6. Expedientes cerrados para atribución
   const qExpedientesCerrados = sb
@@ -458,8 +452,6 @@ export async function obtenerResumenFinanciero(
     resPrev,
     resAccounts,
     resPend,
-    resMktActual,
-    resMktPrev,
     resExp,
     resIns
   ] = await Promise.all([
@@ -467,8 +459,6 @@ export async function obtenerResumenFinanciero(
     qPrev,
     qAccounts,
     qPendientes,
-    qMarketingActual,
-    qMarketingPrev,
     qExpedientesCerrados,
     qInsight
   ]);
@@ -476,15 +466,9 @@ export async function obtenerResumenFinanciero(
   const txsActual = resActual.data || [];
   const txsPrev = resPrev.data || [];
 
-  // Agregar costo marketing de anuncios
-  const mktAdsActual = (resMktActual.data || []).reduce(
-    (acc: number, curr: any) => acc + Number(curr.gasto_publicitario || 0),
-    0
-  );
-  const mktAdsPrev = (resMktPrev.data || []).reduce(
-    (acc: number, curr: any) => acc + Number(curr.gasto_publicitario || 0),
-    0
-  );
+  // La publicidad ya viene dentro de las transacciones (línea costo_marketing)
+  const mktAdsActual = 0;
+  const mktAdsPrev = 0;
 
   // Calcular métricas actuales
   let ingresos = 0;
@@ -1193,6 +1177,8 @@ export async function crearMovimientoFinanzas(data: {
   crm_deal_id?: string | null;
   comprobante_url?: string | null;
   estado: "pagado" | "pendiente";
+  codigo_subcuenta?: string | null;
+  producto_servicio_id?: string | null;
 }): Promise<{ success: boolean; message: string; id?: string }> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -1496,16 +1482,9 @@ export async function obtenerEstadoResultados(
     q = q.eq("business_unit_id", businessUnitId);
   }
 
-  // 2. Anuncios de marketing
-  const qMkt = sb
-    .from("analytics_marketing")
-    .select("fecha, gasto_publicitario")
-    .gte("fecha", fechaInicio)
-    .lte("fecha", fechaFin);
-
-  const [resTx, resMkt] = await Promise.all([q, qMkt]);
+  // La publicidad solo entra al P&L como transacción contable (sin doble conteo)
+  const resTx = await q;
   const txs = resTx.data || [];
-  const mktAds = resMkt.data || [];
 
   // Calcular meses en el periodo
   const start = new Date(fechaInicio + "T00:00:00");
@@ -1551,13 +1530,6 @@ export async function obtenerEstadoResultados(
     if (mapaMensual[linea]) {
       mapaMensual[linea][mes] = (mapaMensual[linea][mes] || 0) + monto;
     }
-  });
-
-  // Sumar gasto de anuncios a costo_marketing
-  mktAds.forEach((ad: any) => {
-    const mes = ad.fecha.slice(0, 7);
-    const monto = Number(ad.gasto_publicitario || 0);
-    mapaMensual["costo_marketing"][mes] = (mapaMensual["costo_marketing"][mes] || 0) + monto;
   });
 
   // Helper para sumar total de una línea

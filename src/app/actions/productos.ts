@@ -30,6 +30,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     tipo: fila.tipo || "servicio",
     centroCostoId: fila.centro_costo_id || null,
     centroCostoNombre: fila.business_units?.nombre || fila.centro_costo_nombre || null,
+    codigoSubcuenta: fila.codigo_subcuenta || null,
     categoria: fila.categoria || "General",
     fotos: Array.isArray(fila.fotos) ? fila.fotos : [],
     descripcionValor: fila.descripcion_valor || "",
@@ -190,6 +191,7 @@ export async function crearProductoServicio(datos: {
   plantillaGarantia?: string;
   tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
   centroCostoId?: string | null;
+  codigoSubcuenta?: string | null;
   categoria?: string;
   fotos?: FotoProducto[];
   descripcionValor?: string;
@@ -225,6 +227,7 @@ export async function crearProductoServicio(datos: {
       plantilla_garantia: datos.plantillaGarantia || "",
       tipo: datos.tipo || "servicio",
       centro_costo_id: datos.centroCostoId || null,
+      codigo_subcuenta: datos.codigoSubcuenta || null,
       categoria: datos.categoria?.trim() || "General",
       fotos: Array.isArray(datos.fotos) ? datos.fotos : [],
       descripcion_valor: datos.descripcionValor?.trim() || "",
@@ -256,6 +259,7 @@ export async function editarProductoServicio(
     plantillaGarantia?: string;
     tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
     centroCostoId?: string | null;
+    codigoSubcuenta?: string | null;
     categoria?: string;
     fotos?: FotoProducto[];
     descripcionValor?: string;
@@ -291,6 +295,9 @@ export async function editarProductoServicio(
   };
   if (datos.tarifasCapacidad !== undefined) {
     updatePayload.tarifas_capacidad = tarifasAJson(datos.tarifasCapacidad);
+  }
+  if (datos.codigoSubcuenta !== undefined) {
+    updatePayload.codigo_subcuenta = datos.codigoSubcuenta || null;
   }
   // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
   if (datos.fichaTecnicaUrl !== undefined) {
@@ -575,6 +582,21 @@ export async function obtenerHistorialPreciosInsumo(insumoId: string): Promise<I
 // ============================================================
 
 /** Listar Centros de Costo disponibles desde Finanzas */
+/** Subcuentas de marketing (especialidades) para clasificar productos. */
+export async function obtenerSubcuentasMarketing(): Promise<
+  Array<{ codigo: string; nombre: string; businessUnitId: string | null }>
+> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("marketing_subcuentas")
+    .select("codigo, nombre, business_unit_id")
+    .eq("activo", true)
+    .order("orden", { ascending: true });
+  if (error) return [];
+  return (data ?? []).map((s: any) => ({ codigo: s.codigo, nombre: s.nombre, businessUnitId: s.business_unit_id }));
+}
+
 export async function obtenerCentrosCosto(): Promise<Array<{ id: string; nombre: string; descripcion: string }>> {
   await requireAdmin();
   const sb = supabaseServidor();

@@ -77,6 +77,21 @@ function esRutaPublica(path: string): boolean {
   );
 }
 
+const CLAVE_HISTORIAL = "sauceda_historial_nav";
+
+/**
+ * Pantalla "de arriba" cuando no hay una anterior a la cual regresar
+ * (p. ej. se abrió un enlace directo o la app recién se abrió).
+ */
+function rutaPadre(path: string): string {
+  const segs = path.split("/").filter(Boolean);
+  segs.pop();
+  const padre = "/" + segs.join("/");
+  if (padre === "/expediente") return "/";
+  if (padre === "/agenda/cita") return "/agenda";
+  return padre;
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -90,6 +105,33 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [colapsada, setColapsada] = useState(false);
   const [gruposColapsados, setGruposColapsados] = useState<Record<string, boolean>>({});
   const [currentSearch, setCurrentSearch] = useState("");
+  const [hayAnterior, setHayAnterior] = useState(false);
+
+  // Historial propio de pantallas internas: en la app instalada (móvil) no hay
+  // botón de atrás del navegador, así que el "←" de la barra lo usa.
+  useEffect(() => {
+    if (!pathname || esRutaPublica(pathname)) return;
+    try {
+      const pila: string[] = JSON.parse(sessionStorage.getItem(CLAVE_HISTORIAL) || "[]");
+      if (pila[pila.length - 1] === pathname) {
+        // recarga de la misma pantalla
+      } else if (pila[pila.length - 2] === pathname) {
+        pila.pop(); // se regresó a la pantalla anterior
+      } else {
+        pila.push(pathname);
+      }
+      const recortada = pila.slice(-50);
+      sessionStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(recortada));
+      setHayAnterior(recortada.length > 1);
+    } catch {
+      setHayAnterior(false);
+    }
+  }, [pathname]);
+
+  const regresar = () => {
+    if (hayAnterior) router.back();
+    else router.push(rutaPadre(pathname || "/"));
+  };
 
   useEffect(() => {
     try {
@@ -891,7 +933,30 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Barra superior (móvil) */}
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-dorado/30 bg-verde-profundo px-4 py-3 text-crema md:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-dorado/30 bg-verde-profundo px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-crema md:hidden">
+        <div className="flex items-center gap-0.5">
+        {pathname !== "/" && (
+          <button
+            type="button"
+            onClick={regresar}
+            aria-label="Regresar a la pantalla anterior"
+            title="Regresar"
+            className="rounded-md p-1.5 transition hover:bg-crema/10 active:bg-crema/20"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setAbierto(true)}
@@ -910,10 +975,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <Link href="/" className="flex items-center gap-2 leading-none">
+        </div>
+        <Link href="/" className="flex min-w-0 items-center gap-2 leading-none">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="SAUCEDA" className="h-7 w-7" />
-          <span className="font-display text-lg font-semibold">SAUCEDA</span>
+          <img src="/logo.svg" alt="SAUCEDA" className="h-7 w-7 shrink-0" />
+          <span className="hidden min-[400px]:inline font-display text-lg font-semibold">SAUCEDA</span>
         </Link>
         <div className="flex items-center gap-1">
           <button

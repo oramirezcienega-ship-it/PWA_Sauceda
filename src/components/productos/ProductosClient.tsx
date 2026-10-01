@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { 
   ProductoServicio, 
   Insumo, 
@@ -20,6 +20,7 @@ import {
   obtenerHistorialPreciosInsumo,
   subirImagenProducto,
   subirFichaTecnicaProducto,
+  obtenerSubcuentasMarketing,
   type MetricaVentaProducto,
 } from "@/app/actions/productos";
 
@@ -62,6 +63,14 @@ export function ProductosClient({
   const [formDescripcion, setFormDescripcion] = useState("");
   const [formTipo, setFormTipo] = useState<"servicio" | "producto" | "concepto_obra" | "insumo">("servicio");
   const [formCentroCostoId, setFormCentroCostoId] = useState("");
+  // Subcuenta de marketing / especialidad (une ventas y publicidad en Finanzas)
+  const [formCodigoSubcuenta, setFormCodigoSubcuenta] = useState("");
+  const [subcuentasMkt, setSubcuentasMkt] = useState<
+    Array<{ codigo: string; nombre: string; businessUnitId: string | null }>
+  >([]);
+  useEffect(() => {
+    obtenerSubcuentasMarketing().then(setSubcuentasMkt).catch(() => {});
+  }, []);
   const [formCategoria, setFormCategoria] = useState("General");
   const [formUnidad, setFormUnidad] = useState("m2");
   const [formCostoUnitario, setFormCostoUnitario] = useState("");
@@ -133,6 +142,7 @@ export function ProductosClient({
     setFormDescripcion("");
     setFormTipo("servicio");
     setFormCentroCostoId(centrosCosto[0]?.id || "");
+    setFormCodigoSubcuenta("");
     setFormCategoria("General");
     setFormUnidad("m2");
     setFormCostoUnitario("");
@@ -158,6 +168,7 @@ export function ProductosClient({
     setFormDescripcion(p.descripcion);
     setFormTipo(p.tipo || "servicio");
     setFormCentroCostoId(p.centroCostoId || "");
+    setFormCodigoSubcuenta(p.codigoSubcuenta || "");
     setFormCategoria(p.categoria || "General");
     setFormUnidad(p.unidad);
     setFormCostoUnitario(String(p.costoUnitario));
@@ -214,6 +225,7 @@ export function ProductosClient({
         descripcion: formDescripcion.trim(),
         tipo: formTipo,
         centroCostoId: formCentroCostoId || null,
+        codigoSubcuenta: formCodigoSubcuenta || null,
         categoria: formCategoria.trim(),
         unidad: formUnidad.trim(),
         costoUnitario: Number(formCostoUnitario || 0),
@@ -1396,7 +1408,11 @@ export function ProductosClient({
                       </label>
                       <select
                         value={formCentroCostoId}
-                        onChange={(e) => setFormCentroCostoId(e.target.value)}
+                        onChange={(e) => {
+                          setFormCentroCostoId(e.target.value);
+                          const sub = subcuentasMkt.find((s) => s.codigo === formCodigoSubcuenta);
+                          if (sub && sub.businessUnitId !== e.target.value) setFormCodigoSubcuenta("");
+                        }}
                         className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
                       >
                         <option value="">Sin centro asignado</option>
@@ -1405,6 +1421,26 @@ export function ProductosClient({
                             {cc.nombre}
                           </option>
                         ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">
+                        Subcuenta / Especialidad (Marketing)
+                      </label>
+                      <select
+                        value={formCodigoSubcuenta}
+                        onChange={(e) => setFormCodigoSubcuenta(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                      >
+                        <option value="">Sin especialidad</option>
+                        {subcuentasMkt
+                          .filter((s) => !formCentroCostoId || s.businessUnitId === formCentroCostoId)
+                          .map((s) => (
+                            <option key={s.codigo} value={s.codigo}>
+                              {s.codigo} {s.nombre}
+                            </option>
+                          ))}
                       </select>
                     </div>
 

@@ -208,6 +208,45 @@ export async function eliminarReglaComision(id: string): Promise<{ ok: boolean; 
 // 2. CÁLCULO Y RESOLUCIÓN DE REGLAS DE COMISIÓN
 // ============================================================
 
+/** Usuarios activos y si generan comisiones (ventas e inspecciones). */
+export async function listarConfigAsesoresComisiones(): Promise<
+  { id: string; nombre: string; rol: string; generaComisiones: boolean }[]
+> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("perfiles")
+    .select("id, nombre, rol, genera_comisiones")
+    .eq("activo", true)
+    .order("nombre", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data || []).map((p: any) => ({
+    id: p.id,
+    nombre: p.nombre || "Sin nombre",
+    rol: p.rol || "",
+    generaComisiones: Boolean(p.genera_comisiones),
+  }));
+}
+
+export async function actualizarGeneraComisiones(
+  perfilId: string,
+  generaComisiones: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { error } = await sb
+      .from("perfiles")
+      .update({ genera_comisiones: generaComisiones })
+      .eq("id", perfilId);
+    if (error) throw new Error(error.message);
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "No se pudo actualizar el asesor." };
+  }
+}
+
 export async function resolverPorcentajeComision(params: {
   asesorId?: string | null;
   servicioTipo?: string | null;
@@ -446,6 +485,7 @@ export async function listarComisiones(filtros?: {
           .select("id, perfil_id, asignados_ids")
           .in("id", citaIds);
         const mapCitas = new Map<string, any>((citasRe || []).map((c: any) => [c.id, c]));
+        const comisionables = await idsAsesoresComisionables(sb);
 
         for (const com of comsInsp || []) {
           const cita = mapCitas.get(com.cita_id);
@@ -455,6 +495,12 @@ export async function listarComisiones(filtros?: {
           if (com.asesor_id && (com.asesor_id === cita.perfil_id || asignados.includes(com.asesor_id))) continue;
           const nuevoAsesor = cita.perfil_id || asignados[0];
           if (!nuevoAsesor || nuevoAsesor === com.asesor_id) continue;
+
+          // El nuevo responsable no genera comisiones: la comisión se quita.
+          if (comisionables && !comisionables.has(nuevoAsesor)) {
+            await quitarComisionesNoComisionables(sb, "cita_id", com.cita_id);
+            continue;
+          }
 
           const { error: errRe } = await sb
             .from("comisiones")
@@ -898,6 +944,23 @@ export async function cancelarComision(datos: {
   }
 }
 
+/**
+ * Marca las citas de inspección cuya comisión fue eliminada para que la
+ * auto-sincronización no la vuelva a crear.
+ */
+async function marcarCitasComisionDescartada(
+  sb: ReturnType<typeof supabaseServidor>,
+  citaIds: (string | null | undefined)[]
+) {
+  const ids = Array.from(new Set(citaIds.filter((id): id is string => Boolean(id))));
+  if (ids.length === 0) return;
+  const { error } = await sb
+    .from("agenda_citas")
+    .update({ comision_descartada: true })
+    .in("id", ids);
+  if (error) console.warn("Aviso al marcar citas con comisión descartada:", error.message);
+}
+
 export async function eliminarComision(datos: {
   comisionId: string;
 }): Promise<{ ok: boolean; error?: string }> {
@@ -907,7 +970,7 @@ export async function eliminarComision(datos: {
 
     const { data: com, error: errBusq } = await sb
       .from("comisiones")
-      .select("id, monto_pagado")
+      .select("id, monto_pagado, cita_id")
       .eq("id", datos.comisionId)
       .single();
 
@@ -925,6 +988,8 @@ export async function eliminarComision(datos: {
       .eq("id", datos.comisionId);
 
     if (errDel) throw new Error(errDel.message);
+
+    await marcarCitasComisionDescartada(sb, [com.cita_id]);
 
     revalidatePath("/comisiones");
     return { ok: true };
@@ -954,7 +1019,7 @@ export async function eliminarComisionesMasivas(datos: {
 
     const { data: comisiones, error: errBusq } = await sb
       .from("comisiones")
-      .select("id, monto_pagado")
+      .select("id, monto_pagado, cita_id")
       .in("id", datos.comisionIds);
 
     if (errBusq) throw new Error(errBusq.message);
@@ -977,6 +1042,11 @@ export async function eliminarComisionesMasivas(datos: {
       .in("id", idsParaEliminar);
 
     if (errDel) throw new Error(errDel.message);
+
+    await marcarCitasComisionDescartada(
+      sb,
+      paraEliminar.map((c: any) => c.cita_id)
+    );
 
     revalidatePath("/comisiones");
     return {
@@ -1564,6 +1634,44 @@ export async function listarPagosComisiones(asesorId?: string): Promise<Comision
 // ============================================================
 
 /** Refleja en Finanzas los importes definitivos de la remisión (no interrumpe si falla). */
+/**
+ * IDs de los usuarios que generan comisiones (perfiles.genera_comisiones).
+ * Devuelve null si la columna aún no existe, para no bloquear comisiones.
+ */
+async function idsAsesoresComisionables(
+  sb: ReturnType<typeof supabaseServidor>
+): Promise<Set<string> | null> {
+  const { data, error } = await sb.from("perfiles").select("id").eq("genera_comisiones", true);
+  if (error) return null;
+  return new Set((data || []).map((r: any) => r.id));
+}
+
+async function asesorGeneraComisiones(
+  sb: ReturnType<typeof supabaseServidor>,
+  asesorId: string
+): Promise<boolean> {
+  const ids = await idsAsesoresComisionables(sb);
+  return !ids || ids.has(asesorId);
+}
+
+/**
+ * El responsable del documento no genera comisiones: se quitan las comisiones
+ * automáticas de ese documento que aún no tienen pagos ni ajuste manual.
+ */
+async function quitarComisionesNoComisionables(
+  sb: ReturnType<typeof supabaseServidor>,
+  campo: "remision_factura_id" | "recibo_pago_id" | "cita_id",
+  valor: string
+) {
+  const { error } = await sb
+    .from("comisiones")
+    .delete()
+    .eq(campo, valor)
+    .eq("es_ajuste_manual", false)
+    .eq("monto_pagado", 0);
+  if (error) console.warn("Aviso al quitar comisiones de asesor no comisionable:", error.message);
+}
+
 async function reflejarRemisionEnFinanzas(remisionId: string): Promise<void> {
   try {
     const { sincronizarFinanzasRemision } = await import("@/app/actions/contabilidad-remisiones");
@@ -1651,6 +1759,12 @@ export async function sincronizarComisionParaRemision(
 
     if (!asesorId) {
       return { ok: false, error: "No se encontró ningún asesor activo para comisionar la venta." };
+    }
+
+    if (!(await asesorGeneraComisiones(sb, asesorId))) {
+      await quitarComisionesNoComisionables(sb, "remision_factura_id", remisionId);
+      await reflejarRemisionEnFinanzas(remisionId);
+      return { ok: true };
     }
 
     // 3. Verificar si ya existe comisión registrada
@@ -1950,6 +2064,11 @@ export async function sincronizarComisionParaRecibo(
       return { ok: false, error: "No se encontró ningún asesor activo para comisionar la venta." };
     }
 
+    if (!(await asesorGeneraComisiones(sb, asesorId))) {
+      await quitarComisionesNoComisionables(sb, "recibo_pago_id", rec.id);
+      return { ok: true };
+    }
+
     // 3. Verificar si ya existe comisión registrada para este recibo
     const { data: comisionExistente } = await sb
       .from("comisiones")
@@ -2080,6 +2199,8 @@ export async function sincronizarComisionParaInspeccion(
     montoFijoCustom?: number;
     notas?: string;
     citaData?: any;
+    /** Regenera la comisión aunque el admin la haya eliminado antes. */
+    forzar?: boolean;
   }
 ): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
   try {
@@ -2112,6 +2233,11 @@ export async function sincronizarComisionParaInspeccion(
 
     if (!esTipoInspeccion) {
       return { ok: false, error: "La cita no es de tipo inspección técnica." };
+    }
+
+    // El admin eliminó la comisión de esta cita: no regenerarla automáticamente.
+    if (cita.comision_descartada && !opciones?.forzar) {
+      return { ok: true };
     }
 
     if (cita.estado !== "completada") {
@@ -2159,6 +2285,11 @@ export async function sincronizarComisionParaInspeccion(
 
     if (!asesorId) {
       return { ok: false, error: "No se encontró ningún asesor asignado para comisionar la inspección." };
+    }
+
+    if (!(await asesorGeneraComisiones(sb, asesorId))) {
+      await quitarComisionesNoComisionables(sb, "cita_id", cita.id);
+      return { ok: true };
     }
 
     // 3. Resolver la tarifa fija asignada
@@ -2405,6 +2536,11 @@ export async function marcarInspeccionEjecutada(datos: {
 
     if (errUpd) throw new Error(errUpd.message);
 
+    // Marcarla de nuevo como ejecutada reactiva su comisión si había sido descartada
+    if (citaActual.comision_descartada) {
+      await sb.from("agenda_citas").update({ comision_descartada: false }).eq("id", datos.citaId);
+    }
+
     // 3. Registrar actividad en el expediente si existe
     if (citaActual.expediente_id) {
       try {
@@ -2424,6 +2560,7 @@ export async function marcarInspeccionEjecutada(datos: {
     const resCom = await sincronizarComisionParaInspeccion(datos.citaId, {
       montoFijoCustom: datos.montoFijoCustom,
       notas: datos.notas,
+      forzar: true,
       citaData: {
         ...citaActual,
         estado: "completada",

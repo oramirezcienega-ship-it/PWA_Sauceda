@@ -11,7 +11,7 @@ import { formatoPesos } from "@/lib/formato";
 import { labelTipoNegocio } from "@/lib/types";
 import { obtenerOrdenTrabajoPorId } from "@/app/actions/ordenes-trabajo";
 import { armarPaqueteAutorizacion } from "@/lib/cotizacion-telegram";
-import { generarPdfPolizaGarantia, generarPdfRecibo } from "@/lib/pdfDocumentosOT";
+import { generarPdfPolizaGarantia, generarPdfRecibo, generarPdfRemision } from "@/lib/pdfDocumentosOT";
 import { pdfsDesdeVistas, type VistaPdf } from "@/lib/pdf-desde-vista";
 
 /** Escapa texto de usuario para el HTML de Telegram. */
@@ -185,6 +185,62 @@ async function armarPaqueteOT(ordenId: string) {
         };
       },
     });
+  }
+
+  // Remisiones / facturas de la orden (o de su cotización)
+  try {
+    let qRem = sb
+      .from("remisiones_facturas")
+      .select("id, folio, tipo, fecha, cotizacion_id, datos_documento, servicios_extra, monto_subtotal, monto_total")
+      .order("fecha", { ascending: true });
+    qRem = orden.cotizacionId
+      ? qRem.or(`orden_trabajo_id.eq.${ordenId},cotizacion_id.eq.${orden.cotizacionId}`)
+      : qRem.eq("orden_trabajo_id", ordenId);
+    const { data: remisiones } = await qRem;
+    for (const rem of remisiones || []) {
+      const esFactura = rem.tipo === "factura";
+      const nombreDoc = `${esFactura ? "Factura" : "Remisión"} ${rem.folio}`;
+      const nombreArchivo = `${limpiarNombre(`${nombreDoc} - ${orden.clienteNombre || "Cliente"}`)}.pdf`;
+      bloques.push({
+        clave: `remision:${rem.id}`,
+        nombre: nombreDoc,
+        detalle: `Total ${formatoPesos(Number(rem.monto_total || 0))}`,
+        nombreArchivo,
+        archivo: async () => {
+          const { data: conceptos } = rem.cotizacion_id
+            ? await sb
+                .from("cotizacion_conceptos")
+                .select("descripcion, cantidad, unidad, precio_unitario, importe")
+                .eq("cotizacion_id", rem.cotizacion_id)
+            : { data: [] as any[] };
+          const datosDoc = (rem.datos_documento || {}) as Record<string, any>;
+          const doc = generarPdfRemision({
+            folio: rem.folio,
+            tipo: rem.tipo,
+            fecha: rem.fecha,
+            clienteNombre: orden.clienteNombre || "Cliente",
+            folioOT: orden.folio,
+            cotizacionId: rem.cotizacion_id,
+            personaRecibe: datosDoc.personaRecibe,
+            direccionEntrega: datosDoc.direccionEntrega || orden.clienteDireccion,
+            fechaInstalacion: datosDoc.fechaInstalacion,
+            conceptos: (conceptos || []).map((c: any) => ({
+              descripcion: c.descripcion,
+              cantidad: Number(c.cantidad || 0),
+              unidad: c.unidad,
+              precioUnitario: Number(c.precio_unitario || 0),
+              importe: Number(c.importe || 0),
+            })),
+            subtotal: Number(rem.monto_subtotal || 0),
+            serviciosExtra: Number(rem.servicios_extra || 0),
+            total: Number(rem.monto_total || 0),
+          });
+          return { buffer: Buffer.from(doc.output("arraybuffer")), nombreArchivo };
+        },
+      });
+    }
+  } catch {
+    /* sin remisiones */
   }
 
   // Contrato: versión vigente (generado o firmado) impresa desde su página, y el PDF firmado escaneado

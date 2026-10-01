@@ -24,6 +24,7 @@ export default async function PaginaContrato({
       datos={contrato.datos}
       estado={contrato.registro.estado}
       claseTitulos={cormorant.className}
+      urlRegreso={`/ordenes-trabajo/${params.id}`}
     />
   );
 }
