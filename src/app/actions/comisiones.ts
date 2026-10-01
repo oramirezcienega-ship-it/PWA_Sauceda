@@ -898,6 +898,23 @@ export async function cancelarComision(datos: {
   }
 }
 
+/**
+ * Marca las citas de inspección cuya comisión fue eliminada para que la
+ * auto-sincronización no la vuelva a crear.
+ */
+async function marcarCitasComisionDescartada(
+  sb: ReturnType<typeof supabaseServidor>,
+  citaIds: (string | null | undefined)[]
+) {
+  const ids = Array.from(new Set(citaIds.filter((id): id is string => Boolean(id))));
+  if (ids.length === 0) return;
+  const { error } = await sb
+    .from("agenda_citas")
+    .update({ comision_descartada: true })
+    .in("id", ids);
+  if (error) console.warn("Aviso al marcar citas con comisión descartada:", error.message);
+}
+
 export async function eliminarComision(datos: {
   comisionId: string;
 }): Promise<{ ok: boolean; error?: string }> {
@@ -907,7 +924,7 @@ export async function eliminarComision(datos: {
 
     const { data: com, error: errBusq } = await sb
       .from("comisiones")
-      .select("id, monto_pagado")
+      .select("id, monto_pagado, cita_id")
       .eq("id", datos.comisionId)
       .single();
 
@@ -925,6 +942,8 @@ export async function eliminarComision(datos: {
       .eq("id", datos.comisionId);
 
     if (errDel) throw new Error(errDel.message);
+
+    await marcarCitasComisionDescartada(sb, [com.cita_id]);
 
     revalidatePath("/comisiones");
     return { ok: true };
@@ -954,7 +973,7 @@ export async function eliminarComisionesMasivas(datos: {
 
     const { data: comisiones, error: errBusq } = await sb
       .from("comisiones")
-      .select("id, monto_pagado")
+      .select("id, monto_pagado, cita_id")
       .in("id", datos.comisionIds);
 
     if (errBusq) throw new Error(errBusq.message);
@@ -977,6 +996,11 @@ export async function eliminarComisionesMasivas(datos: {
       .in("id", idsParaEliminar);
 
     if (errDel) throw new Error(errDel.message);
+
+    await marcarCitasComisionDescartada(
+      sb,
+      paraEliminar.map((c: any) => c.cita_id)
+    );
 
     revalidatePath("/comisiones");
     return {
@@ -2080,6 +2104,8 @@ export async function sincronizarComisionParaInspeccion(
     montoFijoCustom?: number;
     notas?: string;
     citaData?: any;
+    /** Regenera la comisión aunque el admin la haya eliminado antes. */
+    forzar?: boolean;
   }
 ): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
   try {
@@ -2112,6 +2138,11 @@ export async function sincronizarComisionParaInspeccion(
 
     if (!esTipoInspeccion) {
       return { ok: false, error: "La cita no es de tipo inspección técnica." };
+    }
+
+    // El admin eliminó la comisión de esta cita: no regenerarla automáticamente.
+    if (cita.comision_descartada && !opciones?.forzar) {
+      return { ok: true };
     }
 
     if (cita.estado !== "completada") {
@@ -2405,6 +2436,11 @@ export async function marcarInspeccionEjecutada(datos: {
 
     if (errUpd) throw new Error(errUpd.message);
 
+    // Marcarla de nuevo como ejecutada reactiva su comisión si había sido descartada
+    if (citaActual.comision_descartada) {
+      await sb.from("agenda_citas").update({ comision_descartada: false }).eq("id", datos.citaId);
+    }
+
     // 3. Registrar actividad en el expediente si existe
     if (citaActual.expediente_id) {
       try {
@@ -2424,6 +2460,7 @@ export async function marcarInspeccionEjecutada(datos: {
     const resCom = await sincronizarComisionParaInspeccion(datos.citaId, {
       montoFijoCustom: datos.montoFijoCustom,
       notas: datos.notas,
+      forzar: true,
       citaData: {
         ...citaActual,
         estado: "completada",
