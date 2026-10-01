@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   generarContrato,
   listarContratosOT,
@@ -16,6 +16,39 @@ import {
   type OverridesContrato,
   type TipoServicioContrato,
 } from "@/lib/contratos";
+
+/** Textarea que crece con su contenido para poder leer y editar todo el texto en móvil. */
+function TextoAuto({
+  value,
+  onChange,
+  className,
+  minRows = 2,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className: string;
+  minRows?: number;
+  placeholder?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={minRows}
+      className={`${className} resize-none overflow-hidden`}
+      value={value ?? ""}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
 
 interface Props {
   ordenId: string;
@@ -252,6 +285,7 @@ function ModalRevisarContrato({
   const [error, setError] = useState("");
   const [f, setF] = useState<any>(null);
   const [resumen, setResumen] = useState({ cliente: "", cotizacion: "", total: 0 });
+  const [detallesAbiertos, setDetallesAbiertos] = useState(0);
 
   useEffect(() => {
     (regenerar ? obtenerDatosEdicionContrato(ordenId) : obtenerDatosPrecargadosContrato(ordenId)).then((r) => {
@@ -301,13 +335,14 @@ function ModalRevisarContrato({
     else setError(r.error || "No se pudo generar el contrato.");
   };
 
-  const campo = "w-full rounded-xl border border-carbon/20 px-3 py-2 text-sm text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none";
+  // text-base en móvil evita que iOS haga zoom al enfocar el campo
+  const campo = "w-full rounded-xl border border-carbon/20 px-3 py-2 text-base sm:text-sm leading-snug text-carbon focus:border-sauce focus:ring-1 focus:ring-sauce outline-none";
   const etiqueta = "block font-semibold text-carbon/80 mb-1 text-xs";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-carbon/60 p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl border border-carbon/10 my-8">
-        <div className="flex items-center justify-between border-b border-carbon/10 pb-3 mb-4">
+    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-carbon/60 sm:p-4">
+      <div className="flex w-full max-w-2xl flex-col bg-white shadow-2xl border border-carbon/10 h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-carbon/10 px-4 sm:px-6 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-5 pb-3 shrink-0">
           <div>
             <h3 className="font-titular text-lg font-bold text-verde-profundo">
               {regenerar ? "Editar contrato (se genera una nueva versión)" : "Revisar datos del contrato"}
@@ -319,11 +354,12 @@ function ModalRevisarContrato({
               </p>
             )}
           </div>
-          <button type="button" onClick={alCerrar} className="text-carbon/40 hover:text-carbon text-lg font-bold p-1">
+          <button type="button" onClick={alCerrar} className="text-carbon/40 hover:text-carbon text-lg font-bold p-2 -m-1" aria-label="Cerrar">
             ✕
           </button>
         </div>
 
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4">
         {error && (
           <div className="mb-3 rounded-xl bg-rojo/10 border border-rojo/20 p-3 text-xs text-rojo font-medium">⚠️ {error}</div>
         )}
@@ -349,74 +385,78 @@ function ModalRevisarContrato({
 
             <div>
               <label className={etiqueta}>Domicilio de la obra *</label>
-              <input className={campo} value={f.domicilioObra} onChange={(e) => set("domicilioObra", e.target.value)} />
+              <TextoAuto minRows={1} className={campo} value={f.domicilioObra} onChange={(v) => set("domicilioObra", v)} />
             </div>
 
             <div>
               <label className={etiqueta}>Alcance técnico * (m²/cantidad, sistema, producto, capas, preparación)</label>
-              <textarea rows={3} className={campo} value={f.alcanceTecnico} onChange={(e) => set("alcanceTecnico", e.target.value)} />
+              <TextoAuto minRows={3} className={campo} value={f.alcanceTecnico} onChange={(v) => set("alcanceTecnico", v)} />
             </div>
 
             <div>
               <label className={etiqueta}>Exclusiones</label>
-              <textarea rows={3} className={campo} value={f.exclusiones} onChange={(e) => set("exclusiones", e.target.value)} />
+              <TextoAuto minRows={3} className={campo} value={f.exclusiones} onChange={(v) => set("exclusiones", v)} />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className={etiqueta}>% Anticipo *</label>
-                <input type="number" min={0} max={100} className={campo} value={f.anticipoPct} onChange={(e) => set("anticipoPct", e.target.value)} />
+                <input type="number" inputMode="numeric" min={0} max={100} className={campo} value={f.anticipoPct} onChange={(e) => set("anticipoPct", e.target.value)} />
               </div>
               <div>
                 <label className={etiqueta}>Duración (días háb.) *</label>
-                <input type="number" min={1} className={campo} value={f.duracionDias} onChange={(e) => set("duracionDias", e.target.value)} />
+                <input type="number" inputMode="numeric" min={1} className={campo} value={f.duracionDias} onChange={(e) => set("duracionDias", e.target.value)} />
               </div>
               <div className="col-span-2">
                 <label className={etiqueta}>Garantía *</label>
-                <input className={campo} value={f.garantiaTexto} onChange={(e) => set("garantiaTexto", e.target.value)} placeholder="Ej. 3 años" />
+                <TextoAuto minRows={1} className={campo} value={f.garantiaTexto} onChange={(v) => set("garantiaTexto", v)} placeholder="Ej. 3 años" />
               </div>
             </div>
 
             <div>
               <label className={etiqueta}>Forma de pago</label>
-              <input className={campo} value={f.formaPago} onChange={(e) => set("formaPago", e.target.value)} />
+              <TextoAuto minRows={1} className={campo} value={f.formaPago} onChange={(v) => set("formaPago", v)} />
             </div>
 
-            <details className="rounded-xl border border-carbon/10 p-3">
-              <summary className="cursor-pointer text-xs font-semibold text-carbon/70">Cláusulas de garantía, clima e IVA (avanzado)</summary>
-              <div className="space-y-3 mt-3">
+            <details className="rounded-xl border border-carbon/10 p-3" onToggle={() => setDetallesAbiertos((n) => n + 1)}>
+              <summary className="cursor-pointer py-1 text-sm sm:text-xs font-semibold text-carbon/70">Cláusulas de garantía, clima e IVA (avanzado)</summary>
+              <div key={detallesAbiertos} className="space-y-3 mt-3">
                 <div>
                   <label className={etiqueta}>La garantía cubre</label>
-                  <input className={campo} value={f.garantiaObjeto} onChange={(e) => set("garantiaObjeto", e.target.value)} />
+                  <TextoAuto minRows={1} className={campo} value={f.garantiaObjeto} onChange={(v) => set("garantiaObjeto", v)} />
                 </div>
                 <div>
                   <label className={etiqueta}>La garantía no cubre</label>
-                  <textarea rows={3} className={campo} value={f.garantiaExclusiones} onChange={(e) => set("garantiaExclusiones", e.target.value)} />
+                  <TextoAuto minRows={3} className={campo} value={f.garantiaExclusiones} onChange={(v) => set("garantiaExclusiones", v)} />
                 </div>
                 <div>
                   <label className={etiqueta}>Cláusula de clima</label>
-                  <textarea rows={2} className={campo} value={f.clausulaClima} onChange={(e) => set("clausulaClima", e.target.value)} />
+                  <TextoAuto minRows={2} className={campo} value={f.clausulaClima} onChange={(v) => set("clausulaClima", v)} />
                 </div>
                 <div>
                   <label className={etiqueta}>Leyenda de IVA</label>
-                  <input className={campo} value={f.leyendaIva} onChange={(e) => set("leyendaIva", e.target.value)} />
+                  <TextoAuto minRows={1} className={campo} value={f.leyendaIva} onChange={(v) => set("leyendaIva", v)} />
                 </div>
               </div>
             </details>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={alCerrar} className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 text-carbon">
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={guardando}
-                onClick={enviar}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-verde-profundo text-crema disabled:opacity-50"
-              >
-                {guardando ? "Generando…" : regenerar ? "Regenerar contrato" : "Generar contrato"}
-              </button>
-            </div>
+          </div>
+        )}
+        </div>
+
+        {f && !cargando && (
+          <div className="flex justify-end gap-2 border-t border-carbon/10 bg-white px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4 shrink-0 sm:rounded-b-2xl">
+            <button type="button" onClick={alCerrar} className="flex-1 sm:flex-none px-4 py-3 sm:py-2 rounded-xl text-sm sm:text-xs font-bold bg-slate-100 text-carbon">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={guardando}
+              onClick={enviar}
+              className="flex-[2] sm:flex-none px-5 py-3 sm:py-2 rounded-xl text-sm sm:text-xs font-bold bg-verde-profundo text-crema disabled:opacity-50"
+            >
+              {guardando ? "Generando…" : regenerar ? "Regenerar contrato" : "Generar contrato"}
+            </button>
           </div>
         )}
       </div>
