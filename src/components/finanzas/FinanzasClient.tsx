@@ -17,6 +17,7 @@ import {
   obtenerBalanceGeneral,
   obtenerFlujoEfectivo
 } from "@/app/actions/finanzas";
+import { conciliarRemisionesPendientes } from "@/app/actions/contabilidad-remisiones";
 
 import { TabResumen } from "./TabResumen";
 import { TabMovimientos } from "./TabMovimientos";
@@ -119,6 +120,17 @@ export function FinanzasClient() {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+
+  // Al abrir Finanzas, reflejar las remisiones que aún no estén conciliadas
+  // (venta, proveedor, terminal y comisión) y refrescar si hubo cambios.
+  useEffect(() => {
+    conciliarRemisionesPendientes()
+      .then((res) => {
+        if (res.procesadas > 0) cargarDatos();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cambiar fechas por preset
   const aplicarPreset = (p: typeof presetPeriodo) => {
