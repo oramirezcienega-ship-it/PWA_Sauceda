@@ -112,8 +112,18 @@ export async function sincronizarFinanzasRemision(
       .select("id")
       .eq("codigo", "CC-CONSTRUCCION")
       .maybeSingle();
+    let tipoNegocioExpediente: string | null = null;
+    if (rem.expediente_id) {
+      const { data: expTipo } = await sb
+        .from("expedientes")
+        .select("tipo_negocio")
+        .eq("id", rem.expediente_id)
+        .maybeSingle();
+      tipoNegocioExpediente = expTipo?.tipo_negocio || null;
+    }
     const subcuentaVenta =
       subcuentaPorServicio(cot?.servicio_tipo, subcuentas) ||
+      subcuentaPorServicio(tipoNegocioExpediente, subcuentas) ||
       subcuentaPorServicio(ot?.tipo_negocio, subcuentas) ||
       subcuentaPorTexto(ot?.titulo, subcuentas);
     const unidadDeSubcuenta = (codigo: string | null) =>

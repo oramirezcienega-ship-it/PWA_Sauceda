@@ -45,8 +45,13 @@ export function subcuentaPorTexto(
 ): string | null {
   if (!texto) return null;
   const t = normalizar(texto);
+  // Gana la especialidad que aparece primero en el texto: "Mantenimiento de cisterna …
+  // acabado con impermeabilizante" es mantenimiento, no impermeabilización.
+  let mejor: { codigo: string; pos: number } | null = null;
   for (const [codigo, re] of PALABRAS_CLAVE) {
-    if (re.test(t) && subcuentas.some((s) => s.codigo === codigo)) return codigo;
+    if (!subcuentas.some((s) => s.codigo === codigo)) continue;
+    const m = re.exec(t);
+    if (m && (!mejor || m.index < mejor.pos)) mejor = { codigo, pos: m.index };
   }
-  return null;
+  return mejor?.codigo || null;
 }

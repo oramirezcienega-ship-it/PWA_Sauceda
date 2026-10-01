@@ -146,7 +146,12 @@ export async function obtenerRentabilidadComercial(
     .select("monto_total, business_unit_id, origen_modulo, categories!inner(linea_pnl)")
     .eq("tipo", "ingreso")
     .in("categories.linea_pnl", ["ingresos_comisiones", "ingresos_ventas", "ingresos_otros"]);
-  let qCierres = sb.from("expedientes").select("id, ultimo_movimiento").eq("etapa", "cerrado");
+  // Cierres inmobiliarios: expedientes cerrados que no son de construcción
+  let qCierres = sb
+    .from("expedientes")
+    .select("id, ultimo_movimiento, tipo_negocio")
+    .eq("etapa", "cerrado")
+    .not("tipo_negocio", "ilike", "construccion%");
 
   if (fechaInicio) {
     qRent = qRent.gte("fecha", fechaInicio);
@@ -299,7 +304,15 @@ export async function obtenerRentabilidadComercial(
     if (t.origen_modulo === "remision") continue;
     if (ccInmobiliaria && t.business_unit_id === ccInmobiliaria) ingresoInmobiliario += Number(t.monto_total || 0);
   }
-  const cierresInmobiliarios = (resCierres.data || []).length;
+  // Se excluyen los "otro" y los que tienen remisión de venta (son obras)
+  const { data: expConRemision } = await sb
+    .from("remisiones_facturas")
+    .select("expediente_id")
+    .not("expediente_id", "is", null);
+  const idsConRemision = new Set((expConRemision || []).map((r: any) => r.expediente_id));
+  const cierresInmobiliarios = (resCierres.data || []).filter(
+    (e: any) => e.tipo_negocio && e.tipo_negocio !== "otro" && !idsConRemision.has(e.id)
+  ).length;
 
   // ---- Armar centros ----
   const porCentro = new Map<string, CentroRentabilidad & { _acum: Acum }>();

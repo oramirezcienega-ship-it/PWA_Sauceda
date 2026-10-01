@@ -369,3 +369,16 @@ ALTER TABLE public.remisiones_rentabilidad_productos
 
 CREATE INDEX IF NOT EXISTS idx_rentabilidad_productos_subcuenta
   ON public.remisiones_rentabilidad_productos(codigo_subcuenta);
+
+-- 9. Tipos de negocio del expediente que pertenecen a cada subcuenta
+UPDATE public.marketing_subcuentas m
+SET servicio_tipos = (SELECT array_agg(DISTINCT x) FROM unnest(m.servicio_tipos || v.extra) x)
+FROM (VALUES
+  ('601-01-001', ARRAY['construccion-impermeabilizacion']),
+  ('601-01-002', ARRAY['construccion-remodelacion']),
+  ('601-01-003', ARRAY['construccion-piso-estampado']),
+  ('601-01-004', ARRAY['construccion-mantenimiento-cisternas','construccion-mantenimiento-postventa']),
+  ('601-02-001', ARRAY['traspaso_compra','solo_tramite']),
+  ('601-02-002', ARRAY['promocion_venta'])
+) AS v(codigo, extra)
+WHERE m.codigo = v.codigo;
