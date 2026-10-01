@@ -118,8 +118,9 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "" }: Props
         </Clausula>
         <Clausula n={2} titulo="Alcance">{d.alcanceTecnico}</Clausula>
         <Clausula n={3} titulo="Exclusiones">
-          No se incluye: {d.exclusiones || "trabajos no descritos en el Anexo A"}. Cualquier trabajo no descrito en el
-          Anexo A se considera trabajo adicional.
+          {d.exclusiones?.trim()
+            ? `No se incluye: ${d.exclusiones.trim().replace(/\.$/, "")}. Cualquier trabajo no descrito en el Anexo A se considera trabajo adicional.`
+            : "Sin exclusiones."}
         </Clausula>
         <Clausula n={4} titulo="Precio">
           El precio total es de {dinero(d.total)} ({totalConLetra}) {d.leyendaIva}.
