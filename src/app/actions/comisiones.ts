@@ -898,6 +898,305 @@ export async function cancelarComision(datos: {
   }
 }
 
+export async function eliminarComision(datos: {
+  comisionId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    const { data: com, error: errBusq } = await sb
+      .from("comisiones")
+      .select("id, monto_pagado")
+      .eq("id", datos.comisionId)
+      .single();
+
+    if (errBusq || !com) return { ok: false, error: "Comisión no encontrada." };
+    if (Number(com.monto_pagado || 0) > 0) {
+      return {
+        ok: false,
+        error: "La comisión tiene pagos aplicados; no puede eliminarse mientras tenga registros de pago asociados.",
+      };
+    }
+
+    const { error: errDel } = await sb
+      .from("comisiones")
+      .delete()
+      .eq("id", datos.comisionId);
+
+    if (errDel) throw new Error(errDel.message);
+
+    revalidatePath("/comisiones");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al eliminar la comisión." };
+  }
+}
+
+/**
+ * Eliminación masiva de comisiones que no tengan pagos aplicados.
+ */
+export async function eliminarComisionesMasivas(datos: {
+  comisionIds: string[];
+}): Promise<{
+  ok: boolean;
+  eliminadas?: number;
+  omitidasConPagos?: number;
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    if (!datos.comisionIds || datos.comisionIds.length === 0) {
+      return { ok: false, error: "No se seleccionaron comisiones para eliminar." };
+    }
+
+    const { data: comisiones, error: errBusq } = await sb
+      .from("comisiones")
+      .select("id, monto_pagado")
+      .in("id", datos.comisionIds);
+
+    if (errBusq) throw new Error(errBusq.message);
+
+    const conPagos = (comisiones || []).filter((c: any) => Number(c.monto_pagado || 0) > 0);
+    const paraEliminar = (comisiones || []).filter((c: any) => Number(c.monto_pagado || 0) <= 0);
+
+    if (paraEliminar.length === 0) {
+      return {
+        ok: false,
+        error: "Todas las comisiones seleccionadas tienen pagos aplicados y no pueden eliminarse.",
+      };
+    }
+
+    const idsParaEliminar = paraEliminar.map((c: any) => c.id);
+
+    const { error: errDel } = await sb
+      .from("comisiones")
+      .delete()
+      .in("id", idsParaEliminar);
+
+    if (errDel) throw new Error(errDel.message);
+
+    revalidatePath("/comisiones");
+    return {
+      ok: true,
+      eliminadas: idsParaEliminar.length,
+      omitidasConPagos: conPagos.length,
+    };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al eliminar comisiones masivas." };
+  }
+}
+
+/**
+ * Cancelación masiva de comisiones (dejan de contar en balances y se marcan como manuales).
+ */
+export async function cancelarComisionesMasivas(datos: {
+  comisionIds: string[];
+  motivo: string;
+}): Promise<{
+  ok: boolean;
+  canceladas?: number;
+  omitidasConPagos?: number;
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    if (!datos.comisionIds || datos.comisionIds.length === 0) {
+      return { ok: false, error: "No se seleccionaron comisiones para cancelar." };
+    }
+
+    const { data: comisiones, error: errBusq } = await sb
+      .from("comisiones")
+      .select("id, monto_pagado")
+      .in("id", datos.comisionIds);
+
+    if (errBusq) throw new Error(errBusq.message);
+
+    const conPagos = (comisiones || []).filter((c: any) => Number(c.monto_pagado || 0) > 0);
+    const paraCancelar = (comisiones || []).filter((c: any) => Number(c.monto_pagado || 0) <= 0);
+
+    if (paraCancelar.length === 0) {
+      return {
+        ok: false,
+        error: "Todas las comisiones seleccionadas tienen pagos aplicados y no pueden cancelarse.",
+      };
+    }
+
+    const idsParaCancelar = paraCancelar.map((c: any) => c.id);
+
+    const { error: errUpd } = await sb
+      .from("comisiones")
+      .update({
+        estatus: "cancelada",
+        saldo_pendiente: 0,
+        es_ajuste_manual: true,
+        motivo_ajuste: `Cancelación masiva: ${(datos.motivo || "").trim() || "sin motivo especificado"}`,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", idsParaCancelar);
+
+    if (errUpd) throw new Error(errUpd.message);
+
+    revalidatePath("/comisiones");
+    return {
+      ok: true,
+      canceladas: idsParaCancelar.length,
+      omitidasConPagos: conPagos.length,
+    };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al cancelar comisiones masivas." };
+  }
+}
+
+/**
+ * Edición masiva de comisiones seleccionadas (reasignación de asesor, tarifas fijas, %, estatus, notas).
+ */
+export async function editarComisionesMasivas(datos: {
+  comisionIds: string[];
+  cambios: {
+    asesorId?: string;
+    estatus?: EstatusComision;
+    montoComision?: number;
+    porcentajeComision?: number;
+    motivoAjuste?: string;
+    notas?: string;
+  };
+}): Promise<{
+  ok: boolean;
+  actualizadas?: number;
+  omitidasPorConflicto?: number;
+  error?: string;
+}> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    if (!datos.comisionIds || datos.comisionIds.length === 0) {
+      return { ok: false, error: "No se seleccionaron comisiones para editar." };
+    }
+
+    const { data: comisiones, error: errBusq } = await sb
+      .from("comisiones")
+      .select("id, tipo_comision, asesor_id, cita_id, remision_factura_id, monto_venta, base_comisionable, monto_pagado, estatus, porcentaje_comision, monto_comision")
+      .in("id", datos.comisionIds);
+
+    if (errBusq) throw new Error(errBusq.message);
+    if (!comisiones || comisiones.length === 0) {
+      return { ok: false, error: "No se encontraron comisiones para editar." };
+    }
+
+    let actualizadas = 0;
+    let omitidasPorConflicto = 0;
+
+    for (const c of comisiones) {
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+        es_ajuste_manual: true,
+      };
+
+      if (datos.cambios.motivoAjuste) {
+        updateData.motivo_ajuste = datos.cambios.motivoAjuste.trim();
+      }
+      if (datos.cambios.notas !== undefined && datos.cambios.notas !== null) {
+        updateData.notas = datos.cambios.notas.trim();
+      }
+
+      // Reasignación de asesor
+      if (datos.cambios.asesorId && datos.cambios.asesorId !== c.asesor_id) {
+        // Validar conflicto de clave única por cita o remisión
+        if (c.cita_id) {
+          const { data: existente } = await sb
+            .from("comisiones")
+            .select("id")
+            .eq("cita_id", c.cita_id)
+            .eq("asesor_id", datos.cambios.asesorId)
+            .neq("id", c.id)
+            .maybeSingle();
+
+          if (existente) {
+            omitidasPorConflicto++;
+            continue;
+          }
+        }
+        if (c.remision_factura_id) {
+          const { data: existente } = await sb
+            .from("comisiones")
+            .select("id")
+            .eq("remision_factura_id", c.remision_factura_id)
+            .eq("asesor_id", datos.cambios.asesorId)
+            .neq("id", c.id)
+            .maybeSingle();
+
+          if (existente) {
+            omitidasPorConflicto++;
+            continue;
+          }
+        }
+        updateData.asesor_id = datos.cambios.asesorId;
+      }
+
+      // Monto o Porcentaje
+      const montoPagado = Number(c.monto_pagado || 0);
+      let nuevoMonto = Number(c.monto_comision || 0);
+
+      if (datos.cambios.montoComision !== undefined && datos.cambios.montoComision !== null) {
+        nuevoMonto = Math.max(0, Number(datos.cambios.montoComision));
+        updateData.monto_comision = nuevoMonto;
+      } else if (datos.cambios.porcentajeComision !== undefined && datos.cambios.porcentajeComision !== null) {
+        const nuevoPct = Math.max(0, Math.min(100, Number(datos.cambios.porcentajeComision)));
+        updateData.porcentaje_comision = nuevoPct;
+        if (c.tipo_comision !== "inspeccion") {
+          const base = Number(c.base_comisionable || 0);
+          nuevoMonto = Math.round((base * (nuevoPct / 100)) * 100) / 100;
+          updateData.monto_comision = nuevoMonto;
+        }
+      }
+
+      const nuevoSaldo = Math.max(0, nuevoMonto - montoPagado);
+      updateData.saldo_pendiente = nuevoSaldo;
+
+      // Estatus
+      if (datos.cambios.estatus) {
+        updateData.estatus = datos.cambios.estatus;
+        if (datos.cambios.estatus === "cancelada") {
+          updateData.saldo_pendiente = 0;
+        }
+      } else {
+        // Auto-determinar estatus según montos si no se forzó uno específico
+        if (c.estatus !== "cancelada") {
+          if (montoPagado >= nuevoMonto && nuevoMonto > 0) {
+            updateData.estatus = "pagada";
+          } else if (montoPagado > 0) {
+            updateData.estatus = "parcial";
+          } else {
+            updateData.estatus = "pendiente";
+          }
+        }
+      }
+
+      const { error: errUpd } = await sb
+        .from("comisiones")
+        .update(updateData)
+        .eq("id", c.id);
+
+      if (errUpd) {
+        console.error("Error al actualizar comision en lote:", c.id, errUpd.message);
+      } else {
+        actualizadas++;
+      }
+    }
+
+    revalidatePath("/comisiones");
+    return { ok: true, actualizadas, omitidasPorConflicto };
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Error al editar comisiones masivas." };
+  }
+}
+
 // ============================================================
 // 5. REGISTRO Y APLICACIÓN DE PAGOS / LIQUIDACIONES
 // ============================================================
