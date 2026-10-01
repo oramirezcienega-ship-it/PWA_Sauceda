@@ -5,11 +5,12 @@
   * **VERIFICACIÓN DE IMPACTO OBLIGATORIA:** Ningún cambio visual en formularios, expedientes o prospectos debe alterar las columnas, variables o propiedades que Sofía utiliza para construir su contexto conversacional y atender a los clientes.
   * **SOLICITUD DE CONFIRMACIÓN AL USUARIO:** Si una tarea requiere explícitamente modificar el comportamiento, prompts o scripts de Sofía, el asistente **DEBE DETENERSE Y PEDIR CONFIRMACIÓN EXPLÍCITA AL USUARIO PRIMERO**, explicando detalladamente el cambio y su impacto antes de tocar cualquier archivo de la IA.
 
-* **Políticas de Git y Ramas**:
-  * **NUNCA** empujar (`push`) directamente a la rama `main`.
-  * **RAMA DE TRABAJO Y AUTO PUSH A dev OBLIGATORIO:** La rama de trabajo del asistente es **SIEMPRE `dev`**. Siempre que se complete y valide una tarea, corrección o funcionalidad, realizar automáticamente el `git add`, `git commit` y `git push origin dev` sin necesidad de que el usuario lo solicite.
-  * Todos los cambios de código, confirmaciones y empujes deben realizarse estrictamente en la rama `dev`.
-  * El usuario se encargará de realizar el merge correspondiente a `main` y detonar el despliegue final.
+* **Políticas de Git y Despliegue Automático**:
+  * **RAMA DE TRABAJO:** La rama de trabajo del asistente es **SIEMPRE `dev`**. Todos los cambios se desarrollan y confirman primero en `dev`.
+  * **AUTO PUSH A DEV Y DESPLIEGUE A MAIN:** Siempre que se complete y valide una tarea, corrección o funcionalidad:
+    1. Realizar automáticamente `git add`, `git commit` y `git push origin dev`.
+    2. Inmediatamente después, sincronizar y empujar a `main` (merge de `dev` a `main` y `git push origin main`) para detonar automáticamente el despliegue en producción sin esperar confirmación manual.
+    3. Regresar siempre a la rama `dev` para continuar trabajando.
 
 * **Sincronización de Base de Datos y Migraciones en Staging**:
   * Siempre que se creen o modifiquen migraciones SQL o cambios en el esquema de base de datos en `supabase/migrations/`, verificar y asegurar activamente que las adecuaciones queden aplicadas en el entorno de Staging (utilizando las credenciales configuradas en `.env.local`) para garantizar que Staging se mantenga 100% compatible con los nuevos desarrollos.
