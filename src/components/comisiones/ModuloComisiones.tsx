@@ -17,9 +17,14 @@ import {
   eliminarReglaComision,
   guardarTarifaInspeccionGeneral,
   cancelarComision,
+  eliminarComision,
+  eliminarComisionesMasivas,
+  cancelarComisionesMasivas,
+  editarComisionesMasivas,
   aplicarAnticiposAComisionesPendientes,
 } from "@/app/actions/comisiones";
 import { ModalAjustarComision } from "./ModalAjustarComision";
+import { ModalEdicionMasivaComisiones } from "./ModalEdicionMasivaComisiones";
 import { ModalRegistrarPagoComision } from "./ModalRegistrarPagoComision";
 import { ModalReglaComision } from "./ModalReglaComision";
 import { ModalEstadoCuentaImprimible } from "./ModalEstadoCuentaImprimible";
@@ -77,6 +82,12 @@ export function ModuloComisiones({
   const [pagoComisionId, setPagoComisionId] = useState<string | undefined>(undefined);
   const [reglaParaEditar, setReglaParaEditar] = useState<ReglaComision | null | "nueva">(null);
   const [modalImprimirAbierto, setModalImprimirAbierto] = useState(false);
+
+  // Selección múltiple y operaciones masivas
+  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
+  const [modalEdicionMasivaAbierto, setModalEdicionMasivaAbierto] = useState(false);
+  const [confirmandoEliminarMasivo, setConfirmandoEliminarMasivo] = useState(false);
+  const [ejecutandoAccionMasiva, setEjecutandoAccionMasiva] = useState(false);
 
   const [isPending, startTransition] = useTransition();
   const [sincronizando, setSincronizando] = useState(false);
@@ -274,6 +285,84 @@ export function ModuloComisiones({
     }
   };
 
+  const handleEliminarIndividual = async (c: Comision) => {
+    const seguro = window.confirm(
+      `¿Deseas eliminar permanentemente la comisión ${c.remisionFolio || "de inspección"} de ${c.asesorNombre} por ${formatoMoneda(c.montoComision)}?\n\nEsta acción borrará el registro de la base de datos de manera definitiva.`
+    );
+    if (!seguro) return;
+
+    try {
+      const res = await eliminarComision({ comisionId: c.id });
+      if (res.ok) {
+        setMensajeAlerta({ tipo: "ok", texto: "Comisión eliminada permanentemente." });
+        setSeleccionadas((prev) => {
+          const next = new Set(prev);
+          next.delete(c.id);
+          return next;
+        });
+        recargarDatos();
+      } else {
+        setMensajeAlerta({ tipo: "error", texto: res.error || "No se pudo eliminar la comisión." });
+      }
+    } catch (err: any) {
+      setMensajeAlerta({ tipo: "error", texto: err.message || "Error al eliminar la comisión." });
+    }
+  };
+
+  const handleEliminarSeleccionadas = async () => {
+    if (seleccionadas.size === 0) return;
+    try {
+      setEjecutandoAccionMasiva(true);
+      const ids = Array.from(seleccionadas);
+      const res = await eliminarComisionesMasivas({ comisionIds: ids });
+      if (res.ok) {
+        let txt = `Se eliminaron exitosamente ${res.eliminadas} comisión(es).`;
+        if (res.omitidasConPagos && res.omitidasConPagos > 0) {
+          txt += ` (Se conservaron ${res.omitidasConPagos} por contar con pagos registrados).`;
+        }
+        setMensajeAlerta({ tipo: "ok", texto: txt });
+        setSeleccionadas(new Set());
+        setConfirmandoEliminarMasivo(false);
+        recargarDatos();
+      } else {
+        setMensajeAlerta({ tipo: "error", texto: res.error || "No se pudieron eliminar las comisiones." });
+      }
+    } catch (err: any) {
+      setMensajeAlerta({ tipo: "error", texto: err.message || "Error al procesar eliminación masiva." });
+    } finally {
+      setEjecutandoAccionMasiva(false);
+    }
+  };
+
+  const handleCancelarSeleccionadas = async () => {
+    if (seleccionadas.size === 0) return;
+    const motivo = window.prompt(
+      `¿Cancelar en lote las ${seleccionadas.size} comisiones seleccionadas?\n\nIngresa el motivo (dejarán de contar en el balance):`
+    );
+    if (motivo === null) return;
+
+    try {
+      setEjecutandoAccionMasiva(true);
+      const ids = Array.from(seleccionadas);
+      const res = await cancelarComisionesMasivas({ comisionIds: ids, motivo });
+      if (res.ok) {
+        let txt = `Se cancelaron exitosamente ${res.canceladas} comisión(es).`;
+        if (res.omitidasConPagos && res.omitidasConPagos > 0) {
+          txt += ` (Se omitieron ${res.omitidasConPagos} por contar con pagos registrados).`;
+        }
+        setMensajeAlerta({ tipo: "ok", texto: txt });
+        setSeleccionadas(new Set());
+        recargarDatos();
+      } else {
+        setMensajeAlerta({ tipo: "error", texto: res.error || "No se pudieron cancelar las comisiones." });
+      }
+    } catch (err: any) {
+      setMensajeAlerta({ tipo: "error", texto: err.message || "Error al procesar cancelación masiva." });
+    } finally {
+      setEjecutandoAccionMasiva(false);
+    }
+  };
+
   const handleSincronizarRemisiones = async () => {
     try {
       setSincronizando(true);
@@ -431,6 +520,42 @@ export function ModuloComisiones({
     return rango || "Histórico Completo";
   }, [filtroPeriodo, fechaDesde, fechaHasta]);
 
+  // Manejadores y cómputos de selección múltiple
+  const toggleSeleccion = (id: string) => {
+    setSeleccionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const todasVisiblesSeleccionadas = useMemo(
+    () =>
+      comisionesFiltradas.length > 0 &&
+      comisionesFiltradas.every((c) => seleccionadas.has(c.id)),
+    [comisionesFiltradas, seleccionadas]
+  );
+
+  const toggleSeleccionarTodas = () => {
+    if (todasVisiblesSeleccionadas) {
+      setSeleccionadas(new Set());
+    } else {
+      const nuevos = new Set(comisionesFiltradas.map((c) => c.id));
+      setSeleccionadas(nuevos);
+    }
+  };
+
+  const comisionesSeleccionadas = useMemo(
+    () => comisiones.filter((c) => seleccionadas.has(c.id)),
+    [comisiones, seleccionadas]
+  );
+
+  const sumaMontoSeleccionadas = useMemo(
+    () => comisionesSeleccionadas.reduce((acc, c) => acc + (c.montoComision || 0), 0),
+    [comisionesSeleccionadas]
+  );
+
   return (
     <div className="space-y-6">
       {/* Alerta de notificación flotante */}
@@ -510,7 +635,7 @@ export function ModuloComisiones({
             {formatoMoneda(resumen.general.totalVentas)}
           </span>
           <span className="text-[11px] text-carbon/60 mt-1 block">
-            En {resumen.general.comisionesCount} ventas emitidas
+            En {tarjetasExtra.ventasCount} ventas emitidas
           </span>
         </div>
 
@@ -787,12 +912,46 @@ export function ModuloComisiones({
               </div>
             )}
 
-            {/* Botones de Exportación y Envío */}
+            {/* Botones de Exportación, Envío y Operaciones Masivas */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-carbon/5">
-              <span className="text-xs text-carbon/60">
-                Mostrando <strong>{comisionesFiltradas.length}</strong> comisiones en el desglose
-                {isPending && <span className="ml-2 text-dorado animate-pulse">Cargando...</span>}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-carbon/60">
+                  Mostrando <strong>{comisionesFiltradas.length}</strong> comisiones en el desglose
+                  {isPending && <span className="ml-2 text-dorado animate-pulse">Cargando...</span>}
+                </span>
+
+                {seleccionadas.size > 0 && (
+                  <div className="flex items-center gap-1.5 bg-verde-profundo/10 border border-verde-profundo/20 px-2.5 py-1 rounded-xl text-xs animate-in fade-in duration-150">
+                    <span className="font-bold text-verde-profundo">
+                      {seleccionadas.size} seleccionada{seleccionadas.size > 1 ? "s" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setModalEdicionMasivaAbierto(true)}
+                      className="bg-verde-profundo text-crema font-bold px-2 py-0.5 rounded-lg text-[11px] hover:bg-verde-profundo/90 transition flex items-center gap-1 shadow-xs"
+                      title="Editar en lote las comisiones seleccionadas"
+                    >
+                      ✏️ Editar Lote
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmandoEliminarMasivo(true)}
+                      className="bg-red-600 text-white font-bold px-2 py-0.5 rounded-lg text-[11px] hover:bg-red-700 transition flex items-center gap-1 shadow-xs"
+                      title="Eliminar permanentemente las comisiones seleccionadas"
+                    >
+                      🗑️ Eliminar Lote
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSeleccionadas(new Set())}
+                      className="text-carbon/50 hover:text-carbon text-[11px] px-1 font-semibold"
+                      title="Deseleccionar todas"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
                 <button
@@ -824,6 +983,16 @@ export function ModuloComisiones({
               <table className="w-full text-left text-[11px]">
                 <thead className="bg-slate-50 border-b border-carbon/10 text-carbon/70 uppercase text-[10px] tracking-wider">
                   <tr>
+                    <th className="py-3 px-2 text-center w-8">
+                      <input
+                        type="checkbox"
+                        checked={todasVisiblesSeleccionadas}
+                        onChange={toggleSeleccionarTodas}
+                        title={todasVisiblesSeleccionadas ? "Deseleccionar todas" : "Seleccionar todas las visibles"}
+                        aria-label="Seleccionar todas las comisiones visibles"
+                        className="w-4 h-4 rounded text-verde-profundo focus:ring-verde-profundo/30 cursor-pointer accent-verde-profundo"
+                      />
+                    </th>
                     <th className="py-3 px-2">Folio / Fecha</th>
                     <th className="py-3 px-2">Asesor</th>
                     <th className="py-3 px-2">Cliente / Empresa</th>
@@ -843,7 +1012,7 @@ export function ModuloComisiones({
                 <tbody className="divide-y divide-carbon/5">
                   {comisionesFiltradas.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-12 text-center text-carbon/50">
+                      <td colSpan={13} className="py-12 text-center text-carbon/50">
                         <div className="max-w-sm mx-auto space-y-2">
                           <span className="text-3xl block">📑</span>
                           <p className="font-semibold text-sm">No se encontraron comisiones</p>
@@ -862,7 +1031,27 @@ export function ModuloComisiones({
                     </tr>
                   ) : (
                     comisionesFiltradas.map((c) => (
-                      <tr key={c.id} className={`hover:bg-slate-50/70 transition ${c.tipoComision === "inspeccion" ? "bg-amber-50/20" : ""}`}>
+                      <tr
+                        key={c.id}
+                        className={`hover:bg-slate-50/70 transition ${
+                          seleccionadas.has(c.id)
+                            ? "bg-verde-profundo/10 border-l-2 border-verde-profundo"
+                            : c.tipoComision === "inspeccion"
+                            ? "bg-amber-50/20"
+                            : ""
+                        }`}
+                      >
+                        {/* Checkbox de selección */}
+                        <td className="py-3 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={seleccionadas.has(c.id)}
+                            onChange={() => toggleSeleccion(c.id)}
+                            aria-label={`Seleccionar comisión ${c.remisionFolio || c.id}`}
+                            className="w-4 h-4 rounded text-verde-profundo focus:ring-verde-profundo/30 cursor-pointer accent-verde-profundo"
+                          />
+                        </td>
+
                         {/* Folio / Fecha */}
                         <td className="py-3 px-2">
                           <div className="flex items-center gap-1.5">
@@ -1037,14 +1226,25 @@ export function ModuloComisiones({
                               </button>
                             )}
 
+                            {c.montoPagado <= 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarIndividual(c)}
+                                className="p-1.5 hover:bg-red-50 rounded-lg text-red-600 transition text-xs"
+                                title="Eliminar permanentemente esta comisión"
+                              >
+                                🗑️
+                              </button>
+                            )}
+
                             {c.estatus !== "cancelada" && c.montoPagado <= 0 && (
                               <button
                                 type="button"
                                 onClick={() => handleCancelarComision(c)}
-                                className="p-1.5 hover:bg-red-50 rounded-lg text-red-600 transition text-xs"
+                                className="p-1.5 hover:bg-amber-50 rounded-lg text-amber-700 transition text-xs font-semibold"
                                 title="Cancelar esta comisión (deja de contar en el balance)"
                               >
-                                🗑️
+                                🚫
                               </button>
                             )}
 
@@ -1080,7 +1280,7 @@ export function ModuloComisiones({
                 {comisionesFiltradas.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-50 border-t-2 border-carbon/20 font-bold">
-                      <td colSpan={4} className="py-3 px-2 uppercase text-[10px] tracking-wider text-carbon/70">
+                      <td colSpan={5} className="py-3 px-2 uppercase text-[10px] tracking-wider text-carbon/70">
                         Totales generales ({comisionesFiltradas.length} comisiones)
                       </td>
                       <td className="py-3 px-2 text-right font-mono whitespace-nowrap">{formatoMoneda(totalesDesglose.venta)}</td>
@@ -1705,6 +1905,75 @@ export function ModuloComisiones({
       )}
 
       {/* MODALES */}
+      {modalEdicionMasivaAbierto && (
+        <ModalEdicionMasivaComisiones
+          comisionesSeleccionadas={comisionesSeleccionadas}
+          asesores={asesores}
+          alCerrar={() => setModalEdicionMasivaAbierto(false)}
+          alGuardar={(res) => {
+            setModalEdicionMasivaAbierto(false);
+            setSeleccionadas(new Set());
+            if (res) {
+              let msg = `Se actualizaron ${res.actualizadas} comisión(es) exitosamente.`;
+              if (res.omitidasPorConflicto > 0) {
+                msg += ` (${res.omitidasPorConflicto} fueron omitidas por conflicto de duplicidad de asesor).`;
+              }
+              setMensajeAlerta({ tipo: "ok", texto: msg });
+            }
+            recargarDatos();
+          }}
+        />
+      )}
+
+      {/* Modal de confirmación para eliminación masiva */}
+      {confirmandoEliminarMasivo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-red-200 text-carbon p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-600">
+              <span className="text-2xl">⚠️</span>
+              <h3 className="font-titular text-lg font-bold">
+                ¿Eliminar {seleccionadas.size} comisión{seleccionadas.size > 1 ? "es" : ""}?
+              </h3>
+            </div>
+            <p className="text-xs text-carbon/70 leading-relaxed">
+              Esta acción borrará permanentemente las comisiones seleccionadas de la base de datos de manera irreversible.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-900">
+              <span className="font-semibold block mb-0.5">Nota de protección contable:</span>
+              Cualquier comisión que ya cuente con pagos registrados no será eliminada para proteger los balances y el historial de pagos.
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmandoEliminarMasivo(false)}
+                disabled={ejecutandoAccionMasiva}
+                className="px-4 py-2 border border-carbon/20 text-carbon text-xs font-semibold rounded-xl hover:bg-slate-100 transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEliminarSeleccionadas}
+                disabled={ejecutandoAccionMasiva}
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-md flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {ejecutandoAccionMasiva ? (
+                  <>
+                    <span className="inline-block animate-spin">⏳</span>
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🗑️</span>
+                    <span>Sí, Eliminar Permanentemente</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {comisionParaAjustar && (
         <ModalAjustarComision
           comision={comisionParaAjustar}
@@ -1752,6 +2021,61 @@ export function ModuloComisiones({
           anticiposPendientes={resumen.general.anticiposPendientes}
           alCerrar={() => setModalImprimirAbierto(false)}
         />
+      )}
+
+      {/* BARRA FLOTANTE DE ACCIONES MASIVAS */}
+      {seleccionadas.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-carbon text-crema px-4 sm:px-6 py-3 rounded-2xl shadow-2xl border border-dorado/30 flex items-center justify-between gap-3 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-200 max-w-[95vw]">
+          <div className="flex items-center gap-3">
+            <span className="bg-verde-profundo text-crema text-xs font-bold px-2.5 py-1 rounded-full border border-dorado/30">
+              {seleccionadas.size} seleccionada{seleccionadas.size > 1 ? "s" : ""}
+            </span>
+            <span className="text-xs text-crema/80 font-mono hidden sm:inline">
+              Total: <strong className="text-dorado">{formatoMoneda(sumaMontoSeleccionadas)}</strong>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setModalEdicionMasivaAbierto(true)}
+              className="bg-verde-profundo hover:bg-verde-profundo/90 text-crema px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs border border-dorado/30"
+              title="Modificar asesor, monto, porcentaje o estatus en lote"
+            >
+              <span>✏️</span>
+              <span>Editar en Lote</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setConfirmandoEliminarMasivo(true)}
+              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+              title="Eliminar permanentemente las comisiones seleccionadas"
+            >
+              <span>🗑️</span>
+              <span>Eliminar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCancelarSeleccionadas}
+              className="bg-amber-600/80 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-xl text-xs font-semibold transition hidden md:flex items-center gap-1"
+              title="Cancelar las comisiones seleccionadas sin borrarlas de la base"
+            >
+              <span>🚫</span>
+              <span>Cancelar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSeleccionadas(new Set())}
+              className="text-crema/60 hover:text-crema p-1 rounded-lg text-xs"
+              title="Deseleccionar todas"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
