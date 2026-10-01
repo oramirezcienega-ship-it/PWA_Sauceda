@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { TextoAuto } from "@/components/TextoAuto";
 import {
   generarContrato,
   listarContratosOT,
@@ -16,39 +17,6 @@ import {
   type OverridesContrato,
   type TipoServicioContrato,
 } from "@/lib/contratos";
-
-/** Textarea que crece con su contenido para poder leer y editar todo el texto en móvil. */
-function TextoAuto({
-  value,
-  onChange,
-  className,
-  minRows = 2,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  className: string;
-  minRows?: number;
-  placeholder?: string;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight + 2}px`;
-  }, [value]);
-  return (
-    <textarea
-      ref={ref}
-      rows={minRows}
-      className={`${className} resize-none overflow-hidden`}
-      value={value ?? ""}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
-}
 
 interface Props {
   ordenId: string;

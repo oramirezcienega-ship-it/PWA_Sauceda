@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { TextoAuto } from "@/components/TextoAuto";
 import { useRouter } from "next/navigation";
 import {
   guardarReporteVisita,
@@ -1993,14 +1994,14 @@ export function DetalleCotizacionAdmin({
                         </thead>
                         <tbody className="divide-y divide-carbon/5 font-cuerpo">
                           {conceptosEditables.map((c, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/50">
-                              <td className="py-2.5">
-                                <input
-                                  type="text"
+                            <tr key={idx} className="hover:bg-slate-50/50 align-top">
+                              <td className="py-2.5 align-top">
+                                <TextoAuto
+                                  minRows={1}
                                   value={c.descripcion}
-                                  onChange={(e) => actualizarFilaConcepto(idx, "descripcion", e.target.value)}
+                                  onChange={(v) => actualizarFilaConcepto(idx, "descripcion", v)}
                                   placeholder="Ej. Impermeabilización Fester 5 años..."
-                                  className="w-full rounded border border-carbon/15 px-2 py-1 focus:border-sauce focus:outline-none"
+                                  className="block w-full rounded border border-carbon/15 px-2 py-1 text-base sm:text-xs leading-snug focus:border-sauce focus:outline-none"
                                 />
                               </td>
                               <td className="py-2.5 text-center">
