@@ -1339,6 +1339,86 @@ export function ModuloComisiones({
             </div>
           </div>
 
+          {/* Tasas de pasarela / terminal */}
+          <div className="bg-white border border-carbon/10 rounded-2xl shadow-xs overflow-hidden">
+            <div className="px-5 py-3 bg-cyan-50/60 border-b border-carbon/10 font-bold text-xs uppercase tracking-wider text-cyan-950">
+              <span className="flex items-center gap-1.5">
+                <span>💳</span> Tasas de Pasarela / Terminal (sugerencias de costo financiero)
+              </span>
+              <p className="normal-case font-normal tracking-normal text-[11px] text-carbon/60 mt-0.5">
+                Aparecen como botones de sugerencia al ajustar las deducciones de una remisión. Se calculan sobre el total remitido.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/50 border-b border-carbon/5 text-carbon/60 text-[10px] uppercase">
+                  <tr>
+                    <th className="py-2.5 px-4">Clave</th>
+                    <th className="py-2.5 px-4">Pasarela</th>
+                    <th className="py-2.5 px-4 text-center">Tasa (%)</th>
+                    <th className="py-2.5 px-4 text-center">Estatus</th>
+                    <th className="py-2.5 px-4">Notas</th>
+                    <th className="py-2.5 px-4 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-carbon/5">
+                  {reglas.filter((r) => r.tipo === "pasarela").length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-4 px-4 text-center text-carbon/50 italic">
+                        No hay tasas configuradas. Se sugieren Clip 4.18% y Bancaria 3.5% por defecto.
+                      </td>
+                    </tr>
+                  ) : (
+                    reglas
+                      .filter((r) => r.tipo === "pasarela")
+                      .map((r) => (
+                        <tr key={r.id} className="hover:bg-slate-50/60">
+                          <td className="py-2.5 px-4 font-mono font-bold text-verde-profundo">{r.clave}</td>
+                          <td className="py-2.5 px-4 font-semibold text-carbon">{r.etiqueta}</td>
+                          <td className="py-2.5 px-4 text-center font-mono font-bold text-cyan-900 text-sm">
+                            {r.porcentaje}%
+                          </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                r.activo ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-carbon/60"
+                              }`}
+                            >
+                              {r.activo ? "Activa" : "Inactiva"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 text-carbon/60 text-[11px]">{r.notas || "-"}</td>
+                          <td className="py-2.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setReglaParaEditar(r)}
+                                className="px-2 py-1 text-xs text-verde-profundo font-semibold hover:underline"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (confirm(`¿Eliminar la tasa "${r.etiqueta}"?`)) {
+                                    await eliminarReglaComision(r.id);
+                                    recargarDatos();
+                                  }
+                                }}
+                                className="px-2 py-1 text-xs text-red-600 hover:underline"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Reglas por tipo de servicio */}
           <div className="bg-white border border-carbon/10 rounded-2xl shadow-xs overflow-hidden">
             <div className="px-5 py-3 bg-slate-50 border-b border-carbon/10 font-bold text-xs uppercase tracking-wider text-carbon/70">

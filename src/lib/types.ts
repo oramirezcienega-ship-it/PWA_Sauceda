@@ -1322,7 +1322,7 @@ export interface ProcesoMaestro {
 // Módulo de Comisiones para Asesores
 // ============================================================
 
-export type TipoReglaComision = 'global' | 'servicio' | 'producto' | 'asesor' | 'inspeccion';
+export type TipoReglaComision = 'global' | 'servicio' | 'producto' | 'asesor' | 'inspeccion' | 'pasarela';
 export type EstatusComision = 'pendiente' | 'parcial' | 'pagada' | 'cancelada';
 export type MetodoPagoComision = 'transferencia' | 'efectivo' | 'cheque' | 'deposito' | 'otro';
 

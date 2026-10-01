@@ -110,6 +110,9 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
                   setClave("general");
                   setEtiqueta("Comisión Fija por Inspección Técnica");
                 }
+                if (val === "pasarela" && !regla) {
+                  setPorcentaje(4.18);
+                }
               }}
               disabled={Boolean(regla?.tipo === "global")}
               className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-xs bg-white focus:border-verde-profundo outline-none"
@@ -118,6 +121,7 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
               <option value="servicio">Por Tipo de Servicio (Impermeabilización, Pintura, etc.)</option>
               <option value="asesor">Especial por Asesor (Excepción personal)</option>
               <option value="producto">Por Producto de Catálogo</option>
+              <option value="pasarela">💳 Tasa de Pasarela / Terminal (deducción sugerida)</option>
               {regla?.tipo === "global" && <option value="global">Regla Base General</option>}
             </select>
           </div>
@@ -153,7 +157,13 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
               </label>
               <input
                 type="text"
-                placeholder={tipo === "inspeccion" ? "general o clave de inspección" : "ej. impermeabilizacion, losa, CAT-001"}
+                placeholder={
+                  tipo === "inspeccion"
+                    ? "general o clave de inspección"
+                    : tipo === "pasarela"
+                    ? "ej. clip, bancaria, mercadopago"
+                    : "ej. impermeabilizacion, losa, CAT-001"
+                }
                 value={clave}
                 onChange={(e) => setClave(e.target.value)}
                 className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-xs font-mono focus:border-verde-profundo outline-none"
@@ -168,7 +178,13 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
             </label>
             <input
               type="text"
-              placeholder={tipo === "inspeccion" ? "Comisión Fija por Inspección Técnica" : "ej. Impermeabilización Acrílica 5 Años"}
+              placeholder={
+                tipo === "inspeccion"
+                  ? "Comisión Fija por Inspección Técnica"
+                  : tipo === "pasarela"
+                  ? "ej. Clip, Bancaria"
+                  : "ej. Impermeabilización Acrílica 5 Años"
+              }
               value={etiqueta}
               onChange={(e) => setEtiqueta(e.target.value)}
               className="w-full border border-carbon/20 rounded-xl px-3 py-2 text-xs focus:border-verde-profundo outline-none"
@@ -198,7 +214,7 @@ export function ModalReglaComision({ regla, asesores, alCerrar, alGuardar }: Pro
             ) : (
               <div>
                 <label className="block text-xs font-semibold text-carbon mb-1">
-                  Porcentaje (%)
+                  {tipo === "pasarela" ? "Tasa sobre el total, con IVA (%)" : "Porcentaje (%)"}
                 </label>
                 <div className="relative">
                   <input
