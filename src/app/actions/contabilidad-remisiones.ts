@@ -76,11 +76,12 @@ export async function sincronizarFinanzasRemision(
     // ---- Datos relacionados ----
     let ot: any = null;
     if (rem.orden_trabajo_id) {
-      const { data } = await sb
+      const { data, error: errOt } = await sb
         .from("ordenes_trabajo")
-        .select("id, titulo, costo_proveedor, cliente_nombre, proveedor_id")
+        .select("id, titulo, costo_proveedor, proveedor_id, prospecto_id")
         .eq("id", rem.orden_trabajo_id)
         .maybeSingle();
+      if (errOt) throw new Error(`Orden de trabajo: ${errOt.message}`);
       ot = data;
     }
     const costoProveedorCapturado = Number(rem.costo_proveedor || ot?.costo_proveedor || 0);
@@ -96,9 +97,10 @@ export async function sincronizarFinanzasRemision(
     }
 
     let clienteNombre: string =
-      rem.datos_documento?.razonSocial || rem.datos_documento?.personaRecibe || ot?.cliente_nombre || "";
-    if (!clienteNombre && cot?.prospecto_id) {
-      const { data: pr } = await sb.from("prospectos").select("nombre").eq("id", cot.prospecto_id).maybeSingle();
+      rem.datos_documento?.razonSocial || rem.datos_documento?.personaRecibe || "";
+    const prospectoId = ot?.prospecto_id || cot?.prospecto_id || null;
+    if (!clienteNombre && prospectoId) {
+      const { data: pr } = await sb.from("prospectos").select("nombre").eq("id", prospectoId).maybeSingle();
       clienteNombre = pr?.nombre || "";
     }
     clienteNombre = clienteNombre || "Cliente";
@@ -571,6 +573,36 @@ export async function obraTieneRemision(
   const sb = supabaseServidor();
   const { data } = await sb.from("remisiones_facturas").select("id").or(filtros.join(",")).limit(1);
   return Boolean(data && data.length > 0);
+}
+
+/**
+ * Concilia las remisiones que todavía no tienen sus movimientos ligados en
+ * Finanzas (históricas o creadas antes de este flujo). Se ejecuta al abrir
+ * Finanzas; las que ya están conciliadas no se vuelven a procesar.
+ */
+export async function conciliarRemisionesPendientes(): Promise<{ ok: boolean; procesadas: number }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const [{ data: rems }, { data: ligadas }] = await Promise.all([
+      sb.from("remisiones_facturas").select("id, monto_total").gt("monto_total", 0),
+      sb.from("transactions").select("origen_id").eq("origen_modulo", ORIGEN),
+    ]);
+    const conciliadas = new Set((ligadas || []).map((t: any) => t.origen_id));
+    const pendientes = (rems || []).filter((r: any) => !conciliadas.has(r.id));
+
+    let procesadas = 0;
+    for (const r of pendientes) {
+      const res = await sincronizarFinanzasRemision(r.id);
+      if (res.ok) procesadas++;
+      else console.warn(`No se pudo conciliar la remisión ${r.id}:`, res.error);
+    }
+    if (procesadas > 0) revalidatePath("/finanzas");
+    return { ok: true, procesadas };
+  } catch (err: any) {
+    console.warn("Aviso al conciliar remisiones pendientes:", err?.message);
+    return { ok: false, procesadas: 0 };
+  }
 }
 
 /** Recalcula Finanzas y centro de costos de todas las remisiones (corrige históricos y duplicados). */

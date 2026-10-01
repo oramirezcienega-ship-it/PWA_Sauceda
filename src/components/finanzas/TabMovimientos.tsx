@@ -277,7 +277,7 @@ export function TabMovimientos({
                 Atribución de Ventas CRM
               </h3>
               <p className="text-[11px] text-emerald-700">
-                Expedientes cerrados en tu embudo comercial que aún no tienen una comisión registrada:
+                Expedientes cerrados sin remisión, comisión ni ingreso registrado en Finanzas:
               </p>
             </div>
           </div>

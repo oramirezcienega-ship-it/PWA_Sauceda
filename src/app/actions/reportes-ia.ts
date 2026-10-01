@@ -978,15 +978,22 @@ export async function obtenerExpedientesCerradosSinComision(): Promise<
     if (errExp) throw errExp;
     if (!expedientes || expedientes.length === 0) return [];
 
-    // 2. Obtener IDs de expedientes que ya tengan ingresos/comisión asociados (en transactions y legacy)
-    const [resTx, resLegacy] = await Promise.all([
-      sb.from("transactions").select("crm_deal_id").is("crm_deal_id", "not.null").eq("tipo", "ingreso"),
-      sb.from("transacciones_financieras").select("expediente_id").is("expediente_id", "not.null").eq("tipo", "ingreso")
+    // 2. Expedientes ya atendidos: con ingreso en Finanzas (nuevo o legado),
+    // con remisión/factura de venta (la remisión manda y genera su comisión)
+    // o con comisión de asesor registrada.
+    const idsExp = expedientes.map((e: any) => e.id);
+    const [resTx, resLegacy, resRem, resCom] = await Promise.all([
+      sb.from("transactions").select("crm_deal_id").in("crm_deal_id", idsExp).eq("tipo", "ingreso"),
+      sb.from("transacciones_financieras").select("expediente_id").in("expediente_id", idsExp).eq("tipo", "ingreso"),
+      sb.from("remisiones_facturas").select("expediente_id").in("expediente_id", idsExp),
+      sb.from("comisiones").select("expediente_id").in("expediente_id", idsExp).neq("estatus", "cancelada"),
     ]);
 
     const idsConComision = new Set<string>();
     (resTx.data || []).forEach((t: any) => { if (t.crm_deal_id) idsConComision.add(t.crm_deal_id); });
     (resLegacy.data || []).forEach((t: any) => { if (t.expediente_id) idsConComision.add(t.expediente_id); });
+    (resRem.data || []).forEach((r: any) => { if (r.expediente_id) idsConComision.add(r.expediente_id); });
+    (resCom.data || []).forEach((c: any) => { if (c.expediente_id) idsConComision.add(c.expediente_id); });
 
     // 3. Filtrar los que no tienen registro financiero
     return expedientes
