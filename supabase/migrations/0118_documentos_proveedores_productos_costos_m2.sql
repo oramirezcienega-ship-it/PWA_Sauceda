@@ -1,4 +1,4 @@
--- Migration 0116: Estructuración de productos, metros y costo por m2 en documentos de proveedor
+-- Migration 0118: Estructuración de productos, metros y costo por m2 en documentos de proveedor
 -- =========================================================================================
 -- Permite enlazar las remisiones y facturas de proveedores directamente a los productos/partidas
 -- trabajados en la orden de trabajo, guardando cantidad (m2), costo unitario ($/m2) y desglose
