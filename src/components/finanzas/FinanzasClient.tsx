@@ -31,6 +31,8 @@ import { ModalNuevoMovimiento } from "./ModalNuevoMovimiento";
 import { ModalImportarExcel } from "./ModalImportarExcel";
 import { ModalImportarMetaAds } from "./ModalImportarMetaAds";
 
+const CLAVE_FILTROS_FINANZAS = "finanzas:filtros";
+
 type TabId =
   | "resumen"
   | "movimientos"
@@ -55,6 +57,7 @@ export function FinanzasClient() {
 
   // Pestaña activa
   const [activeTab, setActiveTab] = useState<TabId>("resumen");
+  const [filtrosRestaurados, setFiltrosRestaurados] = useState(false);
 
   // Modales globales
   const [showNuevoModal, setShowNuevoModal] = useState(false);
@@ -119,9 +122,42 @@ export function FinanzasClient() {
     cargarCatalogos();
   }, [cargarCatalogos]);
 
+  // Restaurar los filtros guardados (persisten al recargar la página).
+  // Los periodos predefinidos se recalculan para que "Este mes" siga siendo el mes en curso.
   useEffect(() => {
+    try {
+      const g = JSON.parse(window.localStorage.getItem(CLAVE_FILTROS_FINANZAS) || "null");
+      if (g && typeof g === "object") {
+        if (g.presetPeriodo && g.presetPeriodo !== "personalizado") {
+          aplicarPreset(g.presetPeriodo);
+        } else if (typeof g.fechaInicio === "string" && typeof g.fechaFin === "string") {
+          setPresetPeriodo("personalizado");
+          setFechaInicio(g.fechaInicio);
+          setFechaFin(g.fechaFin);
+        }
+        if (typeof g.businessUnitId === "string") setBusinessUnitId(g.businessUnitId);
+        if (g.activeTab) setActiveTab(g.activeTab);
+      }
+    } catch {}
+    setFiltrosRestaurados(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guardar filtros cada vez que cambian (solo tras restaurar los previos)
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
+    try {
+      window.localStorage.setItem(
+        CLAVE_FILTROS_FINANZAS,
+        JSON.stringify({ presetPeriodo, fechaInicio, fechaFin, businessUnitId, activeTab })
+      );
+    } catch {}
+  }, [filtrosRestaurados, presetPeriodo, fechaInicio, fechaFin, businessUnitId, activeTab]);
+
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
     cargarDatos();
-  }, [cargarDatos]);
+  }, [filtrosRestaurados, cargarDatos]);
 
   // Al abrir Finanzas, reflejar las remisiones que aún no estén conciliadas
   // (venta, proveedor, terminal y comisión) y refrescar si hubo cambios.

@@ -24,6 +24,9 @@ interface TabMovimientosProps {
   onMovimientoModificado: () => void;
 }
 
+
+const CLAVE_FILTROS_MOVIMIENTOS = "finanzas:filtros-movimientos";
+
 export function TabMovimientos({
   catalogos,
   fechaInicio,
@@ -41,6 +44,7 @@ export function TabMovimientos({
   const [cuentaFiltro, setCuentaFiltro] = useState<string>("todas");
   const [estadoFiltro, setEstadoFiltro] = useState<"todos" | "pagado" | "pendiente">("todos");
   const [busqueda, setBusqueda] = useState<string>("");
+  const [filtrosRestaurados, setFiltrosRestaurados] = useState(false);
 
   // Modales
   const [showNuevoModal, setShowNuevoModal] = useState(false);
@@ -88,10 +92,37 @@ export function TabMovimientos({
     }
   };
 
+  // Restaurar los filtros guardados (persisten al recargar la página)
   useEffect(() => {
+    try {
+      const g = JSON.parse(window.localStorage.getItem(CLAVE_FILTROS_MOVIMIENTOS) || "null");
+      if (g && typeof g === "object") {
+        if (g.tipoFiltro) setTipoFiltro(g.tipoFiltro);
+        if (g.categoriaFiltro) setCategoriaFiltro(g.categoriaFiltro);
+        if (g.cuentaFiltro) setCuentaFiltro(g.cuentaFiltro);
+        if (g.estadoFiltro) setEstadoFiltro(g.estadoFiltro);
+        if (typeof g.busqueda === "string") setBusqueda(g.busqueda);
+      }
+    } catch {}
+    setFiltrosRestaurados(true);
+  }, []);
+
+  // Guardar filtros cada vez que cambian (solo tras restaurar los previos)
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
+    try {
+      window.localStorage.setItem(
+        CLAVE_FILTROS_MOVIMIENTOS,
+        JSON.stringify({ tipoFiltro, categoriaFiltro, cuentaFiltro, estadoFiltro, busqueda })
+      );
+    } catch {}
+  }, [filtrosRestaurados, tipoFiltro, categoriaFiltro, cuentaFiltro, estadoFiltro, busqueda]);
+
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
     cargarMovimientos();
     cargarExpedientesCRM();
-  }, [fechaInicio, fechaFin, businessUnitId, tipoFiltro, categoriaFiltro, cuentaFiltro, estadoFiltro, busqueda]);
+  }, [filtrosRestaurados, fechaInicio, fechaFin, businessUnitId, tipoFiltro, categoriaFiltro, cuentaFiltro, estadoFiltro, busqueda]);
 
   const handleSincronizarCRM = async () => {
     setSincronizandoCRM(true);

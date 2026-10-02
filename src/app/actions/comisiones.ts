@@ -2191,13 +2191,13 @@ export async function sincronizarComisionParaRecibo(
 
     if (errIns) throw new Error(errIns.message);
 
-    // Reflejar automáticamente la comisión devengada en Finanzas (opex_nomina).
+    // Reflejar automáticamente la comisión devengada en Finanzas (costo directo de la venta).
     try {
       const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
       const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
       await registrarMovimientoAutomaticoCRM({
         tipo: "egreso",
-        lineaPnl: "opex_nomina",
+        lineaPnl: "costo_comisiones_venta",
         monto: montoComision,
         concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${rec.folio}`,
         fecha: rec.fecha_pago || new Date().toISOString().split("T")[0],
@@ -2504,13 +2504,13 @@ export async function sincronizarComisionParaInspeccion(
       return { ok: false, error: `Error al registrar comisión: ${errIns.message}` };
     }
 
-    // Reflejar automáticamente la comisión devengada por inspección en Finanzas (opex_nomina)
+    // Reflejar automáticamente la comisión devengada por inspección en Finanzas (OPEX: comisiones por visitas)
     try {
       const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
       const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
       await registrarMovimientoAutomaticoCRM({
         tipo: "egreso",
-        lineaPnl: "opex_nomina",
+        lineaPnl: "opex_comisiones_visitas",
         monto: montoTarifa,
         concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${cita.cliente_nombre || "Inspección Técnica"}`,
         fecha: fechaComision,

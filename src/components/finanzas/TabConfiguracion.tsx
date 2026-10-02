@@ -590,8 +590,10 @@ export function TabConfiguracion({
                   <option value="ingresos_ventas">Ingresos: Ventas</option>
                   <option value="ingresos_otros">Ingresos: Otros</option>
                   <option value="costo_directo">Costo Directo de Operación</option>
+                  <option value="costo_comisiones_venta">Costo Directo: Comisiones por Venta</option>
                   <option value="costo_marketing">Costo de Marketing</option>
                   <option value="opex_nomina">OPEX: Nómina</option>
+                  <option value="opex_comisiones_visitas">OPEX: Comisiones por Visitas</option>
                   <option value="opex_renta">OPEX: Renta</option>
                   <option value="opex_servicios">OPEX: Servicios y Software</option>
                   <option value="opex_otros">OPEX: Otros Gastos</option>
