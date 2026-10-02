@@ -1052,43 +1052,81 @@ export async function marcarAsesorEnteradoCoordinacion(
   }
 }
 
+/** Opciones validadas por todos los asesores y el mensaje sugerido para el cliente. */
+async function mensajeOpcionesCliente(
+  sb: SupabaseClient,
+  coordinacionId: string
+): Promise<{ ok: true; coord: any; opciones: OpcionHorarioPropuesta[]; texto: string } | { ok: false; error: string }> {
+  const { data: coord, error: errCoord } = await sb
+    .from("coordinaciones_inspeccion")
+    .select("*")
+    .eq("id", coordinacionId)
+    .single();
+  if (errCoord || !coord) return { ok: false, error: "Coordinación no encontrada." };
+
+  const opciones: OpcionHorarioPropuesta[] = coord.opciones_horarios || [];
+  const validadas: string[] = coord.opciones_validadas || [];
+  const opcionesParaCliente = opciones.filter((o) => validadas.includes(o.id));
+  if (opcionesParaCliente.length === 0) {
+    return { ok: false, error: "Aún no hay opciones coincidentes aprobadas por ambos asesores." };
+  }
+
+  const primerNombre = coord.cliente_nombre.split(" ")[0] || coord.cliente_nombre;
+  const listaOpcionesCliente = opcionesParaCliente.map((opc, idx) => `${idx + 1}️⃣ ${opc.label}`).join("\n");
+  const servicio = [coord.servicio_nombre, coord.detalles_tecnicos].filter(Boolean).join(" — ");
+  const texto = `¡Hola ${primerNombre}! 🏡 Con gusto te apoyamos con tu proyecto de ${servicio} en ${coord.ubicacion}.\n\nNuestros técnicos tienen disponibles las siguientes opciones para la visita:\n\n${listaOpcionesCliente}\n\n¿Cuál de estas opciones te queda mejor para confirmarla?`;
+  return { ok: true, coord, opciones: opcionesParaCliente, texto };
+}
+
+/** Vista previa del mensaje que se enviará al cliente con las opciones validadas. */
+export async function previsualizarOpcionesClienteCoordinacion(
+  sb: SupabaseClient,
+  coordinacionId: string
+): Promise<{ ok: boolean; texto?: string; telefono?: string; error?: string }> {
+  const r = await mensajeOpcionesCliente(sb, coordinacionId);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, texto: r.texto, telefono: r.coord.cliente_telefono };
+}
+
 /**
- * 3. Envía las opciones aprobadas al cliente por WhatsApp (1 clic del Administrador)
+ * 3. Envía las opciones aprobadas al cliente por WhatsApp (1 clic del Administrador).
+ * `textoEditado` permite mandar el mensaje tal como lo ajustó el asesor en la vista previa.
+ * El mensaje queda en el historial de la conversación (con su estado de entrega/lectura).
  */
 export async function enviarOpcionesAClienteCoordinacion(
   sb: SupabaseClient,
-  coordinacionId: string
+  coordinacionId: string,
+  textoEditado?: string,
+  agente?: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const { data: coord, error: errCoord } = await sb
-      .from("coordinaciones_inspeccion")
-      .select("*")
-      .eq("id", coordinacionId)
-      .single();
-
-    if (errCoord || !coord) {
-      return { ok: false, error: "Coordinación no encontrada." };
-    }
-
-    const opciones: OpcionHorarioPropuesta[] = coord.opciones_horarios || [];
-    const validadas: string[] = coord.opciones_validadas || [];
-
-    const opcionesParaCliente = opciones.filter((o) => validadas.includes(o.id));
-    if (opcionesParaCliente.length === 0) {
-      return { ok: false, error: "Aún no hay opciones coincidentes aprobadas por ambos asesores." };
-    }
-
+    const prep = await mensajeOpcionesCliente(sb, coordinacionId);
+    if (!prep.ok) return { ok: false, error: prep.error };
+    const { coord, opciones: opcionesParaCliente } = prep;
     const primerNombre = coord.cliente_nombre.split(" ")[0] || coord.cliente_nombre;
-    const listaOpcionesCliente = opcionesParaCliente
-      .map((opc, idx) => `${idx + 1}️⃣ ${opc.label}`)
-      .join("\n");
-
-    const msgCliente = `¡Hola ${primerNombre}! 🏡 Con gusto te apoyamos con la inspección de ${coord.servicio_nombre} en ${coord.ubicacion}.\n\nNuestros técnicos especializados tienen disponibles las siguientes opciones para realizar tu levantamiento técnico sin compromiso:\n\n${listaOpcionesCliente}\n\n¿Cuál de estas opciones te queda mejor para confirmar tu visita?`;
+    const msgCliente = textoEditado?.trim() || prep.texto;
 
     const resWsp = await enviarWhatsAppTexto(coord.cliente_telefono, msgCliente);
     if (!resWsp.ok) {
       console.warn("[Coordinación] No se pudo enviar WhatsApp texto al cliente:", resWsp.error);
+      return {
+        ok: false,
+        error: `No se pudo enviar el WhatsApp al cliente: ${resWsp.error || "error desconocido"}. Si pasaron más de 24 h desde su último mensaje, hay que usar una plantilla aprobada.`,
+      };
     }
+
+    // Registrar en el historial de la conversación; el webhook actualiza entregado/leído por wa_message_id
+    const { error: errMsg } = await sb.from("mensajes_whatsapp").insert({
+      telefono: normalizarTelefono(coord.cliente_telefono),
+      texto: msgCliente,
+      direccion: "out",
+      estado: "enviado",
+      agente: agente || "Coordinación de inspección",
+      wa_message_id: resWsp.messageId ?? null,
+      expediente_id: coord.expediente_id || null,
+      prospecto_id: coord.prospecto_id || null,
+    });
+    if (errMsg) console.warn("[Coordinación] No se pudo registrar el mensaje en el historial:", errMsg);
 
     await sb
       .from("coordinaciones_inspeccion")
@@ -1103,7 +1141,7 @@ export async function enviarOpcionesAClienteCoordinacion(
       expedienteId: coord.expediente_id,
       tipo: "coordinacion_opciones_enviadas_cliente",
       titulo: `💬 Opciones validadas enviadas a ${primerNombre} por WhatsApp`,
-      detalle: `Opciones ofrecidas:\n${opcionesParaCliente.map((o) => o.label).join(", ")}`,
+      detalle: `Opciones ofrecidas:\n${opcionesParaCliente.map((o: OpcionHorarioPropuesta) => o.label).join(", ")}`,
     });
 
     return { ok: true };

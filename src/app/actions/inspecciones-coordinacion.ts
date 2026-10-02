@@ -13,6 +13,7 @@ import {
   registrarVotosAsesorCoordinacion,
   marcarAsesorEnteradoCoordinacion,
   enviarOpcionesAClienteCoordinacion,
+  previsualizarOpcionesClienteCoordinacion,
   confirmarCitaFinalCoordinacion,
   obtenerCoordinacionActivaProspecto,
   cancelarCoordinacionAction as cancelarCoordLib,
@@ -171,16 +172,30 @@ export async function registrarVotosAsesorAction(
   }
 }
 
+/** Vista previa del mensaje con las opciones validadas que se enviará al cliente. */
+export async function previsualizarOpcionesClienteAction(
+  coordinacionId: string
+): Promise<{ ok: boolean; texto?: string; telefono?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    return await previsualizarOpcionesClienteCoordinacion(supabaseServidor(), coordinacionId);
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
+
 /**
  * 8. Envía las opciones validadas por ambos asesores al cliente vía WhatsApp
  */
 export async function enviarOpcionesClienteAction(
   coordinacionId: string,
-  prospectoId?: string
+  prospectoId?: string,
+  textoEditado?: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    await requireAdmin();
     const sb = supabaseServidor();
-    const res = await enviarOpcionesAClienteCoordinacion(sb, coordinacionId);
+    const res = await enviarOpcionesAClienteCoordinacion(sb, coordinacionId, textoEditado);
     if (prospectoId) {
       revalidatePath(`/prospectos/${prospectoId}`);
     }

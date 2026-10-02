@@ -281,7 +281,9 @@ export default async function PaginaProspecto({
               prospecto.ciudad ||
               "León, Gto."
             }
-            detallesIniciales={prospecto.notas || undefined}
+            detallesIniciales={
+              [expedientes[0]?.necesidad, prospecto.notas].filter((t) => t && String(t).trim()).join(" · ") || undefined
+            }
             perfiles={perfiles}
             asesorPredefinidoId={prospecto.asesorId ?? null}
             operadorPredefinidoId={prospecto.operadorId ?? null}

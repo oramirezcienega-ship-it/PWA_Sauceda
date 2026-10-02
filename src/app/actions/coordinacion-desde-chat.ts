@@ -42,7 +42,8 @@ export async function obtenerDatosCoordinacionProspecto(
         tipoNegocioInicial: prospecto.tipoNegocioPrincipal || expedientes[0]?.tipoNegocio || undefined,
         ubicacionInicial:
           expedientes[0]?.fraccionamiento || prospecto.direccion || prospecto.ciudad || "León, Gto.",
-        detallesIniciales: prospecto.notas || undefined,
+        // Lo que el cliente pidió (ej. "Remodelación de baño") va primero; luego las notas
+        detallesIniciales: [expedientes[0]?.necesidad, prospecto.notas].filter((t) => t && String(t).trim()).join(" · ") || undefined,
         perfiles,
         asesorPredefinidoId: prospecto.asesorId ?? null,
         operadorPredefinidoId: prospecto.operadorId ?? null,
