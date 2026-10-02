@@ -221,8 +221,9 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
   function construirCanvasCotizacion(): HTMLCanvasElement | null {
     const width = 1200;
     const filasMeses = plazosActivos.length;
-    const altoTablaMeses = filasMeses ? 96 + filasMeses * 36 : 0;
-    const height = 750 + (filasMeses ? altoTablaMeses + 20 : 0);
+    // Bloque "A meses con intereses" dentro de cada tarjeta (igual que en pantalla)
+    const altoMeses = filasMeses ? 34 + filasMeses * 22 + 12 : 0;
+    const height = 750 + altoMeses;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -266,7 +267,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
     // Dibujar las 3 tarjetas comparativas compactas
     const cardWidth = 346;
-    const cardHeight = 580;
+    const cardHeight = 580 + altoMeses;
     const startX = 54;
     const gap = 27;
     const startY = 145;
@@ -348,18 +349,57 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       ctx.font = "12px sans-serif";
       ctx.fillText(`$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`, x + 22, priceY + 38);
 
+      // 7b. Opciones a meses con intereses
+      if (filasMeses) {
+        const mx = x + 22;
+        const my = priceY + 58;
+        const mw = cardWidth - 44;
+        drawRoundedRect(ctx, mx, my, mw, altoMeses - 12, 7, "#F0F9FF", "#BAE6FD", 1);
+
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = "#0369A1";
+        ctx.font = "bold 9.5px sans-serif";
+        ctx.fillText("A MESES CON INTERESES", mx + 10, my + 10);
+
+        ctx.textBaseline = "middle";
+        opcionesMeses(total).forEach((o, r) => {
+          const rowY = my + 36 + r * 22;
+          ctx.textAlign = "left";
+          ctx.fillStyle = "#334155";
+          ctx.font = "bold 12px sans-serif";
+          ctx.fillText(`${o.meses} meses`, mx + 10, rowY);
+
+          ctx.textAlign = "right";
+          const totalTxt = ` · ${formatearDinero(o.total)}`;
+          ctx.fillStyle = "#94A3B8";
+          ctx.font = "11.5px monospace";
+          ctx.fillText(totalTxt, mx + mw - 10, rowY);
+          let cursor = mx + mw - 10 - ctx.measureText(totalTxt).width;
+          ctx.fillStyle = "#64748B";
+          ctx.fillText("/mes", cursor, rowY);
+          cursor -= ctx.measureText("/mes").width;
+          ctx.fillStyle = esPremium ? "#B58E3F" : "#2D4A2B";
+          ctx.font = "bold 12.5px monospace";
+          ctx.fillText(formatearDinero(o.mensualidad), cursor, rowY);
+        });
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+      }
+
       // 8. Línea divisoria
+      const divY = priceY + 58 + altoMeses;
       ctx.save();
       ctx.beginPath();
       ctx.strokeStyle = "#E2E8F0";
       ctx.lineWidth = 1;
-      ctx.moveTo(x + 22, priceY + 58);
-      ctx.lineTo(x + cardWidth - 22, priceY + 58);
+      ctx.moveTo(x + 22, divY);
+      ctx.lineTo(x + cardWidth - 22, divY);
       ctx.stroke();
       ctx.restore();
 
       // 9. Lista de Inclusiones
-      let listY = priceY + 68;
+      let listY = divY + 10;
       ctx.textBaseline = "top";
 
       pkg.incluye.forEach((item) => {
@@ -426,63 +466,6 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       ctx.textBaseline = "middle";
       ctx.fillText(`Cotizar paquete ${pkg.badge}`, x + cardWidth / 2, btnY + btnH / 2);
     });
-
-    // Tabla de pagos a meses con intereses (sólo si el asesor la activó)
-    if (filasMeses) {
-      const tx = startX;
-      const ty = startY + cardHeight + 20;
-      const tw = width - startX * 2;
-      drawRoundedRect(ctx, tx, ty, tw, altoTablaMeses, 16, "#FFFFFF", "#E2E8F0", 1.5);
-
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillStyle = "#2D4A2B";
-      ctx.font = "bold 16px sans-serif";
-      ctx.fillText("💳 PAGO A MESES CON INTERESES", tx + 22, ty + 16);
-      ctx.fillStyle = "#64748B";
-      ctx.font = "12px sans-serif";
-      ctx.fillText(
-        "Con tarjeta de crédito vía Mercado Pago. El total a meses incluye el costo de financiamiento.",
-        tx + 22,
-        ty + 40
-      );
-
-      const colPlazoW = 160;
-      const colW = (tw - 44 - colPlazoW) / paquetes.length;
-      const headerY = ty + 64;
-      ctx.font = "bold 11px sans-serif";
-      ctx.fillStyle = "#64748B";
-      ctx.fillText("PLAZO", tx + 22, headerY);
-      paquetes.forEach((pkg, i) => {
-        ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#5C7A52";
-        ctx.fillText(pkg.badge, tx + 22 + colPlazoW + i * colW, headerY);
-      });
-
-      plazosActivos.forEach((m, r) => {
-        const rowY = headerY + 20 + r * 36;
-        if (r % 2 === 0) {
-          drawRoundedRect(ctx, tx + 12, rowY - 4, tw - 24, 32, 6, "#F8FAFC");
-        }
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "#0F172A";
-        ctx.font = "bold 14px sans-serif";
-        ctx.fillText(`${m} meses`, tx + 22, rowY + 12);
-
-        paquetes.forEach((pkg, i) => {
-          const o = calcularOpcionMeses(m2Val * pkg.precioM2, m, ivaComision);
-          const cx = tx + 22 + colPlazoW + i * colW;
-          const mensual = `${formatearDinero(o.mensualidad)}/mes`;
-          ctx.fillStyle = pkg.destacado ? "#B58E3F" : "#2D4A2B";
-          ctx.font = "bold 15px sans-serif";
-          ctx.fillText(mensual, cx, rowY + 12);
-          const mw = ctx.measureText(mensual).width;
-          ctx.fillStyle = "#64748B";
-          ctx.font = "11.5px sans-serif";
-          ctx.fillText(`total ${formatearDinero(o.total)}`, cx + mw + 8, rowY + 12);
-        });
-        ctx.textBaseline = "top";
-      });
-    }
 
     return canvas;
   }
