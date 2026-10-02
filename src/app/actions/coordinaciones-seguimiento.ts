@@ -186,3 +186,38 @@ export async function recordarCoordinacionAsesores(
     return { ok: false, recordados: 0, error: err?.message || "Error al enviar recordatorio." };
   }
 }
+
+/** Cierra (cancela) una coordinación que ya no va a avanzar, dejando el motivo en la bitácora. */
+export async function cerrarCoordinacionPendiente(
+  coordinacionId: string,
+  motivo: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: c } = await sb
+      .from("coordinaciones_inspeccion")
+      .select("id, prospecto_id, expediente_id, cliente_nombre, servicio_nombre")
+      .eq("id", coordinacionId)
+      .maybeSingle();
+    if (!c) return { ok: false, error: "Coordinación no encontrada." };
+
+    const { error } = await sb
+      .from("coordinaciones_inspeccion")
+      .update({ estado: "cancelada", updated_at: new Date().toISOString() })
+      .eq("id", coordinacionId);
+    if (error) return { ok: false, error: error.message };
+
+    const { registrarActividad } = await import("@/lib/actividades");
+    await registrarActividad(sb, {
+      prospectoId: c.prospecto_id,
+      expedienteId: c.expediente_id,
+      tipo: "coordinacion_cerrada",
+      titulo: `🗂️ Coordinación cerrada sin cita (${c.cliente_nombre})`,
+      detalle: `${c.servicio_nombre}. Motivo: ${motivo || "Sin especificar"}.`,
+    });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al cerrar la coordinación." };
+  }
+}

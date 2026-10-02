@@ -11,6 +11,7 @@ import {
 import {
   obtenerCoordinacionesPendientes,
   recordarCoordinacionAsesores,
+  cerrarCoordinacionPendiente,
   type CoordinacionPendienteItem,
 } from "@/app/actions/coordinaciones-seguimiento";
 
@@ -22,11 +23,35 @@ function tiempoTranscurrido(min: number): string {
   return `${d} d`;
 }
 
+type EtapaCoord = CoordinacionPendienteItem["etapa"];
+
+const ETAPAS_COORD: { id: EtapaCoord; label: string; clase: string }[] = [
+  { id: "esperando_asesores", label: "Esperando asesores", clase: "bg-amber-50 text-amber-800 border-amber-200" },
+  { id: "listo_para_cliente", label: "Listo para cliente", clase: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  { id: "esperando_cliente", label: "Esperando cliente", clase: "bg-sky-50 text-sky-800 border-sky-200" },
+  { id: "sin_coincidencia", label: "Sin acuerdo", clase: "bg-rose-50 text-rose-800 border-rose-200" },
+];
+
+const MOTIVOS_CIERRE = [
+  "El cliente ya no respondió",
+  "El cliente ya no está interesado",
+  "Se agendó por otro medio",
+  "Coordinación duplicada",
+  "Otro",
+];
+
+function fechaCorta(iso: string): string {
+  return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 export function HeaderActividadesSemana() {
   const [datos, setDatos] = useState<ResumenSemanaActividades | null>(null);
   const [coordinaciones, setCoordinaciones] = useState<CoordinacionPendienteItem[]>([]);
   const [recordandoId, setRecordandoId] = useState<string | null>(null);
   const [avisoCoord, setAvisoCoord] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [filtroEtapaCoord, setFiltroEtapaCoord] = useState<EtapaCoord | "todas">("todas");
+  const [cerrandoCoord, setCerrandoCoord] = useState<{ id: string; motivo: string } | null>(null);
+  const [guardandoCierre, setGuardandoCierre] = useState(false);
   const [cargando, setCargando] = useState(true);
   // Regla: Siempre iniciar contraída por defecto
   const [colapsada, setColapsada] = useState(true);
@@ -90,7 +115,29 @@ export function HeaderActividadesSemana() {
     );
   };
 
+  const handleCerrarCoord = async () => {
+    if (!cerrandoCoord) return;
+    const { id, motivo } = cerrandoCoord;
+    setGuardandoCierre(true);
+    const r = await cerrarCoordinacionPendiente(id, motivo);
+    setGuardandoCierre(false);
+    if (r.ok) {
+      setCoordinaciones((prev) => prev.filter((c) => c.id !== id));
+      setCerrandoCoord(null);
+      setAvisoCoord({ tipo: "ok", texto: "Coordinación cerrada." });
+    } else {
+      setAvisoCoord({ tipo: "error", texto: r.error || "No se pudo cerrar la coordinación." });
+    }
+  };
+
   const hayCoordUrgentes = coordinaciones.some((c) => c.urgente);
+  // Más antiguas primero: son las que más urge cerrar
+  const coordsOrdenadas = useMemo(
+    () => [...coordinaciones].sort((a, b) => new Date(a.creadaAt).getTime() - new Date(b.creadaAt).getTime()),
+    [coordinaciones]
+  );
+  const coordsVisibles =
+    filtroEtapaCoord === "todas" ? coordsOrdenadas : coordsOrdenadas.filter((c) => c.etapa === filtroEtapaCoord);
 
   // Conteos globales de estado para la semana
   const conteos = useMemo(() => {
@@ -591,72 +638,155 @@ export function HeaderActividadesSemana() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[240px] overflow-y-auto pr-1">
-                {coordinaciones.map((c) => (
-                  <div
-                    key={c.id}
-                    className={`rounded-lg border bg-white p-2.5 text-[11px] space-y-1.5 ${
-                      c.urgente ? "border-rojo/40" : "border-indigo-100"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-bold text-carbon truncate">🔍 {c.clienteNombre}</div>
-                        <div className="text-carbon/60 truncate">
-                          {c.servicioNombre} · {c.ubicacion}
+              {/* Filtro por estatus */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[{ id: "todas" as const, label: "Todas", clase: "bg-white text-carbon/70 border-carbon/15" }, ...ETAPAS_COORD].map((e) => {
+                  const n = e.id === "todas" ? coordinaciones.length : coordinaciones.filter((c) => c.etapa === e.id).length;
+                  if (e.id !== "todas" && n === 0) return null;
+                  const activo = filtroEtapaCoord === e.id;
+                  return (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() => setFiltroEtapaCoord(e.id)}
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition ${
+                        activo ? "bg-indigo-900 text-white border-indigo-900" : e.clase
+                      }`}
+                    >
+                      {e.label} ({n})
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="max-h-[300px] overflow-y-auto rounded-lg border border-indigo-100 bg-white">
+                {/* Encabezado (solo escritorio) */}
+                <div className="hidden lg:grid grid-cols-[110px_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_auto] gap-3 px-3 py-1.5 border-b border-indigo-100 bg-indigo-50/60 text-[9.5px] font-bold uppercase tracking-wide text-indigo-900/60 sticky top-0">
+                  <span>Antigüedad</span>
+                  <span>Cliente</span>
+                  <span>Estatus</span>
+                  <span>Asesores</span>
+                  <span className="text-right">Acciones</span>
+                </div>
+
+                {coordsVisibles.map((c) => {
+                  const etapa = ETAPAS_COORD.find((e) => e.id === c.etapa);
+                  const edadClase =
+                    c.minutosPendiente >= 1440
+                      ? "bg-rojo/10 text-rojo"
+                      : c.minutosPendiente >= 120
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-slate-100 text-carbon/70";
+                  const cerrando = cerrandoCoord?.id === c.id;
+                  return (
+                    <div key={c.id} className={`border-b border-slate-100 last:border-b-0 ${c.urgente ? "bg-rojo/[0.03]" : ""}`}>
+                      <div className="grid grid-cols-1 lg:grid-cols-[110px_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_auto] gap-x-3 gap-y-1 px-3 py-2 text-[11px] items-center">
+                        <div className="flex lg:flex-col items-center lg:items-start gap-1.5 lg:gap-0.5">
+                          <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${edadClase}`} title="Tiempo desde que se solicitó">
+                            ⏱ {tiempoTranscurrido(c.minutosPendiente)}
+                          </span>
+                          <span className="text-[10px] text-carbon/50" title="Fecha en que se generó">
+                            {fechaCorta(c.creadaAt)}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="font-bold text-carbon truncate">{c.clienteNombre}</div>
+                          <div className="text-carbon/55 truncate">
+                            {c.servicioNombre} · {c.ubicacion}
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 space-y-0.5">
+                          {etapa && (
+                            <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold ${etapa.clase}`}>
+                              {etapa.label}
+                            </span>
+                          )}
+                          <div className="text-[10.5px] text-indigo-900/80 truncate" title={c.etapaLabel}>
+                            {c.etapaLabel}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {c.asesores.map((a) => (
+                            <span
+                              key={a.id}
+                              className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${
+                                a.respondio ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
+                              }`}
+                              title={`${a.nombre}: ${a.recibido ? "recibió" : "sin confirmación de envío"} · ${a.leido ? "leyó" : "sin confirmar lectura"} · ${a.respondio ? "respondió" : "sin respuesta"}`}
+                            >
+                              <span className="font-semibold">{a.nombre.split(" ")[0]}</span>
+                              <span>{a.recibido ? "📨" : "⚠️"}</span>
+                              <span>{a.leido ? "👁️" : "⏳"}</span>
+                              <span>{a.respondio ? "✅" : "❔"}</span>
+                            </span>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center lg:justify-end gap-1.5">
+                          <Link
+                            href={`/prospectos/${c.prospectoId}`}
+                            className="rounded-md bg-verde-profundo text-crema px-2 py-1 font-semibold hover:bg-sauce transition whitespace-nowrap"
+                          >
+                            Abrir cabina →
+                          </Link>
+                          {c.etapa === "esperando_asesores" && (
+                            <button
+                              type="button"
+                              onClick={() => handleRecordar(c.id)}
+                              disabled={recordandoId === c.id}
+                              className="rounded-md border border-amber-300 bg-amber-50 text-amber-900 px-2 py-1 font-semibold hover:bg-amber-100 transition disabled:opacity-50 whitespace-nowrap"
+                              title="Envía un recordatorio por WhatsApp y Telegram a los asesores que no han respondido"
+                            >
+                              {recordandoId === c.id ? "Enviando…" : "⏰ Recordar"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setCerrandoCoord(cerrando ? null : { id: c.id, motivo: MOTIVOS_CIERRE[0] })}
+                            className="rounded-md border border-carbon/15 bg-white text-carbon/70 px-2 py-1 font-semibold hover:bg-slate-50 transition whitespace-nowrap"
+                            title="Cerrar esta coordinación sin cita (queda registrado el motivo)"
+                          >
+                            Cerrar
+                          </button>
                         </div>
                       </div>
-                      <span
-                        className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-                          c.urgente ? "bg-rojo/10 text-rojo" : "bg-slate-100 text-carbon/70"
-                        }`}
-                        title="Tiempo desde que se solicitó la coordinación"
-                      >
-                        ⏱ {tiempoTranscurrido(c.minutosPendiente)}
-                      </span>
-                    </div>
 
-                    <div className="font-semibold text-indigo-900">{c.etapaLabel}</div>
-
-                    <div className="flex flex-wrap gap-1">
-                      {c.asesores.map((a) => (
-                        <span
-                          key={a.id}
-                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px]"
-                          title={`${a.nombre}: ${a.recibido ? "recibió" : "sin confirmación de envío"} · ${a.leido ? "leyó" : "sin confirmar lectura"} · ${a.respondio ? "respondió" : "sin respuesta"}`}
-                        >
-                          <span className="font-semibold">{a.nombre.split(" ")[0]}</span>
-                          <span>{a.recibido ? "📨" : "⚠️"}</span>
-                          <span>{a.leido ? "👁️" : "⏳"}</span>
-                          <span>{a.respondio ? "✅" : "❔"}</span>
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <Link
-                        href={`/prospectos/${c.prospectoId}`}
-                        className="rounded-md bg-verde-profundo text-crema px-2 py-1 font-semibold hover:bg-sauce transition"
-                      >
-                        Abrir cabina →
-                      </Link>
-                      {c.etapa === "esperando_asesores" && (
-                        <button
-                          type="button"
-                          onClick={() => handleRecordar(c.id)}
-                          disabled={recordandoId === c.id}
-                          className="rounded-md border border-amber-300 bg-amber-50 text-amber-900 px-2 py-1 font-semibold hover:bg-amber-100 transition disabled:opacity-50"
-                          title="Envía un recordatorio por WhatsApp y Telegram a los asesores que no han respondido"
-                        >
-                          {recordandoId === c.id ? "Enviando…" : "⏰ Recordar a los asesores"}
-                        </button>
+                      {cerrando && (
+                        <div className="flex flex-wrap items-center gap-2 px-3 pb-2 text-[11px]">
+                          <span className="font-semibold text-carbon/70">Motivo de cierre:</span>
+                          <select
+                            value={cerrandoCoord?.motivo ?? MOTIVOS_CIERRE[0]}
+                            onChange={(e) => setCerrandoCoord({ id: c.id, motivo: e.target.value })}
+                            className="rounded border border-carbon/20 px-1.5 py-1 text-[11px] bg-white"
+                          >
+                            {MOTIVOS_CIERRE.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={handleCerrarCoord}
+                            disabled={guardandoCierre}
+                            className="rounded-md bg-rojo text-white px-2 py-1 font-bold hover:opacity-90 disabled:opacity-50"
+                          >
+                            {guardandoCierre ? "Cerrando…" : "Confirmar cierre"}
+                          </button>
+                          <button type="button" onClick={() => setCerrandoCoord(null)} className="text-carbon/50 hover:underline">
+                            Cancelar
+                          </button>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="text-[10px] text-carbon/50">
-                📨 recibió · 👁️ leyó (botón Enterado, respuesta o marca manual) · ✅ respondió. Se muestran hasta que la cita queda confirmada o se cancela.
+                Más antiguas primero · ⏱ ámbar &gt; 2 h, rojo &gt; 1 día · 📨 recibió · 👁️ leyó · ✅ respondió. Se muestran hasta que la cita se confirma o se cierra.
               </div>
             </div>
           )}
