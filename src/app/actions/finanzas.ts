@@ -12,8 +12,10 @@ export type LineaPnL =
   | "ingresos_ventas"
   | "ingresos_otros"
   | "costo_directo"
+  | "costo_comisiones_venta"
   | "costo_marketing"
   | "opex_nomina"
+  | "opex_comisiones_visitas"
   | "opex_renta"
   | "opex_servicios"
   | "opex_otros"
@@ -493,10 +495,11 @@ export async function obtenerResumenFinanciero(
         (desgloseCategoriasActual.get(catNombre) || 0) + monto
       );
 
-      if (linea === "costo_directo") costoDirecto += monto;
+      if (linea === "costo_directo" || linea === "costo_comisiones_venta") costoDirecto += monto;
       else if (linea === "costo_marketing") costoMarketing += monto;
       else if (
         linea === "opex_nomina" ||
+        linea === "opex_comisiones_visitas" ||
         linea === "opex_renta" ||
         linea === "opex_servicios" ||
         linea === "opex_otros"
@@ -644,7 +647,7 @@ export async function obtenerResumenFinanciero(
     }
     const item = dealsMap.get(dealId)!;
     if (t.tipo === "ingreso") item.ingreso += m;
-    else if (t.tipo === "egreso" && linea === "costo_directo") item.costo += m;
+    else if (t.tipo === "egreso" && (linea === "costo_directo" || linea === "costo_comisiones_venta")) item.costo += m;
   });
 
   const topOperacionesCRM = Array.from(dealsMap.entries())
@@ -807,6 +810,7 @@ export async function obtenerMovimientosFinanzas(filtros: {
   fechaFin?: string;
   tipo?: "todos" | "ingreso" | "egreso" | "traspaso";
   categoriaId?: string;
+  lineaPnl?: string;
   businessUnitId?: string;
   moneyAccountId?: string;
   estado?: "todos" | "pagado" | "pendiente";
@@ -817,11 +821,15 @@ export async function obtenerMovimientosFinanzas(filtros: {
   await requireAdministrador();
   const sb = supabaseServidor();
 
+  // Al filtrar por línea del P&L se usa un inner join para que solo vuelvan
+  // los movimientos cuya categoría pertenece a esa línea.
+  const joinCategorias = filtros.lineaPnl ? "categories!inner" : "categories";
+
   let q = sb
     .from("transactions")
     .select(`
       *,
-      categories ( nombre, linea_pnl ),
+      ${joinCategorias} ( nombre, linea_pnl ),
       business_units ( nombre ),
       money_accounts!transactions_money_account_id_fkey ( nombre ),
       money_dest:money_accounts!transactions_money_account_destino_id_fkey ( nombre ),
@@ -832,6 +840,7 @@ export async function obtenerMovimientosFinanzas(filtros: {
   if (filtros.fechaFin) q = q.lte("fecha_operacion", filtros.fechaFin);
   if (filtros.tipo && filtros.tipo !== "todos") q = q.eq("tipo", filtros.tipo);
   if (filtros.categoriaId && filtros.categoriaId !== "todas") q = q.eq("categoria_id", filtros.categoriaId);
+  if (filtros.lineaPnl) q = q.eq("categories.linea_pnl", filtros.lineaPnl);
   if (filtros.businessUnitId && filtros.businessUnitId !== "todas") q = q.eq("business_unit_id", filtros.businessUnitId);
   if (filtros.moneyAccountId && filtros.moneyAccountId !== "todas") q = q.eq("money_account_id", filtros.moneyAccountId);
   if (filtros.estado && filtros.estado !== "todos") q = q.eq("estado", filtros.estado);
@@ -1039,7 +1048,7 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
     if (!errCom && comisiones && comisiones.length > 0) {
       const { data: existingComs } = await sb
         .from("transactions")
-        .select("concepto, monto_total")
+        .select("concepto, monto_total, origen_modulo, origen_id")
         .eq("tipo", "egreso");
 
       for (const com of comisiones) {
@@ -1059,6 +1068,7 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
 
         const yaExiste = (existingComs || []).some(
           (t: any) =>
+            (t.origen_modulo === "comision" && t.origen_id === com.id) ||
             t.concepto === concepto ||
             (remFolio && t.concepto?.includes(remFolio)) ||
             (com.tipo_comision === "inspeccion" && clienteExp && t.concepto?.includes(clienteExp) && t.concepto?.includes(asesorNombre))
@@ -1067,13 +1077,14 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
 
         const resReg = await registrarMovimientoAutomaticoCRM({
           tipo: "egreso",
-          lineaPnl: "opex_nomina",
+          lineaPnl: com.tipo_comision === "inspeccion" ? "opex_comisiones_visitas" : "costo_comisiones_venta",
           monto,
           concepto,
           fecha: com.fecha || new Date().toISOString().split("T")[0],
           estado: com.estatus === "pagada" ? "pagado" : "pendiente",
           contraparte: asesorNombre,
           crmDealId: com.expediente_id || null,
+          origen: { modulo: "comision", id: com.id, concepto: "comision" },
         });
 
         if (resReg.ok) {
@@ -1505,8 +1516,10 @@ export async function obtenerEstadoResultados(
     ingresos_ventas: {},
     ingresos_otros: {},
     costo_directo: {},
+    costo_comisiones_venta: {},
     costo_marketing: {},
     opex_nomina: {},
+    opex_comisiones_visitas: {},
     opex_renta: {},
     opex_servicios: {},
     opex_otros: {},
@@ -1532,26 +1545,27 @@ export async function obtenerEstadoResultados(
     }
   });
 
-  // Helper para sumar total de una línea
-  const sumarLinea = (clave: string) =>
-    Object.values(mapaMensual[clave] || {}).reduce((a, b) => a + b, 0);
+  // Grupos de líneas que forman cada sección del reporte
+  const LINEAS_INGRESOS = ["ingresos_comisiones", "ingresos_ventas", "ingresos_otros"];
+  const LINEAS_COSTO_DIRECTO = ["costo_directo", "costo_comisiones_venta"];
+  const LINEAS_OPEX = ["opex_nomina", "opex_comisiones_visitas", "opex_renta", "opex_servicios", "opex_otros"];
 
-  const ingComisiones = sumarLinea("ingresos_comisiones");
-  const ingVentas = sumarLinea("ingresos_ventas");
-  const ingOtros = sumarLinea("ingresos_otros");
-  const totalIngresos = ingComisiones + ingVentas + ingOtros;
+  // Monto de un grupo de líneas en un mes, o en todo el periodo si no se indica mes
+  const sumar = (claves: string[], mes?: string) =>
+    claves.reduce(
+      (acc, k) =>
+        acc + (mes ? mapaMensual[k][mes] || 0 : Object.values(mapaMensual[k]).reduce((a, b) => a + b, 0)),
+      0
+    );
+  const sumarLinea = (clave: string) => sumar([clave]);
 
-  const costoDirecto = sumarLinea("costo_directo");
+  const totalIngresos = sumar(LINEAS_INGRESOS);
+  const costoDirecto = sumar(LINEAS_COSTO_DIRECTO);
   const costoMarketing = sumarLinea("costo_marketing");
   const utilidadBruta = totalIngresos - costoDirecto - costoMarketing;
   const margenBrutoPct = totalIngresos > 0 ? (utilidadBruta / totalIngresos) * 100 : 0;
 
-  const opexNomina = sumarLinea("opex_nomina");
-  const opexRenta = sumarLinea("opex_renta");
-  const opexServicios = sumarLinea("opex_servicios");
-  const opexOtros = sumarLinea("opex_otros");
-  const totalOpex = opexNomina + opexRenta + opexServicios + opexOtros;
-
+  const totalOpex = sumar(LINEAS_OPEX);
   const ebit = utilidadBruta - totalOpex;
   const margenOperativoPct = totalIngresos > 0 ? (ebit / totalIngresos) * 100 : 0;
 
@@ -1560,6 +1574,12 @@ export async function obtenerEstadoResultados(
   const isr = sumarLinea("isr");
   const utilidadNeta = uai - isr;
   const margenNetoPct = totalIngresos > 0 ? (utilidadNeta / totalIngresos) * 100 : 0;
+
+  // Resultados acumulados por mes
+  const brutaMes = (m: string) => sumar(LINEAS_INGRESOS, m) - sumar(LINEAS_COSTO_DIRECTO, m) - sumar(["costo_marketing"], m);
+  const ebitMes = (m: string) => brutaMes(m) - sumar(LINEAS_OPEX, m);
+  const uaiMes = (m: string) => ebitMes(m) - sumar(["gastos_financieros"], m);
+  const netaMes = (m: string) => uaiMes(m) - sumar(["isr"], m);
 
   // Construir las filas del reporte
   const crearFila = (
@@ -1588,69 +1608,39 @@ export async function obtenerEstadoResultados(
     return res;
   };
 
+  const filaLinea = (clave: string, concepto: string) =>
+    crearFila(clave, concepto, sumarLinea(clave), mapaMensual[clave]);
+
   const lineas: LineaPnLReporte[] = [
     // 1. INGRESOS
-    crearFila("hdr_ingresos", "1. Ingresos Operativos", totalIngresos, mensualTotales(m =>
-      (mapaMensual.ingresos_comisiones[m] || 0) +
-      (mapaMensual.ingresos_ventas[m] || 0) +
-      (mapaMensual.ingresos_otros[m] || 0)
-    ), true, true),
-    crearFila("ingresos_comisiones", "  Comisiones Inmobiliarias", ingComisiones, mapaMensual.ingresos_comisiones),
-    crearFila("ingresos_ventas", "  Ventas de Obra / Directas", ingVentas, mapaMensual.ingresos_ventas),
-    crearFila("ingresos_otros", "  Otros Ingresos", ingOtros, mapaMensual.ingresos_otros),
-    crearFila("total_ingresos", "TOTAL INGRESOS", totalIngresos, mensualTotales(m =>
-      (mapaMensual.ingresos_comisiones[m] || 0) +
-      (mapaMensual.ingresos_ventas[m] || 0) +
-      (mapaMensual.ingresos_otros[m] || 0)
-    ), true),
+    crearFila("hdr_ingresos", "1. Ingresos Operativos", totalIngresos, mensualTotales(m => sumar(LINEAS_INGRESOS, m)), true, true),
+    filaLinea("ingresos_comisiones", "  Comisiones Inmobiliarias"),
+    filaLinea("ingresos_ventas", "  Ventas de Obra / Directas"),
+    filaLinea("ingresos_otros", "  Otros Ingresos"),
+    crearFila("total_ingresos", "TOTAL INGRESOS", totalIngresos, mensualTotales(m => sumar(LINEAS_INGRESOS, m)), true),
 
     // 2. COSTOS DIRECTOS Y MARKETING
-    crearFila("costo_directo", "2. Costos Directos de Operaciones", costoDirecto, mapaMensual.costo_directo),
-    crearFila("costo_marketing", "3. Costos de Marketing y Publicidad (Meta/TikTok)", costoMarketing, mapaMensual.costo_marketing),
-    crearFila("utilidad_bruta", "UTILIDAD BRUTA", utilidadBruta, mensualTotales(m =>
-      ((mapaMensual.ingresos_comisiones[m] || 0) + (mapaMensual.ingresos_ventas[m] || 0) + (mapaMensual.ingresos_otros[m] || 0)) -
-      (mapaMensual.costo_directo[m] || 0) -
-      (mapaMensual.costo_marketing[m] || 0)
-    ), true),
+    crearFila("hdr_costo_directo", "2. Costos Directos de Operaciones", costoDirecto, mensualTotales(m => sumar(LINEAS_COSTO_DIRECTO, m)), true, true),
+    filaLinea("costo_directo", "  Proveedores y Obra"),
+    filaLinea("costo_comisiones_venta", "  Comisiones por Venta"),
+    filaLinea("costo_marketing", "3. Costos de Marketing y Publicidad (Meta/TikTok)"),
+    crearFila("utilidad_bruta", "UTILIDAD BRUTA", utilidadBruta, mensualTotales(brutaMes), true),
 
     // 3. OPEX
-    crearFila("hdr_opex", "4. Gastos de Operación (OPEX)", totalOpex, mensualTotales(m =>
-      (mapaMensual.opex_nomina[m] || 0) + (mapaMensual.opex_renta[m] || 0) + (mapaMensual.opex_servicios[m] || 0) + (mapaMensual.opex_otros[m] || 0)
-    ), true, true),
-    crearFila("opex_nomina", "  Nómina y Sueldos", opexNomina, mapaMensual.opex_nomina),
-    crearFila("opex_renta", "  Renta de Inmuebles", opexRenta, mapaMensual.opex_renta),
-    crearFila("opex_servicios", "  Servicios Básicos y Software", opexServicios, mapaMensual.opex_servicios),
-    crearFila("opex_otros", "  Otros Gastos de Operación", opexOtros, mapaMensual.opex_otros),
-    crearFila("total_opex", "TOTAL OPEX", totalOpex, mensualTotales(m =>
-      (mapaMensual.opex_nomina[m] || 0) + (mapaMensual.opex_renta[m] || 0) + (mapaMensual.opex_servicios[m] || 0) + (mapaMensual.opex_otros[m] || 0)
-    ), true),
+    crearFila("hdr_opex", "4. Gastos de Operación (OPEX)", totalOpex, mensualTotales(m => sumar(LINEAS_OPEX, m)), true, true),
+    filaLinea("opex_nomina", "  Nómina y Sueldos"),
+    filaLinea("opex_comisiones_visitas", "  Comisiones por Visitas Técnicas"),
+    filaLinea("opex_renta", "  Renta de Inmuebles"),
+    filaLinea("opex_servicios", "  Servicios Básicos y Software"),
+    filaLinea("opex_otros", "  Otros Gastos de Operación"),
+    crearFila("total_opex", "TOTAL OPEX", totalOpex, mensualTotales(m => sumar(LINEAS_OPEX, m)), true),
 
     // 4. EBIT Y RESULTADO
-    crearFila("ebit", "UTILIDAD DE OPERACIÓN (EBIT)", ebit, mensualTotales(m => {
-      const ing = (mapaMensual.ingresos_comisiones[m] || 0) + (mapaMensual.ingresos_ventas[m] || 0) + (mapaMensual.ingresos_otros[m] || 0);
-      const cst = (mapaMensual.costo_directo[m] || 0) + (mapaMensual.costo_marketing[m] || 0);
-      const opx = (mapaMensual.opex_nomina[m] || 0) + (mapaMensual.opex_renta[m] || 0) + (mapaMensual.opex_servicios[m] || 0) + (mapaMensual.opex_otros[m] || 0);
-      return ing - cst - opx;
-    }), true),
-
-    crearFila("gastos_financieros", "5. Gastos Financieros e Intereses", gastosFinancieros, mapaMensual.gastos_financieros),
-    crearFila("uai", "UTILIDAD ANTES DE IMPUESTOS", uai, mensualTotales(m => {
-      const ing = (mapaMensual.ingresos_comisiones[m] || 0) + (mapaMensual.ingresos_ventas[m] || 0) + (mapaMensual.ingresos_otros[m] || 0);
-      const cst = (mapaMensual.costo_directo[m] || 0) + (mapaMensual.costo_marketing[m] || 0);
-      const opx = (mapaMensual.opex_nomina[m] || 0) + (mapaMensual.opex_renta[m] || 0) + (mapaMensual.opex_servicios[m] || 0) + (mapaMensual.opex_otros[m] || 0);
-      const fin = mapaMensual.gastos_financieros[m] || 0;
-      return ing - cst - opx - fin;
-    }), true),
-
-    crearFila("isr", "6. Impuesto Sobre la Renta (ISR)", isr, mapaMensual.isr),
-    crearFila("utilidad_neta", "UTILIDAD NETA DEL EJERCICIO", utilidadNeta, mensualTotales(m => {
-      const ing = (mapaMensual.ingresos_comisiones[m] || 0) + (mapaMensual.ingresos_ventas[m] || 0) + (mapaMensual.ingresos_otros[m] || 0);
-      const cst = (mapaMensual.costo_directo[m] || 0) + (mapaMensual.costo_marketing[m] || 0);
-      const opx = (mapaMensual.opex_nomina[m] || 0) + (mapaMensual.opex_renta[m] || 0) + (mapaMensual.opex_servicios[m] || 0) + (mapaMensual.opex_otros[m] || 0);
-      const fin = mapaMensual.gastos_financieros[m] || 0;
-      const tax = mapaMensual.isr[m] || 0;
-      return ing - cst - opx - fin - tax;
-    }), true)
+    crearFila("ebit", "UTILIDAD DE OPERACIÓN (EBIT)", ebit, mensualTotales(ebitMes), true),
+    filaLinea("gastos_financieros", "5. Gastos Financieros e Intereses"),
+    crearFila("uai", "UTILIDAD ANTES DE IMPUESTOS", uai, mensualTotales(uaiMes), true),
+    filaLinea("isr", "6. Impuesto Sobre la Renta (ISR)"),
+    crearFila("utilidad_neta", "UTILIDAD NETA DEL EJERCICIO", utilidadNeta, mensualTotales(netaMes), true)
   ];
 
   return {
@@ -2072,7 +2062,7 @@ export async function obtenerFlujoEfectivo(
     } else if (t.tipo === "egreso") {
       if (linea === "costo_directo") pagosProveedoresCostos += m;
       else if (linea === "costo_marketing") pagosMarketing += m;
-      else if (linea === "opex_nomina") pagosNomina += m;
+      else if (linea === "opex_nomina" || linea === "opex_comisiones_visitas") pagosNomina += m;
       else if (linea === "opex_renta" || linea === "opex_servicios") pagosRentaServicios += m;
       else if (linea === "isr") pagosImpuestos += m;
       else pagosProveedoresCostos += m;

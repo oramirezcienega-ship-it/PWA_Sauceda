@@ -17,7 +17,7 @@ import {
  *   costo_proveedor  → egreso   · costo_directo      (cuenta por pagar al proveedor)
  *   costo_financiero → egreso   · gastos_financieros (terminal/pasarela, se liquida al cobrar)
  *   otros_gastos     → egreso   · costo_directo      (otros gastos de venta de la remisión)
- *   comision         → egreso   · opex_nomina        (pagado cuando la comisión está pagada)
+ *   comision         → egreso   · costo_comisiones_venta (pagado cuando la comisión está pagada)
  *
  * Cada movimiento queda ligado a la remisión (origen_modulo/origen_id/origen_concepto),
  * así que editar la remisión actualiza el mismo movimiento en vez de duplicarlo.
@@ -185,7 +185,7 @@ export async function sincronizarFinanzasRemision(
       .from("categories")
       .select("id, linea_pnl")
       .eq("activo", true)
-      .in("linea_pnl", ["ingresos_ventas", "costo_directo", "gastos_financieros", "opex_nomina"]);
+      .in("linea_pnl", ["ingresos_ventas", "costo_directo", "gastos_financieros", "costo_comisiones_venta"]);
     const catPorLinea = new Map<string, string>();
     (categorias || []).forEach((c: any) => {
       if (!catPorLinea.has(c.linea_pnl)) catPorLinea.set(c.linea_pnl, c.id);
@@ -392,7 +392,7 @@ export async function sincronizarFinanzasRemision(
     await aplicarMovimiento({
       concepto: "comision",
       tipo: "egreso",
-      lineaPnl: "opex_nomina",
+      lineaPnl: "costo_comisiones_venta",
       monto: montoComision,
       descripcion: `Comisión ${asesorNombre} - ${folio}`,
       contraparte: asesorNombre,

@@ -937,6 +937,8 @@ export async function cancelarComision(datos: {
       .eq("id", datos.comisionId);
     if (errUpd) throw new Error(errUpd.message);
 
+    await quitarMovimientosDeComisiones(sb, [datos.comisionId]);
+
     revalidatePath("/comisiones");
     return { ok: true };
   } catch (err: any) {
@@ -959,6 +961,24 @@ async function marcarCitasComisionDescartada(
     .update({ comision_descartada: true })
     .in("id", ids);
   if (error) console.warn("Aviso al marcar citas con comisión descartada:", error.message);
+}
+
+/**
+ * Quita de Finanzas los movimientos ligados a comisiones eliminadas o
+ * canceladas, para que no queden egresos de nómina huérfanos.
+ */
+async function quitarMovimientosDeComisiones(
+  sb: ReturnType<typeof supabaseServidor>,
+  comisionIds: string[]
+) {
+  if (comisionIds.length === 0) return;
+  const { error } = await sb
+    .from("transactions")
+    .delete()
+    .eq("origen_modulo", "comision")
+    .in("origen_id", comisionIds);
+  if (error) console.warn("Aviso al quitar movimientos de comisiones en Finanzas:", error.message);
+  revalidatePath("/finanzas");
 }
 
 export async function eliminarComision(datos: {
@@ -988,6 +1008,8 @@ export async function eliminarComision(datos: {
       .eq("id", datos.comisionId);
 
     if (errDel) throw new Error(errDel.message);
+
+    await quitarMovimientosDeComisiones(sb, [datos.comisionId]);
 
     await marcarCitasComisionDescartada(sb, [com.cita_id]);
 
@@ -1042,6 +1064,8 @@ export async function eliminarComisionesMasivas(datos: {
       .in("id", idsParaEliminar);
 
     if (errDel) throw new Error(errDel.message);
+
+    await quitarMovimientosDeComisiones(sb, idsParaEliminar);
 
     await marcarCitasComisionDescartada(
       sb,
@@ -1110,6 +1134,8 @@ export async function cancelarComisionesMasivas(datos: {
       .in("id", idsParaCancelar);
 
     if (errUpd) throw new Error(errUpd.message);
+
+    await quitarMovimientosDeComisiones(sb, idsParaCancelar);
 
     revalidatePath("/comisiones");
     return {
@@ -1663,13 +1689,15 @@ async function quitarComisionesNoComisionables(
   campo: "remision_factura_id" | "recibo_pago_id" | "cita_id",
   valor: string
 ) {
-  const { error } = await sb
+  const { data: borradas, error } = await sb
     .from("comisiones")
     .delete()
     .eq(campo, valor)
     .eq("es_ajuste_manual", false)
-    .eq("monto_pagado", 0);
+    .eq("monto_pagado", 0)
+    .select("id");
   if (error) console.warn("Aviso al quitar comisiones de asesor no comisionable:", error.message);
+  await quitarMovimientosDeComisiones(sb, (borradas || []).map((c: any) => c.id));
 }
 
 async function reflejarRemisionEnFinanzas(remisionId: string): Promise<void> {
@@ -2163,13 +2191,13 @@ export async function sincronizarComisionParaRecibo(
 
     if (errIns) throw new Error(errIns.message);
 
-    // Reflejar automáticamente la comisión devengada en Finanzas (opex_nomina).
+    // Reflejar automáticamente la comisión devengada en Finanzas (costo directo de la venta).
     try {
       const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
       const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
       await registrarMovimientoAutomaticoCRM({
         tipo: "egreso",
-        lineaPnl: "opex_nomina",
+        lineaPnl: "costo_comisiones_venta",
         monto: montoComision,
         concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${rec.folio}`,
         fecha: rec.fecha_pago || new Date().toISOString().split("T")[0],
@@ -2476,19 +2504,20 @@ export async function sincronizarComisionParaInspeccion(
       return { ok: false, error: `Error al registrar comisión: ${errIns.message}` };
     }
 
-    // Reflejar automáticamente la comisión devengada por inspección en Finanzas (opex_nomina)
+    // Reflejar automáticamente la comisión devengada por inspección en Finanzas (OPEX: comisiones por visitas)
     try {
       const { registrarMovimientoAutomaticoCRM } = await import("@/app/actions/finanzas");
       const { data: asesor } = await sb.from("perfiles").select("nombre").eq("id", asesorId).maybeSingle();
       await registrarMovimientoAutomaticoCRM({
         tipo: "egreso",
-        lineaPnl: "opex_nomina",
+        lineaPnl: "opex_comisiones_visitas",
         monto: montoTarifa,
         concepto: `Comisión ${asesor?.nombre || "Asesor"} - ${cita.cliente_nombre || "Inspección Técnica"}`,
         fecha: fechaComision,
         estado: "pendiente",
         contraparte: asesor?.nombre || "Asesor",
         crmDealId: cita.expediente_id || null,
+        origen: nuevaCom?.id ? { modulo: "comision", id: nuevaCom.id, concepto: "comision" } : null,
       });
     } catch (errFin) {
       console.error("Error al registrar movimiento financiero de comisión (inspección):", errFin);
