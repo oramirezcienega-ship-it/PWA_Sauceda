@@ -30,6 +30,7 @@ import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { EmpresaSelector } from "./EmpresaSelector";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { WidgetColapsable } from "./WidgetColapsable";
+import { WidgetCampanasMautic } from "./WidgetCampanasMautic";
 
 /**
  * Vista de detalle de un expediente.
@@ -764,6 +765,21 @@ export function DetalleExpediente({ id }: { id: string }) {
             </form>
           )}
         </div>
+
+        {/* Campañas Mautic & Automatizaciones */}
+        <WidgetColapsable
+          className=""
+          icono="🟠"
+          titulo="Campañas Mautic & Automatizaciones"
+          descripcion="Nutrición de leads, campañas de WhatsApp/Correo y métricas de lectura"
+        >
+          <WidgetCampanasMautic
+            expedienteId={expediente.id}
+            prospectoId={expediente.prospectoId}
+            telefono={expediente.telefono}
+            nombreDefault={expediente.nombreCompleto || expediente.cliente}
+          />
+        </WidgetColapsable>
 
         {/* 6. Actividades con el expediente */}
         <WidgetColapsable

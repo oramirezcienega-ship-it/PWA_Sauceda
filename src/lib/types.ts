@@ -1616,3 +1616,39 @@ export interface ExpedienteInfonavitDetalle {
   historial: OtInfonavitHistorial[];
 }
 
+/** Campaña de Mautic o automatización disponible en el CRM. */
+export interface MauticCampana {
+  id: string;
+  nombre: string;
+  descripcion?: string | null;
+  canal: "whatsapp" | "email" | "omnicanal";
+  activa: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Enrolamiento de un contacto (Prospecto o Expediente) en una campaña de Mautic. */
+export interface EnrolamientoMautic {
+  id: string;
+  campanaId: string;
+  campanaNombre: string;
+  campanaDescripcion?: string | null;
+  canal: "whatsapp" | "email" | "omnicanal";
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  telefono: string;
+  correo: string;
+  nombreContacto: string;
+  estado: "activo" | "desuscrito" | "completado" | "pausado";
+  origenAlta: "crm_manual" | "mautic_sync" | "webhook" | "automatizacion";
+  enroladoAt: string;
+  desuscritoAt?: string | null;
+  notas?: string | null;
+  ultimoMensajeTexto?: string | null;
+  ultimoMensajeAt?: string | null;
+  ultimoMensajeEstado?: string | null;
+  leidoAt?: string | null;
+  entregadoAt?: string | null;
+}
+
+
