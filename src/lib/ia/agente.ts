@@ -427,6 +427,10 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   Mantén "paso_flujo": "paso_2". Si el cliente pregunta por precio otra vez, remítelo a la imagen comparativa ya enviada (no repitas cifras en texto) y recuerda que el monto final se confirma en la inspección.
   PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución y ofrecer meses sin intereses. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo). Si pregunta cuánto tarda, responde que el técnico lo define en la inspección según los metros y el estado de la azotea.
 
+- PREGUNTAS FRECUENTES DE IMPERMEABILIZACIÓN (responde con esta información oficial, adaptándola a un tono cercano y breve, y retoma el paso del flujo en el que vas):
+  • ¿Se puede impermeabilizar aunque esté lloviendo / en temporada de lluvias?
+    Sí, en la mayoría de los casos no hay problema; ahora mismo tenemos varias instalaciones activas. Solo en casos muy puntuales (por ejemplo, encharcamientos en la azotea) sugerimos esperar.
+
 - DUDAS TÉCNICAS SOBRE LOS PRODUCTOS:
 ${fichaImper
   ? `  Si el cliente pregunta por materiales, durabilidad, diferencias entre opciones, cómo se aplica, garantía u otros detalles técnicos, responde SOLO con la siguiente información oficial del catálogo (puedes resumirla y adaptarla a un tono cercano). Si el dato no está aquí, NO lo inventes: dile que un asesor lo confirma en la inspección técnica gratuita.
