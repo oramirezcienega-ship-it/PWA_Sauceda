@@ -1045,7 +1045,7 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
     if (!errCom && comisiones && comisiones.length > 0) {
       const { data: existingComs } = await sb
         .from("transactions")
-        .select("concepto, monto_total")
+        .select("concepto, monto_total, origen_modulo, origen_id")
         .eq("tipo", "egreso");
 
       for (const com of comisiones) {
@@ -1065,6 +1065,7 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
 
         const yaExiste = (existingComs || []).some(
           (t: any) =>
+            (t.origen_modulo === "comision" && t.origen_id === com.id) ||
             t.concepto === concepto ||
             (remFolio && t.concepto?.includes(remFolio)) ||
             (com.tipo_comision === "inspeccion" && clienteExp && t.concepto?.includes(clienteExp) && t.concepto?.includes(asesorNombre))
@@ -1080,6 +1081,7 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
           estado: com.estatus === "pagada" ? "pagado" : "pendiente",
           contraparte: asesorNombre,
           crmDealId: com.expediente_id || null,
+          origen: { modulo: "comision", id: com.id, concepto: "comision" },
         });
 
         if (resReg.ok) {
