@@ -807,6 +807,7 @@ export async function obtenerMovimientosFinanzas(filtros: {
   fechaFin?: string;
   tipo?: "todos" | "ingreso" | "egreso" | "traspaso";
   categoriaId?: string;
+  lineaPnl?: string;
   businessUnitId?: string;
   moneyAccountId?: string;
   estado?: "todos" | "pagado" | "pendiente";
@@ -817,11 +818,15 @@ export async function obtenerMovimientosFinanzas(filtros: {
   await requireAdministrador();
   const sb = supabaseServidor();
 
+  // Al filtrar por línea del P&L se usa un inner join para que solo vuelvan
+  // los movimientos cuya categoría pertenece a esa línea.
+  const joinCategorias = filtros.lineaPnl ? "categories!inner" : "categories";
+
   let q = sb
     .from("transactions")
     .select(`
       *,
-      categories ( nombre, linea_pnl ),
+      ${joinCategorias} ( nombre, linea_pnl ),
       business_units ( nombre ),
       money_accounts!transactions_money_account_id_fkey ( nombre ),
       money_dest:money_accounts!transactions_money_account_destino_id_fkey ( nombre ),
@@ -832,6 +837,7 @@ export async function obtenerMovimientosFinanzas(filtros: {
   if (filtros.fechaFin) q = q.lte("fecha_operacion", filtros.fechaFin);
   if (filtros.tipo && filtros.tipo !== "todos") q = q.eq("tipo", filtros.tipo);
   if (filtros.categoriaId && filtros.categoriaId !== "todas") q = q.eq("categoria_id", filtros.categoriaId);
+  if (filtros.lineaPnl) q = q.eq("categories.linea_pnl", filtros.lineaPnl);
   if (filtros.businessUnitId && filtros.businessUnitId !== "todas") q = q.eq("business_unit_id", filtros.businessUnitId);
   if (filtros.moneyAccountId && filtros.moneyAccountId !== "todas") q = q.eq("money_account_id", filtros.moneyAccountId);
   if (filtros.estado && filtros.estado !== "todos") q = q.eq("estado", filtros.estado);

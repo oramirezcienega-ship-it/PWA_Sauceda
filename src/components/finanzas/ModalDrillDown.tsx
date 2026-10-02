@@ -13,6 +13,7 @@ interface ModalDrillDownProps {
   businessUnitId?: string;
   tipo?: "ingreso" | "egreso" | "todos";
   categoriaId?: string;
+  lineaPnl?: string;
 }
 
 export function ModalDrillDown({
@@ -23,7 +24,8 @@ export function ModalDrillDown({
   fechaFin,
   businessUnitId,
   tipo,
-  categoriaId
+  categoriaId,
+  lineaPnl
 }: ModalDrillDownProps) {
   const [cargando, setCargando] = useState(false);
   const [movimientos, setMovimientos] = useState<Transaction[]>([]);
@@ -37,12 +39,13 @@ export function ModalDrillDown({
       businessUnitId: businessUnitId === "todas" ? undefined : businessUnitId,
       tipo: tipo === "todos" ? undefined : tipo,
       categoriaId: categoriaId === "todas" ? undefined : categoriaId,
+      lineaPnl,
       limite: 100
     })
       .then((res) => setMovimientos(res.movimientos))
       .catch((err) => console.error("Error al cargar drill-down:", err))
       .finally(() => setCargando(false));
-  }, [abierto, fechaInicio, fechaFin, businessUnitId, tipo, categoriaId]);
+  }, [abierto, fechaInicio, fechaFin, businessUnitId, tipo, categoriaId, lineaPnl]);
 
   if (!abierto) return null;
 
