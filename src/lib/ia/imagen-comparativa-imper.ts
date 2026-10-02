@@ -1,4 +1,4 @@
-import type { PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
+import { cotizarPaquete, type PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
 import { INTER_400_BASE64, INTER_700_BASE64, INTER_800_BASE64 } from "@/lib/ia/fuente-inter";
 
 /**
@@ -24,7 +24,7 @@ const dinero = (n: number) => n.toLocaleString("es-MX", { maximumFractionDigits:
 
 function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
   const premium = !!pkg.destacado;
-  const total = m2 * pkg.precioM2;
+  const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2);
   const acento = premium ? DORADO_OSC : VERDE_CLARO;
 
   return h(
@@ -70,7 +70,13 @@ function tarjeta(pkg: PaqueteInfo, m2: number): Nodo {
         h("div", { fontSize: 42, fontWeight: 800, lineHeight: 1 }, dinero(total)),
         h("div", { fontSize: 14, fontWeight: 800, color: "#64748B", marginLeft: 6, marginBottom: 5 }, "MXN"),
       ]),
-      h("div", { color: "#64748B", fontSize: 13, marginTop: 8 }, `$${dinero(pkg.precioM2)} por m²  ·  ${m2} m²`),
+      h(
+        "div",
+        { color: aplicaMinimo ? "#B45309" : "#64748B", fontSize: 13, marginTop: 8, fontWeight: aplicaMinimo ? 800 : 400 },
+        aplicaMinimo
+          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${dinero(pkg.precioM2)} por m²`
+          : `$${dinero(pkg.precioM2)} por m²  ·  ${m2} m²`
+      ),
       h("div", { height: 1, backgroundColor: "#E2E8F0", marginTop: 14, marginBottom: 12 }),
       // Incluye
       h(

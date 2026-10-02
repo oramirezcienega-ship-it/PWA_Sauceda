@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { obtenerPreciosImpermeabilizacionCatalogo } from "@/app/actions/productos";
-import { PAQUETES_DEFAULT, type PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
+import { PAQUETES_DEFAULT, cotizarPaquete, type PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
 import {
   PLAZOS_DISPONIBLES,
   PLAZOS_DEFAULT,
@@ -65,7 +65,11 @@ export function ModalCalculadoraImpermeabilizacion({
           prev.map((pkg) => {
             const precioCatalogo =
               pkg.id === "acrilico" ? precios.acrilico : pkg.id === "estandar" ? precios.estandar : precios.premium;
-            return precioCatalogo && precioCatalogo > 0 ? { ...pkg, precioM2: precioCatalogo } : pkg;
+            return {
+              ...pkg,
+              precioM2: precioCatalogo && precioCatalogo > 0 ? precioCatalogo : pkg.precioM2,
+              minimoM2: precios.minimos?.[pkg.id] || 0,
+            };
           })
         );
       })
@@ -77,9 +81,15 @@ export function ModalCalculadoraImpermeabilizacion({
   if (!abierto) return null;
 
   const m2Val = Math.max(1, isNaN(metros) ? 0 : metros);
-  const totalAcrilico = m2Val * paquetes[0].precioM2;
-  const totalEstandar = m2Val * paquetes[1].precioM2;
-  const totalPremium = m2Val * paquetes[2].precioM2;
+  const totalAcrilico = cotizarPaquete(paquetes[0], m2Val).total;
+  const totalEstandar = cotizarPaquete(paquetes[1], m2Val).total;
+  const totalPremium = cotizarPaquete(paquetes[2], m2Val).total;
+
+  /** Aviso de mínimo de cobro para el texto de WhatsApp ("" si no aplica). */
+  function notaMinimoTexto(pkg: PaqueteInfo): string {
+    const c = cotizarPaquete(pkg, m2Val);
+    return c.aplicaMinimo ? `\n• Mínimo de cobro: ${c.m2Cobrados} m² (el material se adquiere en presentaciones mínimas)` : "";
+  }
 
   function formatearDinero(monto: number) {
     return monto.toLocaleString("es-MX", {
@@ -123,21 +133,21 @@ Metros a impermeabilizar: *${m2Val} m²*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🟢 *1. PAQUETE ACRÍLICO*
-• Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*${bloqueMeses(totalAcrilico)}
+• Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*${notaMinimoTexto(paquetes[0])}${bloqueMeses(totalAcrilico)}
 • Garantía: 2 años
 • Incluye: Acrílico elastomérico con malla de refuerzo, sellado de grietas y limpieza final.
 • Ideal para: Mantenimiento preventivo y azoteas con poco tráfico.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌿 *2. PAQUETE ESTÁNDAR (3.5)*
-• Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*${bloqueMeses(totalEstandar)}
+• Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*${notaMinimoTexto(paquetes[1])}${bloqueMeses(totalEstandar)}
 • Garantía: 5 años
 • Incluye: Impermeabilizante 3.5 con gravilla (roja/gris), sellado de bordes y boquillas.
 • Ideal para: Solución eficaz y económica para azoteas en buen estado.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *3. PAQUETE PREMIUM (4.0 POLIÉSTER)* — 🏆 *10 Años Garantía*
-• Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*${bloqueMeses(totalPremium)}
+• Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*${notaMinimoTexto(paquetes[2])}${bloqueMeses(totalPremium)}
 • Garantía: 10 años por escrito
 • Incluye: Impermeabilizante 4.0 poliéster con gravilla, sellado reforzado y reporte fotográfico.
 • Ideal para: Máxima durabilidad y tranquilidad a largo plazo.
@@ -152,14 +162,14 @@ ${notaMesesTexto ? `${notaMesesTexto.trimStart()}\n\n` : ""}¿Te gustaría que a
   }
 
   function generarTextoPaqueteIndividual(paquete: PaqueteInfo): string {
-    const total = m2Val * paquete.precioM2;
+    const { total } = cotizarPaquete(paquete, m2Val);
     const saludo = nombreCliente && nombreCliente !== "Cliente" ? `¡Hola ${nombreCliente.split(" ")[0]}!` : "¡Hola!";
     return `${saludo} Te compartimos el detalle de la cotización para tu azotea (*${m2Val} m²*):
 
 🏠 *${paquete.titulo.toUpperCase()}* — *${paquete.badge}*
 ${paquete.subtitulo}
 
-💰 *Inversión:* ${formatearDinero(total)} MXN (*$${paquete.precioM2} / m²*)${bloqueMeses(total)}${notaMesesTexto ? `${notaMesesTexto}\n` : ""}
+💰 *Inversión:* ${formatearDinero(total)} MXN (*$${paquete.precioM2} / m²*)${notaMinimoTexto(paquete)}${bloqueMeses(total)}${notaMesesTexto ? `${notaMesesTexto}\n` : ""}
 🛡️ *Garantía:* ${paquete.garantia}
 
 📋 *¿Qué incluye tu servicio?*
@@ -275,7 +285,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     paquetes.forEach((pkg, index) => {
       const x = startX + index * (cardWidth + gap);
       const y = startY;
-      const total = m2Val * pkg.precioM2;
+      const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
       const esPremium = !!pkg.destacado;
 
       // 1. Fondo y borde de tarjeta
@@ -345,9 +355,15 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       ctx.fillText("MXN", x + 42 + totalWidth, priceY + 14);
 
       // 7. PRECIO M² MÁS PEQUEÑO DEBAJO
-      ctx.fillStyle = "#64748B";
-      ctx.font = "12px sans-serif";
-      ctx.fillText(`$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`, x + 22, priceY + 38);
+      ctx.fillStyle = aplicaMinimo ? "#B45309" : "#64748B";
+      ctx.font = aplicaMinimo ? "bold 12px sans-serif" : "12px sans-serif";
+      ctx.fillText(
+        aplicaMinimo
+          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${pkg.precioM2} por m²`
+          : `$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`,
+        x + 22,
+        priceY + 38
+      );
 
       // 7b. Opciones a meses con intereses
       if (filasMeses) {
@@ -733,7 +749,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-stretch">
             
             {paquetes.map((pkg) => {
-              const total = m2Val * pkg.precioM2;
+              const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
               const esPremium = pkg.destacado;
 
               return (
@@ -798,6 +814,11 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
                           (Superficie: {m2Val} m²)
                         </span>
                       </div>
+                      {aplicaMinimo && (
+                        <div className="mt-1.5 px-2 py-1 rounded bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-700">
+                          ⚠ Mínimo de cobro: {m2Cobrados} m² (se cotiza el mínimo)
+                        </div>
+                      )}
                     </div>
 
                     {plazosActivos.length > 0 && (

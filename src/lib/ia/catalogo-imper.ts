@@ -27,6 +27,8 @@ export interface ProductoImper {
   paquete: PaqueteImper;
   precioM2: number;
   costoM2: number;
+  /** Cantidad mínima de cobro en m² (0 = sin mínimo). */
+  minimoM2: number;
   descripcionValor: string;
   especificaciones: string;
   plantillaGarantia: string;
@@ -51,7 +53,7 @@ export function paqueteDeNombre(nombre: string): PaqueteImper | null {
 export async function cargarProductosImper(sb: SupabaseClient): Promise<Partial<Record<PaqueteImper, ProductoImper>>> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, precio_unitario, costo_unitario, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, ficha_tecnica_url, ficha_tecnica_nombre")
+    .select("id, nombre, precio_unitario, costo_unitario, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, ficha_tecnica_url, ficha_tecnica_nombre, cantidad_minima")
     .ilike("nombre", "%imperme%");
 
   const out: Partial<Record<PaqueteImper, ProductoImper>> = {};
@@ -65,6 +67,7 @@ export async function cargarProductosImper(sb: SupabaseClient): Promise<Partial<
       paquete,
       precioM2: Number(f.precio_unitario || 0),
       costoM2: Number(f.costo_unitario || 0),
+      minimoM2: Number(f.cantidad_minima || 0),
       descripcionValor: f.descripcion_valor || "",
       especificaciones: f.especificaciones || "",
       plantillaGarantia: f.plantilla_garantia || "",

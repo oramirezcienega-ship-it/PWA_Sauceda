@@ -1140,6 +1140,8 @@ export interface ProductoServicio {
   fichaTecnicaNombre?: string | null;
   /** Precio por escalón de capacidad (litros), para servicios como limpieza de tinacos/cisternas. */
   tarifasCapacidad?: TarifaCapacidad[];
+  /** Cantidad mínima de cobro, en la unidad del producto (0 = sin mínimo). */
+  cantidadMinima?: number;
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }

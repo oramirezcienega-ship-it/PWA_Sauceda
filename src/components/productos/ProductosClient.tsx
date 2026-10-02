@@ -75,6 +75,7 @@ export function ProductosClient({
   const [formUnidad, setFormUnidad] = useState("m2");
   const [formCostoUnitario, setFormCostoUnitario] = useState("");
   const [formPrecioUnitario, setFormPrecioUnitario] = useState("");
+  const [formCantidadMinima, setFormCantidadMinima] = useState("");
   const [formPorcentajeComision, setFormPorcentajeComision] = useState("5.0");
   const [formGama, setFormGama] = useState<"economica" | "media" | "premium" | "estandar">("estandar");
   const [formDescripcionValor, setFormDescripcionValor] = useState("");
@@ -156,6 +157,7 @@ export function ProductosClient({
     setFormFichaUrl("");
     setFormFichaNombre("");
     setFormTarifas([]);
+    setFormCantidadMinima("");
     setFormComposicionApu([]);
     setTabModalProd("general");
     setErrorMsg("");
@@ -173,6 +175,7 @@ export function ProductosClient({
     setFormUnidad(p.unidad);
     setFormCostoUnitario(String(p.costoUnitario));
     setFormPrecioUnitario(String(p.precioUnitario));
+    setFormCantidadMinima(p.cantidadMinima ? String(p.cantidadMinima) : "");
     setFormPorcentajeComision(String(p.porcentajeComision ?? 5.0));
     setFormGama(p.gama || "estandar");
     setFormDescripcionValor(p.descripcionValor || "");
@@ -230,6 +233,7 @@ export function ProductosClient({
         unidad: formUnidad.trim(),
         costoUnitario: Number(formCostoUnitario || 0),
         precioUnitario: Number(formPrecioUnitario || 0),
+        cantidadMinima: Math.max(0, Number(formCantidadMinima || 0)),
         porcentajeComision: Number(formPorcentajeComision || 5.0),
         gama: formGama,
         descripcionValor: formDescripcionValor.trim(),
@@ -1533,6 +1537,36 @@ export function ProductosClient({
                         <option value="estandar">Sin gama específica</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-4 items-start p-4 rounded-xl bg-amber-50/60 border border-amber-200">
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">
+                        Cantidad mínima de cobro ({formUnidad || "unidad"})
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0 = sin mínimo"
+                        value={formCantidadMinima}
+                        onChange={(e) => setFormCantidadMinima(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-carbon/60 leading-snug sm:pt-6">
+                      Lo mínimo que se cobra de este producto (según lo mínimo que vende el proveedor). Si el cliente pide
+                      menos, la calculadora y Sofía cotizan con este mínimo
+                      {Number(formCantidadMinima) > 0 && Number(formPrecioUnitario) > 0 && (
+                        <>
+                          {": "}
+                          <strong className="text-carbon">
+                            importe mínimo {formatMoneda(Number(formCantidadMinima) * Number(formPrecioUnitario))}
+                          </strong>
+                        </>
+                      )}
+                      .
+                    </p>
                   </div>
 
                   <div>

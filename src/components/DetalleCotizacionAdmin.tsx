@@ -706,6 +706,16 @@ export function DetalleCotizacionAdmin({
     );
   };
 
+  /** Cantidad mínima de cobro del producto del catálogo que corresponde al concepto (0 si no hay). */
+  const minimoDeConcepto = (descripcion: string): number => {
+    const d = descripcion.trim().toLowerCase();
+    if (!d) return 0;
+    const prod = catalogoProductos.find(
+      (p) => Number(p.cantidadMinima) > 0 && (p.nombre.toLowerCase() === d || d.includes(p.nombre.toLowerCase()))
+    );
+    return prod ? Number(prod.cantidadMinima) : 0;
+  };
+
   const handleCargarDesdeCatalogo = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const prodId = e.target.value;
     if (!prodId) return;
@@ -2012,6 +2022,17 @@ export function DetalleCotizacionAdmin({
                                   onChange={(e) => actualizarFilaConcepto(idx, "cantidad", Number(e.target.value))}
                                   className="w-16 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
                                 />
+                                {(() => {
+                                  const minimo = minimoDeConcepto(c.descripcion);
+                                  return minimo > 0 && c.cantidad < minimo ? (
+                                    <span
+                                      className="mt-1 block text-[10px] font-bold text-amber-700 leading-tight"
+                                      title="Cantidad menor al mínimo de cobro definido en el catálogo"
+                                    >
+                                      ⚠ Mín. {minimo}
+                                    </span>
+                                  ) : null;
+                                })()}
                               </td>
                               <td className="py-2.5 text-center">
                                 <select
