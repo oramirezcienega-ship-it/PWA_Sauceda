@@ -40,7 +40,7 @@ export function ModalDrillDown({
       tipo: tipo === "todos" ? undefined : tipo,
       categoriaId: categoriaId === "todas" ? undefined : categoriaId,
       lineaPnl,
-      limite: 100
+      limite: 1000
     })
       .then((res) => setMovimientos(res.movimientos))
       .catch((err) => console.error("Error al cargar drill-down:", err))

@@ -227,7 +227,7 @@ export function TabEstadoResultados({
           fechaInicio={fechaInicio}
           fechaFin={fechaFin}
           businessUnitId={businessUnitId}
-          tipo={drillDownFila.clave.startsWith("ingresos") ? "ingreso" : "egreso"}
+          tipo="todos"
           lineaPnl={drillDownFila.clave}
         />
       )}
