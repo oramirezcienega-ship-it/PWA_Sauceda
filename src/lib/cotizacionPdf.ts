@@ -348,12 +348,12 @@ export function generarPdfCotizacion(
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-    doc.text("Por eso la visita técnica es GRATUITA y SIN COMPROMISO. Te damos la cotización final exacta después de inspeccionarlo.", margin + 4.5, y + 41.5);
+    doc.text("Por eso la cotización final exacta se confirma después de revisar la superficie.", margin + 4.5, y + 41.5);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.5);
     doc.setTextColor(SAUCE[0], SAUCE[1], SAUCE[2]);
-    doc.text("¿Agendamos para que nuestro técnico confirme todos los detalles?", margin + 4.5, y + 45.5);
+    doc.text("Un asesor te dará seguimiento para confirmar todos los detalles.", margin + 4.5, y + 45.5);
 
     y += 52;
   }

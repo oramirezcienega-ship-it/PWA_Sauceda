@@ -451,10 +451,10 @@ export function VisualizadorCotizacionCliente({
                     En ocasiones, lo que parece 30m² en realidad son 35-40m² cuando se incluyen todos los lados y áreas adyacentes.
                   </p>
                   <p className="font-medium text-carbon/80">
-                    Por eso la visita técnica es <span className="font-bold text-verde-profundo">GRATUITA y SIN COMPROMISO</span>. Te damos la cotización final exacta después de inspeccionarlo.
+                    Por eso la <span className="font-bold text-verde-profundo">cotización final exacta</span> se confirma después de revisar la superficie.
                   </p>
                   <p className="text-sauce font-semibold pt-1 text-xs">
-                    ¿Agendamos para que nuestro técnico confirme todos los detalles?
+                    Un asesor te dará seguimiento para confirmar todos los detalles.
                   </p>
                 </div>
               </div>
