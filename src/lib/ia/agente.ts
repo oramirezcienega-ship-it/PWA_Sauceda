@@ -12,6 +12,7 @@ import {
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
+import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
@@ -1241,6 +1242,8 @@ export async function responderConIA(
 
               // Cantidad mínima de cobro del catálogo: si pide menos, se cotiza el mínimo
               const m2Cobrados = Math.max(Number(m), prodCat?.minimoM2 || 0);
+              // Costo del proveedor según el rango de m² negociado (si está capturado)
+              costoM2 = costoUnitarioPorVolumen(prodCat?.costosVolumen, m2Cobrados, costoM2);
               const precioTotal = m2Cobrados * precioM2;
               const costoTotal = m2Cobrados * costoM2;
 

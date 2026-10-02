@@ -1,3 +1,4 @@
+import type { CostoVolumen } from "@/lib/costos-volumen";
 /**
  * Tipos del dominio de traspasos INFONAVIT.
  * Incremento 1: solo lo necesario para el tablero de expedientes.
@@ -1142,6 +1143,8 @@ export interface ProductoServicio {
   tarifasCapacidad?: TarifaCapacidad[];
   /** Cantidad mínima de cobro, en la unidad del producto (0 = sin mínimo). */
   cantidadMinima?: number;
+  /** Costo del proveedor por rango de cantidad (interno). */
+  costosVolumen?: CostoVolumen[];
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }
