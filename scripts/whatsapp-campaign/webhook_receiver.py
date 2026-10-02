@@ -192,6 +192,17 @@ def registrar_mensaje_supabase(
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="ignore")
         logger.error(f"Error HTTP al insertar en mensajes_whatsapp: {e.code} - {err_body}")
+        # Si falló porque la columna campana_origen aún no está migrada en la base de datos:
+        if "campana_origen" in err_body:
+            try:
+                payload_fallback = {k: v for k, v in payload.items() if k != "campana_origen"}
+                req_fallback = urllib.request.Request(insert_url, data=json.dumps(payload_fallback).encode("utf-8"), headers=headers, method="POST")
+                with urllib.request.urlopen(req_fallback, timeout=10) as resp_fb:
+                    if resp_fb.status in (200, 201, 204):
+                        logger.info(f"✅ Mensaje registrado con éxito en mensajes_whatsapp (fallback sin columna campana_origen): WAMID={wamid}")
+                        return True
+            except Exception as e_fb:
+                logger.error(f"Error en fallback sin campana_origen: {e_fb}")
         return False
     except Exception as e:
         logger.error(f"Excepción al insertar en mensajes_whatsapp: {e}")

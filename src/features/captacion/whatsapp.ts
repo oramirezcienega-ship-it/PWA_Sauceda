@@ -695,12 +695,102 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
           if (errorCode) updatePayload.error_codigo = errorCode;
         }
 
-        const { data: msgActualizado } = await sb
+        let { data: msgActualizado } = await sb
           .from("mensajes_whatsapp")
           .update(updatePayload)
           .eq("wa_message_id", waMessageId)
           .select("telefono, expediente_id, prospecto_id, campana_origen, leido_at, entregado_at")
           .maybeSingle();
+
+        // 1.0 Fallback de resiliencia: si el mensaje no existía previamente en mensajes_whatsapp
+        // (por ejemplo, enviado por Mautic / despachador externo sin registrar en Supabase antes de ser entregado o leído):
+        if (!msgActualizado && waMessageId && destinatario) {
+          try {
+            const variantes = variantesTelefono(destinatario);
+            let prospectoId: string | null = null;
+            let expedienteId: string | null = null;
+
+            const { data: prospecto } = await sb
+              .from("prospectos")
+              .select("id, expediente_id")
+              .in("telefono", variantes)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (prospecto) {
+              prospectoId = prospecto.id;
+              expedienteId = prospecto.expediente_id || null;
+            } else {
+              const { data: exp } = await sb
+                .from("expedientes")
+                .select("id, prospecto_id")
+                .in("telefono", variantes)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (exp) {
+                expedienteId = exp.id;
+                prospectoId = exp.prospecto_id || null;
+              }
+            }
+
+            const insertPayload: Record<string, any> = {
+              telefono: destinatario,
+              direccion: "out",
+              texto: "[Campaña Mautic / Plantilla WhatsApp]",
+              wa_message_id: waMessageId,
+              estado: nuevoEstado,
+              agente: "Mautic Automatización",
+              campana_origen: "Campaña Mautic",
+              canal_id: "whatsapp",
+              created_at: status.timestamp && !isNaN(parseInt(status.timestamp, 10))
+                ? new Date(parseInt(status.timestamp, 10) * 1000).toISOString()
+                : new Date().toISOString(),
+              ...updatePayload,
+            };
+            if (prospectoId) insertPayload.prospecto_id = prospectoId;
+            if (expedienteId) insertPayload.expediente_id = expedienteId;
+            if (estadoMeta === "read" && !insertPayload.entregado_at) {
+              insertPayload.entregado_at = insertPayload.leido_at;
+            }
+
+            const { data: nuevoMsg, error: errInsert } = await sb
+              .from("mensajes_whatsapp")
+              .insert(insertPayload)
+              .select("telefono, expediente_id, prospecto_id, campana_origen, leido_at, entregado_at")
+              .maybeSingle();
+
+            if (!errInsert && nuevoMsg) {
+              msgActualizado = nuevoMsg;
+              console.log(`[WhatsApp Webhook] Auto-registrado mensaje huérfano de campaña: wamid=${waMessageId}, tel=${destinatario}, estado=${nuevoEstado}`);
+            } else if (errInsert) {
+              // Si falla por campana_origen o columnas no migradas, reintentar con inserción básica
+              console.warn("[WhatsApp Webhook] Reintentando inserción básica sin campos extendidos:", errInsert.message);
+              const insertBasico: Record<string, any> = {
+                telefono: destinatario,
+                direccion: "out",
+                texto: "[Campaña Mautic / Plantilla WhatsApp]",
+                wa_message_id: waMessageId,
+                estado: nuevoEstado,
+                canal_id: "whatsapp",
+              };
+              if (prospectoId) insertBasico.prospecto_id = prospectoId;
+              if (expedienteId) insertBasico.expediente_id = expedienteId;
+              const { data: msgBasico } = await sb
+                .from("mensajes_whatsapp")
+                .insert(insertBasico)
+                .select("telefono, expediente_id, prospecto_id, campana_origen, leido_at, entregado_at")
+                .maybeSingle();
+              if (msgBasico) {
+                msgActualizado = msgBasico;
+              }
+            }
+          } catch (eAuto) {
+            console.warn("[WhatsApp Webhook] Fallo en auto-registro de mensaje huérfano:", eAuto);
+          }
+        }
 
         // 1.1 Si la cita está vinculada por wa_message_id, actualizar su estado directamente
         try {
