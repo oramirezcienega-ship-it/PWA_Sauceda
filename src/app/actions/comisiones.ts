@@ -412,19 +412,7 @@ export async function listarComisiones(filtros?: {
         citasInsp = cData || [];
       }
 
-      const citasInspCandidatas = (citasInsp || []).filter((c: any) => {
-        const est = (c.estado || "").toLowerCase();
-        const not = (c.notas || "").toLowerCase();
-        return (
-          est === "completada" ||
-          est === "confirmada" ||
-          est === "realizada" ||
-          est === "finalizada" ||
-          not.includes("finalizada") ||
-          not.includes("retro") ||
-          not.includes("ejecutada")
-        );
-      });
+      const citasInspCandidatas = (citasInsp || []).filter((c: any) => inspeccionRealizada(c));
 
       if (citasInspCandidatas.length > 0) {
         const ids = citasInspCandidatas.map((c: any) => c.id);
@@ -1672,6 +1660,15 @@ async function idsAsesoresComisionables(
   return new Set((data || []).map((r: any) => r.id));
 }
 
+/**
+ * Una inspección cuenta como realizada solo cuando la cita se marcó como
+ * completada. Las pendientes, confirmadas o en coordinación aún no se realizan.
+ */
+function inspeccionRealizada(cita: { estado?: string | null }): boolean {
+  const est = (cita.estado || "").toLowerCase();
+  return est === "completada" || est === "realizada" || est === "finalizada";
+}
+
 async function asesorGeneraComisiones(
   sb: ReturnType<typeof supabaseServidor>,
   asesorId: string
@@ -2268,10 +2265,11 @@ export async function sincronizarComisionParaInspeccion(
       return { ok: true };
     }
 
-    if (cita.estado !== "completada") {
-      try {
-        await sb.from("agenda_citas").update({ estado: "completada" }).eq("id", cita.id);
-      } catch {}
+    // Solo comisionan las inspecciones ya realizadas. Una cita pendiente,
+    // confirmada o todavía en coordinación no genera comisión ni se marca
+    // como completada desde aquí.
+    if (!inspeccionRealizada(cita)) {
+      return { ok: true };
     }
 
     // 2. Resolver el asesor responsable de la inspección
@@ -2677,16 +2675,7 @@ export async function sincronizarTodasLasRemisionesPendientes(): Promise<{
 
     const inspeccionesUnicasMap = new Map<string, any>();
     for (const c of citasInsp) {
-      const est = (c.estado || "").toLowerCase();
-      const not = (c.notas || "").toLowerCase();
-      const esEjecutada =
-        est === "completada" ||
-        est === "confirmada" ||
-        est === "realizada" ||
-        est === "finalizada" ||
-        not.includes("finalizada") ||
-        not.includes("retro") ||
-        not.includes("ejecutada");
+      const esEjecutada = inspeccionRealizada(c);
 
       if (esEjecutada && c.id && !inspeccionesUnicasMap.has(c.id)) {
         inspeccionesUnicasMap.set(c.id, c);

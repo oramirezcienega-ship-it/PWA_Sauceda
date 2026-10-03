@@ -311,6 +311,16 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       );
 
       const st = mapearEstado(c.estado);
+      // Inspección creada por la coordinación cuyo equipo aún no confirma:
+      // se distingue de las inspecciones ya programadas.
+      if (
+        tipo === "inspeccion" &&
+        st.estado === "pendiente" &&
+        c.sla_limite_at &&
+        c.sla_estado !== "cumplido"
+      ) {
+        st.label = "En coordinación";
+      }
       const diaObj = dias.find((d) => d.fecha === c.fecha);
 
       actividades.push({
@@ -413,76 +423,10 @@ export async function obtenerActividadesSemana(semanaOffset: number = 0): Promis
       });
     }
 
-    // 6b. Incluir propuestas de inspección de la "Cabina de Coordinación" que
-    // aún no se confirman en agenda_citas (estado evaluando / propuesta
-    // enviada / enviado_cliente). Mientras el cliente o los asesores no
-    // cierren la cita definitiva no existe fila en agenda_citas, así que sin
-    // esto la inspección "agendada" (en proceso de coordinación) no aparecía
-    // en las Actividades de la Semana aunque ya tuviera opciones de horario
-    // propuestas dentro del rango.
-    try {
-      const { data: coordsPendientes } = await sb
-        .from("coordinaciones_inspeccion")
-        .select("*")
-        .in("estado", ["propuesta_enviada", "evaluando", "enviado_cliente"]);
-
-      for (const coord of (coordsPendientes || []) as any[]) {
-        const opciones: Array<{ fecha: string; horaInicio: string; horaFin: string }> =
-          Array.isArray(coord.opciones_horarios) ? coord.opciones_horarios : [];
-        const opcionEnSemana = opciones
-          .filter((o) => o?.fecha >= fechaInicio && o?.fecha <= fechaFin)
-          .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.horaInicio || "").localeCompare(b.horaInicio || ""))[0];
-
-        if (!opcionEnSemana) continue;
-
-        const exp = coord.expediente_id ? mapaExpedientes.get(coord.expediente_id) : null;
-        const prsp = coord.prospecto_id ? mapaProspectos.get(coord.prospecto_id) : null;
-
-        const telBruto = coord.cliente_telefono || exp?.telefono || prsp?.telefono || "";
-        const telCanon = normalizarTelefono(telBruto);
-        const telLink = obtenerTelLink(telBruto);
-        const waLink = telCanon ? `https://wa.me/${telCanon}` : "";
-
-        const fraccionamiento = coord.fraccionamiento || coord.ubicacion || "León, Gto.";
-        const asesoresIds: string[] = Array.isArray(coord.asesores_ids) ? coord.asesores_ids : [];
-        const responsables = asesoresIds
-          .map((id) => mapaPerfiles.get(id))
-          .filter(Boolean) as string[];
-
-        const diaObj = dias.find((d) => d.fecha === opcionEnSemana.fecha);
-        const totalOpciones = opciones.length;
-
-        actividades.push({
-          id: `coord-${coord.id}`,
-          tipo: "inspeccion",
-          tipoLabel: "Inspección",
-          origen: "agenda",
-          fecha: opcionEnSemana.fecha,
-          diaSemanaNombre: diaObj?.diaNombreCompleto || "Día",
-          horaInicio: formatHora12(opcionEnSemana.horaInicio) || "Horario pendiente",
-          horaFin: formatHora12(opcionEnSemana.horaFin) || "",
-          horaRaw: opcionEnSemana.horaInicio || "09:00:00",
-          clienteNombre: coord.cliente_nombre || "Cliente Sauceda",
-          clienteTelefono: telBruto,
-          clienteTelefonoLink: telLink,
-          clienteWhatsAppLink: waLink,
-          direccion: coord.ubicacion || fraccionamiento,
-          fraccionamiento,
-          estado: "pendiente",
-          estadoLabel: `Por Confirmar (${totalOpciones} opción${totalOpciones === 1 ? "" : "es"})`,
-          notas: `Coordinación en curso: ${coord.servicio_nombre || coord.servicio_tipo || "inspección técnica"}. Aún sin confirmar con el cliente/equipo.`,
-          responsables: responsables.length > 0 ? responsables : ["Equipo Sauceda"],
-          expedienteId: coord.expediente_id || null,
-          cotizacionId: null,
-          prospectoId: coord.prospecto_id || null,
-          ordenTrabajoId: null,
-          ordenTrabajoFolio: null,
-          esHoy: opcionEnSemana.fecha === fechaLocalStr,
-        });
-      }
-    } catch (errCoord) {
-      console.error("Aviso: no se pudieron incluir coordinaciones de inspección pendientes:", errCoord);
-    }
+    // Las inspecciones que aún se están coordinando (Cabina de Coordinación)
+    // no se listan aquí: todavía no tienen fecha confirmada y se siguen en el
+    // panel "Coordinaciones por dar seguimiento". Solo aparecen como
+    // actividad cuando la cita queda programada en agenda_citas.
 
     // 7. Ordenar todas las actividades por fecha y luego por hora
     actividades.sort((a, b) => {
