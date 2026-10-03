@@ -660,6 +660,17 @@ export function Conversaciones() {
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
   const [sel, setSel] = useState<string | null>(null);
+
+  // En celular el hilo abierto se muestra a pantalla completa: evitar que la
+  // página de fondo se desplace mientras se escribe.
+  useEffect(() => {
+    if (!sel || window.innerWidth >= 640) return;
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previo;
+    };
+  }, [sel]);
   const [soloTel, setSoloTel] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<ConversacionDetalle | null>(null);
   const [documentosCliente, setDocumentosCliente] = useState<{
@@ -1715,8 +1726,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         </div>
 
         {/* Hilo + responder */}
-        <div className={`flex flex-col overflow-hidden rounded-xl border border-carbon/10 bg-white shadow-sm ${
-          sel ? "flex" : "hidden sm:flex"
+        {/* En celular el hilo abierto ocupa toda la pantalla para que la caja de texto quede siempre visible */}
+        <div className={`flex flex-col overflow-hidden bg-white sm:rounded-xl sm:border sm:border-carbon/10 sm:shadow-sm ${
+          sel
+            ? "fixed inset-0 z-40 h-[100dvh] pt-[env(safe-area-inset-top)] sm:static sm:z-auto sm:h-auto sm:pt-0 flex"
+            : "hidden sm:flex"
         }`}>
           {!sel ? (
             <p className="m-auto p-6 text-center text-sm text-carbon/40">
@@ -2024,7 +2038,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               )}
 
               {/* Mensajes */}
-              <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3 bg-crema/10 scrollbar-sutil">
+              <div className="flex-1 min-h-0 space-y-2 overflow-y-auto px-3 sm:px-4 py-3 bg-crema/10 scrollbar-sutil">
                 {detalle.mensajes.map((m) => (
                   <div
                     key={m.id}
@@ -2143,7 +2157,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               </div>
 
               {/* Responder */}
-              <div className="border-t border-carbon/10 p-3 bg-white">
+              <div className="shrink-0 border-t border-carbon/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3 bg-white">
                 {aviso && (
                   <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-rojo/30 bg-rojo/10 px-3 py-2 text-xs text-rojo">
                     <div className="flex items-center gap-2">
@@ -2463,7 +2477,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           ? "Escribe un mensaje o usa #..."
                           : "Ventana cerrada - No puedes enviar mensajes"
                       }
-                      className={`${INPUT} disabled:bg-slate-50 disabled:text-carbon/40`}
+                      className={`${INPUT} text-base sm:text-sm disabled:bg-slate-50 disabled:text-carbon/40`}
                       onKeyDown={handleKeyDown}
                       disabled={!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp"}
                     />
