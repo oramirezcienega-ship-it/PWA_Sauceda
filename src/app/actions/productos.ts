@@ -1,8 +1,9 @@
 "use server";
 
-import { preciosImpermeabilizacionDeCatalogo } from "@/lib/ia/precios-imper";
+import { preciosImpermeabilizacionDeCatalogo, type PreciosImpermeabilizacion } from "@/lib/ia/precios-imper";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { normalizarCostosVolumen, type CostoVolumen } from "@/lib/costos-volumen";
 import type { 
   ProductoServicio, 
   Insumo, 
@@ -41,6 +42,8 @@ function aProductoServicio(fila: any): ProductoServicio {
     fichaTecnicaUrl: fila.ficha_tecnica_url || null,
     fichaTecnicaNombre: fila.ficha_tecnica_nombre || null,
     tarifasCapacidad: normalizarTarifasCapacidad(fila.tarifas_capacidad),
+    cantidadMinima: Number(fila.cantidad_minima || 0),
+    costosVolumen: normalizarCostosVolumen(fila.costos_volumen),
     createdAt: fila.created_at,
   };
 }
@@ -202,6 +205,8 @@ export async function crearProductoServicio(datos: {
   fichaTecnicaUrl?: string | null;
   fichaTecnicaNombre?: string | null;
   tarifasCapacidad?: TarifaCapacidad[];
+  cantidadMinima?: number;
+  costosVolumen?: CostoVolumen[];
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -238,6 +243,8 @@ export async function crearProductoServicio(datos: {
       ficha_tecnica_url: datos.fichaTecnicaUrl || null,
       ficha_tecnica_nombre: datos.fichaTecnicaUrl ? datos.fichaTecnicaNombre || null : null,
       tarifas_capacidad: tarifasAJson(datos.tarifasCapacidad),
+      cantidad_minima: Math.max(0, Number(datos.cantidadMinima || 0)),
+      costos_volumen: normalizarCostosVolumen(datos.costosVolumen),
     })
     .select("*, business_units ( id, nombre )")
     .single();
@@ -270,6 +277,8 @@ export async function editarProductoServicio(
     fichaTecnicaUrl?: string | null;
     fichaTecnicaNombre?: string | null;
     tarifasCapacidad?: TarifaCapacidad[];
+    cantidadMinima?: number;
+    costosVolumen?: CostoVolumen[];
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -293,6 +302,12 @@ export async function editarProductoServicio(
     activo: datos.activo !== false,
     apto_para_ia: datos.aptoParaIa !== false,
   };
+  if (datos.costosVolumen !== undefined) {
+    updatePayload.costos_volumen = normalizarCostosVolumen(datos.costosVolumen);
+  }
+  if (datos.cantidadMinima !== undefined) {
+    updatePayload.cantidad_minima = Math.max(0, Number(datos.cantidadMinima || 0));
+  }
   if (datos.tarifasCapacidad !== undefined) {
     updatePayload.tarifas_capacidad = tarifasAJson(datos.tarifasCapacidad);
   }
@@ -612,11 +627,7 @@ export async function obtenerCentrosCosto(): Promise<Array<{ id: string; nombre:
 }
 
 /** Precios de Impermeabilización para calculadora rápida de Conversaciones */
-export async function obtenerPreciosImpermeabilizacionCatalogo(): Promise<{
-  acrilico: number | null;
-  estandar: number | null;
-  premium: number | null;
-}> {
+export async function obtenerPreciosImpermeabilizacionCatalogo(): Promise<PreciosImpermeabilizacion> {
   await requireAdmin();
   return preciosImpermeabilizacionDeCatalogo(supabaseServidor());
 }

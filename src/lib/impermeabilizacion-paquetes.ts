@@ -11,6 +11,8 @@ export interface PaqueteInfo {
   titulo: string;
   subtitulo: string;
   precioM2: number;
+  /** Cantidad mínima de cobro en m² (del catálogo; 0/undefined = sin mínimo). */
+  minimoM2?: number;
   garantia: string;
   mejorPara: string;
   destacado?: boolean;
@@ -74,3 +76,13 @@ export const PAQUETES_DEFAULT: PaqueteInfo[] = [
     ],
   },
 ];
+
+/**
+ * Total de un paquete para `m2` metros respetando la cantidad mínima de cobro:
+ * si el cliente pide menos que el mínimo, se cotiza el mínimo.
+ */
+export function cotizarPaquete(pkg: Pick<PaqueteInfo, "precioM2" | "minimoM2">, m2: number) {
+  const minimo = pkg.minimoM2 && pkg.minimoM2 > 0 ? pkg.minimoM2 : 0;
+  const m2Cobrados = Math.max(m2, minimo);
+  return { m2Cobrados, total: m2Cobrados * pkg.precioM2, aplicaMinimo: m2Cobrados > m2 };
+}

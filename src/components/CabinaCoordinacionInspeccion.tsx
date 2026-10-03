@@ -7,6 +7,7 @@ import {
   marcarAsesorEnteradoAction,
   iniciarNegociacionDiasAction,
   enviarOpcionesClienteAction,
+  previsualizarOpcionesClienteAction,
   confirmarCitaFinalCoordinacionAction,
   obtenerCoordinacionActivaProspectoAction,
   cancelarCoordinacionActivaAction,
@@ -106,10 +107,12 @@ export function CabinaCoordinacionInspeccion({
     tipoNegocioInicial ? labelTipoNegocio(tipoNegocioInicial) : "Limpieza y Sellado de Cisterna / Aljibe"
   );
   const [ubicacion, setUbicacion] = useState(ubicacionInicial || "León, Gto.");
-  const [detalles, setDetalles] = useState(detallesIniciales || "Revisión técnica completa y presupuesto sin compromiso");
+  const [detalles, setDetalles] = useState(detallesIniciales || "Revisión técnica en sitio");
   const [asesoresSeleccionados, setAsesoresSeleccionados] = useState<string[]>([]);
   const [opcionesPropuestas, setOpcionesPropuestas] = useState<OpcionHorarioPropuesta[]>(generarOpcionesPorDefecto());
   const [opcionSeleccionadaFinal, setOpcionSeleccionadaFinal] = useState<string>("A");
+  // Vista previa (editable) del WhatsApp con las opciones para el cliente
+  const [previaCliente, setPreviaCliente] = useState<string | null>(null);
 
   // Configuración y Canal Telegram
   const [canalNotif, setCanalNotif] = useState<"telegram" | "whatsapp">("telegram");
@@ -316,17 +319,28 @@ export function CabinaCoordinacionInspeccion({
   };
 
   // 3. ENVIAR OPCIONES VALIDADAS AL CLIENTE POR WHATSAPP
-  const handleEnviarACliente = () => {
+  const handlePrevisualizarCliente = () => {
     if (!coordinacion) return;
     if (coordinacion.opcionesValidadas.length === 0) {
       setMensaje({ tipo: "error", texto: "No hay opciones coincidentes aprobadas por ambos asesores todavía." });
       return;
     }
+    startTransition(async () => {
+      setMensaje(null);
+      const res = await previsualizarOpcionesClienteAction(coordinacion.id);
+      if (res.ok && res.texto) setPreviaCliente(res.texto);
+      else setMensaje({ tipo: "error", texto: res.error || "No se pudo preparar el mensaje." });
+    });
+  };
+
+  const handleEnviarACliente = () => {
+    if (!coordinacion || !previaCliente?.trim()) return;
 
     startTransition(async () => {
       setMensaje(null);
-      const res = await enviarOpcionesClienteAction(coordinacion.id, prospectoId);
+      const res = await enviarOpcionesClienteAction(coordinacion.id, prospectoId, previaCliente);
       if (res.ok) {
+        setPreviaCliente(null);
         setMensaje({
           tipo: "ok",
           texto: `💬 ¡Opciones aprobadas enviadas a ${clienteNombre} por WhatsApp! Esperando su elección.`,
@@ -393,7 +407,7 @@ export function CabinaCoordinacionInspeccion({
   const estaVencidoSLA = coordinacion?.estado === "evaluando" && segundosRestantes === 0;
 
   return (
-    <div className="rounded-2xl border-2 border-indigo-500/30 bg-gradient-to-br from-indigo-950/5 via-white to-blue-50/30 p-4 sm:p-6 shadow-sm space-y-4">
+    <div className="rounded-2xl border-2 border-indigo-200 bg-white bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-4 sm:p-6 shadow-sm space-y-4">
       {/* Encabezado Cabina */}
       <div className="flex items-center justify-between gap-3 flex-wrap border-b border-indigo-100 pb-3">
         <div className="flex items-center gap-2.5">
@@ -944,14 +958,50 @@ export function CabinaCoordinacionInspeccion({
 
                 <button
                   type="button"
-                  onClick={handleEnviarACliente}
-                  disabled={isPending || coordinacion.opcionesValidadas.length === 0}
+                  onClick={handlePrevisualizarCliente}
+                  disabled={isPending || coordinacion.opcionesValidadas.length === 0 || previaCliente !== null}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-titular text-xs font-bold shadow-sm transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                 >
-                  <span>📲</span>
-                  <span>Enviar Opciones a {clienteNombre} por WhatsApp</span>
+                  <span>👁️</span>
+                  <span>Previsualizar mensaje para {clienteNombre}</span>
                 </button>
               </div>
+
+              {previaCliente !== null && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-emerald-800">
+                      Vista previa del WhatsApp · puedes editarlo antes de enviar
+                    </span>
+                    <span className="text-[10px] text-emerald-700/70">Queda en el historial del chat con ✓✓ de entregado/leído</span>
+                  </div>
+                  <textarea
+                    value={previaCliente}
+                    onChange={(e) => setPreviaCliente(e.target.value)}
+                    rows={8}
+                    className="w-full rounded-lg border border-emerald-200 bg-white p-2.5 text-xs leading-relaxed text-slate-800 focus:border-emerald-500 focus:outline-none"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviaCliente(null)}
+                      disabled={isPending}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEnviarACliente}
+                      disabled={isPending || !previaCliente.trim()}
+                      className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>{isPending ? "⏳" : "📲"}</span>
+                      <span>{isPending ? "Enviando…" : `Enviar a ${clienteNombre} por WhatsApp`}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* ACCIÓN FASE 4: EL CLIENTE ELIGIÓ Y SE CONFIRMA DEFINITIVA */}
               <div className="border-t border-slate-100 pt-3">

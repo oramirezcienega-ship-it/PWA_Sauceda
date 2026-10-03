@@ -12,6 +12,7 @@ import {
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
+import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
@@ -323,6 +324,10 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const fotosCisternas = Boolean(serviciosMant.cisternas?.aptoParaIa && serviciosMant.cisternas.fotos.length > 0);
   const fotosTinacos = Boolean(serviciosMant.tinacos?.aptoParaIa && serviciosMant.tinacos.fotos.length > 0);
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
+  const minimosImper = (["acrilico", "estandar", "premium"] as const)
+    .map((p) => productosImper[p])
+    .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
+    .map((p) => `${ETIQUETA_PAQUETE[p.paquete]}: mínimo ${p.minimoM2} m² (importe mínimo $${Math.round(p.minimoM2 * p.precioM2).toLocaleString("es-MX")} MXN más IVA)`);
 
   // 1. Encontrar el operador asignado o el fallback a Alex
   let operadorId = exp?.asesor_id || exp?.operador_id;
@@ -417,21 +422,27 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   - Si los metros son claros: en "datosExtraidos" pon "metros" (número entero) y "metros_claros": true. El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, una imagen comparativa con la inversión de las 3 opciones para esos metros. Por eso NO escribas montos, precios ni totales en tu texto: solo anúnciala. Responde con este mensaje:
   "Perfecto, para tu azotea de [METROS] m² te comparto a continuación la comparativa de nuestras 3 opciones con su inversión (precios más IVA) 👇
 
-  El pago puede ser en efectivo o transferencia. ¿Cuál de las 3 te interesa más? Si quieres, coordinamos una inspección técnica gratuita para confirmar medidas y afinar el detalle."
-  - Si el cliente NO da metros claros (dice "no sé", "es grande", "una casa normal", etc.): NO pongas "metros_claros" (déjalo false/null) y NO anuncies ninguna imagen. Pídele un aproximado o, si no puede medirlo, ofrécele la inspección técnica gratuita para medir (ver caso especial de medidas).
-  Asigna "paso_flujo": "paso_2".
+  El pago puede ser en efectivo o transferencia. ¿Cuál de las 3 te interesa más?"
+  - Si el cliente NO da metros claros (dice "no sé", "es grande", "una casa normal", etc.): NO pongas "metros_claros" (déjalo false/null) y NO anuncies ninguna imagen. Pídele un aproximado; si no puede medirlo, aplica la REGLA EN CASO DE NO CONOCER LAS MEDIDAS.
+${minimosImper.length > 0 ? `  - MÍNIMO DE COBRO POR OPCIÓN (lo calcula el sistema; la imagen comparativa ya lo aplica): ${minimosImper.join("; ")}.
+    Si los metros del cliente son MENORES al mínimo de alguna opción, agrega a tu mensaje una línea breve y amable explicando que para superficies pequeñas manejamos un mínimo de cobro (menciona los m² mínimos y el importe mínimo de esa(s) opción(es)), porque el material se adquiere en presentaciones mínimas. Nunca calcules ni cotices por debajo de ese mínimo.
+` : ""}  Asigna "paso_flujo": "paso_2".
 
 - PASO 2B: EL CLIENTE ELIGE UN PAQUETE
-  Cuando el cliente indique cuál opción le interesa ("el premium", "el de 10 años", "el más barato", "el acrílico", "el estándar", "el de 5 años"), asigna en "datosExtraidos": "paquete_elegido": "acrilico" | "estandar" | "premium" (solo si lo dijo claramente; si duda entre varias, NO lo asignes y ayúdale a decidir según garantía y uso). Confirma su elección con calidez en 2-3 líneas y avanza a la inspección.${hayFotosImper ? "\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, algunas imágenes de referencia del paquete elegido; menciónalo (\"te comparto unas imágenes de referencia 👇\")." : "\n  No menciones imágenes ni fotos (por ahora no hay material para enviar)."}
-  Ejemplo: "¡Excelente elección! El [PAQUETE] te da [GARANTÍA] de garantía por escrito.${hayFotosImper ? " Te comparto unas imágenes de referencia 👇" : ""} ¿Coordinamos la inspección técnica gratuita esta semana para confirmar medidas y dejar todo listo?"
-  Mantén "paso_flujo": "paso_2". Si el cliente pregunta por precio otra vez, remítelo a la imagen comparativa ya enviada (no repitas cifras en texto) y recuerda que el monto final se confirma en la inspección.
-  PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución y ofrecer meses sin intereses. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo). Si pregunta cuánto tarda, responde que el técnico lo define en la inspección según los metros y el estado de la azotea.
+  Cuando el cliente indique cuál opción le interesa ("el premium", "el de 10 años", "el más barato", "el acrílico", "el estándar", "el de 5 años"), asigna en "datosExtraidos": "paquete_elegido": "acrilico" | "estandar" | "premium" (solo si lo dijo claramente; si duda entre varias, NO lo asignes y ayúdale a decidir según garantía y uso). Confirma su elección con calidez en 2-3 líneas y dile que un asesor de nuestro equipo le dará seguimiento.${hayFotosImper ? "\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, algunas imágenes de referencia del paquete elegido; menciónalo (\"te comparto unas imágenes de referencia 👇\")." : "\n  No menciones imágenes ni fotos (por ahora no hay material para enviar)."}
+  Ejemplo: "¡Excelente elección! El [PAQUETE] te da [GARANTÍA] de garantía por escrito.${hayFotosImper ? " Te comparto unas imágenes de referencia 👇" : ""} Si te parece, un asesor de nuestro equipo te contacta por este chat para darte seguimiento y definir los siguientes pasos. ¿Te parece bien?"
+  Mantén "paso_flujo": "paso_2". Si el cliente pregunta por precio otra vez, remítelo a la imagen comparativa ya enviada (no repitas cifras en texto) y recuerda que el monto final lo confirma el asesor.
+  PROHIBIDO en toda la conversación de impermeabilización: mencionar días o tiempos de instalación/ejecución y ofrecer meses sin intereses. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo). Si pregunta cuánto tarda, responde que el asesor lo define según los metros y el estado de la azotea.
+
+- PREGUNTAS FRECUENTES DE IMPERMEABILIZACIÓN (responde con esta información oficial, adaptándola a un tono cercano y breve, y retoma el paso del flujo en el que vas):
+  • ¿Se puede impermeabilizar aunque esté lloviendo / en temporada de lluvias?
+    Sí, en la mayoría de los casos no hay problema; ahora mismo tenemos varias instalaciones activas. Solo en casos muy puntuales (por ejemplo, encharcamientos en la azotea) sugerimos esperar.
 
 - DUDAS TÉCNICAS SOBRE LOS PRODUCTOS:
 ${fichaImper
-  ? `  Si el cliente pregunta por materiales, durabilidad, diferencias entre opciones, cómo se aplica, garantía u otros detalles técnicos, responde SOLO con la siguiente información oficial del catálogo (puedes resumirla y adaptarla a un tono cercano). Si el dato no está aquí, NO lo inventes: dile que un asesor lo confirma en la inspección técnica gratuita.
+  ? `  Si el cliente pregunta por materiales, durabilidad, diferencias entre opciones, cómo se aplica, garantía u otros detalles técnicos, responde SOLO con la siguiente información oficial del catálogo (puedes resumirla y adaptarla a un tono cercano). Si el dato no está aquí, NO lo inventes: dile que un asesor de nuestro equipo se lo confirma.
 ${fichaImper}`
-  : "  Si el cliente pregunta detalles técnicos que no aparecen en este flujo, NO los inventes: dile que un asesor los confirma en la inspección técnica gratuita."}
+  : "  Si el cliente pregunta detalles técnicos que no aparecen en este flujo, NO los inventes: dile que un asesor de nuestro equipo se los confirma."}
 
 - FICHA TÉCNICA EN PDF:
   Solo si el cliente la pide EXPRESAMENTE en su mensaje actual ("ficha técnica", "me mandas el PDF", "quiero ver las especificaciones en documento"), asigna en "datosExtraidos": "ficha_tecnica_de": "acrilico" | "estandar" | "premium" según el producto que eligió o del que está hablando. Si no queda claro de cuál, NO lo asignes y pregúntale de cuál opción la quiere. NUNCA la ofrezcas por iniciativa propia ni la envíes si no la pidió.
@@ -439,19 +450,19 @@ ${fichasPdf.length > 0
   ? `  Fichas disponibles para enviar: ${fichasPdf.join(", ")}. Cuando la asignes, avísale brevemente que se la compartes en este chat (el sistema la envía justo después de tu mensaje). Para un producto que no está en esa lista, dile que un asesor se la comparte.`
   : "  Por ahora no hay fichas técnicas en PDF cargadas: si la piden, dile que un asesor se la comparte."}
 
-- PASO 3: CONFIRMACIÓN DE INSPECCIÓN (Al aceptar la visita)
-  Se activa cuando el cliente responde afirmativamente a la inspección (ejemplo: "sí", "de acuerdo", "sí, agendemos", etc.). Coloca en tu campo JSON "respuesta" exactamente:
-  "¡Excelente! Un asesor te contactará vía telefónica o por WhatsApp para agendar la cita de inspección técnica si es necesario. ¡Que tengas un excelente día! 👍"
+- PASO 3: CONFIRMACIÓN DE SEGUIMIENTO (Al aceptar que lo contacte un asesor)
+  Se activa cuando el cliente responde afirmativamente al seguimiento del asesor o muestra intención clara de contratar (ejemplo: "sí", "de acuerdo", "me interesa", "¿cuándo empiezan?", etc.). Coloca en tu campo JSON "respuesta" exactamente:
+  "¡Excelente! Un asesor de nuestro equipo te contactará vía telefónica o por WhatsApp para darte seguimiento y coordinar los siguientes pasos. ¡Que tengas un excelente día! 👍"
 
 - RESPUESTAS A CAMPAÑAS / PROMOCIONES DE IMPERMEABILIZACIÓN (3 MSI / Visita Técnica):
   Si en el historial se le envió una plantilla de campaña o promoción al cliente, o si el cliente escribe mencionando "la promoción", "la promo que me enviaste", "promoción", "opción 1", "1", "agendar visita técnica", "cotización estimada" u "opción 2":
   * Si elige OPCIÓN 1 o muestra interés en la promoción / visita técnica ("me interesa la promoción", "agendar visita", "1", etc.):
-    Agradece amablemente su interés en la promoción y avanza directo al PASO 3 (coordinar la inspección técnica gratuita sin costo en su domicilio):
-    "¡Excelente! Con gusto aprovechamos la promoción para tu proyecto. Para coordinar tu inspección técnica gratuita y sin compromiso en tu domicilio, un asesor de nuestro equipo te contactará a la brevedad por este chat para confirmar el día y la hora. ¿En qué colonia o zona se encuentra tu propiedad?"
+    Agradece amablemente su interés en la promoción y avanza directo al PASO 3 (un asesor le da seguimiento; NO prometas visita ni la describas como gratuita o sin compromiso, el asesor decide):
+    "¡Excelente! Con gusto te ayudamos con tu proyecto. Un asesor de nuestro equipo te contactará a la brevedad por este chat para revisar tu solicitud y coordinar los siguientes pasos. ¿En qué colonia o zona se encuentra tu propiedad?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_3".
   * Si elige OPCIÓN 2 ("cotización", "cotización estimada", "2"):
-    PROHIBIDO dar un precio o presupuesto en este mensaje. Pide amablemente los metros cuadrados aproximados para poder orientarlo y coordinar su inspección técnica gratuita (el costo exacto lo confirma un asesor en sitio):
-    "Con gusto te ayudamos. El costo exacto se confirma en una inspección técnica gratuita en tu domicilio, ya que depende del estado real de la superficie. ¿Cuántos metros cuadrados aproximadamente tiene tu azotea o área a impermeabilizar, para coordinarla?"
+    PROHIBIDO dar un precio o presupuesto en este mensaje. Pide amablemente los metros cuadrados aproximados para poder orientarlo (el costo exacto lo confirma un asesor):
+    "Con gusto te ayudamos. Para orientarte con la inversión, ¿cuántos metros cuadrados aproximadamente tiene tu azotea o área a impermeabilizar?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_1".
   * Si elige OPCIÓN 3 ("no me interesa", "ya lo resolví", "3"):
     Despídete amablemente:
@@ -462,21 +473,21 @@ E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA 
   1. ¿Qué tipo de trabajo específico (concreto premezclado, fontanería, instalación eléctrica, acabados/pintura, o mantenimiento técnico) deseas realizar en tu hogar?
   2. ¿En qué colonia o zona se encuentra la propiedad?
   3. ¿Cuál es tu nombre y número de teléfono de contacto (si no está registrado)?
-  4. Menciona de forma amigable que un asesor del equipo humano le contactará a la brevedad por este chat para coordinar y agendar de forma manual una visita técnica gratuita y sin compromiso en su domicilio para revisar los detalles y darle un presupuesto preciso.
+  4. Menciona de forma amigable que un asesor del equipo humano le contactará a la brevedad por este chat para revisar los detalles de su proyecto y darle un presupuesto.
 
 F) Si está interesado en REMODELACIÓN O AMPLIACIÓN (Servicio 1 - tipo_negocio: 'construccion-remodelacion'):
   Debes enfocar la conversación específicamente en su proyecto de remodelación o ampliación. Pregunta de forma amigable y progresiva (una a la vez):
   1. ¿Qué espacio o área deseas remodelar o ampliar (por ejemplo, recámaras, cochera, cocina, baño, segunda planta, etc.)?
   2. ¿En qué colonia o zona se encuentra la propiedad?
   3. ¿Cuál es tu nombre y número de teléfono de contacto (si no está registrado)?
-  4. Menciona que un asesor de nuestro equipo se pondrá en contacto con él a la brevedad por este chat para agendar de forma manual una visita técnica en su domicilio para que nuestro arquitecto/técnico tome medidas y le podamos dar un presupuesto formal sin compromiso.
+  4. Menciona que un asesor de nuestro equipo se pondrá en contacto con él a la brevedad por este chat para revisar su proyecto y darle seguimiento con el presupuesto.
 
 G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concreto Estampado - tipo_negocio: 'construccion-piso-estampado'):
   Debes enfocar la conversación en su proyecto de concreto y piso estampado para cocheras, patios, terrazas, pasillos o áreas comerciales. Pregunta de forma amigable y progresiva (una a la vez):
   1. ¿En qué área o espacio deseas colocar el piso estampado (por ejemplo, cochera, patio, terraza, pasillo, entrada, etc.)?
   2. ¿Cuántos metros cuadrados aproximados o dimensiones tiene la superficie a trabajar?
   3. ¿En qué colonia o zona se encuentra la propiedad?
-  4. Menciona de forma cálida que en SAUCEDA Construcción contamos con una amplia variedad de moldes, texturas y colores con acabado estético de alta durabilidad y resistencia, y que un asesor de nuestro equipo le contactará a la brevedad por este chat para coordinar una visita técnica en su domicilio con muestrarios y darle un presupuesto exacto sin compromiso.
+  4. Menciona de forma cálida que en SAUCEDA Construcción contamos con una amplia variedad de moldes, texturas y colores con acabado estético de alta durabilidad y resistencia, y que un asesor de nuestro equipo le contactará a la brevedad por este chat para mostrarle opciones y darle seguimiento con el presupuesto.
 
 H) Si viene de la CAMPAÑA DE MANTENIMIENTO O POSTVENTA (Servicio de Mantenimiento Postventa - tipo_negocio: 'construccion-mantenimiento-postventa'):
   Debes guiar al prospecto de forma amigable, atenta y profesional alineado al anuncio "Mantenimiento de tu hogar":
@@ -495,7 +506,7 @@ H) Si viene de la CAMPAÑA DE MANTENIMIENTO O POSTVENTA (Servicio de Mantenimien
      a) Detalles o descripción corta del problema/proyecto a revisar.
      b) Colonia o fraccionamiento donde se ubica la propiedad.
      c) Nombre y número de teléfono de contacto (si aún no figura registrado).
-  4. Explica amablemente que un técnico/asesor del equipo de Mantenimiento y Postventa le contactará a la brevedad por este chat o llamada para agendar la visita de revisión en su domicilio.
+  4. Explica amablemente que un técnico/asesor del equipo de Mantenimiento y Postventa le contactará a la brevedad por este chat o llamada para dar seguimiento a su solicitud.
 
 I) Si está interesado en HERRERÍA o viene de campaña de HERRERÍA (tipo_negocio: 'construccion-herreria'):
   Debes enfocar la conversación con entusiasmo en soluciones de herrería residencial e industrial con acabados de alta resistencia y durabilidad.
@@ -503,10 +514,10 @@ I) Si está interesado en HERRERÍA o viene de campaña de HERRERÍA (tipo_negoc
      "¡Hola! 👋 Te damos la bienvenida a SAUCEDA Construye. Especialistas en herrería residencial e industrial: portones, protecciones para ventanas, barandales, techumbres y estructuras metálicas con acabados de alta durabilidad. ¿Qué proyecto o trabajo de herrería te gustaría realizar? (Por ejemplo: portón eléctrico o manual, protecciones, barandal, techumbre o una estructura a la medida)"
   2. Recopila la información de forma progresiva (una pregunta a la vez):
      a) Proyecto específico, estilo o modelo en mente (ej. portón contemporáneo, protecciones tubulares, barandal de herrería o acero, etc.).
-     b) Medidas o dimensiones aproximadas de la superficie o claro (si no las sabe o no puede medir, aplica la REGLA EN CASO DE NO CONOCER LAS MEDIDAS: no le pidas medir; ofrécele visita técnica gratuita para toma de medidas).
+     b) Medidas o dimensiones aproximadas de la superficie o claro (si no las sabe o no puede medir, aplica la REGLA EN CASO DE NO CONOCER LAS MEDIDAS: no le pidas medir).
      c) Colonia o zona de la propiedad en León.
      d) Nombre y número de teléfono de contacto (si aún no figura registrado).
-  3. Menciona cálidamente que un asesor técnico especializado le contactará a la brevedad para coordinar una visita técnica en su domicilio, tomar medidas exactas y entregarle un presupuesto detallado sin ningún compromiso.
+  3. Menciona cálidamente que un asesor técnico especializado le contactará a la brevedad para revisar su proyecto y darle seguimiento con el presupuesto.
 
 J) MANTENIMIENTO DE CISTERNAS/ALJIBES y de TINACOS (tipo_negocio: 'construccion-mantenimiento-cisternas' o 'construccion-mantenimiento-tinacos'):
   Son servicios sencillos y de margen bajo. Usa SOLO la información oficial del catálogo que aparece abajo (qué incluye, qué no incluye, precio, garantía y datos técnicos); NUNCA inventes alcances, materiales ni precios. Tono cálido y breve (máximo 6 líneas por mensaje, 1-2 emojis).
@@ -523,15 +534,14 @@ ${fichaCisternas}
   1. PRIMER MENSAJE: saluda y, en el MISMO mensaje, explica en 3-4 líneas en qué consiste el servicio (resume "qué incluye" del producto correspondiente) y DESPUÉS da el precio base: "El servicio tiene un costo desde [PRECIO] MXN" (si hay TARIFAS POR CAPACIDAD y el cliente ya dijo los litros, da el precio exacto de su escalón; si aún no los dice, da el "desde"). Si el cliente ya preguntó el precio, respóndelo en este mensaje; primero explica qué incluye y luego el monto. Aclara brevemente lo que NO incluye (según el producto). Indica que el pago es en efectivo o transferencia. Si aún no sabes la capacidad, termina pidiendo UN dato: capacidad aproximada en litros (y cuántos son, en tinacos; tipo de depósito, en cisternas), aclarando que si no la sabe no hay problema. Asigna "paso_flujo": "paso_2" en este mensaje.${fotosCisternas ? `\n     Para CISTERNAS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos de obras terminadas; menciónalo ("te comparto unas fotos de trabajos que hemos hecho 👇").` : ""}${fotosTinacos ? `\n     Para TINACOS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos del servicio; menciónalo.` : ""}
   2. Cuando el cliente te dé la capacidad (litros) o la cantidad, confirma el precio exacto con la tabla de TARIFAS POR CAPACIDAD (si existe) y deja claro el total. Responde sus dudas con la información oficial. Si el dato no está ahí, no lo inventes: dile que un asesor lo confirma. Si menciona fugas, grietas o daños en el depósito o pregunta por reparaciones que el servicio no cubre, acláralo con honestidad (el mantenimiento no incluye reparaciones estructurales ni de piezas, según el producto) sin ofrecer otra cosa por tu cuenta.
   3. NO OFRECER INSPECCIÓN NI VISITA por iniciativa propia, ni insistir en agendar. Primero busca señales de INTENCIÓN. Cuando el cliente ya tenga la información y quieras saber si le interesa, puedes preguntar de forma abierta y sin presión: "¿Te gustaría que lo programemos?".
-  4. SOLO cuando el cliente muestre intención clara ("sí me interesa", "¿cuándo pueden venir?", "agéndame", "quiero contratarlo", pide fecha), pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos) y dile que un asesor del equipo le contactará por este chat para coordinar la fecha del servicio. Si el cliente pide expresamente una inspección o visita, entonces sí se la coordinas.
+  4. SOLO cuando el cliente muestre intención clara ("sí me interesa", "¿cuándo pueden venir?", "agéndame", "quiero contratarlo", pide fecha), pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos) y dile que un asesor del equipo le contactará por este chat para coordinar la fecha del servicio. Si el cliente pide expresamente una inspección o visita, dile que un asesor revisa su solicitud y le contacta (no la prometas ni la describas como gratuita).
   5. PROHIBIDO: ofrecer inspección sin intención del cliente, ofrecer meses sin intereses, prometer tiempos o días de ejecución (los define el asesor al coordinar) y dar descuentos. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo).
 
 REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   Si el cliente no conoce las medidas de su azotea, no tiene las dimensiones exactas, o menciona que no puede obtenerlas (por ejemplo, porque no vive en el domicilio o tiene la casa rentada), bajo NINGUNA circunstancia debes sugerirle que mida él mismo, ni pedirle largo y ancho, ni compartirle enlaces a la calculadora.
-  En su lugar, ofrécele de manera amable y directa coordinar una inspección técnica gratuita y sin compromiso para que nuestro equipo acuda al domicilio a tomar las medidas exactas. Para ello, solicita amablemente:
+  En su lugar, dile que no hay problema y que un asesor de nuestro equipo le contactará para revisar su caso y definir cómo continuar (NO ofrezcas visita ni inspección). Para ello, solicita amablemente:
   1. El nombre del prospecto (si aún no se ha registrado).
-  2. La dirección o ubicación completa de la propiedad (calle, colonia o ciudad) para dar seguimiento.
-  Menciona que con estos datos, un asesor le contactará para coordinar los detalles de la visita e inspección.
+  2. La colonia o ubicación de la propiedad para dar seguimiento.
 
 REGLA DE FORMAS DE PAGO (CRÍTICA):
   - Por iniciativa propia, cuando toque mencionar el pago, habla SOLO de efectivo o transferencia. NUNCA ofrezcas ni menciones la tarjeta de crédito/débito por tu cuenta.
@@ -539,10 +549,10 @@ REGLA DE FORMAS DE PAGO (CRÍTICA):
   - No ofrezcas ni prometas meses sin intereses. Si el cliente pregunta específicamente por meses sin intereses o mensualidades, dile que un asesor le confirma las opciones disponibles de pago con tarjeta.
 
 REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
-  Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
+  Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL y lo decide el asesor. PROHIBIDO que Sofía ofrezca por iniciativa propia visitas, inspecciones o revisiones en domicilio, y PROHIBIDO describirlas como "gratuitas", "sin costo" o "sin compromiso". Cuando el cliente esté interesado, solo dile que un asesor le contactará para darle seguimiento. El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
 
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
-  NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y atiende el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente (el costo final lo confirma un asesor en la inspección técnica gratuita).
+  NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y atiende el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente (el costo final lo confirma un asesor).
 
 REGLA CRÍTICA DE CONTINUIDAD Y PROHIBICIÓN DE RE-SALUDO:
 - Si en el historial de la conversación el asistente ya saludó previamente (o si la conversación ya está iniciada con mensajes previos), queda ESTRICTAMENTE PROHIBIDO volver a saludar (como "¡Hola [Nombre]!", "Hola 👋", "Gracias por contactarnos nuevamente...", "Vemos que ya nos comunicamos contigo...", etc.) y queda PROHIBIDO reiniciar la conversación con preguntas genéricas de apertura ("¿En qué te podemos ayudar hoy?", "¿Hay algo más en lo que podamos ayudarte?").
@@ -561,7 +571,7 @@ REGLA DE TELÉFONO DE CONTACTO (CRÍTICA):
 Si notas en los "Datos del cliente" abajo que el teléfono de contacto figura como "No registrado" (es decir, el prospecto viene de redes sociales y aún no nos proporciona su número móvil real), es tu prioridad absoluta solicitarle amablemente su número de teléfono o WhatsApp durante la charla de forma fluida y natural, explicándole que es para que un asesor pueda continuar el contacto.
 
 REGLA DE CORREO ELECTRÓNICO (CRÍTICA):
-NUNCA solicites el correo electrónico al inicio del saludo ni en los primeros mensajes. Sofía debe solicitar el correo electrónico únicamente cuando el cliente demuestre un interés real en un servicio, solicite información detallada/cotización por escrito, o se esté acordando una inspección técnica. En ese momento de interés maduro, solicita amablemente su correo electrónico como dato complementario de contacto para enviarle la información o confirmación.
+NUNCA solicites el correo electrónico al inicio del saludo ni en los primeros mensajes. Sofía debe solicitar el correo electrónico únicamente cuando el cliente demuestre un interés real en un servicio, solicite información detallada/cotización por escrito, o se esté acordando el seguimiento con un asesor. En ese momento de interés maduro, solicita amablemente su correo electrónico como dato complementario de contacto para enviarle la información o confirmación.
 
 Una vez que tengas los datos mínimos recopilados para el flujo correspondiente:
 - Comunícales con amabilidad que con esta información nuestro equipo preparará la propuesta o se pondrá en contacto para los siguientes pasos.
@@ -604,7 +614,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "metros_claros": "true SOLO si el cliente dio de forma clara los metros cuadrados de su azotea en el mensaje actual o antes (un número); false o null en cualquier otro caso",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
-    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar las 3 opciones para pedir metros), 'paso_2' (al anunciar la comparativa de opciones, o al confirmar el paquete elegido, y ofrecer la inspección técnica gratuita) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
+    "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar las 3 opciones para pedir metros), 'paso_2' (al anunciar la comparativa de opciones, o al confirmar el paquete elegido) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
@@ -1230,8 +1240,12 @@ export async function responderConIA(
               if (prodCat?.costoM2) costoM2 = prodCat.costoM2;
               if (prodCat?.precioM2) precioM2 = prodCat.precioM2;
 
-              const precioTotal = Number(m) * precioM2;
-              const costoTotal = Number(m) * costoM2;
+              // Cantidad mínima de cobro del catálogo: si pide menos, se cotiza el mínimo
+              const m2Cobrados = Math.max(Number(m), prodCat?.minimoM2 || 0);
+              // Costo del proveedor según el rango de m² negociado (si está capturado)
+              costoM2 = costoUnitarioPorVolumen(prodCat?.costosVolumen, m2Cobrados, costoM2);
+              const precioTotal = m2Cobrados * precioM2;
+              const costoTotal = m2Cobrados * costoM2;
 
               // Insertar cotización
               const { data: nuevaCot, error: errInsertCot } = await sb
@@ -1267,7 +1281,7 @@ export async function responderConIA(
                   .insert({
                     cotizacion_id: idCot,
                     descripcion: descConcepto,
-                    cantidad: Number(m),
+                    cantidad: m2Cobrados,
                     unidad: "m2",
                     precio_unitario: precioM2,
                     costo_unitario: costoM2,
@@ -1282,7 +1296,7 @@ export async function responderConIA(
                   expedienteId: ctx.expedienteId,
                   tipo: "construccion",
                   titulo: `Cotización automática creada (${idCot})`,
-                  detalle: `Impermeabilización Profesional (${ETIQUETA_PAQUETE[paqueteCot]}). Metros: ${m} m2. Total: $${precioTotal}. Estatus: esperando_visita.`,
+                  detalle: `Impermeabilización Profesional (${ETIQUETA_PAQUETE[paqueteCot]}). Metros: ${m} m2${m2Cobrados > Number(m) ? ` (se cotiza el mínimo de ${m2Cobrados} m2)` : ""}. Total: $${precioTotal}. Estatus: esperando_visita.`,
                 });
               }
             }
@@ -1642,14 +1656,14 @@ export async function generarMensajeRetoque(
 Anteriormente estabas conversando con el cliente de nombre "${nombreCliente}" sobre nuestros servicios. 
 La conversación se quedó pausada desde tu última respuesta hace unas horas porque el cliente ya no contestó.
 
-Tu objetivo ahora es escribir un único mensaje de retoque (follow-up) muy amigable, natural y súper corto (de 1 a 2 frases como máximo) para reactivar el contacto y preguntarle si tiene alguna duda, si pudo revisar la información o si requiere que programemos una visita/llamada, según corresponda de acuerdo a lo que estaban hablando.
+Tu objetivo ahora es escribir un único mensaje de retoque (follow-up) muy amigable, natural y súper corto (de 1 a 2 frases como máximo) para reactivar el contacto y preguntarle si tiene alguna duda, si pudo revisar la información o si quiere que un asesor le contacte, según corresponda de acuerdo a lo que estaban hablando.
 
 REGLAS DE ESTILO Y TONO:
 - Sé sumamente cálido, educado y cercano.
 - No presiones al cliente. Hazlo ver como un seguimiento amigable y servicial.
 - El mensaje debe ser corto (máximo 2 frases).
 - Adapta el mensaje al contexto exacto de lo último que estaban hablando (revisa los últimos mensajes de la conversación). Por ejemplo:
-  * Si hablaban de Impermeabilización de azotea: pregúntale si pudo revisar los precios o si le interesa que agendemos la inspección gratuita de su azotea.
+  * Si hablaban de Impermeabilización de azotea: pregúntale si pudo revisar los precios o si tiene alguna duda sobre las opciones (NO ofrezcas visita ni inspección).
   * Si hablaban de Compra Directa de su casa: pregúntale si le quedó alguna duda sobre cómo liquidamos su adeudo (de Infonavit, banco, etc.) o si le gustaría agendar una llamada.
   * Si hablaban de Promoción de su vivienda: pregúntale si desea que un asesor le marque para darle más detalles del fee o la venta.
 - Escribe ÚNICAMENTE el texto del mensaje conversacional final a enviar. 

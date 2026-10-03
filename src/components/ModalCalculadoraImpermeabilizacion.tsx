@@ -2,7 +2,13 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { obtenerPreciosImpermeabilizacionCatalogo } from "@/app/actions/productos";
-import { PAQUETES_DEFAULT, type PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
+import { PAQUETES_DEFAULT, cotizarPaquete, type PaqueteInfo } from "@/lib/impermeabilizacion-paquetes";
+import {
+  PLAZOS_DISPONIBLES,
+  PLAZOS_DEFAULT,
+  calcularOpcionMeses,
+  tasaEfectivaMeses,
+} from "@/lib/mercadopago-meses";
 
 export interface ModalCalculadoraProps {
   abierto: boolean;
@@ -30,6 +36,12 @@ export function ModalCalculadoraImpermeabilizacion({
   const [generandoImagen, setGenerandoImagen] = useState<boolean>(false);
   const [enviandoImagenChat, setEnviandoImagenChat] = useState<boolean>(false);
   const [paquetes, setPaquetes] = useState<PaqueteInfo[]>(PAQUETES_DEFAULT);
+  // Opciones a meses con intereses (Mercado Pago). Apagado por defecto: la
+  // propuesta inicial va de contado y el asesor las agrega sólo si el
+  // cliente lo pide.
+  const [mesesActivo, setMesesActivo] = useState<boolean>(false);
+  const [plazos, setPlazos] = useState<number[]>(PLAZOS_DEFAULT);
+  const [ivaComision, setIvaComision] = useState<boolean>(true);
   const cardsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,6 +49,10 @@ export function ModalCalculadoraImpermeabilizacion({
       setMetros(metrosIniciales);
     }
   }, [abierto, metrosIniciales]);
+
+  useEffect(() => {
+    if (abierto) setMesesActivo(false);
+  }, [abierto]);
 
   // Traer los precios vigentes del catálogo de Productos y Servicios cada
   // vez que se abre la calculadora, para no mostrar precios desactualizados
@@ -49,7 +65,11 @@ export function ModalCalculadoraImpermeabilizacion({
           prev.map((pkg) => {
             const precioCatalogo =
               pkg.id === "acrilico" ? precios.acrilico : pkg.id === "estandar" ? precios.estandar : precios.premium;
-            return precioCatalogo && precioCatalogo > 0 ? { ...pkg, precioM2: precioCatalogo } : pkg;
+            return {
+              ...pkg,
+              precioM2: precioCatalogo && precioCatalogo > 0 ? precioCatalogo : pkg.precioM2,
+              minimoM2: precios.minimos?.[pkg.id] || 0,
+            };
           })
         );
       })
@@ -61,9 +81,15 @@ export function ModalCalculadoraImpermeabilizacion({
   if (!abierto) return null;
 
   const m2Val = Math.max(1, isNaN(metros) ? 0 : metros);
-  const totalAcrilico = m2Val * paquetes[0].precioM2;
-  const totalEstandar = m2Val * paquetes[1].precioM2;
-  const totalPremium = m2Val * paquetes[2].precioM2;
+  const totalAcrilico = cotizarPaquete(paquetes[0], m2Val).total;
+  const totalEstandar = cotizarPaquete(paquetes[1], m2Val).total;
+  const totalPremium = cotizarPaquete(paquetes[2], m2Val).total;
+
+  /** Aviso de mínimo de cobro para el texto de WhatsApp ("" si no aplica). */
+  function notaMinimoTexto(pkg: PaqueteInfo): string {
+    const c = cotizarPaquete(pkg, m2Val);
+    return c.aplicaMinimo ? `\n• Mínimo de cobro: ${c.m2Cobrados} m² (el material se adquiere en presentaciones mínimas)` : "";
+  }
 
   function formatearDinero(monto: number) {
     return monto.toLocaleString("es-MX", {
@@ -72,6 +98,31 @@ export function ModalCalculadoraImpermeabilizacion({
       maximumFractionDigits: 0,
     });
   }
+
+  const plazosActivos = mesesActivo ? [...plazos].sort((a, b) => a - b) : [];
+
+  function opcionesMeses(contado: number) {
+    return plazosActivos.map((m) => calcularOpcionMeses(contado, m, ivaComision));
+  }
+
+  function togglePlazo(m: number) {
+    setPlazos((prev) => (prev.includes(m) ? prev.filter((p) => p !== m) : [...prev, m]));
+  }
+
+  function bloqueMeses(contado: number): string {
+    if (!plazosActivos.length) return "";
+    return `\n• A meses con intereses:\n${lineasMesesTexto(contado)}`;
+  }
+
+  function lineasMesesTexto(contado: number): string {
+    return opcionesMeses(contado)
+      .map((o) => `   ▸ ${o.meses} meses: *${formatearDinero(o.mensualidad)}/mes* (total ${formatearDinero(o.total)})`)
+      .join("\n");
+  }
+
+  const notaMesesTexto = plazosActivos.length
+    ? `\n\n💳 *Pagos a meses con intereses* con tarjeta de crédito vía Mercado Pago. El total a meses incluye el costo de financiamiento; de contado se respeta el precio indicado.`
+    : "";
 
   function generarTextoComparativaCompleta(): string {
     const saludo = nombreCliente && nombreCliente !== "Cliente" ? `¡Hola ${nombreCliente.split(" ")[0]}!` : "¡Hola!";
@@ -82,21 +133,21 @@ Metros a impermeabilizar: *${m2Val} m²*
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🟢 *1. PAQUETE ACRÍLICO*
-• Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*
+• Precio: *$${paquetes[0].precioM2} / m²* ➔ *Total: ${formatearDinero(totalAcrilico)} MXN*${notaMinimoTexto(paquetes[0])}${bloqueMeses(totalAcrilico)}
 • Garantía: 2 años
 • Incluye: Acrílico elastomérico con malla de refuerzo, sellado de grietas y limpieza final.
 • Ideal para: Mantenimiento preventivo y azoteas con poco tráfico.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌿 *2. PAQUETE ESTÁNDAR (3.5)*
-• Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*
+• Precio: *$${paquetes[1].precioM2} / m²* ➔ *Total: ${formatearDinero(totalEstandar)} MXN*${notaMinimoTexto(paquetes[1])}${bloqueMeses(totalEstandar)}
 • Garantía: 5 años
 • Incluye: Impermeabilizante 3.5 con gravilla (roja/gris), sellado de bordes y boquillas.
 • Ideal para: Solución eficaz y económica para azoteas en buen estado.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *3. PAQUETE PREMIUM (4.0 POLIÉSTER)* — 🏆 *10 Años Garantía*
-• Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*
+• Precio: *$${paquetes[2].precioM2} / m²* ➔ *Total: ${formatearDinero(totalPremium)} MXN*${notaMinimoTexto(paquetes[2])}${bloqueMeses(totalPremium)}
 • Garantía: 10 años por escrito
 • Incluye: Impermeabilizante 4.0 poliéster con gravilla, sellado reforzado y reporte fotográfico.
 • Ideal para: Máxima durabilidad y tranquilidad a largo plazo.
@@ -107,18 +158,18 @@ Metros a impermeabilizar: *${m2Val} m²*
 ✓ Materiales de primera calidad y mano de obra especializada
 ✓ Garantía formal por escrito
 
-¿Te gustaría que agendemos una visita técnica gratuita para confirmar medidas y afinar detalles?`;
+${notaMesesTexto ? `${notaMesesTexto.trimStart()}\n\n` : ""}¿Te gustaría que agendemos una visita técnica gratuita para confirmar medidas y afinar detalles?`;
   }
 
   function generarTextoPaqueteIndividual(paquete: PaqueteInfo): string {
-    const total = m2Val * paquete.precioM2;
+    const { total } = cotizarPaquete(paquete, m2Val);
     const saludo = nombreCliente && nombreCliente !== "Cliente" ? `¡Hola ${nombreCliente.split(" ")[0]}!` : "¡Hola!";
     return `${saludo} Te compartimos el detalle de la cotización para tu azotea (*${m2Val} m²*):
 
 🏠 *${paquete.titulo.toUpperCase()}* — *${paquete.badge}*
 ${paquete.subtitulo}
 
-💰 *Inversión:* ${formatearDinero(total)} MXN (*$${paquete.precioM2} / m²*)
+💰 *Inversión:* ${formatearDinero(total)} MXN (*$${paquete.precioM2} / m²*)${notaMinimoTexto(paquete)}${bloqueMeses(total)}${notaMesesTexto ? `${notaMesesTexto}\n` : ""}
 🛡️ *Garantía:* ${paquete.garantia}
 
 📋 *¿Qué incluye tu servicio?*
@@ -179,7 +230,10 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
   function construirCanvasCotizacion(): HTMLCanvasElement | null {
     const width = 1200;
-    const height = 750;
+    const filasMeses = plazosActivos.length;
+    // Bloque "A meses con intereses" dentro de cada tarjeta (igual que en pantalla)
+    const altoMeses = filasMeses ? 34 + filasMeses * 22 + 12 : 0;
+    const height = 750 + altoMeses;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -223,7 +277,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
     // Dibujar las 3 tarjetas comparativas compactas
     const cardWidth = 346;
-    const cardHeight = 580;
+    const cardHeight = 580 + altoMeses;
     const startX = 54;
     const gap = 27;
     const startY = 145;
@@ -231,7 +285,7 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
     paquetes.forEach((pkg, index) => {
       const x = startX + index * (cardWidth + gap);
       const y = startY;
-      const total = m2Val * pkg.precioM2;
+      const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
       const esPremium = !!pkg.destacado;
 
       // 1. Fondo y borde de tarjeta
@@ -301,22 +355,67 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
       ctx.fillText("MXN", x + 42 + totalWidth, priceY + 14);
 
       // 7. PRECIO M² MÁS PEQUEÑO DEBAJO
-      ctx.fillStyle = "#64748B";
-      ctx.font = "12px sans-serif";
-      ctx.fillText(`$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`, x + 22, priceY + 38);
+      ctx.fillStyle = aplicaMinimo ? "#B45309" : "#64748B";
+      ctx.font = aplicaMinimo ? "bold 12px sans-serif" : "12px sans-serif";
+      ctx.fillText(
+        aplicaMinimo
+          ? `Mínimo de cobro: ${m2Cobrados} m²  ·  $${pkg.precioM2} por m²`
+          : `$${pkg.precioM2} por m²  ·  (Superficie: ${m2Val} m²)`,
+        x + 22,
+        priceY + 38
+      );
+
+      // 7b. Opciones a meses con intereses
+      if (filasMeses) {
+        const mx = x + 22;
+        const my = priceY + 58;
+        const mw = cardWidth - 44;
+        drawRoundedRect(ctx, mx, my, mw, altoMeses - 12, 7, "#F0F9FF", "#BAE6FD", 1);
+
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = "#0369A1";
+        ctx.font = "bold 9.5px sans-serif";
+        ctx.fillText("A MESES CON INTERESES", mx + 10, my + 10);
+
+        ctx.textBaseline = "middle";
+        opcionesMeses(total).forEach((o, r) => {
+          const rowY = my + 36 + r * 22;
+          ctx.textAlign = "left";
+          ctx.fillStyle = "#334155";
+          ctx.font = "bold 12px sans-serif";
+          ctx.fillText(`${o.meses} meses`, mx + 10, rowY);
+
+          ctx.textAlign = "right";
+          const totalTxt = ` · ${formatearDinero(o.total)}`;
+          ctx.fillStyle = "#94A3B8";
+          ctx.font = "11.5px monospace";
+          ctx.fillText(totalTxt, mx + mw - 10, rowY);
+          let cursor = mx + mw - 10 - ctx.measureText(totalTxt).width;
+          ctx.fillStyle = "#64748B";
+          ctx.fillText("/mes", cursor, rowY);
+          cursor -= ctx.measureText("/mes").width;
+          ctx.fillStyle = esPremium ? "#B58E3F" : "#2D4A2B";
+          ctx.font = "bold 12.5px monospace";
+          ctx.fillText(formatearDinero(o.mensualidad), cursor, rowY);
+        });
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+      }
 
       // 8. Línea divisoria
+      const divY = priceY + 58 + altoMeses;
       ctx.save();
       ctx.beginPath();
       ctx.strokeStyle = "#E2E8F0";
       ctx.lineWidth = 1;
-      ctx.moveTo(x + 22, priceY + 58);
-      ctx.lineTo(x + cardWidth - 22, priceY + 58);
+      ctx.moveTo(x + 22, divY);
+      ctx.lineTo(x + cardWidth - 22, divY);
       ctx.stroke();
       ctx.restore();
 
       // 9. Lista de Inclusiones
-      let listY = priceY + 68;
+      let listY = divY + 10;
       ctx.textBaseline = "top";
 
       pkg.incluye.forEach((item) => {
@@ -600,10 +699,57 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
 
         {/* Contenedor con las 3 Tarjetas de Precios */}
         <div ref={cardsRef} className="p-3 sm:p-5 overflow-y-auto flex-1 space-y-4">
+          {/* Opciones a meses con intereses (Mercado Pago) */}
+          <div
+            className={`rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center gap-3 ${
+              mesesActivo ? "bg-sky-50 border-sky-200" : "bg-white border-carbon/10"
+            }`}
+          >
+            <label className="flex items-center gap-2 cursor-pointer select-none shrink-0">
+              <input
+                type="checkbox"
+                checked={mesesActivo}
+                onChange={(e) => setMesesActivo(e.target.checked)}
+                className="w-4 h-4 accent-sky-600 cursor-pointer"
+              />
+              <span className="text-xs font-bold text-carbon/80">💳 Agregar pago a meses con intereses</span>
+              <span className="text-[10px] text-carbon/40">(Mercado Pago)</span>
+            </label>
+
+            {mesesActivo && (
+              <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+                {PLAZOS_DISPONIBLES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => togglePlazo(m)}
+                    title={`Comisión efectiva: ${(tasaEfectivaMeses(m, ivaComision) * 100).toFixed(2)}%`}
+                    className={`px-2 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                      plazos.includes(m)
+                        ? "bg-sky-600 text-white shadow-xs"
+                        : "bg-white hover:bg-slate-100 text-carbon/60 border border-carbon/15"
+                    }`}
+                  >
+                    {m} meses
+                  </button>
+                ))}
+                <label className="flex items-center gap-1 ml-2 text-[11px] text-carbon/60 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={ivaComision}
+                    onChange={(e) => setIvaComision(e.target.checked)}
+                    className="accent-sky-600 cursor-pointer"
+                  />
+                  IVA de comisión
+                </label>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 items-stretch">
             
             {paquetes.map((pkg) => {
-              const total = m2Val * pkg.precioM2;
+              const { total, m2Cobrados, aplicaMinimo } = cotizarPaquete(pkg, m2Val);
               const esPremium = pkg.destacado;
 
               return (
@@ -668,7 +814,33 @@ ${paquete.incluye.map((inc) => `✓ ${inc}`).join("\n")}
                           (Superficie: {m2Val} m²)
                         </span>
                       </div>
+                      {aplicaMinimo && (
+                        <div className="mt-1.5 px-2 py-1 rounded bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-700">
+                          ⚠ Mínimo de cobro: {m2Cobrados} m² (se cotiza el mínimo)
+                        </div>
+                      )}
                     </div>
+
+                    {plazosActivos.length > 0 && (
+                      <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-2 space-y-1">
+                        <span className="block text-[9px] uppercase font-bold text-sky-700 tracking-wider">
+                          A meses con intereses
+                        </span>
+                        {opcionesMeses(total).map((o) => (
+                          <div
+                            key={o.meses}
+                            className="flex items-baseline justify-between gap-2 text-[11px]"
+                            title={`Costo de financiamiento: ${formatearDinero(o.costoFinanciamiento)} (comisión ${o.tasaEfectiva.toFixed(2)}%)`}
+                          >
+                            <span className="font-bold text-carbon/70">{o.meses} meses</span>
+                            <span className="font-mono">
+                              <strong className="text-verde-profundo">{formatearDinero(o.mensualidad)}</strong>
+                              <span className="text-carbon/50">/mes · {formatearDinero(o.total)}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="border-t border-carbon/10 my-3"></div>
 

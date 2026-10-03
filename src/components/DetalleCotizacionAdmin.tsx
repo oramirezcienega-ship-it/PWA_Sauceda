@@ -28,6 +28,7 @@ import {
 } from "@/app/actions/cotizaciones";
 import { PLANTILLAS_MODULARES_DISPONIBLES } from "@/lib/plantillasModulares";
 import { listarProductosServicios } from "@/app/actions/productos";
+import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { listarProspectosMin } from "@/app/actions/prospectos";
 import { listarEmpresasMin } from "@/app/actions/empresas";
@@ -649,6 +650,13 @@ export function DetalleCotizacionAdmin({
       prev.map((c, i) => {
         if (i === index) {
           const updated = { ...c, [campo]: valor };
+          // Si el producto del catálogo tiene costos por rango, el costo sigue a la cantidad
+          if (campo === "cantidad") {
+            const prod = productoDeConcepto(updated.descripcion);
+            if (prod?.costosVolumen?.length) {
+              updated.costoUnitario = costoUnitarioPorVolumen(prod.costosVolumen, Number(valor) || 0, updated.costoUnitario);
+            }
+          }
           if (campo === "margen") {
             const m = Math.min(99, Math.max(-1000, Number(valor)));
             updated.precioUnitario = Number((updated.costoUnitario / (1 - m / 100)).toFixed(2));
@@ -705,6 +713,19 @@ export function DetalleCotizacionAdmin({
       })
     );
   };
+
+  /** Producto del catálogo que corresponde al concepto (por nombre). */
+  function productoDeConcepto(descripcion: string) {
+    const d = descripcion.trim().toLowerCase();
+    if (!d) return undefined;
+    return (
+      catalogoProductos.find((p) => p.nombre.toLowerCase() === d) ??
+      catalogoProductos.find((p) => d.includes(p.nombre.toLowerCase()))
+    );
+  }
+
+  /** Cantidad mínima de cobro del producto del catálogo que corresponde al concepto (0 si no hay). */
+  const minimoDeConcepto = (descripcion: string): number => Number(productoDeConcepto(descripcion)?.cantidadMinima) || 0;
 
   const handleCargarDesdeCatalogo = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const prodId = e.target.value;
@@ -2012,6 +2033,17 @@ export function DetalleCotizacionAdmin({
                                   onChange={(e) => actualizarFilaConcepto(idx, "cantidad", Number(e.target.value))}
                                   className="w-16 rounded border border-carbon/15 px-1 py-1 text-center focus:border-sauce focus:outline-none"
                                 />
+                                {(() => {
+                                  const minimo = minimoDeConcepto(c.descripcion);
+                                  return minimo > 0 && c.cantidad < minimo ? (
+                                    <span
+                                      className="mt-1 block text-[10px] font-bold text-amber-700 leading-tight"
+                                      title="Cantidad menor al mínimo de cobro definido en el catálogo"
+                                    >
+                                      ⚠ Mín. {minimo}
+                                    </span>
+                                  ) : null;
+                                })()}
                               </td>
                               <td className="py-2.5 text-center">
                                 <select

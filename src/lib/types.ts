@@ -1,3 +1,4 @@
+import type { CostoVolumen } from "@/lib/costos-volumen";
 /**
  * Tipos del dominio de traspasos INFONAVIT.
  * Incremento 1: solo lo necesario para el tablero de expedientes.
@@ -1140,6 +1141,10 @@ export interface ProductoServicio {
   fichaTecnicaNombre?: string | null;
   /** Precio por escalón de capacidad (litros), para servicios como limpieza de tinacos/cisternas. */
   tarifasCapacidad?: TarifaCapacidad[];
+  /** Cantidad mínima de cobro, en la unidad del producto (0 = sin mínimo). */
+  cantidadMinima?: number;
+  /** Costo del proveedor por rango de cantidad (interno). */
+  costosVolumen?: CostoVolumen[];
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }
@@ -1610,4 +1615,40 @@ export interface ExpedienteInfonavitDetalle {
   catalogoDocs: OtCatalogoDocumento[];
   historial: OtInfonavitHistorial[];
 }
+
+/** Campaña de Mautic o automatización disponible en el CRM. */
+export interface MauticCampana {
+  id: string;
+  nombre: string;
+  descripcion?: string | null;
+  canal: "whatsapp" | "email" | "omnicanal";
+  activa: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Enrolamiento de un contacto (Prospecto o Expediente) en una campaña de Mautic. */
+export interface EnrolamientoMautic {
+  id: string;
+  campanaId: string;
+  campanaNombre: string;
+  campanaDescripcion?: string | null;
+  canal: "whatsapp" | "email" | "omnicanal";
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  telefono: string;
+  correo: string;
+  nombreContacto: string;
+  estado: "activo" | "desuscrito" | "completado" | "pausado";
+  origenAlta: "crm_manual" | "mautic_sync" | "webhook" | "automatizacion";
+  enroladoAt: string;
+  desuscritoAt?: string | null;
+  notas?: string | null;
+  ultimoMensajeTexto?: string | null;
+  ultimoMensajeAt?: string | null;
+  ultimoMensajeEstado?: string | null;
+  leidoAt?: string | null;
+  entregadoAt?: string | null;
+}
+
 

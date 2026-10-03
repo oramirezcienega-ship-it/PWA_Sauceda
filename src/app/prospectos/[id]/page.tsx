@@ -25,6 +25,7 @@ import { CabinaCoordinacionInspeccion } from "@/components/CabinaCoordinacionIns
 import { ModuloOrdenesTrabajo } from "@/components/ModuloOrdenesTrabajo";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { WidgetColapsable } from "@/components/WidgetColapsable";
+import { WidgetCampanasMautic } from "@/components/WidgetCampanasMautic";
 
 export const dynamic = "force-dynamic";
 
@@ -281,7 +282,9 @@ export default async function PaginaProspecto({
               prospecto.ciudad ||
               "León, Gto."
             }
-            detallesIniciales={prospecto.notas || undefined}
+            detallesIniciales={
+              [expedientes[0]?.necesidad, prospecto.notas].filter((t) => t && String(t).trim()).join(" · ") || undefined
+            }
             perfiles={perfiles}
             asesorPredefinidoId={prospecto.asesorId ?? null}
             operadorPredefinidoId={prospecto.operadorId ?? null}
@@ -457,6 +460,21 @@ export default async function PaginaProspecto({
             </Link>
           ))}
         </div>
+
+        {/* Campañas de Mautic & Automatizaciones */}
+        <WidgetColapsable
+          icono="🟠"
+          titulo="Campañas de Mautic & Automatizaciones"
+          descripcion="Enrolamiento, desuscripción y métricas de lectura de campañas"
+        >
+          <WidgetCampanasMautic
+            prospectoId={prospecto.id}
+            expedienteId={expedientes[0]?.id ?? null}
+            telefono={prospecto.telefono}
+            correo={prospecto.correo}
+            nombreDefault={prospecto.nombreCompleto}
+          />
+        </WidgetColapsable>
 
         {/* Línea de tiempo de la Secuencia de Automatización */}
         <WidgetColapsable icono="⏱️" titulo="Secuencia de Automatización" descripcion="Línea de tiempo de mensajes automáticos">
