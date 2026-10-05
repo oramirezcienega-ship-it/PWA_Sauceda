@@ -163,42 +163,24 @@ export async function crearProspecto(
   // Dispara automatizaciones del evento "nuevo prospecto".
   await dispararEvento(sb, "nuevo-prospecto", { prospectoId: id });
 
-  // Enviar evento identify a RudderStack en segundo plano
+  // Enviar evento identify a RudderStack / Mautic en segundo plano
   (async () => {
     try {
-      const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
-      const rudderUrl = process.env.RUDDERSTACK_URL || (esStaging 
-        ? "http://192.168.100.253:51700/v1/identify" 
-        : "http://192.168.100.253:52700/v1/identify");
-        
-      const basicAuth = Buffer.from("crm_source:").toString("base64");
-      
-      await fetch(rudderUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Basic ${basicAuth}`
-        },
-        body: JSON.stringify({
-          userId: id,
-          type: "identify",
-          traits: {
-            firstname: datos.nombre || "",
-            lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
-            email: datos.correo || "",
-            phone: datos.telefono || "",
-            origen: datos.origen || ""
-          },
-          context: {
-            library: {
-              name: "http",
-              version: "1.0.0"
-            }
-          }
-        })
+      const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+      await sincronizarConectorMautic({
+        userId: id,
+        firstname: datos.nombre,
+        lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
+        email: datos.correo,
+        phone: datos.telefono,
+        origen: datos.origen,
+        tipo_negocio: "otro",
+        etapa: "nuevo-lead",
+        estatus: datos.estatus || "nuevo",
+        ia_pausada: Boolean(datos.iaPausada),
       });
     } catch (rudderErr) {
-      console.error("[RudderStack] Error al enviar evento identify:", rudderErr);
+      console.error("[Conector Mautic] Error al enviar identify en crearProspecto:", rudderErr);
     }
   })();
 
@@ -268,50 +250,31 @@ export async function actualizarProspecto(
     await sincronizarEtapaExpediente(sb, [id], datos.estatus);
   }
 
-  // Enviar evento identify a RudderStack en segundo plano
+  // Enviar evento identify a RudderStack / Mautic en segundo plano
   (async () => {
     try {
-      // Obtener el tipo de negocio del expediente enlazado (si existe)
+      // Obtener el tipo de negocio y etapa del expediente enlazado (si existe)
       const { data: exp } = await sb
         .from("expedientes")
-        .select("tipo_negocio")
+        .select("tipo_negocio, etapa")
         .eq("prospecto_id", id)
         .maybeSingle();
 
-      const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
-      const rudderUrl = process.env.RUDDERSTACK_URL || (esStaging 
-        ? "http://192.168.100.253:51700/v1/identify" 
-        : "http://192.168.100.253:52700/v1/identify");
-        
-      const basicAuth = Buffer.from("crm_source:").toString("base64");
-      
-      await fetch(rudderUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Basic ${basicAuth}`
-        },
-        body: JSON.stringify({
-          userId: id,
-          type: "identify",
-          traits: {
-            firstname: datos.nombre || "",
-            lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
-            email: datos.correo || "",
-            phone: datos.telefono || "",
-            origen: datos.origen || "",
-            tipo_negocio: exp?.tipo_negocio || "otro"
-          },
-          context: {
-            library: {
-              name: "http",
-              version: "1.0.0"
-            }
-          }
-        })
+      const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+      await sincronizarConectorMautic({
+        userId: id,
+        firstname: datos.nombre,
+        lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
+        email: datos.correo,
+        phone: datos.telefono,
+        origen: datos.origen,
+        tipo_negocio: exp?.tipo_negocio || "otro",
+        etapa: exp?.etapa || "nuevo-lead",
+        estatus: datos.estatus || "nuevo",
+        ia_pausada: Boolean(datos.iaPausada),
       });
     } catch (rudderErr) {
-      console.error("[RudderStack] Error al enviar evento identify en actualizarProspecto:", rudderErr);
+      console.error("[Conector Mautic] Error al enviar identify en actualizarProspecto:", rudderErr);
     }
   })();
 

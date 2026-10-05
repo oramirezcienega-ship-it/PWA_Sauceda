@@ -166,23 +166,11 @@ def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
         "Accept": "application/json",
     }
 
-    # 1. Buscar en prospectos
-    try:
-        query_url = f"{SUPABASE_URL}/rest/v1/prospectos?select=id,expediente_id&telefono=ilike.*{sufijo_10}*&limit=1"
-        req = urllib.request.Request(query_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                pid = data[0].get("id")
-                eid = data[0].get("expediente_id")
-                logger.info(f"Prospecto encontrado en Supabase: ID={pid}, Expediente={eid}")
-                return pid, eid
-    except Exception as e:
-        logger.debug(f"Búsqueda prospecto: {e}")
+    pid, eid = None, None
 
-    # 2. Buscar en expedientes
+    # 1. Buscar en expedientes primero (contiene id y prospecto_id)
     try:
-        query_url = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id&telefono=ilike.*{sufijo_10}*&limit=1"
+        query_url = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
         req = urllib.request.Request(query_url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=6) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -194,7 +182,31 @@ def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
     except Exception as e:
         logger.debug(f"Búsqueda expediente: {e}")
 
-    return None, None
+    # 2. Buscar en prospectos
+    try:
+        query_url = f"{SUPABASE_URL}/rest/v1/prospectos?select=id&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
+        req = urllib.request.Request(query_url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data and len(data) > 0:
+                pid = data[0].get("id")
+                logger.info(f"Prospecto encontrado en Supabase: ID={pid}")
+                # Buscar expediente asociado al prospecto si existe
+                try:
+                    query_exp = f"{SUPABASE_URL}/rest/v1/expedientes?select=id&prospecto_id=eq.{pid}&order=created_at.desc&limit=1"
+                    req_exp = urllib.request.Request(query_exp, headers=headers, method="GET")
+                    with urllib.request.urlopen(req_exp, timeout=6) as resp_exp:
+                        data_exp = json.loads(resp_exp.read().decode("utf-8"))
+                        if data_exp and len(data_exp) > 0:
+                            eid = data_exp[0].get("id")
+                            logger.info(f"Expediente asociado encontrado: ID={eid}")
+                except Exception:
+                    pass
+                return pid, eid
+    except Exception as e:
+        logger.debug(f"Búsqueda prospecto: {e}")
+
+    return pid, eid
 
 
 def registrar_mensaje_supabase(
@@ -481,8 +493,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
         # Extraer parámetros de query string
         is_legacy = self.path.startswith("/webhook/whatsapp-impermeabilizacion")
         campaign_name = qparams.get("campaign", ["reactivacion_impermeabilizacion" if is_legacy else None])[0]
-        template_name = qparams.get("template", [None])[0]
+        template_name = qparams.get("template", ["reactivacion_impermeabiliza_v4" if is_legacy else None])[0]
         media_id = qparams.get("media_id", [None])[0]
+        language = qparams.get("language", [None])[0]
 
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
@@ -506,6 +519,16 @@ class WebhookHandler(BaseHTTPRequestHandler):
         campaign_name = raw_data.get("campaign") or raw_data.get("campaign_name") or campaign_name or "Campaña Mautic"
         template_name = raw_data.get("template") or raw_data.get("template_name") or template_name
         media_id = raw_data.get("media_id") if "media_id" in raw_data else media_id
+        language = raw_data.get("language") or language
+
+        # Idioma del template en Meta (auto-detección para evitar rechazos)
+        if not language:
+            if template_name in ("reactivar_inspeccion_gratuita", "dudas_seguimiento_llamada"):
+                language = "en"
+            elif template_name == "hello_world":
+                language = "en_US"
+            else:
+                language = "es_MX"
 
         lead_id = raw_data.get("lead_id") or raw_data.get("id") or raw_data.get("contact", {}).get("id")
         raw_name = raw_data.get("firstname") or raw_data.get("first_name") or raw_data.get("name") or ""
@@ -550,6 +573,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
             "template": template_name,
             "template_name": template_name,
             "media_id": media_id,
+            "language": language,
             "dedup_key": dedup_key
         }
         job_queue.put(payload_job)
