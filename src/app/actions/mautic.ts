@@ -1,7 +1,7 @@
 "use server";
 
-import { supabaseServidor } from "@/lib/supabaseServidor";
-import { requireUsuario } from "@/app/actions/usuarios";
+import { supabaseServidor } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { MauticCampana, EnrolamientoMautic } from "@/lib/types";
 import { revalidatePath } from "next/cache";
@@ -325,7 +325,7 @@ export async function inscribirContactoEnCampanaMautic(params: {
   notas?: string;
 }): Promise<ActionResult<EnrolamientoMautic>> {
   try {
-    await requireUsuario();
+    await requireAdmin();
     const sb = supabaseServidor();
 
     const { campanaId, prospectoId, expedienteId, telefono, correo = "", nombre = "", notas = "" } = params;
@@ -431,7 +431,7 @@ export async function desuscribirContactoDeCampanaMautic(params: {
   motivo?: string;
 }): Promise<ActionResult<void>> {
   try {
-    await requireUsuario();
+    await requireAdmin();
     const sb = supabaseServidor();
 
     const { enrolamientoId, campanaId, prospectoId, expedienteId, telefono, correo = "", motivo = "Retirado manualmente desde CRM" } = params;
