@@ -17,6 +17,8 @@ export interface DatosLeadTelegram {
   necesidad: string;
   asignadoPor: string;
   fotosCliente: number;
+  /** Imágenes comparativas de precios que se le enviaron al cliente. */
+  comparativas?: number;
   totalMensajes: number;
 }
 
@@ -54,6 +56,7 @@ export function armarHtmlLeadTelegram(d: DatosLeadTelegram, resumen: string, not
   partes.push(
     "",
     `💬 Conversación completa (${d.totalMensajes} mensajes) en el archivo adjunto.`,
+    d.comparativas ? `💲 Comparativa de precios que se le envió al cliente, a continuación.` : null,
     d.fotosCliente > 0 ? `📷 ${d.fotosCliente} foto(s) del cliente a continuación.` : null,
     "",
     `Asignado por: ${esc(d.asignadoPor || "SAUCEDA")}. Sofía quedó en pausa para este cliente.`,

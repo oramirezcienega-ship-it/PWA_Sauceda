@@ -14,6 +14,9 @@ import type { DatosLeadTelegram } from "@/lib/lead-telegram-formato";
 export const HORAS_RECORDATORIO_LEAD = 2;
 
 const MAX_FOTOS = 10;
+/** Comparativas de precios enviadas al cliente que se reenvían al asesor (las más recientes). */
+const MAX_COMPARATIVAS = 3;
+const esComparativa = (caption: string) => /comparativa/i.test(caption);
 
 export interface FotoCliente {
   /** mediaId de WhatsApp o URL http(s). */
@@ -28,6 +31,8 @@ export interface InformacionLead {
   nombreArchivo: string;
   /** Últimas fotos del cliente (máx. 10) que se envían como álbum. */
   fotos: FotoCliente[];
+  /** Imágenes comparativas de precios que se le enviaron al cliente (las más recientes). */
+  comparativas: FotoCliente[];
   /** Conversación compacta para el resumen de la IA. */
   transcripcion: string;
   telefono: string;
@@ -139,6 +144,17 @@ export async function armarInformacionLead(
   const fotos = fotosTodas.slice(-MAX_FOTOS);
   const enAlbum = new Set(fotos.map((f) => f.numero));
 
+  // Comparativas de precios que se le mandaron al cliente
+  const comparativasTodas: FotoCliente[] = [];
+  for (const m of msgs) {
+    if (m.direccion !== "out") continue;
+    const f = (m.texto || "").match(/^\[image:([^\]]+)\]\s*([\s\S]*)$/);
+    if (f && esComparativa(f[2] || "")) {
+      comparativasTodas.push({ ref: f[1], numero: comparativasTodas.length + 1, caption: (f[2] || "").trim() });
+    }
+  }
+  const comparativas = comparativasTodas.slice(-MAX_COMPARATIVAS);
+
   const quien = (m: (typeof msgs)[number]) =>
     m.direccion === "in" ? "Cliente" : !m.agente || m.agente === "IA" ? "Sofía (IA)" : m.agente;
 
@@ -146,7 +162,10 @@ export async function armarInformacionLead(
   const lineas = msgs.map((m) => {
     const esFotoCliente = m.direccion === "in" && /^\[image:/.test(m.texto || "");
     const num = esFotoCliente ? ++nFoto : undefined;
-    return `${fechaHora(m.created_at)}  ${quien(m)}: ${textoPlano(m.texto, num, num ? enAlbum.has(num) : false)}`;
+    let linea = textoPlano(m.texto, num, num ? enAlbum.has(num) : false);
+    const ref = m.direccion === "out" ? (m.texto || "").match(/^\[image:([^\]]+)\]/)?.[1] : undefined;
+    if (ref && comparativas.some((c) => c.ref === ref)) linea = linea.replace(/^\[Foto\]/, "[Comparativa · enviada aparte]");
+    return `${fechaHora(m.created_at)}  ${quien(m)}: ${linea}`;
   });
 
   const telefonoLegible = esSocial(telefono) ? telefono : formatearTelefonoLegible(telefono);
@@ -177,6 +196,7 @@ export async function armarInformacionLead(
       txt,
       nombreArchivo: `conversacion_${slug || "cliente"}.txt`,
       fotos,
+      comparativas,
       transcripcion: lineas.slice(-80).join("\n").slice(-12000),
       datos: {
         clienteNombre,
@@ -189,6 +209,7 @@ export async function armarInformacionLead(
         necesidad,
         asignadoPor,
         fotosCliente: fotos.length,
+        comparativas: comparativas.length,
         totalMensajes: msgs.length,
       },
     },
