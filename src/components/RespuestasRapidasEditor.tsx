@@ -12,6 +12,7 @@ import {
 const CATEGORIAS = ["General", "Productos", "FAQs", "Seguimiento", "Otro"];
 
 const PARAMS_DISPONIBLES: { clave: string; descripcion: string }[] = [
+  { clave: "{{saludo}}", descripcion: "Buenos días / Buenas tardes / Buenas noches según la hora" },
   { clave: "{{nombre}}", descripcion: "Primer nombre del cliente" },
   { clave: "{{nombre_completo}}", descripcion: "Nombre completo del cliente" },
   { clave: "{{asesor}}", descripcion: "Nombre del asesor actual" },
@@ -254,7 +255,7 @@ export function RespuestasRapidasEditor({ onCambio }: { onCambio?: () => void } 
               required
             />
             <p className="text-[10px] text-carbon/35 px-1">
-              Parámetros disponibles: <code className="bg-carbon/5 px-0.5 rounded">{"{{nombre}}"}</code> · <code className="bg-carbon/5 px-0.5 rounded">{"{{nombre_completo}}"}</code> · <code className="bg-carbon/5 px-0.5 rounded">{"{{asesor}}"}</code> · <code className="bg-carbon/5 px-0.5 rounded">{"{{fraccionamiento}}"}</code>
+              Parámetros disponibles: <code className="bg-carbon/5 px-0.5 rounded">{"{{saludo}}"}</code> (buenos días / tardes / noches) · <code className="bg-carbon/5 px-0.5 rounded">{"{{nombre}}"}</code> · <code className="bg-carbon/5 px-0.5 rounded">{"{{nombre_completo}}"}</code> · <code className="bg-carbon/5 px-0.5 rounded">{"{{asesor}}"}</code> · <code className="bg-carbon/5 px-0.5 rounded">{"{{fraccionamiento}}"}</code>
             </p>
           </div>
 
