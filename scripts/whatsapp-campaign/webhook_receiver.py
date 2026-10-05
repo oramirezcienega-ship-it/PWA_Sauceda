@@ -661,6 +661,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
             "language": language,
             "dedup_key": dedup_key
         }
+        job_queue.put(payload_job)
         permitido, motivo = es_horario_permitido()
         estado_cola = "queued" if permitido else "queued_scheduled"
         logger.info(f"[ENQUEUED] Campaign='{campaign_name}' | Template='{template_name}' | To={phone_e164} ({raw_name}) | Horario: {motivo}. En cola: {job_queue.qsize()}")
