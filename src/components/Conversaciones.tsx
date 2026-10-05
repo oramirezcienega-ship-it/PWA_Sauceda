@@ -203,13 +203,31 @@ function Countdown24h({
   );
 }
 
-/** Resuelve parámetros {{nombre}}, {{asesor}}, etc. en el texto de una respuesta rápida. */
+/** "Buenos días" (5:00–11:59), "Buenas tardes" (12:00–18:59) o "Buenas noches", con la hora de León. */
+function saludoSegunHora(fecha: Date = new Date()): string {
+  const h = parseInt(
+    fecha.toLocaleString("en-US", { timeZone: "America/Mexico_City", hour: "numeric", hour12: false }),
+    10
+  ) % 24;
+  if (h >= 5 && h < 12) return "Buenos días";
+  if (h >= 12 && h < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+/** Resuelve parámetros {{nombre}}, {{asesor}}, {{saludo}}, etc. en el texto de una respuesta rápida. */
 function resolverParametros(
   texto: string,
   detalle: ConversacionDetalle | null,
   usuario: { nombre: string } | null,
 ): string {
   let t = texto;
+  // {{saludo}}: con mayúscula al inicio de una oración; en minúscula a media frase ("Hola, buenas tardes")
+  const saludo = saludoSegunHora();
+  t = t.replace(/\{\{saludo\}\}/g, (_m, offset: number, todo: string) => {
+    const previo = todo.slice(0, offset).replace(/[ \t]+$/, "");
+    const inicioOracion = previo === "" || /[\n.!?¡¿]$/.test(previo);
+    return inicioOracion ? saludo : saludo.charAt(0).toLowerCase() + saludo.slice(1);
+  });
   if (detalle?.nombre) {
     t = t.replace(/\{\{nombre\}\}/g, detalle.nombre.split(" ")[0]);
     t = t.replace(/\{\{nombre_completo\}\}/g, detalle.nombre);
