@@ -18,7 +18,8 @@ export type EtapaId =
   | "cotizacion"
   | "visita"
   | "propuesta-aceptada"
-  | "venta";
+  | "venta"
+  | "en_pausa";
 
 /** Definición visual y de orden de una etapa. */
 export interface Etapa {
@@ -771,7 +772,8 @@ export type CotizacionEstatus =
   | 'aceptada'
   | 'instalacion'
   | 'rechazada'
-  | 'archivada';
+  | 'archivada'
+  | 'pausada';
 
 export interface Cotizacion {
   id: string;

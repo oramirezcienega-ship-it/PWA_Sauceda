@@ -20,6 +20,7 @@ import { MARCA } from "@/lib/marca";
 import { variantesTelefono } from "@/lib/telefono";
 import { generarAudioTTS, subirAudioAMeta, enviarWhatsAppAudio } from "@/lib/ia/audio";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { hoyMexico, pausarExpediente, reactivarExpediente } from "@/lib/pausa-leads";
 
 /**
  * AGENTE DE IA (Claude) para responder automáticamente las conversaciones
@@ -327,7 +328,7 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const minimosImper = (["acrilico", "estandar", "premium"] as const)
     .map((p) => productosImper[p])
     .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
-    .map((p) => `${ETIQUETA_PAQUETE[p.paquete]}: mínimo ${p.minimoM2} m² (importe mínimo $${Math.round(p.minimoM2 * p.precioM2).toLocaleString("es-MX")} MXN más IVA)`);
+    .map((p) => `${ETIQUETA_PAQUETE[p.paquete]}: mínimo ${p.minimoM2} m²`);
 
   // 1. Encontrar el operador asignado o el fallback a Alex
   let operadorId = exp?.asesor_id || exp?.operador_id;
@@ -425,7 +426,7 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
   El pago puede ser en efectivo o transferencia. ¿Cuál de las 3 te interesa más?"
   - Si el cliente NO da metros claros (dice "no sé", "es grande", "una casa normal", etc.): NO pongas "metros_claros" (déjalo false/null) y NO anuncies ninguna imagen. Pídele un aproximado; si no puede medirlo, aplica la REGLA EN CASO DE NO CONOCER LAS MEDIDAS.
 ${minimosImper.length > 0 ? `  - MÍNIMO DE COBRO POR OPCIÓN (lo calcula el sistema; la imagen comparativa ya lo aplica): ${minimosImper.join("; ")}.
-    Si los metros del cliente son MENORES al mínimo de alguna opción, agrega a tu mensaje una línea breve y amable explicando que para superficies pequeñas manejamos un mínimo de cobro (menciona los m² mínimos y el importe mínimo de esa(s) opción(es)), porque el material se adquiere en presentaciones mínimas. Nunca calcules ni cotices por debajo de ese mínimo.
+    Si los metros del cliente son MENORES al mínimo de alguna opción, agrega a tu mensaje una línea breve y amable explicando que para superficies pequeñas manejamos un mínimo de cobro (menciona solo los m² mínimos de esa(s) opción(es); el importe ya viene en la imagen comparativa, NO lo escribas), porque el material se adquiere en presentaciones mínimas. Nunca calcules ni cotices por debajo de ese mínimo.
 ` : ""}  Asigna "paso_flujo": "paso_2".
 
 - PASO 2B: EL CLIENTE ELIGE UN PAQUETE
@@ -525,7 +526,7 @@ I) Si está interesado en HERRERÍA o viene de campaña de HERRERÍA (tipo_negoc
   3. Menciona cálidamente que un asesor técnico especializado le contactará a la brevedad para revisar su proyecto y darle seguimiento con el presupuesto.
 
 J) MANTENIMIENTO DE CISTERNAS/ALJIBES y de TINACOS (tipo_negocio: 'construccion-mantenimiento-cisternas' o 'construccion-mantenimiento-tinacos'):
-  Son servicios sencillos y de margen bajo. Usa SOLO la información oficial del catálogo que aparece abajo (qué incluye, qué no incluye, precio, garantía y datos técnicos); NUNCA inventes alcances, materiales ni precios. Tono cálido y breve (máximo 6 líneas por mensaje, 1-2 emojis).
+  Son servicios sencillos y de margen bajo. Usa SOLO la información oficial del catálogo que aparece abajo (qué incluye, qué no incluye, garantía y datos técnicos); NUNCA inventes alcances ni materiales. PROHIBIDO dar precios o montos en texto (aplica la REGLA DE PRECIOS): el precio lo confirma el asesor. Tono cálido y breve (máximo 6 líneas por mensaje, 1-2 emojis).
 
   CLASIFICACIÓN: si el cliente habla sólo de TINACO, el tipo_negocio es 'construccion-mantenimiento-tinacos'. Si habla de CISTERNA o ALJIBE, es 'construccion-mantenimiento-cisternas'. Si llegó de la campaña "Cisternas, Aljibes y Tinacos" y no ha dicho de cuál se trata, pregúntale primero: "¿El servicio es para una cisterna/aljibe o para un tinaco?" y asigna el tipo_negocio según su respuesta (si cambia de tema, corrígelo en "datosExtraidos").
 
@@ -536,8 +537,8 @@ ${fichaTinacos}
 ${fichaCisternas}
 
   FLUJO (igual para ambos servicios):
-  1. PRIMER MENSAJE: saluda y, en el MISMO mensaje, explica en 3-4 líneas en qué consiste el servicio (resume "qué incluye" del producto correspondiente) y DESPUÉS da el precio base: "El servicio tiene un costo desde [PRECIO] MXN" (si hay TARIFAS POR CAPACIDAD y el cliente ya dijo los litros, da el precio exacto de su escalón; si aún no los dice, da el "desde"). Si el cliente ya preguntó el precio, respóndelo en este mensaje; primero explica qué incluye y luego el monto. Aclara brevemente lo que NO incluye (según el producto). Indica que el pago es en efectivo o transferencia. Si aún no sabes la capacidad, termina pidiendo UN dato: capacidad aproximada en litros (y cuántos son, en tinacos; tipo de depósito, en cisternas), aclarando que si no la sabe no hay problema. Asigna "paso_flujo": "paso_2" en este mensaje.${fotosCisternas ? `\n     Para CISTERNAS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos de obras terminadas; menciónalo ("te comparto unas fotos de trabajos que hemos hecho 👇").` : ""}${fotosTinacos ? `\n     Para TINACOS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos del servicio; menciónalo.` : ""}
-  2. Cuando el cliente te dé la capacidad (litros) o la cantidad, confirma el precio exacto con la tabla de TARIFAS POR CAPACIDAD (si existe) y deja claro el total. Responde sus dudas con la información oficial. Si el dato no está ahí, no lo inventes: dile que un asesor lo confirma. Si menciona fugas, grietas o daños en el depósito o pregunta por reparaciones que el servicio no cubre, acláralo con honestidad (el mantenimiento no incluye reparaciones estructurales ni de piezas, según el producto) sin ofrecer otra cosa por tu cuenta.
+  1. PRIMER MENSAJE: saluda y, en el MISMO mensaje, explica en 3-4 líneas en qué consiste el servicio (resume "qué incluye" del producto correspondiente). NO des precio ni montos: si el cliente pregunta el precio, dile que depende de la capacidad y que un asesor de nuestro equipo se lo confirma. Aclara brevemente lo que NO incluye (según el producto). Indica que el pago es en efectivo o transferencia. Si aún no sabes la capacidad, termina pidiendo UN dato: capacidad aproximada en litros (y cuántos son, en tinacos; tipo de depósito, en cisternas), aclarando que si no la sabe no hay problema. Asigna "paso_flujo": "paso_2" en este mensaje.${fotosCisternas ? `\n     Para CISTERNAS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos de obras terminadas; menciónalo ("te comparto unas fotos de trabajos que hemos hecho 👇").` : ""}${fotosTinacos ? `\n     Para TINACOS, el sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos del servicio; menciónalo.` : ""}
+  2. Cuando el cliente te dé la capacidad (litros) o la cantidad, regístrala y dile que un asesor le confirma el precio para su caso (NO des montos). Responde sus dudas con la información oficial. Si el dato no está ahí, no lo inventes: dile que un asesor lo confirma. Si menciona fugas, grietas o daños en el depósito o pregunta por reparaciones que el servicio no cubre, acláralo con honestidad (el mantenimiento no incluye reparaciones estructurales ni de piezas, según el producto) sin ofrecer otra cosa por tu cuenta.
   3. NO OFRECER INSPECCIÓN NI VISITA por iniciativa propia, ni insistir en agendar. Primero busca señales de INTENCIÓN. Cuando el cliente ya tenga la información y quieras saber si le interesa, puedes preguntar de forma abierta y sin presión: "¿Te gustaría que lo programemos?".
   4. SOLO cuando el cliente muestre intención clara ("sí me interesa", "¿cuándo pueden venir?", "agéndame", "quiero contratarlo", pide fecha), pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos) y dile que un asesor del equipo le contactará por este chat para coordinar la fecha del servicio. Si el cliente pide expresamente una inspección o visita, dile que un asesor revisa su solicitud y le contacta (no la prometas ni la describas como gratuita).
   5. PROHIBIDO: ofrecer inspección sin intención del cliente, ofrecer meses sin intereses, prometer tiempos o días de ejecución (los define el asesor al coordinar) y dar descuentos. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo).
@@ -547,6 +548,18 @@ REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
   En su lugar, dile que no hay problema y que un asesor de nuestro equipo le contactará para revisar su caso y definir cómo continuar (NO ofrezcas visita ni inspección). Para ello, solicita amablemente:
   1. El nombre del prospecto (si aún no se ha registrado).
   2. La colonia o ubicación de la propiedad para dar seguimiento.
+
+REGLA DE CLIENTE QUE POSPONE (CRÍTICA):
+  Hoy es ${hoyMexico()}. Si el cliente dice que por ahora no, que lo retomará más adelante o da una fecha ("hasta diciembre", "después de la quincena", "en enero", "ahorita no, más adelante", "le aviso luego"):
+  - NO insistas, NO vendas, NO anuncies imágenes, comparativas ni fotos, y NO pongas "metros_claros", "paquete_elegido" ni "ficha_tecnica_de" en este turno.
+  - Responde breve y cálido, confirmando que le escribiremos unos días antes de la fecha que dijo (sin prometer un día exacto). Ej.: "¡Claro, [NOMBRE]! Te escribo unos días antes de diciembre para retomarlo. Cualquier cosa antes, aquí estamos 👍".
+  - En "datosExtraidos" pon "cliente_pospone": true, "pospone_fecha": la fecha que dijo como "YYYY-MM" (mes) o "YYYY-MM-DD" (día), siempre en el futuro respecto a hoy (si dice "diciembre" y estamos antes de diciembre, es diciembre de este año); null si no dio fecha. Y "pospone_motivo": lo que dijo en pocas palabras.
+  - Si el negocio está EN PAUSA (lo verás en "Datos del cliente") y el cliente escribe con intención clara de retomar YA ("ya estoy listo", "quiero agendar", "¿siguen teniendo lugar?"), pon "cliente_retoma": true y continúa el flujo normal. Si solo agradece o saluda, no lo pongas.
+
+REGLA DE PRECIOS (CRÍTICA):
+  - PROHIBIDO escribir en texto precios, montos, costos por m², importes mínimos, rangos ("desde $...") o totales de cualquier producto o servicio.
+  - ÚNICA EXCEPCIÓN: en impermeabilización, la inversión se comunica SOLO mediante la imagen comparativa que envía el sistema automáticamente (PASO 2). Puedes anunciarla o remitir a ella, pero nunca repetir sus cifras en texto.
+  - Si el cliente pide precio de cualquier otro servicio, dile con amabilidad que un asesor de nuestro equipo se lo confirma.
 
 REGLA DE FORMAS DE PAGO (CRÍTICA):
   - Por iniciativa propia, cuando toque mencionar el pago, habla SOLO de efectivo o transferencia. NUNCA ofrezcas ni menciones la tarjeta de crédito/débito por tu cuenta.
@@ -621,6 +634,10 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
     "paso_flujo": "El paso del flujo de impermeabilización que estás ejecutando con tu respuesta actual. Debe ser exactamente 'paso_1' (al saludar y presentar las 3 opciones para pedir metros), 'paso_2' (al anunciar la comparativa de opciones, o al confirmar el paquete elegido) o 'paso_3' (al confirmar que un asesor le contactará). Si el tipo de negocio no es impermeabilización, pon null",
     "fecha_inspeccion_confirmada": "La fecha en formato YYYY-MM-DD del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.fecha}'), de lo contrario null",
+    "cliente_pospone": "true SOLO si en su mensaje actual el cliente pospone o dice que lo retomará más adelante (ver REGLA DE CLIENTE QUE POSPONE); de lo contrario null",
+    "pospone_fecha": "Si cliente_pospone: la fecha que dijo como 'YYYY-MM' o 'YYYY-MM-DD' (en el futuro); null si no dio fecha",
+    "pospone_motivo": "Si cliente_pospone: el motivo en pocas palabras (ej. 'hasta diciembre por presupuesto'); de lo contrario null",
+    "cliente_retoma": "true SOLO si el negocio está EN PAUSA y el cliente muestra intención clara de retomar ya; de lo contrario null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
   }
 }
@@ -672,6 +689,20 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
       exp.ultimo_paso_flujo && `Último paso de flujo de impermeabilización ejecutado: ${exp.ultimo_paso_flujo}`,
       exp.ultimo_paso_alcanzado && `Paso del funnel más avanzado alcanzado: ${exp.ultimo_paso_alcanzado}`,
     ].filter(Boolean);
+    if (exp.etapa === "en_pausa") {
+      try {
+        const { data: pausa } = await sb
+          .from("expedientes")
+          .select("retomar_en, motivo_pausa")
+          .eq("prospecto_id", exp.prospecto_id ?? "")
+          .eq("etapa", "en_pausa")
+          .limit(1)
+          .maybeSingle();
+        partes.push(`NEGOCIO EN PAUSA: el cliente pidió retomarlo más adelante${pausa?.motivo_pausa ? ` (${pausa.motivo_pausa})` : ""}; le escribiremos alrededor del ${pausa?.retomar_en || "la fecha acordada"}. No insistas ni vendas: contesta lo que pregunte.`);
+      } catch {
+        partes.push("NEGOCIO EN PAUSA: el cliente pidió retomarlo más adelante. No insistas ni vendas: contesta lo que pregunte.");
+      }
+    }
     if (partes.length) contexto = `\n\nDatos del cliente:\n${partes.join("\n")}`;
   }
 
@@ -1021,6 +1052,10 @@ export async function responderConIA(
       metros_claros?: boolean | string | null;
       paquete_elegido?: string | null;
       ficha_tecnica_de?: string | null;
+      cliente_pospone?: boolean | string | null;
+      pospone_fecha?: string | null;
+      pospone_motivo?: string | null;
+      cliente_retoma?: boolean | string | null;
       cliente_nombre?: string | null;
       telefono_real?: string | null;
     } = {};
@@ -1091,6 +1126,16 @@ export async function responderConIA(
     textoRespuesta = textoRespuesta
       .replace(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9.-]+\/(?:cotizacion|c)\b(?!\/[a-zA-Z0-9-])\/?/gi, "[LINK_COTIZACION]")
       .replace(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9.-]+\/(?:cita-confirmada|a)\b(?!\/[a-zA-Z0-9-])\/?/gi, "[LINK_CITA_CONFIRMADA]");
+
+    // --- BLOQUEO DE PRECIOS EN TEXTO (construcción) ---
+    // Sofía no da precios en texto; la única vía es la imagen comparativa de impermeabilización.
+    if ((exp?.tipo_negocio || "").startsWith("construccion")) {
+      const reMonto = /\$\s?\d[\d,.]*(?:\s?(?:MXN|pesos))?(?:\s?(?:más|mas|\+)\s?IVA)?|\b\d[\d,.]*\s?(?:MXN|pesos)\b/gi;
+      if (reMonto.test(textoRespuesta)) {
+        console.warn(`[Precios] Sofía escribió un monto en texto; se reemplaza. Expediente ${ctx.expedienteId}`);
+        textoRespuesta = textoRespuesta.replace(reMonto, "(monto que te confirma el asesor)");
+      }
+    }
 
     // --- PROCESAMIENTO DE DATOS EXTRAÍDOS ---
     const updates: Record<string, any> = {};
@@ -1530,6 +1575,27 @@ export async function responderConIA(
       }
     }
 
+    // --- CLIENTE QUE POSPONE / RETOMA ---
+    const esVerdadero = (v: unknown) => v === true || v === "true";
+    const clientePospone = esVerdadero((datosExtraidos as any).cliente_pospone);
+    if (ctx.expedienteId) {
+      try {
+        if (clientePospone) {
+          const rPausa = await pausarExpediente(sb, {
+            expedienteId: ctx.expedienteId,
+            fechaCliente: (datosExtraidos as any).pospone_fecha ?? null,
+            motivo: (datosExtraidos as any).pospone_motivo ?? null,
+            origen: "Sofía detectó que el cliente pospone",
+          });
+          if (!rPausa.ok) console.warn(`[Pausa] No se pudo pausar ${ctx.expedienteId}: ${rPausa.error}`);
+        } else if (exp?.etapa === "en_pausa" && esVerdadero((datosExtraidos as any).cliente_retoma)) {
+          await reactivarExpediente(sb, ctx.expedienteId, "El cliente escribió para retomar (detectado por Sofía)");
+        }
+      } catch (pausaErr) {
+        console.error("[Pausa] Error procesando pausa/reactivación:", pausaErr);
+      }
+    }
+
     // --- ENVÍO DEL MENSAJE POR WHATSAPP/MESSENGER/INSTAGRAM ---
     let r: { ok: boolean; error?: string };
     const canal = (ctx.telefono.startsWith("messenger:") || ctx.telefono.startsWith("instagram:"))
@@ -1592,7 +1658,7 @@ export async function responderConIA(
     // --- MANTENIMIENTO (cisternas/tinacos): fotos del servicio cuando se presenta servicio + precio ---
     {
       const servicioMant = servicioDeTipoNegocio((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio);
-      if (r.ok && !esMessenger && !esInstagram && servicioMant && (datosExtraidos as any).paso_flujo === "paso_2") {
+      if (r.ok && !clientePospone && !esMessenger && !esInstagram && servicioMant && (datosExtraidos as any).paso_flujo === "paso_2") {
         await enviarFotosMantenimiento(sb, {
           canal,
           telefono: ctx.telefono,
@@ -1604,19 +1670,22 @@ export async function responderConIA(
     }
 
     // --- IMPERMEABILIZACIÓN: comparativa de precios e imágenes de referencia (sólo WhatsApp) ---
-    if (r.ok && !esMessenger && !esInstagram && (exp?.tipo_negocio === "construccion-impermeabilizacion" || (datosExtraidos as any).paso_flujo)) {
+    if (r.ok && !clientePospone && !esMessenger && !esInstagram && (exp?.tipo_negocio === "construccion-impermeabilizacion" || (datosExtraidos as any).paso_flujo)) {
       const ctxEnvio = { canal, telefono: ctx.telefono, expedienteId: ctx.expedienteId ?? null, agente: NOMBRE_AGENTE };
       const claros = (datosExtraidos as any).metros_claros === true || (datosExtraidos as any).metros_claros === "true";
       const metrosImper = metrosClaros((datosExtraidos as any).metros);
-      if (claros && metrosImper && (datosExtraidos as any).paso_flujo === "paso_2") {
+      // Sólo se envían medios que el texto de Sofía anunció en este turno (evita mandarlos fuera de contexto)
+      const anunciaComparativa = /comparativa/i.test(textoRespuesta);
+      const anunciaFotos = /(fotos?|im[aá]genes|imagen de referencia|👇)/i.test(textoRespuesta);
+      if (claros && metrosImper && anunciaComparativa && (datosExtraidos as any).paso_flujo === "paso_2") {
         await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper });
       }
-      if ((datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
+      if (anunciaFotos && (datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
         // Tras la información básica se comparten fotos de la impermeabilización estándar (una sola vez)
         await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: "estandar" });
       }
       const elegido = (datosExtraidos as any).paquete_elegido;
-      if (esPaqueteImper(elegido)) {
+      if (anunciaFotos && esPaqueteImper(elegido)) {
         await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: elegido });
       }
       const fichaDe = (datosExtraidos as any).ficha_tecnica_de;

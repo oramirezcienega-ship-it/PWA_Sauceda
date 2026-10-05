@@ -206,7 +206,7 @@ def clean_name(raw_name: str) -> str:
 
 DISQUALIFIED_ESTATUS = {"descalificado", "no_viable", "sin_contacto", "perdido"}
 DISQUALIFIED_CALIFICACION = {"descalificado", "no_viable"}
-DISQUALIFIED_ETAPAS = {"perdido", "descalificado", "no_viable", "fuera_de_zona", "cancelado"}
+DISQUALIFIED_ETAPAS = {"perdido", "descalificado", "no_viable", "fuera_de_zona", "cancelado", "en_pausa"}
 
 
 def verificar_elegibilidad_crm(phone_e164: str, sufijo_10: str) -> tuple[bool, str, str | None, str | None]:

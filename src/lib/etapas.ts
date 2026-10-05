@@ -54,9 +54,17 @@ export const ETAPAS: Etapa[] = [
       "¡Tu traspaso se concluyó con éxito! Gracias por confiar en SAUCEDA.",
   },
   {
+    id: "en_pausa",
+    nombre: "En pausa (retomar)",
+    orden: 5,
+    descripcion: "El cliente pidió retomarlo más adelante. Sin campañas hasta la fecha para retomar.",
+    nombreCliente: "En pausa",
+    descripcionCliente: "Retomaremos tu solicitud en la fecha que acordamos contigo.",
+  },
+  {
     id: "perdido",
     nombre: "Cerrado perdido",
-    orden: 5,
+    orden: 6,
     descripcion: "Lead o traspaso que no prosperó.",
     nombreCliente: "En pausa",
     descripcionCliente:
@@ -79,6 +87,7 @@ export const PROBABILIDAD_POR_ETAPA: Record<EtapaId, number> = {
   "visita": 0.5,
   "propuesta-aceptada": 0.8,
   "venta": 1.0,
+  "en_pausa": 0.1,
 };
 
 export const ETAPAS_CONSTRUCCION: Etapa[] = [
@@ -123,9 +132,17 @@ export const ETAPAS_CONSTRUCCION: Etapa[] = [
     descripcionCliente: "¡Tu servicio se concluyó con éxito! Gracias por confiar en nosotros.",
   },
   {
+    id: "en_pausa",
+    nombre: "En pausa (retomar)",
+    orden: 5,
+    descripcion: "El cliente pidió retomarlo más adelante. Sin campañas hasta la fecha para retomar.",
+    nombreCliente: "En pausa",
+    descripcionCliente: "Retomaremos tu solicitud en la fecha que acordamos contigo.",
+  },
+  {
     id: "perdido",
     nombre: "Perdido",
-    orden: 5,
+    orden: 6,
     descripcion: "Cotización rechazada o no prosperó.",
     nombreCliente: "En pausa",
     descripcionCliente: "Por ahora tu cotización no continúa. Si tienes dudas, contáctanos.",

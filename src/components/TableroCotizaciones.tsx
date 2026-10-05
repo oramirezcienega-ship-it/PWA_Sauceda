@@ -180,6 +180,8 @@ export function TableroCotizaciones({
         return <span className="inline-block rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700 uppercase">Rechazada</span>;
       case "archivada":
         return <span className="inline-block rounded-full bg-slate-300 px-2.5 py-0.5 text-xs font-semibold text-slate-600 uppercase">Archivada</span>;
+      case "pausada":
+        return <span className="inline-block rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 uppercase">En pausa ⏸</span>;
     }
   };
 
@@ -251,6 +253,7 @@ export function TableroCotizaciones({
             <option value="instalacion">En Instalación</option>
             <option value="rechazada">Rechazada</option>
             <option value="archivada">Archivada</option>
+            <option value="pausada">En pausa</option>
           </select>
 
           <button

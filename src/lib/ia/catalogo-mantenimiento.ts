@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatoPesos } from "@/lib/formato";
 
 /**
  * Productos de mantenimiento de tinacos y cisternas del catálogo (Productos y Servicios).
@@ -88,15 +87,10 @@ export function fichaServicioParaPrompt(prod: ProductoMant | undefined): string 
   if (!prod || !prod.aptoParaIa) {
     return "  (No hay información oficial cargada de este servicio: NO des precio ni detalles técnicos; dile que un asesor se los confirma.)";
   }
+  // Los precios no se incluyen en el prompt: Sofía nunca da montos en texto (los confirma el asesor).
   return [
     `  Servicio: ${prod.nombre}`,
-    prod.tarifas.length > 0
-      ? `  TARIFAS POR CAPACIDAD (precio por depósito). Elige el PRIMER escalón cuya capacidad sea mayor o igual a los litros del cliente; si tiene varios, multiplica por la cantidad y muestra el total:\n${prod.tarifas
-          .map((t) => `    - Hasta ${t.hastaLitros.toLocaleString("es-MX")} L: ${formatoPesos(t.precio)} MXN`)
-          .join("\n")}\n    Si los litros superan el último escalón, NO des precio: un asesor lo confirma. Mientras el cliente no diga la capacidad, menciona solo "desde ${formatoPesos(prod.tarifas[0].precio)} MXN" (el escalón menor).`
-      : prod.precio > 0
-      ? `  Precio base: ${formatoPesos(prod.precio)} MXN`
-      : "  Precio: no disponible (NO des precio; un asesor lo confirma)",
+    "  Precio: NO lo des en texto (ni montos, ni \"desde\", ni totales); un asesor lo confirma.",
     prod.descripcion.trim() ? `  Qué incluye y qué no incluye: ${prod.descripcion.trim()}` : "",
     prod.descripcionValor.trim() ? `  Propuesta de valor: ${prod.descripcionValor.trim()}` : "",
     prod.especificaciones.trim() ? `  Datos técnicos y facts:\n${prod.especificaciones.trim().split("\n").map((l) => `    ${l}`).join("\n")}` : "",

@@ -28,6 +28,7 @@ import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones"
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
 import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
 import { obtenerProveedorIA, guardarProveedorIA, moverEtapa } from "@/app/actions/expedientes";
+import { posponerExpediente } from "@/app/actions/pausa";
 import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
 import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
@@ -769,6 +770,8 @@ export function Conversaciones() {
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
   const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
   const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
+  // Formulario para posponer (etapa "En pausa"): fecha para retomar y motivo
+  const [posponer, setPosponer] = useState<{ fecha: string; motivo: string } | null>(null);
   const [envioLead, setEnvioLead] = useState<EnvioLeadTelegram | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1852,6 +1855,13 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         onChange={async (e) => {
                           const nueva = e.target.value as EtapaId;
                           if (!nueva || nueva === detalle.etapa || !detalle.expedienteId) return;
+                          if (nueva === "en_pausa") {
+                            // Por defecto, retomar en 30 días; el usuario la ajusta
+                            const d = new Date();
+                            d.setDate(d.getDate() + 30);
+                            setPosponer({ fecha: d.toISOString().slice(0, 10), motivo: "" });
+                            return;
+                          }
                           setCambiandoEtapa(true);
                           setAviso(null);
                           try {
@@ -1887,6 +1897,49 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           </option>
                         ))}
                       </select>
+                      {posponer && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs">
+                          <span className="font-bold text-slate-700">⏸ Retomar el</span>
+                          <input
+                            type="date"
+                            value={posponer.fecha}
+                            min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                            onChange={(e) => setPosponer({ ...posponer, fecha: e.target.value })}
+                            className="rounded border border-slate-300 px-1 py-0.5 text-xs"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Motivo (ej. hasta diciembre)"
+                            value={posponer.motivo}
+                            onChange={(e) => setPosponer({ ...posponer, motivo: e.target.value })}
+                            className="w-40 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                          />
+                          <button
+                            type="button"
+                            disabled={cambiandoEtapa || !posponer.fecha}
+                            onClick={async () => {
+                              if (!detalle.expedienteId) return;
+                              setCambiandoEtapa(true);
+                              setAviso(null);
+                              try {
+                                await posponerExpediente(detalle.expedienteId, posponer.fecha, posponer.motivo);
+                                setPosponer(null);
+                                await refrescar(detalle.telefono);
+                              } catch (err: any) {
+                                setAviso(humanizarError(err));
+                              } finally {
+                                setCambiandoEtapa(false);
+                              }
+                            }}
+                            className="rounded-full bg-slate-700 px-2 py-0.5 font-bold text-white disabled:opacity-50"
+                          >
+                            Pausar
+                          </button>
+                          <button type="button" onClick={() => setPosponer(null)} className="text-slate-500 hover:text-slate-800">
+                            ✕
+                          </button>
+                        </span>
+                      )}
                     </>
                   )}
 

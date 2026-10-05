@@ -20,6 +20,7 @@ const ESTILO_ETAPA: Record<EtapaId, string> = {
   visita: "bg-dorado/20 text-[#8a7233] border-dorado/40",
   "propuesta-aceptada": "bg-sauce/20 text-verde-profundo border-sauce/40",
   venta: "bg-verde-profundo text-crema border-verde-profundo",
+  en_pausa: "bg-slate-100 text-slate-700 border-slate-300",
 };
 
 export function EtapaBadge({ etapa, tipoNegocio }: { etapa: EtapaId; tipoNegocio?: string | null }) {
