@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, DragEvent } from "react";
+import { useState, useMemo, useEffect, DragEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
@@ -48,6 +48,8 @@ interface ModalInspeccionData {
   perfilId?: string | null;
 }
 
+const CLAVE_FILTROS_PIPELINE = "pipeline:filtros:v1";
+
 export function PipelineProspectosClient({
   prospectosIniciales,
   expedientesIniciales = [],
@@ -67,6 +69,32 @@ export function PipelineProspectosClient({
   const [filtroCalificacion, setFiltroCalificacion] = useState<string>("todos");
   const [filtroOrigen, setFiltroOrigen] = useState<string>("todos");
   const [filtroAsesor, setFiltroAsesor] = useState<string>("todos");
+  const [filtrosRestaurados, setFiltrosRestaurados] = useState(false);
+
+  // Los filtros persisten al refrescar la página (solo en este navegador)
+  useEffect(() => {
+    try {
+      const g = JSON.parse(window.localStorage.getItem(CLAVE_FILTROS_PIPELINE) || "null");
+      if (g && typeof g === "object") {
+        if (g.tipoPipeline === "prospectos" || g.tipoPipeline === "expedientes") setTipoPipeline(g.tipoPipeline);
+        if (typeof g.busqueda === "string") setBusqueda(g.busqueda);
+        if (typeof g.filtroCalificacion === "string") setFiltroCalificacion(g.filtroCalificacion);
+        if (typeof g.filtroOrigen === "string") setFiltroOrigen(g.filtroOrigen);
+        if (typeof g.filtroAsesor === "string") setFiltroAsesor(g.filtroAsesor);
+      }
+    } catch {}
+    setFiltrosRestaurados(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
+    try {
+      window.localStorage.setItem(
+        CLAVE_FILTROS_PIPELINE,
+        JSON.stringify({ tipoPipeline, busqueda, filtroCalificacion, filtroOrigen, filtroAsesor })
+      );
+    } catch {}
+  }, [filtrosRestaurados, tipoPipeline, busqueda, filtroCalificacion, filtroOrigen, filtroAsesor]);
 
   // Estados para Drag and Drop
   const [arrastrandoId, setArrastrandoId] = useState<string | null>(null);
