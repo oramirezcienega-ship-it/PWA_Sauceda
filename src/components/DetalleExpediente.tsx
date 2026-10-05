@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useExpedientes } from "@/context/expedientes-context";
-import { etapaAnterior, etapaSiguiente, ETAPAS_POR_ID, obtenerEtapasPorNegocio } from "@/lib/etapas";
+import { etapaAnterior, etapaSiguiente, ETAPAS, ETAPAS_POR_ID, TODAS_LAS_ETAPAS_POR_ID, obtenerEtapasPorNegocio } from "@/lib/etapas";
 import { EtapaBadge } from "./EtapaBadge";
 import { AvanceTraspaso } from "./AvanceTraspaso";
 import { Actividades } from "./Actividades";
@@ -13,7 +13,7 @@ import { formatoFecha, formatoPesos } from "@/lib/formato";
 import { BotonLlamar } from "./BotonLlamar";
 import { AsesorSelector } from "./AsesorSelector";
 import { OperadorSelector } from "./OperadorSelector";
-import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto } from "@/lib/types";
+import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto, type EtapaId } from "@/lib/types";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
 import { cambiarCalificacionExpediente } from "@/app/actions/expedientes";
 import { ConversacionHistorica } from "./ConversacionHistorica";
@@ -290,7 +290,7 @@ export function DetalleExpediente({ id }: { id: string }) {
         </p>
 
         {/* Calificación / Prioridad y Tipo de Negocio responsivos */}
-        <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-carbon/5 mt-2">
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-[10px] uppercase font-bold text-carbon/40">Calificación:</span>
             <CalificacionProspectoBadge calificacion={expediente.calificacion || "frio"} />
@@ -311,6 +311,41 @@ export function DetalleExpediente({ id }: { id: string }) {
             </select>
           </div>
           
+          {/* Etapa: mismas etapas que el Pipeline; si la actual no está en la lista, se agrega */}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[10px] uppercase font-bold text-carbon/40">Etapa:</span>
+            <select
+              value={expediente.etapa}
+              onChange={async (e) => {
+                const nueva = e.target.value as EtapaId;
+                if (nueva === expediente.etapa) return;
+                await moverEtapa(expediente.id, nueva);
+                await recargar();
+              }}
+              className={`text-[11px] rounded-full border px-2 py-0.5 font-bold focus:outline-none cursor-pointer shadow-2xs ${
+                expediente.etapa === "perdido"
+                  ? "bg-rose-50 border-rose-300 text-rose-900"
+                  : expediente.etapa === "cerrado" || expediente.etapa === "venta"
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                  : expediente.etapa === "nuevo-lead" || expediente.etapa === "interes"
+                  ? "bg-sky-50 border-sky-300 text-sky-900"
+                  : "bg-violet-50 border-violet-300 text-violet-900"
+              }`}
+              title="Cambiar etapa del negocio"
+            >
+              {!ETAPAS.some((et) => et.id === expediente.etapa) && (
+                <option value={expediente.etapa}>
+                  {TODAS_LAS_ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa}
+                </option>
+              )}
+              {ETAPAS.map((et) => (
+                <option key={et.id} value={et.id}>
+                  {et.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-[10px] uppercase font-bold text-carbon/40">Negocio:</span>
             {expediente.tipoNegocio ? (
