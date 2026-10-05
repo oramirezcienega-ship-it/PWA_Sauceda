@@ -57,6 +57,8 @@ export interface PrevisualizacionLeadTelegram {
   nombreArchivo?: string;
   /** Fotos del cliente que se enviarán (mediaId o URL). */
   fotos?: { ref: string; numero: number; caption: string }[];
+  /** Comparativas de precios enviadas al cliente que también se enviarán. */
+  comparativas?: { ref: string; numero: number; caption: string }[];
   asesores?: { id: string; nombre: string; tieneTelegram: boolean }[];
 }
 
@@ -81,6 +83,7 @@ export async function previsualizarLeadTelegramAction(telefono: string): Promise
       txt: r.info.txt,
       nombreArchivo: r.info.nombreArchivo,
       fotos: r.info.fotos,
+      comparativas: r.info.comparativas,
       asesores: (perfiles || []).map((p: any) => ({
         id: p.id,
         nombre: p.nombre,
@@ -175,26 +178,38 @@ export async function enviarLeadTelegramAction(input: {
     });
     if (!doc.ok) avisos.push(`No se pudo adjuntar la conversación: ${doc.error}`);
 
-    // 3. Fotos del cliente
-    let fotosEnviadas = 0;
-    if (info.fotos.length > 0) {
-      const descargadas = await Promise.all(info.fotos.map((f) => descargarMediaWhatsApp(f.ref)));
-      const fotos = info.fotos
+    // 3. Imágenes: comparativa de precios enviada al cliente y fotos del cliente
+    const enviarImagenes = async (
+      lista: { ref: string; numero: number; caption: string }[],
+      nombre: (n: number) => string,
+      caption: (f: { numero: number; caption: string }) => string
+    ): Promise<number> => {
+      if (lista.length === 0) return 0;
+      const descargadas = await Promise.all(lista.map((f) => descargarMediaWhatsApp(f.ref)));
+      const fotos = lista
         .map((f, i) => ({ f, d: descargadas[i] }))
         .filter((x) => x.d)
-        .map(({ f, d }) => ({
-          contenido: d!.contenido,
-          mimeType: d!.mimeType,
-          nombre: `foto_${f.numero}.jpg`,
-          caption: `Foto ${f.numero}${f.caption ? ` · ${f.caption}` : ""}`,
-        }));
-      if (fotos.length > 0) {
-        const res = await enviarFotosBufferTelegram({ botToken, chatId: asesor.telegram_chat_id, fotos });
-        fotosEnviadas = res.enviadas;
-      }
-      if (fotosEnviadas < info.fotos.length)
-        avisos.push(`Se enviaron ${fotosEnviadas} de ${info.fotos.length} fotos (algunas ya no están disponibles en WhatsApp).`);
-    }
+        .map(({ f, d }) => ({ contenido: d!.contenido, mimeType: d!.mimeType, nombre: nombre(f.numero), caption: caption(f) }));
+      if (fotos.length === 0) return 0;
+      const res = await enviarFotosBufferTelegram({ botToken, chatId: String(asesor.telegram_chat_id), fotos });
+      return res.enviadas;
+    };
+
+    const compEnviadas = await enviarImagenes(
+      info.comparativas,
+      (n) => `comparativa_${n}.jpg`,
+      (f) => `💲 Comparativa enviada al cliente${f.caption ? ` · ${f.caption}` : ""}`
+    );
+    if (compEnviadas < info.comparativas.length)
+      avisos.push(`Se enviaron ${compEnviadas} de ${info.comparativas.length} comparativas de precios (alguna ya no está disponible en WhatsApp).`);
+
+    const fotosEnviadas = await enviarImagenes(
+      info.fotos,
+      (n) => `foto_${n}.jpg`,
+      (f) => `Foto ${f.numero} del cliente${f.caption ? ` · ${f.caption}` : ""}`
+    );
+    if (fotosEnviadas < info.fotos.length)
+      avisos.push(`Se enviaron ${fotosEnviadas} de ${info.fotos.length} fotos del cliente (algunas ya no están disponibles en WhatsApp).`);
 
     // 4. Asignación y pausa de Sofía
     const pausa = await alternarPausaIA(input.telefono, true);
@@ -209,8 +224,8 @@ export async function enviarLeadTelegramAction(input: {
       const detalle = [
         `Enviado por ${yo.nombre || "—"}. Se asignó a ${asesor.nombre} y se pausó a Sofía.`,
         `Incluye: ficha del cliente, conversación (${info.datos.totalMensajes} mensajes, TXT)${
-          fotosEnviadas ? ` y ${fotosEnviadas} foto(s)` : ""
-        }.`,
+          compEnviadas ? `, ${compEnviadas} comparativa(s) de precios` : ""
+        }${fotosEnviadas ? ` y ${fotosEnviadas} foto(s) del cliente` : ""}.`,
         fila.nota ? `Nota: ${fila.nota}` : "",
         fila.resumen ? `Resumen:\n${fila.resumen}` : "",
       ]

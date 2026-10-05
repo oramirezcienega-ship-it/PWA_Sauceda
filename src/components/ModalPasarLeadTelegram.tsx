@@ -170,6 +170,23 @@ export function ModalPasarLeadTelegram({ telefono, atiendeActual, alCerrar, alEn
                       {prev.txt}
                     </pre>
                   </details>
+                  {(prev.comparativas?.length || 0) > 0 && (
+                    <div className="rounded-lg bg-white p-1.5 shadow-sm">
+                      <div className="text-[10px] font-semibold text-carbon/60 mb-1">💲 Comparativa de precios enviada al cliente</div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {prev.comparativas!.map((f) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={f.ref}
+                            src={urlFoto(f.ref)}
+                            alt={f.caption || "Comparativa"}
+                            title={f.caption}
+                            className="w-full rounded object-contain border border-carbon/10 bg-carbon/5"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {(prev.fotos?.length || 0) > 0 && (
                     <div className="grid grid-cols-5 gap-1 rounded-lg bg-white p-1.5 shadow-sm">
                       {prev.fotos!.map((f) => (
