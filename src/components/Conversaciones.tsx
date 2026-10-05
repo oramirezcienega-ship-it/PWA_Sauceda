@@ -32,6 +32,12 @@ import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
+import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
+import {
+  obtenerEnvioLeadTelegramAction,
+  marcarLeadRevisadoManualAction,
+  type EnvioLeadTelegram,
+} from "@/app/actions/leads-telegram";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -741,6 +747,8 @@ export function Conversaciones() {
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
+  const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
+  const [envioLead, setEnvioLead] = useState<EnvioLeadTelegram | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -807,6 +815,20 @@ export function Conversaciones() {
     }
     setCambiandoProveedor(false);
   }
+
+  // Último envío del lead a un asesor por Telegram (estado de confirmación)
+  const telefonoDetalle = detalle?.telefono ?? null;
+  useEffect(() => {
+    setEnvioLead(null);
+    if (!telefonoDetalle) return;
+    let cancelado = false;
+    obtenerEnvioLeadTelegramAction(telefonoDetalle).then((e) => {
+      if (!cancelado) setEnvioLead(e);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [telefonoDetalle]);
 
   const refrescar = useCallback(async (telefonoPreseleccionado: string | null) => {
     try {
@@ -2382,6 +2404,51 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           <span>Coordinar Inspección</span>
                         </button>
                       )}
+                      {/* Pasar el lead a un asesor por Telegram (con vista previa y acuse) */}
+                      <button
+                        type="button"
+                        onClick={() => setMostrarPasarLead(true)}
+                        title="Asignar el lead a un asesor y enviarle por Telegram la ficha, el resumen, la conversación y las fotos"
+                        className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                      >
+                        <span>📨</span>
+                        <span>Pasar a asesor</span>
+                      </button>
+                      {envioLead && (
+                        <span
+                          className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-semibold ${
+                            envioLead.estado === "revisado"
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                              : envioLead.estado === "rechazado"
+                              ? "bg-rose-50 border-rose-200 text-rose-800"
+                              : "bg-amber-50 border-amber-200 text-amber-900"
+                          }`}
+                          title={`Enviado por ${envioLead.enviadoPorNombre || "—"} el ${horaCorta(envioLead.enviadoAt)}${
+                            envioLead.recordatorioAt ? " · se le envió recordatorio" : ""
+                          }`}
+                        >
+                          📨 {envioLead.asesorNombre} ·{" "}
+                          {envioLead.estado === "revisado"
+                            ? `🟢 revisado ${envioLead.respondidoAt ? horaCorta(envioLead.respondidoAt) : ""}`
+                            : envioLead.estado === "rechazado"
+                            ? "🔴 no puede atenderlo"
+                            : "🟡 sin confirmar"}
+                          {envioLead.estado === "enviado" && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const r = await marcarLeadRevisadoManualAction(envioLead.id);
+                                if (!r.ok) setAviso(humanizarError(r.error ?? "No se pudo marcar."));
+                                if (telefonoDetalle) setEnvioLead(await obtenerEnvioLeadTelegramAction(telefonoDetalle));
+                              }}
+                              title="Marcar a mano que el asesor ya lo revisó (p. ej. lo confirmó por llamada)"
+                              className="ml-1 underline decoration-dotted hover:text-amber-700 cursor-pointer"
+                            >
+                              marcar revisado
+                            </button>
+                          )}
+                        </span>
+                      )}
                       {detalle?.prospectoId && (
                         <button
                           type="button"
@@ -2612,6 +2679,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         <ModalCoordinarInspeccion
           prospectoId={detalle.prospectoId}
           alCerrar={() => setMostrarCoordinacion(false)}
+        />
+      )}
+
+      {/* Modal: pasar el lead a un asesor por Telegram */}
+      {mostrarPasarLead && detalle && (
+        <ModalPasarLeadTelegram
+          telefono={detalle.telefono}
+          atiendeActual={detalle.atiende}
+          alCerrar={() => setMostrarPasarLead(false)}
+          alEnviado={async (envio) => {
+            if (envio) setEnvioLead(envio);
+            await refrescar(detalle.telefono);
+          }}
         />
       )}
 
