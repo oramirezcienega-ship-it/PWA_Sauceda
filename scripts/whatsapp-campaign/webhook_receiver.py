@@ -32,7 +32,7 @@ import queue
 import threading
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import urllib.request
 import urllib.parse
@@ -88,6 +88,57 @@ SENT_RECORDS_FILE = os.path.join(BASE_DIR, "sent_records.json")
 job_queue = queue.Queue()
 queued_keys = set()
 lock = threading.Lock()
+
+# =============================================================================
+# CONTROL DE HORARIOS COMERCIALES (ZONA HORARIA MÉXICO UTC-6)
+# =============================================================================
+# Lunes a Viernes: 09:00 - 19:00 (07:00 PM)
+# Sábados: 09:00 - 14:00 (02:00 PM)
+# Domingos: Envíos masivos suspendidos (descanso dominical)
+DISPATCH_START_HOUR = int(os.getenv("DISPATCH_START_HOUR", "9"))       # 09:00 AM
+DISPATCH_END_HOUR = int(os.getenv("DISPATCH_END_HOUR", "19"))          # 19:00 (7:00 PM)
+DISPATCH_SAT_END_HOUR = int(os.getenv("DISPATCH_SAT_END_HOUR", "14"))  # 14:00 (2:00 PM)
+DISPATCH_ALLOW_SUNDAY = os.getenv("DISPATCH_ALLOW_SUNDAY", "false").lower() in ("true", "1", "yes")
+DISPATCH_TZ_OFFSET = int(os.getenv("DISPATCH_TZ_OFFSET", "-6"))        # UTC-6 (Bajío / Guanajuato)
+
+
+def obtener_hora_local() -> datetime:
+    tz_local = timezone(timedelta(hours=DISPATCH_TZ_OFFSET))
+    return datetime.now(tz_local)
+
+
+def es_horario_permitido() -> tuple[bool, str]:
+    """
+    Evalúa si el momento actual está dentro de la ventana de envío comercial permitida.
+    Retorna (permitido: bool, motivo: str).
+    """
+    ahora = obtener_hora_local()
+    weekday = ahora.weekday()  # 0=Lunes, ..., 5=Sábado, 6=Domingo
+    hora_decimal = ahora.hour + ahora.minute / 60.0
+
+    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    dia_str = dias[weekday]
+    hora_str = ahora.strftime("%H:%M")
+
+    # 1. Domingo
+    if weekday == 6 and not DISPATCH_ALLOW_SUNDAY:
+        return False, f"Domingo ({hora_str}): envíos masivos suspendidos por descanso dominical"
+
+    # 2. Sábado
+    if weekday == 5:
+        if hora_decimal < DISPATCH_START_HOUR:
+            return False, f"Sábado muy temprano ({hora_str}). Inicio de ventana: {DISPATCH_START_HOUR:02d}:00"
+        if hora_decimal >= DISPATCH_SAT_END_HOUR:
+            return False, f"Sábado fuera de horario ({hora_str}). Límite de sábado: {DISPATCH_SAT_END_HOUR:02d}:00"
+        return True, f"Sábado en horario hábil ({hora_str})"
+
+    # 3. Lunes a Viernes
+    if hora_decimal < DISPATCH_START_HOUR:
+        return False, f"{dia_str} muy temprano ({hora_str}). Inicio de ventana: {DISPATCH_START_HOUR:02d}:00"
+    if hora_decimal >= DISPATCH_END_HOUR:
+        return False, f"{dia_str} fuera de horario ({hora_str}). Límite permitido: {DISPATCH_END_HOUR:02d}:00"
+
+    return True, f"{dia_str} en horario comercial hábil ({hora_str})"
 
 
 def load_sent_records() -> dict:
@@ -360,11 +411,31 @@ def enviar_plantilla_meta(
 
 
 def queue_worker():
-    """Worker que procesa la cola de envíos de campañas espaciando cada 3 segundos."""
+    """Worker que procesa la cola de envíos de campañas espaciando cada 3 segundos y respetando horarios comerciales."""
     logger.info("Iniciando Queue Worker de despachos Mautic...")
+    was_paused = False
     while True:
         try:
-            job = job_queue.get()
+            # 1. Verificar si estamos dentro del horario comercial hábil
+            permitido, motivo = es_horario_permitido()
+            if not permitido:
+                if not was_paused:
+                    tam_cola = job_queue.qsize()
+                    logger.warning(f"⏸️ [HORARIO NO CONVENIENTE] {motivo}. Envíos de campañas en pausa ({tam_cola} mensajes en cola esperando).")
+                    was_paused = True
+                time.sleep(30.0)
+                continue
+
+            if was_paused:
+                logger.info(f"▶️ [HORARIO HÁBIL REANUDADO] {motivo}. Reanudando despachos de campañas pendientes...")
+                was_paused = False
+
+            # 2. Obtener trabajo con timeout para re-evaluar horario continuamente
+            try:
+                job = job_queue.get(timeout=5.0)
+            except queue.Empty:
+                continue
+
             if job is None:
                 break
 
@@ -468,6 +539,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
             total_sent = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "sent")
             total_failed = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "failed")
 
+            permitido, motivo = es_horario_permitido()
+            ahora_local = obtener_hora_local()
+
             self._responder_json(200, {
                 "status": "online",
                 "service": "Mautic WhatsApp Campaign Dispatcher",
@@ -477,6 +551,17 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 "successful_sent": total_sent,
                 "failed": total_failed,
                 "campaigns": campaign_stats,
+                "dispatch_schedule": {
+                    "current_local_time": ahora_local.strftime("%Y-%m-%d %H:%M:%S"),
+                    "timezone": f"UTC{DISPATCH_TZ_OFFSET:+d} (America/Mexico_City)",
+                    "is_dispatch_allowed_now": permitido,
+                    "status_reason": motivo,
+                    "windows": {
+                        "monday_to_friday": f"{DISPATCH_START_HOUR:02d}:00 - {DISPATCH_END_HOUR:02d}:00",
+                        "saturday": f"{DISPATCH_START_HOUR:02d}:00 - {DISPATCH_SAT_END_HOUR:02d}:00",
+                        "sunday": "Cerrado (descanso comercial)" if not DISPATCH_ALLOW_SUNDAY else f"{DISPATCH_START_HOUR:02d}:00 - {DISPATCH_END_HOUR:02d}:00"
+                    }
+                },
                 "time": datetime.now(timezone.utc).isoformat()
             })
         else:
@@ -576,15 +661,18 @@ class WebhookHandler(BaseHTTPRequestHandler):
             "language": language,
             "dedup_key": dedup_key
         }
-        job_queue.put(payload_job)
-        logger.info(f"[ENQUEUED] Campaign='{campaign_name}' | Template='{template_name}' | To={phone_e164} ({raw_name}). En cola: {job_queue.qsize()}")
+        permitido, motivo = es_horario_permitido()
+        estado_cola = "queued" if permitido else "queued_scheduled"
+        logger.info(f"[ENQUEUED] Campaign='{campaign_name}' | Template='{template_name}' | To={phone_e164} ({raw_name}) | Horario: {motivo}. En cola: {job_queue.qsize()}")
 
         self._responder_json(202, {
-            "status": "queued",
+            "status": estado_cola,
             "campaign": campaign_name,
             "phone": phone_e164,
             "template": template_name,
             "media_id": media_id,
+            "is_within_business_hours": permitido,
+            "schedule_status": motivo,
             "queue_position": job_queue.qsize()
         })
 
