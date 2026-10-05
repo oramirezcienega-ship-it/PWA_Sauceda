@@ -41,6 +41,7 @@ import { PanelAutorizacionCostosTelegram } from "./PanelAutorizacionCostosTelegr
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface DetalleCotizacionAdminProps {
   cotizacionInicial: Cotizacion;
@@ -2468,7 +2469,7 @@ export function DetalleCotizacionAdmin({
                           
                           <div className="flex gap-2 pt-2 flex-wrap">
                             <a
-                              href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
+                              href={`https://wa.me/${normalizarTelefono(cotizacion.prospectoTelefono || "")}?text=${encodeURIComponent(
                                 `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto el Reporte de Levantamiento Técnico y Diagnóstico del servicio en tu domicilio. Puedes revisarlo a detalle en el siguiente enlace: ${baseEnlace}/reporte-visita/${cotizacion.token}`
                               )}`}
                               target="_blank"
@@ -2494,7 +2495,7 @@ export function DetalleCotizacionAdmin({
 
                         {/* Compartir por WhatsApp Web */}
                         <a
-                          href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
+                          href={`https://wa.me/${normalizarTelefono(cotizacion.prospectoTelefono || "")}?text=${encodeURIComponent(
                             `¡Hola ${cotizacion.prospectoNombre?.split(" ")[0] || "Cliente"}! Te comparto la propuesta comercial y cotización para el servicio en tu domicilio (Folio ${cotizacion.id}). En el siguiente enlace puedes revisar a detalle los conceptos y autorizarla en línea por sistema: ${enlaceCliente}`
                           )}`}
                           target="_blank"

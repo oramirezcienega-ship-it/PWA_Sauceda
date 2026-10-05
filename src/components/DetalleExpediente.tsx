@@ -31,6 +31,7 @@ import { EmpresaSelector } from "./EmpresaSelector";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { WidgetColapsable } from "./WidgetColapsable";
 import { WidgetCampanasMautic } from "./WidgetCampanasMautic";
+import { normalizarTelefono } from "@/lib/telefono";
 
 /**
  * Vista de detalle de un expediente.
@@ -439,7 +440,7 @@ export function DetalleExpediente({ id }: { id: string }) {
                 <div className="flex items-center gap-1.5 pt-1">
                   <BotonLlamar telefono={expediente.telefono} prospectoId={expediente.prospectoId} />
                   <a
-                    href={`https://wa.me/${expediente.telefono.replace(/\D/g, "")}`}
+                    href={`https://wa.me/${normalizarTelefono(expediente.telefono)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-700 transition shadow-2xs"

@@ -6,6 +6,7 @@ import { obtenerExpedientesSeguimiento, cambiarCalificacionExpediente, type Expe
 import { concluirTareaYProgramarSiguiente } from "@/app/actions/bpm";
 import { CalificacionProspectoBadge } from "@/components/CalificacionProspectoBadge";
 import type { CalificacionProspecto } from "@/lib/types";
+import { normalizarTelefono } from "@/lib/telefono";
 
 // Componente Desplegable de Selección Múltiple
 function MultiSelectDropdown({
@@ -714,7 +715,7 @@ export function WidgetSeguimientoExpedientes() {
                           <div className="flex-shrink-0 flex items-center gap-1.5 justify-end w-full xl:w-auto pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
                             {e.telefono && (
                               <a
-                                href={`https://wa.me/${e.telefono.replace(/\D/g, "")}`}
+                                href={`https://wa.me/${normalizarTelefono(e.telefono)}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="h-8 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200 text-xs font-semibold transition-all flex items-center gap-1 shrink-0"

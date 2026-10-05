@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Comision, ComisionPago } from "@/lib/types";
 import { calcularTotalesTarjetas } from "@/lib/comisiones-totales";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface Props {
   asesorNombre: string;
@@ -78,7 +79,7 @@ export function ModalEstadoCuentaImprimible({
   };
 
   const handleCompartirWhatsApp = () => {
-    const tel = asesorTelefono?.replace(/\D/g, "") || "";
+    const tel = normalizarTelefono(asesorTelefono || "");
     const texto = `*ESTADO DE CUENTA DE COMISIONES · SAUCEDA*\n` +
       `👤 *Asesor:* ${asesorNombre}\n` +
       `📅 *Período:* ${periodoTexto}\n\n` +

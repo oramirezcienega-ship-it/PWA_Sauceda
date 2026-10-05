@@ -1,5 +1,6 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import { normalizarTelefono } from "@/lib/telefono";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export default async function PaginaDetalleCita({ params }: PaginaDetalleCitaPro
         <div className="space-y-3 pt-2">
           {telefonoAsesor && (
             <a
-              href={`https://wa.me/${telefonoAsesor.replace(/\D/g, "")}`}
+              href={`https://wa.me/${normalizarTelefono(telefonoAsesor)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full inline-flex items-center justify-center rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white py-3 px-4 font-semibold text-sm transition shadow-sm"

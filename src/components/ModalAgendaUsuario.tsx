@@ -13,6 +13,7 @@ import {
   type Cita,
   type Bloqueo,
 } from "@/app/actions/agenda";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface ModalAgendaUsuarioProps {
   usuario: UsuarioApp;
@@ -710,7 +711,7 @@ export function ModalAgendaUsuario({ usuario, onClose }: ModalAgendaUsuarioProps
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-center">
                             <a
-                              href={`https://wa.me/${c.cliente_telefono}`}
+                              href={`https://wa.me/${normalizarTelefono(c.cliente_telefono)}`}
                               target="_blank"
                               rel="noreferrer"
                               className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100 flex items-center gap-1"
