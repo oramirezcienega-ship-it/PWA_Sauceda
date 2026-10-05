@@ -1393,7 +1393,13 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       {/* Tab: Respuestas Rápidas */}
       {tab === "respuestas" && (
         <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
-          <RespuestasRapidasEditor />
+          <RespuestasRapidasEditor
+            onCambio={() => {
+              listarRespuestasRapidas()
+                .then((r) => setRespuestasRapidas(r))
+                .catch(() => undefined);
+            }}
+          />
         </div>
       )}
 
