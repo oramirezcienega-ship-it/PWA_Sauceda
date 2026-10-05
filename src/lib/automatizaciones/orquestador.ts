@@ -21,6 +21,19 @@ export async function orquestador(): Promise<{
   const errores: string[] = [];
 
   try {
+    // 00. Despertar negocios en pausa cuya fecha para retomar ya llegó
+    try {
+      const { despertarLeadsEnPausa } = await import("@/lib/pausa-leads");
+      const resPausa = await despertarLeadsEnPausa(sb);
+      procesados += resPausa.procesados;
+      accionesEjecutadas += resPausa.plantillas;
+      if (resPausa.errores.length > 0) {
+        errores.push(...resPausa.errores.map((e) => `[Pausa] ${e}`));
+      }
+    } catch (pausaErr: any) {
+      errores.push(`[Pausa] Error crítico: ${pausaErr.message}`);
+    }
+
     // 0. Buscar e inscribir prospectos/expedientes inactivos en secuencias de reactivación (3 días)
     await buscarYEnrolarLeadsInactivos(sb);
 
@@ -452,7 +465,7 @@ async function leadRespondio(
       .eq("id", enrollment.expediente_id)
       .maybeSingle();
 
-    if (exp && (exp.etapa === "cerrado" || exp.etapa === "perdido" || exp.etapa === "contactado")) {
+    if (exp && (exp.etapa === "cerrado" || exp.etapa === "perdido" || exp.etapa === "contactado" || exp.etapa === "en_pausa")) {
       return true;
     }
   }
@@ -881,6 +894,7 @@ export async function retoqueAutomaticoLedsInactivos(
         e.etapa !== "cerrado" &&
         e.etapa !== "perdido" &&
         e.etapa !== "venta" &&
+        e.etapa !== "en_pausa" &&
         !e.no_viable
     );
 

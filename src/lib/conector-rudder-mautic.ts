@@ -31,14 +31,15 @@ export function esContactoDescalificado(params: {
   descalificado?: boolean | null;
   calificacion?: string | null;
 }): boolean {
-  if (params.descalificado !== undefined && params.descalificado !== null) {
-    return Boolean(params.descalificado);
+  if (params.descalificado === true) {
+    return true;
   }
   const etapaLimpia = (params.etapa || "").toLowerCase();
   const estatusLimpio = (params.estatus || "").toLowerCase();
   const califLimpia = (params.calificacion || "").toLowerCase();
   
   return (
+    Boolean(params.descalificado) ||
     etapaLimpia === "perdido" ||
     etapaLimpia === "descalificado" ||
     etapaLimpia === "no_viable" ||
@@ -69,6 +70,9 @@ export async function sincronizarConectorMautic(
         : "http://192.168.100.253:52700/v1/identify");
 
     const descalificado = esContactoDescalificado(datos);
+    // En pausa: se excluye de campañas (descalificado=1) mientras dure, sin marcarlo como descalificado
+    // de forma permanente; al reactivarse vuelve a sincronizarse con su etapa normal.
+    const enPausa = (datos.etapa || "").toLowerCase() === "en_pausa";
 
     // Construir lista de tags limpia para Mautic
     const tagsList = new Set<string>(datos.tags || []);
@@ -80,6 +84,9 @@ export async function sincronizarConectorMautic(
     }
     if (descalificado) {
       tagsList.add("descalificado");
+    }
+    if (enPausa) {
+      tagsList.add("en_pausa");
     }
 
     const rawPhone = (datos.phone || "").replace(/\D/g, "");
@@ -97,7 +104,8 @@ export async function sincronizarConectorMautic(
       calificacion: descalificado ? "descalificado" : (datos.calificacion || "templado"),
       no_viable: Boolean(datos.no_viable),
       ia_pausada: Boolean(datos.ia_pausada),
-      descalificado: descalificado ? 1 : 0,
+      descalificado: descalificado || enPausa ? 1 : 0,
+      en_pausa: enPausa ? 1 : 0,
       tags: Array.from(tagsList).join(","),
     };
 

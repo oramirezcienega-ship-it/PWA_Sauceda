@@ -204,12 +204,20 @@ def clean_name(raw_name: str) -> str:
     return first
 
 
-def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
+DISQUALIFIED_ESTATUS = {"descalificado", "no_viable", "sin_contacto", "perdido"}
+DISQUALIFIED_CALIFICACION = {"descalificado", "no_viable"}
+DISQUALIFIED_ETAPAS = {"perdido", "descalificado", "no_viable", "fuera_de_zona", "cancelado", "en_pausa"}
+
+
+def verificar_elegibilidad_crm(phone_e164: str, sufijo_10: str) -> tuple[bool, str, str | None, str | None]:
     """
-    Busca prospecto_id y expediente_id en Supabase por el número telefónico.
+    PRE-FLIGHT GUARD: Consulta en tiempo real a Supabase (prospectos y expedientes)
+    ANTES de enviar cualquier mensaje de campaña por WhatsApp.
+    Si el contacto está descalificado, no viable, fuera de zona, cancelado o perdido:
+    retorna (False, motivo, prospecto_id, expediente_id) para ABORTAR el envío.
     """
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not sufijo_10 or len(sufijo_10) < 8:
-        return None, None
+        return True, "Validación omitida (sin credenciales)", None, None
 
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -218,45 +226,78 @@ def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
     }
 
     pid, eid = None, None
+    prospecto = None
+    expedientes = []
 
-    # 1. Buscar en expedientes primero (contiene id y prospecto_id)
+    # 1. Buscar en prospectos
     try:
-        query_url = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
-        req = urllib.request.Request(query_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                eid = data[0].get("id")
-                pid = data[0].get("prospecto_id")
-                logger.info(f"Expediente encontrado en Supabase: ID={eid}, Prospecto={pid}")
-                return pid, eid
+        query_p = f"{SUPABASE_URL}/rest/v1/prospectos?select=id,nombre,estatus,calificacion,no_viable&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
+        req_p = urllib.request.Request(query_p, headers=headers, method="GET")
+        with urllib.request.urlopen(req_p, timeout=5) as resp:
+            data_p = json.loads(resp.read().decode("utf-8"))
+            if data_p and len(data_p) > 0:
+                prospecto = data_p[0]
+                pid = prospecto.get("id")
     except Exception as e:
-        logger.debug(f"Búsqueda expediente: {e}")
+        logger.warning(f"Error consultando prospecto en Supabase para {sufijo_10}: {e}")
 
-    # 2. Buscar en prospectos
+    # 2. Buscar en expedientes
     try:
-        query_url = f"{SUPABASE_URL}/rest/v1/prospectos?select=id&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
-        req = urllib.request.Request(query_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                pid = data[0].get("id")
-                logger.info(f"Prospecto encontrado en Supabase: ID={pid}")
-                # Buscar expediente asociado al prospecto si existe
-                try:
-                    query_exp = f"{SUPABASE_URL}/rest/v1/expedientes?select=id&prospecto_id=eq.{pid}&order=created_at.desc&limit=1"
-                    req_exp = urllib.request.Request(query_exp, headers=headers, method="GET")
-                    with urllib.request.urlopen(req_exp, timeout=6) as resp_exp:
-                        data_exp = json.loads(resp_exp.read().decode("utf-8"))
-                        if data_exp and len(data_exp) > 0:
-                            eid = data_exp[0].get("id")
-                            logger.info(f"Expediente asociado encontrado: ID={eid}")
-                except Exception:
-                    pass
-                return pid, eid
+        if pid:
+            query_e = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id,etapa,no_viable,calificacion,situacion,tipo_negocio&or=(prospecto_id.eq.{pid},telefono.ilike.*{sufijo_10}*)&order=created_at.desc&limit=5"
+        else:
+            query_e = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id,etapa,no_viable,calificacion,situacion,tipo_negocio&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=5"
+        req_e = urllib.request.Request(query_e, headers=headers, method="GET")
+        with urllib.request.urlopen(req_e, timeout=5) as resp:
+            expedientes = json.loads(resp.read().decode("utf-8"))
+            if expedientes and len(expedientes) > 0:
+                eid = expedientes[0].get("id")
+                if not pid:
+                    pid = expedientes[0].get("prospecto_id")
     except Exception as e:
-        logger.debug(f"Búsqueda prospecto: {e}")
+        logger.warning(f"Error consultando expedientes en Supabase para {sufijo_10}: {e}")
 
+    # Evaluar Descalificación exhaustivamente
+    reasons = []
+
+    if prospecto:
+        p_est = str(prospecto.get("estatus") or "").strip().lower()
+        p_cal = str(prospecto.get("calificacion") or "").strip().lower()
+        p_nv = prospecto.get("no_viable")
+
+        if p_est in DISQUALIFIED_ESTATUS:
+            reasons.append(f"prospecto.estatus='{p_est}'")
+        if p_cal in DISQUALIFIED_CALIFICACION:
+            reasons.append(f"prospecto.calificacion='{p_cal}'")
+        if p_nv is True or str(p_nv).lower() in ("true", "1", "t"):
+            reasons.append("prospecto.no_viable=True")
+
+    for exp in expedientes:
+        e_id = exp.get("id")
+        e_etapa = str(exp.get("etapa") or "").strip().lower()
+        e_nv = exp.get("no_viable")
+        e_cal = str(exp.get("calificacion") or "").strip().lower()
+        e_sit = str(exp.get("situacion") or "").strip().lower()
+
+        if e_etapa in DISQUALIFIED_ETAPAS:
+            reasons.append(f"expediente({e_id}).etapa='{e_etapa}'")
+        if e_nv is True or str(e_nv).lower() in ("true", "1", "t"):
+            reasons.append(f"expediente({e_id}).no_viable=True")
+        if e_cal in DISQUALIFIED_CALIFICACION:
+            reasons.append(f"expediente({e_id}).calificacion='{e_cal}'")
+        if "descalificado" in e_sit or "no viable" in e_sit:
+            reasons.append(f"expediente({e_id}).situacion='{e_sit}'")
+
+    if reasons:
+        motivo = " | ".join(reasons)
+        return False, motivo, pid, eid
+
+    return True, "Elegible", pid, eid
+
+
+def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
+    """Compatibilidad: consulta rápida de IDs sin validación estricta."""
+    _, _, pid, eid = verificar_elegibilidad_crm("", sufijo_10)
     return pid, eid
 
 
@@ -454,6 +495,29 @@ def queue_worker():
                 job_queue.task_done()
                 continue
 
+            # =========================================================================
+            # PRE-FLIGHT GUARD: VALIDACIÓN EN TIEMPO REAL CONTRA SUPABASE
+            # =========================================================================
+            elegible, motivo_rechazo, prospecto_id, expediente_id = verificar_elegibilidad_crm(phone_e164, sufijo_10)
+            if not elegible:
+                logger.warning(f"⛔ [PRE-FLIGHT BLOQUEADO] {phone_e164} ({name}) DESCALIFICADO EN CRM: {motivo_rechazo}. Abortando envío.")
+                record_entry = {
+                    "lead_id": job.get("lead_id"),
+                    "campaign": campaign_name,
+                    "template": template_name,
+                    "raw_name": raw_name,
+                    "clean_name": name,
+                    "phone": phone_e164,
+                    "status": "skipped_disqualified",
+                    "reason": motivo_rechazo,
+                    "prospecto_id": prospecto_id,
+                    "expediente_id": expediente_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+                save_sent_record(dedup_key, phone_e164, record_entry)
+                job_queue.task_done()
+                continue
+
             logger.info(f"[DISPATCHING] Campaign='{campaign_name}' | Template='{template_name}' | To={phone_e164} ({name}) | En cola: {job_queue.qsize()}")
 
             # 1. Enviar a Meta Cloud API
@@ -481,8 +545,7 @@ def queue_worker():
             if ok and wamid:
                 logger.info(f"✅ [SUCCESS] Enviado a {phone_e164} ({name})! WAMID: {wamid}")
 
-                # 2. Consultar prospecto y expediente en Supabase
-                prospecto_id, expediente_id = consultar_entidad_supabase(sufijo_10)
+                # 2. Asociar IDs de prospecto y expediente obtenidos en la validación
                 record_entry["prospecto_id"] = prospecto_id
                 record_entry["expediente_id"] = expediente_id
 
@@ -530,14 +593,17 @@ class WebhookHandler(BaseHTTPRequestHandler):
                     continue
                 camp = r.get("campaign", "default")
                 if camp not in campaign_stats:
-                    campaign_stats[camp] = {"sent": 0, "failed": 0}
+                    campaign_stats[camp] = {"sent": 0, "failed": 0, "skipped_disqualified": 0}
                 if r.get("status") == "sent":
                     campaign_stats[camp]["sent"] += 1
                 elif r.get("status") == "failed":
                     campaign_stats[camp]["failed"] += 1
+                elif r.get("status") == "skipped_disqualified":
+                    campaign_stats[camp]["skipped_disqualified"] += 1
 
             total_sent = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "sent")
             total_failed = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "failed")
+            total_skipped_disqualified = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "skipped_disqualified")
 
             permitido, motivo = es_horario_permitido()
             ahora_local = obtener_hora_local()
@@ -550,6 +616,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 "queue_remaining": job_queue.qsize(),
                 "successful_sent": total_sent,
                 "failed": total_failed,
+                "skipped_disqualified": total_skipped_disqualified,
                 "campaigns": campaign_stats,
                 "dispatch_schedule": {
                     "current_local_time": ahora_local.strftime("%Y-%m-%d %H:%M:%S"),
@@ -632,12 +699,21 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
         dedup_key = f"{campaign_name}:{phone_e164}"
 
-        # Deduplicación contra ya enviados
+        # Deduplicación contra ya enviados o descalificados
         records = load_sent_records()
-        if dedup_key in records and records[dedup_key].get("status") == "sent":
-            logger.info(f"[{campaign_name}] {phone_e164} ya enviado anteriormente. Deduplicando.")
-            self._responder_json(200, {"status": "skipped", "reason": "already_sent"})
-            return
+        if dedup_key in records:
+            st = records[dedup_key].get("status")
+            if st in ("sent", "skipped_disqualified"):
+                logger.info(f"[{campaign_name}] {phone_e164} ya registrado anteriormente con estado '{st}'. Omitiendo.")
+                self._responder_json(200, {"status": "skipped", "reason": f"already_{st}"})
+                return
+
+        if phone_e164 in records:
+            st = records[phone_e164].get("status")
+            if st == "skipped_disqualified":
+                logger.info(f"[{campaign_name}] {phone_e164} marcado previamente como descalificado. Omitiendo.")
+                self._responder_json(200, {"status": "skipped", "reason": "already_skipped_disqualified"})
+                return
 
         # Deduplicación contra en cola
         with lock:

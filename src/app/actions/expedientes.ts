@@ -556,6 +556,9 @@ export async function actualizarExpediente(
 /** Cambia la etapa de un expediente. */
 export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   await requireAdmin();
+  if (etapa === "en_pausa") {
+    throw new Error('Para pausar un negocio usa "Posponer" y elige la fecha para retomarlo.');
+  }
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
   const { rol } = await rolDe(usuario.id);
@@ -564,7 +567,7 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   // Obtener prospecto_id antes de actualizar
   const { data: exp } = await sb
     .from("expedientes")
-    .select("prospecto_id, asesor_id, operador_id")
+    .select("prospecto_id, asesor_id, operador_id, etapa")
     .eq("id", id)
     .maybeSingle();
 
@@ -573,6 +576,12 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     if (exp?.[colId] !== usuario.id) {
       throw new Error("No estás autorizado para modificar este expediente.");
     }
+  }
+
+  // Si estaba en pausa, se quita la pausa (fecha, cotizaciones pausadas) antes de moverlo
+  if (exp?.etapa === "en_pausa") {
+    const { reactivarExpediente } = await import("@/lib/pausa-leads");
+    await reactivarExpediente(sb, id, "Movido de etapa manualmente");
   }
 
   const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
@@ -722,6 +731,9 @@ export async function moverEtapaMasivo(
 ): Promise<void> {
   await requireAdmin();
   if (ids.length === 0) return;
+  if (etapa === "en_pausa") {
+    throw new Error('Para pausar negocios usa "Posponer" y elige la fecha para retomarlos.');
+  }
   const sb = supabaseServidor();
 
   // Obtener todos los prospecto_ids únicos
