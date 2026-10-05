@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
+import { avanzarAContactoInicialPorRespuesta } from "@/lib/etapa-automatica";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, subirMediaMeta, enviarWhatsAppSticker, enviarWhatsAppDocumento } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
@@ -221,13 +222,15 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const nombres = new Map<string, string>();
   const nombresAsesor = new Map<string, string>();
   const tipoNegocioExp = new Map<string, string>();
+  const etapaExp = new Map<string, string>();
   if (expIds.length > 0) {
     const { data: exps } = await sb
       .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
+      .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
       .in("id", expIds);
     (exps ?? []).forEach((e: any) => {
       nombres.set(e.id as string, nombreDe(e));
+      if (e.etapa) etapaExp.set(e.id as string, e.etapa);
       if (e.perfiles?.nombre) {
         nombresAsesor.set(e.id as string, e.perfiles.nombre);
       }
@@ -301,6 +304,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
         (expId && tipoNegocioExp.get(expId)) ||
         (prosId && tipoNegocioPros.get(prosId)) ||
         null,
+      etapa: (expId && etapaExp.get(expId)) || null,
     });
   });
   resumenes.sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha));
@@ -501,15 +505,17 @@ export async function obtenerConversacion(
 
   let asesorNombre = "";
   let tipoNegocio: string | null = null;
+  let etapa: string | null = null;
 
   if (expedienteId) {
     const { data: e } = await sb
       .from("expedientes")
-      .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
+      .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
       .eq("id", expedienteId)
       .maybeSingle();
     if (e) {
       nombreExpediente = nombreDe(e as any);
+      etapa = (e as any).etapa ?? null;
       if ((e as any).tipo_negocio) {
         tipoNegocio = (e as any).tipo_negocio;
       }
@@ -626,6 +632,7 @@ export async function obtenerConversacion(
     posibleBloqueo,
     motivoAlerta,
     iaPausada,
+    etapa,
   };
 }
 
@@ -828,6 +835,8 @@ export async function responderConversacion(
         titulo: `Respuesta por ${canalLabel}`,
         detalle: texto,
       });
+      // Una persona respondió: el negocio en etapa inicial pasa a "Contacto inicial"
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
     }
     return r.ok ? { ok: true } : { ok: false, error: (r as any).errorDetail || r.error };
   } catch (err: any) {
@@ -1352,6 +1361,7 @@ export async function enviarArchivoDirectoConversacion(
         titulo: "Archivo adjunto enviado por WhatsApp",
         detalle: `Se envió el archivo "${filename}" por WhatsApp.`,
       });
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
     }
 
     return { ok: true };

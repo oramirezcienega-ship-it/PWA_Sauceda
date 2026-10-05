@@ -27,7 +27,9 @@ import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
 import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
-import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
+import { obtenerProveedorIA, guardarProveedorIA, moverEtapa } from "@/app/actions/expedientes";
+import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
+import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
@@ -748,6 +750,7 @@ export function Conversaciones() {
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
   const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
+  const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
   const [envioLead, setEnvioLead] = useState<EnvioLeadTelegram | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1695,6 +1698,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           👤 {c.prospectoId}
                         </Link>
                       )}
+                      {c.etapa && (
+                        <span
+                          className="bg-violet-50 text-violet-800 border border-violet-200 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                          title="Etapa del negocio"
+                        >
+                          📊 {TODAS_LAS_ETAPAS_POR_ID[c.etapa]?.nombre || c.etapa}
+                        </span>
+                      )}
                     </span>
                   )}
 
@@ -1803,6 +1814,55 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         👤 {detalle.prospectoId}
                       </a>
+                    </>
+                  )}
+
+                  {/* Etapa del negocio (se puede cambiar desde aquí) */}
+                  {detalle.expedienteId && (
+                    <>
+                      <span className="text-carbon/30 text-xs font-mono">·</span>
+                      <select
+                        value={detalle.etapa ?? ""}
+                        disabled={cambiandoEtapa}
+                        title="Etapa del negocio. Pasa sola a Contacto inicial cuando alguien del equipo responde en el chat."
+                        onChange={async (e) => {
+                          const nueva = e.target.value as EtapaId;
+                          if (!nueva || nueva === detalle.etapa || !detalle.expedienteId) return;
+                          setCambiandoEtapa(true);
+                          setAviso(null);
+                          try {
+                            await moverEtapa(detalle.expedienteId, nueva);
+                            await refrescar(detalle.telefono);
+                          } catch (err: any) {
+                            setAviso(humanizarError(err));
+                          } finally {
+                            setCambiandoEtapa(false);
+                          }
+                        }}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-bold shadow-2xs cursor-pointer focus:outline-none disabled:opacity-50 ${
+                          detalle.etapa === "nuevo-lead" || detalle.etapa === "interes"
+                            ? "bg-sky-50 border-sky-300 text-sky-900"
+                            : detalle.etapa === "contactado"
+                            ? "bg-amber-50 border-amber-300 text-amber-900"
+                            : detalle.etapa === "cerrado" || detalle.etapa === "venta"
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                            : detalle.etapa === "perdido"
+                            ? "bg-rose-50 border-rose-300 text-rose-900"
+                            : "bg-violet-50 border-violet-300 text-violet-900"
+                        }`}
+                      >
+                        {detalle.etapa && !ETAPAS.some((et) => et.id === detalle.etapa) && (
+                          <option value={detalle.etapa}>
+                            📊 {TODAS_LAS_ETAPAS_POR_ID[detalle.etapa]?.nombre || detalle.etapa}
+                          </option>
+                        )}
+                        {!detalle.etapa && <option value="">📊 Sin etapa</option>}
+                        {ETAPAS.map((et) => (
+                          <option key={et.id} value={et.id}>
+                            📊 {et.nombre}
+                          </option>
+                        ))}
+                      </select>
                     </>
                   )}
 

@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { enviarWhatsAppDocumento } from "@/lib/whatsapp";
 import { registrarActividad } from "@/lib/actividades";
+import { avanzarAContactoInicialPorRespuesta } from "@/lib/etapa-automatica";
 import { variantesTelefono } from "@/lib/telefono";
 
 /** Nombre del asesor actual (desde perfiles). */
@@ -193,6 +194,7 @@ export async function enviarDocumentoConversacion(
       titulo: "Documento enviado por WhatsApp",
       detalle: `Se envió el documento "${doc.nombre}" por WhatsApp.`,
     });
+    await avanzarAContactoInicialPorRespuesta(sb, ref.expediente_id, nombreAsesor ?? "");
   }
 
   return { ok: true };
