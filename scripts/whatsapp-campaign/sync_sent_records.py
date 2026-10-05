@@ -47,29 +47,38 @@ def consultar_entidad_supabase(phone: str, headers: dict) -> tuple[str | None, s
     if sufijo_10 in ENTITY_CACHE:
         return ENTITY_CACHE[sufijo_10]
 
-    # 1. Buscar en prospectos
+    # 1. Buscar en expedientes primero
     try:
-        url = f"{SUPABASE_URL}/rest/v1/prospectos?select=id,expediente_id&telefono=ilike.*{sufijo_10}*&limit=1"
-        req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                pid = data[0].get("id")
-                eid = data[0].get("expediente_id")
-                ENTITY_CACHE[sufijo_10] = (pid, eid)
-                return pid, eid
-    except Exception:
-        pass
-
-    # 2. Buscar en expedientes
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id&telefono=ilike.*{sufijo_10}*&limit=1"
+        url = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
         req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=6) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data and len(data) > 0:
                 eid = data[0].get("id")
                 pid = data[0].get("prospecto_id")
+                ENTITY_CACHE[sufijo_10] = (pid, eid)
+                return pid, eid
+    except Exception:
+        pass
+
+    # 2. Buscar en prospectos
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/prospectos?select=id&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data and len(data) > 0:
+                pid = data[0].get("id")
+                eid = None
+                try:
+                    url_exp = f"{SUPABASE_URL}/rest/v1/expedientes?select=id&prospecto_id=eq.{pid}&order=created_at.desc&limit=1"
+                    req_exp = urllib.request.Request(url_exp, headers=headers, method="GET")
+                    with urllib.request.urlopen(req_exp, timeout=6) as resp_exp:
+                        data_exp = json.loads(resp_exp.read().decode("utf-8"))
+                        if data_exp and len(data_exp) > 0:
+                            eid = data_exp[0].get("id")
+                except Exception:
+                    pass
                 ENTITY_CACHE[sufijo_10] = (pid, eid)
                 return pid, eid
     except Exception:

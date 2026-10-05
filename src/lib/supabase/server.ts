@@ -25,6 +25,8 @@ export function supabaseServidor(): SupabaseClient {
   if (!cliente) {
     cliente = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Evita que el Data Cache de Next.js guarde respuestas de la BD y sirva datos viejos
+      global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
     });
   }
   return cliente;

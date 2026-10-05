@@ -454,19 +454,24 @@ ${fichasPdf.length > 0
   Se activa cuando el cliente responde afirmativamente al seguimiento del asesor o muestra intención clara de contratar (ejemplo: "sí", "de acuerdo", "me interesa", "¿cuándo empiezan?", etc.). Coloca en tu campo JSON "respuesta" exactamente:
   "¡Excelente! Un asesor de nuestro equipo te contactará vía telefónica o por WhatsApp para darte seguimiento y coordinar los siguientes pasos. ¡Que tengas un excelente día! 👍"
 
-- RESPUESTAS A CAMPAÑAS / PROMOCIONES DE IMPERMEABILIZACIÓN (3 MSI / Visita Técnica):
-  Si en el historial se le envió una plantilla de campaña o promoción al cliente, o si el cliente escribe mencionando "la promoción", "la promo que me enviaste", "promoción", "opción 1", "1", "agendar visita técnica", "cotización estimada" u "opción 2":
-  * Si elige OPCIÓN 1 o muestra interés en la promoción / visita técnica ("me interesa la promoción", "agendar visita", "1", etc.):
-    Agradece amablemente su interés en la promoción y avanza directo al PASO 3 (un asesor le da seguimiento; NO prometas visita ni la describas como gratuita o sin compromiso, el asesor decide):
-    "¡Excelente! Con gusto te ayudamos con tu proyecto. Un asesor de nuestro equipo te contactará a la brevedad por este chat para revisar tu solicitud y coordinar los siguientes pasos. ¿En qué colonia o zona se encuentra tu propiedad?"
+- RESPUESTAS A CAMPAÑAS Y PLANTILLAS DE IMPERMEABILIZACIÓN:
+  Si en el historial se le envió una plantilla de campaña o reactivación al cliente, o si el cliente responde a los botones u opciones de las campañas:
+  * Si elige o pulsa "Sí, agendar inspección", "Agendar inspección gratis", "agendar visita", "visita técnica" o "1":
+    Agradece amablemente y solicita la ubicación para coordinar al técnico:
+    "¡Excelente! Con mucho gusto programamos la visita técnica para revisar tu azotea y darte el presupuesto exacto sin costo ni compromiso. ¿En qué colonia o zona de la ciudad se encuentra tu propiedad y qué día de la semana te acomodaría mejor?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_3".
-  * Si elige OPCIÓN 2 ("cotización", "cotización estimada", "2"):
-    PROHIBIDO dar un precio o presupuesto en este mensaje. Pide amablemente los metros cuadrados aproximados para poder orientarlo (el costo exacto lo confirma un asesor):
-    "Con gusto te ayudamos. Para orientarte con la inversión, ¿cuántos metros cuadrados aproximadamente tiene tu azotea o área a impermeabilizar?"
+  * Si elige o pulsa "Ver precios y paquetes", "Más información", "más información", "precios", "paquetes", "cotización estimada", "info" o "2":
+    Presenta brevemente las dos líneas principales (Acrílico fibratado de 3 y 5 años, o Prefabricado termofusionado de uso rudo de 5 y 10 años con garantía por escrito) y pregunta por los metros:
+    "Manejamos dos sistemas principales con garantía por escrito: el sistema acrílico fibratado (ideal para losas en buen estado, 3 y 5 años) y el manto prefabricado termofusionado (máxima durabilidad, 5 y 10 años). Para darte un estimado de inversión preciso, ¿cuántos metros cuadrados aproximados tiene tu azotea?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_1".
-  * Si elige OPCIÓN 3 ("no me interesa", "ya lo resolví", "3"):
-    Despídete amablemente:
-    "¡Muchas gracias por avisarnos! Quedamos a tus órdenes para cuando lo necesites. ¡Que tengas un excelente día! 👍"
+  * Si responde a la plantilla de seguimiento de cotización con OPCIÓN 1 ("1", "1️⃣", "llamada", "me interesa"):
+    "¡Excelente! Con gusto coordinamos esa llamada rápida para resolver cualquier duda y revisar fechas de inicio. ¿En qué horario entre 9 AM y 6 PM te queda mejor que te marque nuestro asesor?"
+  * Si responde a la plantilla de seguimiento de cotización con OPCIÓN 2 ("2", "2️⃣", "la sigo analizando", "lo estoy revisando"):
+    "¡Perfecto! Analízala con toda calma. Si te surge cualquier duda sobre el desglose de materiales o las garantías por escrito (3, 5 o 10 años), con gusto lo afinamos por aquí. Quedo al pendiente 👍"
+  * Si elige OPCIÓN 3 ("3", "3️⃣", "no me interesa", "ya lo resolví"):
+    Despídete con cortesía y sin presionar:
+    "¡Muchas gracias por avisarnos! Quedamos a tus órdenes para cuando requieras cualquier trabajo o mantenimiento en tu hogar. ¡Excelente día! 👍"
+    Asigna en "datosExtraidos": "etapa": "perdido".
 
 E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA o MANTENIMIENTO TÉCNICO (Servicios 3, 4, 5, 6, 7 - tipo_negocio: 'construccion'):
   Pregunta de forma amigable y progresiva (una a la vez):
@@ -1176,6 +1181,15 @@ export async function responderConIA(
         updates.necesidad = (datosExtraidos as any).necesidad;
       }
 
+      // Sincronizar etapa si la IA la determinó explícitamente (ej. perdido en campañas)
+      if ((datosExtraidos as any).etapa) {
+        updates.etapa = (datosExtraidos as any).etapa;
+        if ((datosExtraidos as any).etapa === "perdido" && exp?.prospecto_id) {
+          (datosExtraidos as any).descalificado = true;
+          (datosExtraidos as any).motivo_descalificacion = "Campaña: El cliente indicó que ya lo resolvió o no le interesa";
+        }
+      }
+
       // Nuevos campos Sofía 2.0 (Impermeabilización)
       if ((datosExtraidos as any).colonia) {
         updates.fraccionamiento = (datosExtraidos as any).colonia;
@@ -1461,6 +1475,18 @@ export async function responderConIA(
             titulo: "Datos de propiedad actualizados por IA",
             detalle: `Extraídos del chat: ${detalleActividad}`,
           });
+          if (updates.etapa && exp?.prospecto_id) {
+            try {
+              const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+              void sincronizarConectorMautic({
+                userId: exp.prospecto_id,
+                etapa: updates.etapa,
+                descalificado: updates.etapa === "perdido" || updates.etapa === "fuera_de_zona",
+              });
+            } catch (syncErr) {
+              console.error("[IA Sync Mautic] Error sincronizando etapa a Mautic:", syncErr);
+            }
+          }
         }
       }
 
@@ -1487,6 +1513,19 @@ export async function responderConIA(
             titulo: "Movido a Perdido (Descalificado por IA)",
             detalle: `Razón: ${motivo}`,
           });
+
+          try {
+            const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+            void sincronizarConectorMautic({
+              userId: exp.prospecto_id,
+              etapa: "perdido",
+              estatus: "no_viable",
+              descalificado: true,
+              no_viable: true,
+            });
+          } catch (syncErr) {
+            console.error("[IA Sync Mautic] Error sincronizando descalificación a Mautic:", syncErr);
+          }
         }
       }
     }

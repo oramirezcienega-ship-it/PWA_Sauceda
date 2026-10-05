@@ -392,66 +392,6 @@ export async function listarComisiones(filtros?: {
       console.warn("Aviso al depurar comisiones huérfanas de recibos:", eDel);
     }
 
-    // 1b. Auto-sincronización pasiva de inspecciones ejecutadas que no tengan comisión aún
-    try {
-      let citasInsp: any[] = [];
-      const { data: cData, error: errCData } = await sb
-        .from("agenda_citas")
-        .select("*")
-        .or("tipo_cita.eq.inspeccion,tipo_cita.eq.visita,notas.ilike.%inspecci%")
-        .limit(50);
-
-      if (errCData) {
-        const { data: cDataFallback } = await sb
-          .from("agenda_citas")
-          .select("*")
-          .eq("tipo_cita", "inspeccion")
-          .limit(50);
-        citasInsp = cDataFallback || [];
-      } else {
-        citasInsp = cData || [];
-      }
-
-      const citasInspCandidatas = (citasInsp || []).filter((c: any) => inspeccionRealizada(c));
-
-      if (citasInspCandidatas.length > 0) {
-        const ids = citasInspCandidatas.map((c: any) => c.id);
-        const { data: comsExistentes } = await sb
-          .from("comisiones")
-          .select("cita_id, asesor_id, es_ajuste_manual")
-          .in("cita_id", ids);
-
-        const mapExistentes = new Map<string, { asesorId: string | null; ajusteManual: boolean }>(
-          (comsExistentes || [])
-            .filter((x: any) => x.cita_id)
-            .map((x: any) => [x.cita_id, { asesorId: x.asesor_id || null, ajusteManual: Boolean(x.es_ajuste_manual) }])
-        );
-
-        for (const cita of citasInspCandidatas) {
-          const existente = mapExistentes.get(cita.id);
-          if (!existente) {
-            // Sin comisión aún: crearla.
-            await sincronizarComisionParaInspeccion(cita.id, { citaData: cita });
-            continue;
-          }
-          if (existente.ajusteManual) continue; // respetar ajustes manuales del admin
-
-          // Si el asesor responsable de la cita cambió después de generada la
-          // comisión (reasignación de inspección), volver a sincronizar para
-          // que la comisión "siga" al asesor actual en vez de quedar
-          // "pegada" al asesor original.
-          const asesorActual =
-            cita.perfil_id ||
-            (Array.isArray(cita.asignados_ids) && cita.asignados_ids.length > 0 ? cita.asignados_ids[0] : null);
-          if (asesorActual && asesorActual !== existente.asesorId) {
-            await sincronizarComisionParaInspeccion(cita.id, { citaData: cita });
-          }
-        }
-      }
-    } catch (eAutoSync) {
-      console.warn("Aviso en auto-sync pasivo de comisiones de inspección:", eAutoSync);
-    }
-
     // 1c. Reasignación: toda comisión de inspección debe seguir al asesor actual
     // de su cita, sin importar el estado de la cita ni el límite de la
     // auto-sincronización anterior. Solo se mueven las que no tienen pagos

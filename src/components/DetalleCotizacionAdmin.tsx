@@ -490,6 +490,9 @@ export function DetalleCotizacionAdmin({
         const res = await subirFotoVisita(formData);
         if (res && res.ok && res.url) {
           nuevasUrls.push(res.url);
+          // Agregar cada foto al estado en cuanto se sube, para no perderla si se guarda antes de terminar el lote
+          const url = res.url;
+          setFotos((prev) => [...prev, url]);
         } else {
           ultimoError = res?.error || "Respuesta vacía del servidor.";
           console.error("Error al subir imagen:", ultimoError);
@@ -497,7 +500,6 @@ export function DetalleCotizacionAdmin({
       }
 
       if (nuevasUrls.length > 0) {
-        setFotos((prev) => [...prev, ...nuevasUrls]);
         setMensajeInspeccion({
           tipo: "ok",
           texto: `Se cargaron ${nuevasUrls.length} imagen(es) con éxito.`
@@ -571,6 +573,10 @@ export function DetalleCotizacionAdmin({
   };
   const handleGuardarInspeccion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (subiendoFotos) {
+      setMensajeInspeccion({ tipo: "error", texto: "Espera a que terminen de subirse las fotos antes de guardar." });
+      return;
+    }
     try {
       setGuardandoInspeccion(true);
       setMensajeInspeccion({ tipo: "", texto: "" });
@@ -1710,10 +1716,10 @@ export function DetalleCotizacionAdmin({
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
-                    disabled={guardandoInspeccion}
+                    disabled={guardandoInspeccion || subiendoFotos}
                     className="rounded-lg bg-sauce px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-verde-profundo disabled:opacity-50"
                   >
-                    {guardandoInspeccion ? "Guardando..." : "Guardar Reporte Técnico"}
+                    {guardandoInspeccion ? "Guardando..." : subiendoFotos ? "Subiendo fotos..." : "Guardar Reporte Técnico"}
                   </button>
                 </div>
               </form>
