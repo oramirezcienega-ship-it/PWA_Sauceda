@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { formatoPesos } from "@/lib/formato";
 import type { Cotizacion, CotizacionConcepto, VisitaReporte } from "@/lib/types";
+import { normalizarTelefono } from "@/lib/telefono";
 
 export interface ModalPrevisualizarCotizacionProps {
   abierto: boolean;
@@ -99,7 +100,7 @@ export function ModalPrevisualizarCotizacion({
   };
 
   const handleAbrirWhatsAppWeb = () => {
-    const telLimpio = telefonoCliente.replace(/\D/g, "");
+    const telLimpio = normalizarTelefono(telefonoCliente);
     const url = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensajeWsp)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };

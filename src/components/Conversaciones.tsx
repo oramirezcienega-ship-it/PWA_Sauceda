@@ -26,7 +26,7 @@ import {
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
-import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
+import { formatearTelefonoLegible, obtenerTelLink, normalizarTelefono } from "@/lib/telefono";
 import { obtenerProveedorIA, guardarProveedorIA, moverEtapa } from "@/app/actions/expedientes";
 import { posponerExpediente } from "@/app/actions/pausa";
 import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
@@ -460,7 +460,7 @@ function renderizarContenidoMensaje(
                   <span>📞 Llamar</span>
                 </a>
                 <a
-                  href={`https://wa.me/${telefono.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${normalizarTelefono(telefono)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-verde-chile/10 hover:bg-verde-chile/20 text-verde-profundo text-[11px] font-medium transition"
