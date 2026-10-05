@@ -31,14 +31,15 @@ export function esContactoDescalificado(params: {
   descalificado?: boolean | null;
   calificacion?: string | null;
 }): boolean {
-  if (params.descalificado !== undefined && params.descalificado !== null) {
-    return Boolean(params.descalificado);
+  if (params.descalificado === true) {
+    return true;
   }
   const etapaLimpia = (params.etapa || "").toLowerCase();
   const estatusLimpio = (params.estatus || "").toLowerCase();
   const califLimpia = (params.calificacion || "").toLowerCase();
   
   return (
+    Boolean(params.descalificado) ||
     etapaLimpia === "perdido" ||
     etapaLimpia === "descalificado" ||
     etapaLimpia === "no_viable" ||
