@@ -713,6 +713,8 @@ export interface ConversacionResumen {
   posibleBloqueo?: boolean;
   /** Motivo de la alerta de entrega / posible bloqueo. */
   motivoAlerta?: string | null;
+  /** Etapa del negocio (expediente) ligado a la conversación. */
+  etapa?: string | null;
 }
 
 /** Detalle de una conversación (hilo completo). */
@@ -735,6 +737,8 @@ export interface ConversacionDetalle {
   motivoAlerta?: string | null;
   /** Indica si las respuestas automáticas de Sofía están pausadas para este chat. */
   iaPausada?: boolean;
+  /** Etapa del negocio (expediente) ligado a la conversación. */
+  etapa?: string | null;
 }
 
 /** Una ejecución registrada del motor (bitácora de automatizaciones). */
