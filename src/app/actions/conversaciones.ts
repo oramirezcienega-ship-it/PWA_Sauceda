@@ -1160,10 +1160,31 @@ export async function guardarRespuestaRapida(datos: {
     const { error } = await sb.from("respuestas_rapidas").update(campos).eq("id", id);
     if (error) return { ok: false, error: error.message };
   } else {
+    // Las nuevas van al final de la lista, salvo que se indique un orden
+    if (campos.orden === undefined) {
+      const { data: ultima } = await sb
+        .from("respuestas_rapidas")
+        .select("orden")
+        .order("orden", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      campos.orden = ((ultima?.orden as number | undefined) ?? 0) + 1;
+    }
     const { error } = await sb.from("respuestas_rapidas").insert(campos);
     if (error) return { ok: false, error: error.message };
   }
   return { ok: true };
+}
+
+/** Guarda el orden de las respuestas rápidas (la primera del arreglo queda hasta arriba). */
+export async function reordenarRespuestasRapidas(ids: string[]): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const resultados = await Promise.all(
+    ids.map((id, i) => sb.from("respuestas_rapidas").update({ orden: i + 1 }).eq("id", id))
+  );
+  const fallo = resultados.find((r) => r.error);
+  return fallo?.error ? { ok: false, error: fallo.error.message } : { ok: true };
 }
 
 /** Elimina una respuesta rápida. */

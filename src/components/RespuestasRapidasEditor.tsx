@@ -5,6 +5,7 @@ import {
   listarRespuestasRapidas,
   guardarRespuestaRapida,
   eliminarRespuestaRapida,
+  reordenarRespuestasRapidas,
   type RespuestaRapidaDB,
 } from "@/app/actions/conversaciones";
 
@@ -17,18 +18,19 @@ const PARAMS_DISPONIBLES: { clave: string; descripcion: string }[] = [
   { clave: "{{fraccionamiento}}", descripcion: "Fraccionamiento / zona de interés" },
 ];
 
-const RR_VACIA: Omit<RespuestaRapidaDB, "id" | "created_at"> = {
+const RR_VACIA: Omit<RespuestaRapidaDB, "id" | "created_at" | "orden"> = {
   atajo: "",
   titulo: "",
   texto: "",
   categoria: "General",
-  orden: 0,
 };
 
 const INPUT = "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
 
-export function RespuestasRapidasEditor() {
+export function RespuestasRapidasEditor({ onCambio }: { onCambio?: () => void } = {}) {
   const [respuestas, setRespuestas] = useState<RespuestaRapidaDB[]>([]);
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +97,8 @@ export function RespuestasRapidasEditor() {
       titulo: editando.titulo.trim(),
       texto: editando.texto.trim(),
       categoria: editando.categoria ?? "General",
-      orden: editando.orden ?? 0,
+      // Al editar se conserva su lugar; las nuevas van al final
+      orden: editando.id ? editando.orden : undefined,
     });
 
     setGuardando(false);
@@ -109,6 +112,7 @@ export function RespuestasRapidasEditor() {
     setTimeout(() => setExito(null), 2500);
     setEditando(null);
     void cargar();
+    onCambio?.();
   }
 
   async function handleEliminar(rr: RespuestaRapidaDB) {
@@ -116,12 +120,27 @@ export function RespuestasRapidasEditor() {
     const r = await eliminarRespuestaRapida(rr.id);
     if (!r.ok) { setError(r.error ?? "No se pudo eliminar."); return; }
     void cargar();
+    onCambio?.();
   }
 
-  const agrupadasPor = CATEGORIAS.reduce<Record<string, RespuestaRapidaDB[]>>((acc, cat) => {
-    acc[cat] = respuestas.filter((r) => r.categoria === cat);
-    return acc;
-  }, {});
+  /** Mueve una respuesta a otra posición y guarda el nuevo orden. */
+  async function mover(id: string, destino: number) {
+    const origen = respuestas.findIndex((r) => r.id === id);
+    if (origen < 0) return;
+    const d = Math.max(0, Math.min(respuestas.length - 1, destino));
+    if (d === origen) return;
+    const nueva = [...respuestas];
+    const [item] = nueva.splice(origen, 1);
+    nueva.splice(d, 0, item);
+    setRespuestas(nueva.map((r, i) => ({ ...r, orden: i + 1 })));
+    const res = await reordenarRespuestasRapidas(nueva.map((r) => r.id));
+    if (!res.ok) {
+      setError(res.error ?? "No se pudo guardar el orden.");
+      void cargar();
+      return;
+    }
+    onCambio?.();
+  }
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -193,16 +212,9 @@ export function RespuestasRapidasEditor() {
                 {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-carbon/60">Orden (número)</label>
-              <input
-                type="number"
-                value={editando.orden ?? 0}
-                onChange={(e) => setEditando((p) => ({ ...p, orden: parseInt(e.target.value) || 0 }))}
-                className={INPUT}
-                min={0}
-              />
-            </div>
+            <p className="self-end pb-2 text-[11px] text-carbon/45">
+              El lugar en la lista se cambia arrastrando la respuesta (o con ▲ ▼).
+            </p>
           </div>
 
           <div className="space-y-1">
@@ -283,62 +295,110 @@ export function RespuestasRapidasEditor() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {CATEGORIAS.map((cat) => {
-            const lista = agrupadasPor[cat];
-            if (!lista || lista.length === 0) return null;
-            return (
-              <div key={cat}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-carbon/35">{cat}</span>
-                  <div className="flex-1 h-px bg-carbon/8" />
-                </div>
-                <div className="space-y-1.5">
-                  {lista.map((rr) => (
-                    <div
-                      key={rr.id}
-                      className="flex items-start gap-3 rounded-lg border border-carbon/8 bg-white p-3 group hover:border-sauce/30 transition"
-                    >
-                      <span className="mt-0.5 rounded bg-sauce/15 px-1.5 py-0.5 text-[10px] font-mono font-bold text-verde-profundo shrink-0">
-                        #{rr.atajo}
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-carbon/50">
+            Este es el orden en que aparecen al insertar una respuesta. Arrastra con <strong>⋮⋮</strong> o usa ▲ ▼;{" "}
+            <strong>⤒</strong> la sube hasta arriba.
+          </p>
+          {respuestas.map((rr, i) => (
+            <div
+              key={rr.id}
+              draggable
+              onDragStart={(e) => {
+                setArrastrando(rr.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (sobre !== rr.id) setSobre(rr.id);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (arrastrando) void mover(arrastrando, i);
+                setArrastrando(null);
+                setSobre(null);
+              }}
+              onDragEnd={() => {
+                setArrastrando(null);
+                setSobre(null);
+              }}
+              className={`flex items-start gap-2 rounded-lg border bg-white p-3 group transition ${
+                arrastrando === rr.id
+                  ? "opacity-40 border-sauce/40"
+                  : sobre === rr.id && arrastrando
+                  ? "border-sauce border-dashed bg-sauce/5"
+                  : "border-carbon/8 hover:border-sauce/30"
+              }`}
+            >
+              <div className="flex flex-col items-center shrink-0 select-none">
+                <span
+                  className="cursor-grab active:cursor-grabbing text-carbon/30 hover:text-carbon/60 text-sm leading-none"
+                  title="Arrastra para reordenar"
+                >
+                  ⋮⋮
+                </span>
+                <span className="mt-1 text-[10px] font-mono text-carbon/35">{i + 1}</span>
+              </div>
+              <span className="mt-0.5 rounded bg-sauce/15 px-1.5 py-0.5 text-[10px] font-mono font-bold text-verde-profundo shrink-0">
+                #{rr.atajo}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-carbon flex items-center gap-1.5">
+                  {rr.titulo}
+                  <span className="rounded bg-carbon/5 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-carbon/45">
+                    {rr.categoria}
+                  </span>
+                </p>
+                <p className="text-[11px] text-carbon/55 mt-0.5 whitespace-pre-wrap leading-relaxed line-clamp-3">
+                  {rr.texto}
+                </p>
+                {/\{\{[^}]+\}\}/.test(rr.texto) && (
+                  <div className="flex gap-1 flex-wrap mt-1">
+                    {Array.from(rr.texto.matchAll(/\{\{([^}]+)\}\}/g)).map(([full], j) => (
+                      <span key={j} className="rounded bg-dorado/15 px-1 py-0.5 text-[9px] font-mono text-carbon/60">
+                        {full}
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-carbon">{rr.titulo}</p>
-                        <p className="text-[11px] text-carbon/55 mt-0.5 whitespace-pre-wrap leading-relaxed line-clamp-3">
-                          {rr.texto}
-                        </p>
-                        {/\{\{[^}]+\}\}/.test(rr.texto) && (
-                          <div className="flex gap-1 flex-wrap mt-1">
-                            {Array.from(rr.texto.matchAll(/\{\{([^}]+)\}\}/g)).map(([full], i) => (
-                              <span key={i} className="rounded bg-dorado/15 px-1 py-0.5 text-[9px] font-mono text-carbon/60">
-                                {full}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
-                        <button
-                          type="button"
-                          onClick={() => abrirEdicion(rr)}
-                          className="rounded border border-carbon/15 px-2 py-1 text-[10px] font-semibold text-carbon/60 hover:text-verde-profundo hover:border-sauce/40 transition"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEliminar(rr)}
-                          className="rounded border border-rojo/20 px-2 py-1 text-[10px] font-semibold text-rojo hover:bg-rojo/5 transition"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => void mover(rr.id, 0)} disabled={i === 0} title="Subir hasta arriba" className="rounded border border-carbon/15 px-1.5 py-0.5 text-[11px] text-carbon/60 hover:text-verde-profundo hover:border-sauce/40 disabled:opacity-25 transition">
+                    ⤒
+                  </button>
+                  <button type="button" onClick={() => void mover(rr.id, i - 1)} disabled={i === 0} title="Subir" className="rounded border border-carbon/15 px-1.5 py-0.5 text-[11px] text-carbon/60 hover:text-verde-profundo hover:border-sauce/40 disabled:opacity-25 transition">
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void mover(rr.id, i + 1)}
+                    disabled={i === respuestas.length - 1}
+                    title="Bajar"
+                    className="rounded border border-carbon/15 px-1.5 py-0.5 text-[11px] text-carbon/60 hover:text-verde-profundo hover:border-sauce/40 disabled:opacity-25 transition"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                  <button
+                    type="button"
+                    onClick={() => abrirEdicion(rr)}
+                    className="rounded border border-carbon/15 px-2 py-1 text-[10px] font-semibold text-carbon/60 hover:text-verde-profundo hover:border-sauce/40 transition"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEliminar(rr)}
+                    className="rounded border border-rojo/20 px-2 py-1 text-[10px] font-semibold text-rojo hover:bg-rojo/5 transition"
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>
