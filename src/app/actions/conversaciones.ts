@@ -147,17 +147,20 @@ async function duenosPorTelefonos(
 
 /** Lista las conversaciones (una por teléfono, con su último mensaje). */
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
-  await requireAdmin();
+  // Una sola validación de sesión (getUser es una llamada de red a Supabase Auth).
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
-  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
-  const { data, error } = await sb
-    .from("mensajes_whatsapp")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(1000);
+  // Rol y mensajes en paralelo; solo las columnas que usa la bandeja.
+  const [{ rol }, { data, error }] = await Promise.all([
+    rolDe(usuario.id),
+    sb
+      .from("mensajes_whatsapp")
+      .select("expediente_id, prospecto_id, telefono, direccion, texto, agente, created_at, finalizado")
+      .order("created_at", { ascending: false })
+      .limit(1000),
+  ]);
   if (error) throw new Error(error.message);
   let filas = (data as FilaMsg[]) ?? [];
 
@@ -173,9 +176,6 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       new Set(filas.map((f) => f.prospecto_id).filter(Boolean) as string[]),
     );
 
-    const duenosExp = await duenosPorIds(sb, "expedientes", idsExp, colId);
-    const duenosPros = await duenosPorIds(sb, "prospectos", idsPros, colId);
-
     const telefonos10 = Array.from(
       new Set(
         filas
@@ -183,8 +183,12 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
           .filter((t) => t.length === 10),
       ),
     );
-    const duenosTelExp = await duenosPorTelefonos(sb, "expedientes", telefonos10, colId);
-    const duenosTelPros = await duenosPorTelefonos(sb, "prospectos", telefonos10, colId);
+    const [duenosExp, duenosPros, duenosTelExp, duenosTelPros] = await Promise.all([
+      duenosPorIds(sb, "expedientes", idsExp, colId),
+      duenosPorIds(sb, "prospectos", idsPros, colId),
+      duenosPorTelefonos(sb, "expedientes", telefonos10, colId),
+      duenosPorTelefonos(sb, "prospectos", telefonos10, colId),
+    ]);
 
     filas = filas.filter((f) => {
       const duenoExp = f.expediente_id ? duenosExp.get(f.expediente_id) : undefined;
@@ -223,48 +227,53 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const nombresAsesor = new Map<string, string>();
   const tipoNegocioExp = new Map<string, string>();
   const etapaExp = new Map<string, string>();
-  if (expIds.length > 0) {
-    const { data: exps } = await sb
-      .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
-      .in("id", expIds);
-    (exps ?? []).forEach((e: any) => {
-      nombres.set(e.id as string, nombreDe(e));
-      if (e.etapa) etapaExp.set(e.id as string, e.etapa);
-      if (e.perfiles?.nombre) {
-        nombresAsesor.set(e.id as string, e.perfiles.nombre);
-      }
-      if (e.tipo_negocio) {
-        tipoNegocioExp.set(e.id as string, e.tipo_negocio);
-      }
-    });
-  }
-
-  // Resuelve nombres desde los prospectos enlazados (una sola consulta).
+  // Resuelve nombres desde los prospectos enlazados.
   const prosIds = Array.from(
     new Set(filas.map((f) => f.prospecto_id).filter(Boolean) as string[]),
   );
+
+  // Expedientes y prospectos en paralelo (una consulta cada uno).
+  const [{ data: exps }, { data: pros }] = await Promise.all([
+    expIds.length > 0
+      ? sb
+          .from("expedientes")
+          .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
+          .in("id", expIds)
+      : Promise.resolve({ data: [] as any[] }),
+    prosIds.length > 0
+      ? sb
+          .from("prospectos")
+          .select("id, nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
+          .in("id", prosIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  (exps ?? []).forEach((e: any) => {
+    nombres.set(e.id as string, nombreDe(e));
+    if (e.etapa) etapaExp.set(e.id as string, e.etapa);
+    if (e.perfiles?.nombre) {
+      nombresAsesor.set(e.id as string, e.perfiles.nombre);
+    }
+    if (e.tipo_negocio) {
+      tipoNegocioExp.set(e.id as string, e.tipo_negocio);
+    }
+  });
+
   const nombresPros = new Map<string, string>();
   const nombresAsesorPros = new Map<string, string>();
   const tipoNegocioPros = new Map<string, string>();
-  if (prosIds.length > 0) {
-    const { data: pros } = await sb
-      .from("prospectos")
-      .select("id, nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
-      .in("id", prosIds);
-    (pros ?? []).forEach((p: any) => {
-      const nom = [p.nombre, p.primer_apellido, p.segundo_apellido]
-        .filter(Boolean)
-        .join(" ");
-      nombresPros.set(p.id as string, nom);
-      if (p.perfiles?.nombre) {
-        nombresAsesorPros.set(p.id as string, p.perfiles.nombre);
-      }
-      if (p.tipo_negocio) {
-        tipoNegocioPros.set(p.id as string, p.tipo_negocio);
-      }
-    });
-  }
+  (pros ?? []).forEach((p: any) => {
+    const nom = [p.nombre, p.primer_apellido, p.segundo_apellido]
+      .filter(Boolean)
+      .join(" ");
+    nombresPros.set(p.id as string, nom);
+    if (p.perfiles?.nombre) {
+      nombresAsesorPros.set(p.id as string, p.perfiles.nombre);
+    }
+    if (p.tipo_negocio) {
+      tipoNegocioPros.set(p.id as string, p.tipo_negocio);
+    }
+  });
 
   const resumenes: ConversacionResumen[] = [];
   porTel.forEach((arr, telefono) => {
@@ -293,7 +302,8 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
         (expId && nombres.get(expId)) ||
         (prosId && nombresPros.get(prosId)) ||
         telefono,
-      ultimoTexto: ultimo.texto,
+      // La bandeja solo muestra 2 líneas: se recorta para aligerar la respuesta.
+      ultimoTexto: (ultimo.texto || "").slice(0, 240),
       ultimaFecha: ultimo.created_at,
       ventanaAbierta: ventanaAbierta(arr),
       ultimoInboundFecha: ultimoInbound?.created_at ?? null,

@@ -679,10 +679,14 @@ function humanizarError(error: any): string {
   return msg;
 }
 
-/** Bandeja de conversaciones de WhatsApp (lista + hilo + responder). */
-export function Conversaciones() {
+/**
+ * Bandeja de conversaciones de WhatsApp (lista + hilo + responder).
+ * `inicial` es la lista precargada en el servidor (pinta sin esperar al cliente).
+ */
+export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } = {}) {
   const [tab, setTab] = useState<TabPrincipal>("bandeja");
-  const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
+  const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>(inicial ?? []);
+  const [listaCargada, setListaCargada] = useState(inicial !== undefined);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
@@ -869,6 +873,7 @@ export function Conversaciones() {
     try {
       const lista = await listarConversaciones();
       setConversaciones(lista);
+      setListaCargada(true);
       if (telefonoPreseleccionado) {
         const coincidencia = lista.find((c) => coincidenTelefonos(c.telefono, telefonoPreseleccionado));
         const telReal = coincidencia ? coincidencia.telefono : telefonoPreseleccionado;
@@ -893,7 +898,8 @@ export function Conversaciones() {
       }
     }
 
-    void refrescar(preseleccion);
+    // Si el servidor ya mandó la lista, solo hace falta ir por el hilo preseleccionado.
+    if (!inicial || preseleccion) void refrescar(preseleccion);
     listarPlantillasWhatsApp()
       .then((r) => setPlantillas(r.plantillas.filter((p) => p.estado === "APPROVED")))
       .catch(() => setPlantillas([]));
@@ -922,10 +928,31 @@ export function Conversaciones() {
       .catch(() => setUsuario(null));
   }, [refrescar]);
 
-  // Sondeo cada 15 s (lista + hilo abierto).
+  // Sondeo cada 10 s (lista + hilo abierto) solo con la app visible; al volver
+  // a primer plano (abrir la PWA, desbloquear el teléfono) refresca de inmediato.
   useEffect(() => {
-    const id = setInterval(() => void refrescar(sel), 15000);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | null = null;
+    const iniciar = () => {
+      if (id === null) id = setInterval(() => void refrescar(sel), 10000);
+    };
+    const detener = () => {
+      if (id !== null) clearInterval(id);
+      id = null;
+    };
+    const alCambiarVisibilidad = () => {
+      if (document.visibilityState === "visible") {
+        void refrescar(sel);
+        iniciar();
+      } else {
+        detener();
+      }
+    };
+    if (document.visibilityState === "visible") iniciar();
+    document.addEventListener("visibilitychange", alCambiarVisibilidad);
+    return () => {
+      detener();
+      document.removeEventListener("visibilitychange", alCambiarVisibilidad);
+    };
   }, [refrescar, sel]);
 
   // Autoscroll al final cuando cambian los mensajes.
@@ -1389,30 +1416,53 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Navegación de tabs */}
-      <div className="flex items-center gap-1 border-b border-carbon/10 pb-0">
+    <div className="flex flex-col gap-1.5 sm:gap-3">
+      {/* Navegación de tabs (en móvil: una fila delgada con nombres cortos) */}
+      <div className="flex items-center gap-0.5 sm:gap-1 border-b border-carbon/10 pb-0">
         {(["bandeja", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
           const labels: Record<TabPrincipal, string> = {
             bandeja: "💬 Bandeja",
             documentos: "📂 Documentos",
             respuestas: "⚡ Respuestas Rápidas",
           };
+          const labelsCortos: Record<TabPrincipal, string> = {
+            bandeja: "💬 Bandeja",
+            documentos: "📂 Docs",
+            respuestas: "⚡ Rápidas",
+          };
           return (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition ${
+              className={`px-2.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-t-lg border-b-2 transition whitespace-nowrap ${
                 tab === t
                   ? "border-sauce text-verde-profundo bg-sauce/5"
                   : "border-transparent text-carbon/50 hover:text-carbon hover:bg-carbon/5"
               }`}
             >
-              {labels[t]}
+              <span className="sm:hidden">{labelsCortos[t]}</span>
+              <span className="hidden sm:inline">{labels[t]}</span>
             </button>
           );
         })}
+        {/* Móvil: Sofía se reduce a un botón; la barra completa solo aparece al abrirla */}
+        {esAdmin && tab === "bandeja" && (
+          <button
+            type="button"
+            onClick={() => setMostrarConfigIA(!mostrarConfigIA)}
+            className={`sm:hidden ml-auto mb-0.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${
+              mostrarConfigIA
+                ? "border-sauce bg-sauce/10 text-verde-profundo"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
+            aria-label="Configurar Sofía (IA)"
+            title={`Sofía (IA): ${proveedorIA === "anthropic" ? "Claude (Anthropic)" : proveedorIA === "kimi" ? "Kimi K3 (Moonshot)" : "Local (Ollama)"}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            🤖 Sofía
+          </button>
+        )}
       </div>
 
       {/* Tab: Documentos */}
@@ -1440,7 +1490,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
       {/* Diagnóstico del agente de IA (Colapsable y compacto para móvil) */}
       {esAdmin && (
-        <div className="rounded-xl border border-carbon/10 bg-white shadow-2xs overflow-hidden transition">
+        <div className={`rounded-xl border border-carbon/10 bg-white shadow-2xs overflow-hidden transition ${
+          mostrarConfigIA ? "" : "hidden sm:block"
+        }`}>
           <button
             type="button"
             onClick={() => setMostrarConfigIA(!mostrarConfigIA)}
@@ -1527,9 +1579,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         </div>
       )}
 
-      <div className="grid h-[calc(100dvh-180px)] sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[340px_1fr] lg:grid-cols-[400px_1fr] 2xl:grid-cols-[460px_1fr]">
+      <div className="grid bandeja-alto-movil sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[340px_1fr] lg:grid-cols-[400px_1fr] 2xl:grid-cols-[460px_1fr]">
         {/* Lista de conversaciones */}
-        <div className={`overflow-y-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-2 shadow-sm ${
+        <div className={`overflow-y-auto rounded-lg sm:rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-1 sm:p-2 shadow-sm ${
           sel ? "hidden sm:flex" : "flex"
         }`}>
           {soloTel && (
@@ -1553,12 +1605,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             </div>
           )}
 
+          {/* Filtros: en móvil ambos grupos van en una sola fila */}
+          <div className="flex items-stretch gap-1 mb-1 sm:mb-0 sm:block shrink-0">
           {/* Tabs de Filtro */}
-          <div className="flex border border-carbon/10 mb-2 bg-crema/40 p-1 rounded-lg shrink-0">
+          <div className={`flex border border-carbon/10 sm:mb-2 bg-crema/40 p-0.5 sm:p-1 rounded-lg shrink-0 ${
+            filtro === "abiertas" ? "" : "flex-1"
+          }`}>
             <button
               type="button"
               onClick={() => setFiltro("abiertas")}
-              className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-md transition ${
+              className={`flex-1 text-center px-1.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold rounded-md transition whitespace-nowrap ${
                 filtro === "abiertas"
                   ? "bg-white text-verde-profundo shadow-sm border border-carbon/5 font-bold"
                   : "text-carbon/60 hover:text-carbon"
@@ -1569,22 +1625,24 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             <button
               type="button"
               onClick={() => setFiltro("terminadas")}
-              className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-md transition ${
+              className={`flex-1 text-center px-1.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold rounded-md transition whitespace-nowrap ${
                 filtro === "terminadas"
                   ? "bg-white text-verde-profundo shadow-sm border border-carbon/5 font-bold"
                   : "text-carbon/60 hover:text-carbon"
               }`}
             >
-              Terminadas ({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
+              <span className={filtro === "abiertas" ? "sm:hidden" : "hidden"}>Term.</span>
+              <span className={filtro === "abiertas" ? "hidden sm:inline" : ""}>Terminadas</span>
+              {" "}({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
             </button>
           </div>
 
           {filtro === "abiertas" && (
-            <div className="mb-2 flex flex-wrap gap-1 bg-slate-50 p-1 rounded-lg border border-slate-100 shrink-0">
+            <div className="flex-1 min-w-0 overflow-x-auto scrollbar-none sm:mb-2 flex gap-0.5 sm:gap-1 sm:flex-wrap bg-slate-50 p-0.5 sm:p-1 rounded-lg border border-slate-100">
               <button
                 type="button"
                 onClick={() => setSubFiltro("todas")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "todas"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
@@ -1595,7 +1653,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               <button
                 type="button"
                 onClick={() => setSubFiltro("mias")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "mias"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
@@ -1612,18 +1670,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               <button
                 type="button"
                 onClick={() => setSubFiltro("ia")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "ia"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                De la IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
+                <span className="hidden sm:inline">De la </span>IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
               </button>
               <button
                 type="button"
                 onClick={() => setSubFiltro("nuevas")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "nuevas"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
@@ -1634,15 +1692,23 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             </div>
           )}
 
+          </div>
+
           <div className="flex-1 overflow-y-auto space-y-1">
-            {conversacionesFiltradas.length === 0 ? (
+            {!listaCargada ? (
+              <div className="space-y-1.5 animate-pulse" aria-label="Cargando conversaciones">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <div key={i} className="h-[76px] rounded-lg bg-carbon/5" />
+                ))}
+              </div>
+            ) : conversacionesFiltradas.length === 0 ? (
               <p className="p-6 text-center text-sm text-carbon/40">
                 No hay conversaciones en esta pestaña.
               </p>
             ) : (
               <>
               {filtro === "abiertas" && (
-                <p className="px-1 pb-1.5 text-[10px] font-medium text-carbon/45 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <p className="px-1 pb-1.5 text-[10px] font-medium text-carbon/45 hidden sm:flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span>↑ Ordenadas por vencimiento de la ventana de 24 h</span>
                   <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-600" />&lt;2h</span>
                   <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500" />&lt;6h</span>
@@ -1669,7 +1735,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   key={c.telefono}
                   type="button"
                   onClick={() => abrir(c.telefono)}
-                  className={`flex w-full flex-col items-start gap-1 px-3 py-2.5 text-left transition rounded-lg border-l-4 mb-1 ${bordeUrgencia} ${
+                  className={`flex w-full flex-col items-start gap-0.5 sm:gap-1 px-2.5 py-2 sm:px-3 sm:py-2.5 text-left transition rounded-lg border-l-4 mb-1 ${bordeUrgencia} ${
                     sel === c.telefono
                       ? "bg-sauce/10 ring-1 ring-sauce/40"
                       : urgencia === "critica"
@@ -1695,27 +1761,33 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     />
                   </span>
 
-                  {/* Negocio: ícono + nombre completo (sin recortar) */}
-                  <span
-                    className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold leading-tight ${negocio.clases}`}
-                    title={`${negocio.linea} · ${negocio.nombre}`}
-                  >
-                    <span className="text-sm leading-none">{negocio.icono}</span>
-                    <span className="whitespace-normal break-words">{negocio.nombre}</span>
-                  </span>
-
-                  {pendiente && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
-                      ● Pendiente de respuesta
+                  {/* Negocio (ícono + nombre completo) + etapa en móvil + pendiente, en una fila */}
+                  <span className="flex max-w-full flex-wrap items-center gap-1">
+                    <span
+                      className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold leading-tight ${negocio.clases}`}
+                      title={`${negocio.linea} · ${negocio.nombre}`}
+                    >
+                      <span className="text-xs sm:text-sm leading-none">{negocio.icono}</span>
+                      <span className="whitespace-normal break-words">{negocio.nombre}</span>
                     </span>
-                  )}
+                    {c.etapa && (
+                      <span className="sm:hidden bg-violet-50 text-violet-800 border border-violet-200 rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-tight">
+                        📊 {TODAS_LAS_ETAPAS_POR_ID[c.etapa]?.nombre || c.etapa}
+                      </span>
+                    )}
+                    {pendiente && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                        ● <span className="sm:hidden">Pendiente</span><span className="hidden sm:inline">Pendiente de respuesta</span>
+                      </span>
+                    )}
+                  </span>
                   <span className={`w-full text-xs font-normal line-clamp-2 ${pendiente ? "text-red-700 font-medium" : "text-carbon/60"}`}>
                     {c.ultimoTexto || "—"}
                   </span>
 
                   {/* Expediente / prospecto */}
                   {(c.expedienteId || c.prospectoId) && (
-                    <span className="flex flex-wrap gap-1">
+                    <span className="hidden sm:flex flex-wrap gap-1">
                       {c.expedienteId && (
                         <Link
                           href={`/expediente/${c.expedienteId}`}
@@ -1749,8 +1821,10 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
                   <span className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <span className="flex items-center gap-1.5 min-w-0">
-                      <CanalBadge telefono={c.telefono} size="sm" />
-                      <span className="font-mono text-xs font-bold text-carbon truncate">
+                      <span className={canalDe(c.telefono) === "whatsapp" ? "hidden sm:inline-flex" : "inline-flex"}>
+                        <CanalBadge telefono={c.telefono} size="sm" />
+                      </span>
+                      <span className="font-mono text-[11px] sm:text-xs font-bold text-carbon truncate">
                         {formatearTelefonoLegible(c.telefono)}
                       </span>
                       <span className="font-mono text-[10px] text-carbon/50 shrink-0">
