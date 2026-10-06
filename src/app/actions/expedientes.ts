@@ -1613,3 +1613,43 @@ export async function cambiarCalificacionExpediente(
     return { ok: false, error: err?.message || "Error al cambiar la calificación." };
   }
 }
+
+/** Actualiza la dirección de la propiedad (y opcionalmente el link de Maps) y la sincroniza con el prospecto */
+export async function actualizarDireccionExpediente(
+  expedienteId: string,
+  direccion: string,
+  linkGoogleMaps?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const usuario = await usuarioActual();
+    if (!usuario) return { ok: false, error: "No autorizado." };
+
+    const sb = supabaseServidor();
+    const dir = direccion.trim();
+    const cambios: Record<string, string | null> = {
+      direccion_propiedad: dir || null,
+      ultimo_movimiento: hoyISO(),
+    };
+    if (linkGoogleMaps !== undefined) cambios.link_google_maps = linkGoogleMaps.trim() || null;
+
+    const { data: exp, error } = await sb
+      .from("expedientes")
+      .update(cambios)
+      .eq("id", expedienteId)
+      .select("prospecto_id")
+      .single();
+
+    if (error) return { ok: false, error: error.message };
+
+    if (exp?.prospecto_id) {
+      await sb
+        .from("prospectos")
+        .update({ direccion: dir })
+        .eq("id", exp.prospecto_id);
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al guardar la dirección." };
+  }
+}

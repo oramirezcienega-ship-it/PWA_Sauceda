@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BotonLlamar } from "@/components/BotonLlamar";
 import { labelTipoNegocio } from "@/lib/types";
 import { ProximasVisitasWidget } from "@/components/ProximasVisitasWidget";
+import { CoordinacionesPendientesWidget } from "@/components/CoordinacionesPendientesWidget";
 import { ResumenKpisAsesor } from "@/components/ResumenKpisAsesor";
 import { FiltrosDashboard } from "@/components/FiltrosDashboard";
 
@@ -122,6 +123,9 @@ export default async function PaginaDashboard({
           <div className="mt-4 sm:mt-6 space-y-4">
             {/* Widget de Próximas Visitas, Llamadas e Instalaciones */}
             <ProximasVisitasWidget perfilId={user?.id} />
+
+            {/* Coordinaciones de inspección pendientes (solo las asignadas a este usuario) */}
+            <CoordinacionesPendientesWidget />
 
             {/* Sección de Tareas Pendientes */}
             <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
@@ -247,6 +251,11 @@ export default async function PaginaDashboard({
         {/* Widget de Próximas Citas, Llamadas e Instalaciones (Global Admin) */}
         <div className="mt-6">
           <ProximasVisitasWidget />
+        </div>
+
+        {/* Coordinaciones de inspección pendientes, compartibles por Telegram */}
+        <div className="mt-6">
+          <CoordinacionesPendientesWidget />
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

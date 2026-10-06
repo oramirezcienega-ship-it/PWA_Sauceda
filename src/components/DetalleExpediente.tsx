@@ -15,7 +15,7 @@ import { AsesorSelector } from "./AsesorSelector";
 import { OperadorSelector } from "./OperadorSelector";
 import { labelTipoNegocio, type Cotizacion, type CalificacionProspecto, type EtapaId } from "@/lib/types";
 import { CalificacionProspectoBadge } from "./CalificacionProspectoBadge";
-import { cambiarCalificacionExpediente } from "@/app/actions/expedientes";
+import { cambiarCalificacionExpediente, actualizarDireccionExpediente } from "@/app/actions/expedientes";
 import { ConversacionHistorica } from "./ConversacionHistorica";
 import { LlamadasHistoricas } from "./LlamadasHistoricas";
 import { TimelineSecuencia } from "./TimelineSecuencia";
@@ -49,6 +49,13 @@ export function DetalleExpediente({ id }: { id: string }) {
   const [enrolandoSecuencia, setEnrolandoSecuencia] = useState(false);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [siteUrl, setSiteUrl] = useState("https://app.saucedamx.com");
+
+  // Edición en línea de la dirección
+  const [editandoDireccion, setEditandoDireccion] = useState(false);
+  const [direccionBorrador, setDireccionBorrador] = useState("");
+  const [mapsBorrador, setMapsBorrador] = useState("");
+  const [guardandoDireccion, setGuardandoDireccion] = useState(false);
+  const [errorDireccion, setErrorDireccion] = useState<string | null>(null);
 
   // Estado para programación de llamada
   const [mostrarFormLlamada, setMostrarFormLlamada] = useState(false);
@@ -474,12 +481,79 @@ export function DetalleExpediente({ id }: { id: string }) {
             {/* Dirección Completa / Propiedad */}
             <div className="rounded-lg border border-carbon/10 bg-slate-50/50 p-3 space-y-1.5 flex flex-col justify-between">
               <div>
-                <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📍 Dirección Completa</span>
-                <span className="text-xs font-medium text-carbon/80 block mt-0.5 line-clamp-2" title={expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}>
-                  {expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[9px] font-bold text-carbon/40 uppercase tracking-wider block">📍 Dirección Completa</span>
+                  {!editandoDireccion && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDireccionBorrador(expediente.direccionPropiedad || expediente.prospectoDireccion || "");
+                        setMapsBorrador(expediente.linkGoogleMaps || "");
+                        setErrorDireccion(null);
+                        setEditandoDireccion(true);
+                      }}
+                      className="text-xs text-carbon/40 hover:text-sauce transition"
+                      title="Editar dirección"
+                      aria-label="Editar dirección"
+                    >
+                      ✏️
+                    </button>
+                  )}
+                </div>
+                {editandoDireccion ? (
+                  <div className="mt-1 space-y-1.5">
+                    <textarea
+                      value={direccionBorrador}
+                      onChange={(e) => setDireccionBorrador(e.target.value)}
+                      rows={2}
+                      autoFocus
+                      placeholder="Calle, número, colonia"
+                      className="w-full rounded border border-carbon/20 bg-white px-2 py-1 text-xs focus:outline-none focus:border-sauce"
+                    />
+                    <input
+                      type="url"
+                      value={mapsBorrador}
+                      onChange={(e) => setMapsBorrador(e.target.value)}
+                      placeholder="Link de Google Maps (opcional)"
+                      className="w-full rounded border border-carbon/20 bg-white px-2 py-1 text-[11px] focus:outline-none focus:border-sauce"
+                    />
+                    {errorDireccion && <p className="text-[10px] text-rojo">{errorDireccion}</p>}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={guardandoDireccion}
+                        onClick={async () => {
+                          setGuardandoDireccion(true);
+                          setErrorDireccion(null);
+                          const r = await actualizarDireccionExpediente(expediente.id, direccionBorrador, mapsBorrador);
+                          setGuardandoDireccion(false);
+                          if (!r.ok) {
+                            setErrorDireccion(r.error ?? "No se pudo guardar.");
+                            return;
+                          }
+                          setEditandoDireccion(false);
+                          await recargar();
+                        }}
+                        className="rounded bg-sauce px-2 py-0.5 text-[10px] font-bold text-crema hover:bg-verde-profundo disabled:opacity-50"
+                      >
+                        {guardandoDireccion ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditandoDireccion(false)}
+                        className="text-[10px] text-carbon/50 hover:underline"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-xs font-medium text-carbon/80 block mt-0.5 line-clamp-2" title={expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}>
+                    {expediente.direccionPropiedad || expediente.prospectoDireccion || `${expediente.fraccionamiento || "Sin dirección"}, León, Gto.`}
+                  </span>
+                )}
               </div>
-              {expediente.linkGoogleMaps ? (
+              {editandoDireccion ? null : expediente.linkGoogleMaps ? (
                 <a
                   href={expediente.linkGoogleMaps}
                   target="_blank"
