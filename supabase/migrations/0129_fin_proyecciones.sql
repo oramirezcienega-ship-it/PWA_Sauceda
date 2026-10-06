@@ -116,6 +116,30 @@ CREATE INDEX IF NOT EXISTS idx_fin_fijos_plan_bu ON public.fin_fijos_plan(busine
 CREATE INDEX IF NOT EXISTS idx_fin_fijos_plan_mes ON public.fin_fijos_plan(mes);
 
 -- ============================================================
+-- TABLAS AUXILIARES / DEPENDENCIAS EXTERNAS
+-- ============================================================
+
+-- Asegurar tabla de gastos de Meta Ads si no existe
+CREATE TABLE IF NOT EXISTS public.meta_ads_gastos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_name text,
+  centro_costos text,
+  cuenta_mayor text,
+  codigo_subcuenta text,
+  nombre_subcuenta text,
+  producto_servicio text,
+  gasto numeric(14,2) NOT NULL DEFAULT 0,
+  impresiones integer NOT NULL DEFAULT 0,
+  clics integer NOT NULL DEFAULT 0,
+  fecha_inicio date NOT NULL,
+  fecha_fin date,
+  estatus_contable text NOT NULL DEFAULT 'PENDIENTE',
+  transaction_id uuid REFERENCES public.transactions(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- ============================================================
 -- VISTAS ANALÍTICAS
 -- ============================================================
 
