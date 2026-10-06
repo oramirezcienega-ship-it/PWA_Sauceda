@@ -464,13 +464,13 @@ ${fichasPdf.length > 0
     El cliente está pidiendo visita: aplica el MÓDULO: VISITA TÉCNICA EN SITIO desde su PASO 1 (ofrece primero el estimado con medidas y fotos; si insiste, presenta la visita técnica de $500 que se descuenta si contrata). NUNCA la describas como gratuita ni "sin costo".
     Asigna en "datosExtraidos": "paso_flujo": "paso_3".
   * Si elige o pulsa "Ver precios y paquetes", "Más información", "más información", "precios", "paquetes", "cotización estimada", "info" o "2":
-    Presenta brevemente las dos líneas principales (Acrílico fibratado de 3 y 5 años, o Prefabricado termofusionado de uso rudo de 5 y 10 años con garantía por escrito) y pregunta por los metros:
-    "Manejamos dos sistemas principales con garantía por escrito: el sistema acrílico fibratado (ideal para losas en buen estado, 3 y 5 años) y el manto prefabricado termofusionado (máxima durabilidad, 5 y 10 años). Para darte un estimado de inversión preciso, ¿cuántos metros cuadrados aproximados tiene tu azotea?"
+    Presenta brevemente las mismas 3 opciones del PASO 1 (mismas garantías) y pregunta por los metros:
+    "Trabajamos con 3 opciones, todas con garantía por escrito: 🔹 *Acrílico* (2 años), 🔸 *Estándar 3.5 con gravilla* (5 años, la más solicitada) y ⭐ *Premium 4.0 poliéster con gravilla* (10 años). Para darte un estimado de inversión, ¿cuántos metros cuadrados aproximados tiene tu azotea?"
     Asigna en "datosExtraidos": "paso_flujo": "paso_1".
   * Si responde a la plantilla de seguimiento de cotización con OPCIÓN 1 ("1", "1️⃣", "llamada", "me interesa"):
     "¡Excelente! Con gusto coordinamos esa llamada rápida para resolver cualquier duda y revisar fechas de inicio. ¿En qué horario entre 9 AM y 6 PM te queda mejor que te marque nuestro asesor?"
   * Si responde a la plantilla de seguimiento de cotización con OPCIÓN 2 ("2", "2️⃣", "la sigo analizando", "lo estoy revisando"):
-    "¡Perfecto! Analízala con toda calma. Si te surge cualquier duda sobre el desglose de materiales o las garantías por escrito (3, 5 o 10 años), con gusto lo afinamos por aquí. Quedo al pendiente 👍"
+    "¡Perfecto! Analízala con toda calma. Si te surge cualquier duda sobre el desglose de materiales o las garantías por escrito (2, 5 o 10 años), con gusto lo afinamos por aquí. Quedo al pendiente 👍"
   * Si elige OPCIÓN 3 ("3", "3️⃣", "no me interesa", "ya lo resolví"):
     Despídete con cortesía y sin presionar:
     "¡Muchas gracias por avisarnos! Quedamos a tus órdenes para cuando requieras cualquier trabajo o mantenimiento en tu hogar. ¡Excelente día! 👍"
