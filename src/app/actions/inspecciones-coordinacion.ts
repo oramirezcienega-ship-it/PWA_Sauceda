@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, requireAdministrador, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
+import {
+  listarCoordinacionesPendientes,
+  enviarReporteCoordinacionesTelegram,
+  type CoordinacionPendiente,
+  type ResultadoEnvioReporte,
+} from "@/lib/coordinaciones-pendientes";
 import {
   calcularSlotsDisponiblesConjuntos,
   solicitarCoordinacionInspeccion,
@@ -336,5 +342,47 @@ export async function marcarAsesorEnteradoAction(
     return res;
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al marcar como enterado." };
+  }
+}
+
+/**
+ * Lista las coordinaciones de inspección pendientes (de la más antigua a la más reciente).
+ * El administrador ve todas; un asesor u operador solo las que tiene asignadas.
+ */
+export async function obtenerCoordinacionesPendientesAction(): Promise<{
+  ok: boolean;
+  coordinaciones: CoordinacionPendiente[];
+  esAdmin: boolean;
+  error?: string;
+}> {
+  try {
+    const usuario = await usuarioActual();
+    if (!usuario) return { ok: false, coordinaciones: [], esAdmin: false, error: "No autorizado." };
+    const { rol } = await rolDe(usuario.id);
+    const esAdmin = rol === "admin";
+    const sb = supabaseServidor();
+    const coordinaciones = await listarCoordinacionesPendientes(sb, esAdmin ? null : usuario.id);
+    return { ok: true, coordinaciones, esAdmin };
+  } catch (err: any) {
+    console.error("[Action] Error en obtenerCoordinacionesPendientesAction:", err);
+    return { ok: false, coordinaciones: [], esAdmin: false, error: err.message || "Error al listar coordinaciones." };
+  }
+}
+
+/**
+ * Comparte el reporte de coordinaciones pendientes por Telegram:
+ * al grupo operativo o, como recordatorio, a cada asesor con sus pendientes.
+ */
+export async function enviarReporteCoordinacionesTelegramAction(
+  destino: "grupo" | "asesores",
+): Promise<ResultadoEnvioReporte> {
+  try {
+    await requireAdministrador();
+    const sb = supabaseServidor();
+    const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
+    return await enviarReporteCoordinacionesTelegram(sb, destino, siteUrl);
+  } catch (err: any) {
+    console.error("[Action] Error en enviarReporteCoordinacionesTelegramAction:", err);
+    return { ok: false, enviados: 0, sinEntrega: [], error: err.message || "Error al enviar el reporte." };
   }
 }
