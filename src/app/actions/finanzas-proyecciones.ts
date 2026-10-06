@@ -764,6 +764,139 @@ export async function eliminarLinea(linea_id: string): Promise<boolean> {
 }
 
 // ============================================================
+// 4b. INSUMOS EDITABLES DEL ESCENARIO (SUPUESTOS Y GASTOS FIJOS)
+// ============================================================
+
+/**
+ * Devuelve los supuestos y gastos fijos tal como están guardados,
+ * para que el grid muestre y edite los valores reales (no derivados del resultado).
+ */
+export async function obtenerInsumosEscenario(
+  escenario_id: string
+): Promise<{ supuestos: SupuestoMes[]; fijos: FijoPlan[] }> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  const { data: lineas } = await sb
+    .from("fin_lineas_plan")
+    .select("id")
+    .eq("escenario_id", escenario_id);
+  const lineaIds = (lineas || []).map((l) => l.id);
+
+  const [{ data: supuestos }, { data: fijos, error: errFij }] = await Promise.all([
+    lineaIds.length > 0
+      ? sb.from("fin_supuestos_mes").select("*").in("linea_id", lineaIds)
+      : Promise.resolve({ data: [] as any[] }),
+    sb
+      .from("fin_fijos_plan")
+      .select("*, business_units(nombre)")
+      .eq("escenario_id", escenario_id)
+      .order("concepto")
+  ]);
+  if (errFij) throw new Error(errFij.message);
+
+  return {
+    supuestos: (supuestos || []).map((s: any) => ({
+      ...s,
+      mes: String(s.mes).slice(0, 7) + "-01"
+    })),
+    fijos: (fijos || []).map((f: any) => ({
+      id: f.id,
+      escenario_id: f.escenario_id,
+      business_unit_id: f.business_unit_id,
+      business_unit_nombre: f.business_units?.nombre || "Sin Unidad",
+      concepto: f.concepto,
+      linea_pnl: f.linea_pnl,
+      mes: String(f.mes).slice(0, 7) + "-01",
+      monto: Number(f.monto || 0),
+      fuente: f.fuente
+    }))
+  };
+}
+
+/**
+ * Actualiza el monto de un gasto fijo (concepto + unidad) en uno o en todos los meses.
+ * Si `mes` es null, aplica el monto a todos los meses del concepto.
+ */
+export async function actualizarFijo(params: {
+  escenario_id: string;
+  concepto: string;
+  business_unit_id: string | null;
+  mes: string | null;
+  monto: number;
+}): Promise<boolean> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  let q = sb
+    .from("fin_fijos_plan")
+    .update({ monto: params.monto, fuente: "manual" })
+    .eq("escenario_id", params.escenario_id)
+    .eq("concepto", params.concepto);
+  q = params.business_unit_id
+    ? q.eq("business_unit_id", params.business_unit_id)
+    : q.is("business_unit_id", null);
+  if (params.mes) q = q.eq("mes", params.mes.slice(0, 7) + "-01");
+
+  const { error } = await q;
+  if (error) throw new Error(error.message);
+  revalidatePath("/finanzas");
+  return true;
+}
+
+/** Agrega un concepto de gasto fijo con el mismo monto en todos los meses del escenario. */
+export async function agregarConceptoFijo(params: {
+  escenario_id: string;
+  concepto: string;
+  linea_pnl: string;
+  business_unit_id: string | null;
+  monto: number;
+  meses: string[];
+}): Promise<boolean> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  const filas = params.meses.map((m) => ({
+    escenario_id: params.escenario_id,
+    business_unit_id: params.business_unit_id,
+    concepto: params.concepto.trim().toUpperCase(),
+    linea_pnl: params.linea_pnl,
+    mes: m.slice(0, 7) + "-01",
+    monto: params.monto,
+    fuente: "manual"
+  }));
+
+  const { error } = await sb.from("fin_fijos_plan").insert(filas);
+  if (error) throw new Error(error.message);
+  revalidatePath("/finanzas");
+  return true;
+}
+
+/** Elimina un concepto de gasto fijo (todos sus meses) del escenario. */
+export async function eliminarConceptoFijo(params: {
+  escenario_id: string;
+  concepto: string;
+  business_unit_id: string | null;
+}): Promise<boolean> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  let q = sb
+    .from("fin_fijos_plan")
+    .delete()
+    .eq("escenario_id", params.escenario_id)
+    .eq("concepto", params.concepto);
+  q = params.business_unit_id
+    ? q.eq("business_unit_id", params.business_unit_id)
+    : q.is("business_unit_id", null);
+
+  const { error } = await q;
+  if (error) throw new Error(error.message);
+  revalidatePath("/finanzas");
+  return true;
+}
+
+// ============================================================
 // 5. CÁLCULO COMPLETO DE PROYECCIÓN
 // ============================================================
 
