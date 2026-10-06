@@ -626,6 +626,8 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
     "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
+    "direccion": "La dirección de la propiedad tal como la dio el cliente (calle, número, colonia, referencias) si la escribió en cualquier mensaje de la conversación, de lo contrario null. No la inventes ni la completes con solo la colonia",
+    "link_google_maps": "El enlace de Google Maps (maps.google, goo.gl/maps, maps.app.goo.gl) si el cliente compartió su ubicación como link, de lo contrario null",
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
     "paquete_elegido": "El paquete de impermeabilización que el cliente eligió CLARAMENTE: 'acrilico', 'estandar' o 'premium'. Si aún no ha elegido, null (no asumas uno)",
     "ficha_tecnica_de": "'acrilico', 'estandar' o 'premium' SOLO si en el mensaje actual el cliente pidió expresamente la ficha técnica (PDF) de ese producto; en cualquier otro caso null",
@@ -1238,6 +1240,20 @@ export async function responderConIA(
       // Nuevos campos Sofía 2.0 (Impermeabilización)
       if ((datosExtraidos as any).colonia) {
         updates.fraccionamiento = (datosExtraidos as any).colonia;
+      }
+      const direccionExtraida = String((datosExtraidos as any).direccion || "").trim();
+      if (direccionExtraida && direccionExtraida.toLowerCase() !== "null" && direccionExtraida.length >= 6) {
+        updates.direccion_propiedad = direccionExtraida;
+        if (exp?.prospecto_id) {
+          await sb
+            .from("prospectos")
+            .update({ direccion: direccionExtraida })
+            .eq("id", exp.prospecto_id);
+        }
+      }
+      const linkMaps = String((datosExtraidos as any).link_google_maps || "").trim();
+      if (/^https?:\/\/(?:www\.)?(?:maps\.google\.|google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)/i.test(linkMaps)) {
+        updates.link_google_maps = linkMaps;
       }
       if ((datosExtraidos as any).cliente_nombre) {
         updates.cliente = (datosExtraidos as any).cliente_nombre;
