@@ -19,9 +19,13 @@ import {
   aplicarATodosLosMeses,
   restaurarAlReal,
   eliminarLinea,
-  generarLecturaSofiaProyeccion
+  generarLecturaSofiaProyeccion,
+  obtenerInsumosEscenario,
+  actualizarFijo,
+  agregarConceptoFijo,
+  eliminarConceptoFijo
 } from "@/app/actions/finanzas-proyecciones";
-import type { ResultadoProyeccion } from "@/lib/finanzas/proyeccion";
+import type { ResultadoProyeccion, SupuestoMes, FijoPlan } from "@/lib/finanzas/proyeccion";
 import { exportarAExcelCSV } from "@/lib/finanzasExport";
 import { ModalNuevoEscenario } from "./ModalNuevoEscenario";
 import { ModalDuplicarEscenario } from "./ModalDuplicarEscenario";
@@ -54,9 +58,13 @@ type VariableSupuesto =
   | "ticket_promedio"
   | "margen_pct"
   | "pct_comision_asesor"
-  | "gasto_ads";
+  | "gasto_ads"
+  | "costo_por_lead";
 
-const VARIABLES_CATALOGO: Array<{ id: VariableSupuesto; label: string; unidad: string }> = [
+// Lo que se puede editar en el grid: un supuesto por línea o los gastos fijos del escenario
+type VariableGrid = VariableSupuesto | "gastos_fijos";
+
+const VARIABLES_CATALOGO: Array<{ id: VariableGrid; label: string; unidad: string }> = [
   { id: "operaciones_manual", label: "Operaciones (Manual)", unidad: "ops" },
   { id: "leads", label: "Leads Captados (Embudo)", unidad: "leads" },
   { id: "pct_a_cotizacion", label: "% Conversión a Cotización", unidad: "%" },
@@ -64,8 +72,30 @@ const VARIABLES_CATALOGO: Array<{ id: VariableSupuesto; label: string; unidad: s
   { id: "ticket_promedio", label: "Ticket Promedio", unidad: "$" },
   { id: "margen_pct", label: "Margen Bruto", unidad: "%" },
   { id: "pct_comision_asesor", label: "% Comisión Asesor", unidad: "%" },
-  { id: "gasto_ads", label: "Gasto Marketing Ads", unidad: "$" }
+  { id: "gasto_ads", label: "Gasto Marketing Ads", unidad: "$" },
+  { id: "costo_por_lead", label: "Costo por Lead (si no hay gasto ads)", unidad: "$" },
+  { id: "gastos_fijos", label: "Gastos Fijos (nómina, renta, servicios…)", unidad: "$/mes" }
 ];
+
+// Variables que solo aplican a un modelo de línea
+const SOLO_EMBUDO: VariableSupuesto[] = ["leads", "pct_a_cotizacion", "pct_cierre"];
+const SOLO_MANUAL: VariableSupuesto[] = ["operaciones_manual"];
+
+const LINEAS_PNL_FIJOS: Array<{ id: string; label: string }> = [
+  { id: "opex_nomina", label: "Nómina" },
+  { id: "opex_renta", label: "Renta" },
+  { id: "opex_servicios", label: "Servicios" },
+  { id: "opex_comisiones_visitas", label: "Comisiones / Visitas" },
+  { id: "opex_otros", label: "Otros" }
+];
+
+// Los porcentajes se guardan como 0..1 y se muestran como 0..100
+const valorParaMostrar = (campo: VariableSupuesto, raw: number | null | undefined): string => {
+  if (raw === null || raw === undefined || isNaN(Number(raw))) return "";
+  const n = Number(raw);
+  const v = campo.includes("pct") && n <= 1 ? n * 100 : n;
+  return String(Math.round(v * 100) / 100);
+};
 
 const formatMXN = (val: number) =>
   `$${Math.round(val || 0).toLocaleString("es-MX")}`;
@@ -77,7 +107,7 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
   // Estado de navegación
   const [seccionActiva, setSeccionActiva] = useState<SubSeccionId>("proyeccion");
   const [vistaAgrupacion, setVistaAgrupacion] = useState<"mes" | "trimestre">("mes");
-  const [variableActiva, setVariableActiva] = useState<VariableSupuesto>("operaciones_manual");
+  const [variableActiva, setVariableActiva] = useState<VariableGrid>("operaciones_manual");
 
   // Escenarios
   const [escenarios, setEscenarios] = useState<EscenarioFinanciero[]>([]);
@@ -89,6 +119,10 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
   const [baseReal, setBaseReal] = useState<IndicadorBaseReal[]>([]);
   const [realVsPlan, setRealVsPlan] = useState<VariacionRealPlan[]>([]);
   const [cargandoCalculo, setCargandoCalculo] = useState(false);
+  const [insumos, setInsumos] = useState<{ supuestos: SupuestoMes[]; fijos: FijoPlan[] }>({
+    supuestos: [],
+    fijos: []
+  });
 
   // Modales
   const [modalNuevo, setModalNuevo] = useState(false);
@@ -125,22 +159,25 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
   }, [cargarEscenarios]);
 
   // 2. Cargar cálculo del escenario seleccionado y base real
-  const cargarDatosEscenario = useCallback(async (escId: string) => {
+  // `silencioso` recalcula sin ocultar el contenido (para ediciones en el grid)
+  const cargarDatosEscenario = useCallback(async (escId: string, silencioso = false) => {
     if (!escId) return;
-    setCargandoCalculo(true);
+    if (!silencioso) setCargandoCalculo(true);
     try {
-      const [resProy, resBase, resComp] = await Promise.all([
+      const [resProy, resBase, resComp, resInsumos] = await Promise.all([
         calcularProyeccion(escId),
         obtenerBaseReal(3),
-        obtenerRealVsPlan(escId)
+        obtenerRealVsPlan(escId),
+        obtenerInsumosEscenario(escId)
       ]);
       setProyeccion(resProy);
       setBaseReal(resBase);
       setRealVsPlan(resComp);
+      setInsumos(resInsumos);
     } catch (err) {
       console.error("Error al calcular proyección:", err);
     } finally {
-      setCargandoCalculo(false);
+      if (!silencioso) setCargandoCalculo(false);
     }
   }, []);
 
@@ -196,7 +233,7 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
     try {
       await actualizarSupuesto(lineaId, mes, campo, valor);
       if (escenarioSeleccionadoId) {
-        await cargarDatosEscenario(escenarioSeleccionadoId);
+        await cargarDatosEscenario(escenarioSeleccionadoId, true);
       }
     } catch (err: any) {
       console.error("Error al actualizar celda:", err);
@@ -208,13 +245,13 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
   const handleAplicarATodos = async (
     lineaId: string,
     campo: VariableSupuesto,
-    valorActual: number
+    valorActual: number | null
   ) => {
-    if (!confirm(`¿Aplicar el valor a todos los meses de esta línea?`)) return;
+    if (!confirm(`¿Aplicar el valor del primer mes a todos los meses de esta línea?`)) return;
     try {
       await aplicarATodosLosMeses(lineaId, campo, valorActual);
       if (escenarioSeleccionadoId) {
-        await cargarDatosEscenario(escenarioSeleccionadoId);
+        await cargarDatosEscenario(escenarioSeleccionadoId, true);
       }
     } catch (err: any) {
       alert("Error: " + err.message);
@@ -240,6 +277,129 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
       if (escenarioSeleccionadoId) {
         await cargarDatosEscenario(escenarioSeleccionadoId);
       }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  // Supuestos guardados indexados por `linea_id:mes`
+  const supuestosMap = useMemo(() => {
+    const map = new Map<string, SupuestoMes>();
+    insumos.supuestos.forEach((s) => map.set(`${s.linea_id}:${s.mes}`, s));
+    return map;
+  }, [insumos.supuestos]);
+
+  // Líneas agrupadas por unidad de negocio (respeta el orden del escenario)
+  const lineasAgrupadas = useMemo(() => {
+    if (!proyeccion) return [];
+    const grupos = new Map<string, { nombre: string; lineas: ResultadoProyeccion["por_linea"][string][] }>();
+    Object.values(proyeccion.por_linea).forEach((l) => {
+      const k = l.business_unit_id || "null";
+      const g = grupos.get(k) || { nombre: l.business_unit_nombre, lineas: [] };
+      g.lineas.push(l);
+      grupos.set(k, g);
+    });
+    return Array.from(grupos.entries()).map(([buId, g]) => ({ buId, ...g }));
+  }, [proyeccion]);
+
+  // Gastos fijos agrupados por concepto + unidad de negocio
+  const fijosAgrupados = useMemo(() => {
+    const grupos = new Map<
+      string,
+      {
+        concepto: string;
+        linea_pnl: string;
+        business_unit_id: string | null;
+        business_unit_nombre: string;
+        por_mes: Record<string, number>;
+      }
+    >();
+    insumos.fijos.forEach((f) => {
+      const k = `${f.concepto}|${f.business_unit_id || "null"}`;
+      const g = grupos.get(k) || {
+        concepto: f.concepto,
+        linea_pnl: f.linea_pnl,
+        business_unit_id: f.business_unit_id,
+        business_unit_nombre: f.business_unit_nombre || "Sin Unidad",
+        por_mes: {}
+      };
+      g.por_mes[f.mes] = (g.por_mes[f.mes] || 0) + Number(f.monto || 0);
+      grupos.set(k, g);
+    });
+    return Array.from(grupos.values()).sort((a, b) =>
+      a.business_unit_nombre.localeCompare(b.business_unit_nombre)
+    );
+  }, [insumos.fijos]);
+
+  // Handlers de Gastos Fijos
+  const [nuevoFijo, setNuevoFijo] = useState<{
+    concepto: string;
+    linea_pnl: string;
+    business_unit_id: string;
+    monto: string;
+  } | null>(null);
+
+  const handleEditarFijo = async (
+    concepto: string,
+    businessUnitId: string | null,
+    mes: string | null,
+    valorRaw: string
+  ) => {
+    let monto = parseFloat(valorRaw);
+    if (isNaN(monto)) monto = 0;
+    if (!escenarioSeleccionadoId) return;
+    if (mes === null && !confirm(`¿Aplicar $${monto.toLocaleString("es-MX")} a todos los meses de '${concepto}'?`)) return;
+
+    const key = `fijo:${concepto}:${businessUnitId}:${mes}`;
+    setGuardandoCelda(key);
+    try {
+      await actualizarFijo({
+        escenario_id: escenarioSeleccionadoId,
+        concepto,
+        business_unit_id: businessUnitId,
+        mes,
+        monto
+      });
+      await cargarDatosEscenario(escenarioSeleccionadoId, true);
+    } catch (err: any) {
+      alert("Error al actualizar gasto fijo: " + err.message);
+    } finally {
+      setGuardandoCelda(null);
+    }
+  };
+
+  const handleAgregarFijo = async () => {
+    if (!nuevoFijo || !escenarioSeleccionadoId || !proyeccion) return;
+    if (!nuevoFijo.concepto.trim()) {
+      alert("Escribe el nombre del concepto.");
+      return;
+    }
+    try {
+      await agregarConceptoFijo({
+        escenario_id: escenarioSeleccionadoId,
+        concepto: nuevoFijo.concepto,
+        linea_pnl: nuevoFijo.linea_pnl,
+        business_unit_id: nuevoFijo.business_unit_id || null,
+        monto: parseFloat(nuevoFijo.monto) || 0,
+        meses: proyeccion.meses
+      });
+      setNuevoFijo(null);
+      await cargarDatosEscenario(escenarioSeleccionadoId, true);
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  const handleEliminarFijo = async (concepto: string, businessUnitId: string | null) => {
+    if (!escenarioSeleccionadoId) return;
+    if (!confirm(`¿Eliminar el gasto fijo '${concepto}' de este escenario?`)) return;
+    try {
+      await eliminarConceptoFijo({
+        escenario_id: escenarioSeleccionadoId,
+        concepto,
+        business_unit_id: businessUnitId
+      });
+      await cargarDatosEscenario(escenarioSeleccionadoId, true);
     } catch (err: any) {
       alert("Error: " + err.message);
     }
@@ -920,7 +1080,224 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                 </div>
               </div>
 
-              {/* Grid de Supuestos por Línea */}
+              {variableActiva === "gastos_fijos" ? (
+                /* Grid de Gastos Fijos por concepto, agrupado por unidad */
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                  <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">Gastos Fijos del Escenario</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Se precargaron al crear el escenario. Edita el monto mensual; se restan de la contribución para llegar a la utilidad operativa.
+                      </p>
+                    </div>
+                    {!nuevoFijo && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNuevoFijo({
+                            concepto: "",
+                            linea_pnl: "opex_otros",
+                            business_unit_id: businessUnits[0]?.id || "",
+                            monto: ""
+                          })
+                        }
+                        className="rounded-xl bg-[#2D4A2B] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#5C7A52] transition"
+                      >
+                        + Concepto
+                      </button>
+                    )}
+                  </div>
+
+                  {nuevoFijo && (
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap items-end gap-2">
+                      <label className="text-[11px] font-bold text-slate-600 flex flex-col gap-1">
+                        Concepto
+                        <input
+                          type="text"
+                          value={nuevoFijo.concepto}
+                          onChange={(e) => setNuevoFijo({ ...nuevoFijo, concepto: e.target.value })}
+                          placeholder="Ej. Contador"
+                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-normal"
+                        />
+                      </label>
+                      <label className="text-[11px] font-bold text-slate-600 flex flex-col gap-1">
+                        Rubro P&L
+                        <select
+                          value={nuevoFijo.linea_pnl}
+                          onChange={(e) => setNuevoFijo({ ...nuevoFijo, linea_pnl: e.target.value })}
+                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-normal"
+                        >
+                          {LINEAS_PNL_FIJOS.map((lp) => (
+                            <option key={lp.id} value={lp.id}>{lp.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[11px] font-bold text-slate-600 flex flex-col gap-1">
+                        Unidad
+                        <select
+                          value={nuevoFijo.business_unit_id}
+                          onChange={(e) => setNuevoFijo({ ...nuevoFijo, business_unit_id: e.target.value })}
+                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-normal"
+                        >
+                          {businessUnits.map((bu) => (
+                            <option key={bu.id} value={bu.id}>{bu.nombre}</option>
+                          ))}
+                          <option value="">Sin Unidad</option>
+                        </select>
+                      </label>
+                      <label className="text-[11px] font-bold text-slate-600 flex flex-col gap-1">
+                        Monto mensual
+                        <input
+                          type="number"
+                          step="100"
+                          value={nuevoFijo.monto}
+                          onChange={(e) => setNuevoFijo({ ...nuevoFijo, monto: e.target.value })}
+                          className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-xs font-normal"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAgregarFijo}
+                        className="rounded-lg bg-[#2D4A2B] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#5C7A52]"
+                      >
+                        Agregar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNuevoFijo(null)}
+                        className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-300"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                          <th className="py-3 px-4 min-w-[220px]">Concepto</th>
+                          {proyeccion.meses.map((m) => (
+                            <th key={m} className="py-3 px-2 text-center whitespace-nowrap min-w-[100px]">
+                              {new Date(m + "T00:00:00").toLocaleDateString("es-MX", {
+                                month: "short",
+                                year: "2-digit"
+                              })}
+                            </th>
+                          ))}
+                          <th className="py-3 px-4 text-center">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {fijosAgrupados.length === 0 && (
+                          <tr>
+                            <td colSpan={proyeccion.meses.length + 2} className="py-6 text-center text-slate-400">
+                              Este escenario no tiene gastos fijos.
+                            </td>
+                          </tr>
+                        )}
+                        {fijosAgrupados.map((g, i) => {
+                          const nuevaUnidad =
+                            i === 0 || fijosAgrupados[i - 1].business_unit_nombre !== g.business_unit_nombre;
+                          const delGrupo = fijosAgrupados.filter(
+                            (x) => x.business_unit_nombre === g.business_unit_nombre
+                          );
+                          return (
+                            <React.Fragment key={`${g.concepto}|${g.business_unit_id}`}>
+                              {nuevaUnidad && (
+                                <tr className="bg-[#2D4A2B]/5">
+                                  <td className="py-2 px-4 text-[11px] font-extrabold uppercase tracking-wide text-[#2D4A2B]">
+                                    {g.business_unit_nombre}
+                                  </td>
+                                  {proyeccion.meses.map((m) => (
+                                    <td key={m} className="py-2 px-2 text-center text-[11px] font-bold font-mono text-[#2D4A2B]">
+                                      {formatMXN(delGrupo.reduce((acc, x) => acc + (x.por_mes[m] || 0), 0))}
+                                    </td>
+                                  ))}
+                                  <td />
+                                </tr>
+                              )}
+                              <tr className="hover:bg-slate-50/50">
+                                <td className="py-2.5 px-4 pl-7 font-bold text-slate-800">
+                                  <div>{g.concepto}</div>
+                                  <span className="text-[10px] text-slate-400 font-normal">
+                                    {LINEAS_PNL_FIJOS.find((lp) => lp.id === g.linea_pnl)?.label || g.linea_pnl}
+                                  </span>
+                                </td>
+                                {proyeccion.meses.map((m) => {
+                                  const monto = g.por_mes[m];
+                                  const valor = monto === undefined ? "" : String(Math.round(monto * 100) / 100);
+                                  const guardando = guardandoCelda === `fijo:${g.concepto}:${g.business_unit_id}:${m}`;
+                                  return (
+                                    <td key={m} className="py-2 px-1 text-center">
+                                      <input
+                                        key={`${m}:${valor}`}
+                                        type="number"
+                                        step="100"
+                                        defaultValue={valor}
+                                        disabled={monto === undefined}
+                                        title={monto === undefined ? "Sin registro para este mes" : undefined}
+                                        onBlur={(e) => {
+                                          if (e.target.value === valor) return;
+                                          handleEditarFijo(g.concepto, g.business_unit_id, m, e.target.value);
+                                        }}
+                                        className={`w-24 text-center rounded-lg border py-1 px-1.5 text-xs font-mono font-bold transition disabled:opacity-40 ${
+                                          guardando
+                                            ? "bg-amber-100 border-amber-400"
+                                            : "bg-[#FEF9C3]/70 text-[#1E40AF] border-blue-300 hover:border-blue-500"
+                                        }`}
+                                      />
+                                    </td>
+                                  );
+                                })}
+                                <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleEditarFijo(
+                                          g.concepto,
+                                          g.business_unit_id,
+                                          null,
+                                          String(g.por_mes[proyeccion.meses[0]] ?? 0)
+                                        )
+                                      }
+                                      className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded font-bold"
+                                      title="Copiar el monto del primer mes a todos los meses"
+                                    >
+                                      Copiar mes 1
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEliminarFijo(g.concepto, g.business_unit_id)}
+                                      className="text-xs text-red-500 hover:text-red-700 p-1"
+                                      title="Eliminar concepto"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+                        {fijosAgrupados.length > 0 && (
+                          <tr className="bg-slate-50 font-bold text-slate-700">
+                            <td className="py-2.5 px-4">Total gastos fijos</td>
+                            {proyeccion.meses.map((m) => (
+                              <td key={m} className="py-2.5 px-2 text-center font-mono">
+                                {formatMXN(proyeccion.consolidado.por_mes[m]?.gastos_fijos || 0)}
+                              </td>
+                            ))}
+                            <td />
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+              /* Grid de Supuestos por Línea, agrupado por unidad de negocio */
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
@@ -940,105 +1317,135 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {Object.values(proyeccion.por_linea).map((l) => {
+                      {lineasAgrupadas.map((grupo) => {
+                        const utilidadGrupo = grupo.lineas.reduce((acc, l) => acc + l.total.utilidad_bruta, 0);
                         return (
-                          <tr key={l.linea_id} className="hover:bg-slate-50/50">
-                            <td className="py-2.5 px-4 font-bold text-slate-800">
-                              <div>{l.nombre}</div>
-                              <span className="text-[10px] text-slate-400 font-normal">
-                                {l.business_unit_nombre}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-2">
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                l.modelo === "embudo" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
-                              }`}>
-                                {l.modelo}
-                              </span>
-                            </td>
+                          <React.Fragment key={grupo.buId}>
+                            <tr className="bg-[#2D4A2B]/5">
+                              <td colSpan={2} className="py-2 px-4 text-[11px] font-extrabold uppercase tracking-wide text-[#2D4A2B]">
+                                {grupo.nombre}
+                                <span className="ml-2 normal-case font-bold text-slate-500">
+                                  {grupo.lineas.length} {grupo.lineas.length === 1 ? "línea" : "líneas"} · Utilidad bruta{" "}
+                                  {formatMXN(utilidadGrupo)}
+                                </span>
+                              </td>
+                              {proyeccion.meses.map((m) => (
+                                <td key={m} className="py-2 px-2 text-center text-[10px] font-bold font-mono text-[#2D4A2B]">
+                                  {formatMXN(grupo.lineas.reduce((acc, l) => acc + (l.por_mes[m]?.utilidad_bruta || 0), 0))}
+                                </td>
+                              ))}
+                              <td />
+                            </tr>
 
-                            {proyeccion.meses.map((m) => {
-                              // Extraer valor de la celda según la variable
-                              const resMes = l.por_mes[m];
-                              let valDisplay = 0;
-                              if (variableActiva === "operaciones_manual") valDisplay = resMes?.operaciones || 0;
-                              else if (variableActiva === "ticket_promedio") {
-                                valDisplay = resMes?.operaciones > 0 ? resMes.ingreso_bruto / resMes.operaciones : 25000;
-                              } else if (variableActiva === "margen_pct") {
-                                valDisplay = resMes?.ingreso_bruto > 0 ? (resMes.utilidad_bruta / resMes.ingreso_bruto) * 100 : 50;
-                              } else if (variableActiva === "pct_comision_asesor") {
-                                valDisplay = resMes?.ingreso_bruto > 0 ? (resMes.comision_asesor / resMes.ingreso_bruto) * 100 : 5;
-                              } else if (variableActiva === "gasto_ads") {
-                                valDisplay = resMes?.marketing || 0;
-                              } else if (variableActiva === "leads") {
-                                valDisplay = resMes?.marketing > 0 ? resMes.marketing / 80 : 25;
-                              } else {
-                                valDisplay = 20;
-                              }
-
-                              const key = `${l.linea_id}:${m}:${variableActiva}`;
-                              const guardando = guardandoCelda === key;
+                            {grupo.lineas.map((l) => {
+                              const campo = variableActiva as VariableSupuesto;
+                              const noAplica =
+                                (l.modelo === "manual" && SOLO_EMBUDO.includes(campo)) ||
+                                (l.modelo === "embudo" && SOLO_MANUAL.includes(campo));
+                              const primerSupuesto = supuestosMap.get(`${l.linea_id}:${proyeccion.meses[0]}`);
 
                               return (
-                                <td key={m} className="py-2 px-1 text-center">
-                                  <input
-                                    type="number"
-                                    step={variableActiva.includes("pct") || variableActiva.includes("ops") ? "0.1" : "100"}
-                                    defaultValue={Math.round(valDisplay * 10) / 10}
-                                    onBlur={(e) =>
-                                      handleEditarSupuesto(l.linea_id, m, variableActiva, e.target.value)
-                                    }
-                                    className={`w-20 text-center rounded-lg border py-1 px-1.5 text-xs font-mono font-bold transition ${
-                                      guardando
-                                        ? "bg-amber-100 border-amber-400"
-                                        : "bg-[#FEF9C3]/70 text-[#1E40AF] border-blue-300 hover:border-blue-500"
-                                    }`}
-                                  />
-                                </td>
+                                <tr key={l.linea_id} className="hover:bg-slate-50/50">
+                                  <td className="py-2.5 px-4 pl-7 font-bold text-slate-800">
+                                    <div>{l.nombre}</div>
+                                    <span className="text-[10px] text-slate-400 font-normal">
+                                      Utilidad bruta {formatMXN(l.total.utilidad_bruta)}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-2">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      l.modelo === "embudo" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
+                                    }`}>
+                                      {l.modelo}
+                                    </span>
+                                  </td>
+
+                                  {proyeccion.meses.map((m) => {
+                                    // Valor guardado del supuesto (no derivado del resultado)
+                                    const supuesto = supuestosMap.get(`${l.linea_id}:${m}`);
+                                    const valor = valorParaMostrar(campo, supuesto?.[campo] as number | null | undefined);
+                                    const esReal = supuesto?.fuente !== "manual";
+
+                                    const key = `${l.linea_id}:${m}:${campo}`;
+                                    const guardando = guardandoCelda === key;
+
+                                    return (
+                                      <td key={m} className="py-2 px-1 text-center">
+                                        <input
+                                          key={`${key}:${valor}`}
+                                          type="number"
+                                          step={campo.includes("pct") || campo === "operaciones_manual" ? "0.1" : "100"}
+                                          defaultValue={valor}
+                                          disabled={!supuesto || noAplica}
+                                          title={
+                                            noAplica
+                                              ? `No aplica a líneas de modelo ${l.modelo}`
+                                              : !supuesto
+                                              ? "Sin supuesto para este mes"
+                                              : undefined
+                                          }
+                                          onBlur={(e) => {
+                                            if (e.target.value === valor) return;
+                                            handleEditarSupuesto(l.linea_id, m, campo, e.target.value);
+                                          }}
+                                          className={`w-20 text-center rounded-lg border py-1 px-1.5 text-xs font-mono font-bold transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                                            guardando
+                                              ? "bg-amber-100 border-amber-400"
+                                              : esReal
+                                              ? "bg-slate-100 text-slate-700 border-slate-300 hover:border-slate-500"
+                                              : "bg-[#FEF9C3]/70 text-[#1E40AF] border-blue-300 hover:border-blue-500"
+                                          }`}
+                                        />
+                                      </td>
+                                    );
+                                  })}
+
+                                  <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        disabled={noAplica}
+                                        onClick={() =>
+                                          handleAplicarATodos(
+                                            l.linea_id,
+                                            campo,
+                                            (primerSupuesto?.[campo] as number | null | undefined) ?? null
+                                          )
+                                        }
+                                        className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded font-bold disabled:opacity-30"
+                                        title="Copiar el valor del primer mes a todos los meses"
+                                      >
+                                        Copiar mes 1
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRestaurarReal(l.linea_id)}
+                                        className="text-[10px] text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded"
+                                        title="Restaurar a promedios reales históricos"
+                                      >
+                                        ↺ Real
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEliminarLinea(l.linea_id, l.nombre)}
+                                        className="text-xs text-red-500 hover:text-red-700 p-1"
+                                        title="Eliminar línea"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
                               );
                             })}
-
-                            <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleAplicarATodos(
-                                      l.linea_id,
-                                      variableActiva,
-                                      l.por_mes[proyeccion.meses[0]]?.operaciones || 0
-                                    )
-                                  }
-                                  className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded font-bold"
-                                  title="Copiar el valor a todos los meses"
-                                >
-                                  Copiar mes 1
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRestaurarReal(l.linea_id)}
-                                  className="text-[10px] text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded"
-                                  title="Restaurar a promedios reales históricos"
-                                >
-                                  ↺ Real
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleEliminarLinea(l.linea_id, l.nombre)}
-                                  className="text-xs text-red-500 hover:text-red-700 p-1"
-                                  title="Eliminar línea"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
               </div>
+              )}
             </div>
           )}
 
