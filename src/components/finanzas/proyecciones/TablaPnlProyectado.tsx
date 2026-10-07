@@ -11,7 +11,10 @@ interface TablaPnlProyectadoProps {
 // Cómo se muestran los gastos fijos: un solo renglón, por cuenta contable o por concepto
 type ModoFijos = "total" | "cuenta" | "concepto";
 
-const formatMXN = (val: number) => `$${Math.round(val || 0).toLocaleString("es-MX")}`;
+const formatMXN = (val: number) => {
+  const n = Math.round(val || 0);
+  return `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("es-MX")}`;
+};
 
 const etiquetaMes = (m: string) =>
   new Date(m + "T00:00:00").toLocaleDateString("es-MX", { month: "short", year: "2-digit" });

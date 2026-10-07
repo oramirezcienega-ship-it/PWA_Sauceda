@@ -95,8 +95,10 @@ const valorParaMostrar = (campo: VariableSupuesto, raw: number | null | undefine
   return String(Math.round(v * 100) / 100);
 };
 
-const formatMXN = (val: number) =>
-  `$${Math.round(val || 0).toLocaleString("es-MX")}`;
+const formatMXN = (val: number) => {
+  const n = Math.round(val || 0);
+  return `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("es-MX")}`;
+};
 
 const formatPct = (val: number) =>
   `${(val || 0).toFixed(1)}%`;
@@ -525,6 +527,7 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
       });
       const row: Record<string, any> = { mes: mesLabel };
       Object.values(proyeccion.por_unidad).forEach((u) => {
+        if (u.total.ingreso_bruto === 0) return;
         row[u.business_unit_nombre] = u.por_mes[m]?.ingreso_bruto || 0;
       });
       return row;
@@ -812,15 +815,21 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                         <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v / 1000}k`} />
                         <Tooltip formatter={(value: any) => formatMXN(Number(value))} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        {Object.values(proyeccion.por_unidad).map((u, i) => (
-                          <Bar
-                            key={u.business_unit_nombre}
-                            dataKey={u.business_unit_nombre}
-                            stackId="a"
-                            fill={i === 0 ? "#2D4A2B" : i === 1 ? "#5C7A52" : "#C9A961"}
-                            radius={i === Object.keys(proyeccion.por_unidad).length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
-                          />
-                        ))}
+                        {(() => {
+                          // Solo unidades con ingreso (Gastos Generales no factura)
+                          const conIngreso = Object.values(proyeccion.por_unidad).filter(
+                            (u) => u.total.ingreso_bruto !== 0
+                          );
+                          return conIngreso.map((u, i) => (
+                            <Bar
+                              key={u.business_unit_nombre}
+                              dataKey={u.business_unit_nombre}
+                              stackId="a"
+                              fill={i === 0 ? "#2D4A2B" : i === 1 ? "#5C7A52" : "#C9A961"}
+                              radius={i === conIngreso.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                            />
+                          ));
+                        })()}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
