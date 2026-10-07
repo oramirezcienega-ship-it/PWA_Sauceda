@@ -5,6 +5,7 @@ import type {
   ProductoServicio, 
   Insumo, 
   FotoProducto, 
+  VideoProducto,
   ConceptoApuComposicion,
   InsumoHistorialPrecio 
 } from "@/lib/types";
@@ -20,9 +21,30 @@ import {
   obtenerHistorialPreciosInsumo,
   subirImagenProducto,
   subirFichaTecnicaProducto,
+  prepararSubidaVideoProducto,
   obtenerSubcuentasMarketing,
   type MetricaVentaProducto,
 } from "@/app/actions/productos";
+import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
+import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+
+/** Duración en segundos de un video local (null si el navegador no la puede leer). */
+function leerDuracionVideo(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    const fin = (d: number | null) => { URL.revokeObjectURL(url); resolve(d); };
+    v.onloadedmetadata = () => fin(Number.isFinite(v.duration) ? Math.round(v.duration) : null);
+    v.onerror = () => fin(null);
+    v.src = url;
+  });
+}
+
+function formatoDuracion(seg?: number | null): string {
+  if (!seg) return "";
+  return `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, "0")}`;
+}
 
 interface Props {
   productosIniciales: ProductoServicio[];
@@ -83,6 +105,7 @@ export function ProductosClient({
   const [formEspecificaciones, setFormEspecificaciones] = useState("");
   const [formAptoParaIa, setFormAptoParaIa] = useState(true);
   const [formFotos, setFormFotos] = useState<FotoProducto[]>([]);
+  const [formVideos, setFormVideos] = useState<VideoProducto[]>([]);
   const [formTarifas, setFormTarifas] = useState<{ hastaLitros: string; costo: string; precio: string }[]>([]);
   const [formFichaUrl, setFormFichaUrl] = useState("");
   const [formFichaNombre, setFormFichaNombre] = useState("");
@@ -103,6 +126,10 @@ export function ProductosClient({
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [tipoFotoNueva, setTipoFotoNueva] = useState<"producto" | "aplicacion">("aplicacion");
   const [tituloFotoNueva, setTituloFotoNueva] = useState("");
+
+  // Subida de video (se optimiza para WhatsApp en el navegador antes de subir)
+  const [tituloVideoNuevo, setTituloVideoNuevo] = useState("");
+  const [estadoVideo, setEstadoVideo] = useState<string | null>(null);
 
   // Estado Catálogo Insumos
   const [insumos, setInsumos] = useState<Insumo[]>(insumosIniciales);
@@ -155,6 +182,7 @@ export function ProductosClient({
     setFormEspecificaciones("");
     setFormAptoParaIa(true);
     setFormFotos([]);
+    setFormVideos([]);
     setFormFichaUrl("");
     setFormFichaNombre("");
     setFormTarifas([]);
@@ -185,6 +213,7 @@ export function ProductosClient({
     setFormEspecificaciones(p.especificaciones || "");
     setFormAptoParaIa(p.aptoParaIa !== false);
     setFormFotos(p.fotos || []);
+    setFormVideos(p.videos || []);
     setFormFichaUrl(p.fichaTecnicaUrl || "");
     setFormTarifas((p.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), costo: t.costo === null || t.costo === undefined ? "" : String(t.costo), precio: t.precio === null ? "" : String(t.precio) })));
     setFormFichaNombre(p.fichaTecnicaNombre || "");
@@ -246,6 +275,7 @@ export function ProductosClient({
         especificaciones: formEspecificaciones.trim(),
         aptoParaIa: formAptoParaIa,
         fotos: formFotos,
+        videos: formVideos,
         tarifasCapacidad: formTarifas
           .filter((t) => Number(t.hastaLitros) > 0)
           .map((t) => ({
@@ -369,6 +399,52 @@ export function ProductosClient({
 
   const handleEliminarFoto = (idx: number) => {
     setFormFotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubirVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      // WhatsApp sólo acepta MP4 H.264 de hasta 16 MB: se convierte aquí para que Sofía lo mande al instante.
+      if (videoRequiereConversion(file)) {
+        setEstadoVideo("Optimizando video para WhatsApp… 0%");
+        file = await convertirVideoParaWhatsApp(file, (p) => setEstadoVideo(`Optimizando video para WhatsApp… ${p}%`));
+      }
+      if (file.size > 16 * 1024 * 1024) throw new Error("El video supera los 16 MB que permite WhatsApp. Recórtalo e inténtalo de nuevo.");
+
+      const duracionSeg = await leerDuracionVideo(file);
+      setEstadoVideo("Subiendo video…");
+      const prep = await prepararSubidaVideoProducto(file.name);
+      if (!prep.ok || !prep.ruta || !prep.token || !prep.url) throw new Error(prep.error || "No se pudo preparar la subida.");
+      const { error } = await supabaseNavegador()
+        .storage.from("expedientes-fotos")
+        .uploadToSignedUrl(prep.ruta, prep.token, file, { contentType: "video/mp4" });
+      if (error) throw new Error(error.message);
+
+      const nuevo: VideoProducto = {
+        url: prep.url,
+        titulo: tituloVideoNuevo.trim() || "Trabajo realizado",
+        descripcion: "",
+        duracionSeg,
+        pesoBytes: file.size,
+      };
+      setFormVideos((prev) => [...prev, nuevo]);
+      setTituloVideoNuevo("");
+    } catch (err: any) {
+      alert("Error al subir el video: " + (err?.message || "Falla desconocida"));
+    } finally {
+      setEstadoVideo(null);
+    }
+  };
+
+  const handleEditarVideo = (idx: number, cambios: Partial<VideoProducto>) => {
+    setFormVideos((prev) => prev.map((v, i) => (i === idx ? { ...v, ...cambios } : v)));
+  };
+
+  const handleEliminarVideo = (idx: number) => {
+    if (!window.confirm("¿Quitar este video del producto?")) return;
+    setFormVideos((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // APU Receta Helpers
@@ -1334,10 +1410,10 @@ export function ProductosClient({
                     : "border-transparent text-carbon/60 hover:text-carbon"
                 }`}
               >
-                🖼️ Fotos y Ejemplos de Obra
-                {formFotos.length > 0 && (
+                🖼️ Fotos, Videos y Obra
+                {formFotos.length + formVideos.length > 0 && (
                   <span className="rounded-full bg-sauce/15 px-1.5 py-0.2 text-[10px] text-sauce">
-                    {formFotos.length}
+                    {formFotos.length + formVideos.length}
                   </span>
                 )}
               </button>
@@ -1775,6 +1851,77 @@ export function ProductosClient({
                                   <option value="producto">Producto / Muestra</option>
                                   <option value="antes_despues">Antes y después</option>
                                 </select>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Videos de trabajos realizados */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10 space-y-3">
+                    <div>
+                      <h4 className="font-semibold text-carbon">Videos de trabajos realizados ({formVideos.length})</h4>
+                      <p className="text-[11px] text-carbon/50 mt-0.5">
+                        Se optimizan automáticamente para WhatsApp (MP4, máx. 16 MB). Cuando un cliente le pida videos a Sofía, ella los envía en automático.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-carbon/60 text-[11px] mb-1">Título del video</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Impermeabilización azotea 120 m², Col. Jardines"
+                          value={tituloVideoNuevo}
+                          onChange={(e) => setTituloVideoNuevo(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-carbon/20"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-carbon/60 text-[11px] mb-1">Seleccionar video</label>
+                        <input
+                          type="file"
+                          accept="video/*,.mov,.mp4,.m4v"
+                          disabled={estadoVideo !== null}
+                          onChange={handleSubirVideo}
+                          className="w-full text-xs text-carbon/60 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-sauce file:text-white hover:file:bg-verde-profundo cursor-pointer disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                    {estadoVideo && <p className="text-xs text-sauce animate-pulse">{estadoVideo}</p>}
+
+                    {formVideos.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {formVideos.map((v, idx) => (
+                          <div key={v.url} className="rounded-lg overflow-hidden border border-carbon/15 bg-white">
+                            <video src={v.url} controls preload="metadata" className="h-40 w-full bg-black object-contain" />
+                            <div className="p-2.5 space-y-1.5 text-[11px]">
+                              <input
+                                type="text"
+                                value={v.titulo || ""}
+                                placeholder="Título del video"
+                                onChange={(e) => handleEditarVideo(idx, { titulo: e.target.value })}
+                                className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none"
+                              />
+                              <textarea
+                                rows={2}
+                                value={v.descripcion || ""}
+                                placeholder="Descripción (Sofía la envía con el video)"
+                                onChange={(e) => handleEditarVideo(idx, { descripcion: e.target.value })}
+                                className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none resize-none"
+                              />
+                              <div className="flex items-center justify-between text-[10px] text-carbon/45">
+                                <span>
+                                  {[formatoDuracion(v.duracionSeg), v.pesoBytes ? `${(v.pesoBytes / (1024 * 1024)).toFixed(1)} MB` : ""].filter(Boolean).join(" · ")}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminarVideo(idx)}
+                                  className="rounded px-2 py-1 font-semibold text-rojo/70 hover:bg-rojo/5 hover:text-rojo transition"
+                                >
+                                  Quitar
+                                </button>
                               </div>
                             </div>
                           </div>

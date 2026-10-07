@@ -958,6 +958,15 @@ export interface FotoProducto {
   descripcion?: string;
 }
 
+/** Video de trabajo realizado, ya optimizado para WhatsApp (MP4 H.264, ≤16 MB). */
+export interface VideoProducto {
+  url: string;
+  titulo?: string;
+  descripcion?: string;
+  duracionSeg?: number | null;
+  pesoBytes?: number | null;
+}
+
 export interface Insumo {
   id: string;
   codigo?: string | null;
@@ -1137,6 +1146,8 @@ export interface ProductoServicio {
   codigoSubcuenta?: string | null;
   categoria?: string;
   fotos?: FotoProducto[];
+  /** Videos de trabajos realizados (Sofía los envía cuando el cliente pide videos). */
+  videos?: VideoProducto[];
   descripcionValor?: string;
   especificaciones?: string;
   gama?: 'economica' | 'media' | 'premium' | 'estandar';

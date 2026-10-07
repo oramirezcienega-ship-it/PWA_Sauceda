@@ -620,11 +620,13 @@ function renderizarContenidoMensaje(
       if (match) {
         const mediaId = match[1];
         const caption = match[2];
+        // Los videos del catálogo se envían por link público; el resto por media_id de Meta.
+        const src = /^https?:\/\//i.test(mediaId) ? mediaId : `/api/conversaciones/media?mediaId=${mediaId}`;
         return (
           <div className="space-y-1 max-w-[280px]">
             <div className="overflow-hidden rounded-lg border border-carbon/10 bg-carbon/5 shadow-sm">
               <video
-                src={`/api/conversaciones/media?mediaId=${mediaId}`}
+                src={src}
                 controls
                 className="max-h-[220px] w-full object-contain mx-auto"
                 preload="metadata"

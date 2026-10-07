@@ -14,6 +14,7 @@ import {
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
+import { cargarProductosConVideos, videosParaPrompt, enviarVideosCatalogo } from "@/lib/ia/videos-catalogo";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { MARCA } from "@/lib/marca";
@@ -326,6 +327,7 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const fotosCisternas = Boolean(serviciosMant.cisternas?.aptoParaIa && serviciosMant.cisternas.fotos.length > 0);
   const fotosTinacos = Boolean(serviciosMant.tinacos?.aptoParaIa && serviciosMant.tinacos.fotos.length > 0);
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
+  const listaVideos = videosParaPrompt(await cargarProductosConVideos(sb).catch(() => []));
   const minimosImper = (["acrilico", "estandar", "premium"] as const)
     .map((p) => productosImper[p])
     .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
@@ -584,10 +586,18 @@ REGLA EN CASO DE NO CONOCER LAS MEDIDAS (CRÍTICA):
 
 REGLA DE CLIENTE QUE POSPONE (CRÍTICA):
   Hoy es ${hoyMexico()}. Si el cliente dice que por ahora no, que lo retomará más adelante o da una fecha ("hasta diciembre", "después de la quincena", "en enero", "ahorita no, más adelante", "le aviso luego"):
-  - NO insistas, NO vendas, NO anuncies imágenes, comparativas ni fotos, y NO pongas "metros_claros", "paquete_elegido" ni "ficha_tecnica_de" en este turno.
+  - NO insistas, NO vendas, NO anuncies imágenes, comparativas, fotos ni videos, y NO pongas "metros_claros", "paquete_elegido", "ficha_tecnica_de" ni "videos_de" en este turno.
   - Responde breve y cálido, confirmando que le escribiremos unos días antes de la fecha que dijo (sin prometer un día exacto). Ej.: "¡Claro, [NOMBRE]! Te escribo unos días antes de diciembre para retomarlo. Cualquier cosa antes, aquí estamos 👍".
   - En "datosExtraidos" pon "cliente_pospone": true, "pospone_fecha": la fecha que dijo como "YYYY-MM" (mes) o "YYYY-MM-DD" (día), siempre en el futuro respecto a hoy (si dice "diciembre" y estamos antes de diciembre, es diciembre de este año); null si no dio fecha. Y "pospone_motivo": lo que dijo en pocas palabras.
   - Si el negocio está EN PAUSA (lo verás en "Datos del cliente") y el cliente escribe con intención clara de retomar YA ("ya estoy listo", "quiero agendar", "¿siguen teniendo lugar?"), pon "cliente_retoma": true y continúa el flujo normal. Si solo agradece o saluda, no lo pongas.
+
+VIDEOS DE TRABAJOS REALIZADOS (cualquier servicio):
+${listaVideos
+  ? `  Si el cliente pide ver videos ("¿tienen videos?", "mándame un video de cómo queda", "videos de trabajos que hayan hecho"), asigna en "datosExtraidos": "videos_de": la clave (v1, v2…) del servicio del que está hablando según esta lista, o "general" si no queda claro de cuál. Avísale en una línea que se los compartes 👇 (el sistema los envía AUTOMÁTICAMENTE justo después de tu mensaje). No describas el contenido de los videos más allá de su título. NUNCA asignes "videos_de" si el cliente no pidió videos.
+  Videos disponibles:
+${listaVideos}
+  Si pide videos de un servicio que no está en la lista, dile que por ahora no tienes videos de ese servicio a la mano y que un asesor se los puede compartir.`
+  : `  Por ahora no hay videos cargados: si el cliente pide videos, dile que un asesor de nuestro equipo se los comparte. No pongas "videos_de".`}
 
 REGLA DE PRECIOS (CRÍTICA):
   - PROHIBIDO escribir en texto precios, montos, costos por m², importes mínimos, rangos ("desde $...") o totales de cualquier producto o servicio.
@@ -666,6 +676,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "metros": "El número entero de metros cuadrados aproximados a impermeabilizar proporcionados por el cliente si el tipo de negocio es impermeabilización, de lo contrario null",
     "paquete_elegido": "El paquete de impermeabilización que el cliente eligió CLARAMENTE: 'acrilico', 'estandar' o 'premium'. Si aún no ha elegido, null (no asumas uno)",
     "ficha_tecnica_de": "'acrilico', 'estandar' o 'premium' SOLO si en el mensaje actual el cliente pidió expresamente la ficha técnica (PDF) de ese producto; en cualquier otro caso null",
+    "videos_de": "La clave del servicio ('v1', 'v2'…) o 'general' SOLO si en el mensaje actual el cliente pidió ver videos de trabajos realizados; en cualquier otro caso null",
     "metros_claros": "true SOLO si el cliente dio de forma clara los metros cuadrados de su azotea en el mensaje actual o antes (un número); false o null en cualquier otro caso",
     "cliente_nombre": "El nombre proporcionado por el cliente, de lo contrario null",
     "fuera_de_zona": "Boolean (true) si el cliente confirmó que NO tiene propiedades en León y está fuera de nuestra cobertura geográfica, de lo contrario null",
@@ -1105,6 +1116,7 @@ export async function responderConIA(
       metros_claros?: boolean | string | null;
       paquete_elegido?: string | null;
       ficha_tecnica_de?: string | null;
+      videos_de?: string | null;
       cliente_pospone?: boolean | string | null;
       pospone_fecha?: string | null;
       pospone_motivo?: string | null;
@@ -1773,6 +1785,21 @@ export async function responderConIA(
       const fichaDe = (datosExtraidos as any).ficha_tecnica_de;
       if (esPaqueteImper(fichaDe)) {
         await enviarFichaTecnicaImper(sb, { ...ctxEnvio, paquete: fichaDe });
+      }
+    }
+
+    // --- VIDEOS DE TRABAJOS REALIZADOS: sólo cuando el cliente los pidió (sólo WhatsApp) ---
+    {
+      const videosDe = typeof datosExtraidos.videos_de === "string" ? datosExtraidos.videos_de.trim() : "";
+      if (r.ok && !clientePospone && !esMessenger && !esInstagram && videosDe && videosDe.toLowerCase() !== "null") {
+        await enviarVideosCatalogo(sb, {
+          canal,
+          telefono: ctx.telefono,
+          expedienteId: ctx.expedienteId ?? null,
+          agente: NOMBRE_AGENTE,
+          videosDe,
+          tipoNegocio: (updates.tipo_negocio as string | undefined) || exp?.tipo_negocio,
+        });
       }
     }
 

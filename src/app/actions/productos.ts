@@ -10,6 +10,7 @@ import type {
   ConceptoApuComposicion, 
   InsumoHistorialPrecio,
   FotoProducto,
+  VideoProducto,
   TarifaCapacidad
 } from "@/lib/types";
 
@@ -34,6 +35,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     codigoSubcuenta: fila.codigo_subcuenta || null,
     categoria: fila.categoria || "General",
     fotos: Array.isArray(fila.fotos) ? fila.fotos : [],
+    videos: normalizarVideos(fila.videos),
     descripcionValor: fila.descripcion_valor || "",
     especificaciones: fila.especificaciones || "",
     gama: fila.gama || "estandar",
@@ -65,6 +67,30 @@ function normalizarTarifasCapacidad(raw: any): TarifaCapacidad[] {
         (t.costo === null || Number.isFinite(t.costo))
     )
     .sort((a, b) => a.hastaLitros - b.hastaLitros);
+}
+
+/** Lee el JSON de videos (snake_case en BD) descartando entradas sin URL válida. */
+function normalizarVideos(raw: any): VideoProducto[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v: any) => v && /^https?:\/\//i.test(v.url || ""))
+    .map((v: any) => ({
+      url: v.url,
+      titulo: v.titulo || "",
+      descripcion: v.descripcion || "",
+      duracionSeg: v.duracion_seg ?? v.duracionSeg ?? null,
+      pesoBytes: v.peso_bytes ?? v.pesoBytes ?? null,
+    }));
+}
+
+function videosAJson(v?: VideoProducto[]) {
+  return normalizarVideos(v).map((x) => ({
+    url: x.url,
+    titulo: x.titulo?.trim() || "",
+    descripcion: x.descripcion?.trim() || "",
+    duracion_seg: x.duracionSeg ?? null,
+    peso_bytes: x.pesoBytes ?? null,
+  }));
 }
 
 function tarifasAJson(t?: TarifaCapacidad[]) {
@@ -197,6 +223,7 @@ export async function crearProductoServicio(datos: {
   codigoSubcuenta?: string | null;
   categoria?: string;
   fotos?: FotoProducto[];
+  videos?: VideoProducto[];
   descripcionValor?: string;
   especificaciones?: string;
   gama?: 'economica' | 'media' | 'premium' | 'estandar';
@@ -235,6 +262,7 @@ export async function crearProductoServicio(datos: {
       codigo_subcuenta: datos.codigoSubcuenta || null,
       categoria: datos.categoria?.trim() || "General",
       fotos: Array.isArray(datos.fotos) ? datos.fotos : [],
+      videos: videosAJson(datos.videos),
       descripcion_valor: datos.descripcionValor?.trim() || "",
       especificaciones: datos.especificaciones?.trim() || "",
       gama: datos.gama || "estandar",
@@ -269,6 +297,7 @@ export async function editarProductoServicio(
     codigoSubcuenta?: string | null;
     categoria?: string;
     fotos?: FotoProducto[];
+    videos?: VideoProducto[];
     descripcionValor?: string;
     especificaciones?: string;
     gama?: 'economica' | 'media' | 'premium' | 'estandar';
@@ -302,6 +331,10 @@ export async function editarProductoServicio(
     activo: datos.activo !== false,
     apto_para_ia: datos.aptoParaIa !== false,
   };
+  // Los videos sólo se tocan si vienen en la petición (otros flujos de edición no los envían)
+  if (datos.videos !== undefined) {
+    updatePayload.videos = videosAJson(datos.videos);
+  }
   if (datos.costosVolumen !== undefined) {
     updatePayload.costos_volumen = normalizarCostosVolumen(datos.costosVolumen);
   }
@@ -837,4 +870,22 @@ export async function subirFichaTecnicaProducto(
 
   const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(data.path);
   return { ok: true, url: urlData.publicUrl, nombre: archivo.name };
+}
+
+/**
+ * Prepara la subida de un video de producto: devuelve una URL firmada para que el
+ * navegador lo suba directo a Storage (las funciones de Netlify cortan a ~6 MB).
+ * El navegador ya lo convirtió a MP4 H.264 ≤16 MB, listo para enviarse por WhatsApp.
+ */
+export async function prepararSubidaVideoProducto(
+  nombre: string
+): Promise<{ ok: boolean; ruta?: string; token?: string; url?: string; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const limpio = (nombre || "video.mp4").normalize("NFD").replace(/[^\w.-]+/g, "_").replace(/\.[^.]+$/, "").slice(-60);
+  const ruta = `catalogo/videos/${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${limpio}.mp4`;
+  const { data, error } = await sb.storage.from("expedientes-fotos").createSignedUploadUrl(ruta);
+  if (error || !data) return { ok: false, error: error?.message || "No se pudo preparar la subida del video." };
+  const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(data.path);
+  return { ok: true, ruta: data.path, token: data.token, url: urlData.publicUrl };
 }
