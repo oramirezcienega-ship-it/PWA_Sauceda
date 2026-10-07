@@ -36,6 +36,7 @@ import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
+import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
 import {
   obtenerEnvioLeadTelegramAction,
   marcarLeadRevisadoManualAction,
@@ -711,6 +712,8 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [params, setParams] = useState<string[]>([]);
   const [filtroPlantillasModo, setFiltroPlantillasModo] = useState<"recomendadas" | "todas">("recomendadas");
   const [busquedaPlantilla, setBusquedaPlantilla] = useState<string>("");
+  const [modalCatalogoAbierto, setModalCatalogoAbierto] = useState(false);
+  const [modoVistaPlantillas, setModoVistaPlantillas] = useState<"tarjetas" | "select">("tarjetas");
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
@@ -1166,6 +1169,26 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       modoFiltro: filtroPlantillasModo,
     });
   }, [plantillas, detalle?.tipoNegocio, busquedaPlantilla, filtroPlantillasModo]);
+
+  function seleccionarPlantilla(selectedName: string) {
+    setPlantillaSel(selectedName);
+    const p = plantillas.find((x) => x.nombre === selectedName);
+    if (p && p.parametros > 0) {
+      const newParams = Array(p.parametros).fill("");
+      if (detalle?.nombre) {
+        newParams[0] = detalle.nombre.split(" ")[0];
+      }
+      if (selectedName.includes("imper")) {
+        if (p.parametros >= 2) newParams[1] = "Impermeabilización";
+      } else if (selectedName.includes("cotizacion")) {
+        if (p.parametros >= 2) newParams[1] = "Servicio de Construcción";
+        if (p.parametros >= 3) newParams[2] = "Cotización";
+      }
+      setParams(newParams);
+    } else {
+      setParams([]);
+    }
+  }
 
   async function enviarPlantilla() {
     if (!sel || !plantillaSel) return;
@@ -2443,7 +2466,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         <p className="text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
                       ) : (
                         <div className="space-y-3">
-                          {/* Barra de Filtros Rápidos y Búsqueda */}
+                          {/* Barra de Filtros Rápidos, Modos de Vista y Búsqueda */}
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-carbon/10 pb-2">
                             <div className="flex flex-wrap items-center gap-1.5">
                               {infoNegocioPlantillas ? (
@@ -2483,79 +2506,166 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                               )}
                             </div>
 
-                            {/* Buscador de plantillas */}
-                            <div className="relative">
-                              <input
-                                type="text"
-                                value={busquedaPlantilla}
-                                onChange={(e) => setBusquedaPlantilla(e.target.value)}
-                                placeholder="🔍 Buscar plantilla..."
-                                className="bg-white border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce w-36 sm:w-48"
-                              />
-                              {busquedaPlantilla && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {/* Buscador de plantillas */}
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={busquedaPlantilla}
+                                  onChange={(e) => setBusquedaPlantilla(e.target.value)}
+                                  placeholder="🔍 Buscar..."
+                                  className="bg-white border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce w-28 sm:w-36"
+                                />
+                                {busquedaPlantilla && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setBusquedaPlantilla("")}
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
+                                    title="Limpiar búsqueda"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Selector de modo de vista: Tarjetas vs Dropdown */}
+                              <div className="inline-flex rounded-md border border-carbon/15 bg-white p-0.5 shadow-2xs">
                                 <button
                                   type="button"
-                                  onClick={() => setBusquedaPlantilla("")}
-                                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
-                                  title="Limpiar búsqueda"
+                                  onClick={() => setModoVistaPlantillas("tarjetas")}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                    modoVistaPlantillas === "tarjetas"
+                                      ? "bg-sauce text-crema"
+                                      : "text-carbon/60 hover:text-carbon"
+                                  }`}
+                                  title="Ver plantillas en tarjetas visuales con texto completo"
                                 >
-                                  ✕
+                                  <span>🎨</span>
+                                  <span>Tarjetas</span>
                                 </button>
-                              )}
+                                <button
+                                  type="button"
+                                  onClick={() => setModoVistaPlantillas("select")}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                    modoVistaPlantillas === "select"
+                                      ? "bg-sauce text-crema"
+                                      : "text-carbon/60 hover:text-carbon"
+                                  }`}
+                                  title="Ver como lista desplegable compacta"
+                                >
+                                  <span>📋</span>
+                                  <span>Lista</span>
+                                </button>
+                              </div>
+
+                              {/* Botón Catálogo Visual Completo */}
+                              <button
+                                type="button"
+                                onClick={() => setModalCatalogoAbierto(true)}
+                                className="px-2 py-1 rounded text-[10px] font-bold bg-sauce/15 hover:bg-sauce/25 text-verde-profundo border border-sauce/30 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                                title="Abrir ventana con catálogo visual grande de todas las plantillas"
+                              >
+                                <span>🔍</span>
+                                <span>Catálogo Completo</span>
+                              </button>
                             </div>
                           </div>
 
-                          {/* Selector con Grupos Temáticos (<optgroup>) */}
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider">
-                                Seleccionar Plantilla:
-                              </label>
-                              <span className="text-[10px] text-carbon/40 font-medium">
-                                {totalPlantillasFiltradas} {totalPlantillasFiltradas === 1 ? "opción" : "opciones"} en el listado
-                              </span>
+                          {/* Vista en Tarjetas Visuales (por defecto) */}
+                          {modoVistaPlantillas === "tarjetas" ? (
+                            <div className="space-y-3 max-h-80 overflow-y-auto p-1 scrollbar-sutil">
+                              {gruposPlantillas.length === 0 ? (
+                                <p className="text-center py-6 text-xs text-carbon/40">
+                                  No hay plantillas con ese criterio de búsqueda.
+                                </p>
+                              ) : (
+                                gruposPlantillas.map((grupo) => (
+                                  <div key={grupo.id} className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-verde-profundo uppercase tracking-wider bg-carbon/5 px-2.5 py-1 rounded-md">
+                                      <span>{grupo.icono}</span>
+                                      <span>{grupo.label}</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {grupo.plantillas.map((p) => {
+                                        const esSel = p.nombre === plantillaSel;
+                                        return (
+                                          <div
+                                            key={p.nombre}
+                                            onClick={() => seleccionarPlantilla(p.nombre)}
+                                            className={`rounded-xl border p-3 transition-all duration-150 cursor-pointer text-left flex flex-col justify-between ${
+                                              esSel
+                                                ? "border-sauce bg-sauce/10 ring-2 ring-sauce shadow-sm"
+                                                : "border-carbon/15 bg-white hover:border-sauce/60 hover:shadow-xs"
+                                            }`}
+                                          >
+                                            <div className="space-y-1.5">
+                                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                                <span className="font-mono text-xs font-bold text-carbon">
+                                                  {p.nombre}
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                  <span className="text-[9px] bg-carbon/5 text-carbon/60 px-1.5 py-0.5 rounded font-mono font-bold">
+                                                    {p.idioma}
+                                                  </span>
+                                                  <span className="text-[9px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
+                                                    {p.categoria}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <p className="text-xs text-carbon/80 whitespace-pre-line font-sans line-clamp-3 bg-crema/25 p-2 rounded-md border border-carbon/5 leading-relaxed">
+                                                {p.cuerpo}
+                                              </p>
+                                            </div>
+                                            <div className="mt-2 pt-1.5 border-t border-carbon/10 flex items-center justify-between text-[10px]">
+                                              <span className="text-carbon/50 font-mono">
+                                                {p.parametros > 0 ? `${p.parametros} variable${p.parametros === 1 ? "" : "s"}` : "Sin variables"}
+                                              </span>
+                                              <span className={`font-bold transition-colors ${esSel ? "text-sauce font-extrabold" : "text-carbon/60 group-hover:text-sauce"}`}>
+                                                {esSel ? "✓ Seleccionada" : "Elegir →"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
                             </div>
-                            <select
-                              value={plantillaSel}
-                              onChange={(e) => {
-                                const selectedName = e.target.value;
-                                setPlantillaSel(selectedName);
-                                const p = plantillas.find((x) => x.nombre === selectedName);
-                                if (p && p.parametros > 0) {
-                                  const newParams = Array(p.parametros).fill("");
-                                  if (detalle?.nombre) {
-                                    newParams[0] = detalle.nombre.split(" ")[0];
-                                  }
-                                  if (selectedName.includes("imper")) {
-                                    if (p.parametros >= 2) newParams[1] = "Impermeabilización";
-                                  } else if (selectedName.includes("cotizacion")) {
-                                    if (p.parametros >= 2) newParams[1] = "Servicio de Construcción";
-                                    if (p.parametros >= 3) newParams[2] = "Cotización";
-                                  }
-                                  setParams(newParams);
-                                } else {
-                                  setParams([]);
-                                }
-                              }}
-                              className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
-                            >
-                              <option value="">— selecciona una plantilla —</option>
-                              {gruposPlantillas.map((grupo) => (
-                                <optgroup key={grupo.id} label={`${grupo.icono} ${grupo.label}`}>
-                                  {grupo.plantillas.map((p) => {
-                                    const snippet = p.cuerpo
-                                      ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 48)}${p.cuerpo.length > 48 ? "..." : ""}"`
-                                      : "";
-                                    return (
-                                      <option key={p.nombre} value={p.nombre}>
-                                        {p.nombre} ({p.categoria}){snippet}
-                                      </option>
-                                    );
-                                  })}
-                                </optgroup>
-                              ))}
-                            </select>
-                          </div>
+                          ) : (
+                            /* Vista en Lista Desplegable (<select>) */
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider">
+                                  Seleccionar Plantilla:
+                                </label>
+                                <span className="text-[10px] text-carbon/40 font-medium">
+                                  {totalPlantillasFiltradas} {totalPlantillasFiltradas === 1 ? "opción" : "opciones"} en el listado
+                                </span>
+                              </div>
+                              <select
+                                value={plantillaSel}
+                                onChange={(e) => seleccionarPlantilla(e.target.value)}
+                                className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
+                              >
+                                <option value="">— selecciona una plantilla —</option>
+                                {gruposPlantillas.map((grupo) => (
+                                  <optgroup key={grupo.id} label={`${grupo.icono} ${grupo.label}`}>
+                                    {grupo.plantillas.map((p) => {
+                                      const snippet = p.cuerpo
+                                        ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 48)}${p.cuerpo.length > 48 ? "..." : ""}"`
+                                        : "";
+                                      return (
+                                        <option key={p.nombre} value={p.nombre}>
+                                          {p.nombre} ({p.categoria}){snippet}
+                                        </option>
+                                      );
+                                    })}
+                                  </optgroup>
+                                ))}
+                              </select>
+                            </div>
+                          )}
 
                           {plantilla && (
                             <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2.5 shadow-2xs">
@@ -3060,6 +3170,17 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             textareaRef.current.focus();
           }
         }}
+      />
+
+      {/* Modal de Catálogo Visual de Plantillas de WhatsApp */}
+      <ModalCatalogoPlantillas
+        abierto={modalCatalogoAbierto}
+        alCerrar={() => setModalCatalogoAbierto(false)}
+        plantillas={plantillas}
+        plantillaSeleccionada={plantillaSel}
+        alSeleccionar={seleccionarPlantilla}
+        tipoNegocio={detalle?.tipoNegocio}
+        nombreCliente={detalle?.nombre}
       />
 
       {/* Modal / Bottom Sheet de Catálogo de Respuestas Rápidas */}
