@@ -981,24 +981,39 @@ export async function responderConIA(
     }
 
     // Detectar bucles con auto-respondedores/bots.
+    // Solo se considera bucle si los mensajes idénticos ocurrieron en una ventana reciente (<= 30 minutos).
+    // Si un cliente vuelve a escribir días o semanas después con el mismo texto (ej. pulsando de nuevo un anuncio),
+    // NO es un bot y Sofía debe atenderlo normalmente.
     const ultimosIn = historia.filter((f) => f.direccion === "in").slice(-3);
     if (ultimosIn.length >= 2) {
-      const texto1 = (ultimosIn[ultimosIn.length - 1].texto ?? "").trim().toLowerCase();
-      const texto2 = (ultimosIn[ultimosIn.length - 2].texto ?? "").trim().toLowerCase();
+      const msg1 = ultimosIn[ultimosIn.length - 1];
+      const msg2 = ultimosIn[ultimosIn.length - 2];
+      const texto1 = (msg1.texto ?? "").trim().toLowerCase();
+      const texto2 = (msg2.texto ?? "").trim().toLowerCase();
       
       if (texto1 && texto1 === texto2) {
-        // Si el mensaje repetido es largo (más de 20 caracteres), asumimos bot y paramos de inmediato.
-        if (texto1.length > 20) {
-          console.warn(`IA: Se detectó bucle de bot (mensajes idénticos largos) de ${ctx.telefono}.`);
-          return;
-        }
-        
-        // Si es corto, paramos al tercer mensaje idéntico.
-        if (ultimosIn.length >= 3) {
-          const texto3 = (ultimosIn[ultimosIn.length - 3].texto ?? "").trim().toLowerCase();
-          if (texto2 === texto3) {
-            console.warn(`IA: Se detectó bucle repetido (3 mensajes idénticos cortos) de ${ctx.telefono}.`);
+        const t1 = msg1.created_at ? new Date(msg1.created_at).getTime() : Date.now();
+        const t2 = msg2.created_at ? new Date(msg2.created_at).getTime() : 0;
+        const diffMinutos = Math.abs(t1 - t2) / (1000 * 60);
+
+        // Si llegaron con menos de 30 minutos de diferencia:
+        if (diffMinutos <= 30) {
+          // Si el mensaje repetido es largo (más de 20 caracteres), asumimos bot y paramos de inmediato.
+          if (texto1.length > 20) {
+            console.warn(`IA: Se detectó bucle de bot (mensajes idénticos en ${diffMinutos.toFixed(1)} min) de ${ctx.telefono}.`);
             return;
+          }
+          
+          // Si es corto, paramos al tercer mensaje idéntico dentro de una ventana reciente.
+          if (ultimosIn.length >= 3) {
+            const msg3 = ultimosIn[ultimosIn.length - 3];
+            const texto3 = (msg3.texto ?? "").trim().toLowerCase();
+            const t3 = msg3.created_at ? new Date(msg3.created_at).getTime() : 0;
+            const diffMinutos3 = Math.abs(t1 - t3) / (1000 * 60);
+            if (texto2 === texto3 && diffMinutos3 <= 60) {
+              console.warn(`IA: Se detectó bucle repetido (3 mensajes idénticos en ${diffMinutos3.toFixed(1)} min) de ${ctx.telefono}.`);
+              return;
+            }
           }
         }
       }
