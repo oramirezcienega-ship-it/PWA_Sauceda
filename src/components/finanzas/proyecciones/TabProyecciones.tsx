@@ -100,6 +100,10 @@ const formatMXN = (val: number) => {
   return `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("es-MX")}`;
 };
 
+// % de un monto sobre su base, para las relaciones verticales de las tablas
+const pctSobre = (valor: number, base: number) =>
+  base > 0 ? `${((valor / base) * 100).toFixed(1)}%` : "—";
+
 const formatPct = (val: number) =>
   `${(val || 0).toFixed(1)}%`;
 
@@ -895,11 +899,20 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                         <td className="py-1.5 px-3 text-red-600 font-semibold">(-) Salidas de Efectivo (Costos + Fijos)</td>
                         {proyeccion.meses.map((m) => (
                           <td key={m} className="py-1.5 px-3 text-right font-mono text-red-600">
-                            -{formatMXN(proyeccion.consolidado.por_mes[m]?.salidas_caja || 0)}
+                            <div>-{formatMXN(proyeccion.consolidado.por_mes[m]?.salidas_caja || 0)}</div>
+                            <div className="text-[9px] font-normal text-slate-400">
+                              {pctSobre(
+                                proyeccion.consolidado.por_mes[m]?.salidas_caja || 0,
+                                proyeccion.consolidado.por_mes[m]?.cobro_caja || 0
+                              )}
+                            </div>
                           </td>
                         ))}
                         <td className="py-1.5 px-3 text-right font-mono font-bold text-red-700 bg-slate-50">
-                          -{formatMXN(proyeccion.consolidado.total.salidas_caja)}
+                          <div>-{formatMXN(proyeccion.consolidado.total.salidas_caja)}</div>
+                          <div className="text-[9px] font-normal text-slate-400">
+                            {pctSobre(proyeccion.consolidado.total.salidas_caja, proyeccion.consolidado.total.cobro_caja)}
+                          </div>
                         </td>
                       </tr>
                       <tr className="bg-slate-50 font-bold">
@@ -908,12 +921,18 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                           const fn = proyeccion.consolidado.por_mes[m]?.flujo_neto_caja || 0;
                           return (
                             <td key={m} className={`py-2 px-3 text-right font-mono ${fn >= 0 ? "text-emerald-700" : "text-red-600"}`}>
-                              {formatMXN(fn)}
+                              <div>{formatMXN(fn)}</div>
+                              <div className="text-[9px] font-normal text-slate-400">
+                                {pctSobre(fn, proyeccion.consolidado.por_mes[m]?.cobro_caja || 0)}
+                              </div>
                             </td>
                           );
                         })}
                         <td className="py-2 px-3 text-right font-mono bg-slate-100 font-extrabold text-[#2D4A2B]">
-                          {formatMXN(proyeccion.consolidado.total.flujo_neto_caja)}
+                          <div>{formatMXN(proyeccion.consolidado.total.flujo_neto_caja)}</div>
+                          <div className="text-[9px] font-normal text-slate-400">
+                            {pctSobre(proyeccion.consolidado.total.flujo_neto_caja, proyeccion.consolidado.total.cobro_caja)}
+                          </div>
                         </td>
                       </tr>
                       <tr className="bg-emerald-50/70 font-extrabold text-emerald-950">
