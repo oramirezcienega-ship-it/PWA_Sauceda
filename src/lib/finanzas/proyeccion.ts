@@ -355,7 +355,7 @@ export function proyectar(
   unidadesMap.forEach((lineaIds, buId) => {
     const buNombre =
       buId === "sin_unidad"
-        ? "Sin Unidad Asignada"
+        ? "Gastos Generales"
         : buNombres.get(buId) || "Unidad " + buId.slice(0, 8);
 
     porUnidad[buId] = {
