@@ -1307,6 +1307,11 @@ export async function enviarArchivoDirectoConversacion(
     else if (mimeType.startsWith("video/")) metaType = "video";
     else if (mimeType.startsWith("audio/")) metaType = "audio";
 
+    // El navegador convierte los videos a MP4 antes de enviarlos; si llega otro formato, no se pudo convertir.
+    if (metaType === "video" && mimeType !== "video/mp4" && mimeType !== "video/3gpp") {
+      return { ok: false, error: "WhatsApp solo acepta videos MP4. Actualiza la página e inténtalo de nuevo, o envía el video desde una computadora." };
+    }
+
     // 1. Subir binario a Meta
     const resUpload = await subirMediaMeta(buffer, mimeType, filename, metaType);
     if (!resUpload.mediaId) {

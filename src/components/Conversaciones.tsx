@@ -39,6 +39,7 @@ import type {
 import { labelTipoNegocio } from "@/lib/types";
 import { visualNegocio } from "@/lib/negocios-visual";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
+import { videoRequiereConversion, convertirVideoParaWhatsApp } from "@/lib/convertir-video";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
@@ -746,6 +747,7 @@ export function Conversaciones() {
   const [mostrarAdjuntar, setMostrarAdjuntar] = useState(false);
   const [enviandoDoc, setEnviandoDoc] = useState(false);
   const [enviandoArchivoDirecto, setEnviandoArchivoDirecto] = useState(false);
+  const [progresoVideo, setProgresoVideo] = useState<number | null>(null);
   const [mostrarStickers, setMostrarStickers] = useState(false);
   const [enviandoSticker, setEnviandoSticker] = useState(false);
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
@@ -1278,6 +1280,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     setAviso(null);
 
     try {
+      // WhatsApp solo acepta MP4/3GPP: los .mov del iPhone se convierten aquí antes de subirlos.
+      if (videoRequiereConversion(file)) {
+        setProgresoVideo(0);
+        try {
+          file = await convertirVideoParaWhatsApp(file, setProgresoVideo);
+        } finally {
+          setProgresoVideo(null);
+        }
+      }
+
       const fd = new FormData();
       fd.append("telefono", sel);
       fd.append("archivo", file);
@@ -2158,6 +2170,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
               {/* Responder */}
               <div className="shrink-0 border-t border-carbon/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3 bg-white">
+                {progresoVideo !== null && (
+                  <div className="mb-2 rounded-md border border-sauce/30 bg-sauce/10 px-3 py-2 text-xs font-medium text-verde-profundo">
+                    🎬 Convirtiendo video a MP4 para WhatsApp… {progresoVideo}%
+                  </div>
+                )}
                 {aviso && (
                   <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-rojo/30 bg-rojo/10 px-3 py-2 text-xs text-rojo">
                     <div className="flex items-center gap-2">
