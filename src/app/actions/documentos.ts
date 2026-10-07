@@ -120,6 +120,25 @@ export async function subirDocumento(formData: FormData): Promise<{ ok: boolean;
   return { ok: true };
 }
 
+/** Edita nombre y descripción de un documento (el archivo no cambia). */
+export async function editarDocumento(
+  id: string,
+  nombre: string,
+  descripcion: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const nombreLimpio = nombre.trim();
+  if (!nombreLimpio) return { ok: false, error: "El nombre del documento es requerido." };
+
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("documentos_ventas")
+    .update({ nombre: nombreLimpio, descripcion: descripcion?.trim() || null })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 /** Elimina un documento de la BD y del storage. */
 export async function eliminarDocumento(id: string): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
