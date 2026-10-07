@@ -16,6 +16,10 @@ const formatMXN = (val: number) => {
   return `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("es-MX")}`;
 };
 
+// % a la derecha de la cifra, con ancho fijo para que las columnas queden alineadas
+const PCT_BASE = "ml-1.5 inline-block w-11 text-left text-[9px] font-normal";
+const PCT_CLASE = `${PCT_BASE} text-slate-400`;
+
 const etiquetaMes = (m: string) =>
   new Date(m + "T00:00:00").toLocaleDateString("es-MX", { month: "short", year: "2-digit" });
 
@@ -60,8 +64,9 @@ interface FilaFijo {
  * unidades plegables y análisis vertical opcional (% sobre el ingreso).
  */
 export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProps) {
-  const [unidadesPlegadas, setUnidadesPlegadas] = useState<Set<string>>(new Set());
-  const [modoFijos, setModoFijos] = useState<ModoFijos>("concepto");
+  // Al abrir, todo agrupado: solo se guardan las unidades que el usuario desglosa
+  const [unidadesDesglosadas, setUnidadesDesglosadas] = useState<Set<string>>(new Set());
+  const [modoFijos, setModoFijos] = useState<ModoFijos>("total");
   const [mostrarPct, setMostrarPct] = useState(true);
 
   const { meses, consolidado } = proyeccion;
@@ -104,14 +109,14 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
   const fijosConsolidados = useMemo(() => agruparFijos(fijos), [fijos, modoFijos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleUnidad = (clave: string) =>
-    setUnidadesPlegadas((prev) => {
+    setUnidadesDesglosadas((prev) => {
       const sig = new Set(prev);
       if (sig.has(clave)) sig.delete(clave);
       else sig.add(clave);
       return sig;
     });
 
-  const todasPlegadas = unidades.every((u) => unidadesPlegadas.has(u.business_unit_id || "sin_unidad"));
+  const todasPlegadas = unidades.every((u) => !unidadesDesglosadas.has(u.business_unit_id || "sin_unidad"));
 
   // Monto con su % sobre la base (análisis vertical) debajo, si está activo
   const Celda = ({
@@ -126,11 +131,11 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
     className?: string;
   }) => (
     <td className={`py-1 px-3 text-right font-mono whitespace-nowrap ${className}`}>
-      <div>{negativo && valor ? `-${formatMXN(valor)}` : formatMXN(valor)}</div>
+      <span>{negativo && valor ? `-${formatMXN(valor)}` : formatMXN(valor)}</span>
       {mostrarPct && (
-        <div className="text-[9px] font-normal text-slate-400">
+        <span className={PCT_CLASE}>
           {base > 0 ? `${((valor / base) * 100).toFixed(1)}%` : "—"}
-        </div>
+        </span>
       )}
     </td>
   );
@@ -243,8 +248,8 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
           <button
             type="button"
             onClick={() =>
-              setUnidadesPlegadas(
-                todasPlegadas ? new Set() : new Set(unidades.map((u) => u.business_unit_id || "sin_unidad"))
+              setUnidadesDesglosadas(
+                todasPlegadas ? new Set(unidades.map((u) => u.business_unit_id || "sin_unidad")) : new Set()
               )
             }
             className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
@@ -287,7 +292,7 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
           <tbody className="divide-y divide-slate-100">
             {unidades.map((u) => {
               const claveU = u.business_unit_id || "sin_unidad";
-              const plegada = unidadesPlegadas.has(claveU);
+              const plegada = !unidadesDesglosadas.has(claveU);
               const esGeneral = !u.business_unit_id;
               const lineasDeUnidad = Object.values(proyeccion.por_linea).filter(
                 (l) => l.business_unit_id === u.business_unit_id
@@ -468,23 +473,23 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
               </td>
               {meses.map((m) => (
                 <td key={m} className="py-3 px-3 text-right font-mono">
-                  <div>{formatMXN(consolidado.por_mes[m]?.utilidad_operativa || 0)}</div>
+                  <span>{formatMXN(consolidado.por_mes[m]?.utilidad_operativa || 0)}</span>
                   {mostrarPct && (
-                    <div className="text-[9px] font-normal text-white/60">
+                    <span className={`${PCT_BASE} text-white/60`}>
                       {(consolidado.por_mes[m]?.margen_operativo_pct || 0).toFixed(1)}%
-                    </div>
+                    </span>
                   )}
                 </td>
               ))}
               <td className="py-3 px-4 text-right font-mono bg-[#1E331D] text-[#C9A961] text-sm">
-                <div>{formatMXN(consolidado.total.utilidad_operativa)}</div>
+                <span>{formatMXN(consolidado.total.utilidad_operativa)}</span>
                 {mostrarPct && (
-                  <div className="text-[9px] font-normal text-[#C9A961]/70">
+                  <span className={`${PCT_BASE} text-[#C9A961]/70`}>
                     {consolidado.total.ingreso_bruto > 0
                       ? ((consolidado.total.utilidad_operativa / consolidado.total.ingreso_bruto) * 100).toFixed(1)
                       : "0.0"}
                     %
-                  </div>
+                  </span>
                 )}
               </td>
             </tr>
