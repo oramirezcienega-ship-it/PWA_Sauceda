@@ -12,7 +12,7 @@ import {
 import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
 import { registrarActividad } from "@/lib/actividades";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
-import { registrarRespuestaLead } from "@/lib/lead-telegram";
+import { registrarRespuestaLead, urlPortalParaTelegram } from "@/lib/lead-telegram";
 import {
   iniciarNegociacionDias,
   alternarDiaAsesor,
@@ -272,7 +272,16 @@ export async function POST(req: NextRequest) {
         const r = await registrarRespuestaLead(sb, envioId, val === "1" ? "revisado" : "rechazado", "telegram");
         const chatMsg = cb.message?.chat?.id;
         const msgId = cb.message?.message_id;
-        if (chatMsg && msgId) await actualizarTecladoTelegram(botToken, chatMsg, msgId, []);
+        if (chatMsg && msgId) {
+          // Se quitan los botones de confirmación pero queda el acceso al portal para dar seguimiento
+          const urlPortal = await urlPortalParaTelegram(sb, envio.asesor_id);
+          await actualizarTecladoTelegram(
+            botToken,
+            chatMsg,
+            msgId,
+            urlPortal ? [[{ text: "📋 Dar seguimiento en mi portal", url: urlPortal }]] : []
+          );
+        }
         await responderCallbackQueryTelegram(
           botToken,
           cb.id,
