@@ -62,7 +62,7 @@ interface FilaFijo {
 export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProps) {
   const [unidadesPlegadas, setUnidadesPlegadas] = useState<Set<string>>(new Set());
   const [modoFijos, setModoFijos] = useState<ModoFijos>("concepto");
-  const [mostrarPct, setMostrarPct] = useState(false);
+  const [mostrarPct, setMostrarPct] = useState(true);
 
   const { meses, consolidado } = proyeccion;
   const ingresoConsolidadoMes = (m: string) => consolidado.por_mes[m]?.ingreso_bruto || 0;
@@ -179,13 +179,15 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
     totalMes,
     total,
     baseMes,
-    baseTotal
+    baseTotal,
+    soloTotal = false
   }: {
     filas: FilaFijo[];
     totalMes: (m: string) => number;
     total: number;
     baseMes: (m: string) => number;
     baseTotal: number;
+    soloTotal?: boolean; // unidad plegada: sin desglose de conceptos
   }) => (
     <>
       <Renglon
@@ -199,6 +201,7 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
         claseValor="text-red-600"
       />
       {modoFijos !== "total" &&
+        !soloTotal &&
         filas.map((f) => (
           <Renglon
             key={f.clave}
@@ -400,6 +403,7 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                       total={u.total.gastos_fijos}
                       baseMes={baseMes}
                       baseTotal={baseTotal}
+                      soloTotal={plegada}
                     />
                   )}
 
