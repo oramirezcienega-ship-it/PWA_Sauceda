@@ -887,12 +887,14 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                       <tr>
                         <td className="py-1.5 px-3 text-emerald-700 font-semibold">(+) Cobros a Clientes en Caja</td>
                         {proyeccion.meses.map((m) => (
-                          <td key={m} className="py-1.5 px-3 text-right font-mono text-emerald-700">
+                          <td key={m} className="py-1.5 px-3 text-right whitespace-nowrap font-mono text-emerald-700">
                             {formatMXN(proyeccion.consolidado.por_mes[m]?.cobro_caja || 0)}
+                            <span className="ml-1.5 inline-block w-11" />
                           </td>
                         ))}
-                        <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-800 bg-slate-50">
+                        <td className="py-1.5 px-3 text-right whitespace-nowrap font-mono font-bold text-emerald-800 bg-slate-50">
                           {formatMXN(proyeccion.consolidado.total.cobro_caja)}
+                          <span className="ml-1.5 inline-block w-11" />
                         </td>
                       </tr>
                       <tr>
@@ -938,12 +940,14 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                       <tr className="bg-emerald-50/70 font-extrabold text-emerald-950">
                         <td className="py-2 px-3">Saldo Final Acumulado en Caja</td>
                         {proyeccion.meses.map((m) => (
-                          <td key={m} className="py-2 px-3 text-right font-mono">
+                          <td key={m} className="py-2 px-3 text-right whitespace-nowrap font-mono">
                             {formatMXN(proyeccion.consolidado.por_mes[m]?.saldo_caja_acumulado || 0)}
+                            <span className="ml-1.5 inline-block w-11" />
                           </td>
                         ))}
-                        <td className="py-2 px-3 text-right font-mono bg-emerald-100 text-[#2D4A2B]">
+                        <td className="py-2 px-3 text-right whitespace-nowrap font-mono bg-emerald-100 text-[#2D4A2B]">
                           {formatMXN(proyeccion.kpis.saldo_caja_final)}
+                          <span className="ml-1.5 inline-block w-11" />
                         </td>
                       </tr>
                     </tbody>

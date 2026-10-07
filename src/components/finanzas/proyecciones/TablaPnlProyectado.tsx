@@ -116,6 +116,9 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
       return sig;
     });
 
+  // Espacio vacío del ancho del % para que las cifras sin % queden alineadas con las demás
+  const hueco = mostrarPct ? <span className={PCT_BASE} /> : null;
+
   const todasPlegadas = unidades.every((u) => !unidadesDesglosadas.has(u.business_unit_id || "sin_unidad"));
 
   // Monto con su % sobre la base (análisis vertical) debajo, si está activo
@@ -318,12 +321,14 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                       🏢 {u.business_unit_nombre}
                     </td>
                     {meses.map((m) => (
-                      <td key={m} className="py-2 px-3 text-right font-mono">
+                      <td key={m} className="py-2 px-3 text-right whitespace-nowrap font-mono">
                         {tieneIngresos ? formatMXN(u.por_mes[m]?.ingreso_bruto || 0) : ""}
+                        {hueco}
                       </td>
                     ))}
-                    <td className="py-2 px-4 text-right font-mono bg-[#F5F1E8] font-extrabold">
+                    <td className="py-2 px-4 text-right whitespace-nowrap font-mono bg-[#F5F1E8] font-extrabold">
                       {tieneIngresos ? formatMXN(u.total.ingreso_bruto) : ""}
+                      {hueco}
                     </td>
                   </tr>
 
@@ -349,12 +354,14 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                             </td>
                             <td className="py-1 px-2 text-[11px] text-slate-500">Operaciones</td>
                             {meses.map((m) => (
-                              <td key={m} className="py-1 px-3 text-right font-mono text-slate-600">
+                              <td key={m} className="py-1 px-3 text-right whitespace-nowrap font-mono text-slate-600">
                                 {(l.por_mes[m]?.operaciones || 0).toFixed(1)}
+                                {hueco}
                               </td>
                             ))}
-                            <td className="py-1 px-4 text-right font-mono font-bold bg-slate-50">
+                            <td className="py-1 px-4 text-right whitespace-nowrap font-mono font-bold bg-slate-50">
                               {l.total.operaciones.toFixed(1)}
+                              {hueco}
                             </td>
                           </tr>
                           {pasos.map((c, idx) => (
@@ -472,7 +479,7 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                 Utilidad Operativa Consolidada
               </td>
               {meses.map((m) => (
-                <td key={m} className="py-3 px-3 text-right font-mono">
+                <td key={m} className="py-3 px-3 text-right whitespace-nowrap font-mono">
                   <span>{formatMXN(consolidado.por_mes[m]?.utilidad_operativa || 0)}</span>
                   {mostrarPct && (
                     <span className={`${PCT_BASE} text-white/60`}>
@@ -481,7 +488,7 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                   )}
                 </td>
               ))}
-              <td className="py-3 px-4 text-right font-mono bg-[#1E331D] text-[#C9A961] text-sm">
+              <td className="py-3 px-4 text-right whitespace-nowrap font-mono bg-[#1E331D] text-[#C9A961] text-sm">
                 <span>{formatMXN(consolidado.total.utilidad_operativa)}</span>
                 {mostrarPct && (
                   <span className={`${PCT_BASE} text-[#C9A961]/70`}>
@@ -498,12 +505,14 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                 Utilidad Acumulada
               </td>
               {meses.map((m) => (
-                <td key={m} className="py-2 px-3 text-right font-mono text-[#C9A961]">
+                <td key={m} className="py-2 px-3 text-right whitespace-nowrap font-mono text-[#C9A961]">
                   {formatMXN(consolidado.por_mes[m]?.utilidad_acumulada || 0)}
+                  {hueco}
                 </td>
               ))}
-              <td className="py-2 px-4 text-right font-mono text-[#C9A961] bg-[#142313]">
+              <td className="py-2 px-4 text-right whitespace-nowrap font-mono text-[#C9A961] bg-[#142313]">
                 {formatMXN(consolidado.total.utilidad_acumulada)}
+                {hueco}
               </td>
             </tr>
           </tbody>
