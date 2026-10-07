@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { labelTipoNegocio } from "@/lib/types";
 import { variantesTelefono, normalizarTelefono, formatearTelefonoLegible } from "@/lib/telefono";
 import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/telegram";
+import { obtenerOCrearTokenPortal, urlPortalAsesor } from "@/lib/portal-asesor";
 import type { DatosLeadTelegram } from "@/lib/lead-telegram-formato";
 
 /**
@@ -299,12 +300,20 @@ export async function descargarMediaWhatsApp(
   }
 }
 
-export const tecladoLead = (envioId: string) => [
+export const tecladoLead = (envioId: string, urlPortal?: string | null) => [
   [
     { text: "✅ Recibido, lo atiendo", callback_data: `L:${envioId}:1` },
     { text: "❌ No puedo atenderlo", callback_data: `L:${envioId}:0` },
   ],
+  // Acceso al portal del asesor (sin login) para dar seguimiento al cliente
+  ...(urlPortal ? [[{ text: "📋 Dar seguimiento en mi portal", url: urlPortal }]] : []),
 ];
+
+/** URL del portal del asesor para los botones de Telegram (la crea si no existe). */
+export async function urlPortalParaTelegram(sb: SupabaseClient, asesorId: string): Promise<string | null> {
+  const token = await obtenerOCrearTokenPortal(sb, asesorId);
+  return token ? urlPortalAsesor(token) : null;
+}
 
 function horaCortaMx(iso: string): string {
   return new Date(iso).toLocaleString("es-MX", {
@@ -432,7 +441,7 @@ export async function procesarRecordatoriosLeadsTelegram(sb: SupabaseClient): Pr
         texto: `⏰ <b>RECORDATORIO</b>\nTienes pendiente confirmar el lead de <b>${escHtml(e.cliente_nombre)}</b> (${escHtml(
           formatearTelefonoLegible(e.telefono)
         )}) que te enviaron hace más de ${HORAS_RECORDATORIO_LEAD} h.\nLa información completa está en el mensaje anterior.`,
-        inlineKeyboard: tecladoLead(e.id),
+        inlineKeyboard: tecladoLead(e.id, await urlPortalParaTelegram(sb, e.asesor_id)),
       });
     }
 

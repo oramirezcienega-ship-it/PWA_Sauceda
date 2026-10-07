@@ -48,6 +48,7 @@ import {
   IconoFuego,
   IconoRemisiones,
   IconoProductos,
+  IconoCoordinaciones,
 } from "./IconosNav";
 
 /**
@@ -73,7 +74,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/contrato-pdf/") ||
     path.startsWith("/garantia/") ||
     path.startsWith("/orden-trabajo/entrega/") ||
-    path.startsWith("/orden-trabajo/remision/")
+    path.startsWith("/orden-trabajo/remision/") ||
+    path.startsWith("/asesor/")
   );
 }
 
@@ -495,6 +497,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           href: "/remisiones",
           label: "Remisiones y Facturas",
           icono: IconoRemisiones,
+        },
+        {
+          href: "/coordinaciones",
+          label: "Coordinaciones de Inspección",
+          icono: IconoCoordinaciones,
+          esAdminOnly: true,
         },
       ],
     },

@@ -13,6 +13,7 @@ import {
   registrarRespuestaLead,
   procesarRecordatoriosLeadsTelegram,
   tecladoLead,
+  urlPortalParaTelegram,
   tituloActividadLead,
 } from "@/lib/lead-telegram";
 import { alternarPausaIA, asignarAgente } from "@/app/actions/conversaciones";
@@ -144,7 +145,7 @@ export async function enviarLeadTelegramAction(input: {
       chatId: asesor.telegram_chat_id,
       texto: html,
       parseMode: "HTML",
-      inlineKeyboard: tecladoLead(envioId),
+      inlineKeyboard: tecladoLead(envioId, await urlPortalParaTelegram(sb, asesor.id)),
     });
     if (!msg.ok) return { ok: false, error: `Telegram rechazó el mensaje: ${msg.error}` };
 
