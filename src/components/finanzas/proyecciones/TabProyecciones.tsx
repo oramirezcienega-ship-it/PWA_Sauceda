@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import type { BusinessUnit } from "@/app/actions/finanzas";
+import type { BusinessUnit, Category } from "@/app/actions/finanzas";
 import type {
   EscenarioFinanciero,
   IndicadorBaseReal,
@@ -23,6 +23,7 @@ import {
   obtenerInsumosEscenario,
   actualizarFijo,
   agregarConceptoFijo,
+  editarConceptoFijo,
   eliminarConceptoFijo
 } from "@/app/actions/finanzas-proyecciones";
 import type { ResultadoProyeccion, SupuestoMes, FijoPlan } from "@/lib/finanzas/proyeccion";
@@ -47,6 +48,7 @@ import {
 
 interface TabProyeccionesProps {
   businessUnits: BusinessUnit[];
+  categories: Category[];
 }
 
 type SubSeccionId = "proyeccion" | "supuestos" | "base_real" | "real_vs_plan" | "sofia";
@@ -81,13 +83,8 @@ const VARIABLES_CATALOGO: Array<{ id: VariableSupuesto; label: string; unidad: s
 const SOLO_EMBUDO: VariableSupuesto[] = ["leads", "pct_a_cotizacion", "pct_cierre"];
 const SOLO_MANUAL: VariableSupuesto[] = ["operaciones_manual"];
 
-const LINEAS_PNL_FIJOS: Array<{ id: string; label: string }> = [
-  { id: "opex_nomina", label: "Nómina" },
-  { id: "opex_renta", label: "Renta" },
-  { id: "opex_servicios", label: "Servicios" },
-  { id: "opex_comisiones_visitas", label: "Comisiones / Visitas" },
-  { id: "opex_otros", label: "Otros" }
-];
+// Fijos sin unidad de negocio: gastos generales (overhead) de toda la empresa
+const GASTOS_GENERALES = "Gastos Generales";
 
 // Los porcentajes se guardan como 0..1 y se muestran como 0..100
 const valorParaMostrar = (campo: VariableSupuesto, raw: number | null | undefined): string => {
@@ -103,7 +100,12 @@ const formatMXN = (val: number) =>
 const formatPct = (val: number) =>
   `${(val || 0).toFixed(1)}%`;
 
-export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
+export function TabProyecciones({ businessUnits, categories }: TabProyeccionesProps) {
+  // Cuentas del catálogo de Finanzas a las que puede enlazarse un gasto fijo
+  const cuentasEgreso = useMemo(
+    () => categories.filter((c) => c.tipo === "egreso" && c.linea_pnl !== "no_pnl"),
+    [categories]
+  );
   // Estado de navegación
   const [seccionActiva, setSeccionActiva] = useState<SubSeccionId>("proyeccion");
   const [vistaAgrupacion, setVistaAgrupacion] = useState<"mes" | "trimestre">("mes");
@@ -311,6 +313,7 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
       {
         concepto: string;
         linea_pnl: string;
+        categoria_id: string | null;
         business_unit_id: string | null;
         business_unit_nombre: string;
         por_mes: Record<string, number>;
@@ -321,22 +324,28 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
       const g = grupos.get(k) || {
         concepto: f.concepto,
         linea_pnl: f.linea_pnl,
+        categoria_id: f.categoria_id ?? null,
         business_unit_id: f.business_unit_id,
-        business_unit_nombre: f.business_unit_nombre || "Sin Unidad",
+        business_unit_nombre: f.business_unit_id ? f.business_unit_nombre || "Unidad" : GASTOS_GENERALES,
         por_mes: {}
       };
       g.por_mes[f.mes] = (g.por_mes[f.mes] || 0) + Number(f.monto || 0);
       grupos.set(k, g);
     });
-    return Array.from(grupos.values()).sort((a, b) =>
-      a.business_unit_nombre.localeCompare(b.business_unit_nombre)
-    );
+    // Unidades primero (alfabético) y al final los gastos generales de la empresa
+    return Array.from(grupos.values()).sort((a, b) => {
+      if (!a.business_unit_id !== !b.business_unit_id) return a.business_unit_id ? -1 : 1;
+      return (
+        a.business_unit_nombre.localeCompare(b.business_unit_nombre) ||
+        a.concepto.localeCompare(b.concepto)
+      );
+    });
   }, [insumos.fijos]);
 
   // Handlers de Gastos Fijos
   const [nuevoFijo, setNuevoFijo] = useState<{
     concepto: string;
-    linea_pnl: string;
+    categoria_id: string;
     business_unit_id: string;
     monto: string;
   } | null>(null);
@@ -376,11 +385,15 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
       alert("Escribe el nombre del concepto.");
       return;
     }
+    if (!nuevoFijo.categoria_id) {
+      alert("Elige la cuenta contable del gasto.");
+      return;
+    }
     try {
       await agregarConceptoFijo({
         escenario_id: escenarioSeleccionadoId,
         concepto: nuevoFijo.concepto,
-        linea_pnl: nuevoFijo.linea_pnl,
+        categoria_id: nuevoFijo.categoria_id,
         business_unit_id: nuevoFijo.business_unit_id || null,
         monto: parseFloat(nuevoFijo.monto) || 0,
         meses: proyeccion.meses
@@ -389,6 +402,30 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
       await cargarDatosEscenario(escenarioSeleccionadoId, true);
     } catch (err: any) {
       alert("Error: " + err.message);
+    }
+  };
+
+  // Edita la etiqueta del concepto (nombre, cuenta o unidad) en todos sus meses
+  const handleEditarEtiquetaFijo = async (
+    concepto: string,
+    businessUnitId: string | null,
+    cambios: { concepto?: string; categoria_id?: string; business_unit_id?: string | null }
+  ) => {
+    if (!escenarioSeleccionadoId) return;
+    const key = `fijo:${concepto}:${businessUnitId}:etiqueta`;
+    setGuardandoCelda(key);
+    try {
+      await editarConceptoFijo({
+        escenario_id: escenarioSeleccionadoId,
+        concepto,
+        business_unit_id: businessUnitId,
+        cambios
+      });
+      await cargarDatosEscenario(escenarioSeleccionadoId, true);
+    } catch (err: any) {
+      alert("Error al editar el concepto: " + err.message);
+    } finally {
+      setGuardandoCelda(null);
     }
   };
 
@@ -1201,7 +1238,7 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                     <div>
                       <h4 className="text-xs font-bold text-slate-800">Gastos Fijos del Escenario</h4>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Se precargaron al crear el escenario. Edita el monto mensual; se restan de la contribución para llegar a la utilidad operativa.
+                        Gastos recurrentes de cada mes. Cada concepto se enlaza a una cuenta del catálogo de Finanzas para caer en la misma línea del P&L; edita nombre, cuenta, unidad y monto. Se restan de la contribución para llegar a la utilidad operativa.
                       </p>
                     </div>
                     {!nuevoFijo && (
@@ -1210,8 +1247,11 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                         onClick={() =>
                           setNuevoFijo({
                             concepto: "",
-                            linea_pnl: "opex_otros",
-                            business_unit_id: businessUnits[0]?.id || "",
+                            categoria_id:
+                              cuentasEgreso.find((c) => c.linea_pnl === "opex_otros")?.id ||
+                              cuentasEgreso[0]?.id ||
+                              "",
+                            business_unit_id: "",
                             monto: ""
                           })
                         }
@@ -1235,14 +1275,14 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                         />
                       </label>
                       <label className="text-[11px] font-bold text-slate-600 flex flex-col gap-1">
-                        Rubro P&L
+                        Cuenta contable
                         <select
-                          value={nuevoFijo.linea_pnl}
-                          onChange={(e) => setNuevoFijo({ ...nuevoFijo, linea_pnl: e.target.value })}
+                          value={nuevoFijo.categoria_id}
+                          onChange={(e) => setNuevoFijo({ ...nuevoFijo, categoria_id: e.target.value })}
                           className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-normal"
                         >
-                          {LINEAS_PNL_FIJOS.map((lp) => (
-                            <option key={lp.id} value={lp.id}>{lp.label}</option>
+                          {cuentasEgreso.map((c) => (
+                            <option key={c.id} value={c.id}>{c.nombre}</option>
                           ))}
                         </select>
                       </label>
@@ -1253,10 +1293,10 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                           onChange={(e) => setNuevoFijo({ ...nuevoFijo, business_unit_id: e.target.value })}
                           className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-normal"
                         >
+                          <option value="">{GASTOS_GENERALES} (toda la empresa)</option>
                           {businessUnits.map((bu) => (
                             <option key={bu.id} value={bu.id}>{bu.nombre}</option>
                           ))}
-                          <option value="">Sin Unidad</option>
                         </select>
                       </label>
                       <label className="text-[11px] font-bold text-slate-600 flex flex-col gap-1">
@@ -1316,6 +1356,8 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                           const delGrupo = fijosAgrupados.filter(
                             (x) => x.business_unit_nombre === g.business_unit_nombre
                           );
+                          const guardandoEtiqueta =
+                            guardandoCelda === `fijo:${g.concepto}:${g.business_unit_id}:etiqueta`;
                           return (
                             <React.Fragment key={`${g.concepto}|${g.business_unit_id}`}>
                               {nuevaUnidad && (
@@ -1332,11 +1374,59 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                                 </tr>
                               )}
                               <tr className="hover:bg-slate-50/50">
-                                <td className="py-2.5 px-4 pl-7 font-bold text-slate-800">
-                                  <div>{g.concepto}</div>
-                                  <span className="text-[10px] text-slate-400 font-normal">
-                                    {LINEAS_PNL_FIJOS.find((lp) => lp.id === g.linea_pnl)?.label || g.linea_pnl}
-                                  </span>
+                                <td className={`py-2 px-4 pl-6 ${guardandoEtiqueta ? "opacity-50" : ""}`}>
+                                  <input
+                                    key={g.concepto}
+                                    type="text"
+                                    defaultValue={g.concepto}
+                                    title="Editar nombre del concepto"
+                                    onBlur={(e) => {
+                                      const nombre = e.target.value.trim();
+                                      if (!nombre) {
+                                        e.target.value = g.concepto;
+                                        return;
+                                      }
+                                      if (nombre === g.concepto) return;
+                                      handleEditarEtiquetaFijo(g.concepto, g.business_unit_id, { concepto: nombre });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                    }}
+                                    className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs font-bold text-slate-800 hover:border-slate-200 focus:border-blue-400 focus:bg-white focus:outline-none"
+                                  />
+                                  <div className="mt-0.5 flex items-center gap-1">
+                                    <select
+                                      value={g.categoria_id || ""}
+                                      onChange={(e) =>
+                                        handleEditarEtiquetaFijo(g.concepto, g.business_unit_id, {
+                                          categoria_id: e.target.value
+                                        })
+                                      }
+                                      title="Cuenta contable (catálogo de Finanzas)"
+                                      className="max-w-[170px] rounded border border-transparent bg-transparent px-0.5 text-[10px] text-slate-500 hover:border-slate-200 focus:outline-none"
+                                    >
+                                      {!g.categoria_id && <option value="">Sin cuenta ({g.linea_pnl})</option>}
+                                      {cuentasEgreso.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.nombre}</option>
+                                      ))}
+                                    </select>
+                                    <span className="text-[10px] text-slate-300">·</span>
+                                    <select
+                                      value={g.business_unit_id || ""}
+                                      onChange={(e) =>
+                                        handleEditarEtiquetaFijo(g.concepto, g.business_unit_id, {
+                                          business_unit_id: e.target.value || null
+                                        })
+                                      }
+                                      title="Unidad de negocio"
+                                      className="max-w-[130px] rounded border border-transparent bg-transparent px-0.5 text-[10px] text-slate-500 hover:border-slate-200 focus:outline-none"
+                                    >
+                                      <option value="">{GASTOS_GENERALES}</option>
+                                      {businessUnits.map((bu) => (
+                                        <option key={bu.id} value={bu.id}>{bu.nombre}</option>
+                                      ))}
+                                    </select>
+                                  </div>
                                 </td>
                                 {proyeccion.meses.map((m) => {
                                   const monto = g.por_mes[m];
