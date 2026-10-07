@@ -30,6 +30,7 @@ import { exportarAExcelCSV } from "@/lib/finanzasExport";
 import { ModalNuevoEscenario } from "./ModalNuevoEscenario";
 import { ModalDuplicarEscenario } from "./ModalDuplicarEscenario";
 import { ModalNuevoNegocio } from "./ModalNuevoNegocio";
+import { PanelLineaSupuestos } from "./PanelLineaSupuestos";
 
 import {
   ResponsiveContainer,
@@ -61,10 +62,10 @@ type VariableSupuesto =
   | "gasto_ads"
   | "costo_por_lead";
 
-// Lo que se puede editar en el grid: un supuesto por línea o los gastos fijos del escenario
-type VariableGrid = VariableSupuesto | "gastos_fijos";
+// Vistas del grid: todas las variables de una línea, una variable de todas las líneas, o gastos fijos
+type VistaSupuestos = "linea" | "variable" | "fijos";
 
-const VARIABLES_CATALOGO: Array<{ id: VariableGrid; label: string; unidad: string }> = [
+const VARIABLES_CATALOGO: Array<{ id: VariableSupuesto; label: string; unidad: string }> = [
   { id: "operaciones_manual", label: "Operaciones (Manual)", unidad: "ops" },
   { id: "leads", label: "Leads Captados (Embudo)", unidad: "leads" },
   { id: "pct_a_cotizacion", label: "% Conversión a Cotización", unidad: "%" },
@@ -73,8 +74,7 @@ const VARIABLES_CATALOGO: Array<{ id: VariableGrid; label: string; unidad: strin
   { id: "margen_pct", label: "Margen Bruto", unidad: "%" },
   { id: "pct_comision_asesor", label: "% Comisión Asesor", unidad: "%" },
   { id: "gasto_ads", label: "Gasto Marketing Ads", unidad: "$" },
-  { id: "costo_por_lead", label: "Costo por Lead (si no hay gasto ads)", unidad: "$" },
-  { id: "gastos_fijos", label: "Gastos Fijos (nómina, renta, servicios…)", unidad: "$/mes" }
+  { id: "costo_por_lead", label: "Costo por Lead (si no hay gasto ads)", unidad: "$" }
 ];
 
 // Variables que solo aplican a un modelo de línea
@@ -107,7 +107,9 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
   // Estado de navegación
   const [seccionActiva, setSeccionActiva] = useState<SubSeccionId>("proyeccion");
   const [vistaAgrupacion, setVistaAgrupacion] = useState<"mes" | "trimestre">("mes");
-  const [variableActiva, setVariableActiva] = useState<VariableGrid>("operaciones_manual");
+  const [variableActiva, setVariableActiva] = useState<VariableSupuesto>("operaciones_manual");
+  const [vistaSupuestos, setVistaSupuestos] = useState<VistaSupuestos>("linea");
+  const [lineaSeleccionadaId, setLineaSeleccionadaId] = useState<string>("");
 
   // Escenarios
   const [escenarios, setEscenarios] = useState<EscenarioFinanciero[]>([]);
@@ -1043,19 +1045,41 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
             <div className="space-y-6">
               {/* Barra de control de variables */}
               <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-slate-600">Variable a Editar:</span>
-                  <select
-                    value={variableActiva}
-                    onChange={(e) => setVariableActiva(e.target.value as any)}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-[#2D4A2B] focus:outline-none focus:ring-2 focus:ring-[#2D4A2B]"
-                  >
-                    {VARIABLES_CATALOGO.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label} ({v.unidad})
-                      </option>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex rounded-xl bg-slate-100 p-0.5">
+                    {([
+                      { id: "linea", label: "Por línea" },
+                      { id: "variable", label: "Por variable" },
+                      { id: "fijos", label: "Gastos fijos" }
+                    ] as Array<{ id: VistaSupuestos; label: string }>).map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setVistaSupuestos(v.id)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                          vistaSupuestos === v.id
+                            ? "bg-white text-[#2D4A2B] shadow-xs"
+                            : "text-slate-500 hover:text-slate-700"
+                        }`}
+                      >
+                        {v.label}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+
+                  {vistaSupuestos === "variable" && (
+                    <select
+                      value={variableActiva}
+                      onChange={(e) => setVariableActiva(e.target.value as VariableSupuesto)}
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-[#2D4A2B] focus:outline-none focus:ring-2 focus:ring-[#2D4A2B]"
+                    >
+                      {VARIABLES_CATALOGO.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.label} ({v.unidad})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1080,7 +1104,97 @@ export function TabProyecciones({ businessUnits }: TabProyeccionesProps) {
                 </div>
               </div>
 
-              {variableActiva === "gastos_fijos" ? (
+              {vistaSupuestos === "linea" ? (
+                /* Vista por línea: todas las variables de una línea de negocio a la vez */
+                (() => {
+                  const todas = lineasAgrupadas.flatMap((g) => g.lineas);
+                  const idx = Math.max(0, todas.findIndex((l) => l.linea_id === lineaSeleccionadaId));
+                  const seleccionada = todas[idx];
+                  if (!seleccionada) {
+                    return (
+                      <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-400">
+                        Este escenario no tiene líneas de negocio.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-4">
+                      {/* Selector de línea agrupado por unidad */}
+                      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
+                        {lineasAgrupadas.map((grupo) => (
+                          <div key={grupo.buId} className="flex items-start gap-3 flex-wrap">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#2D4A2B] w-28 pt-1.5 shrink-0">
+                              {grupo.nombre}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5 flex-1">
+                              {grupo.lineas.map((l) => {
+                                const activa = l.linea_id === seleccionada.linea_id;
+                                return (
+                                  <button
+                                    key={l.linea_id}
+                                    type="button"
+                                    onClick={() => setLineaSeleccionadaId(l.linea_id)}
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition text-left ${
+                                      activa
+                                        ? "bg-[#2D4A2B] border-[#2D4A2B] text-white"
+                                        : "bg-white border-slate-200 text-slate-700 hover:border-[#2D4A2B]"
+                                    }`}
+                                  >
+                                    {l.nombre}
+                                    <span
+                                      className={`ml-1.5 font-mono font-normal ${
+                                        activa
+                                          ? "text-white/80"
+                                          : l.total.utilidad_bruta > 0
+                                          ? "text-emerald-700"
+                                          : "text-slate-400"
+                                      }`}
+                                    >
+                                      {formatMXN(l.total.utilidad_bruta)}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => setLineaSeleccionadaId(todas[idx - 1].linea_id)}
+                            className="text-[11px] font-bold text-slate-600 hover:text-[#2D4A2B] disabled:opacity-30 px-2 py-1"
+                          >
+                            ← Anterior
+                          </button>
+                          <span className="text-[10px] text-slate-400">
+                            Línea {idx + 1} de {todas.length} · el monto es la utilidad bruta del periodo
+                          </span>
+                          <button
+                            type="button"
+                            disabled={idx === todas.length - 1}
+                            onClick={() => setLineaSeleccionadaId(todas[idx + 1].linea_id)}
+                            className="text-[11px] font-bold text-slate-600 hover:text-[#2D4A2B] disabled:opacity-30 px-2 py-1"
+                          >
+                            Siguiente →
+                          </button>
+                        </div>
+                      </div>
+
+                      <PanelLineaSupuestos
+                        linea={seleccionada}
+                        meses={proyeccion.meses}
+                        supuestosMap={supuestosMap}
+                        guardandoCelda={guardandoCelda}
+                        onEditar={handleEditarSupuesto}
+                        onCopiarMes1={handleAplicarATodos}
+                        onRestaurarReal={handleRestaurarReal}
+                        onEliminar={handleEliminarLinea}
+                      />
+                    </div>
+                  );
+                })()
+              ) : vistaSupuestos === "fijos" ? (
                 /* Grid de Gastos Fijos por concepto, agrupado por unidad */
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
                   <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
