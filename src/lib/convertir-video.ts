@@ -11,6 +11,7 @@
 const LIMITE_BYTES = 16 * 1024 * 1024;
 // Margen para el audio, el contenedor y la imprecisión del bitrate del encoder.
 const OBJETIVO_BYTES = 14 * 1024 * 1024;
+// Estimación del audio para calcular cuánto bitrate le queda al video.
 const BITRATE_AUDIO = 128_000;
 const BITRATE_VIDEO_MAX = 4_000_000;
 const BITRATE_VIDEO_MIN = 250_000;
@@ -81,10 +82,14 @@ export async function convertirVideoParaWhatsApp(
           forceTranscode: true,
         }
       : { codec: "avc" },
-    audio: { codec: "aac", quality: new Quality(BITRATE_AUDIO) },
+    // Sin `quality`: si el audio ya es AAC (lo normal en iPhone) se copia tal cual. Pedir una
+    // calidad obliga a recodificarlo, y en navegadores sin encoder AAC el audio se perdía.
+    audio: { codec: "aac" },
   });
 
-  if (!conversion.isValid) {
+  const pistaAudio = await input.getPrimaryAudioTrack();
+  const descartada = (tipo: "video" | "audio") => conversion.discardedTracks.some((d) => d.track.type === tipo);
+  if (!conversion.isValid || descartada("video") || (!!pistaAudio && descartada("audio"))) {
     throw new Error(
       "Este navegador no puede convertir el video a MP4. Envíalo desde la galería en formato «Más compatible» o desde una computadora.",
     );
