@@ -70,7 +70,8 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/garantia/") ||
     path.startsWith("/orden-trabajo/entrega/") ||
     path.startsWith("/c/") ||
-    path.startsWith("/a/");
+    path.startsWith("/a/") ||
+    path.startsWith("/asesor/");
 
   if (!user && !esPublico) {
     const destino = request.nextUrl.clone();
@@ -78,9 +79,28 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(destino);
   }
 
+  const esMovil = /Android|iPhone|iPod|Mobile/i.test(request.headers.get("user-agent") || "");
+
   if (user && path.startsWith("/login")) {
     const destino = request.nextUrl.clone();
-    destino.pathname = "/dashboard";
+    destino.pathname = esMovil ? "/conversaciones" : "/dashboard";
+    return NextResponse.redirect(destino);
+  }
+
+  // En móvil, abrir la app (carga directa de "/", sin navegación interna previa)
+  // lleva a la bandeja de conversaciones. Los clics al logo dentro de la app
+  // son navegaciones del router (encabezado RSC o referer) y no se redirigen.
+  if (
+    user &&
+    esMovil &&
+    path === "/" &&
+    !request.nextUrl.search &&
+    !request.headers.get("rsc") &&
+    !request.headers.get("next-router-prefetch") &&
+    !request.headers.get("referer")
+  ) {
+    const destino = request.nextUrl.clone();
+    destino.pathname = "/conversaciones";
     return NextResponse.redirect(destino);
   }
 

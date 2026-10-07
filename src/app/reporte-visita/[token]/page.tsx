@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { BotonImprimir } from "@/components/BotonImprimir";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface PaginaReporteProps {
   params: {

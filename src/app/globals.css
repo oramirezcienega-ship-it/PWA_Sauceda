@@ -39,3 +39,14 @@
     display: none;
   }
 }
+
+/*
+ * Bandeja de conversaciones en móvil: ocupa todo el alto disponible debajo de
+ * la barra superior (59 px + zona segura) y la fila de pestañas (~41 px), sin
+ * que la página haga scroll. En sm+ manda la clase sm:h-[...] del componente.
+ */
+@media (max-width: 639px) {
+  .bandeja-alto-movil {
+    height: calc(100dvh - 100px - max(12px, env(safe-area-inset-top)) - env(safe-area-inset-bottom));
+  }
+}

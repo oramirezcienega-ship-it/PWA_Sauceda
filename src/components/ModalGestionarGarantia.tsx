@@ -7,6 +7,7 @@ import {
   listarEntregadoresGarantia,
   type CartaGarantiaOT,
 } from "@/app/actions/ordenes-trabajo";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface ModalGestionarGarantiaProps {
   abierto: boolean;
@@ -372,7 +373,7 @@ Sauceda Construye · León, Guanajuato`;
                 </a>
                 {clienteTelefono && (
                   <a
-                    href={`https://wa.me/${clienteTelefono.replace(/[^0-9]/g, "")}?text=${mensajeWhatsApp}`}
+                    href={`https://wa.me/${normalizarTelefono(clienteTelefono)}?text=${mensajeWhatsApp}`}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1"

@@ -24,6 +24,7 @@ const ICONO: Record<TipoActividad, string> = {
   creacion: "✨",
   construccion: "🏗️",
   sistema: "⚙️",
+  telegram_lead: "📨",
 };
 
 /** Tipos que el asesor puede registrar manualmente. */

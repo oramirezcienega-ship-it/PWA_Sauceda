@@ -12,6 +12,7 @@ import {
   generarMensajeEntregaDirecto,
 } from "@/lib/meta-plantillas";
 import type { RemisionFactura } from "@/lib/types";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface ModalNotificarEntregaOTProps {
   abierto: boolean;
@@ -173,7 +174,7 @@ export function ModalNotificarEntregaOT({
   };
 
   const handleAbrirWhatsAppWeb = async () => {
-    const telLimpio = telefono.replace(/[^0-9]/g, "");
+    const telLimpio = normalizarTelefono(telefono);
     const waUrl = `https://wa.me/${telLimpio}?text=${encodeURIComponent(textoDirecto)}`;
     window.open(waUrl, "_blank");
 

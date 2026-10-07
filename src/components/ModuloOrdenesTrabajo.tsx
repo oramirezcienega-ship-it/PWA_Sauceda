@@ -24,6 +24,7 @@ import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface ModuloOrdenesTrabajoProps {
   expedienteId?: string | null;
@@ -911,10 +912,7 @@ export function ModuloOrdenesTrabajo({
                                       </a>
                                       {rec.clienteTelefono && (
                                         <a
-                                          href={`https://wa.me/${rec.clienteTelefono.replace(
-                                            /[^0-9]/g,
-                                            ""
-                                          )}?text=${msjWa}`}
+                                          href={`https://wa.me/${normalizarTelefono(rec.clienteTelefono)}?text=${msjWa}`}
                                           target="_blank"
                                           rel="noreferrer"
                                           className="rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-[11px] font-bold flex items-center gap-1 shadow-2xs"
@@ -979,10 +977,7 @@ export function ModuloOrdenesTrabajo({
                                 </a>
                                 {ot.clienteTelefono && (
                                   <a
-                                    href={`https://wa.me/${ot.clienteTelefono.replace(
-                                      /[^0-9]/g,
-                                      ""
-                                    )}?text=${encodeURIComponent(
+                                    href={`https://wa.me/${normalizarTelefono(ot.clienteTelefono)}?text=${encodeURIComponent(
                                       `¡Hola ${ot.clienteNombre}! 🛡️ Le compartimos su *Póliza de Garantía por Servicio* de la orden *${ot.folio}*.\n\nConsúltela aquí:\n${
                                         typeof window !== "undefined"
                                           ? window.location.origin
@@ -1061,10 +1056,7 @@ export function ModuloOrdenesTrabajo({
                                 </a>
                                 {ot.cotizacionToken && ot.clienteTelefono && (
                                   <a
-                                    href={`https://wa.me/${ot.clienteTelefono.replace(
-                                      /[^0-9]/g,
-                                      ""
-                                    )}?text=${encodeURIComponent(
+                                    href={`https://wa.me/${normalizarTelefono(ot.clienteTelefono)}?text=${encodeURIComponent(
                                       `¡Hola ${ot.clienteNombre}! 📦 Le compartimos su *${detalleOT.remisionFactura.tipo === 'factura' ? 'Factura Fiscal' : 'Remisión Oficial de Entrega'}* con folio *${detalleOT.remisionFactura.folio}* correspondiente a los trabajos concluidos en su orden *${ot.folio}*.\n\nPuede consultarla y descargarla en el siguiente enlace:\n${
                                         typeof window !== "undefined"
                                           ? window.location.origin

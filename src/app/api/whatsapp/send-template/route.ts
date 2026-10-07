@@ -45,24 +45,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      phone,
-      template_name,
-      template_language = "es_MX",
-      components = [],
-      metadata = {},
-    } = body;
+    const phone = body.phone || body.telefono || body.celular;
+    const template_name = body.template_name || body.plantilla || body.nombre_plantilla;
+    const template_language = body.template_language || body.idioma || "es_MX";
+    let components = body.components || body.componentes || [];
+    const metadata = body.metadata || body.metadatos || {};
+
+    // Soporte para parámetros simples en español: "parametros": ["Nombre", "Servicio"]
+    const parametrosDirectos = body.parametros || body.variables;
+    if (Array.isArray(parametrosDirectos) && (!components || components.length === 0)) {
+      components = [
+        {
+          type: "body",
+          parameters: parametrosDirectos.map((val: any) => ({
+            type: "text",
+            text: String(val ?? "").trim(),
+          })),
+        },
+      ];
+    }
 
     if (!phone) {
       return NextResponse.json(
-        { error: "El campo 'phone' es obligatorio." },
+        { error: "El campo 'telefono' (o 'phone') es obligatorio." },
         { status: 400 }
       );
     }
 
     if (!template_name) {
       return NextResponse.json(
-        { error: "El campo 'template_name' es obligatorio." },
+        { error: "El campo 'plantilla' (o 'template_name') es obligatorio." },
         { status: 400 }
       );
     }

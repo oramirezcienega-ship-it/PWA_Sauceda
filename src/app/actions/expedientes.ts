@@ -346,6 +346,23 @@ export async function crearExpediente(
     const { instanciarFlujoEnExpediente } = await import("@/app/actions/bpm");
     void instanciarFlujoEnExpediente(id, datos.tipoNegocio);
   }
+
+  // Sincronizar hacia el conector Mautic (RudderStack) en segundo plano
+  if (datos.prospectoId) {
+    const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+    void sincronizarConectorMautic({
+      userId: datos.prospectoId,
+      firstname: datos.cliente,
+      lastname: [datos.primerApellido, datos.segundoApellido].filter(Boolean).join(" "),
+      phone: datos.telefono,
+      email: (datos as any).email || (datos as any).correo || "",
+      origen: (datos as any).origen || "",
+      tipo_negocio: datos.tipoNegocio || "otro",
+      etapa: "nuevo-lead",
+      estatus: "nuevo",
+      descalificado: false,
+    });
+  }
   } catch (err) {
     console.error(`[crearExpediente] Efectos secundarios fallaron para ${id}:`, err);
   }
@@ -501,52 +518,34 @@ export async function actualizarExpediente(
     void sincronizarAsignadosBpm(id, datos.asesorId ?? null, datos.operadorId ?? null);
   }
 
-  // Enviar evento identify a RudderStack en segundo plano si hay un prospecto enlazado
+  // Enviar evento identify a RudderStack / Mautic en segundo plano si hay un prospecto enlazado
   if (datos.prospectoId) {
     const prospectoId = datos.prospectoId;
     (async () => {
       try {
-        // Consultar los datos actualizados del prospecto
         const { data: pros } = await sb
           .from("prospectos")
-          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen")
+          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus, ia_pausada")
           .eq("id", prospectoId)
           .maybeSingle();
 
         if (pros) {
-          const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
-          const rudderUrl = process.env.RUDDERSTACK_URL || (esStaging ? "http://192.168.100.253:51700/v1/identify" : "http://192.168.100.253:52700/v1/identify");
-            
-          const basicAuth = Buffer.from("crm_source:").toString("base64");
-          
-          await fetch(rudderUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Basic ${basicAuth}`
-            },
-            body: JSON.stringify({
-              userId: prospectoId,
-              type: "identify",
-              traits: {
-                firstname: pros.nombre || "",
-                lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
-                email: pros.correo || "",
-                phone: pros.telefono || "",
-                origen: pros.origen || "",
-                tipo_negocio: nuevos.tipo_negocio || "otro"
-              },
-              context: {
-                library: {
-                  name: "http",
-                  version: "1.0.0"
-                }
-              }
-            })
+          const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+          await sincronizarConectorMautic({
+            userId: prospectoId,
+            firstname: pros.nombre,
+            lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
+            email: pros.correo,
+            phone: pros.telefono,
+            origen: pros.origen,
+            tipo_negocio: nuevos.tipo_negocio || "otro",
+            etapa: nuevos.etapa || antes?.etapa || "nuevo-lead",
+            estatus: pros.estatus,
+            ia_pausada: pros.ia_pausada,
           });
         }
       } catch (rudderErr) {
-        console.error("[RudderStack] Error al enviar evento identify en actualizarExpediente:", rudderErr);
+        console.error("[Conector Mautic] Error en actualizarExpediente:", rudderErr);
       }
     })();
   }
@@ -557,6 +556,9 @@ export async function actualizarExpediente(
 /** Cambia la etapa de un expediente. */
 export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   await requireAdmin();
+  if (etapa === "en_pausa") {
+    throw new Error('Para pausar un negocio usa "Posponer" y elige la fecha para retomarlo.');
+  }
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
   const { rol } = await rolDe(usuario.id);
@@ -565,7 +567,7 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   // Obtener prospecto_id antes de actualizar
   const { data: exp } = await sb
     .from("expedientes")
-    .select("prospecto_id, asesor_id, operador_id")
+    .select("prospecto_id, asesor_id, operador_id, etapa")
     .eq("id", id)
     .maybeSingle();
 
@@ -574,6 +576,12 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     if (exp?.[colId] !== usuario.id) {
       throw new Error("No estás autorizado para modificar este expediente.");
     }
+  }
+
+  // Si estaba en pausa, se quita la pausa (fecha, cotizaciones pausadas) antes de moverlo
+  if (exp?.etapa === "en_pausa") {
+    const { reactivarExpediente } = await import("@/lib/pausa-leads");
+    await reactivarExpediente(sb, id, "Movido de etapa manualmente");
   }
 
   const updatePayload: any = { etapa, ultimo_movimiento: hoyISO() };
@@ -615,15 +623,14 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     cambios: ["etapa"],
   });
 
-  // Enviar evento identify a RudderStack en segundo plano si hay un prospecto enlazado
+  // Enviar evento identify a RudderStack / Mautic en segundo plano si hay un prospecto enlazado
   if (exp?.prospecto_id) {
     const prospectoId = exp.prospecto_id;
     (async () => {
       try {
-        // Consultar los datos del prospecto y del expediente
         const { data: pros } = await sb
           .from("prospectos")
-          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen")
+          .select("nombre, primer_apellido, segundo_apellido, correo, telefono, origen, estatus, ia_pausada")
           .eq("id", prospectoId)
           .maybeSingle();
 
@@ -634,39 +641,22 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
           .maybeSingle();
 
         if (pros) {
-          const esStaging = process.env.SITE_URL?.includes("sslip.io") || process.env.SITE_URL?.includes("192.168.100.253");
-          const rudderUrl = process.env.RUDDERSTACK_URL || (esStaging ? "http://192.168.100.253:51700/v1/identify" : "http://192.168.100.253:52700/v1/identify");
-            
-          const basicAuth = Buffer.from("crm_source:").toString("base64");
-          
-          await fetch(rudderUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Basic ${basicAuth}`
-            },
-            body: JSON.stringify({
-              userId: prospectoId,
-              type: "identify",
-              traits: {
-                firstname: pros.nombre || "",
-                lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
-                email: pros.correo || "",
-                phone: pros.telefono || "",
-                origen: pros.origen || "",
-                tipo_negocio: currentExp?.tipo_negocio || "otro"
-              },
-              context: {
-                library: {
-                  name: "http",
-                  version: "1.0.0"
-                }
-              }
-            })
+          const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
+          await sincronizarConectorMautic({
+            userId: prospectoId,
+            firstname: pros.nombre,
+            lastname: [pros.primer_apellido, pros.segundo_apellido].filter(Boolean).join(" "),
+            email: pros.correo,
+            phone: pros.telefono,
+            origen: pros.origen,
+            tipo_negocio: currentExp?.tipo_negocio || "otro",
+            etapa: etapa,
+            estatus: pros.estatus,
+            ia_pausada: pros.ia_pausada,
           });
         }
       } catch (rudderErr) {
-        console.error("[RudderStack] Error al enviar evento identify en moverEtapa:", rudderErr);
+        console.error("[Conector Mautic] Error en moverEtapa:", rudderErr);
       }
     })();
   }
@@ -741,6 +731,9 @@ export async function moverEtapaMasivo(
 ): Promise<void> {
   await requireAdmin();
   if (ids.length === 0) return;
+  if (etapa === "en_pausa") {
+    throw new Error('Para pausar negocios usa "Posponer" y elige la fecha para retomarlos.');
+  }
   const sb = supabaseServidor();
 
   // Obtener todos los prospecto_ids únicos
@@ -1618,5 +1611,45 @@ export async function cambiarCalificacionExpediente(
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al cambiar la calificación." };
+  }
+}
+
+/** Actualiza la dirección de la propiedad (y opcionalmente el link de Maps) y la sincroniza con el prospecto */
+export async function actualizarDireccionExpediente(
+  expedienteId: string,
+  direccion: string,
+  linkGoogleMaps?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const usuario = await usuarioActual();
+    if (!usuario) return { ok: false, error: "No autorizado." };
+
+    const sb = supabaseServidor();
+    const dir = direccion.trim();
+    const cambios: Record<string, string | null> = {
+      direccion_propiedad: dir || null,
+      ultimo_movimiento: hoyISO(),
+    };
+    if (linkGoogleMaps !== undefined) cambios.link_google_maps = linkGoogleMaps.trim() || null;
+
+    const { data: exp, error } = await sb
+      .from("expedientes")
+      .update(cambios)
+      .eq("id", expedienteId)
+      .select("prospecto_id")
+      .single();
+
+    if (error) return { ok: false, error: error.message };
+
+    if (exp?.prospecto_id) {
+      await sb
+        .from("prospectos")
+        .update({ direccion: dir })
+        .eq("id", exp.prospecto_id);
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al guardar la dirección." };
   }
 }

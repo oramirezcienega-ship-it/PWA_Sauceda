@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface LinkCitaWidgetProps {
   asesorId: string | null;
@@ -64,7 +65,7 @@ export function LinkCitaWidget({
     ? `Hola ${prospectoNombre}, para la inspección técnica en sitio de tu propiedad, te comparto el enlace de la agenda de nuestro operario para que selecciones el día y la hora que prefieras: ${urlReserva}`
     : `Hola ${prospectoNombre}, te comparto este enlace para que puedas seleccionar el horario que mejor te convenga para nuestra cita o asesoría: ${urlReserva}`;
   const whatsappUrl = prospectoTelefono
-    ? `https://wa.me/${prospectoTelefono.replace(/\D/g, "")}?text=${encodeURIComponent(mensajeWhatsApp)}`
+    ? `https://wa.me/${normalizarTelefono(prospectoTelefono)}?text=${encodeURIComponent(mensajeWhatsApp)}`
     : `https://wa.me/?text=${encodeURIComponent(mensajeWhatsApp)}`;
 
   return (

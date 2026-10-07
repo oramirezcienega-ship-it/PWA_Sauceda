@@ -12,6 +12,7 @@ import {
 import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
 import { registrarActividad } from "@/lib/actividades";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
+import { registrarRespuestaLead, urlPortalParaTelegram } from "@/lib/lead-telegram";
 import {
   iniciarNegociacionDias,
   alternarDiaAsesor,
@@ -237,6 +238,59 @@ export async function POST(req: NextRequest) {
             detalle: `Respuesta recibida por Telegram.`,
           });
         }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Lead pasado a un asesor desde Conversaciones: L:{envioId}:{1 recibido | 0 no puedo}
+      const mLead = data.match(/^L:([0-9a-f-]{36}):([01])$/i);
+      if (mLead) {
+        const [, envioId, val] = mLead;
+        const { data: envio } = await sb
+          .from("leads_envios_telegram")
+          .select("asesor_id, estado")
+          .eq("id", envioId)
+          .maybeSingle();
+        if (!envio) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Este lead ya no está disponible.");
+          return NextResponse.json({ ok: true });
+        }
+
+        const { data: asesorL } = await sb
+          .from("perfiles")
+          .select("telegram_chat_id, telegram_username")
+          .eq("id", envio.asesor_id)
+          .maybeSingle();
+        const esElAsesor =
+          asesorL &&
+          (asesorL.telegram_chat_id === fromId ||
+            (username && asesorL.telegram_username?.toLowerCase() === username.toLowerCase()));
+        if (!esElAsesor) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Este lead fue asignado a otro asesor.", true);
+          return NextResponse.json({ ok: true });
+        }
+
+        const r = await registrarRespuestaLead(sb, envioId, val === "1" ? "revisado" : "rechazado", "telegram");
+        const chatMsg = cb.message?.chat?.id;
+        const msgId = cb.message?.message_id;
+        if (chatMsg && msgId) {
+          // Se quitan los botones de confirmación pero queda el acceso al portal para dar seguimiento
+          const urlPortal = await urlPortalParaTelegram(sb, envio.asesor_id);
+          await actualizarTecladoTelegram(
+            botToken,
+            chatMsg,
+            msgId,
+            urlPortal ? [[{ text: "📋 Dar seguimiento en mi portal", url: urlPortal }]] : []
+          );
+        }
+        await responderCallbackQueryTelegram(
+          botToken,
+          cb.id,
+          r.yaRespondido
+            ? "Ya habías respondido este lead."
+            : val === "1"
+            ? "✅ Registrado: el lead es tuyo. ¡Éxito!"
+            : "Registrado. Avisamos para reasignarlo."
+        );
         return NextResponse.json({ ok: true });
       }
 

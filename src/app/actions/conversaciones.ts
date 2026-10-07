@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
+import { avanzarAContactoInicialPorRespuesta } from "@/lib/etapa-automatica";
 import { enviarWhatsAppTexto, enviarWhatsAppPlantilla, subirMediaMeta, enviarWhatsAppSticker, enviarWhatsAppDocumento } from "@/lib/whatsapp";
 import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
@@ -146,17 +147,20 @@ async function duenosPorTelefonos(
 
 /** Lista las conversaciones (una por teléfono, con su último mensaje). */
 export async function listarConversaciones(): Promise<ConversacionResumen[]> {
-  await requireAdmin();
+  // Una sola validación de sesión (getUser es una llamada de red a Supabase Auth).
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
-  const { rol } = await rolDe(usuario.id);
   const sb = supabaseServidor();
 
-  const { data, error } = await sb
-    .from("mensajes_whatsapp")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(1000);
+  // Rol y mensajes en paralelo; solo las columnas que usa la bandeja.
+  const [{ rol }, { data, error }] = await Promise.all([
+    rolDe(usuario.id),
+    sb
+      .from("mensajes_whatsapp")
+      .select("expediente_id, prospecto_id, telefono, direccion, texto, agente, created_at, finalizado")
+      .order("created_at", { ascending: false })
+      .limit(1000),
+  ]);
   if (error) throw new Error(error.message);
   let filas = (data as FilaMsg[]) ?? [];
 
@@ -172,9 +176,6 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
       new Set(filas.map((f) => f.prospecto_id).filter(Boolean) as string[]),
     );
 
-    const duenosExp = await duenosPorIds(sb, "expedientes", idsExp, colId);
-    const duenosPros = await duenosPorIds(sb, "prospectos", idsPros, colId);
-
     const telefonos10 = Array.from(
       new Set(
         filas
@@ -182,8 +183,12 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
           .filter((t) => t.length === 10),
       ),
     );
-    const duenosTelExp = await duenosPorTelefonos(sb, "expedientes", telefonos10, colId);
-    const duenosTelPros = await duenosPorTelefonos(sb, "prospectos", telefonos10, colId);
+    const [duenosExp, duenosPros, duenosTelExp, duenosTelPros] = await Promise.all([
+      duenosPorIds(sb, "expedientes", idsExp, colId),
+      duenosPorIds(sb, "prospectos", idsPros, colId),
+      duenosPorTelefonos(sb, "expedientes", telefonos10, colId),
+      duenosPorTelefonos(sb, "prospectos", telefonos10, colId),
+    ]);
 
     filas = filas.filter((f) => {
       const duenoExp = f.expediente_id ? duenosExp.get(f.expediente_id) : undefined;
@@ -221,47 +226,54 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
   const nombres = new Map<string, string>();
   const nombresAsesor = new Map<string, string>();
   const tipoNegocioExp = new Map<string, string>();
-  if (expIds.length > 0) {
-    const { data: exps } = await sb
-      .from("expedientes")
-      .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
-      .in("id", expIds);
-    (exps ?? []).forEach((e: any) => {
-      nombres.set(e.id as string, nombreDe(e));
-      if (e.perfiles?.nombre) {
-        nombresAsesor.set(e.id as string, e.perfiles.nombre);
-      }
-      if (e.tipo_negocio) {
-        tipoNegocioExp.set(e.id as string, e.tipo_negocio);
-      }
-    });
-  }
-
-  // Resuelve nombres desde los prospectos enlazados (una sola consulta).
+  const etapaExp = new Map<string, string>();
+  // Resuelve nombres desde los prospectos enlazados.
   const prosIds = Array.from(
     new Set(filas.map((f) => f.prospecto_id).filter(Boolean) as string[]),
   );
+
+  // Expedientes y prospectos en paralelo (una consulta cada uno).
+  const [{ data: exps }, { data: pros }] = await Promise.all([
+    expIds.length > 0
+      ? sb
+          .from("expedientes")
+          .select("id, cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
+          .in("id", expIds)
+      : Promise.resolve({ data: [] as any[] }),
+    prosIds.length > 0
+      ? sb
+          .from("prospectos")
+          .select("id, nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
+          .in("id", prosIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  (exps ?? []).forEach((e: any) => {
+    nombres.set(e.id as string, nombreDe(e));
+    if (e.etapa) etapaExp.set(e.id as string, e.etapa);
+    if (e.perfiles?.nombre) {
+      nombresAsesor.set(e.id as string, e.perfiles.nombre);
+    }
+    if (e.tipo_negocio) {
+      tipoNegocioExp.set(e.id as string, e.tipo_negocio);
+    }
+  });
+
   const nombresPros = new Map<string, string>();
   const nombresAsesorPros = new Map<string, string>();
   const tipoNegocioPros = new Map<string, string>();
-  if (prosIds.length > 0) {
-    const { data: pros } = await sb
-      .from("prospectos")
-      .select("id, nombre, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
-      .in("id", prosIds);
-    (pros ?? []).forEach((p: any) => {
-      const nom = [p.nombre, p.primer_apellido, p.segundo_apellido]
-        .filter(Boolean)
-        .join(" ");
-      nombresPros.set(p.id as string, nom);
-      if (p.perfiles?.nombre) {
-        nombresAsesorPros.set(p.id as string, p.perfiles.nombre);
-      }
-      if (p.tipo_negocio) {
-        tipoNegocioPros.set(p.id as string, p.tipo_negocio);
-      }
-    });
-  }
+  (pros ?? []).forEach((p: any) => {
+    const nom = [p.nombre, p.primer_apellido, p.segundo_apellido]
+      .filter(Boolean)
+      .join(" ");
+    nombresPros.set(p.id as string, nom);
+    if (p.perfiles?.nombre) {
+      nombresAsesorPros.set(p.id as string, p.perfiles.nombre);
+    }
+    if (p.tipo_negocio) {
+      tipoNegocioPros.set(p.id as string, p.tipo_negocio);
+    }
+  });
 
   const resumenes: ConversacionResumen[] = [];
   porTel.forEach((arr, telefono) => {
@@ -290,7 +302,8 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
         (expId && nombres.get(expId)) ||
         (prosId && nombresPros.get(prosId)) ||
         telefono,
-      ultimoTexto: ultimo.texto,
+      // La bandeja solo muestra 2 líneas: se recorta para aligerar la respuesta.
+      ultimoTexto: (ultimo.texto || "").slice(0, 240),
       ultimaFecha: ultimo.created_at,
       ventanaAbierta: ventanaAbierta(arr),
       ultimoInboundFecha: ultimoInbound?.created_at ?? null,
@@ -301,6 +314,7 @@ export async function listarConversaciones(): Promise<ConversacionResumen[]> {
         (expId && tipoNegocioExp.get(expId)) ||
         (prosId && tipoNegocioPros.get(prosId)) ||
         null,
+      etapa: (expId && etapaExp.get(expId)) || null,
     });
   });
   resumenes.sort((a, b) => b.ultimaFecha.localeCompare(a.ultimaFecha));
@@ -501,15 +515,17 @@ export async function obtenerConversacion(
 
   let asesorNombre = "";
   let tipoNegocio: string | null = null;
+  let etapa: string | null = null;
 
   if (expedienteId) {
     const { data: e } = await sb
       .from("expedientes")
-      .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, perfiles:asesor_id(nombre)")
+      .select("cliente, primer_apellido, segundo_apellido, tipo_negocio, etapa, perfiles:asesor_id(nombre)")
       .eq("id", expedienteId)
       .maybeSingle();
     if (e) {
       nombreExpediente = nombreDe(e as any);
+      etapa = (e as any).etapa ?? null;
       if ((e as any).tipo_negocio) {
         tipoNegocio = (e as any).tipo_negocio;
       }
@@ -626,6 +642,7 @@ export async function obtenerConversacion(
     posibleBloqueo,
     motivoAlerta,
     iaPausada,
+    etapa,
   };
 }
 
@@ -828,6 +845,8 @@ export async function responderConversacion(
         titulo: `Respuesta por ${canalLabel}`,
         detalle: texto,
       });
+      // Una persona respondió: el negocio en etapa inicial pasa a "Contacto inicial"
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
     }
     return r.ok ? { ok: true } : { ok: false, error: (r as any).errorDetail || r.error };
   } catch (err: any) {
@@ -1151,10 +1170,31 @@ export async function guardarRespuestaRapida(datos: {
     const { error } = await sb.from("respuestas_rapidas").update(campos).eq("id", id);
     if (error) return { ok: false, error: error.message };
   } else {
+    // Las nuevas van al final de la lista, salvo que se indique un orden
+    if (campos.orden === undefined) {
+      const { data: ultima } = await sb
+        .from("respuestas_rapidas")
+        .select("orden")
+        .order("orden", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      campos.orden = ((ultima?.orden as number | undefined) ?? 0) + 1;
+    }
     const { error } = await sb.from("respuestas_rapidas").insert(campos);
     if (error) return { ok: false, error: error.message };
   }
   return { ok: true };
+}
+
+/** Guarda el orden de las respuestas rápidas (la primera del arreglo queda hasta arriba). */
+export async function reordenarRespuestasRapidas(ids: string[]): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const resultados = await Promise.all(
+    ids.map((id, i) => sb.from("respuestas_rapidas").update({ orden: i + 1 }).eq("id", id))
+  );
+  const fallo = resultados.find((r) => r.error);
+  return fallo?.error ? { ok: false, error: fallo.error.message } : { ok: true };
 }
 
 /** Elimina una respuesta rápida. */
@@ -1357,6 +1397,7 @@ export async function enviarArchivoDirectoConversacion(
         titulo: "Archivo adjunto enviado por WhatsApp",
         detalle: `Se envió el archivo "${filename}" por WhatsApp.`,
       });
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
     }
 
     return { ok: true };

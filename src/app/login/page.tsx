@@ -102,7 +102,11 @@ export default function PaginaLogin() {
         return;
       }
       // Redirección adaptativa según el rol devuelto por el servidor
-      const destino = (r.rol === "asesor" || r.rol === "operaciones") ? "/dashboard" : "/";
+      // En móvil la primera pantalla es la bandeja de conversaciones.
+      const esMovil = window.matchMedia("(max-width: 767px)").matches;
+      const destino = esMovil
+        ? "/conversaciones"
+        : (r.rol === "asesor" || r.rol === "operaciones") ? "/dashboard" : "/";
       window.location.assign(destino);
     } catch (err: any) {
       console.error("Error al iniciar sesión:", err);

@@ -41,6 +41,7 @@ import { PanelAutorizacionCostosTelegram } from "./PanelAutorizacionCostosTelegr
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface DetalleCotizacionAdminProps {
   cotizacionInicial: Cotizacion;
@@ -490,6 +491,9 @@ export function DetalleCotizacionAdmin({
         const res = await subirFotoVisita(formData);
         if (res && res.ok && res.url) {
           nuevasUrls.push(res.url);
+          // Agregar cada foto al estado en cuanto se sube, para no perderla si se guarda antes de terminar el lote
+          const url = res.url;
+          setFotos((prev) => [...prev, url]);
         } else {
           ultimoError = res?.error || "Respuesta vacía del servidor.";
           console.error("Error al subir imagen:", ultimoError);
@@ -497,7 +501,6 @@ export function DetalleCotizacionAdmin({
       }
 
       if (nuevasUrls.length > 0) {
-        setFotos((prev) => [...prev, ...nuevasUrls]);
         setMensajeInspeccion({
           tipo: "ok",
           texto: `Se cargaron ${nuevasUrls.length} imagen(es) con éxito.`
@@ -571,6 +574,10 @@ export function DetalleCotizacionAdmin({
   };
   const handleGuardarInspeccion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (subiendoFotos) {
+      setMensajeInspeccion({ tipo: "error", texto: "Espera a que terminen de subirse las fotos antes de guardar." });
+      return;
+    }
     try {
       setGuardandoInspeccion(true);
       setMensajeInspeccion({ tipo: "", texto: "" });
@@ -1710,10 +1717,10 @@ export function DetalleCotizacionAdmin({
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
-                    disabled={guardandoInspeccion}
+                    disabled={guardandoInspeccion || subiendoFotos}
                     className="rounded-lg bg-sauce px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-verde-profundo disabled:opacity-50"
                   >
-                    {guardandoInspeccion ? "Guardando..." : "Guardar Reporte Técnico"}
+                    {guardandoInspeccion ? "Guardando..." : subiendoFotos ? "Subiendo fotos..." : "Guardar Reporte Técnico"}
                   </button>
                 </div>
               </form>
@@ -2462,7 +2469,7 @@ export function DetalleCotizacionAdmin({
                           
                           <div className="flex gap-2 pt-2 flex-wrap">
                             <a
-                              href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
+                              href={`https://wa.me/${normalizarTelefono(cotizacion.prospectoTelefono || "")}?text=${encodeURIComponent(
                                 `Hola ${cotizacion.prospectoNombre?.split(" ")[0]}, te comparto el Reporte de Levantamiento Técnico y Diagnóstico del servicio en tu domicilio. Puedes revisarlo a detalle en el siguiente enlace: ${baseEnlace}/reporte-visita/${cotizacion.token}`
                               )}`}
                               target="_blank"
@@ -2488,7 +2495,7 @@ export function DetalleCotizacionAdmin({
 
                         {/* Compartir por WhatsApp Web */}
                         <a
-                          href={`https://wa.me/${cotizacion.prospectoTelefono?.replace(/\s+/g, "")}?text=${encodeURIComponent(
+                          href={`https://wa.me/${normalizarTelefono(cotizacion.prospectoTelefono || "")}?text=${encodeURIComponent(
                             `¡Hola ${cotizacion.prospectoNombre?.split(" ")[0] || "Cliente"}! Te comparto la propuesta comercial y cotización para el servicio en tu domicilio (Folio ${cotizacion.id}). En el siguiente enlace puedes revisar a detalle los conceptos y autorizarla en línea por sistema: ${enlaceCliente}`
                           )}`}
                           target="_blank"

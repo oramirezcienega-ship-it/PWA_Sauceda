@@ -48,6 +48,7 @@ import {
   IconoFuego,
   IconoRemisiones,
   IconoProductos,
+  IconoCoordinaciones,
 } from "./IconosNav";
 
 /**
@@ -73,7 +74,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/contrato-pdf/") ||
     path.startsWith("/garantia/") ||
     path.startsWith("/orden-trabajo/entrega/") ||
-    path.startsWith("/orden-trabajo/remision/")
+    path.startsWith("/orden-trabajo/remision/") ||
+    path.startsWith("/asesor/")
   );
 }
 
@@ -286,7 +288,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (esRutaPublica(pathname || "")) return;
     refrescarNotificaciones();
     const id = setInterval(refrescarNotificaciones, 15000);
-    return () => clearInterval(id);
+    // Al volver a primer plano (abrir la PWA, desbloquear) no esperar al siguiente ciclo.
+    const alVolver = () => {
+      if (document.visibilityState === "visible") refrescarNotificaciones();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+    };
   }, [pathname]);
 
   const unreadCount = notificaciones.filter((n) => !n.leido).length;
@@ -487,6 +497,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           href: "/remisiones",
           label: "Remisiones y Facturas",
           icono: IconoRemisiones,
+        },
+        {
+          href: "/coordinaciones",
+          label: "Coordinaciones de Inspección",
+          icono: IconoCoordinaciones,
+          esAdminOnly: true,
         },
       ],
     },
@@ -1059,8 +1075,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           colapsada ? "md:pl-0" : "md:pl-64"
         }`}
       >
-        {/* Barra superior de actividades de la semana (móvil y escritorio) */}
-        <HeaderActividadesSemana />
+        {/* Barra superior de actividades de la semana (móvil y escritorio).
+            En Conversaciones (móvil) se oculta para dar el espacio a la bandeja.
+            `contents` conserva el sticky de la barra. */}
+        <div className={pathname?.startsWith("/conversaciones") ? "hidden md:contents" : "contents"}>
+          <HeaderActividadesSemana />
+        </div>
 
         {children}
       </div>

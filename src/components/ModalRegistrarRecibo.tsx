@@ -8,6 +8,7 @@ import {
   enviarReciboPorWhatsApp,
   type ReciboPago,
 } from "@/app/actions/ordenes-trabajo";
+import { normalizarTelefono } from "@/lib/telefono";
 
 interface ModalRegistrarReciboProps {
   abierto: boolean;
@@ -280,7 +281,7 @@ export function ModalRegistrarRecibo({
                 </a>
                 {clienteTelefono && (
                   <a
-                    href={`https://wa.me/${clienteTelefono.replace(/[^0-9]/g, "")}?text=${mensajeWhatsApp}`}
+                    href={`https://wa.me/${normalizarTelefono(clienteTelefono)}?text=${mensajeWhatsApp}`}
                     target="_blank"
                     rel="noreferrer"
                     className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 text-center transition flex items-center justify-center gap-1.5 shadow-sm"

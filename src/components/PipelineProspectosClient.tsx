@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, DragEvent } from "react";
+import { useState, useMemo, useEffect, DragEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
@@ -48,6 +48,11 @@ interface ModalInspeccionData {
   perfilId?: string | null;
 }
 
+const CLAVE_FILTROS_PIPELINE = "pipeline:filtros:v1";
+/** Columnas ocultas por defecto: los cerrados, para enfocarse en lo que está en proceso. */
+const OCULTAS_DEFAULT_EXP = ["cerrado", "perdido"];
+const OCULTAS_DEFAULT_PROS = ["cliente", "no_viable"];
+
 export function PipelineProspectosClient({
   prospectosIniciales,
   expedientesIniciales = [],
@@ -67,6 +72,37 @@ export function PipelineProspectosClient({
   const [filtroCalificacion, setFiltroCalificacion] = useState<string>("todos");
   const [filtroOrigen, setFiltroOrigen] = useState<string>("todos");
   const [filtroAsesor, setFiltroAsesor] = useState<string>("todos");
+  const [filtrosRestaurados, setFiltrosRestaurados] = useState(false);
+  // Etapas (columnas) ocultas; se guardan las ocultas para que una etapa nueva aparezca por defecto
+  const [ocultasExp, setOcultasExp] = useState<string[]>(OCULTAS_DEFAULT_EXP);
+  const [ocultasPros, setOcultasPros] = useState<string[]>(OCULTAS_DEFAULT_PROS);
+
+  // Los filtros persisten al refrescar la página (solo en este navegador)
+  useEffect(() => {
+    try {
+      const g = JSON.parse(window.localStorage.getItem(CLAVE_FILTROS_PIPELINE) || "null");
+      if (g && typeof g === "object") {
+        if (g.tipoPipeline === "prospectos" || g.tipoPipeline === "expedientes") setTipoPipeline(g.tipoPipeline);
+        if (typeof g.busqueda === "string") setBusqueda(g.busqueda);
+        if (typeof g.filtroCalificacion === "string") setFiltroCalificacion(g.filtroCalificacion);
+        if (typeof g.filtroOrigen === "string") setFiltroOrigen(g.filtroOrigen);
+        if (typeof g.filtroAsesor === "string") setFiltroAsesor(g.filtroAsesor);
+        if (Array.isArray(g.ocultasExp)) setOcultasExp(g.ocultasExp.filter((x: unknown) => typeof x === "string"));
+        if (Array.isArray(g.ocultasPros)) setOcultasPros(g.ocultasPros.filter((x: unknown) => typeof x === "string"));
+      }
+    } catch {}
+    setFiltrosRestaurados(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtrosRestaurados) return;
+    try {
+      window.localStorage.setItem(
+        CLAVE_FILTROS_PIPELINE,
+        JSON.stringify({ tipoPipeline, busqueda, filtroCalificacion, filtroOrigen, filtroAsesor, ocultasExp, ocultasPros })
+      );
+    } catch {}
+  }, [filtrosRestaurados, tipoPipeline, busqueda, filtroCalificacion, filtroOrigen, filtroAsesor, ocultasExp, ocultasPros]);
 
   // Estados para Drag and Drop
   const [arrastrandoId, setArrastrandoId] = useState<string | null>(null);
@@ -423,6 +459,59 @@ export function PipelineProspectosClient({
             ))}
           </select>
         </div>
+
+        {/* Etapas visibles (por defecto, todas menos los cerrados) */}
+        {(() => {
+          const lista: { id: string; nombre: string }[] = tipoPipeline === "expedientes" ? ETAPAS : ETAPAS_PROSPECTO;
+          const ocultas = tipoPipeline === "expedientes" ? ocultasExp : ocultasPros;
+          const setOcultas = tipoPipeline === "expedientes" ? setOcultasExp : setOcultasPros;
+          const porDefecto = tipoPipeline === "expedientes" ? OCULTAS_DEFAULT_EXP : OCULTAS_DEFAULT_PROS;
+          const esDefecto = ocultas.length === porDefecto.length && porDefecto.every((x) => ocultas.includes(x));
+          return (
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span className="font-bold uppercase tracking-wide text-slate-400 mr-1">Etapas:</span>
+              {lista.map((et) => {
+                const visible = !ocultas.includes(et.id);
+                return (
+                  <button
+                    key={et.id}
+                    type="button"
+                    onClick={() =>
+                      setOcultas((prev) => (visible ? [...prev, et.id] : prev.filter((x) => x !== et.id)))
+                    }
+                    title={visible ? "Ocultar esta columna" : "Mostrar esta columna"}
+                    className={`rounded-full border px-2.5 py-0.5 font-semibold transition ${
+                      visible
+                        ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                        : "bg-white border-slate-200 text-slate-400 line-through decoration-slate-300"
+                    }`}
+                  >
+                    {visible ? "✓ " : ""}
+                    {et.nombre}
+                  </button>
+                );
+              })}
+              {ocultas.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOcultas([])}
+                  className="ml-1 text-slate-500 underline decoration-dotted hover:text-emerald-700"
+                >
+                  Mostrar todas
+                </button>
+              )}
+              {!esDefecto && (
+                <button
+                  type="button"
+                  onClick={() => setOcultas(porDefecto)}
+                  className="ml-1 text-slate-500 underline decoration-dotted hover:text-emerald-700"
+                >
+                  Solo en proceso
+                </button>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ========================================================================= */}
@@ -430,7 +519,7 @@ export function PipelineProspectosClient({
       {/* ========================================================================= */}
       {tipoPipeline === "prospectos" && (
         <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-3 pt-1 h-[calc(100vh-260px)] min-h-[420px] w-full items-stretch">
-          {ETAPAS_PROSPECTO.map((etapa) => {
+          {ETAPAS_PROSPECTO.filter((et) => !ocultasPros.includes(et.id)).map((etapa) => {
             const prospectosEtapa = prospectosFiltrados
               .filter((p) => p.estatus === etapa.id)
               .sort((a, b) => obtenerTimestampProspecto(b) - obtenerTimestampProspecto(a));
@@ -449,7 +538,7 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropProspecto(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col min-h-0 rounded-2xl border p-3 transition-colors duration-150 ${
+                className={`flex w-72 sm:w-[275px] shrink-0 lg:shrink lg:flex-1 lg:w-auto lg:min-w-[260px] flex-col min-h-0 rounded-2xl border p-3 transition-colors duration-150 ${
                   estaHover
                     ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30"
                     : esGanado
@@ -660,7 +749,7 @@ export function PipelineProspectosClient({
       {/* ========================================================================= */}
       {tipoPipeline === "expedientes" && (
         <div className="flex gap-3.5 overflow-x-auto scrollbar-sutil pb-3 pt-1 h-[calc(100vh-260px)] min-h-[420px] w-full items-stretch">
-          {ETAPAS.map((etapa) => {
+          {ETAPAS.filter((et) => !ocultasExp.includes(et.id)).map((etapa) => {
             const expedientesEtapa = expedientesFiltrados
               .filter((exp) => exp.etapa === etapa.id)
               .sort((a, b) => obtenerTimestampExpediente(b) - obtenerTimestampExpediente(a));
@@ -681,7 +770,7 @@ export function PipelineProspectosClient({
                 onDragOver={(e) => handleDragOver(e, etapa.id)}
                 onDragLeave={(e) => handleDragLeave(e, etapa.id)}
                 onDrop={(e) => handleDropExpediente(e, etapa.id)}
-                className={`flex w-72 sm:w-[275px] lg:w-[290px] xl:w-[300px] shrink-0 flex-col min-h-0 rounded-2xl border p-3 transition-colors duration-150 ${
+                className={`flex w-72 sm:w-[275px] shrink-0 lg:shrink lg:flex-1 lg:w-auto lg:min-w-[260px] flex-col min-h-0 rounded-2xl border p-3 transition-colors duration-150 ${
                   estaHover
                     ? "border-emerald-500 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30"
                     : esGanado

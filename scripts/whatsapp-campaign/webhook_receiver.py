@@ -32,7 +32,7 @@ import queue
 import threading
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import urllib.request
 import urllib.parse
@@ -88,6 +88,57 @@ SENT_RECORDS_FILE = os.path.join(BASE_DIR, "sent_records.json")
 job_queue = queue.Queue()
 queued_keys = set()
 lock = threading.Lock()
+
+# =============================================================================
+# CONTROL DE HORARIOS COMERCIALES (ZONA HORARIA MÉXICO UTC-6)
+# =============================================================================
+# Lunes a Viernes: 09:00 - 19:00 (07:00 PM)
+# Sábados: 09:00 - 14:00 (02:00 PM)
+# Domingos: Envíos masivos suspendidos (descanso dominical)
+DISPATCH_START_HOUR = int(os.getenv("DISPATCH_START_HOUR", "9"))       # 09:00 AM
+DISPATCH_END_HOUR = int(os.getenv("DISPATCH_END_HOUR", "19"))          # 19:00 (7:00 PM)
+DISPATCH_SAT_END_HOUR = int(os.getenv("DISPATCH_SAT_END_HOUR", "14"))  # 14:00 (2:00 PM)
+DISPATCH_ALLOW_SUNDAY = os.getenv("DISPATCH_ALLOW_SUNDAY", "false").lower() in ("true", "1", "yes")
+DISPATCH_TZ_OFFSET = int(os.getenv("DISPATCH_TZ_OFFSET", "-6"))        # UTC-6 (Bajío / Guanajuato)
+
+
+def obtener_hora_local() -> datetime:
+    tz_local = timezone(timedelta(hours=DISPATCH_TZ_OFFSET))
+    return datetime.now(tz_local)
+
+
+def es_horario_permitido() -> tuple[bool, str]:
+    """
+    Evalúa si el momento actual está dentro de la ventana de envío comercial permitida.
+    Retorna (permitido: bool, motivo: str).
+    """
+    ahora = obtener_hora_local()
+    weekday = ahora.weekday()  # 0=Lunes, ..., 5=Sábado, 6=Domingo
+    hora_decimal = ahora.hour + ahora.minute / 60.0
+
+    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    dia_str = dias[weekday]
+    hora_str = ahora.strftime("%H:%M")
+
+    # 1. Domingo
+    if weekday == 6 and not DISPATCH_ALLOW_SUNDAY:
+        return False, f"Domingo ({hora_str}): envíos masivos suspendidos por descanso dominical"
+
+    # 2. Sábado
+    if weekday == 5:
+        if hora_decimal < DISPATCH_START_HOUR:
+            return False, f"Sábado muy temprano ({hora_str}). Inicio de ventana: {DISPATCH_START_HOUR:02d}:00"
+        if hora_decimal >= DISPATCH_SAT_END_HOUR:
+            return False, f"Sábado fuera de horario ({hora_str}). Límite de sábado: {DISPATCH_SAT_END_HOUR:02d}:00"
+        return True, f"Sábado en horario hábil ({hora_str})"
+
+    # 3. Lunes a Viernes
+    if hora_decimal < DISPATCH_START_HOUR:
+        return False, f"{dia_str} muy temprano ({hora_str}). Inicio de ventana: {DISPATCH_START_HOUR:02d}:00"
+    if hora_decimal >= DISPATCH_END_HOUR:
+        return False, f"{dia_str} fuera de horario ({hora_str}). Límite permitido: {DISPATCH_END_HOUR:02d}:00"
+
+    return True, f"{dia_str} en horario comercial hábil ({hora_str})"
 
 
 def load_sent_records() -> dict:
@@ -153,12 +204,20 @@ def clean_name(raw_name: str) -> str:
     return first
 
 
-def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
+DISQUALIFIED_ESTATUS = {"descalificado", "no_viable", "sin_contacto", "perdido"}
+DISQUALIFIED_CALIFICACION = {"descalificado", "no_viable"}
+DISQUALIFIED_ETAPAS = {"perdido", "descalificado", "no_viable", "fuera_de_zona", "cancelado", "en_pausa"}
+
+
+def verificar_elegibilidad_crm(phone_e164: str, sufijo_10: str) -> tuple[bool, str, str | None, str | None]:
     """
-    Busca prospecto_id y expediente_id en Supabase por el número telefónico.
+    PRE-FLIGHT GUARD: Consulta en tiempo real a Supabase (prospectos y expedientes)
+    ANTES de enviar cualquier mensaje de campaña por WhatsApp.
+    Si el contacto está descalificado, no viable, fuera de zona, cancelado o perdido:
+    retorna (False, motivo, prospecto_id, expediente_id) para ABORTAR el envío.
     """
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not sufijo_10 or len(sufijo_10) < 8:
-        return None, None
+        return True, "Validación omitida (sin credenciales)", None, None
 
     headers = {
         "apikey": SUPABASE_SERVICE_ROLE_KEY,
@@ -166,35 +225,80 @@ def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
         "Accept": "application/json",
     }
 
+    pid, eid = None, None
+    prospecto = None
+    expedientes = []
+
     # 1. Buscar en prospectos
     try:
-        query_url = f"{SUPABASE_URL}/rest/v1/prospectos?select=id,expediente_id&telefono=ilike.*{sufijo_10}*&limit=1"
-        req = urllib.request.Request(query_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                pid = data[0].get("id")
-                eid = data[0].get("expediente_id")
-                logger.info(f"Prospecto encontrado en Supabase: ID={pid}, Expediente={eid}")
-                return pid, eid
+        query_p = f"{SUPABASE_URL}/rest/v1/prospectos?select=id,nombre,estatus,calificacion,no_viable&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=1"
+        req_p = urllib.request.Request(query_p, headers=headers, method="GET")
+        with urllib.request.urlopen(req_p, timeout=5) as resp:
+            data_p = json.loads(resp.read().decode("utf-8"))
+            if data_p and len(data_p) > 0:
+                prospecto = data_p[0]
+                pid = prospecto.get("id")
     except Exception as e:
-        logger.debug(f"Búsqueda prospecto: {e}")
+        logger.warning(f"Error consultando prospecto en Supabase para {sufijo_10}: {e}")
 
     # 2. Buscar en expedientes
     try:
-        query_url = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id&telefono=ilike.*{sufijo_10}*&limit=1"
-        req = urllib.request.Request(query_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                eid = data[0].get("id")
-                pid = data[0].get("prospecto_id")
-                logger.info(f"Expediente encontrado en Supabase: ID={eid}, Prospecto={pid}")
-                return pid, eid
+        if pid:
+            query_e = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id,etapa,no_viable,calificacion,situacion,tipo_negocio&or=(prospecto_id.eq.{pid},telefono.ilike.*{sufijo_10}*)&order=created_at.desc&limit=5"
+        else:
+            query_e = f"{SUPABASE_URL}/rest/v1/expedientes?select=id,prospecto_id,etapa,no_viable,calificacion,situacion,tipo_negocio&telefono=ilike.*{sufijo_10}*&order=created_at.desc&limit=5"
+        req_e = urllib.request.Request(query_e, headers=headers, method="GET")
+        with urllib.request.urlopen(req_e, timeout=5) as resp:
+            expedientes = json.loads(resp.read().decode("utf-8"))
+            if expedientes and len(expedientes) > 0:
+                eid = expedientes[0].get("id")
+                if not pid:
+                    pid = expedientes[0].get("prospecto_id")
     except Exception as e:
-        logger.debug(f"Búsqueda expediente: {e}")
+        logger.warning(f"Error consultando expedientes en Supabase para {sufijo_10}: {e}")
 
-    return None, None
+    # Evaluar Descalificación exhaustivamente
+    reasons = []
+
+    if prospecto:
+        p_est = str(prospecto.get("estatus") or "").strip().lower()
+        p_cal = str(prospecto.get("calificacion") or "").strip().lower()
+        p_nv = prospecto.get("no_viable")
+
+        if p_est in DISQUALIFIED_ESTATUS:
+            reasons.append(f"prospecto.estatus='{p_est}'")
+        if p_cal in DISQUALIFIED_CALIFICACION:
+            reasons.append(f"prospecto.calificacion='{p_cal}'")
+        if p_nv is True or str(p_nv).lower() in ("true", "1", "t"):
+            reasons.append("prospecto.no_viable=True")
+
+    for exp in expedientes:
+        e_id = exp.get("id")
+        e_etapa = str(exp.get("etapa") or "").strip().lower()
+        e_nv = exp.get("no_viable")
+        e_cal = str(exp.get("calificacion") or "").strip().lower()
+        e_sit = str(exp.get("situacion") or "").strip().lower()
+
+        if e_etapa in DISQUALIFIED_ETAPAS:
+            reasons.append(f"expediente({e_id}).etapa='{e_etapa}'")
+        if e_nv is True or str(e_nv).lower() in ("true", "1", "t"):
+            reasons.append(f"expediente({e_id}).no_viable=True")
+        if e_cal in DISQUALIFIED_CALIFICACION:
+            reasons.append(f"expediente({e_id}).calificacion='{e_cal}'")
+        if "descalificado" in e_sit or "no viable" in e_sit:
+            reasons.append(f"expediente({e_id}).situacion='{e_sit}'")
+
+    if reasons:
+        motivo = " | ".join(reasons)
+        return False, motivo, pid, eid
+
+    return True, "Elegible", pid, eid
+
+
+def consultar_entidad_supabase(sufijo_10: str) -> tuple[str | None, str | None]:
+    """Compatibilidad: consulta rápida de IDs sin validación estricta."""
+    _, _, pid, eid = verificar_elegibilidad_crm("", sufijo_10)
+    return pid, eid
 
 
 def registrar_mensaje_supabase(
@@ -348,11 +452,31 @@ def enviar_plantilla_meta(
 
 
 def queue_worker():
-    """Worker que procesa la cola de envíos de campañas espaciando cada 3 segundos."""
+    """Worker que procesa la cola de envíos de campañas espaciando cada 3 segundos y respetando horarios comerciales."""
     logger.info("Iniciando Queue Worker de despachos Mautic...")
+    was_paused = False
     while True:
         try:
-            job = job_queue.get()
+            # 1. Verificar si estamos dentro del horario comercial hábil
+            permitido, motivo = es_horario_permitido()
+            if not permitido:
+                if not was_paused:
+                    tam_cola = job_queue.qsize()
+                    logger.warning(f"⏸️ [HORARIO NO CONVENIENTE] {motivo}. Envíos de campañas en pausa ({tam_cola} mensajes en cola esperando).")
+                    was_paused = True
+                time.sleep(30.0)
+                continue
+
+            if was_paused:
+                logger.info(f"▶️ [HORARIO HÁBIL REANUDADO] {motivo}. Reanudando despachos de campañas pendientes...")
+                was_paused = False
+
+            # 2. Obtener trabajo con timeout para re-evaluar horario continuamente
+            try:
+                job = job_queue.get(timeout=5.0)
+            except queue.Empty:
+                continue
+
             if job is None:
                 break
 
@@ -368,6 +492,29 @@ def queue_worker():
             phone_e164, sufijo_10 = normalizar_telefono_crm(phone_raw)
             if not phone_e164:
                 logger.warning(f"Teléfono inválido en job: '{phone_raw}'. Omitiendo.")
+                job_queue.task_done()
+                continue
+
+            # =========================================================================
+            # PRE-FLIGHT GUARD: VALIDACIÓN EN TIEMPO REAL CONTRA SUPABASE
+            # =========================================================================
+            elegible, motivo_rechazo, prospecto_id, expediente_id = verificar_elegibilidad_crm(phone_e164, sufijo_10)
+            if not elegible:
+                logger.warning(f"⛔ [PRE-FLIGHT BLOQUEADO] {phone_e164} ({name}) DESCALIFICADO EN CRM: {motivo_rechazo}. Abortando envío.")
+                record_entry = {
+                    "lead_id": job.get("lead_id"),
+                    "campaign": campaign_name,
+                    "template": template_name,
+                    "raw_name": raw_name,
+                    "clean_name": name,
+                    "phone": phone_e164,
+                    "status": "skipped_disqualified",
+                    "reason": motivo_rechazo,
+                    "prospecto_id": prospecto_id,
+                    "expediente_id": expediente_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+                save_sent_record(dedup_key, phone_e164, record_entry)
                 job_queue.task_done()
                 continue
 
@@ -398,8 +545,7 @@ def queue_worker():
             if ok and wamid:
                 logger.info(f"✅ [SUCCESS] Enviado a {phone_e164} ({name})! WAMID: {wamid}")
 
-                # 2. Consultar prospecto y expediente en Supabase
-                prospecto_id, expediente_id = consultar_entidad_supabase(sufijo_10)
+                # 2. Asociar IDs de prospecto y expediente obtenidos en la validación
                 record_entry["prospecto_id"] = prospecto_id
                 record_entry["expediente_id"] = expediente_id
 
@@ -447,14 +593,20 @@ class WebhookHandler(BaseHTTPRequestHandler):
                     continue
                 camp = r.get("campaign", "default")
                 if camp not in campaign_stats:
-                    campaign_stats[camp] = {"sent": 0, "failed": 0}
+                    campaign_stats[camp] = {"sent": 0, "failed": 0, "skipped_disqualified": 0}
                 if r.get("status") == "sent":
                     campaign_stats[camp]["sent"] += 1
                 elif r.get("status") == "failed":
                     campaign_stats[camp]["failed"] += 1
+                elif r.get("status") == "skipped_disqualified":
+                    campaign_stats[camp]["skipped_disqualified"] += 1
 
             total_sent = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "sent")
             total_failed = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "failed")
+            total_skipped_disqualified = sum(1 for r in records.values() if isinstance(r, dict) and r.get("status") == "skipped_disqualified")
+
+            permitido, motivo = es_horario_permitido()
+            ahora_local = obtener_hora_local()
 
             self._responder_json(200, {
                 "status": "online",
@@ -464,7 +616,19 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 "queue_remaining": job_queue.qsize(),
                 "successful_sent": total_sent,
                 "failed": total_failed,
+                "skipped_disqualified": total_skipped_disqualified,
                 "campaigns": campaign_stats,
+                "dispatch_schedule": {
+                    "current_local_time": ahora_local.strftime("%Y-%m-%d %H:%M:%S"),
+                    "timezone": f"UTC{DISPATCH_TZ_OFFSET:+d} (America/Mexico_City)",
+                    "is_dispatch_allowed_now": permitido,
+                    "status_reason": motivo,
+                    "windows": {
+                        "monday_to_friday": f"{DISPATCH_START_HOUR:02d}:00 - {DISPATCH_END_HOUR:02d}:00",
+                        "saturday": f"{DISPATCH_START_HOUR:02d}:00 - {DISPATCH_SAT_END_HOUR:02d}:00",
+                        "sunday": "Cerrado (descanso comercial)" if not DISPATCH_ALLOW_SUNDAY else f"{DISPATCH_START_HOUR:02d}:00 - {DISPATCH_END_HOUR:02d}:00"
+                    }
+                },
                 "time": datetime.now(timezone.utc).isoformat()
             })
         else:
@@ -481,8 +645,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
         # Extraer parámetros de query string
         is_legacy = self.path.startswith("/webhook/whatsapp-impermeabilizacion")
         campaign_name = qparams.get("campaign", ["reactivacion_impermeabilizacion" if is_legacy else None])[0]
-        template_name = qparams.get("template", [None])[0]
+        template_name = qparams.get("template", ["reactivacion_impermeabiliza_v4" if is_legacy else None])[0]
         media_id = qparams.get("media_id", [None])[0]
+        language = qparams.get("language", [None])[0]
 
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
@@ -506,6 +671,16 @@ class WebhookHandler(BaseHTTPRequestHandler):
         campaign_name = raw_data.get("campaign") or raw_data.get("campaign_name") or campaign_name or "Campaña Mautic"
         template_name = raw_data.get("template") or raw_data.get("template_name") or template_name
         media_id = raw_data.get("media_id") if "media_id" in raw_data else media_id
+        language = raw_data.get("language") or language
+
+        # Idioma del template en Meta (auto-detección para evitar rechazos)
+        if not language:
+            if template_name in ("reactivar_inspeccion_gratuita", "dudas_seguimiento_llamada"):
+                language = "en"
+            elif template_name == "hello_world":
+                language = "en_US"
+            else:
+                language = "es_MX"
 
         lead_id = raw_data.get("lead_id") or raw_data.get("id") or raw_data.get("contact", {}).get("id")
         raw_name = raw_data.get("firstname") or raw_data.get("first_name") or raw_data.get("name") or ""
@@ -524,12 +699,21 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
         dedup_key = f"{campaign_name}:{phone_e164}"
 
-        # Deduplicación contra ya enviados
+        # Deduplicación contra ya enviados o descalificados
         records = load_sent_records()
-        if dedup_key in records and records[dedup_key].get("status") == "sent":
-            logger.info(f"[{campaign_name}] {phone_e164} ya enviado anteriormente. Deduplicando.")
-            self._responder_json(200, {"status": "skipped", "reason": "already_sent"})
-            return
+        if dedup_key in records:
+            st = records[dedup_key].get("status")
+            if st in ("sent", "skipped_disqualified"):
+                logger.info(f"[{campaign_name}] {phone_e164} ya registrado anteriormente con estado '{st}'. Omitiendo.")
+                self._responder_json(200, {"status": "skipped", "reason": f"already_{st}"})
+                return
+
+        if phone_e164 in records:
+            st = records[phone_e164].get("status")
+            if st == "skipped_disqualified":
+                logger.info(f"[{campaign_name}] {phone_e164} marcado previamente como descalificado. Omitiendo.")
+                self._responder_json(200, {"status": "skipped", "reason": "already_skipped_disqualified"})
+                return
 
         # Deduplicación contra en cola
         with lock:
@@ -550,17 +734,22 @@ class WebhookHandler(BaseHTTPRequestHandler):
             "template": template_name,
             "template_name": template_name,
             "media_id": media_id,
+            "language": language,
             "dedup_key": dedup_key
         }
         job_queue.put(payload_job)
-        logger.info(f"[ENQUEUED] Campaign='{campaign_name}' | Template='{template_name}' | To={phone_e164} ({raw_name}). En cola: {job_queue.qsize()}")
+        permitido, motivo = es_horario_permitido()
+        estado_cola = "queued" if permitido else "queued_scheduled"
+        logger.info(f"[ENQUEUED] Campaign='{campaign_name}' | Template='{template_name}' | To={phone_e164} ({raw_name}) | Horario: {motivo}. En cola: {job_queue.qsize()}")
 
         self._responder_json(202, {
-            "status": "queued",
+            "status": estado_cola,
             "campaign": campaign_name,
             "phone": phone_e164,
             "template": template_name,
             "media_id": media_id,
+            "is_within_business_hours": permitido,
+            "schedule_status": motivo,
             "queue_position": job_queue.qsize()
         })
 

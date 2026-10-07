@@ -27,6 +27,7 @@ import { TabBalanceGeneral } from "./TabBalanceGeneral";
 import { TabFlujoEfectivo } from "./TabFlujoEfectivo";
 import { TabConfiguracion } from "./TabConfiguracion";
 import { TabRentabilidadProductos } from "./TabRentabilidadProductos";
+import { TabProyecciones } from "./proyecciones/TabProyecciones";
 import { ModalNuevoMovimiento } from "./ModalNuevoMovimiento";
 import { ModalImportarExcel } from "./ModalImportarExcel";
 import { ModalImportarMetaAds } from "./ModalImportarMetaAds";
@@ -41,6 +42,7 @@ type TabId =
   | "balance"
   | "flujo"
   | "rentabilidad"
+  | "proyecciones"
   | "configuracion";
 
 export function FinanzasClient() {
@@ -323,6 +325,7 @@ export function FinanzasClient() {
                 ["balance", "⚖️ Balance General"],
                 ["flujo", "🌊 Flujo de Efectivo"],
                 ["rentabilidad", "📦 Rentabilidad"],
+                ["proyecciones", "🔮 Proyecciones"],
                 ["configuracion", "⚙️ Configuración"]
               ] as const
             ).map(([tab, label]) => (
@@ -421,6 +424,10 @@ export function FinanzasClient() {
                 fechaFin={fechaFin}
                 onRecalculado={cargarDatos}
               />
+            )}
+
+            {activeTab === "proyecciones" && (
+              <TabProyecciones businessUnits={catalogos.businessUnits} categories={catalogos.categories} />
             )}
 
             {activeTab === "configuracion" && (

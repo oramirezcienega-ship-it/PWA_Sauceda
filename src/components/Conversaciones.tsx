@@ -26,12 +26,22 @@ import {
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
 import { enviarDocumentoConversacion, type DocumentoVenta } from "@/app/actions/documentos";
-import { formatearTelefonoLegible, obtenerTelLink } from "@/lib/telefono";
-import { obtenerProveedorIA, guardarProveedorIA } from "@/app/actions/expedientes";
+import { formatearTelefonoLegible, obtenerTelLink, normalizarTelefono } from "@/lib/telefono";
+import { obtenerProveedorIA, guardarProveedorIA, moverEtapa } from "@/app/actions/expedientes";
+import { posponerExpediente } from "@/app/actions/pausa";
+import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
+import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
+import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
+import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
+import {
+  obtenerEnvioLeadTelegramAction,
+  marcarLeadRevisadoManualAction,
+  type EnvioLeadTelegram,
+} from "@/app/actions/leads-telegram";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -40,6 +50,11 @@ import { labelTipoNegocio } from "@/lib/types";
 import { visualNegocio } from "@/lib/negocios-visual";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 import { videoRequiereConversion, convertirVideoParaWhatsApp } from "@/lib/convertir-video";
+import {
+  deduplicarPlantillas,
+  agruparPlantillasParaChat,
+  clasificarPlantilla,
+} from "@/lib/plantillas-whatsapp";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
@@ -196,13 +211,31 @@ function Countdown24h({
   );
 }
 
-/** Resuelve parámetros {{nombre}}, {{asesor}}, etc. en el texto de una respuesta rápida. */
+/** "Buenos días" (5:00–11:59), "Buenas tardes" (12:00–18:59) o "Buenas noches", con la hora de León. */
+function saludoSegunHora(fecha: Date = new Date()): string {
+  const h = parseInt(
+    fecha.toLocaleString("en-US", { timeZone: "America/Mexico_City", hour: "numeric", hour12: false }),
+    10
+  ) % 24;
+  if (h >= 5 && h < 12) return "Buenos días";
+  if (h >= 12 && h < 19) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+/** Resuelve parámetros {{nombre}}, {{asesor}}, {{saludo}}, etc. en el texto de una respuesta rápida. */
 function resolverParametros(
   texto: string,
   detalle: ConversacionDetalle | null,
   usuario: { nombre: string } | null,
 ): string {
   let t = texto;
+  // {{saludo}}: con mayúscula al inicio de una oración; en minúscula a media frase ("Hola, buenas tardes")
+  const saludo = saludoSegunHora();
+  t = t.replace(/\{\{saludo\}\}/g, (_m, offset: number, todo: string) => {
+    const previo = todo.slice(0, offset).replace(/[ \t]+$/, "");
+    const inicioOracion = previo === "" || /[\n.!?¡¿]$/.test(previo);
+    return inicioOracion ? saludo : saludo.charAt(0).toLowerCase() + saludo.slice(1);
+  });
   if (detalle?.nombre) {
     t = t.replace(/\{\{nombre\}\}/g, detalle.nombre.split(" ")[0]);
     t = t.replace(/\{\{nombre_completo\}\}/g, detalle.nombre);
@@ -434,7 +467,7 @@ function renderizarContenidoMensaje(
                   <span>📞 Llamar</span>
                 </a>
                 <a
-                  href={`https://wa.me/${telefono.replace(/\D/g, "")}`}
+                  href={`https://wa.me/${normalizarTelefono(telefono)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-verde-chile/10 hover:bg-verde-chile/20 text-verde-profundo text-[11px] font-medium transition"
@@ -653,10 +686,14 @@ function humanizarError(error: any): string {
   return msg;
 }
 
-/** Bandeja de conversaciones de WhatsApp (lista + hilo + responder). */
-export function Conversaciones() {
+/**
+ * Bandeja de conversaciones de WhatsApp (lista + hilo + responder).
+ * `inicial` es la lista precargada en el servidor (pinta sin esperar al cliente).
+ */
+export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } = {}) {
   const [tab, setTab] = useState<TabPrincipal>("bandeja");
-  const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>([]);
+  const [conversaciones, setConversaciones] = useState<ConversacionResumen[]>(inicial ?? []);
+  const [listaCargada, setListaCargada] = useState(inicial !== undefined);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
@@ -685,6 +722,10 @@ export function Conversaciones() {
   const [agenteFirma, setAgenteFirma] = useState<string>("");
   const [plantillaSel, setPlantillaSel] = useState("");
   const [params, setParams] = useState<string[]>([]);
+  const [filtroPlantillasModo, setFiltroPlantillasModo] = useState<"recomendadas" | "todas">("recomendadas");
+  const [busquedaPlantilla, setBusquedaPlantilla] = useState<string>("");
+  const [modalCatalogoAbierto, setModalCatalogoAbierto] = useState(false);
+  const [modoVistaPlantillas, setModoVistaPlantillas] = useState<"tarjetas" | "select">("tarjetas");
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
@@ -754,6 +795,11 @@ export function Conversaciones() {
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
+  const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
+  const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
+  // Formulario para posponer (etapa "En pausa"): fecha para retomar y motivo
+  const [posponer, setPosponer] = useState<{ fecha: string; motivo: string } | null>(null);
+  const [envioLead, setEnvioLead] = useState<EnvioLeadTelegram | null>(null);
   const finRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -821,10 +867,25 @@ export function Conversaciones() {
     setCambiandoProveedor(false);
   }
 
+  // Último envío del lead a un asesor por Telegram (estado de confirmación)
+  const telefonoDetalle = detalle?.telefono ?? null;
+  useEffect(() => {
+    setEnvioLead(null);
+    if (!telefonoDetalle) return;
+    let cancelado = false;
+    obtenerEnvioLeadTelegramAction(telefonoDetalle).then((e) => {
+      if (!cancelado) setEnvioLead(e);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [telefonoDetalle]);
+
   const refrescar = useCallback(async (telefonoPreseleccionado: string | null) => {
     try {
       const lista = await listarConversaciones();
       setConversaciones(lista);
+      setListaCargada(true);
       if (telefonoPreseleccionado) {
         const coincidencia = lista.find((c) => coincidenTelefonos(c.telefono, telefonoPreseleccionado));
         const telReal = coincidencia ? coincidencia.telefono : telefonoPreseleccionado;
@@ -849,9 +910,10 @@ export function Conversaciones() {
       }
     }
 
-    void refrescar(preseleccion);
+    // Si el servidor ya mandó la lista, solo hace falta ir por el hilo preseleccionado.
+    if (!inicial || preseleccion) void refrescar(preseleccion);
     listarPlantillasWhatsApp()
-      .then((r) => setPlantillas(r.plantillas.filter((p) => p.estado === "APPROVED")))
+      .then((r) => setPlantillas(deduplicarPlantillas(r.plantillas.filter((p) => p.estado === "APPROVED"))))
       .catch(() => setPlantillas([]));
     
     listarAsesoresActivos()
@@ -878,10 +940,31 @@ export function Conversaciones() {
       .catch(() => setUsuario(null));
   }, [refrescar]);
 
-  // Sondeo cada 15 s (lista + hilo abierto).
+  // Sondeo cada 10 s (lista + hilo abierto) solo con la app visible; al volver
+  // a primer plano (abrir la PWA, desbloquear el teléfono) refresca de inmediato.
   useEffect(() => {
-    const id = setInterval(() => void refrescar(sel), 15000);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | null = null;
+    const iniciar = () => {
+      if (id === null) id = setInterval(() => void refrescar(sel), 10000);
+    };
+    const detener = () => {
+      if (id !== null) clearInterval(id);
+      id = null;
+    };
+    const alCambiarVisibilidad = () => {
+      if (document.visibilityState === "visible") {
+        void refrescar(sel);
+        iniciar();
+      } else {
+        detener();
+      }
+    };
+    if (document.visibilityState === "visible") iniciar();
+    document.addEventListener("visibilitychange", alCambiarVisibilidad);
+    return () => {
+      detener();
+      document.removeEventListener("visibilitychange", alCambiarVisibilidad);
+    };
   }, [refrescar, sel]);
 
   // Autoscroll al final cuando cambian los mensajes.
@@ -1079,6 +1162,46 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
   }
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel);
+
+  // Al cambiar de cliente, restablecer a vista de recomendadas
+  useEffect(() => {
+    setFiltroPlantillasModo("recomendadas");
+    setBusquedaPlantilla("");
+  }, [detalle?.telefono]);
+
+  const {
+    grupos: gruposPlantillas,
+    totalFiltradas: totalPlantillasFiltradas,
+    totalRecomendadas: totalPlantillasRecomendadas,
+    infoNegocio: infoNegocioPlantillas,
+  } = useMemo(() => {
+    return agruparPlantillasParaChat({
+      plantillas,
+      tipoNegocio: detalle?.tipoNegocio,
+      busqueda: busquedaPlantilla,
+      modoFiltro: filtroPlantillasModo,
+    });
+  }, [plantillas, detalle?.tipoNegocio, busquedaPlantilla, filtroPlantillasModo]);
+
+  function seleccionarPlantilla(selectedName: string) {
+    setPlantillaSel(selectedName);
+    const p = plantillas.find((x) => x.nombre === selectedName);
+    if (p && p.parametros > 0) {
+      const newParams = Array(p.parametros).fill("");
+      if (detalle?.nombre) {
+        newParams[0] = detalle.nombre.split(" ")[0];
+      }
+      if (selectedName.includes("imper")) {
+        if (p.parametros >= 2) newParams[1] = "Impermeabilización";
+      } else if (selectedName.includes("cotizacion")) {
+        if (p.parametros >= 2) newParams[1] = "Servicio de Construcción";
+        if (p.parametros >= 3) newParams[2] = "Cotización";
+      }
+      setParams(newParams);
+    } else {
+      setParams([]);
+    }
+  }
 
   async function enviarPlantilla() {
     if (!sel || !plantillaSel) return;
@@ -1355,30 +1478,53 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Navegación de tabs */}
-      <div className="flex items-center gap-1 border-b border-carbon/10 pb-0">
+    <div className="flex flex-col gap-1.5 sm:gap-3">
+      {/* Navegación de tabs (en móvil: una fila delgada con nombres cortos) */}
+      <div className="flex items-center gap-0.5 sm:gap-1 border-b border-carbon/10 pb-0">
         {(["bandeja", "documentos", "respuestas"] as TabPrincipal[]).map((t) => {
           const labels: Record<TabPrincipal, string> = {
             bandeja: "💬 Bandeja",
             documentos: "📂 Documentos",
             respuestas: "⚡ Respuestas Rápidas",
           };
+          const labelsCortos: Record<TabPrincipal, string> = {
+            bandeja: "💬 Bandeja",
+            documentos: "📂 Docs",
+            respuestas: "⚡ Rápidas",
+          };
           return (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition ${
+              className={`px-2.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-t-lg border-b-2 transition whitespace-nowrap ${
                 tab === t
                   ? "border-sauce text-verde-profundo bg-sauce/5"
                   : "border-transparent text-carbon/50 hover:text-carbon hover:bg-carbon/5"
               }`}
             >
-              {labels[t]}
+              <span className="sm:hidden">{labelsCortos[t]}</span>
+              <span className="hidden sm:inline">{labels[t]}</span>
             </button>
           );
         })}
+        {/* Móvil: Sofía se reduce a un botón; la barra completa solo aparece al abrirla */}
+        {esAdmin && tab === "bandeja" && (
+          <button
+            type="button"
+            onClick={() => setMostrarConfigIA(!mostrarConfigIA)}
+            className={`sm:hidden ml-auto mb-0.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${
+              mostrarConfigIA
+                ? "border-sauce bg-sauce/10 text-verde-profundo"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
+            aria-label="Configurar Sofía (IA)"
+            title={`Sofía (IA): ${proveedorIA === "anthropic" ? "Claude (Anthropic)" : proveedorIA === "kimi" ? "Kimi K3 (Moonshot)" : "Local (Ollama)"}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            🤖 Sofía
+          </button>
+        )}
       </div>
 
       {/* Tab: Documentos */}
@@ -1391,7 +1537,13 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
       {/* Tab: Respuestas Rápidas */}
       {tab === "respuestas" && (
         <div className="rounded-xl border border-carbon/10 bg-white p-5 shadow-sm">
-          <RespuestasRapidasEditor />
+          <RespuestasRapidasEditor
+            onCambio={() => {
+              listarRespuestasRapidas()
+                .then((r) => setRespuestasRapidas(r))
+                .catch(() => undefined);
+            }}
+          />
         </div>
       )}
 
@@ -1400,7 +1552,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
       {/* Diagnóstico del agente de IA (Colapsable y compacto para móvil) */}
       {esAdmin && (
-        <div className="rounded-xl border border-carbon/10 bg-white shadow-2xs overflow-hidden transition">
+        <div className={`rounded-xl border border-carbon/10 bg-white shadow-2xs overflow-hidden transition ${
+          mostrarConfigIA ? "" : "hidden sm:block"
+        }`}>
           <button
             type="button"
             onClick={() => setMostrarConfigIA(!mostrarConfigIA)}
@@ -1487,9 +1641,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         </div>
       )}
 
-      <div className="grid h-[calc(100dvh-180px)] sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[340px_1fr] lg:grid-cols-[400px_1fr] 2xl:grid-cols-[460px_1fr]">
+      <div className="grid bandeja-alto-movil sm:h-[calc(100vh-220px)] grid-cols-1 gap-3 sm:grid-cols-[340px_1fr] lg:grid-cols-[400px_1fr] 2xl:grid-cols-[460px_1fr]">
         {/* Lista de conversaciones */}
-        <div className={`overflow-y-auto rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-2 shadow-sm ${
+        <div className={`overflow-y-auto rounded-lg sm:rounded-xl border border-carbon/10 bg-white scrollbar-sutil flex flex-col p-1 sm:p-2 shadow-sm ${
           sel ? "hidden sm:flex" : "flex"
         }`}>
           {soloTel && (
@@ -1513,12 +1667,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             </div>
           )}
 
+          {/* Filtros: en móvil ambos grupos van en una sola fila */}
+          <div className="flex items-stretch gap-1 mb-1 sm:mb-0 sm:block shrink-0">
           {/* Tabs de Filtro */}
-          <div className="flex border border-carbon/10 mb-2 bg-crema/40 p-1 rounded-lg shrink-0">
+          <div className={`flex border border-carbon/10 sm:mb-2 bg-crema/40 p-0.5 sm:p-1 rounded-lg shrink-0 ${
+            filtro === "abiertas" ? "" : "flex-1"
+          }`}>
             <button
               type="button"
               onClick={() => setFiltro("abiertas")}
-              className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-md transition ${
+              className={`flex-1 text-center px-1.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold rounded-md transition whitespace-nowrap ${
                 filtro === "abiertas"
                   ? "bg-white text-verde-profundo shadow-sm border border-carbon/5 font-bold"
                   : "text-carbon/60 hover:text-carbon"
@@ -1529,22 +1687,24 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             <button
               type="button"
               onClick={() => setFiltro("terminadas")}
-              className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-md transition ${
+              className={`flex-1 text-center px-1.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold rounded-md transition whitespace-nowrap ${
                 filtro === "terminadas"
                   ? "bg-white text-verde-profundo shadow-sm border border-carbon/5 font-bold"
                   : "text-carbon/60 hover:text-carbon"
               }`}
             >
-              Terminadas ({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
+              <span className={filtro === "abiertas" ? "sm:hidden" : "hidden"}>Term.</span>
+              <span className={filtro === "abiertas" ? "hidden sm:inline" : ""}>Terminadas</span>
+              {" "}({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
             </button>
           </div>
 
           {filtro === "abiertas" && (
-            <div className="mb-2 flex flex-wrap gap-1 bg-slate-50 p-1 rounded-lg border border-slate-100 shrink-0">
+            <div className="flex-1 min-w-0 overflow-x-auto scrollbar-none sm:mb-2 flex gap-0.5 sm:gap-1 sm:flex-wrap bg-slate-50 p-0.5 sm:p-1 rounded-lg border border-slate-100">
               <button
                 type="button"
                 onClick={() => setSubFiltro("todas")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "todas"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
@@ -1555,7 +1715,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               <button
                 type="button"
                 onClick={() => setSubFiltro("mias")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "mias"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
@@ -1572,18 +1732,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
               <button
                 type="button"
                 onClick={() => setSubFiltro("ia")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "ia"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                De la IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
+                <span className="hidden sm:inline">De la </span>IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
               </button>
               <button
                 type="button"
                 onClick={() => setSubFiltro("nuevas")}
-                className={`flex-1 text-center py-1 px-1.5 text-[9px] font-bold rounded transition ${
+                className={`flex-1 text-center py-1 px-1 sm:px-1.5 text-[10px] sm:text-[9px] font-bold rounded transition whitespace-nowrap ${
                   subFiltro === "nuevas"
                     ? "bg-[#2D4A2B] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
@@ -1594,15 +1754,23 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             </div>
           )}
 
+          </div>
+
           <div className="flex-1 overflow-y-auto space-y-1">
-            {conversacionesFiltradas.length === 0 ? (
+            {!listaCargada ? (
+              <div className="space-y-1.5 animate-pulse" aria-label="Cargando conversaciones">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <div key={i} className="h-[76px] rounded-lg bg-carbon/5" />
+                ))}
+              </div>
+            ) : conversacionesFiltradas.length === 0 ? (
               <p className="p-6 text-center text-sm text-carbon/40">
                 No hay conversaciones en esta pestaña.
               </p>
             ) : (
               <>
               {filtro === "abiertas" && (
-                <p className="px-1 pb-1.5 text-[10px] font-medium text-carbon/45 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <p className="px-1 pb-1.5 text-[10px] font-medium text-carbon/45 hidden sm:flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span>↑ Ordenadas por vencimiento de la ventana de 24 h</span>
                   <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-600" />&lt;2h</span>
                   <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500" />&lt;6h</span>
@@ -1629,7 +1797,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   key={c.telefono}
                   type="button"
                   onClick={() => abrir(c.telefono)}
-                  className={`flex w-full flex-col items-start gap-1 px-3 py-2.5 text-left transition rounded-lg border-l-4 mb-1 ${bordeUrgencia} ${
+                  className={`flex w-full flex-col items-start gap-0.5 sm:gap-1 px-2.5 py-2 sm:px-3 sm:py-2.5 text-left transition rounded-lg border-l-4 mb-1 ${bordeUrgencia} ${
                     sel === c.telefono
                       ? "bg-sauce/10 ring-1 ring-sauce/40"
                       : urgencia === "critica"
@@ -1655,27 +1823,33 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     />
                   </span>
 
-                  {/* Negocio: ícono + nombre completo (sin recortar) */}
-                  <span
-                    className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold leading-tight ${negocio.clases}`}
-                    title={`${negocio.linea} · ${negocio.nombre}`}
-                  >
-                    <span className="text-sm leading-none">{negocio.icono}</span>
-                    <span className="whitespace-normal break-words">{negocio.nombre}</span>
-                  </span>
-
-                  {pendiente && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
-                      ● Pendiente de respuesta
+                  {/* Negocio (ícono + nombre completo) + etapa en móvil + pendiente, en una fila */}
+                  <span className="flex max-w-full flex-wrap items-center gap-1">
+                    <span
+                      className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold leading-tight ${negocio.clases}`}
+                      title={`${negocio.linea} · ${negocio.nombre}`}
+                    >
+                      <span className="text-xs sm:text-sm leading-none">{negocio.icono}</span>
+                      <span className="whitespace-normal break-words">{negocio.nombre}</span>
                     </span>
-                  )}
+                    {c.etapa && (
+                      <span className="sm:hidden bg-violet-50 text-violet-800 border border-violet-200 rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-tight">
+                        📊 {TODAS_LAS_ETAPAS_POR_ID[c.etapa]?.nombre || c.etapa}
+                      </span>
+                    )}
+                    {pendiente && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                        ● <span className="sm:hidden">Pendiente</span><span className="hidden sm:inline">Pendiente de respuesta</span>
+                      </span>
+                    )}
+                  </span>
                   <span className={`w-full text-xs font-normal line-clamp-2 ${pendiente ? "text-red-700 font-medium" : "text-carbon/60"}`}>
                     {c.ultimoTexto || "—"}
                   </span>
 
                   {/* Expediente / prospecto */}
                   {(c.expedienteId || c.prospectoId) && (
-                    <span className="flex flex-wrap gap-1">
+                    <span className="hidden sm:flex flex-wrap gap-1">
                       {c.expedienteId && (
                         <Link
                           href={`/expediente/${c.expedienteId}`}
@@ -1696,13 +1870,23 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           👤 {c.prospectoId}
                         </Link>
                       )}
+                      {c.etapa && (
+                        <span
+                          className="bg-violet-50 text-violet-800 border border-violet-200 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                          title="Etapa del negocio"
+                        >
+                          📊 {TODAS_LAS_ETAPAS_POR_ID[c.etapa]?.nombre || c.etapa}
+                        </span>
+                      )}
                     </span>
                   )}
 
                   <span className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <span className="flex items-center gap-1.5 min-w-0">
-                      <CanalBadge telefono={c.telefono} size="sm" />
-                      <span className="font-mono text-xs font-bold text-carbon truncate">
+                      <span className={canalDe(c.telefono) === "whatsapp" ? "hidden sm:inline-flex" : "inline-flex"}>
+                        <CanalBadge telefono={c.telefono} size="sm" />
+                      </span>
+                      <span className="font-mono text-[11px] sm:text-xs font-bold text-carbon truncate">
                         {formatearTelefonoLegible(c.telefono)}
                       </span>
                       <span className="font-mono text-[10px] text-carbon/50 shrink-0">
@@ -1807,6 +1991,105 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         👤 {detalle.prospectoId}
                       </a>
+                    </>
+                  )}
+
+                  {/* Etapa del negocio (se puede cambiar desde aquí) */}
+                  {detalle.expedienteId && (
+                    <>
+                      <span className="text-carbon/30 text-xs font-mono">·</span>
+                      <select
+                        value={detalle.etapa ?? ""}
+                        disabled={cambiandoEtapa}
+                        title="Etapa del negocio. Pasa sola a Contacto inicial cuando alguien del equipo responde en el chat."
+                        onChange={async (e) => {
+                          const nueva = e.target.value as EtapaId;
+                          if (!nueva || nueva === detalle.etapa || !detalle.expedienteId) return;
+                          if (nueva === "en_pausa") {
+                            // Por defecto, retomar en 30 días; el usuario la ajusta
+                            const d = new Date();
+                            d.setDate(d.getDate() + 30);
+                            setPosponer({ fecha: d.toISOString().slice(0, 10), motivo: "" });
+                            return;
+                          }
+                          setCambiandoEtapa(true);
+                          setAviso(null);
+                          try {
+                            await moverEtapa(detalle.expedienteId, nueva);
+                            await refrescar(detalle.telefono);
+                          } catch (err: any) {
+                            setAviso(humanizarError(err));
+                          } finally {
+                            setCambiandoEtapa(false);
+                          }
+                        }}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-bold shadow-2xs cursor-pointer focus:outline-none disabled:opacity-50 ${
+                          detalle.etapa === "nuevo-lead" || detalle.etapa === "interes"
+                            ? "bg-sky-50 border-sky-300 text-sky-900"
+                            : detalle.etapa === "contactado"
+                            ? "bg-amber-50 border-amber-300 text-amber-900"
+                            : detalle.etapa === "cerrado" || detalle.etapa === "venta"
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                            : detalle.etapa === "perdido"
+                            ? "bg-rose-50 border-rose-300 text-rose-900"
+                            : "bg-violet-50 border-violet-300 text-violet-900"
+                        }`}
+                      >
+                        {detalle.etapa && !ETAPAS.some((et) => et.id === detalle.etapa) && (
+                          <option value={detalle.etapa}>
+                            📊 {TODAS_LAS_ETAPAS_POR_ID[detalle.etapa]?.nombre || detalle.etapa}
+                          </option>
+                        )}
+                        {!detalle.etapa && <option value="">📊 Sin etapa</option>}
+                        {ETAPAS.map((et) => (
+                          <option key={et.id} value={et.id}>
+                            📊 {et.nombre}
+                          </option>
+                        ))}
+                      </select>
+                      {posponer && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs">
+                          <span className="font-bold text-slate-700">⏸ Retomar el</span>
+                          <input
+                            type="date"
+                            value={posponer.fecha}
+                            min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                            onChange={(e) => setPosponer({ ...posponer, fecha: e.target.value })}
+                            className="rounded border border-slate-300 px-1 py-0.5 text-xs"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Motivo (ej. hasta diciembre)"
+                            value={posponer.motivo}
+                            onChange={(e) => setPosponer({ ...posponer, motivo: e.target.value })}
+                            className="w-40 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                          />
+                          <button
+                            type="button"
+                            disabled={cambiandoEtapa || !posponer.fecha}
+                            onClick={async () => {
+                              if (!detalle.expedienteId) return;
+                              setCambiandoEtapa(true);
+                              setAviso(null);
+                              try {
+                                await posponerExpediente(detalle.expedienteId, posponer.fecha, posponer.motivo);
+                                setPosponer(null);
+                                await refrescar(detalle.telefono);
+                              } catch (err: any) {
+                                setAviso(humanizarError(err));
+                              } finally {
+                                setCambiandoEtapa(false);
+                              }
+                            }}
+                            className="rounded-full bg-slate-700 px-2 py-0.5 font-bold text-white disabled:opacity-50"
+                          >
+                            Pausar
+                          </button>
+                          <button type="button" onClick={() => setPosponer(null)} className="text-slate-500 hover:text-slate-800">
+                            ✕
+                          </button>
+                        </span>
+                      )}
                     </>
                   )}
 
@@ -2214,59 +2497,257 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         <p className="text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
                       ) : (
                         <div className="space-y-3">
-                          <div>
-                            <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider mb-1">Seleccionar Plantilla:</label>
-                            <select
-                              value={plantillaSel}
-                              onChange={(e) => {
-                                const selectedName = e.target.value;
-                                setPlantillaSel(selectedName);
-                                const p = plantillas.find((x) => x.nombre === selectedName);
-                                if (p && p.parametros > 0) {
-                                  const newParams = Array(p.parametros).fill("");
-                                  if (detalle?.nombre) {
-                                    newParams[0] = detalle.nombre.split(" ")[0];
-                                  }
-                                  if (selectedName.includes("cotizacion")) {
-                                    if (p.parametros >= 2) newParams[1] = "Servicio de Construcción";
-                                    if (p.parametros >= 3) newParams[2] = "Cotización";
-                                  }
-                                  setParams(newParams);
-                                } else {
-                                  setParams([]);
-                                }
-                              }}
-                              className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
-                            >
-                              <option value="">— selecciona una plantilla —</option>
-                              {plantillas.map((p) => {
-                                const snippet = p.cuerpo
-                                  ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 50)}${p.cuerpo.length > 50 ? "..." : ""}"`
-                                  : "";
-                                return (
-                                  <option key={p.nombre} value={p.nombre}>
-                                    {p.nombre} ({p.categoria}){snippet}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                          {/* Barra de Filtros Rápidos, Modos de Vista y Búsqueda */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-carbon/10 pb-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {infoNegocioPlantillas ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFiltroPlantillasModo("recomendadas")}
+                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                      filtroPlantillasModo === "recomendadas"
+                                        ? "bg-sauce text-crema shadow-xs"
+                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
+                                    }`}
+                                    title={`Mostrar plantillas específicas de ${infoNegocioPlantillas.nombreLegible} y operativas`}
+                                  >
+                                    <span>{infoNegocioPlantillas.icono}</span>
+                                    <span>Recomendadas ({totalPlantillasRecomendadas})</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFiltroPlantillasModo("todas")}
+                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                      filtroPlantillasModo === "todas"
+                                        ? "bg-sauce text-crema shadow-xs"
+                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
+                                    }`}
+                                    title="Mostrar todas las plantillas registradas"
+                                  >
+                                    <span>🌐</span>
+                                    <span>Todas las líneas ({plantillas.length})</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-[11px] font-bold text-verde-profundo flex items-center gap-1">
+                                  <span>📝</span>
+                                  <span>{plantillas.length} plantillas disponibles</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {/* Buscador de plantillas */}
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={busquedaPlantilla}
+                                  onChange={(e) => setBusquedaPlantilla(e.target.value)}
+                                  placeholder="🔍 Buscar..."
+                                  className="bg-white border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce w-28 sm:w-36"
+                                />
+                                {busquedaPlantilla && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setBusquedaPlantilla("")}
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
+                                    title="Limpiar búsqueda"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Selector de modo de vista: Tarjetas vs Dropdown */}
+                              <div className="inline-flex rounded-md border border-carbon/15 bg-white p-0.5 shadow-2xs">
+                                <button
+                                  type="button"
+                                  onClick={() => setModoVistaPlantillas("tarjetas")}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                    modoVistaPlantillas === "tarjetas"
+                                      ? "bg-sauce text-crema"
+                                      : "text-carbon/60 hover:text-carbon"
+                                  }`}
+                                  title="Ver plantillas en tarjetas visuales con texto completo"
+                                >
+                                  <span>🎨</span>
+                                  <span>Tarjetas</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setModoVistaPlantillas("select")}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                    modoVistaPlantillas === "select"
+                                      ? "bg-sauce text-crema"
+                                      : "text-carbon/60 hover:text-carbon"
+                                  }`}
+                                  title="Ver como lista desplegable compacta"
+                                >
+                                  <span>📋</span>
+                                  <span>Lista</span>
+                                </button>
+                              </div>
+
+                              {/* Botón Catálogo Visual Completo */}
+                              <button
+                                type="button"
+                                onClick={() => setModalCatalogoAbierto(true)}
+                                className="px-2 py-1 rounded text-[10px] font-bold bg-sauce/15 hover:bg-sauce/25 text-verde-profundo border border-sauce/30 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                                title="Abrir ventana con catálogo visual grande de todas las plantillas"
+                              >
+                                <span>🔍</span>
+                                <span>Catálogo Completo</span>
+                              </button>
+                            </div>
                           </div>
 
+                          {/* Vista en Tarjetas Visuales (por defecto) */}
+                          {modoVistaPlantillas === "tarjetas" ? (
+                            <div className="space-y-3 max-h-80 overflow-y-auto p-1 scrollbar-sutil">
+                              {gruposPlantillas.length === 0 ? (
+                                <p className="text-center py-6 text-xs text-carbon/40">
+                                  No hay plantillas con ese criterio de búsqueda.
+                                </p>
+                              ) : (
+                                gruposPlantillas.map((grupo) => (
+                                  <div key={grupo.id} className="space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-verde-profundo uppercase tracking-wider bg-carbon/5 px-2.5 py-1 rounded-md">
+                                      <span>{grupo.icono}</span>
+                                      <span>{grupo.label}</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {grupo.plantillas.map((p) => {
+                                        const esSel = p.nombre === plantillaSel;
+                                        return (
+                                          <div
+                                            key={p.nombre}
+                                            onClick={() => seleccionarPlantilla(p.nombre)}
+                                            className={`rounded-xl border p-3 transition-all duration-150 cursor-pointer text-left flex flex-col justify-between ${
+                                              esSel
+                                                ? "border-sauce bg-sauce/10 ring-2 ring-sauce shadow-sm"
+                                                : "border-carbon/15 bg-white hover:border-sauce/60 hover:shadow-xs"
+                                            }`}
+                                          >
+                                            <div className="space-y-1.5">
+                                              <div className="flex items-center justify-between gap-1 flex-wrap">
+                                                <span className="font-mono text-xs font-bold text-carbon">
+                                                  {p.nombre}
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                  <span className="text-[9px] bg-carbon/5 text-carbon/60 px-1.5 py-0.5 rounded font-mono font-bold">
+                                                    {p.idioma}
+                                                  </span>
+                                                  <span className="text-[9px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
+                                                    {p.categoria}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <p className="text-xs text-carbon/80 whitespace-pre-line font-sans line-clamp-3 bg-crema/25 p-2 rounded-md border border-carbon/5 leading-relaxed">
+                                                {p.cuerpo}
+                                              </p>
+                                            </div>
+                                            <div className="mt-2 pt-1.5 border-t border-carbon/10 flex items-center justify-between text-[10px]">
+                                              <span className="text-carbon/50 font-mono">
+                                                {p.parametros > 0 ? `${p.parametros} variable${p.parametros === 1 ? "" : "s"}` : "Sin variables"}
+                                              </span>
+                                              <span className={`font-bold transition-colors ${esSel ? "text-sauce font-extrabold" : "text-carbon/60 group-hover:text-sauce"}`}>
+                                                {esSel ? "✓ Seleccionada" : "Elegir →"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          ) : (
+                            /* Vista en Lista Desplegable (<select>) */
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider">
+                                  Seleccionar Plantilla:
+                                </label>
+                                <span className="text-[10px] text-carbon/40 font-medium">
+                                  {totalPlantillasFiltradas} {totalPlantillasFiltradas === 1 ? "opción" : "opciones"} en el listado
+                                </span>
+                              </div>
+                              <select
+                                value={plantillaSel}
+                                onChange={(e) => seleccionarPlantilla(e.target.value)}
+                                className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
+                              >
+                                <option value="">— selecciona una plantilla —</option>
+                                {gruposPlantillas.map((grupo) => (
+                                  <optgroup key={grupo.id} label={`${grupo.icono} ${grupo.label}`}>
+                                    {grupo.plantillas.map((p) => {
+                                      const snippet = p.cuerpo
+                                        ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 48)}${p.cuerpo.length > 48 ? "..." : ""}"`
+                                        : "";
+                                      return (
+                                        <option key={p.nombre} value={p.nombre}>
+                                          {p.nombre} ({p.categoria}){snippet}
+                                        </option>
+                                      );
+                                    })}
+                                  </optgroup>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
                           {plantilla && (
-                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2">
-                              <p className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Vista previa de la plantilla:</p>
-                              <p className="text-xs text-carbon/75 whitespace-pre-line font-mono">{plantilla.cuerpo}</p>
+                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2.5 shadow-2xs">
+                              <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-carbon/5 pb-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-verde-profundo uppercase tracking-wider">
+                                    Vista previa:
+                                  </span>
+                                  <span className="font-mono text-xs font-semibold text-carbon">
+                                    {plantilla.nombre}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] bg-carbon/5 text-carbon/70 px-1.5 py-0.5 rounded font-mono font-bold">
+                                    {plantilla.idioma}
+                                  </span>
+                                  <span className="text-[10px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
+                                    {plantilla.categoria}
+                                  </span>
+                                  {plantilla.parametros > 0 && (
+                                    <span className="text-[10px] bg-dorado/15 text-dorado px-1.5 py-0.5 rounded font-bold">
+                                      {plantilla.parametros} var{plantilla.parametros === 1 ? "" : "s"}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-carbon/80 whitespace-pre-line font-mono bg-crema/20 p-2.5 rounded-md border border-carbon/5 leading-relaxed">
+                                {plantilla.cuerpo}
+                              </p>
                               
                               {plantilla.parametros > 0 && (
                                 <div className="pt-2 border-t border-carbon/5 space-y-2">
-                                  <p className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Variables del mensaje:</p>
+                                  <p className="text-[10px] font-bold text-carbon/50 uppercase tracking-wider">
+                                    Variables dinámicas del mensaje:
+                                  </p>
                                   <div className="grid grid-cols-1 gap-2">
                                     {Array.from({ length: plantilla.parametros }).map((_, i) => (
                                       <div key={i} className="flex items-center gap-2">
-                                        <span className="text-[10px] font-mono text-carbon/50 font-bold">{"{{"}{i + 1}{"}}"}</span>
+                                        <span className="text-[10px] font-mono text-carbon/60 font-bold shrink-0 w-8">
+                                          {"{{"}{i + 1}{"}}"}
+                                        </span>
                                         <input
                                           type="text"
-                                          placeholder={`Ingresar valor para la variable ${i + 1}`}
+                                          placeholder={
+                                            i === 0
+                                              ? `Nombre del cliente (ej. ${detalle?.nombre?.split(" ")[0] || "Angel"})`
+                                              : i === 1
+                                              ? "Servicio / Detalle"
+                                              : `Valor para variable ${i + 1}`
+                                          }
                                           value={params[i] || ""}
                                           onChange={(e) => {
                                             const val = e.target.value;
@@ -2276,7 +2757,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                               return copy;
                                             });
                                           }}
-                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon outline-none focus:border-sauce"
+                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2.5 py-1 text-xs text-carbon outline-none focus:border-sauce focus:bg-white transition"
                                         />
                                       </div>
                                     ))}
@@ -2289,9 +2770,10 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                   type="button"
                                   onClick={enviarPlantilla}
                                   disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
-                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50"
+                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50 cursor-pointer shadow-xs flex items-center gap-1.5"
                                 >
-                                  {enviando ? "Enviando..." : "⚡ Enviar Plantilla"}
+                                  <span>⚡</span>
+                                  <span>{enviando ? "Enviando..." : "Enviar Plantilla"}</span>
                                 </button>
                               </div>
                             </div>
@@ -2412,6 +2894,51 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           <span>🔍</span>
                           <span>Coordinar Inspección</span>
                         </button>
+                      )}
+                      {/* Pasar el lead a un asesor por Telegram (con vista previa y acuse) */}
+                      <button
+                        type="button"
+                        onClick={() => setMostrarPasarLead(true)}
+                        title="Asignar el lead a un asesor y enviarle por Telegram la ficha, el resumen, la conversación y las fotos"
+                        className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                      >
+                        <span>📨</span>
+                        <span>Pasar a asesor</span>
+                      </button>
+                      {envioLead && (
+                        <span
+                          className={`flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-semibold ${
+                            envioLead.estado === "revisado"
+                              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                              : envioLead.estado === "rechazado"
+                              ? "bg-rose-50 border-rose-200 text-rose-800"
+                              : "bg-amber-50 border-amber-200 text-amber-900"
+                          }`}
+                          title={`Enviado por ${envioLead.enviadoPorNombre || "—"} el ${horaCorta(envioLead.enviadoAt)}${
+                            envioLead.recordatorioAt ? " · se le envió recordatorio" : ""
+                          }`}
+                        >
+                          📨 {envioLead.asesorNombre} ·{" "}
+                          {envioLead.estado === "revisado"
+                            ? `🟢 revisado ${envioLead.respondidoAt ? horaCorta(envioLead.respondidoAt) : ""}`
+                            : envioLead.estado === "rechazado"
+                            ? "🔴 no puede atenderlo"
+                            : "🟡 sin confirmar"}
+                          {envioLead.estado === "enviado" && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const r = await marcarLeadRevisadoManualAction(envioLead.id);
+                                if (!r.ok) setAviso(humanizarError(r.error ?? "No se pudo marcar."));
+                                if (telefonoDetalle) setEnvioLead(await obtenerEnvioLeadTelegramAction(telefonoDetalle));
+                              }}
+                              title="Marcar a mano que el asesor ya lo revisó (p. ej. lo confirmó por llamada)"
+                              className="ml-1 underline decoration-dotted hover:text-amber-700 cursor-pointer"
+                            >
+                              marcar revisado
+                            </button>
+                          )}
+                        </span>
                       )}
                       {detalle?.prospectoId && (
                         <button
@@ -2646,6 +3173,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         />
       )}
 
+      {/* Modal: pasar el lead a un asesor por Telegram */}
+      {mostrarPasarLead && detalle && (
+        <ModalPasarLeadTelegram
+          telefono={detalle.telefono}
+          atiendeActual={detalle.atiende}
+          alCerrar={() => setMostrarPasarLead(false)}
+          alEnviado={async (envio) => {
+            if (envio) setEnvioLead(envio);
+            await refrescar(detalle.telefono);
+          }}
+        />
+      )}
+
       {/* Modal de Calculadora de Impermeabilización */}
       <ModalCalculadoraImpermeabilizacion
         abierto={mostrarCalculadora}
@@ -2661,6 +3201,17 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             textareaRef.current.focus();
           }
         }}
+      />
+
+      {/* Modal de Catálogo Visual de Plantillas de WhatsApp */}
+      <ModalCatalogoPlantillas
+        abierto={modalCatalogoAbierto}
+        alCerrar={() => setModalCatalogoAbierto(false)}
+        plantillas={plantillas}
+        plantillaSeleccionada={plantillaSel}
+        alSeleccionar={seleccionarPlantilla}
+        tipoNegocio={detalle?.tipoNegocio}
+        nombreCliente={detalle?.nombre}
       />
 
       {/* Modal / Bottom Sheet de Catálogo de Respuestas Rápidas */}

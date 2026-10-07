@@ -137,6 +137,8 @@ export function TabEstadoResultados({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {reporte.lineas.map((linea) => {
+                  // % vertical de cada mes contra el ingreso de ese mismo mes
+                  const ingresosMes = reporte.lineas.find((l) => l.clave === "total_ingresos")?.mensual || {};
                   const esHeader = linea.esEncabezado;
                   const esTotal = linea.esTotal;
                   const esNeta = linea.clave === "utilidad_neta";
@@ -197,11 +199,16 @@ export function TabEstadoResultados({
                         reporte.meses.map((m) => (
                           <td
                             key={m}
-                            className={`px-3 py-2 text-right font-mono text-[10px] ${
+                            className={`px-3 py-2 text-right whitespace-nowrap font-mono text-[10px] ${
                               esNeta ? "text-white" : "text-slate-600"
                             }`}
                           >
-                            ${(linea.mensual[m] || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            <span>${(linea.mensual[m] || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                            <span className={`ml-1.5 inline-block w-11 text-left text-[9px] ${esNeta ? "text-[#C9A961]" : "text-slate-400"}`}>
+                              {(ingresosMes[m] || 0) > 0
+                                ? `${(((linea.mensual[m] || 0) / ingresosMes[m]) * 100).toFixed(1)}%`
+                                : "—"}
+                            </span>
                           </td>
                         ))}
                     </tr>

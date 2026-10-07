@@ -31,7 +31,7 @@ export const FRANJAS = {
   T: { label: "Tarde", icono: "🌤️", ini: 14 * 60, fin: 18 * 60 },
 } as const;
 
-type Teclado = Array<Array<{ text: string; callback_data: string }>>;
+type Teclado = Array<Array<{ text: string; callback_data?: string; url?: string }>>;
 
 // ------------------------------------------------------------
 // Utilidades de fechas y etiquetas

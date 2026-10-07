@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { registrarVotosAsesorCoordinacion } from "@/lib/coordinacion-inspecciones";
+import { obtenerOCrearTokenPortal, urlPortalAsesor } from "@/lib/portal-asesor";
 
 export interface ConfiguracionTelegram {
   botToken: string;
@@ -250,11 +251,15 @@ export async function despacharPropuestaInspeccionTelegram(
       };
       continue;
     }
+    // En el chat personal se agrega el acceso a su portal (sin login) para responder desde la web
+    const tokenPortal = await obtenerOCrearTokenPortal(sb, asesor.id);
     const resPersonal = await enviarMensajeTelegram({
       botToken,
       chatId: asesor.telegram_chat_id,
       texto: textoMensaje,
-      inlineKeyboard,
+      inlineKeyboard: tokenPortal
+        ? [...inlineKeyboard, [{ text: "📋 Ver y responder en mi portal", url: urlPortalAsesor(tokenPortal) }]]
+        : inlineKeyboard,
     });
     if (resPersonal.ok) despachados++;
     porAsesor[asesor.id] = {

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { procesarAlertasYResumenesAgenda } from "@/lib/agenda-notificaciones";
+import { procesarRecordatoriosLeadsTelegram } from "@/lib/lead-telegram";
+import { supabaseServidor } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +44,17 @@ async function manejarCron(request: NextRequest) {
       forzar: forzar || undefined,
     });
 
+    // Leads pasados a asesores por Telegram sin confirmar
+    const leadsTelegram = await procesarRecordatoriosLeadsTelegram(supabaseServidor()).catch((e) => {
+      console.error("[Cron agenda] Error en recordatorios de leads por Telegram:", e);
+      return { recordados: 0 };
+    });
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       ...resultado,
+      leadsTelegram,
     });
   } catch (err: any) {
     console.error("Error en la ruta cron de notificaciones de agenda:", err);
