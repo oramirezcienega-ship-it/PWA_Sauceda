@@ -11,8 +11,8 @@ export type CampoSupuesto =
   | "ticket_promedio"
   | "margen_pct"
   | "pct_comision_asesor"
-  | "gasto_ads"
-  | "costo_por_lead";
+  | "cac"
+  | "pct_comision_pasarela";
 
 interface PanelLineaSupuestosProps {
   linea: ResultadoLineaTotal;
@@ -38,8 +38,8 @@ const SUPUESTOS_COMUNES: Array<{ id: CampoSupuesto; label: string; unidad: strin
   { id: "ticket_promedio", label: "Ticket promedio", unidad: "$" },
   { id: "margen_pct", label: "Margen bruto", unidad: "%" },
   { id: "pct_comision_asesor", label: "% comisión asesor", unidad: "%" },
-  { id: "gasto_ads", label: "Gasto marketing ads", unidad: "$" },
-  { id: "costo_por_lead", label: "Costo por lead", unidad: "$" }
+  { id: "cac", label: "CAC (marketing por cliente)", unidad: "$" },
+  { id: "pct_comision_pasarela", label: "% comisión pasarela / tarjeta", unidad: "%" }
 ];
 
 // Renglones calculados por el motor (solo lectura)
@@ -52,9 +52,10 @@ const RESULTADOS: Array<{
   { id: "operaciones", label: "Operaciones resultantes" },
   { id: "ingreso_bruto", label: "Ingreso bruto", signo: "+" },
   { id: "costo_directo", label: "Costo directo", signo: "-" },
+  { id: "margen_bruto", label: "Margen bruto", signo: "=", destacado: true },
   { id: "comision_asesor", label: "Comisión asesor", signo: "-" },
-  { id: "utilidad_bruta", label: "Utilidad bruta", signo: "=", destacado: true },
-  { id: "marketing", label: "Marketing", signo: "-" },
+  { id: "marketing", label: "Marketing (operaciones × CAC)", signo: "-" },
+  { id: "comision_pasarela", label: "Comisión pasarela", signo: "-" },
   { id: "contribucion", label: "Contribución marginal", signo: "=", destacado: true },
   { id: "cobro_caja", label: "Cobro en caja" }
 ];
@@ -111,8 +112,8 @@ export function PanelLineaSupuestos({
             <p className="text-xs font-extrabold font-mono text-slate-800">{formatMXN(linea.total.ingreso_bruto)}</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] text-slate-400 font-bold uppercase">Utilidad bruta</p>
-            <p className="text-xs font-extrabold font-mono text-emerald-700">{formatMXN(linea.total.utilidad_bruta)}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase">Margen bruto</p>
+            <p className="text-xs font-extrabold font-mono text-emerald-700">{formatMXN(linea.total.margen_bruto)}</p>
           </div>
           <div className="text-right">
             <p className="text-[10px] text-slate-400 font-bold uppercase">Contribución</p>
@@ -272,7 +273,7 @@ export function PanelLineaSupuestos({
         {linea.modelo === "embudo"
           ? "Operaciones = leads × % a cotización × % de cierre."
           : "Operaciones capturadas manualmente."}{" "}
-        Ingreso = operaciones × ticket · Costo directo = ingreso × (1 − margen) · Si hay gasto de ads, se usa en lugar de leads × costo por lead.
+        Ingreso = operaciones × ticket · Costo directo = ingreso × (1 − margen) · Marketing = operaciones × CAC · Pasarela = ingreso × % pasarela.
       </p>
     </div>
   );

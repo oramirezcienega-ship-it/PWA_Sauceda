@@ -36,6 +36,9 @@ export interface SupuestoMes {
   ticket_promedio?: number | null;
   margen_pct?: number | null; // 0..1 o %
   pct_comision_asesor?: number | null; // 0..1 o %
+  cac?: number | null; // costo de adquisición por operación cerrada
+  pct_comision_pasarela?: number | null; // 0..1 o %, sobre el ingreso
+  // Legado: antes del CAC el marketing se capturaba como gasto o costo por lead
   gasto_ads?: number | null;
   costo_por_lead?: number | null;
   fuente?: "real" | "promedio_real" | "manual";
@@ -61,10 +64,12 @@ export interface ResultadoLineaMes {
   operaciones: number;
   ingreso_bruto: number;
   costo_directo: number;
+  margen_bruto: number; // ingreso − costo directo
   comision_asesor: number;
-  utilidad_bruta: number;
-  marketing: number;
-  contribucion: number;
+  utilidad_bruta: number; // margen bruto − comisión asesor
+  marketing: number; // operaciones × CAC
+  comision_pasarela: number; // ingreso × % pasarela
+  contribucion: number; // utilidad bruta − marketing − pasarela
   cobro_caja: number;
 }
 
@@ -85,9 +90,11 @@ export interface ResultadoUnidadMes {
   operaciones: number;
   ingreso_bruto: number;
   costo_directo: number;
+  margen_bruto: number;
   comision_asesor: number;
   utilidad_bruta: number;
   marketing: number;
+  comision_pasarela: number;
   contribucion: number;
   gastos_fijos: number;
   utilidad_operativa: number;
@@ -109,9 +116,11 @@ export interface ResultadoConsolidadoMes {
   operaciones: number;
   ingreso_bruto: number;
   costo_directo: number;
+  margen_bruto: number;
   comision_asesor: number;
   utilidad_bruta: number;
   marketing: number;
+  comision_pasarela: number;
   contribucion: number;
   gastos_fijos: number;
   utilidad_operativa: number;
@@ -226,9 +235,11 @@ export function proyectar(
         operaciones: 0,
         ingreso_bruto: 0,
         costo_directo: 0,
+        margen_bruto: 0,
         comision_asesor: 0,
         utilidad_bruta: 0,
         marketing: 0,
+        comision_pasarela: 0,
         contribucion: 0,
         cobro_caja: 0
       }
@@ -254,22 +265,27 @@ export function proyectar(
       const margenPct = normalizarPorcentaje(supuesto?.margen_pct);
       const comisionAsesorPct = normalizarPorcentaje(supuesto?.pct_comision_asesor);
 
+      const pasarelaPct = normalizarPorcentaje(supuesto?.pct_comision_pasarela);
+
       const ingreso_bruto = r2(operaciones * ticket);
       const costo_directo = r2(ingreso_bruto * (1 - margenPct));
+      const margen_bruto = r2(ingreso_bruto - costo_directo);
       const comision_asesor = r2(ingreso_bruto * comisionAsesorPct);
-      const utilidad_bruta = r2(ingreso_bruto - costo_directo - comision_asesor);
+      const utilidad_bruta = r2(margen_bruto - comision_asesor);
 
+      // Marketing = operaciones × CAC; los supuestos anteriores al CAC usan gasto o costo por lead
       let marketing = 0;
-      if (supuesto?.gasto_ads !== null && supuesto?.gasto_ads !== undefined) {
+      if (supuesto?.cac !== null && supuesto?.cac !== undefined) {
+        marketing = operaciones * Number(supuesto.cac);
+      } else if (supuesto?.gasto_ads !== null && supuesto?.gasto_ads !== undefined) {
         marketing = Number(supuesto.gasto_ads);
       } else {
-        const leads = Number(supuesto?.leads || 0);
-        const costoPorLead = Number(supuesto?.costo_por_lead || 0);
-        marketing = leads * costoPorLead;
+        marketing = Number(supuesto?.leads || 0) * Number(supuesto?.costo_por_lead || 0);
       }
       marketing = r2(marketing);
 
-      const contribucion = r2(utilidad_bruta - marketing);
+      const comision_pasarela = r2(ingreso_bruto * pasarelaPct);
+      const contribucion = r2(utilidad_bruta - marketing - comision_pasarela);
 
       // Programar cobros según esquema_cobro
       const esquema =
@@ -299,9 +315,11 @@ export function proyectar(
         operaciones: r2(operaciones),
         ingreso_bruto,
         costo_directo,
+        margen_bruto,
         comision_asesor,
         utilidad_bruta,
         marketing,
+        comision_pasarela,
         contribucion,
         cobro_caja: 0 // Se completará después de consolidar desfases
       };
@@ -321,6 +339,8 @@ export function proyectar(
       tot.operaciones = r2(tot.operaciones + resMes.operaciones);
       tot.ingreso_bruto = r2(tot.ingreso_bruto + resMes.ingreso_bruto);
       tot.costo_directo = r2(tot.costo_directo + resMes.costo_directo);
+      tot.margen_bruto = r2(tot.margen_bruto + resMes.margen_bruto);
+      tot.comision_pasarela = r2(tot.comision_pasarela + resMes.comision_pasarela);
       tot.comision_asesor = r2(tot.comision_asesor + resMes.comision_asesor);
       tot.utilidad_bruta = r2(tot.utilidad_bruta + resMes.utilidad_bruta);
       tot.marketing = r2(tot.marketing + resMes.marketing);
@@ -369,9 +389,11 @@ export function proyectar(
         operaciones: 0,
         ingreso_bruto: 0,
         costo_directo: 0,
+        margen_bruto: 0,
         comision_asesor: 0,
         utilidad_bruta: 0,
         marketing: 0,
+        comision_pasarela: 0,
         contribucion: 0,
         gastos_fijos: 0,
         utilidad_operativa: 0,
@@ -389,6 +411,7 @@ export function proyectar(
       let com = 0;
       let ubr = 0;
       let mkt = 0;
+      let pas = 0;
       let con = 0;
       let cobro = 0;
 
@@ -398,6 +421,7 @@ export function proyectar(
           ops += r.operaciones;
           ing += r.ingreso_bruto;
           cdir += r.costo_directo;
+          pas += r.comision_pasarela;
           com += r.comision_asesor;
           ubr += r.utilidad_bruta;
           mkt += r.marketing;
@@ -408,7 +432,7 @@ export function proyectar(
 
       const gf = fijosPorBuYMes.get(`${buId}:${mes}`) || 0;
       const uOp = r2(con - gf);
-      const salidas = r2(cdir + com + mkt + gf);
+      const salidas = r2(cdir + com + mkt + pas + gf);
       const flujoNeto = r2(cobro - salidas);
       const margenOpPct = ing > 0 ? r2((uOp / ing) * 100) : 0;
 
@@ -419,9 +443,11 @@ export function proyectar(
         operaciones: r2(ops),
         ingreso_bruto: r2(ing),
         costo_directo: r2(cdir),
+        margen_bruto: r2(ing - cdir),
         comision_asesor: r2(com),
         utilidad_bruta: r2(ubr),
         marketing: r2(mkt),
+        comision_pasarela: r2(pas),
         contribucion: r2(con),
         gastos_fijos: r2(gf),
         utilidad_operativa: uOp,
@@ -437,6 +463,8 @@ export function proyectar(
       totBu.operaciones = r2(totBu.operaciones + resBuMes.operaciones);
       totBu.ingreso_bruto = r2(totBu.ingreso_bruto + resBuMes.ingreso_bruto);
       totBu.costo_directo = r2(totBu.costo_directo + resBuMes.costo_directo);
+      totBu.margen_bruto = r2(totBu.margen_bruto + resBuMes.margen_bruto);
+      totBu.comision_pasarela = r2(totBu.comision_pasarela + resBuMes.comision_pasarela);
       totBu.comision_asesor = r2(totBu.comision_asesor + resBuMes.comision_asesor);
       totBu.utilidad_bruta = r2(totBu.utilidad_bruta + resBuMes.utilidad_bruta);
       totBu.marketing = r2(totBu.marketing + resBuMes.marketing);
@@ -465,9 +493,11 @@ export function proyectar(
     operaciones: 0,
     ingreso_bruto: 0,
     costo_directo: 0,
+    margen_bruto: 0,
     comision_asesor: 0,
     utilidad_bruta: 0,
     marketing: 0,
+    comision_pasarela: 0,
     contribucion: 0,
     gastos_fijos: 0,
     utilidad_operativa: 0,
@@ -486,6 +516,7 @@ export function proyectar(
     let com = 0;
     let ubr = 0;
     let mkt = 0;
+    let pas = 0;
     let con = 0;
     let gf = 0;
     let cobro = 0;
@@ -500,6 +531,7 @@ export function proyectar(
         com += r.comision_asesor;
         ubr += r.utilidad_bruta;
         mkt += r.marketing;
+        pas += r.comision_pasarela;
         con += r.contribucion;
         gf += r.gastos_fijos;
         cobro += r.cobro_caja;
@@ -527,9 +559,11 @@ export function proyectar(
       operaciones: r2(ops),
       ingreso_bruto: r2(ing),
       costo_directo: r2(cdir),
+      margen_bruto: r2(ing - cdir),
       comision_asesor: r2(com),
       utilidad_bruta: r2(ubr),
       marketing: r2(mkt),
+      comision_pasarela: r2(pas),
       contribucion: r2(con),
       gastos_fijos: r2(gf),
       utilidad_operativa: uOp,
@@ -546,6 +580,8 @@ export function proyectar(
     consolidadoTotal.operaciones = r2(consolidadoTotal.operaciones + resMesConsolidado.operaciones);
     consolidadoTotal.ingreso_bruto = r2(consolidadoTotal.ingreso_bruto + resMesConsolidado.ingreso_bruto);
     consolidadoTotal.costo_directo = r2(consolidadoTotal.costo_directo + resMesConsolidado.costo_directo);
+    consolidadoTotal.margen_bruto = r2(consolidadoTotal.margen_bruto + resMesConsolidado.margen_bruto);
+    consolidadoTotal.comision_pasarela = r2(consolidadoTotal.comision_pasarela + resMesConsolidado.comision_pasarela);
     consolidadoTotal.comision_asesor = r2(consolidadoTotal.comision_asesor + resMesConsolidado.comision_asesor);
     consolidadoTotal.utilidad_bruta = r2(consolidadoTotal.utilidad_bruta + resMesConsolidado.utilidad_bruta);
     consolidadoTotal.marketing = r2(consolidadoTotal.marketing + resMesConsolidado.marketing);

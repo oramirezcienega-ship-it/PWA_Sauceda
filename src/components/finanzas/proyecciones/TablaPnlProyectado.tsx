@@ -19,6 +19,33 @@ const formatMXN = (val: number) => {
 const etiquetaMes = (m: string) =>
   new Date(m + "T00:00:00").toLocaleDateString("es-MX", { month: "short", year: "2-digit" });
 
+// Cascada del P&L por línea, unidad y consolidado (antes de gastos fijos)
+type ClaveCascada =
+  | "ingreso_bruto"
+  | "costo_directo"
+  | "margen_bruto"
+  | "comision_asesor"
+  | "marketing"
+  | "comision_pasarela"
+  | "contribucion";
+type TipoPaso = "base" | "resta" | "subtotal";
+
+const CASCADA: Array<{ k: ClaveCascada; label: string; tipo: TipoPaso }> = [
+  { k: "ingreso_bruto", label: "Ingreso Bruto", tipo: "base" },
+  { k: "costo_directo", label: "(-) Costo directo", tipo: "resta" },
+  { k: "margen_bruto", label: "= Margen Bruto", tipo: "subtotal" },
+  { k: "comision_asesor", label: "(-) Comisión asesor", tipo: "resta" },
+  { k: "marketing", label: "(-) Marketing (ops × CAC)", tipo: "resta" },
+  { k: "comision_pasarela", label: "(-) Comisión pasarela", tipo: "resta" },
+  { k: "contribucion", label: "= Contribución marginal", tipo: "subtotal" }
+];
+
+const ESTILO_PASO: Record<TipoPaso, { etiqueta: string; valor: string }> = {
+  base: { etiqueta: "font-semibold text-slate-800", valor: "text-slate-800" },
+  resta: { etiqueta: "text-red-600", valor: "text-red-600" },
+  subtotal: { etiqueta: "font-bold text-emerald-700", valor: "font-bold text-emerald-700" }
+};
+
 // Renglón de gasto fijo ya agregado según el modo elegido
 interface FilaFijo {
   clave: string;
@@ -296,10 +323,15 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                   {!plegada &&
                     lineasDeUnidad.map((l) => {
                       const baseL = (m: string) => l.por_mes[m]?.ingreso_bruto || 0;
+                      // En el detalle por línea se omiten deducciones en cero (p. ej. sin pasarela)
+                      const pasos = CASCADA.filter((c) => c.tipo !== "resta" || l.total[c.k] !== 0);
                       return (
                         <React.Fragment key={l.linea_id}>
                           <tr className="hover:bg-slate-50/80">
-                            <td rowSpan={4} className="py-2 px-4 align-top font-bold text-slate-800 border-r border-slate-100">
+                            <td
+                              rowSpan={pasos.length + 1}
+                              className="py-2 px-4 align-top font-bold text-slate-800 border-r border-slate-100"
+                            >
                               <div className="flex items-center gap-1.5">
                                 <span>{l.nombre}</span>
                                 <span className="text-[9px] px-1.5 rounded bg-slate-100 text-slate-500 uppercase">
@@ -317,93 +349,50 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                               {l.total.operaciones.toFixed(1)}
                             </td>
                           </tr>
-                          <tr className="hover:bg-slate-50/80">
-                            <td className="py-1 px-2 text-[11px] text-slate-700 font-semibold">Ingreso Bruto</td>
-                            {meses.map((m) => (
-                              <Celda key={m} valor={baseL(m)} base={baseL(m)} className="text-slate-800" />
-                            ))}
-                            <Celda
-                              valor={l.total.ingreso_bruto}
-                              base={l.total.ingreso_bruto}
-                              className="bg-slate-50 font-bold text-[#2D4A2B]"
-                            />
-                          </tr>
-                          <tr className="hover:bg-slate-50/80">
-                            <td className="py-1 px-2 text-[11px] text-red-600">Costos + Comisiones</td>
-                            {meses.map((m) => (
+                          {pasos.map((c, idx) => (
+                            <tr
+                              key={c.k}
+                              className={`hover:bg-slate-50/80 ${idx === pasos.length - 1 ? "border-b border-slate-200" : ""}`}
+                            >
+                              <td className={`py-1 px-2 text-[11px] whitespace-nowrap ${ESTILO_PASO[c.tipo].etiqueta}`}>
+                                {c.label}
+                              </td>
+                              {meses.map((m) => (
+                                <Celda
+                                  key={m}
+                                  valor={l.por_mes[m]?.[c.k] || 0}
+                                  base={baseL(m)}
+                                  negativo={c.tipo === "resta"}
+                                  className={ESTILO_PASO[c.tipo].valor}
+                                />
+                              ))}
                               <Celda
-                                key={m}
-                                valor={(l.por_mes[m]?.costo_directo || 0) + (l.por_mes[m]?.comision_asesor || 0)}
-                                base={baseL(m)}
-                                negativo
-                                className="text-red-600"
+                                valor={l.total[c.k]}
+                                base={l.total.ingreso_bruto}
+                                negativo={c.tipo === "resta"}
+                                className={`bg-slate-50 ${ESTILO_PASO[c.tipo].valor}`}
                               />
-                            ))}
-                            <Celda
-                              valor={l.total.costo_directo + l.total.comision_asesor}
-                              base={l.total.ingreso_bruto}
-                              negativo
-                              className="bg-slate-50 text-red-700"
-                            />
-                          </tr>
-                          <tr className="hover:bg-slate-50/80 border-b border-slate-200">
-                            <td className="py-1 px-2 text-[11px] font-bold text-emerald-700">Utilidad Bruta</td>
-                            {meses.map((m) => (
-                              <Celda
-                                key={m}
-                                valor={l.por_mes[m]?.utilidad_bruta || 0}
-                                base={baseL(m)}
-                                className="font-bold text-emerald-700"
-                              />
-                            ))}
-                            <Celda
-                              valor={l.total.utilidad_bruta}
-                              base={l.total.ingreso_bruto}
-                              className="bg-slate-50 font-bold text-emerald-800"
-                            />
-                          </tr>
+                            </tr>
+                          ))}
                         </React.Fragment>
                       );
                     })}
 
-                  {/* Resumen de la unidad: utilidad bruta → marketing → fijos → operativa */}
-                  {tieneIngresos && (
-                    <>
-                      {plegada && (
-                        <Renglon
-                          etiqueta="(-) Costos + Comisiones"
-                          valorMes={(m) => (u.por_mes[m]?.costo_directo || 0) + (u.por_mes[m]?.comision_asesor || 0)}
-                          total={u.total.costo_directo + u.total.comision_asesor}
-                          baseMes={baseMes}
-                          baseTotal={baseTotal}
-                          negativo
-                          claseEtiqueta="text-red-600"
-                          claseValor="text-red-600"
-                        />
-                      )}
+                  {/* Resumen de la unidad: plegada muestra la cascada completa; desglosada, solo la contribución */}
+                  {tieneIngresos &&
+                    CASCADA.filter((c) => c.k !== "ingreso_bruto" && (plegada || c.k === "contribucion")).map((c) => (
                       <Renglon
-                        etiqueta={`Utilidad Bruta (${u.business_unit_nombre})`}
-                        valorMes={(m) => u.por_mes[m]?.utilidad_bruta || 0}
-                        total={u.total.utilidad_bruta}
+                        key={c.k}
+                        etiqueta={c.k === "contribucion" ? `${c.label} (${u.business_unit_nombre})` : c.label}
+                        valorMes={(m) => u.por_mes[m]?.[c.k] || 0}
+                        total={u.total[c.k]}
                         baseMes={baseMes}
                         baseTotal={baseTotal}
-                        claseEtiqueta="font-bold text-emerald-700"
-                        claseValor="font-bold text-emerald-700"
+                        negativo={c.tipo === "resta"}
+                        claseEtiqueta={ESTILO_PASO[c.tipo].etiqueta}
+                        claseValor={ESTILO_PASO[c.tipo].valor}
                       />
-                      {u.total.marketing !== 0 && (
-                        <Renglon
-                          etiqueta="(-) Marketing variable (Ads)"
-                          valorMes={(m) => u.por_mes[m]?.marketing || 0}
-                          total={u.total.marketing}
-                          baseMes={baseMes}
-                          baseTotal={baseTotal}
-                          negativo
-                          claseEtiqueta="text-red-600"
-                          claseValor="text-red-600"
-                        />
-                      )}
-                    </>
-                  )}
+                    ))}
                   {u.total.gastos_fijos !== 0 && (
                     <BloqueFijos
                       filas={fijosDeUnidad(u.business_unit_id)}
@@ -448,48 +437,19 @@ export function TablaPnlProyectado({ proyeccion, fijos }: TablaPnlProyectadoProp
                 Resumen consolidado
               </td>
             </tr>
-            <Renglon
-              etiqueta="Ingreso Bruto"
-              valorMes={ingresoConsolidadoMes}
-              total={consolidado.total.ingreso_bruto}
-              baseMes={ingresoConsolidadoMes}
-              baseTotal={consolidado.total.ingreso_bruto}
-              claseEtiqueta="font-semibold text-slate-800"
-              claseValor="text-slate-800"
-            />
-            <Renglon
-              etiqueta="(-) Costos + Comisiones"
-              valorMes={(m) =>
-                (consolidado.por_mes[m]?.costo_directo || 0) + (consolidado.por_mes[m]?.comision_asesor || 0)
-              }
-              total={consolidado.total.costo_directo + consolidado.total.comision_asesor}
-              baseMes={ingresoConsolidadoMes}
-              baseTotal={consolidado.total.ingreso_bruto}
-              negativo
-              claseEtiqueta="text-red-600"
-              claseValor="text-red-600"
-            />
-            <Renglon
-              etiqueta="Utilidad Bruta"
-              valorMes={(m) => consolidado.por_mes[m]?.utilidad_bruta || 0}
-              total={consolidado.total.utilidad_bruta}
-              baseMes={ingresoConsolidadoMes}
-              baseTotal={consolidado.total.ingreso_bruto}
-              claseEtiqueta="font-bold text-emerald-700"
-              claseValor="font-bold text-emerald-700"
-            />
-            {consolidado.total.marketing !== 0 && (
+            {CASCADA.map((c) => (
               <Renglon
-                etiqueta="(-) Marketing variable (Ads)"
-                valorMes={(m) => consolidado.por_mes[m]?.marketing || 0}
-                total={consolidado.total.marketing}
+                key={c.k}
+                etiqueta={c.label}
+                valorMes={(m) => consolidado.por_mes[m]?.[c.k] || 0}
+                total={consolidado.total[c.k]}
                 baseMes={ingresoConsolidadoMes}
                 baseTotal={consolidado.total.ingreso_bruto}
-                negativo
-                claseEtiqueta="text-red-600"
-                claseValor="text-red-600"
+                negativo={c.tipo === "resta"}
+                claseEtiqueta={ESTILO_PASO[c.tipo].etiqueta}
+                claseValor={ESTILO_PASO[c.tipo].valor}
               />
-            )}
+            ))}
             <BloqueFijos
               filas={fijosConsolidados}
               totalMes={(m) => consolidado.por_mes[m]?.gastos_fijos || 0}

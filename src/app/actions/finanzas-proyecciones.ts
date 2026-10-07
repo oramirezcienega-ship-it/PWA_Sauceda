@@ -178,6 +178,12 @@ export async function eliminarEscenario(escenarioId: string): Promise<boolean> {
 // 2. BASE REAL DEL CRM Y CONFIABILIDAD
 // ============================================================
 
+/** CAC estimado de la base real: gasto de marketing mensual ÷ operaciones cerradas al mes. */
+function cacDeBaseReal(b: IndicadorBaseReal): number {
+  const ops = b.leads_promedio * (b.pct_a_cotizacion / 100) * (b.pct_cierre / 100);
+  return ops > 0 ? r2(b.gasto_marketing_promedio / ops) : 0;
+}
+
 export async function obtenerBaseReal(meses = 3): Promise<IndicadorBaseReal[]> {
   await requireAdministrador();
   const sb = supabaseServidor();
@@ -344,6 +350,8 @@ export async function crearEscenario(params: {
             ticket_promedio: sOrig?.ticket_promedio ?? 0,
             margen_pct: sOrig?.margen_pct ?? 0,
             pct_comision_asesor: sOrig?.pct_comision_asesor ?? 0,
+            cac: sOrig?.cac ?? null,
+            pct_comision_pasarela: sOrig?.pct_comision_pasarela ?? null,
             gasto_ads: sOrig?.gasto_ads ?? null,
             costo_por_lead: sOrig?.costo_por_lead ?? null,
             fuente: sOrig?.fuente ?? "promedio_real"
@@ -426,8 +434,7 @@ export async function crearEscenario(params: {
         ticket_promedio: b.ticket_promedio,
         margen_pct: b.margen_pct / 100,
         pct_comision_asesor: b.pct_comision_asesor / 100,
-        gasto_ads: b.gasto_marketing_promedio,
-        costo_por_lead: b.costo_por_lead,
+        cac: cacDeBaseReal(b),
         fuente: "promedio_real"
       }));
 
@@ -570,6 +577,8 @@ export async function duplicarEscenario(
           ticket_promedio: s.ticket_promedio,
           margen_pct: s.margen_pct,
           pct_comision_asesor: s.pct_comision_asesor,
+          cac: s.cac ?? null,
+          pct_comision_pasarela: s.pct_comision_pasarela ?? null,
           gasto_ads: s.gasto_ads ? r2(Number(s.gasto_ads) * factor) : null,
           costo_por_lead: s.costo_por_lead,
           fuente: factor !== 1.0 ? "manual" : s.fuente
@@ -668,8 +677,8 @@ export async function agregarLineaNueva(params: {
       ticket_promedio: params.ticket,
       margen_pct: normalizarPorcentaje(params.margen_pct),
       pct_comision_asesor: normalizarPorcentaje(params.pct_comision_asesor),
-      gasto_ads: null,
-      costo_por_lead: null,
+      cac: null,
+      pct_comision_pasarela: null,
       fuente: "manual"
     };
   });
@@ -753,8 +762,9 @@ export async function restaurarAlReal(linea_id: string): Promise<boolean> {
     ticket_promedio: ind.ticket_promedio,
     margen_pct: ind.margen_pct / 100,
     pct_comision_asesor: ind.pct_comision_asesor / 100,
-    gasto_ads: ind.gasto_marketing_promedio,
-    costo_por_lead: ind.costo_por_lead,
+    cac: cacDeBaseReal(ind),
+    gasto_ads: null,
+    costo_por_lead: null,
     fuente: "promedio_real",
     updated_at: new Date().toISOString()
   };
@@ -1034,6 +1044,8 @@ export async function calcularProyeccion(escenario_id: string): Promise<Resultad
     ticket_promedio: s.ticket_promedio,
     margen_pct: s.margen_pct,
     pct_comision_asesor: s.pct_comision_asesor,
+    cac: s.cac,
+    pct_comision_pasarela: s.pct_comision_pasarela,
     gasto_ads: s.gasto_ads,
     costo_por_lead: s.costo_por_lead,
     fuente: s.fuente

@@ -62,8 +62,8 @@ type VariableSupuesto =
   | "ticket_promedio"
   | "margen_pct"
   | "pct_comision_asesor"
-  | "gasto_ads"
-  | "costo_por_lead";
+  | "cac"
+  | "pct_comision_pasarela";
 
 // Vistas del grid: todas las variables de una línea, una variable de todas las líneas, o gastos fijos
 type VistaSupuestos = "linea" | "variable" | "fijos";
@@ -76,8 +76,8 @@ const VARIABLES_CATALOGO: Array<{ id: VariableSupuesto; label: string; unidad: s
   { id: "ticket_promedio", label: "Ticket Promedio", unidad: "$" },
   { id: "margen_pct", label: "Margen Bruto", unidad: "%" },
   { id: "pct_comision_asesor", label: "% Comisión Asesor", unidad: "%" },
-  { id: "gasto_ads", label: "Gasto Marketing Ads", unidad: "$" },
-  { id: "costo_por_lead", label: "Costo por Lead (si no hay gasto ads)", unidad: "$" }
+  { id: "cac", label: "Marketing: CAC (costo por cliente)", unidad: "$" },
+  { id: "pct_comision_pasarela", label: "% Comisión Pasarela / Tarjeta", unidad: "%" }
 ];
 
 // Variables que solo aplican a un modelo de línea
@@ -106,7 +106,11 @@ const formatPct = (val: number) =>
 export function TabProyecciones({ businessUnits, categories }: TabProyeccionesProps) {
   // Cuentas del catálogo de Finanzas a las que puede enlazarse un gasto fijo
   const cuentasEgreso = useMemo(
-    () => categories.filter((c) => c.tipo === "egreso" && c.linea_pnl !== "no_pnl"),
+    // Marketing no va en fijos: se calcula por línea con el CAC
+    () =>
+      categories.filter(
+        (c) => c.tipo === "egreso" && c.linea_pnl !== "no_pnl" && c.linea_pnl !== "costo_marketing"
+      ),
     [categories]
   );
   // Estado de navegación
@@ -475,11 +479,17 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
       const valoresCosto = proyeccion.meses.map((m) => l.por_mes[m]?.costo_directo || 0);
       filas.push([l.business_unit_nombre, l.nombre, "Costo Directo", ...valoresCosto, l.total.costo_directo]);
 
+      const valoresMargen = proyeccion.meses.map((m) => l.por_mes[m]?.margen_bruto || 0);
+      filas.push([l.business_unit_nombre, l.nombre, "Margen Bruto", ...valoresMargen, l.total.margen_bruto]);
+
       const valoresComision = proyeccion.meses.map((m) => l.por_mes[m]?.comision_asesor || 0);
       filas.push([l.business_unit_nombre, l.nombre, "Comisión Asesor", ...valoresComision, l.total.comision_asesor]);
 
-      const valoresUtilidad = proyeccion.meses.map((m) => l.por_mes[m]?.utilidad_bruta || 0);
-      filas.push([l.business_unit_nombre, l.nombre, "Utilidad Bruta (Margen)", ...valoresUtilidad, l.total.utilidad_bruta]);
+      const valoresMkt = proyeccion.meses.map((m) => l.por_mes[m]?.marketing || 0);
+      filas.push([l.business_unit_nombre, l.nombre, "Marketing (Ops × CAC)", ...valoresMkt, l.total.marketing]);
+
+      const valoresPasarela = proyeccion.meses.map((m) => l.por_mes[m]?.comision_pasarela || 0);
+      filas.push([l.business_unit_nombre, l.nombre, "Comisión Pasarela", ...valoresPasarela, l.total.comision_pasarela]);
 
       const valoresContribucion = proyeccion.meses.map((m) => l.por_mes[m]?.contribucion || 0);
       filas.push([l.business_unit_nombre, l.nombre, "Contribución Marginal", ...valoresContribucion, l.total.contribucion]);
@@ -697,14 +707,14 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                     Margen Bruto
                   </span>
                   <div className="text-lg font-extrabold text-emerald-700 font-mono mt-1">
-                    {formatMXN(proyeccion.kpis.utilidad_bruta_total)}
+                    {formatMXN(proyeccion.consolidado.total.margen_bruto)}
                   </div>
                   <span className="text-[10px] text-emerald-600">
                     {proyeccion.kpis.ingreso_total > 0
                       ? formatPct(
-                          (proyeccion.kpis.utilidad_bruta_total / proyeccion.kpis.ingreso_total) * 100
+                          (proyeccion.consolidado.total.margen_bruto / proyeccion.kpis.ingreso_total) * 100
                         )
-                      : "0%"} de margen
+                      : "0%"} de margen · Contribución {formatMXN(proyeccion.consolidado.total.contribucion)}
                   </span>
                 </div>
 
@@ -716,7 +726,7 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                     {formatMXN(proyeccion.consolidado.total.gastos_fijos)}
                   </div>
                   <span className="text-[10px] text-slate-500">
-                    Nómina, renta, mkt y opex
+                    Nómina, renta, servicios y opex
                   </span>
                 </div>
 
@@ -1255,6 +1265,11 @@ export function TabProyecciones({ businessUnits, categories }: TabProyeccionesPr
                                       className="max-w-[170px] rounded border border-transparent bg-transparent px-0.5 text-[10px] text-slate-500 hover:border-slate-200 focus:outline-none"
                                     >
                                       {!g.categoria_id && <option value="">Sin cuenta ({g.linea_pnl})</option>}
+                                      {g.categoria_id && !cuentasEgreso.some((c) => c.id === g.categoria_id) && (
+                                        <option value={g.categoria_id}>
+                                          {categories.find((c) => c.id === g.categoria_id)?.nombre || g.linea_pnl} (pasar a CAC)
+                                        </option>
+                                      )}
                                       {cuentasEgreso.map((c) => (
                                         <option key={c.id} value={c.id}>{c.nombre}</option>
                                       ))}
