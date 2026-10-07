@@ -5,6 +5,7 @@ import {
   listarPlantillasAprobadas,
   type PlantillaWhatsApp,
 } from "@/lib/whatsapp";
+import { deduplicarPlantillas } from "@/lib/plantillas-whatsapp";
 
 /**
  * Server actions del módulo WHATSAPP.
@@ -17,7 +18,14 @@ export async function listarPlantillasWhatsApp(): Promise<{
   plantillas: PlantillaWhatsApp[];
 }> {
   await requireAdmin();
-  return listarPlantillasAprobadas();
+  const res = await listarPlantillasAprobadas();
+  if (res.ok && res.plantillas) {
+    return {
+      ...res,
+      plantillas: deduplicarPlantillas(res.plantillas),
+    };
+  }
+  return res;
 }
 
 /**

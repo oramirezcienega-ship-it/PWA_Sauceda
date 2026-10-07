@@ -48,6 +48,11 @@ import type {
 import { labelTipoNegocio } from "@/lib/types";
 import { visualNegocio } from "@/lib/negocios-visual";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
+import {
+  deduplicarPlantillas,
+  agruparPlantillasParaChat,
+  clasificarPlantilla,
+} from "@/lib/plantillas-whatsapp";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
@@ -704,6 +709,8 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [agenteFirma, setAgenteFirma] = useState<string>("");
   const [plantillaSel, setPlantillaSel] = useState("");
   const [params, setParams] = useState<string[]>([]);
+  const [filtroPlantillasModo, setFiltroPlantillasModo] = useState<"recomendadas" | "todas">("recomendadas");
+  const [busquedaPlantilla, setBusquedaPlantilla] = useState<string>("");
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
@@ -890,7 +897,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     // Si el servidor ya mandó la lista, solo hace falta ir por el hilo preseleccionado.
     if (!inicial || preseleccion) void refrescar(preseleccion);
     listarPlantillasWhatsApp()
-      .then((r) => setPlantillas(r.plantillas.filter((p) => p.estado === "APPROVED")))
+      .then((r) => setPlantillas(deduplicarPlantillas(r.plantillas.filter((p) => p.estado === "APPROVED"))))
       .catch(() => setPlantillas([]));
     
     listarAsesoresActivos()
@@ -1139,6 +1146,26 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
   }
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel);
+
+  // Al cambiar de cliente, restablecer a vista de recomendadas
+  useEffect(() => {
+    setFiltroPlantillasModo("recomendadas");
+    setBusquedaPlantilla("");
+  }, [detalle?.telefono]);
+
+  const {
+    grupos: gruposPlantillas,
+    totalFiltradas: totalPlantillasFiltradas,
+    totalRecomendadas: totalPlantillasRecomendadas,
+    infoNegocio: infoNegocioPlantillas,
+  } = useMemo(() => {
+    return agruparPlantillasParaChat({
+      plantillas,
+      tipoNegocio: detalle?.tipoNegocio,
+      busqueda: busquedaPlantilla,
+      modoFiltro: filtroPlantillasModo,
+    });
+  }, [plantillas, detalle?.tipoNegocio, busquedaPlantilla, filtroPlantillasModo]);
 
   async function enviarPlantilla() {
     if (!sel || !plantillaSel) return;
@@ -2416,8 +2443,78 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         <p className="text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
                       ) : (
                         <div className="space-y-3">
+                          {/* Barra de Filtros Rápidos y Búsqueda */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-carbon/10 pb-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {infoNegocioPlantillas ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFiltroPlantillasModo("recomendadas")}
+                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                      filtroPlantillasModo === "recomendadas"
+                                        ? "bg-sauce text-crema shadow-xs"
+                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
+                                    }`}
+                                    title={`Mostrar plantillas específicas de ${infoNegocioPlantillas.nombreLegible} y operativas`}
+                                  >
+                                    <span>{infoNegocioPlantillas.icono}</span>
+                                    <span>Recomendadas ({totalPlantillasRecomendadas})</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFiltroPlantillasModo("todas")}
+                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                                      filtroPlantillasModo === "todas"
+                                        ? "bg-sauce text-crema shadow-xs"
+                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
+                                    }`}
+                                    title="Mostrar todas las plantillas registradas"
+                                  >
+                                    <span>🌐</span>
+                                    <span>Todas las líneas ({plantillas.length})</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-[11px] font-bold text-verde-profundo flex items-center gap-1">
+                                  <span>📝</span>
+                                  <span>{plantillas.length} plantillas disponibles</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Buscador de plantillas */}
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={busquedaPlantilla}
+                                onChange={(e) => setBusquedaPlantilla(e.target.value)}
+                                placeholder="🔍 Buscar plantilla..."
+                                className="bg-white border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce w-36 sm:w-48"
+                              />
+                              {busquedaPlantilla && (
+                                <button
+                                  type="button"
+                                  onClick={() => setBusquedaPlantilla("")}
+                                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
+                                  title="Limpiar búsqueda"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Selector con Grupos Temáticos (<optgroup>) */}
                           <div>
-                            <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider mb-1">Seleccionar Plantilla:</label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider">
+                                Seleccionar Plantilla:
+                              </label>
+                              <span className="text-[10px] text-carbon/40 font-medium">
+                                {totalPlantillasFiltradas} {totalPlantillasFiltradas === 1 ? "opción" : "opciones"} en el listado
+                              </span>
+                            </div>
                             <select
                               value={plantillaSel}
                               onChange={(e) => {
@@ -2429,7 +2526,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                   if (detalle?.nombre) {
                                     newParams[0] = detalle.nombre.split(" ")[0];
                                   }
-                                  if (selectedName.includes("cotizacion")) {
+                                  if (selectedName.includes("imper")) {
+                                    if (p.parametros >= 2) newParams[1] = "Impermeabilización";
+                                  } else if (selectedName.includes("cotizacion")) {
                                     if (p.parametros >= 2) newParams[1] = "Servicio de Construcción";
                                     if (p.parametros >= 3) newParams[2] = "Cotización";
                                   }
@@ -2441,34 +2540,73 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                               className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
                             >
                               <option value="">— selecciona una plantilla —</option>
-                              {plantillas.map((p) => {
-                                const snippet = p.cuerpo
-                                  ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 50)}${p.cuerpo.length > 50 ? "..." : ""}"`
-                                  : "";
-                                return (
-                                  <option key={p.nombre} value={p.nombre}>
-                                    {p.nombre} ({p.categoria}){snippet}
-                                  </option>
-                                );
-                              })}
+                              {gruposPlantillas.map((grupo) => (
+                                <optgroup key={grupo.id} label={`${grupo.icono} ${grupo.label}`}>
+                                  {grupo.plantillas.map((p) => {
+                                    const snippet = p.cuerpo
+                                      ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 48)}${p.cuerpo.length > 48 ? "..." : ""}"`
+                                      : "";
+                                    return (
+                                      <option key={p.nombre} value={p.nombre}>
+                                        {p.nombre} ({p.categoria}){snippet}
+                                      </option>
+                                    );
+                                  })}
+                                </optgroup>
+                              ))}
                             </select>
                           </div>
 
                           {plantilla && (
-                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2">
-                              <p className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Vista previa de la plantilla:</p>
-                              <p className="text-xs text-carbon/75 whitespace-pre-line font-mono">{plantilla.cuerpo}</p>
+                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2.5 shadow-2xs">
+                              <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-carbon/5 pb-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-verde-profundo uppercase tracking-wider">
+                                    Vista previa:
+                                  </span>
+                                  <span className="font-mono text-xs font-semibold text-carbon">
+                                    {plantilla.nombre}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] bg-carbon/5 text-carbon/70 px-1.5 py-0.5 rounded font-mono font-bold">
+                                    {plantilla.idioma}
+                                  </span>
+                                  <span className="text-[10px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
+                                    {plantilla.categoria}
+                                  </span>
+                                  {plantilla.parametros > 0 && (
+                                    <span className="text-[10px] bg-dorado/15 text-dorado px-1.5 py-0.5 rounded font-bold">
+                                      {plantilla.parametros} var{plantilla.parametros === 1 ? "" : "s"}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-carbon/80 whitespace-pre-line font-mono bg-crema/20 p-2.5 rounded-md border border-carbon/5 leading-relaxed">
+                                {plantilla.cuerpo}
+                              </p>
                               
                               {plantilla.parametros > 0 && (
                                 <div className="pt-2 border-t border-carbon/5 space-y-2">
-                                  <p className="text-[10px] font-bold text-carbon/40 uppercase tracking-wider">Variables del mensaje:</p>
+                                  <p className="text-[10px] font-bold text-carbon/50 uppercase tracking-wider">
+                                    Variables dinámicas del mensaje:
+                                  </p>
                                   <div className="grid grid-cols-1 gap-2">
                                     {Array.from({ length: plantilla.parametros }).map((_, i) => (
                                       <div key={i} className="flex items-center gap-2">
-                                        <span className="text-[10px] font-mono text-carbon/50 font-bold">{"{{"}{i + 1}{"}}"}</span>
+                                        <span className="text-[10px] font-mono text-carbon/60 font-bold shrink-0 w-8">
+                                          {"{{"}{i + 1}{"}}"}
+                                        </span>
                                         <input
                                           type="text"
-                                          placeholder={`Ingresar valor para la variable ${i + 1}`}
+                                          placeholder={
+                                            i === 0
+                                              ? `Nombre del cliente (ej. ${detalle?.nombre?.split(" ")[0] || "Angel"})`
+                                              : i === 1
+                                              ? "Servicio / Detalle"
+                                              : `Valor para variable ${i + 1}`
+                                          }
                                           value={params[i] || ""}
                                           onChange={(e) => {
                                             const val = e.target.value;
@@ -2478,7 +2616,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                               return copy;
                                             });
                                           }}
-                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon outline-none focus:border-sauce"
+                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2.5 py-1 text-xs text-carbon outline-none focus:border-sauce focus:bg-white transition"
                                         />
                                       </div>
                                     ))}
@@ -2491,9 +2629,10 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                                   type="button"
                                   onClick={enviarPlantilla}
                                   disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
-                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50"
+                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50 cursor-pointer shadow-xs flex items-center gap-1.5"
                                 >
-                                  {enviando ? "Enviando..." : "⚡ Enviar Plantilla"}
+                                  <span>⚡</span>
+                                  <span>{enviando ? "Enviando..." : "Enviar Plantilla"}</span>
                                 </button>
                               </div>
                             </div>
