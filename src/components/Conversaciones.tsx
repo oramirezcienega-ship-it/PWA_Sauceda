@@ -18,7 +18,8 @@ import {
   eliminarMensajeIndividual,
   editarMensajeIndividual,
   enviarStickerConversacion,
-  enviarArchivoDirectoConversacion,
+  prepararSubidaAdjuntoConversacion,
+  enviarAdjuntoSubidoConversacion,
   actualizarTipoNegocioConversacion,
   corregirOrtografiaMensaje,
   alternarPausaIA,
@@ -50,6 +51,7 @@ import { labelTipoNegocio } from "@/lib/types";
 import { visualNegocio } from "@/lib/negocios-visual";
 import type { PlantillaWhatsApp } from "@/lib/whatsapp";
 import { videoRequiereConversion, convertirVideoParaWhatsApp } from "@/lib/convertir-video";
+import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import {
   deduplicarPlantillas,
   agruparPlantillasParaChat,
@@ -1413,14 +1415,34 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         }
       }
 
-      const fd = new FormData();
-      fd.append("telefono", sel);
-      fd.append("archivo", file);
-      if (caption) fd.append("caption", caption);
+      if (file.size > 16 * 1024 * 1024) {
+        setAviso("El archivo supera el límite de 16 MB que permite WhatsApp.");
+        return false;
+      }
 
-      const r = await enviarArchivoDirectoConversacion(fd);
-      if (!r.ok) {
-        setAviso(humanizarError(r.error ?? "No se pudo enviar el archivo."));
+      // El archivo se sube directo a Storage: la función del servidor corta peticiones de más de ~6 MB.
+      const subida = await prepararSubidaAdjuntoConversacion(file.name);
+      if (!subida.ok || !subida.ruta || !subida.token) {
+        setAviso(humanizarError(subida.error ?? "No se pudo preparar la subida del archivo."));
+        return false;
+      }
+      const { error: errSubida } = await supabaseNavegador()
+        .storage.from("conversaciones-adjuntos")
+        .uploadToSignedUrl(subida.ruta, subida.token, file, { contentType: file.type || "application/octet-stream" });
+      if (errSubida) {
+        setAviso(humanizarError(`No se pudo subir el archivo: ${errSubida.message}`));
+        return false;
+      }
+
+      const r = await enviarAdjuntoSubidoConversacion({
+        telefono: sel,
+        ruta: subida.ruta,
+        nombre: file.name,
+        tipo: file.type,
+        caption,
+      });
+      if (!r?.ok) {
+        setAviso(humanizarError(r?.error ?? "No se pudo enviar el archivo."));
         return false;
       } else {
         await refrescar(sel);

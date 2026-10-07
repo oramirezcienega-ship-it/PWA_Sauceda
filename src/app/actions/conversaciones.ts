@@ -1319,27 +1319,57 @@ export async function enviarStickerConversacion(
   }
 }
 
-/** Envía cualquier archivo desde la computadora directamente por WhatsApp. */
-export async function enviarArchivoDirectoConversacion(
-  formData: FormData,
-): Promise<{ ok: boolean; error?: string }> {
+const BUCKET_ADJUNTOS = "conversaciones-adjuntos";
+const MAX_MB_ADJUNTO = 16;
+
+/**
+ * Paso 1 del envío de un archivo desde la computadora/celular: devuelve una URL firmada
+ * para que el navegador suba el archivo directo a Storage. Así el archivo no pasa por
+ * la función de Netlify, que corta las peticiones de más de ~6 MB (p. ej. videos).
+ */
+export async function prepararSubidaAdjuntoConversacion(
+  nombre: string,
+): Promise<{ ok: boolean; ruta?: string; token?: string; error?: string }> {
   await requireAdmin();
-  const telefono = (formData.get("telefono") as string | null)?.trim() || "";
-  const archivo = formData.get("archivo") as File | null;
-  const caption = (formData.get("caption") as string | null)?.trim() || "";
+  const limpio = (nombre || "archivo").normalize("NFD").replace(/[^\w.-]+/g, "_").slice(-80);
+  const ruta = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${limpio}`;
+  const { data, error } = await supabaseServidor().storage.from(BUCKET_ADJUNTOS).createSignedUploadUrl(ruta);
+  if (error || !data) {
+    console.error("Error al preparar la subida del adjunto:", error);
+    return { ok: false, error: "No se pudo preparar la subida del archivo." };
+  }
+  return { ok: true, ruta: data.path, token: data.token };
+}
+
+/** Paso 2: toma el archivo ya subido a Storage, lo envía por WhatsApp y lo borra de Storage. */
+export async function enviarAdjuntoSubidoConversacion(params: {
+  telefono: string;
+  ruta: string;
+  nombre: string;
+  tipo: string;
+  caption?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const telefono = params.telefono?.trim() || "";
+  const caption = params.caption?.trim() || "";
+  const filename = params.nombre || "archivo";
+  const mimeType = params.tipo || "application/octet-stream";
 
   if (!telefono) return { ok: false, error: "Falta el teléfono." };
-  if (!archivo || archivo.size === 0) return { ok: false, error: "No se seleccionó ningún archivo." };
+  if (!params.ruta || params.ruta.includes("..")) return { ok: false, error: "Archivo inválido." };
 
-  const MAX_MB = 16;
-  if (archivo.size > MAX_MB * 1024 * 1024) {
-    return { ok: false, error: `El archivo supera el límite de ${MAX_MB} MB.` };
-  }
-
+  const sb = supabaseServidor();
   try {
-    const buffer = Buffer.from(await archivo.arrayBuffer());
-    const mimeType = archivo.type || "application/octet-stream";
-    const filename = archivo.name;
+    const { data: blob, error: errDescarga } = await sb.storage.from(BUCKET_ADJUNTOS).download(params.ruta);
+    if (errDescarga || !blob) {
+      console.error("Error al descargar el adjunto de Storage:", errDescarga);
+      return { ok: false, error: "No se encontró el archivo subido. Inténtalo de nuevo." };
+    }
+    if (blob.size === 0) return { ok: false, error: "El archivo está vacío." };
+    if (blob.size > MAX_MB_ADJUNTO * 1024 * 1024) {
+      return { ok: false, error: `El archivo supera el límite de ${MAX_MB_ADJUNTO} MB.` };
+    }
+    const buffer = Buffer.from(await blob.arrayBuffer());
 
     // Determinar categoría para Meta API
     let metaType: "image" | "sticker" | "document" | "audio" | "video" = "document";
@@ -1366,7 +1396,6 @@ export async function enviarArchivoDirectoConversacion(
     }
 
     // 3. Registrar mensaje en la BD
-    const sb = supabaseServidor();
     const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
     const agente = await nombreAgenteActual(sb);
 
@@ -1404,6 +1433,9 @@ export async function enviarArchivoDirectoConversacion(
   } catch (err: any) {
     console.error("Error al enviar archivo directo de conversación:", err);
     return { ok: false, error: err.message || "Error al procesar el archivo." };
+  } finally {
+    // WhatsApp ya guardó su copia (media_id); no hace falta conservarla en Storage.
+    await sb.storage.from(BUCKET_ADJUNTOS).remove([params.ruta]).catch(() => {});
   }
 }
 
