@@ -48,6 +48,8 @@ export interface FijoPlan {
   business_unit_nombre?: string;
   concepto: string;
   linea_pnl: string;
+  categoria_id?: string | null; // cuenta del catálogo de Finanzas (categories)
+  categoria_nombre?: string;
   mes: string; // 'YYYY-MM-01'
   monto: number;
   fuente?: string;

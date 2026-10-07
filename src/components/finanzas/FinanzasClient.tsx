@@ -427,7 +427,7 @@ export function FinanzasClient() {
             )}
 
             {activeTab === "proyecciones" && (
-              <TabProyecciones businessUnits={catalogos.businessUnits} />
+              <TabProyecciones businessUnits={catalogos.businessUnits} categories={catalogos.categories} />
             )}
 
             {activeTab === "configuracion" && (

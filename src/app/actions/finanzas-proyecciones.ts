@@ -369,6 +369,7 @@ export async function crearEscenario(params: {
             business_unit_id: f.business_unit_id,
             concepto: f.concepto,
             linea_pnl: f.linea_pnl,
+            categoria_id: f.categoria_id ?? null,
             mes: m,
             monto: f.monto,
             fuente: "copia"
@@ -456,16 +457,30 @@ export async function crearEscenario(params: {
     fijosPorCat.set("default:opex_otros", { buId: buBienesRaices?.id || null, monto: 3000 });
   }
 
+  // Cada fijo se enlaza a la cuenta de egreso del catálogo que corresponde a su línea P&L
+  const { data: cuentasEgreso } = await sb
+    .from("categories")
+    .select("id, nombre, linea_pnl")
+    .eq("tipo", "egreso")
+    .eq("activo", true)
+    .order("created_at");
+  const cuentaPorLinea = new Map<string, { id: string; nombre: string }>();
+  (cuentasEgreso || []).forEach((c) => {
+    if (!cuentaPorLinea.has(c.linea_pnl)) cuentaPorLinea.set(c.linea_pnl, { id: c.id, nombre: c.nombre });
+  });
+
   const fijosAInsertar: any[] = [];
   fijosPorCat.forEach((val, k) => {
     const lineaPnl = k.split(":")[1] || "opex_otros";
-    const concepto = lineaPnl.replace("_", " ").toUpperCase();
+    const cuenta = cuentaPorLinea.get(lineaPnl);
+    const concepto = cuenta?.nombre || lineaPnl.replace("_", " ").toUpperCase();
     meses.forEach((m) => {
       fijosAInsertar.push({
         escenario_id: nuevoEscenarioId,
         business_unit_id: val.buId,
         concepto,
         linea_pnl: lineaPnl,
+        categoria_id: cuenta?.id || null,
         mes: m,
         monto: r2(val.monto),
         fuente: "promedio_real"
@@ -577,6 +592,7 @@ export async function duplicarEscenario(
       business_unit_id: f.business_unit_id,
       concepto: f.concepto,
       linea_pnl: f.linea_pnl,
+      categoria_id: f.categoria_id ?? null,
       mes: f.mes,
       monto: f.monto,
       fuente: f.fuente
@@ -789,7 +805,7 @@ export async function obtenerInsumosEscenario(
       : Promise.resolve({ data: [] as any[] }),
     sb
       .from("fin_fijos_plan")
-      .select("*, business_units(nombre)")
+      .select("*, business_units(nombre), categories(nombre)")
       .eq("escenario_id", escenario_id)
       .order("concepto")
   ]);
@@ -804,9 +820,11 @@ export async function obtenerInsumosEscenario(
       id: f.id,
       escenario_id: f.escenario_id,
       business_unit_id: f.business_unit_id,
-      business_unit_nombre: f.business_units?.nombre || "Sin Unidad",
+      business_unit_nombre: f.business_units?.nombre || "Gastos Generales",
       concepto: f.concepto,
       linea_pnl: f.linea_pnl,
+      categoria_id: f.categoria_id ?? null,
+      categoria_nombre: f.categories?.nombre,
       mes: String(f.mes).slice(0, 7) + "-01",
       monto: Number(f.monto || 0),
       fuente: f.fuente
@@ -848,7 +866,7 @@ export async function actualizarFijo(params: {
 export async function agregarConceptoFijo(params: {
   escenario_id: string;
   concepto: string;
-  linea_pnl: string;
+  categoria_id: string;
   business_unit_id: string | null;
   monto: number;
   meses: string[];
@@ -856,17 +874,76 @@ export async function agregarConceptoFijo(params: {
   await requireAdministrador();
   const sb = supabaseServidor();
 
+  const lineaPnl = await lineaPnlDeCuenta(params.categoria_id);
   const filas = params.meses.map((m) => ({
     escenario_id: params.escenario_id,
     business_unit_id: params.business_unit_id,
-    concepto: params.concepto.trim().toUpperCase(),
-    linea_pnl: params.linea_pnl,
+    concepto: params.concepto.trim(),
+    linea_pnl: lineaPnl,
+    categoria_id: params.categoria_id,
     mes: m.slice(0, 7) + "-01",
     monto: params.monto,
     fuente: "manual"
   }));
 
   const { error } = await sb.from("fin_fijos_plan").insert(filas);
+  if (error) throw new Error(error.message);
+  revalidatePath("/finanzas");
+  return true;
+}
+
+/** La línea P&L de un fijo siempre se toma de su cuenta del catálogo de Finanzas. */
+async function lineaPnlDeCuenta(categoria_id: string): Promise<string> {
+  const { data: cuenta, error } = await supabaseServidor()
+    .from("categories")
+    .select("linea_pnl, tipo")
+    .eq("id", categoria_id)
+    .single();
+  if (error || !cuenta) throw new Error("La cuenta seleccionada no existe.");
+  if (cuenta.tipo !== "egreso" || cuenta.linea_pnl === "no_pnl") {
+    throw new Error("La cuenta debe ser de egreso y afectar el P&L.");
+  }
+  return cuenta.linea_pnl;
+}
+
+/**
+ * Edita la etiqueta de un concepto fijo: nombre, cuenta contable y/o unidad,
+ * aplicado a todos sus meses dentro del escenario.
+ */
+export async function editarConceptoFijo(params: {
+  escenario_id: string;
+  concepto: string;
+  business_unit_id: string | null;
+  cambios: { concepto?: string; categoria_id?: string; business_unit_id?: string | null };
+}): Promise<boolean> {
+  await requireAdministrador();
+  const sb = supabaseServidor();
+
+  const update: Record<string, any> = {};
+  if (params.cambios.concepto !== undefined) {
+    const nombre = params.cambios.concepto.trim();
+    if (!nombre) throw new Error("El concepto no puede quedar vacío.");
+    update.concepto = nombre;
+  }
+  if (params.cambios.categoria_id) {
+    update.categoria_id = params.cambios.categoria_id;
+    update.linea_pnl = await lineaPnlDeCuenta(params.cambios.categoria_id);
+  }
+  if (params.cambios.business_unit_id !== undefined) {
+    update.business_unit_id = params.cambios.business_unit_id || null;
+  }
+  if (Object.keys(update).length === 0) return true;
+
+  let q = sb
+    .from("fin_fijos_plan")
+    .update(update)
+    .eq("escenario_id", params.escenario_id)
+    .eq("concepto", params.concepto);
+  q = params.business_unit_id
+    ? q.eq("business_unit_id", params.business_unit_id)
+    : q.is("business_unit_id", null);
+
+  const { error } = await q;
   if (error) throw new Error(error.message);
   revalidatePath("/finanzas");
   return true;
