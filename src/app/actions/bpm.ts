@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { revalidatePath } from "next/cache";
+import { resolverPasosAplicables, type CondicionCampoJson } from "@/lib/bpm/condiciones";
 
 export interface BpmFlujo {
   id: string;
@@ -17,9 +18,11 @@ export interface BpmPaso {
   orden: number;
   tituloTarea: string;
   descripcion: string | null;
-  rolResponsable: 'asesor' | 'operaciones' | 'tecnico' | 'admin';
+  rolResponsable: 'asesor' | 'operaciones' | 'tecnico' | 'admin' | 'gestor' | 'sistema';
   diasVencimiento: number;
   condicionActivacion: string;
+  /** Condición opcional sobre campos del expediente (ver `@/lib/bpm/condiciones`). */
+  condicionCampo?: CondicionCampoJson;
 }
 
 export interface BpmTareaInstanciada {
@@ -103,7 +106,8 @@ export async function guardarFlujoBPM(tipoNegocio: string, pasos: Omit<BpmPaso, 
         descripcion: p.descripcion || "",
         rol_responsable: p.rolResponsable,
         dias_vencimiento: p.diasVencimiento,
-        condicion_activacion: p.condicionActivacion || "inmediato"
+        condicion_activacion: p.condicionActivacion || "inmediato",
+        condicion_campo: p.condicionCampo ?? null
       }));
 
       const { error: errPasos } = await sb.from("bpm_pasos").insert(pasosInsert);
@@ -163,9 +167,10 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
   if (count && count > 0) return; // ya inicializado
 
   // 1.5. Obtener los datos del expediente para ver quién es el asesor_id y el operador_id
+  // (se lee el expediente completo para evaluar `condicion_campo` de los pasos)
   const { data: exp } = await sb
     .from("expedientes")
-    .select("asesor_id, operador_id")
+    .select("*")
     .eq("id", expedienteId)
     .maybeSingle();
 
@@ -173,33 +178,12 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
   const datosFlujo = await obtenerFlujoPorProducto(tipoNegocio);
   if (!datosFlujo || datosFlujo.pasos.length === 0) return;
 
-  // 3. Crear tareas
+  // 3. Crear tareas (solo de los pasos que aplican al expediente)
   const ahora = new Date();
-  const tareasInsert = datosFlujo.pasos.map((p: any) => {
-    const agendadaPara = new Date(ahora.getTime() + p.dias_vencimiento * 24 * 60 * 60 * 1000).toISOString();
-    
-    // Si tiene condición especial (como esperar reporte técnico), inicia en "esperando_condicion"
-    const estadoInicial = p.condicion_activacion === "inmediato" ? "pendiente" : "esperando_condicion";
-
-    // Asignación automática de responsable basado en rol
-    let responsableId = null;
-    if (p.rol_responsable === "asesor") {
-      responsableId = exp?.asesor_id || null;
-    } else if (p.rol_responsable === "operaciones") {
-      responsableId = exp?.operador_id || null;
-    }
-
-    return {
-      expediente_id: expedienteId,
-      paso_id: p.id,
-      titulo: p.titulo_tarea,
-      descripcion: p.descripcion,
-      estado: estadoInicial,
-      dias_vencimiento: p.dias_vencimiento,
-      agendada_para: agendadaPara,
-      responsable_id: responsableId
-    };
-  });
+  const aplicables = resolverPasosAplicables(datosFlujo.pasos as any[], exp || {});
+  const tareasInsert = aplicables.map(({ paso: p, condicionEfectiva, condicionHeredada }: any) =>
+    construirTarea(expedienteId, p, condicionEfectiva, condicionHeredada, exp, ahora)
+  );
 
   const { error } = await sb.from("bpm_expediente_tareas").insert(tareasInsert);
   if (error) {
@@ -230,6 +214,122 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
   }
 }
 
+/** Responsable por rol: asesor → asesor del expediente; operaciones/gestor → operador. */
+function responsablePorRol(rol: string, exp: any): string | null {
+  if (rol === "asesor") return exp?.asesor_id || null;
+  if (rol === "operaciones" || rol === "gestor") return exp?.operador_id || null;
+  return null;
+}
+
+/** Arma el registro de bpm_expediente_tareas para un paso del flujo. */
+function construirTarea(
+  expedienteId: string,
+  p: any,
+  condicionEfectiva: string,
+  condicionHeredada: boolean,
+  exp: any,
+  ahora: Date
+) {
+  const agendadaPara = new Date(ahora.getTime() + p.dias_vencimiento * 24 * 60 * 60 * 1000).toISOString();
+  // Si tiene condición especial (como esperar reporte técnico), inicia en "esperando_condicion"
+  const estadoInicial = condicionEfectiva === "inmediato" ? "pendiente" : "esperando_condicion";
+  const tarea: Record<string, any> = {
+    expediente_id: expedienteId,
+    paso_id: p.id,
+    titulo: p.titulo_tarea,
+    descripcion: p.descripcion,
+    estado: estadoInicial,
+    dias_vencimiento: p.dias_vencimiento,
+    agendada_para: agendadaPara,
+    responsable_id: responsablePorRol(p.rol_responsable, exp)
+  };
+  // Solo se escribe cuando difiere de la del paso (columna nueva, opcional).
+  if (condicionHeredada) tarea.condicion_activacion_efectiva = condicionEfectiva;
+  return tarea;
+}
+
+/** Condición con la que espera una tarea: la efectiva (si el paso previo se omitió) o la del paso. */
+function condicionDeTarea(t: any): string | undefined {
+  return t.condicion_activacion_efectiva || t.paso?.condicion_activacion;
+}
+
+/**
+ * Reevalúa las condiciones sobre campos del expediente (p. ej. `ya_tiene_casa`)
+ * después de que cambian: cancela las tareas abiertas de pasos que ya no
+ * aplican, crea las de pasos que ahora sí aplican y recalcula de qué paso
+ * depende cada tarea. No toca tareas completadas.
+ */
+export async function reevaluarCondicionesBpm(expedienteId: string) {
+  const sb = supabaseServidor();
+  const { data: exp } = await sb.from("expedientes").select("*").eq("id", expedienteId).maybeSingle();
+  if (!exp?.tipo_negocio) return;
+
+  const datosFlujo = await obtenerFlujoPorProducto(exp.tipo_negocio);
+  if (!datosFlujo || datosFlujo.pasos.length === 0) return;
+  // Solo aplica a flujos que usan condiciones por campo.
+  if (!datosFlujo.pasos.some((p: any) => p.condicion_campo)) return;
+
+  const { data: tareas } = await sb
+    .from("bpm_expediente_tareas")
+    .select("*, paso:paso_id(*)")
+    .eq("expediente_id", expedienteId);
+  if (!tareas || tareas.length === 0) return; // el flujo aún no se instancia
+
+  const aplicables = resolverPasosAplicables(datosFlujo.pasos as any[], exp);
+  const idsAplicables = new Set(aplicables.map((a) => a.paso.id));
+  const abiertas = (t: any) => t.estado === "pendiente" || t.estado === "esperando_condicion";
+  const ahora = new Date();
+  const cambios: string[] = [];
+
+  // 1. Cancelar tareas abiertas de pasos que ya no aplican
+  for (const t of tareas) {
+    if (t.paso_id && abiertas(t) && datosFlujo.pasos.some((p: any) => p.id === t.paso_id) && !idsAplicables.has(t.paso_id)) {
+      await sb.from("bpm_expediente_tareas").update({ estado: "cancelada" }).eq("id", t.id);
+      t.estado = "cancelada";
+      cambios.push(`omitida: ${t.titulo}`);
+    }
+  }
+
+  // 2. Crear / actualizar las tareas de pasos que aplican
+  const tituloCompletado = new Set(
+    tareas.filter((t: any) => t.estado === "completada" && t.paso).map((t: any) => t.paso.titulo_tarea)
+  );
+  const idCompletado = new Set(tareas.filter((t: any) => t.estado === "completada").map((t: any) => t.paso_id));
+  const yaCumplida = (cond: string) =>
+    cond === "inmediato" || tituloCompletado.has(cond) || Array.from(idCompletado).some((id) => `completar_${id}` === cond);
+
+  for (const { paso, condicionEfectiva, condicionHeredada } of aplicables as any[]) {
+    const existentes = tareas.filter((t: any) => t.paso_id === paso.id);
+    const vigente = existentes.find((t: any) => t.estado !== "cancelada");
+    if (!vigente) {
+      const nueva = construirTarea(expedienteId, paso, condicionEfectiva, condicionHeredada, exp, ahora);
+      if (nueva.estado === "esperando_condicion" && yaCumplida(condicionEfectiva)) nueva.estado = "pendiente";
+      await sb.from("bpm_expediente_tareas").insert(nueva);
+      cambios.push(`agregada: ${paso.titulo_tarea}`);
+      continue;
+    }
+    if (!abiertas(vigente)) continue;
+    const payload: Record<string, any> = {};
+    const efectivaGuardada = vigente.condicion_activacion_efectiva || null;
+    const efectivaNueva = condicionHeredada ? condicionEfectiva : null;
+    if (efectivaGuardada !== efectivaNueva) payload.condicion_activacion_efectiva = efectivaNueva;
+    if (vigente.estado === "esperando_condicion" && yaCumplida(condicionEfectiva)) payload.estado = "pendiente";
+    if (Object.keys(payload).length > 0) {
+      await sb.from("bpm_expediente_tareas").update(payload).eq("id", vigente.id);
+    }
+  }
+
+  if (cambios.length > 0) {
+    await registrarActividad(sb, {
+      expedienteId,
+      tipo: "sistema",
+      titulo: "🔀 Flujo BPM ajustado al perfil del expediente",
+      detalle: cambios.join(" · ")
+    });
+  }
+  revalidatePath("/expediente/[id]");
+}
+
 /** Sincroniza los responsables de las tareas pendientes de un expediente tras cambiar el asesor u operador */
 export async function sincronizarAsignadosBpm(
   expedienteId: string,
@@ -253,7 +353,7 @@ export async function sincronizarAsignadosBpm(
 
     if (rol === "asesor") {
       nuevoResponsableId = asesorId;
-    } else if (rol === "operaciones") {
+    } else if (rol === "operaciones" || rol === "gestor") {
       nuevoResponsableId = operadorId;
     }
 
@@ -309,7 +409,8 @@ export async function actualizarEstadoTarea(
     if (tareasEsperando && tareasEsperando.length > 0) {
       for (const t of tareasEsperando) {
         // Si el paso dependiente tiene como condición de activación la conclusión de esta tarea
-        if (t.paso?.condicion_activacion === pasoTrigger || t.paso?.condicion_activacion === `completar_${tareaActualizada.paso.id}`) {
+        const condicion = condicionDeTarea(t);
+        if (condicion === pasoTrigger || condicion === `completar_${tareaActualizada.paso.id}`) {
           await sb
             .from("bpm_expediente_tareas")
             .update({ estado: "pendiente" })
@@ -349,7 +450,7 @@ export async function activarTareasBPMPorEvento(expedienteId: string, nombreEven
   if (!tareasEsperando || tareasEsperando.length === 0) return;
 
   for (const t of tareasEsperando) {
-    if (t.paso?.condicion_activacion === nombreEvento) {
+    if (condicionDeTarea(t) === nombreEvento) {
       await sb
         .from("bpm_expediente_tareas")
         .update({ estado: "pendiente" })
@@ -404,7 +505,8 @@ export async function listarFlujosBPM() {
         descripcion: p.descripcion,
         rolResponsable: p.rol_responsable,
         diasVencimiento: p.dias_vencimiento,
-        condicionActivacion: p.condicion_activacion
+        condicionActivacion: p.condicion_activacion,
+        condicionCampo: p.condicion_campo ?? null
       }))
   }));
 }

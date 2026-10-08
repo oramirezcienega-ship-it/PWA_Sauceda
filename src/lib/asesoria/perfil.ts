@@ -1,0 +1,158 @@
+/**
+ * Perfil de búsqueda del comprador (asesoría de compra).
+ *
+ * Normaliza y valida lo que captura el asesor antes de guardarlo en
+ * `expedientes`. Módulo puro para poder probarlo con `node --test`.
+ */
+
+export const FUENTES_PRECALIFICACION = ["infonavit", "fovissste", "bancario", "cofinavit", "otro"] as const;
+export type FuentePrecalificacion = (typeof FUENTES_PRECALIFICACION)[number];
+
+export const ETIQUETA_FUENTE: Record<FuentePrecalificacion, string> = {
+  infonavit: "INFONAVIT",
+  fovissste: "FOVISSSTE",
+  bancario: "Bancario",
+  cofinavit: "Cofinavit",
+  otro: "Otro",
+};
+
+/** Perfil tal como lo usa la app (camelCase). */
+export interface PerfilBusqueda {
+  busquedaZonas: string[];
+  busquedaPrecioMin: number | null;
+  busquedaPrecioMax: number | null;
+  montoCreditoPrecalificado: number | null;
+  montoAhorroPropio: number | null;
+  busquedaRecamarasMin: number | null;
+  busquedaRequisitos: string | null;
+  precalificacionFecha: string | null;
+  precalificacionFuente: FuentePrecalificacion | null;
+  yaTieneCasa: boolean;
+}
+
+/** Lo que llega del formulario (todo opcional, números como texto o número). */
+export type EntradaPerfil = Partial<{
+  busquedaZonas: string[] | string | null;
+  busquedaPrecioMin: number | string | null;
+  busquedaPrecioMax: number | string | null;
+  montoCreditoPrecalificado: number | string | null;
+  montoAhorroPropio: number | string | null;
+  busquedaRecamarasMin: number | string | null;
+  busquedaRequisitos: string | null;
+  precalificacionFecha: string | null;
+  precalificacionFuente: string | null;
+  yaTieneCasa: boolean | null;
+}>;
+
+export type ResultadoPerfil =
+  | { ok: true; perfil: PerfilBusqueda }
+  | { ok: false; errores: string[] };
+
+/** "$1,250,000" | "1250000" | 1250000 → 1250000; vacío → null. */
+export function aMonto(valor: unknown): number | null {
+  if (valor === null || valor === undefined) return null;
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  const limpio = String(valor).replace(/[^\d.]/g, "");
+  if (!limpio) return null;
+  const n = Number(limpio);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Separa zonas por coma, punto y coma o salto de línea; quita vacías y repetidas. */
+export function normalizarZonas(valor: unknown): string[] {
+  const lista = Array.isArray(valor) ? valor : String(valor ?? "").split(/[,;\n]/);
+  const vistas = new Set<string>();
+  const salida: string[] = [];
+  for (const z of lista) {
+    const limpia = String(z ?? "").replace(/\s+/g, " ").trim();
+    const clave = limpia.toLocaleLowerCase("es-MX");
+    if (!limpia || vistas.has(clave)) continue;
+    vistas.add(clave);
+    salida.push(limpia);
+  }
+  return salida;
+}
+
+/** Poder de compra = crédito precalificado (crédito + subcuenta) + ahorro propio. */
+export function poderDeCompra(perfil: Pick<PerfilBusqueda, "montoCreditoPrecalificado" | "montoAhorroPropio">): number {
+  return (perfil.montoCreditoPrecalificado ?? 0) + (perfil.montoAhorroPropio ?? 0);
+}
+
+export function normalizarPerfil(entrada: EntradaPerfil): ResultadoPerfil {
+  const errores: string[] = [];
+
+  const precioMin = aMonto(entrada.busquedaPrecioMin);
+  const precioMax = aMonto(entrada.busquedaPrecioMax);
+  if (precioMin !== null && precioMax !== null && precioMin > precioMax) {
+    errores.push("El precio mínimo no puede ser mayor que el máximo.");
+  }
+
+  const recamarasTexto = entrada.busquedaRecamarasMin;
+  let recamaras: number | null = null;
+  if (recamarasTexto !== null && recamarasTexto !== undefined && String(recamarasTexto).trim() !== "") {
+    const n = Number(recamarasTexto);
+    if (!Number.isInteger(n) || n < 0 || n > 20) errores.push("Las recámaras mínimas deben ser un número entero entre 0 y 20.");
+    else recamaras = n;
+  }
+
+  const fecha = (entrada.precalificacionFecha ?? "").trim() || null;
+  if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) errores.push("La fecha de precalificación no es válida.");
+
+  const fuenteTexto = (entrada.precalificacionFuente ?? "").trim().toLowerCase() || null;
+  let fuente: FuentePrecalificacion | null = null;
+  if (fuenteTexto) {
+    if ((FUENTES_PRECALIFICACION as readonly string[]).includes(fuenteTexto)) fuente = fuenteTexto as FuentePrecalificacion;
+    else errores.push("La fuente de precalificación no es válida.");
+  }
+
+  if (errores.length > 0) return { ok: false, errores };
+
+  return {
+    ok: true,
+    perfil: {
+      busquedaZonas: normalizarZonas(entrada.busquedaZonas),
+      busquedaPrecioMin: precioMin,
+      busquedaPrecioMax: precioMax,
+      montoCreditoPrecalificado: aMonto(entrada.montoCreditoPrecalificado),
+      montoAhorroPropio: aMonto(entrada.montoAhorroPropio),
+      busquedaRecamarasMin: recamaras,
+      busquedaRequisitos: (entrada.busquedaRequisitos ?? "").trim() || null,
+      precalificacionFecha: fecha,
+      precalificacionFuente: fuente,
+      yaTieneCasa: Boolean(entrada.yaTieneCasa),
+    },
+  };
+}
+
+/** Perfil → columnas de `expedientes`. */
+export function perfilAFila(p: PerfilBusqueda) {
+  return {
+    busqueda_zonas: p.busquedaZonas.length > 0 ? p.busquedaZonas : null,
+    busqueda_precio_min: p.busquedaPrecioMin,
+    busqueda_precio_max: p.busquedaPrecioMax,
+    monto_credito_precalificado: p.montoCreditoPrecalificado,
+    monto_ahorro_propio: p.montoAhorroPropio,
+    busqueda_recamaras_min: p.busquedaRecamarasMin,
+    busqueda_requisitos: p.busquedaRequisitos,
+    precalificacion_fecha: p.precalificacionFecha,
+    precalificacion_fuente: p.precalificacionFuente,
+    ya_tiene_casa: p.yaTieneCasa,
+  };
+}
+
+/** Fila de `expedientes` → perfil. */
+export function filaAPerfil(f: Record<string, any>): PerfilBusqueda {
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  return {
+    busquedaZonas: Array.isArray(f.busqueda_zonas) ? f.busqueda_zonas : [],
+    busquedaPrecioMin: num(f.busqueda_precio_min),
+    busquedaPrecioMax: num(f.busqueda_precio_max),
+    montoCreditoPrecalificado: num(f.monto_credito_precalificado),
+    montoAhorroPropio: num(f.monto_ahorro_propio),
+    busquedaRecamarasMin: num(f.busqueda_recamaras_min),
+    busquedaRequisitos: f.busqueda_requisitos ?? null,
+    precalificacionFecha: f.precalificacion_fecha ?? null,
+    precalificacionFuente: f.precalificacion_fuente ?? null,
+    yaTieneCasa: Boolean(f.ya_tiene_casa),
+  };
+}

@@ -1688,6 +1688,7 @@ function VistaAnalisisIA({ leads, onUpdateLead }: VistaAnalisisIAProps) {
             <option value="traspaso_compra">Traspaso / Compra</option>
             <option value="promocion_venta">Promoción Venta</option>
             <option value="solo_tramite">Solo Trámite</option>
+            <option value="asesoria_compra">Asesoría de Compra</option>
             <option value="construccion">Sauceda Construye (General)</option>
             <option value="construccion-impermeabilizacion">Sauceda Construye (Impermeabilización)</option>
             <option value="construccion-remodelacion">Sauceda Construye (Remodelación)</option>

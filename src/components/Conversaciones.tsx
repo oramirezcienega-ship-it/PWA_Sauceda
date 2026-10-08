@@ -2174,6 +2174,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       <option value="traspaso_compra">Traspaso / Compra</option>
                       <option value="promocion_venta">Promoción Venta</option>
                       <option value="solo_tramite">Solo Trámite</option>
+                      <option value="asesoria_compra">Asesoría de Compra</option>
                       <option value="otro">Otro</option>
                     </select>
                   </div>
