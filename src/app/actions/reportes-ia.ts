@@ -3,6 +3,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
 import { obtenerDatosCRM } from "./crm";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 export interface MarketingMetric {
   id?: string;
@@ -486,7 +487,7 @@ Responde exclusivamente con un JSON válido con esta estructura:
     throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en el entorno.");
   }
 
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  const model = modeloClaude();
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -498,7 +499,7 @@ Responde exclusivamente con un JSON válido con esta estructura:
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
+        ...opcionesClaude(model, { maxTokens: 2000 }),
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -509,7 +510,7 @@ Responde exclusivamente con un JSON válido con esta estructura:
     }
 
     const json = await res.json();
-    const texto = json.content[0].text;
+    const texto = textoDeRespuesta(json);
 
     const match = texto.match(/\{[\s\S]*\}/);
     if (!match) {

@@ -2,6 +2,7 @@
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 // ============================================================
 // TIPOS E INTERFACES DEL MÓDULO FINANZAS
@@ -2232,8 +2233,8 @@ Responde ÚNICAMENTE con un JSON válido con este formato:
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022",
-        max_tokens: 1500,
+        model: modeloClaude(),
+        ...opcionesClaude(modeloClaude(), { maxTokens: 1500 }),
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -2244,7 +2245,7 @@ Responde ÚNICAMENTE con un JSON válido con este formato:
     }
 
     const data = await res.json();
-    const texto = data.content?.[0]?.text || "";
+    const texto = textoDeRespuesta(data);
     const match = texto.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("No se recibió JSON en la respuesta de Sofía.");
 

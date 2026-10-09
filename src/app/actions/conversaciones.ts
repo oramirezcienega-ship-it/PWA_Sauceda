@@ -15,6 +15,7 @@ import type {
   ConversacionResumen,
   MensajeChat,
 } from "@/lib/types";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 /** Devuelve true si el identificador es un canal de red social (no es teléfono). */
 function esCanalSocial(telefono: string): boolean {
@@ -1501,7 +1502,7 @@ REGLAS ESTRICTAS:
       textoFinal = (json.choices?.[0]?.message?.content || "").trim();
     } else if (process.env.ANTHROPIC_API_KEY) {
       const apiKey = process.env.ANTHROPIC_API_KEY;
-      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+      const model = modeloClaude();
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -1512,8 +1513,7 @@ REGLAS ESTRICTAS:
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1000,
-          temperature: 0.1,
+          ...opcionesClaude(model, { maxTokens: 1000, temperature: 0.1 }),
           messages: [
             {
               role: "user",
@@ -1529,7 +1529,7 @@ REGLAS ESTRICTAS:
       }
 
       const json = await res.json();
-      textoFinal = (json.content?.[0]?.text || "").trim();
+      textoFinal = textoDeRespuesta(json).trim();
     } else {
       return {
         ok: false,

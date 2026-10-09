@@ -15,7 +15,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DOMINIOS_PORTALES, describirCriterios, limpiarCandidatas, normalizarUrl, type Candidata, type CriteriosBusqueda } from "./busqueda-web";
 
-const MODELO = "claude-opus-5-5";
+// Sonnet 5.5: buena extracción a la mitad del costo de Opus.
+const MODELO = "claude-sonnet-5-5";
 const MAX_CONTINUACIONES = 5;
 
 const CAMPO_TEXTO = { type: ["string", "null"] } as const;

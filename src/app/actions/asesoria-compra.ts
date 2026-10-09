@@ -1727,8 +1727,18 @@ export async function obtenerPanelBusquedaWeb(ordenTrabajoId: string): Promise<P
   };
 }
 
-/** Lanza la búsqueda en segundo plano (Netlify Background Function) o en línea en desarrollo. */
+/**
+ * Lanza el procesamiento de la búsqueda sin hacer esperar al asesor.
+ * - Servidor permanente (Coolify / Docker): corre en segundo plano en el mismo proceso.
+ * - Netlify (funciones con límite de tiempo): llama a la Background Function.
+ */
 async function despacharBusquedaWeb(sb: Sb, id: string) {
+  const { procesarBusquedaWeb } = await import("@/lib/asesoria/ia-busqueda");
+  const serverless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (!serverless) {
+    void procesarBusquedaWeb(sb, id).catch((err) => console.error("[despacharBusquedaWeb]", err));
+    return;
+  }
   const base = (process.env.SITE_URL || process.env.URL || "").replace(/\/$/, "");
   if (base && process.env.CRON_SECRET) {
     try {
@@ -1744,8 +1754,7 @@ async function despacharBusquedaWeb(sb: Sb, id: string) {
       console.warn("[despacharBusquedaWeb] no se pudo llamar a la función en segundo plano", err);
     }
   }
-  // Desarrollo local (o sin función en segundo plano): procesar aquí mismo.
-  const { procesarBusquedaWeb } = await import("@/lib/asesoria/ia-busqueda");
+  // Último recurso: procesar aquí (puede cortarse por el límite de tiempo de la función).
   await procesarBusquedaWeb(sb, id);
 }
 

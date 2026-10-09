@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import { registrarActividad } from "@/lib/actividades";
+import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
 
 export interface AnalisisIA {
   telefono: string;
@@ -181,7 +182,7 @@ export async function analizarConversacionConIA(telefono: string, prospectoId?: 
     throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
   }
 
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  const model = modeloClaude();
 
   const prompt = `Eres un analista de ventas para SAUCEDA Bienes Raíces, especialistas en traspasos INFONAVIT en León, Guanajuato.
 
@@ -210,7 +211,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON válido. No incluyas explicaciones an
     },
     body: JSON.stringify({
       model: model,
-      max_tokens: 1000,
+      ...opcionesClaude(model, { maxTokens: 1000 }),
       messages: [{
         role: "user",
         content: prompt
@@ -380,7 +381,7 @@ export async function generarPlanMejoraConsolidado(): Promise<{
     throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
   }
 
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+  const model = modeloClaude();
 
   const prompt = `Eres un consultor experto en optimización de agentes conversacionales y prompts de sistema de IA para ventas en SAUCEDA Bienes Raíces.
 
@@ -425,7 +426,7 @@ Responde con el siguiente formato estructurado usando etiquetas delimitadoras (n
       },
       body: JSON.stringify({
         model: model,
-        max_tokens: 1500,
+        ...opcionesClaude(model, { maxTokens: 1500 }),
         messages: [{
           role: "user",
           content: prompt

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseSesion, rolDe } from "@/lib/supabase/cliente-sesion";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 export const dynamic = "force-dynamic";
 
@@ -80,10 +81,7 @@ async function llamarIA({
       throw new Error("Falta API Key de IA (ANTHROPIC_API_KEY / KIMI_API_KEY) en las variables de entorno.");
     }
 
-    let model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
-    if (model.includes("claude-sonnet-4-6") || model.includes("claude-haiku-4-5")) {
-      model = "claude-3-5-sonnet-20241022";
-    }
+    const model = modeloClaude();
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -94,7 +92,7 @@ async function llamarIA({
       },
       body: JSON.stringify({
         model,
-        max_tokens: maxTokens,
+        ...opcionesClaude(model, { maxTokens: maxTokens }),
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
@@ -106,7 +104,7 @@ async function llamarIA({
     }
 
     const data = await res.json();
-    return (data.content?.[0]?.text || "").trim();
+    return textoDeRespuesta(data).trim();
   }
 }
 
