@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { obtenerOrdenAsesoria, cambiarEtapaOrdenAsesoria, type OrdenAsesoria } from "@/app/actions/asesoria-compra";
 import { TarjetaPerfilBusqueda } from "./TarjetaPerfilBusqueda";
 import { TarjetaPrecalificacion } from "./TarjetaPrecalificacion";
+import { PanelBusquedaInternet } from "./PanelBusquedaInternet";
 import { BandejaOpciones } from "./BandejaOpciones";
 import { PanelBusquedaAliados } from "@/components/aliados/PanelBusquedaAliados";
 import { WidgetBpmTareas } from "@/components/WidgetBpmTareas";
@@ -16,15 +17,19 @@ import { WidgetBpmTareas } from "@/components/WidgetBpmTareas";
 export function PanelAsesoriaCompraOT({
   ordenTrabajoId,
   soloLectura = false,
+  flujoAparte = false,
 }: {
   ordenTrabajoId: string;
   soloLectura?: boolean;
+  /** La página dibuja el flujo BPM al final (con FlujoAsesoriaOT); el panel no lo repite. */
+  flujoAparte?: boolean;
 }) {
   const [orden, setOrden] = useState<OrdenAsesoria | null>(null);
   const [cargando, setCargando] = useState(true);
   const [moviendo, setMoviendo] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [versionOpciones, setVersionOpciones] = useState(0);
 
   const cargar = useCallback(async () => {
     try {
@@ -145,22 +150,29 @@ export function PanelAsesoriaCompraOT({
         />
       </div>
 
-      {orden.expedienteId && (
+
+      {busquedaHabilitada && (
+        <>
+          <PanelBusquedaAliados ordenTrabajoId={ordenTrabajoId} />
+          <PanelBusquedaInternet ordenTrabajoId={ordenTrabajoId} onAgregada={() => setVersionOpciones((v) => v + 1)} />
+          <BandejaOpciones key={`opciones-${version}-${versionOpciones}`} ordenTrabajoId={ordenTrabajoId} />
+        </>
+      )}
+      {!flujoAparte && orden.expedienteId && (
         <WidgetBpmTareas
           key={`tareas-${version}`}
           expedienteId={orden.expedienteId}
           ordenTrabajoId={ordenTrabajoId}
           tipoNegocio="asesoria_compra"
-          inicialContraido={false}
+          inicialContraido
         />
-      )}
-
-      {busquedaHabilitada && (
-        <>
-          <PanelBusquedaAliados ordenTrabajoId={ordenTrabajoId} />
-          <BandejaOpciones key={`opciones-${version}`} ordenTrabajoId={ordenTrabajoId} />
-        </>
       )}
     </div>
   );
+}
+
+/** Flujo BPM de la OT de asesoría, contraído, para mostrarlo al final de la página. */
+export function FlujoAsesoriaOT({ ordenTrabajoId, expedienteId }: { ordenTrabajoId: string; expedienteId: string | null }) {
+  if (!expedienteId) return null;
+  return <WidgetBpmTareas expedienteId={expedienteId} ordenTrabajoId={ordenTrabajoId} tipoNegocio="asesoria_compra" inicialContraido />;
 }
