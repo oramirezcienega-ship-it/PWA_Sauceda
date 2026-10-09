@@ -35,6 +35,7 @@ import { normalizarTelefono } from "@/lib/telefono";
 import { TarjetaPerfilBusqueda } from "./asesoria-compra/TarjetaPerfilBusqueda";
 import { BandejaOpciones } from "./asesoria-compra/BandejaOpciones";
 import { BotonPublicarInventario } from "./asesoria-compra/BotonPublicarInventario";
+import { PanelBusquedaAliados } from "./aliados/PanelBusquedaAliados";
 
 /**
  * Vista de detalle de un expediente.
@@ -943,6 +944,7 @@ export function DetalleExpediente({ id }: { id: string }) {
               </div>
             </div>
             <TarjetaPerfilBusqueda expedienteId={expediente.id} onGuardado={recargar} />
+            {!expediente.yaTieneCasa && <PanelBusquedaAliados expedienteId={expediente.id} />}
             {!expediente.yaTieneCasa && <BandejaOpciones expedienteId={expediente.id} />}
           </div>
         )}
