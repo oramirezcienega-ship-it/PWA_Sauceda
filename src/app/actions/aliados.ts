@@ -21,7 +21,7 @@ import { normalizarZonas } from "@/lib/asesoria/perfil";
 import { calcularMatch, type PerfilMatch } from "@/lib/asesoria/match";
 import { filaAPerfil } from "@/lib/asesoria/perfil";
 import { filaInmuebleDesdeFormulario, type DatosInmuebleRapido } from "@/lib/asesoria/inmueble-form";
-import { prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
+import { pendientesDeFicha, prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
 import { armarConvenio, siguienteFolioConvenio, type ConvenioRenderizado } from "@/lib/asesoria/convenio";
 import { fechaLarga } from "@/lib/contratos";
 import {
@@ -448,6 +448,11 @@ export async function lanzarBusqueda(
       "busqueda",
     );
     if (!compuerta.ok) return { ...r, mensaje: compuerta.mensaje };
+    // La precalificación es el filtro: sin dictamen favorable no se busca casa.
+    const pendientes = await pendientesDeFicha(sb, ficha);
+    if (pendientes.length > 0) {
+      return { ...r, mensaje: `Antes de buscar con aliados falta: ${pendientes.map((x) => x.texto).join(" ")}` };
+    }
 
     const { data: provs } = await sb
       .from("proveedores")

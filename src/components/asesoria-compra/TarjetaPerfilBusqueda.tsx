@@ -5,12 +5,17 @@ import { guardarFichaAsesoria } from "@/app/actions/asesoria-compra";
 import { ETIQUETA_CREDITO, TIPOS_CREDITO } from "@/lib/asesoria/match";
 import {
   ETIQUETA_FUENTE,
+  ETIQUETA_PLAZO,
+  ETIQUETA_TIPO_INMUEBLE,
   FUENTES_PRECALIFICACION,
-  normalizarZonas,
+  PLAZOS_MUDANZA,
+  TIPOS_INMUEBLE,
   poderDeCompra,
   type PerfilBusqueda,
 } from "@/lib/asesoria/perfil";
 import { formatoPesos, formatoFecha } from "@/lib/formato";
+import { zonaConfirmada, type ZonaGeo } from "@/lib/asesoria/zonas";
+import { MapaZonas, SelectorZonas, zonaVacia } from "./SelectorZonas";
 
 /** Formato MXN $#,##0 mientras se escribe ("1250000" → "$1,250,000"). */
 function aTextoMonto(valor: number | null): string {
@@ -47,7 +52,11 @@ interface Borrador {
   montoAhorroPropio: string;
   precalificacionFuente: string;
   precalificacionFecha: string;
-  zonas: string[];
+  zonas: ZonaGeo[];
+  tipoInmueble: string;
+  plazoMudanza: string;
+  busquedaIndispensables: string;
+  justificacionPrecio: string;
   busquedaPrecioMin: string;
   busquedaPrecioMax: string;
   busquedaRecamarasMin: string;
@@ -63,7 +72,11 @@ function aBorrador(p: PerfilBusqueda | null): Borrador {
     precalificacionFuente: p?.precalificacionFuente ?? "",
     precalificacionFecha: p?.precalificacionFecha ?? "",
     // Siempre al menos un campo vacío para capturar la primera zona.
-    zonas: p?.busquedaZonas?.length ? [...p.busquedaZonas] : [""],
+    zonas: p?.zonasGeo?.length ? p.zonasGeo.map((z) => ({ ...z })) : [zonaVacia()],
+    tipoInmueble: p?.tipoInmueble ?? "",
+    plazoMudanza: p?.plazoMudanza ?? "",
+    busquedaIndispensables: p?.busquedaIndispensables ?? "",
+    justificacionPrecio: p?.justificacionPrecio ?? "",
     busquedaPrecioMin: aTextoMonto(p?.busquedaPrecioMin ?? null),
     busquedaPrecioMax: aTextoMonto(p?.busquedaPrecioMax ?? null),
     busquedaRecamarasMin: p?.busquedaRecamarasMin != null ? String(p.busquedaRecamarasMin) : "",
@@ -106,7 +119,11 @@ export function TarjetaPerfilBusqueda({
       montoAhorroPropio: borrador.montoAhorroPropio,
       precalificacionFuente: borrador.precalificacionFuente,
       precalificacionFecha: borrador.precalificacionFecha,
-      busquedaZonas: normalizarZonas(borrador.zonas),
+      zonasGeo: borrador.zonas.filter((z) => z.nombre.trim()),
+      tipoInmueble: borrador.tipoInmueble,
+      plazoMudanza: borrador.plazoMudanza,
+      busquedaIndispensables: borrador.busquedaIndispensables,
+      justificacionPrecio: borrador.justificacionPrecio,
       busquedaPrecioMin: borrador.busquedaPrecioMin,
       busquedaPrecioMax: borrador.busquedaPrecioMax,
       busquedaRecamarasMin: borrador.busquedaRecamarasMin,
@@ -126,8 +143,8 @@ export function TarjetaPerfilBusqueda({
 
   const montoNum = (t: string) => Number(t.replace(/\D/g, "")) || 0;
   const poderBorrador = montoNum(borrador.montoCreditoPrecalificado) + montoNum(borrador.montoAhorroPropio);
-  const listoParaBuscar =
-    !!perfil && (perfil.montoCreditoPrecalificado ?? 0) > 0 && perfil.busquedaZonas.length > 0;
+  const precioMaxBorrador = montoNum(borrador.busquedaPrecioMax);
+  const rebasaPoder = precioMaxBorrador > 0 && poderBorrador > 0 && precioMaxBorrador > poderBorrador;
 
   return (
     <section className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
@@ -175,11 +192,18 @@ export function TarjetaPerfilBusqueda({
             <>
               <div>
                 <p className="text-[10px] font-bold uppercase text-carbon/40">Zonas</p>
-                {perfil.busquedaZonas.length > 0 ? (
+                {perfil.zonasGeo.length > 0 ? (
                   <div className="mt-1 flex flex-wrap gap-1.5">
-                    {perfil.busquedaZonas.map((z) => (
-                      <span key={z} className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs text-violet-900">
-                        {z}
+                    {perfil.zonasGeo.map((z) => (
+                      <span
+                        key={z.placeId ?? z.nombre}
+                        title={zonaConfirmada(z) ? `${z.direccion ?? ""} · radio ${z.radioKm} km` : "Sin confirmar en el mapa"}
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                          zonaConfirmada(z) ? "border-violet-200 bg-violet-50 text-violet-900" : "border-amber-200 bg-amber-50 text-amber-900"
+                        }`}
+                      >
+                        {zonaConfirmada(z) ? "📍" : "⚠️"} {z.nombre}
+                        {zonaConfirmada(z) && <span className="text-violet-900/50"> · {z.radioKm} km</span>}
                       </span>
                     ))}
                   </div>
@@ -195,16 +219,18 @@ export function TarjetaPerfilBusqueda({
                     : "—"
                 }
               />
-              {perfil.busquedaRequisitos && <Dato etiqueta="Requisitos" valor={perfil.busquedaRequisitos} />}
-              <p
-                className={`rounded-md px-3 py-2 text-xs ${
-                  listoParaBuscar ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"
-                }`}
-              >
-                {listoParaBuscar
-                  ? "✅ Listo para pasar a Búsqueda."
-                  : "⚠️ Para pasar a Búsqueda falta el monto precalificado y al menos una zona."}
-              </p>
+              {perfil.zonasGeo.some(zonaConfirmada) && <MapaZonas zonas={perfil.zonasGeo.filter(zonaConfirmada)} alto={180} />}
+              {perfil.justificacionPrecio && (
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  ⚠️ El precio máximo rebasa el poder de compra. Justificación: {perfil.justificacionPrecio}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Dato etiqueta="Tipo de inmueble" valor={perfil.tipoInmueble ? ETIQUETA_TIPO_INMUEBLE[perfil.tipoInmueble] : "—"} />
+                <Dato etiqueta="¿Cuándo quiere mudarse?" valor={perfil.plazoMudanza ? ETIQUETA_PLAZO[perfil.plazoMudanza] : "—"} />
+              </div>
+              {perfil.busquedaIndispensables && <Dato etiqueta="Indispensable" valor={perfil.busquedaIndispensables} />}
+              {perfil.busquedaRequisitos && <Dato etiqueta="Deseable" valor={perfil.busquedaRequisitos} />}
             </>
           )}
         </div>
@@ -276,36 +302,7 @@ export function TarjetaPerfilBusqueda({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="sm:col-span-2 lg:col-span-3">
                 <span className="mb-1 block text-[10px] font-bold uppercase text-carbon/50">Zonas, colonias o fraccionamientos</span>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {borrador.zonas.map((zona, i) => (
-                    <div key={i} className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={zona}
-                        onChange={(e) => set("zonas", borrador.zonas.map((z, j) => (j === i ? e.target.value : z)))}
-                        placeholder={i === 0 ? "Villas de San Juan" : `Zona ${i + 1}`}
-                        className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
-                      />
-                      {borrador.zonas.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => set("zonas", borrador.zonas.filter((_, j) => j !== i))}
-                          aria-label={`Quitar zona ${i + 1}`}
-                          className="shrink-0 rounded-md border border-carbon/15 px-2 py-1.5 text-xs text-carbon/50 hover:border-rojo hover:text-rojo"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => set("zonas", [...borrador.zonas, ""])}
-                  className="mt-2 text-xs font-semibold text-sauce hover:underline"
-                >
-                  + Agregar otra zona
-                </button>
+                <SelectorZonas zonas={borrador.zonas} onCambio={(z) => set("zonas", z)} />
               </div>
               <Campo etiqueta="Precio mínimo">
                 <MontoInput valor={borrador.busquedaPrecioMin} onCambio={(t) => set("busquedaPrecioMin", t)} placeholder="$600,000" />
@@ -323,15 +320,65 @@ export function TarjetaPerfilBusqueda({
                   className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
                 />
               </Campo>
-              <Campo etiqueta="Requisitos" ancho>
-                <textarea
-                  rows={2}
-                  value={borrador.busquedaRequisitos}
-                  onChange={(e) => set("busquedaRequisitos", e.target.value)}
-                  placeholder="Planta baja, cerca de escuela…"
+              {rebasaPoder && (
+                <Campo etiqueta={`⚠️ El precio máximo rebasa el poder de compra (${formatoPesos(poderBorrador)}): justifícalo`} ancho>
+                  <input
+                    type="text"
+                    value={borrador.justificacionPrecio}
+                    onChange={(e) => set("justificacionPrecio", e.target.value)}
+                    placeholder="Ej. pondrá $100,000 más de enganche con su aguinaldo"
+                    className="w-full rounded-md border border-amber-300 bg-amber-50/40 px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
+                  />
+                </Campo>
+              )}
+              <Campo etiqueta="Tipo de inmueble">
+                <select
+                  value={borrador.tipoInmueble}
+                  onChange={(e) => set("tipoInmueble", e.target.value)}
                   className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
-                />
+                >
+                  <option value="">Sin definir</option>
+                  {TIPOS_INMUEBLE.map((t) => (
+                    <option key={t} value={t}>
+                      {ETIQUETA_TIPO_INMUEBLE[t]}
+                    </option>
+                  ))}
+                </select>
               </Campo>
+              <Campo etiqueta="¿Cuándo quiere mudarse?">
+                <select
+                  value={borrador.plazoMudanza}
+                  onChange={(e) => set("plazoMudanza", e.target.value)}
+                  className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
+                >
+                  <option value="">Sin definir</option>
+                  {PLAZOS_MUDANZA.map((t) => (
+                    <option key={t} value={t}>
+                      {ETIQUETA_PLAZO[t]}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Campo etiqueta="Indispensable (no negociable)">
+                  <textarea
+                    rows={2}
+                    value={borrador.busquedaIndispensables}
+                    onChange={(e) => set("busquedaIndispensables", e.target.value)}
+                    placeholder="Planta baja, 2 cajones de estacionamiento…"
+                    className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
+                  />
+                </Campo>
+                <Campo etiqueta="Deseable (suma, pero no es requisito)">
+                  <textarea
+                    rows={2}
+                    value={borrador.busquedaRequisitos}
+                    onChange={(e) => set("busquedaRequisitos", e.target.value)}
+                    placeholder="Cerca de escuela, jardín, cocina integral…"
+                    className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
+                  />
+                </Campo>
+              </div>
             </div>
           )}
 

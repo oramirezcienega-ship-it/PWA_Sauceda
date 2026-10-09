@@ -10,7 +10,8 @@
  *  - `estatus` = 'disponible'
  *
  * Score (0–100):
- *  - zona exacta ................................. 40
+ *  - zona: dentro del radio de una zona confirmada en el mapa, o
+ *    mismo nombre de zona/colonia/fraccionamiento ............ 40
  *  - precio dentro del rango (decrece hacia el tope) 25 → 12.5
  *  - recámaras ≥ mínimo .......................... 15
  *  - con escritura y sin adeudos ................. 10
@@ -19,6 +20,8 @@
  *
  * Al empatar, gana el origen: propio > aliado > portal (el propio no comparte comisión).
  */
+
+import { zonaQueCubre, type ZonaGeo } from "./zonas";
 
 export type OrigenInmueble = "propio" | "aliado" | "portal";
 export type TipoCredito = "infonavit" | "fovissste" | "bancario" | "cofinavit" | "contado";
@@ -35,6 +38,8 @@ export const ETIQUETA_CREDITO: Record<TipoCredito, string> = {
 
 export interface PerfilMatch {
   busquedaZonas?: string[] | null;
+  /** Zonas confirmadas en Google Maps (con coordenadas y radio). */
+  zonasGeo?: ZonaGeo[] | null;
   busquedaPrecioMin?: number | null;
   busquedaPrecioMax?: number | null;
   montoCreditoPrecalificado?: number | null;
@@ -54,6 +59,8 @@ export interface InmuebleMatch {
   zona?: string | null;
   fraccionamiento?: string | null;
   colonia?: string | null;
+  lat?: number | string | null;
+  lng?: number | string | null;
   recamaras?: number | null;
   tiene_escritura?: boolean | null;
   tiene_adeudos?: boolean | null;
@@ -146,7 +153,14 @@ export function calcularMatch(perfil: PerfilMatch, inmueble: InmuebleMatch, ahor
   const zonasPerfil = (perfil.busquedaZonas ?? []).map(normalizarTexto).filter(Boolean);
   const zonasInmueble = [inmueble.zona, inmueble.fraccionamiento, inmueble.colonia].map(normalizarTexto).filter(Boolean);
   const zonaCoincide = zonasInmueble.find((z) => zonasPerfil.includes(z));
-  if (zonaCoincide) {
+  const cubre = zonaQueCubre(perfil.zonasGeo, {
+    lat: inmueble.lat === null || inmueble.lat === undefined ? null : Number(inmueble.lat),
+    lng: inmueble.lng === null || inmueble.lng === undefined ? null : Number(inmueble.lng),
+  });
+  if (cubre) {
+    score += 40;
+    razones.push(`+40 A ${cubre.km.toFixed(1)} km de ${cubre.zona.nombre}`);
+  } else if (zonaCoincide) {
     score += 40;
     razones.push(`+40 Zona buscada (${inmueble.fraccionamiento || inmueble.zona || inmueble.colonia})`);
   }

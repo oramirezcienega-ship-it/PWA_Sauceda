@@ -8,8 +8,62 @@ import "server-only";
 
 import { supabaseServidor } from "@/lib/supabase/server";
 import type { Inmueble } from "./inmuebles";
+import { filaAPerfil } from "./perfil";
+import { zonaConfirmada } from "./zonas";
+import {
+  DICTAMENES,
+  evaluarRequisitos,
+  filaARequisito,
+  normalizarEvidencias,
+  pendientesParaBusqueda,
+  type PendienteCompuerta,
+  type RequisitoPrecalificacion,
+} from "./precalificacion";
 
 export const BUCKET_INMUEBLES = "inmuebles";
+export const BUCKET_PRECALIFICACIONES = "precalificaciones";
+
+/** Google Maps está configurado (sin clave, las zonas se capturan como texto). */
+export function mapaActivo(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+}
+
+/** Requisitos activos de precalificación del tipo de crédito (vacío si no hay crédito). */
+export async function cargarRequisitos(sb: Sb, tipoCredito: string | null | undefined): Promise<RequisitoPrecalificacion[]> {
+  if (!tipoCredito) return [];
+  const { data } = await sb
+    .from("requisitos_precalificacion")
+    .select("*")
+    .eq("tipo_credito", tipoCredito)
+    .eq("activo", true)
+    .order("orden");
+  return (data ?? []).map(filaARequisito);
+}
+
+/** Lo que le falta a la ficha de la OT para salir de Precalificación. */
+export async function pendientesDeFicha(
+  sb: Sb,
+  ficha: Record<string, any>,
+  requisitos?: RequisitoPrecalificacion[],
+): Promise<PendienteCompuerta[]> {
+  const perfil = filaAPerfil(ficha);
+  const reqs = requisitos ?? (await cargarRequisitos(sb, perfil.tipoCredito));
+  return pendientesParaBusqueda(
+    {
+      tipoCredito: perfil.tipoCredito,
+      montoCreditoPrecalificado: perfil.montoCreditoPrecalificado,
+      montoAhorroPropio: perfil.montoAhorroPropio,
+      busquedaPrecioMax: perfil.busquedaPrecioMax,
+      justificacionPrecio: perfil.justificacionPrecio,
+      busquedaZonas: perfil.busquedaZonas,
+      zonasConfirmadas: perfil.zonasGeo.filter(zonaConfirmada).length,
+      dictamen: (DICTAMENES as readonly string[]).includes(ficha.dictamen) ? ficha.dictamen : null,
+      evidencias: normalizarEvidencias(ficha.precalificacion_evidencias).length,
+      evaluacion: evaluarRequisitos(reqs, ficha.precalificacion_respuestas ?? {}),
+    },
+    { mapaActivo: mapaActivo(), soloPrecalificacion: perfil.yaTieneCasa },
+  );
+}
 
 type Sb = ReturnType<typeof supabaseServidor>;
 
