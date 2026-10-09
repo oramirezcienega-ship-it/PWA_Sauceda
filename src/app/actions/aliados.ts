@@ -22,6 +22,8 @@ import { calcularMatch, type PerfilMatch } from "@/lib/asesoria/match";
 import { filaAPerfil } from "@/lib/asesoria/perfil";
 import { filaInmuebleDesdeFormulario, type DatosInmuebleRapido } from "@/lib/asesoria/inmueble-form";
 import { prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
+import { armarConvenio, siguienteFolioConvenio, type ConvenioRenderizado } from "@/lib/asesoria/convenio";
+import { fechaLarga } from "@/lib/contratos";
 import {
   CONVENIO_ESTATUS,
   ESTATUS_ACEPTADA,
@@ -235,6 +237,9 @@ export async function cambiarConvenioAliado(
   try {
     await requireAdministrador();
     if (!(CONVENIO_ESTATUS as readonly string[]).includes(estatus)) return { ok: false, mensaje: "Estatus inválido." };
+    if (estatus === "firmado") {
+      return { ok: false, mensaje: "Para marcar el convenio como firmado usa “Registrar firma” (requiere el convenio generado)." };
+    }
     const { error } = await supabaseServidor()
       .from("proveedores")
       .update({ convenio_estatus: estatus })
@@ -739,4 +744,221 @@ export async function marcarSinResultadosAliado(token: string, busquedaId: strin
     titulo: `🚫 ${aliado.nombre} no tiene casas para la búsqueda`,
   });
   return { ok: true };
+}
+
+// ============================================================================
+// Fase 5: convenio de comisión compartida (reutiliza `contratos` y
+// `plantillas_clausulas`) y comisiones de aliados
+// ============================================================================
+
+export interface ConvenioAliado {
+  contratoId: string;
+  folio: string;
+  estado: string;
+  fechaGeneracion: string;
+  fechaFirma: string | null;
+  aliado: string;
+  convenio: ConvenioRenderizado;
+}
+
+/** Datos del convenio a partir de las plantillas vigentes. */
+async function renderizarConvenio(sb: Sb, prov: Record<string, any>): Promise<ConvenioRenderizado> {
+  const { data } = await sb.from("plantillas_clausulas").select("tipo_servicio, clave, texto").in("tipo_servicio", ["convenio_aliado", "general"]);
+  const conv: Record<string, string> = {};
+  const gral: Record<string, string> = {};
+  for (const r of data ?? []) (r.tipo_servicio === "convenio_aliado" ? conv : gral)[r.clave] = r.texto;
+  return armarConvenio(conv, {
+    prestador: gral.prestador_razon_social || "SAUCEDA Bienes Raíces",
+    prestadorDomicilio: gral.prestador_domicilio || "León, Guanajuato",
+    aliado: prov.razon_social || prov.nombre,
+    aliadoContacto: prov.contacto_nombre || "",
+    pct: Number(prov.comision_compartida_pct ?? 0),
+    fecha: fechaLarga(new Date().toISOString()),
+  });
+}
+
+/**
+ * Genera el convenio del aliado en `contratos` (tipo_servicio = 'convenio_aliado'),
+ * guarda `convenio_contrato_id`, deja el convenio como "enviado" y se lo manda
+ * por Telegram (link para leerlo). Si ya había uno sin firmar, se reemplaza.
+ */
+export async function generarConvenioAliado(
+  aliadoId: string,
+): Promise<{ ok: boolean; mensaje?: string; folio?: string; link?: string; porTelegram?: boolean }> {
+  try {
+    await requireAdmin();
+    const usuario = await usuarioActual();
+    const sb = supabaseServidor();
+    const { data: prov } = await sb.from("proveedores").select("*").eq("id", aliadoId).eq("es_aliado_inmobiliario", true).maybeSingle();
+    if (!prov) return { ok: false, mensaje: "El aliado no existe." };
+    if (prov.comision_compartida_pct === null || prov.comision_compartida_pct === undefined) {
+      return { ok: false, mensaje: "Define el % de comisión compartida del aliado antes de generar el convenio." };
+    }
+    if (prov.convenio_estatus === "firmado") return { ok: false, mensaje: "El aliado ya tiene convenio firmado." };
+
+    const convenio = await renderizarConvenio(sb, prov);
+    const anio = new Date().getFullYear();
+    const { data: ultimo } = await sb
+      .from("contratos")
+      .select("folio")
+      .ilike("folio", `CONV-${anio}-%`)
+      .order("folio", { ascending: false })
+      .limit(1);
+
+    // Un convenio previo sin firmar se cancela (queda el historial).
+    await sb
+      .from("contratos")
+      .update({ estado: "cancelado", updated_at: new Date().toISOString() })
+      .eq("proveedor_id", aliadoId)
+      .eq("tipo_servicio", "convenio_aliado")
+      .in("estado", ["borrador", "generado"]);
+
+    const folio = siguienteFolioConvenio(ultimo?.[0]?.folio, anio);
+    const { data: contrato, error } = await sb
+      .from("contratos")
+      .insert({
+        folio,
+        version: 1,
+        proveedor_id: aliadoId,
+        tipo_servicio: "convenio_aliado",
+        estado: "generado",
+        generado_por: usuario?.id ?? null,
+        datos_snapshot: {
+          tipo: "convenio_aliado",
+          aliado: prov.nombre,
+          comisionCompartidaPct: Number(prov.comision_compartida_pct),
+          convenio,
+        },
+      })
+      .select("id")
+      .single();
+    if (error || !contrato) throw new Error(error?.message || "No se pudo generar el convenio.");
+
+    let token = prov.token_carga as string | null;
+    if (!token) token = nuevoToken();
+    await sb
+      .from("proveedores")
+      .update({ convenio_contrato_id: contrato.id, convenio_estatus: "enviado", token_carga: token })
+      .eq("id", aliadoId);
+
+    const link = `${SITE_URL()}/aliados/carga/${token}/convenio`;
+    let porTelegram = false;
+    if (prov.telegram_chat_id) {
+      const { botToken } = await obtenerConfiguracionTelegram(sb);
+      if (botToken) {
+        const r = await enviarMensajeTelegram({
+          botToken,
+          chatId: prov.telegram_chat_id,
+          parseMode: "HTML",
+          texto: `🤝 <b>${prov.nombre}</b>, te compartimos el convenio de comisión compartida con SAUCEDA (${folio}): ${Number(prov.comision_compartida_pct)}% de los honorarios del lado comprador.\n\nLéelo aquí y avísanos para firmarlo:`,
+          inlineKeyboard: [[{ text: "📄 Ver convenio", url: link }]],
+        });
+        porTelegram = r.ok;
+      }
+    }
+    revalidatePath("/aliados");
+    return { ok: true, folio, link, porTelegram };
+  } catch (err) {
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo generar el convenio." };
+  }
+}
+
+/** Convenio vigente de un aliado (vista interna para imprimir). */
+export async function obtenerConvenioAliado(aliadoId: string): Promise<ConvenioAliado | null> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data: prov } = await sb.from("proveedores").select("nombre, convenio_contrato_id").eq("id", aliadoId).maybeSingle();
+  if (!prov?.convenio_contrato_id) return null;
+  return leerConvenio(sb, prov.convenio_contrato_id, prov.nombre);
+}
+
+async function leerConvenio(sb: Sb, contratoId: string, aliado: string): Promise<ConvenioAliado | null> {
+  const { data: c } = await sb
+    .from("contratos")
+    .select("id, folio, estado, fecha_generacion, fecha_firma, datos_snapshot")
+    .eq("id", contratoId)
+    .eq("tipo_servicio", "convenio_aliado")
+    .maybeSingle();
+  if (!c) return null;
+  return {
+    contratoId: c.id,
+    folio: c.folio,
+    estado: c.estado,
+    fechaGeneracion: c.fecha_generacion,
+    fechaFirma: c.fecha_firma,
+    aliado,
+    convenio: (c.datos_snapshot as any)?.convenio ?? { titulo: "Convenio", clausulas: [] },
+  };
+}
+
+/** Convenio del aliado desde su link (público, valida el token). */
+export async function obtenerConvenioPorToken(token: string): Promise<ConvenioAliado | null> {
+  const sb = supabaseServidor();
+  const aliado = await aliadoPorToken(sb, token);
+  if (!aliado) return null;
+  const { data: prov } = await sb.from("proveedores").select("convenio_contrato_id").eq("id", aliado.id).maybeSingle();
+  if (!prov?.convenio_contrato_id) return null;
+  return leerConvenio(sb, prov.convenio_contrato_id, aliado.nombre);
+}
+
+/** Registra la firma del convenio: contrato firmado y aliado habilitado para recibir búsquedas. */
+export async function marcarConvenioFirmado(aliadoId: string, fechaFirma: string): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdministrador();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFirma)) return { ok: false, mensaje: "Indica la fecha de firma." };
+    const sb = supabaseServidor();
+    const { data: prov } = await sb.from("proveedores").select("convenio_contrato_id").eq("id", aliadoId).maybeSingle();
+    if (!prov?.convenio_contrato_id) return { ok: false, mensaje: "Primero genera el convenio." };
+    const { error } = await sb
+      .from("contratos")
+      .update({ estado: "firmado", fecha_firma: fechaFirma, updated_at: new Date().toISOString() })
+      .eq("id", prov.convenio_contrato_id)
+      .neq("estado", "cancelado");
+    if (error) throw new Error(error.message);
+    await sb.from("proveedores").update({ convenio_estatus: "firmado" }).eq("id", aliadoId);
+    revalidatePath("/aliados");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo registrar la firma." };
+  }
+}
+
+export interface ComisionAliado {
+  id: string;
+  aliadoId: string;
+  aliadoNombre: string;
+  expedienteId: string | null;
+  fecha: string;
+  montoVenta: number;
+  montoComision: number;
+  montoPagado: number;
+  saldoPendiente: number;
+  estatus: string;
+  detalle: Record<string, any>;
+}
+
+/** Comisiones a pagar a aliados (no aparecen en el estado de cuenta de asesores). */
+export async function listarComisionesAliados(): Promise<ComisionAliado[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("comisiones")
+    .select("id, proveedor_id, expediente_id, fecha, monto_venta, monto_comision, monto_pagado, saldo_pendiente, estatus, detalles_calculo, proveedor:proveedor_id(nombre)")
+    .eq("tipo_comision", "aliado")
+    .neq("estatus", "cancelada")
+    .order("fecha", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((c: any) => ({
+    id: c.id,
+    aliadoId: c.proveedor_id,
+    aliadoNombre: c.proveedor?.nombre ?? "—",
+    expedienteId: c.expediente_id,
+    fecha: c.fecha,
+    montoVenta: Number(c.monto_venta),
+    montoComision: Number(c.monto_comision),
+    montoPagado: Number(c.monto_pagado),
+    saldoPendiente: Number(c.saldo_pendiente),
+    estatus: c.estatus,
+    detalle: c.detalles_calculo ?? {},
+  }));
 }

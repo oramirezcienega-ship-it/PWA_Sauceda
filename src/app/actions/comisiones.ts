@@ -445,6 +445,8 @@ export async function listarComisiones(filtros?: {
     let query = sb
       .from("comisiones")
       .select("*")
+      // Los pagos a aliados inmobiliarios se ven en el menú Aliados, no en el estado de cuenta de asesores.
+      .neq("tipo_comision", "aliado")
       .order("fecha", { ascending: false })
       .order("created_at", { ascending: false });
 

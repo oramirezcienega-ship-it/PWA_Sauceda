@@ -6,6 +6,8 @@ import {
   generarSugerencias,
   publicarPropuesta,
   descartarSugerencia,
+  actualizarEstatusPropuesta,
+  registrarCierreCompra,
   type PropuestaInmueble,
 } from "@/app/actions/asesoria-compra";
 import {
@@ -15,6 +17,7 @@ import {
   type MotivoDescarte,
 } from "@/lib/asesoria/inmuebles";
 import { TarjetaInmueble } from "./TarjetaInmueble";
+import { formatoPesos } from "@/lib/formato";
 
 /**
  * Bandeja "Opciones" del expediente comprador: sugerencias del match con su
@@ -172,6 +175,16 @@ export function BandejaOpciones({ expedienteId }: { expedienteId: string }) {
                     {p.comentarioCliente ? ` — “${p.comentarioCliente}”` : ""}
                   </p>
                 )}
+                {["me_interesa", "visita_agendada", "visitada", "ofertada"].includes(p.estatus) && (
+                  <SeguimientoPropuesta
+                    propuesta={p}
+                    onAviso={setAviso}
+                    onCambio={cargar}
+                  />
+                )}
+                {p.comentarioCliente && p.estatus !== "descartada" && (
+                  <p className="text-[11px] text-carbon/70">💬 “{p.comentarioCliente}”</p>
+                )}
                 {p.estatus === "sugerida" && (
                   <div className="flex gap-2">
                     <button
@@ -196,5 +209,91 @@ export function BandejaOpciones({ expedienteId }: { expedienteId: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Avance tras el interés del cliente: visita realizada, oferta y cierre (escritura). */
+function SeguimientoPropuesta({
+  propuesta: p,
+  onAviso,
+  onCambio,
+}: {
+  propuesta: PropuestaInmueble;
+  onAviso: (m: string) => void;
+  onCambio: () => Promise<void>;
+}) {
+  const [cierre, setCierre] = useState(false);
+  const [precio, setPrecio] = useState(formatoPesos(p.inmueble.precio));
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [enviando, setEnviando] = useState(false);
+
+  async function avanzar(estatus: "visitada" | "ofertada") {
+    const r = await actualizarEstatusPropuesta(p.id, estatus);
+    if (!r.ok) onAviso(r.mensaje || "No se pudo actualizar.");
+    await onCambio();
+  }
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-violet-100 bg-violet-50/50 p-2 text-xs">
+      <div className="flex flex-wrap gap-1.5">
+        {(p.estatus === "me_interesa" || p.estatus === "visita_agendada") && (
+          <button type="button" onClick={() => avanzar("visitada")} className="rounded border border-violet-300 px-2 py-1 text-violet-900">
+            Visita realizada
+          </button>
+        )}
+        {p.estatus !== "ofertada" && (
+          <button type="button" onClick={() => avanzar("ofertada")} className="rounded border border-violet-300 px-2 py-1 text-violet-900">
+            Oferta presentada
+          </button>
+        )}
+        <button type="button" onClick={() => setCierre((v) => !v)} className="rounded bg-verde-profundo px-2 py-1 font-semibold text-crema">
+          🔑 Registrar cierre
+        </button>
+      </div>
+      {cierre && (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="text-[10px] uppercase text-carbon/50">
+              Precio de compraventa
+              <input
+                value={precio}
+                inputMode="numeric"
+                onChange={(e) => {
+                  const n = e.target.value.replace(/\D/g, "");
+                  setPrecio(n ? formatoPesos(Number(n)) : "");
+                }}
+                className="mt-0.5 block w-full rounded border border-carbon/20 px-2 py-1 font-mono text-xs"
+              />
+            </label>
+            <label className="text-[10px] uppercase text-carbon/50">
+              Firma de escritura
+              <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="mt-0.5 block w-full rounded border border-carbon/20 px-2 py-1 text-xs" />
+            </label>
+          </div>
+          <p className="text-[10px] text-carbon/50">
+            La casa queda como elegida y vendida.{p.inmueble.origen === "aliado" ? " Se genera la comisión compartida del aliado." : ""}
+          </p>
+          <button
+            type="button"
+            disabled={enviando}
+            onClick={async () => {
+              if (!window.confirm(`¿Registrar el cierre de ${p.inmueble.folio}?`)) return;
+              setEnviando(true);
+              const r = await registrarCierreCompra(p.id, { precioCompraventa: precio, fechaEscritura: fecha });
+              setEnviando(false);
+              onAviso(
+                r.ok
+                  ? `Cierre registrado.${r.comisionAliado != null ? ` Comisión al aliado: ${formatoPesos(r.comisionAliado)}.` : ""}`
+                  : r.mensaje || "No se pudo registrar el cierre.",
+              );
+              await onCambio();
+            }}
+            className="w-full rounded bg-verde-profundo px-2 py-1.5 font-semibold text-crema disabled:opacity-50"
+          >
+            {enviando ? "Registrando…" : "Confirmar cierre"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1038,6 +1038,7 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
       .select(`
         id, fecha, monto_comision, estatus, tipo_comision, expediente_id,
         perfiles:asesor_id(nombre),
+        proveedores:proveedor_id(nombre),
         remisiones_facturas:remision_factura_id(folio),
         expedientes:expediente_id(cliente)
       `)
@@ -1055,12 +1056,18 @@ export async function sincronizarMovimientosHistoricosCRM(): Promise<{
         const monto = Number(com.monto_comision || 0);
         if (monto <= 0) continue;
 
-        const asesorNombre = (com.perfiles as any)?.nombre || "Asesor";
+        // Comisión compartida con un aliado inmobiliario: la contraparte es el aliado.
+        const asesorNombre =
+          com.tipo_comision === "aliado"
+            ? (com as any).proveedores?.nombre || "Aliado"
+            : (com.perfiles as any)?.nombre || "Asesor";
         const remFolio = (com.remisiones_facturas as any)?.folio;
         const clienteExp = (com.expedientes as any)?.cliente;
 
         let concepto = "";
-        if (com.tipo_comision === "inspeccion") {
+        if (com.tipo_comision === "aliado") {
+          concepto = `Comisión compartida ${asesorNombre} - ${clienteExp || "Asesoría de compra"}`;
+        } else if (com.tipo_comision === "inspeccion") {
           concepto = `Comisión ${asesorNombre} - ${clienteExp || "Inspección Técnica"}`;
         } else {
           concepto = `Comisión ${asesorNombre} - ${remFolio || "Venta de Obra"}`;
