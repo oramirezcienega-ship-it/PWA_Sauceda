@@ -23,6 +23,7 @@ import { ModalGenerarRemisionOT } from "./ModalGenerarRemisionOT";
 import { ModalNotificarEntregaOT } from "./ModalNotificarEntregaOT";
 import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
+import { PanelAsesoriaCompraOT } from "./asesoria-compra/PanelAsesoriaCompraOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 import { normalizarTelefono } from "@/lib/telefono";
 
@@ -423,7 +424,7 @@ export function ModuloOrdenesTrabajo({
             onClick={() => setModalCrearOT(true)}
             className="rounded-xl bg-sauce hover:bg-verde-profundo text-white px-3.5 py-2 text-xs font-bold transition shadow-xs flex items-center gap-1.5"
           >
-            <span>+</span> Nueva Orden de Trabajo
+            <span>+</span> Iniciar orden de trabajo
           </button>
         )}
       </div>
@@ -707,7 +708,7 @@ export function ModuloOrdenesTrabajo({
                         </button>
                       )}
 
-                      {!soloLectura && (
+                      {!soloLectura && ot.tipoNegocio !== "asesoria_compra" && (
                         <button
                           type="button"
                           onClick={() =>
@@ -795,8 +796,17 @@ export function ModuloOrdenesTrabajo({
                           </div>
                         )}
 
-                        {/* Contrato de Prestación de Servicios */}
-                        <SeccionContratoOT ordenId={ot.id} tieneCotizacion={Boolean(ot.cotizacionId)} />
+                        {/* Asesoría de compra: etapas, ficha, tareas, aliados y opciones de casas */}
+                        {ot.tipoNegocio === "asesoria_compra" && (
+                          <div className="mb-6">
+                            <PanelAsesoriaCompraOT ordenTrabajoId={ot.id} soloLectura={soloLectura} />
+                          </div>
+                        )}
+
+                        {/* Contrato de Prestación de Servicios (obra; la asesoría no lo usa) */}
+                        {ot.tipoNegocio !== "asesoria_compra" && (
+                          <SeccionContratoOT ordenId={ot.id} tieneCotizacion={Boolean(ot.cotizacionId)} />
+                        )}
 
                         {/* Enlace al Portal Público de Entrega del Cliente */}
                         <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-carbon/10 shadow-2xs">
@@ -928,7 +938,8 @@ export function ModuloOrdenesTrabajo({
                           )}
                         </div>
 
-                        {/* 2. Póliza de Garantía */}
+                        {/* 2. Póliza de Garantía (obra; la asesoría de compra no la usa) */}
+                        {ot.tipoNegocio !== "asesoria_compra" && (
                         <div className="border-t border-carbon/10 pt-4">
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="font-titular text-xs font-bold uppercase tracking-wider text-verde-profundo flex items-center gap-1.5">
@@ -999,6 +1010,7 @@ export function ModuloOrdenesTrabajo({
                             </p>
                           )}
                         </div>
+                        )}
 
                         {/* 3. Remisión de Entrega / Factura Fiscal */}
                         <div className="border-t border-carbon/10 pt-4">

@@ -6,16 +6,7 @@ import type { EtapaId } from "@/lib/types";
  * por líneas. Completadas en verde (✓), la actual en azul, las siguientes en
  * gris. "Perdido" se muestra como estado aparte.
  */
-export function AvanceTraspaso({
-  etapa,
-  tipoNegocio,
-  yaTieneCasa,
-}: {
-  etapa: EtapaId;
-  tipoNegocio?: string | null;
-  /** Asesoría de compra: oculta Búsqueda y Negociación si el cliente ya tiene casa. */
-  yaTieneCasa?: boolean | null;
-}) {
+export function AvanceTraspaso({ etapa, tipoNegocio }: { etapa: EtapaId; tipoNegocio?: string | null }) {
   if (etapa === "perdido") {
     return (
       <div className="rounded-lg border border-rojo/30 bg-rojo/10 px-4 py-3 text-sm text-rojo">
@@ -24,16 +15,13 @@ export function AvanceTraspaso({
     );
   }
 
-  const etapas = obtenerEtapasPorNegocio(tipoNegocio, { yaTieneCasa });
+  const etapas = obtenerEtapasPorNegocio(tipoNegocio);
   const mapa = obtenerEtapasPorId(tipoNegocio);
   
   const actualEtapa = mapa[etapa];
   const actualOrden = actualEtapa ? actualEtapa.orden : 0;
   
-  // En asesoría de compra "En pausa" no es un paso del avance.
-  const pasos = etapas.filter(
-    (e) => e.id !== "perdido" && !(tipoNegocio === "asesoria_compra" && e.id === "en_pausa"),
-  );
+  const pasos = etapas.filter((e) => e.id !== "perdido");
   const ultimo = pasos.length - 1;
 
   return (
@@ -67,7 +55,7 @@ export function AvanceTraspaso({
                         : "bg-carbon/10 text-carbon/40"
                   }`}
                 >
-                  {completada ? "✓" : i + 1}
+                  {completada ? "✓" : p.orden + 1}
                 </span>
                 <span
                   className={`h-0.5 flex-1 ${

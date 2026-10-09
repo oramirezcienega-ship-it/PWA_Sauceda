@@ -20,10 +20,10 @@ import { TarjetaInmueble } from "./TarjetaInmueble";
 import { formatoPesos } from "@/lib/formato";
 
 /**
- * Bandeja "Opciones" del expediente comprador: sugerencias del match con su
+ * Bandeja "Opciones" de la OT de asesoría de compra: sugerencias del match con su
  * score y razones; el asesor las revisa y publica al portal del cliente.
  */
-export function BandejaOpciones({ expedienteId }: { expedienteId: string }) {
+export function BandejaOpciones({ ordenTrabajoId }: { ordenTrabajoId: string }) {
   const [propuestas, setPropuestas] = useState<PropuestaInmueble[]>([]);
   const [cargando, setCargando] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
@@ -32,13 +32,13 @@ export function BandejaOpciones({ expedienteId }: { expedienteId: string }) {
 
   const cargar = useCallback(async () => {
     try {
-      setPropuestas(await listarPropuestas(expedienteId));
+      setPropuestas(await listarPropuestas(ordenTrabajoId));
     } catch (e: any) {
       setAviso(e?.message || "No se pudieron cargar las opciones.");
     } finally {
       setCargando(false);
     }
-  }, [expedienteId]);
+  }, [ordenTrabajoId]);
 
   useEffect(() => {
     void cargar();
@@ -63,7 +63,7 @@ export function BandejaOpciones({ expedienteId }: { expedienteId: string }) {
 
   async function buscar() {
     setTrabajando(true);
-    const r = await generarSugerencias(expedienteId);
+    const r = await generarSugerencias(ordenTrabajoId);
     setTrabajando(false);
     setAviso(r.ok ? `Se evaluaron ${r.evaluados} inmuebles disponibles: ${r.nuevas} sugerencias nuevas.` : r.mensaje || "No se pudo buscar.");
     await cargar();

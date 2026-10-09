@@ -47,11 +47,11 @@ export async function prepararSubidaFoto(nombre: string, carpeta: "internas" | "
   return { ok: true, ruta: data.path, token: data.token };
 }
 
-/** Ronda actual del expediente: la mayor registrada en propuestas o en búsquedas a aliados (o 1). */
-export async function rondaActual(sb: Sb, expedienteId: string): Promise<number> {
+/** Ronda actual de la OT: la mayor registrada en propuestas o en búsquedas a aliados (o 1). */
+export async function rondaActual(sb: Sb, ordenTrabajoId: string): Promise<number> {
   const [{ data: p }, { data: b }] = await Promise.all([
-    sb.from("propuestas_inmuebles").select("ronda").eq("expediente_id", expedienteId).order("ronda", { ascending: false }).limit(1),
-    sb.from("busquedas_aliados").select("ronda").eq("expediente_id", expedienteId).order("ronda", { ascending: false }).limit(1),
+    sb.from("propuestas_inmuebles").select("ronda").eq("orden_trabajo_id", ordenTrabajoId).order("ronda", { ascending: false }).limit(1),
+    sb.from("busquedas_aliados").select("ronda").eq("orden_trabajo_id", ordenTrabajoId).order("ronda", { ascending: false }).limit(1),
   ]);
   return Math.max(p?.[0]?.ronda ?? 1, b?.[0]?.ronda ?? 1);
 }

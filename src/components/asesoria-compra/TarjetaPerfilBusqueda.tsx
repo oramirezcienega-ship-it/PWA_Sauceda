@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { obtenerPerfilBusqueda, guardarPerfilBusqueda } from "@/app/actions/asesoria-compra";
+import { useState } from "react";
+import { guardarFichaAsesoria } from "@/app/actions/asesoria-compra";
+import { ETIQUETA_CREDITO, TIPOS_CREDITO } from "@/lib/asesoria/match";
 import {
   ETIQUETA_FUENTE,
   FUENTES_PRECALIFICACION,
@@ -41,6 +42,7 @@ function MontoInput({
 }
 
 interface Borrador {
+  tipoCredito: string;
   montoCreditoPrecalificado: string;
   montoAhorroPropio: string;
   precalificacionFuente: string;
@@ -55,6 +57,7 @@ interface Borrador {
 
 function aBorrador(p: PerfilBusqueda | null): Borrador {
   return {
+    tipoCredito: p?.tipoCredito ?? "",
     montoCreditoPrecalificado: aTextoMonto(p?.montoCreditoPrecalificado ?? null),
     montoAhorroPropio: aTextoMonto(p?.montoAhorroPropio ?? null),
     precalificacionFuente: p?.precalificacionFuente ?? "",
@@ -69,39 +72,25 @@ function aBorrador(p: PerfilBusqueda | null): Borrador {
 }
 
 /**
- * Tarjeta "Perfil de búsqueda" del expediente de asesoría de compra:
- * precalificación (poder de compra) y criterios para buscar casa.
+ * Ficha de la OT de asesoría de compra: precalificación (poder de compra) y
+ * perfil de búsqueda del comprador.
  */
 export function TarjetaPerfilBusqueda({
-  expedienteId,
+  ordenTrabajoId,
+  perfilInicial,
   onGuardado,
 }: {
-  expedienteId: string;
+  ordenTrabajoId: string;
+  perfilInicial: PerfilBusqueda;
   onGuardado?: () => void | Promise<void>;
 }) {
-  const [perfil, setPerfil] = useState<PerfilBusqueda | null>(null);
-  const [cargando, setCargando] = useState(true);
-  const [editando, setEditando] = useState(false);
-  const [borrador, setBorrador] = useState<Borrador>(aBorrador(null));
+  const [perfil, setPerfil] = useState<PerfilBusqueda | null>(perfilInicial);
+  const cargando = false;
+  // Si aún no hay precalificación, se abre directo en edición.
+  const [editando, setEditando] = useState(perfilInicial.montoCreditoPrecalificado === null);
+  const [borrador, setBorrador] = useState<Borrador>(aBorrador(perfilInicial));
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let vivo = true;
-    obtenerPerfilBusqueda(expedienteId)
-      .then((p) => {
-        if (!vivo) return;
-        setPerfil(p);
-        setBorrador(aBorrador(p));
-        // Si aún no hay precalificación, se abre directo en edición.
-        setEditando(!p || p.montoCreditoPrecalificado === null);
-      })
-      .catch((e) => vivo && setError(e?.message || "No se pudo cargar el perfil."))
-      .finally(() => vivo && setCargando(false));
-    return () => {
-      vivo = false;
-    };
-  }, [expedienteId]);
 
   function set<K extends keyof Borrador>(campo: K, valor: Borrador[K]) {
     setBorrador((b) => ({ ...b, [campo]: valor }));
@@ -110,7 +99,8 @@ export function TarjetaPerfilBusqueda({
   async function guardar() {
     setGuardando(true);
     setError(null);
-    const r = await guardarPerfilBusqueda(expedienteId, {
+    const r = await guardarFichaAsesoria(ordenTrabajoId, {
+      tipoCredito: borrador.tipoCredito,
       montoCreditoPrecalificado: borrador.montoCreditoPrecalificado,
       montoAhorroPropio: borrador.montoAhorroPropio,
       precalificacionFuente: borrador.precalificacionFuente,
@@ -142,7 +132,7 @@ export function TarjetaPerfilBusqueda({
     <section className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-violet-900">🔎 Perfil de búsqueda</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-violet-900">🔎 Ficha: precalificación y perfil de búsqueda</p>
           <p className="text-[11px] text-carbon/50">Precalificación y lo que busca el comprador.</p>
         </div>
         {!cargando && !editando && (
@@ -164,6 +154,7 @@ export function TarjetaPerfilBusqueda({
             <Dato etiqueta="Crédito precalificado" valor={perfil.montoCreditoPrecalificado !== null ? formatoPesos(perfil.montoCreditoPrecalificado) : "—"} />
             <Dato etiqueta="Ahorro propio" valor={perfil.montoAhorroPropio !== null ? formatoPesos(perfil.montoAhorroPropio) : "—"} />
             <Dato etiqueta="Poder de compra" valor={formatoPesos(poderDeCompra(perfil))} resaltar />
+            <Dato etiqueta="Tipo de crédito" valor={perfil.tipoCredito ? ETIQUETA_CREDITO[perfil.tipoCredito] : "—"} />
             <Dato
               etiqueta="Fuente"
               valor={perfil.precalificacionFuente ? ETIQUETA_FUENTE[perfil.precalificacionFuente] : "—"}
@@ -226,6 +217,20 @@ export function TarjetaPerfilBusqueda({
             </Campo>
             <Campo etiqueta="Ahorro propio">
               <MontoInput valor={borrador.montoAhorroPropio} onCambio={(t) => set("montoAhorroPropio", t)} placeholder="$50,000" />
+            </Campo>
+            <Campo etiqueta="Tipo de crédito del cliente">
+              <select
+                value={borrador.tipoCredito}
+                onChange={(e) => set("tipoCredito", e.target.value)}
+                className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
+              >
+                <option value="">Sin definir</option>
+                {TIPOS_CREDITO.map((c) => (
+                  <option key={c} value={c}>
+                    {ETIQUETA_CREDITO[c]}
+                  </option>
+                ))}
+              </select>
             </Campo>
             <Campo etiqueta="Fuente de la precalificación">
               <select

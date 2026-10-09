@@ -300,12 +300,33 @@ export interface AliadoParaBusqueda {
   motivo: string | null;
 }
 
-/** Aliados para el panel "Lanzar búsqueda", con preselección por zona y bloqueo sin convenio. */
-export async function aliadosParaExpediente(expedienteId: string): Promise<AliadoParaBusqueda[]> {
+/** OT de asesoría con su ficha y el asesor de su expediente. */
+async function ordenConFicha(sb: Sb, ordenTrabajoId: string) {
+  const { data: ot } = await sb
+    .from("ordenes_trabajo")
+    .select("id, folio, expediente_id, tipo_negocio, asesor_responsable_id")
+    .eq("id", ordenTrabajoId)
+    .maybeSingle();
+  if (!ot || ot.tipo_negocio !== "asesoria_compra") return null;
+  const [{ data: ficha }, { data: exp }] = await Promise.all([
+    sb.from("ot_ficha_asesoria_compra").select("*").eq("orden_trabajo_id", ot.id).maybeSingle(),
+    ot.expediente_id
+      ? sb.from("expedientes").select("asesor_id").eq("id", ot.expediente_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  return {
+    ot,
+    ficha: (ficha as Record<string, any>) || { ya_tiene_casa: false },
+    asesorId: (exp as any)?.asesor_id || ot.asesor_responsable_id || null,
+  };
+}
+
+/** Aliados para el panel "Lanzar búsqueda" de la OT, con preselección por zona y bloqueo sin convenio. */
+export async function aliadosParaOrden(ordenTrabajoId: string): Promise<AliadoParaBusqueda[]> {
   await requireAdmin();
   const sb = supabaseServidor();
-  const [{ data: exp }, { data: provs }] = await Promise.all([
-    sb.from("expedientes").select("busqueda_zonas").eq("id", expedienteId).maybeSingle(),
+  const [orden, { data: provs }] = await Promise.all([
+    ordenConFicha(sb, ordenTrabajoId),
     sb
       .from("proveedores")
       .select("id, nombre, zonas_cobertura, convenio_estatus, calificacion, telegram_chat_id, activo")
@@ -323,7 +344,7 @@ export async function aliadosParaExpediente(expedienteId: string): Promise<Aliad
         convenioEstatus: p.convenio_estatus,
         calificacion: p.calificacion != null ? Number(p.calificacion) : null,
         telegramVinculado: Boolean(p.telegram_chat_id),
-        sugerido: habilitado && zonasSeCruzan(p.zonas_cobertura, exp?.busqueda_zonas),
+        sugerido: habilitado && zonasSeCruzan(p.zonas_cobertura, orden?.ficha.busqueda_zonas),
         habilitado,
         motivo: habilitado ? null : p.convenio_estatus === "suspendido" ? "Convenio suspendido" : "Sin convenio firmado",
       };
@@ -350,15 +371,15 @@ export interface BusquedaAliado {
   whatsappAliado: string | null;
 }
 
-/** Estado de cada solicitud a aliados del expediente. */
-export async function listarBusquedasExpediente(expedienteId: string): Promise<BusquedaAliado[]> {
+/** Estado de cada solicitud a aliados de la OT. */
+export async function listarBusquedasOrden(ordenTrabajoId: string): Promise<BusquedaAliado[]> {
   await requireAdmin();
   const sb = supabaseServidor();
   await marcarVencidas(sb);
   const { data, error } = await sb
     .from("busquedas_aliados")
     .select("*, aliado:aliado_id(nombre, token_carga, whatsapp, telefono)")
-    .eq("expediente_id", expedienteId)
+    .eq("orden_trabajo_id", ordenTrabajoId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map((b: any) => {
@@ -400,7 +421,7 @@ export interface ResultadoLanzarBusqueda {
  * Telegram la solicitud con el link de carga. Solo aliados con convenio firmado.
  */
 export async function lanzarBusqueda(
-  expedienteId: string,
+  ordenTrabajoId: string,
   aliadoIds: string[],
   opciones: { nuevaRonda?: boolean } = {},
 ): Promise<ResultadoLanzarBusqueda> {
@@ -412,15 +433,17 @@ export async function lanzarBusqueda(
     if (ids.length === 0) return { ...r, mensaje: "Selecciona al menos un aliado." };
 
     const sb = supabaseServidor();
-    const { data: exp } = await sb.from("expedientes").select("*").eq("id", expedienteId).maybeSingle();
-    if (!exp) return { ...r, mensaje: "El expediente no existe." };
-    if (exp.tipo_negocio !== "asesoria_compra") return { ...r, mensaje: "Solo aplica a expedientes de asesoría de compra." };
+    const orden = await ordenConFicha(sb, ordenTrabajoId);
+    if (!orden) return { ...r, mensaje: "Solo aplica a órdenes de trabajo de asesoría de compra." };
+    if (!orden.ot.expediente_id) return { ...r, mensaje: "La orden no está ligada a un expediente." };
+    const expedienteId = orden.ot.expediente_id as string;
+    const ficha = orden.ficha;
     const compuerta = validarCompuertaEtapa(
       {
-        tipoNegocio: exp.tipo_negocio,
-        montoCreditoPrecalificado: exp.monto_credito_precalificado,
-        busquedaZonas: exp.busqueda_zonas,
-        yaTieneCasa: exp.ya_tiene_casa,
+        tipoNegocio: "asesoria_compra",
+        montoCreditoPrecalificado: ficha.monto_credito_precalificado,
+        busquedaZonas: ficha.busqueda_zonas,
+        yaTieneCasa: ficha.ya_tiene_casa,
       },
       "busqueda",
     );
@@ -438,8 +461,9 @@ export async function lanzarBusqueda(
       return { ...r, mensaje: "Ninguno de los aliados seleccionados tiene convenio firmado." };
     }
 
-    const ronda = (await rondaActual(sb, expedienteId)) + (opciones.nuevaRonda ? 1 : 0);
-    const criterios = construirCriteriosSnapshot(exp);
+    const ronda = (await rondaActual(sb, ordenTrabajoId)) + (opciones.nuevaRonda ? 1 : 0);
+    // Solo criterios de la ficha (lista blanca): nunca datos personales del cliente.
+    const criterios = construirCriteriosSnapshot(ficha);
     const fechaLimite = new Date(Date.now() + HORAS_LIMITE_BUSQUEDA * 3600 * 1000).toISOString();
     const { botToken } = await obtenerConfiguracionTelegram(sb);
 
@@ -452,6 +476,7 @@ export async function lanzarBusqueda(
       const { data: busqueda, error } = await sb
         .from("busquedas_aliados")
         .insert({
+          orden_trabajo_id: ordenTrabajoId,
           expediente_id: expedienteId,
           aliado_id: p.id,
           ronda,
@@ -493,7 +518,7 @@ export async function lanzarBusqueda(
     await registrarActividad(sb, {
       expedienteId,
       tipo: "sistema",
-      titulo: `📨 Búsqueda enviada a ${r.enviadas} aliado${r.enviadas === 1 ? "" : "s"} (ronda ${ronda})`,
+      titulo: `📨 Orden ${orden.ot.folio}: búsqueda enviada a ${r.enviadas} aliado${r.enviadas === 1 ? "" : "s"} (ronda ${ronda})`,
       detalle: [
         `Por Telegram: ${r.porTelegram}.`,
         r.manuales.length ? `Compartir a mano: ${r.manuales.join(", ")}.` : null,
@@ -507,7 +532,7 @@ export async function lanzarBusqueda(
     const { data: tareas } = await sb
       .from("bpm_expediente_tareas")
       .select("id, estado, paso:paso_id(titulo_tarea)")
-      .eq("expediente_id", expedienteId)
+      .eq("orden_trabajo_id", ordenTrabajoId)
       .eq("estado", "pendiente");
     const tarea = (tareas ?? []).find((t: any) => t.paso?.titulo_tarea === "Enviar solicitud a aliados de la zona");
     if (tarea) {
@@ -515,7 +540,7 @@ export async function lanzarBusqueda(
       await actualizarEstadoTarea(tarea.id, "completada");
     }
 
-    revalidatePath(`/expediente/${expedienteId}`);
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
     return { ...r, ok: true };
   } catch (err) {
     console.error("[lanzarBusqueda]", err);
@@ -549,7 +574,7 @@ async function busquedaDelAliado(sb: Sb, aliadoId: string, busquedaId: string | 
   if (!busquedaId || !/^[0-9a-f-]{36}$/i.test(busquedaId)) return null;
   const { data } = await sb
     .from("busquedas_aliados")
-    .select("id, expediente_id, aliado_id, ronda, criterios_snapshot, estado, fecha_limite, inmuebles_recibidos, respondida_at")
+    .select("id, expediente_id, orden_trabajo_id, aliado_id, ronda, criterios_snapshot, estado, fecha_limite, inmuebles_recibidos, respondida_at")
     .eq("id", busquedaId)
     .eq("aliado_id", aliadoId)
     .maybeSingle();
@@ -609,7 +634,15 @@ export async function prepararSubidaFotoAliado(
 /** Notifica al asesor del expediente (o al grupo) que llegó una casa de un aliado. */
 async function notificarCasaRecibida(
   sb: Sb,
-  datos: { aliado: string; folio: string; precio: number; zona: string | null; expedienteId: string | null; asesorId: string | null },
+  datos: {
+    aliado: string;
+    folio: string;
+    precio: number;
+    zona: string | null;
+    ordenTrabajoId: string | null;
+    ordenFolio: string | null;
+    asesorId: string | null;
+  },
 ) {
   try {
     const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
@@ -621,7 +654,7 @@ async function notificarCasaRecibida(
     }
     chatId = chatId || chatIdGrupo || null;
     if (!chatId) return;
-    const destino = datos.expedienteId ? `${SITE_URL()}/expediente/${datos.expedienteId}` : `${SITE_URL()}/inventario`;
+    const destino = datos.ordenTrabajoId ? `${SITE_URL()}/ordenes-trabajo/${datos.ordenTrabajoId}` : `${SITE_URL()}/inventario`;
     await enviarMensajeTelegram({
       botToken,
       chatId,
@@ -629,7 +662,7 @@ async function notificarCasaRecibida(
       texto: [
         `🏠 <b>${datos.aliado}</b> subió una casa: <b>${datos.folio}</b>`,
         `💰 ${formatoPesos(datos.precio)}${datos.zona ? ` · 📍 ${datos.zona}` : ""}`,
-        datos.expedienteId ? `Para el expediente <b>${datos.expedienteId}</b>: revísala en la bandeja Opciones.` : "Queda por validar en Inventario.",
+        datos.ordenTrabajoId ? `Para la orden <b>${datos.ordenFolio ?? ""}</b>: revísala en la bandeja Opciones.` : "Queda por validar en Inventario.",
       ].join("\n"),
       inlineKeyboard: [[{ text: "Abrir en el CRM", url: destino }]],
     });
@@ -673,6 +706,7 @@ export async function enviarInmuebleAliado(
     if (error || !inm) throw new Error(error?.message || "No se pudo guardar la casa.");
 
     let asesorId: string | null = null;
+    let ordenFolio: string | null = null;
     if (b) {
       await sb
         .from("busquedas_aliados")
@@ -683,14 +717,16 @@ export async function enviarInmuebleAliado(
         })
         .eq("id", b.id);
 
-      const { data: exp } = await sb.from("expedientes").select("*").eq("id", b.expediente_id).maybeSingle();
-      if (exp) {
-        asesorId = exp.asesor_id;
-        const perfil: PerfilMatch = { ...filaAPerfil(exp), tipoCredito: exp.tipo_credito ?? null };
+      const orden = await ordenConFicha(sb, b.orden_trabajo_id);
+      if (orden) {
+        asesorId = orden.asesorId;
+        ordenFolio = orden.ot.folio;
+        const perfil: PerfilMatch = { ...filaAPerfil(orden.ficha), tipoCredito: orden.ficha.tipo_credito ?? null };
         // Se puntúa como si ya estuviera validada; el asesor la valida al publicar.
         const match = calcularMatch(perfil, { ...inm, origen: "aliado", estatus: "disponible", precio: Number(inm.precio) });
         await sb.from("propuestas_inmuebles").upsert(
           {
+            orden_trabajo_id: b.orden_trabajo_id,
             expediente_id: b.expediente_id,
             inmueble_id: inm.id,
             busqueda_id: b.id,
@@ -699,12 +735,12 @@ export async function enviarInmuebleAliado(
             razones_match: ["⚠ Casa de aliado por validar", ...match.razones],
             estatus: "sugerida",
           },
-          { onConflict: "expediente_id,inmueble_id", ignoreDuplicates: true },
+          { onConflict: "orden_trabajo_id,inmueble_id", ignoreDuplicates: true },
         );
         await registrarActividad(sb, {
           expedienteId: b.expediente_id,
           tipo: "sistema",
-          titulo: `🏠 ${aliado.nombre} envió la casa ${inm.folio}`,
+          titulo: `🏠 Orden ${orden.ot.folio}: ${aliado.nombre} envió la casa ${inm.folio}`,
           detalle: `${formatoPesos(Number(inm.precio))}${inm.fraccionamiento || inm.zona ? ` en ${inm.fraccionamiento || inm.zona}` : ""}. Match ${match.score}${match.cumple ? "" : " (no cumple algún filtro)"}.`,
         });
       }
@@ -715,7 +751,8 @@ export async function enviarInmuebleAliado(
       folio: inm.folio,
       precio: Number(inm.precio),
       zona: inm.fraccionamiento || inm.zona,
-      expedienteId: b?.expediente_id ?? null,
+      ordenTrabajoId: b?.orden_trabajo_id ?? null,
+      ordenFolio,
       asesorId,
     });
 

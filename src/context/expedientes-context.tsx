@@ -12,7 +12,6 @@ import {
 import { usePathname } from "next/navigation";
 import type { DatosExpediente, EtapaId, Expediente, CalificacionProspecto } from "@/lib/types";
 import * as acciones from "@/app/actions/expedientes";
-import { validarCambioEtapa } from "@/app/actions/asesoria-compra";
 
 /**
  * Estado de los expedientes respaldado por Supabase (Incremento 3).
@@ -130,30 +129,8 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
     }
   }, [pathname, recargar]);
 
-  /**
-   * Asesoría de compra: compuerta de precalificación. Avisa antes de mover
-   * (el servidor la vuelve a validar y rechaza el cambio si no se cumple).
-   */
-  const compuertaPermite = useCallback(
-    async (ids: string[], etapa: EtapaId) => {
-      const sujetos = expedientes.filter((e) => ids.includes(e.id) && e.tipoNegocio === "asesoria_compra");
-      for (const exp of sujetos) {
-        const r = await validarCambioEtapa(exp.id, etapa);
-        if (!r.ok) {
-          if (typeof window !== "undefined") {
-            window.alert(sujetos.length > 1 ? `${exp.id}: ${r.mensaje}` : r.mensaje);
-          }
-          return false;
-        }
-      }
-      return true;
-    },
-    [expedientes],
-  );
-
   const moverEtapa = useCallback(
     async (id: string, etapa: EtapaId) => {
-      if (!(await compuertaPermite([id], etapa))) return;
       const hoy = new Date().toISOString().slice(0, 10);
       // Optimista: actualizamos la UI de inmediato.
       setExpedientes((prev) =>
@@ -168,13 +145,12 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
         await recargar(); // revertimos al estado real
       }
     },
-    [recargar, compuertaPermite],
+    [recargar],
   );
 
   const moverEtapaMasivo = useCallback(
     async (ids: string[], etapa: EtapaId) => {
       if (ids.length === 0) return;
-      if (!(await compuertaPermite(ids, etapa))) return;
       const hoy = new Date().toISOString().slice(0, 10);
       // Optimista: actualizamos todas las filas seleccionadas de inmediato.
       setExpedientes((prev) =>
@@ -191,7 +167,7 @@ export function ExpedientesProvider({ children }: { children: ReactNode }) {
         await recargar();
       }
     },
-    [recargar, compuertaPermite],
+    [recargar],
   );
 
   const asignarAsesorMasivo = useCallback(

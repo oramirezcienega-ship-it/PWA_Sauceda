@@ -27,6 +27,7 @@ import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { SeccionContratoOT } from "./SeccionContratoOT";
 import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
+import { PanelAsesoriaCompraOT } from "./asesoria-compra/PanelAsesoriaCompraOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface DetalleOrdenTrabajoProps {
@@ -628,8 +629,13 @@ export function DetalleOrdenTrabajo({
         />
       )}
 
-      {/* 3c. Contrato de Prestación de Servicios */}
-      <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
+      {/* 3b'. Asesoría de compra: etapas, ficha, tareas, aliados y opciones de casas */}
+      {orden.tipoNegocio === "asesoria_compra" && <PanelAsesoriaCompraOT ordenTrabajoId={orden.id} soloLectura={soloLectura} />}
+
+      {/* 3c. Contrato de Prestación de Servicios (obra; la asesoría de compra no lo usa) */}
+      {orden.tipoNegocio !== "asesoria_compra" && (
+        <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
+      )}
 
       {/* 4. Grid de Módulos: Recibos Oficiales & Póliza de Garantía */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

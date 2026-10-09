@@ -4,7 +4,10 @@
  * Server actions de la asesoría y acompañamiento al comprador de vivienda
  * (`tipo_negocio = 'asesoria_compra'`).
  *
- * Fase 1: perfil de búsqueda y compuerta de precalificación.
+ * La operación vive en la ORDEN DE TRABAJO de tipo `asesoria_compra`: su ficha
+ * (`ot_ficha_asesoria_compra`), sus etapas (`ot_etapas`), su flujo BPM, sus
+ * opciones de casas y búsquedas a aliados. El expediente solo guarda la
+ * información básica del negocio con el prospecto.
  */
 
 import { revalidatePath } from "next/cache";
@@ -12,7 +15,14 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { registrarActividad } from "@/lib/actividades";
 import { formatoPesos } from "@/lib/formato";
-import { validarCompuertaEtapa, type ResultadoCompuerta } from "@/lib/asesoria/compuerta";
+import { validarCompuertaEtapa } from "@/lib/asesoria/compuerta";
+import {
+  ETAPAS_ASESORIA_COMPRA_OT,
+  etapasAplicables,
+  filaAEtapaOT,
+  normalizarEtapaActual,
+  type EtapaOT,
+} from "@/lib/asesoria/etapas-ot";
 import {
   normalizarPerfil,
   perfilAFila,
@@ -23,6 +33,7 @@ import {
   type PerfilBusqueda,
 } from "@/lib/asesoria/perfil";
 import {
+  normalizarCredito,
   rankearInmuebles,
   type OrigenInmueble,
   type PerfilMatch,
@@ -57,27 +68,126 @@ import {
   type MotivoDescarte,
 } from "@/lib/asesoria/inmuebles";
 
-const COLUMNAS_PERFIL =
-  "id, tipo_negocio, asesor_id, operador_id, etapa, busqueda_zonas, busqueda_precio_min, busqueda_precio_max, " +
-  "monto_credito_precalificado, monto_ahorro_propio, busqueda_recamaras_min, busqueda_requisitos, " +
-  "precalificacion_fecha, precalificacion_fuente, ya_tiene_casa";
 
-/** Asesor y operaciones solo pueden tocar sus propios expedientes (misma regla que `actualizarExpediente`). */
-async function verificarAcceso(exp: { asesor_id: string | null; operador_id: string | null }) {
+// ============================================================================
+// Orden de trabajo de asesoría de compra: ficha, etapas y compuerta
+// (el expediente solo guarda la información básica del negocio)
+// ============================================================================
+
+const TIPO_OT = "asesoria_compra";
+
+interface ContextoOrden {
+  ot: Record<string, any>;
+  ficha: Record<string, any>;
+  exp: Record<string, any> | null;
+  etapas: EtapaOT[];
+  aplicables: EtapaOT[];
+}
+
+/** Carga la OT de asesoría con su ficha, su expediente y sus etapas aplicables. */
+async function cargarOrden(sb: Sb, ordenTrabajoId: string): Promise<ContextoOrden | null> {
+  const { data: ot } = await sb
+    .from("ordenes_trabajo")
+    .select("id, folio, expediente_id, prospecto_id, tipo_negocio, etapa, estatus, token, asesor_responsable_id, asesor_ejecutor_id")
+    .eq("id", ordenTrabajoId)
+    .maybeSingle();
+  if (!ot || ot.tipo_negocio !== TIPO_OT) return null;
+  const [{ data: ficha }, { data: exp }, { data: filasEtapas }] = await Promise.all([
+    sb.from("ot_ficha_asesoria_compra").select("*").eq("orden_trabajo_id", ot.id).maybeSingle(),
+    ot.expediente_id
+      ? sb.from("expedientes").select("id, cliente, telefono, token, asesor_id, operador_id, tipo_credito").eq("id", ot.expediente_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    sb.from("ot_etapas").select("*").eq("tipo_negocio", TIPO_OT),
+  ]);
+  const etapas = (filasEtapas ?? []).length ? (filasEtapas ?? []).map(filaAEtapaOT) : ETAPAS_ASESORIA_COMPRA_OT;
+  const f = (ficha as Record<string, any>) || { orden_trabajo_id: ot.id, ya_tiene_casa: false };
+  return { ot, ficha: f, exp: exp as any, etapas, aplicables: etapasAplicables(etapas, f) };
+}
+
+/** Asesor y operaciones solo pueden tocar sus propias órdenes (las de sus expedientes). */
+async function verificarAccesoOrden(ctx: ContextoOrden) {
   const usuario = await usuarioActual();
   if (!usuario) throw new Error("No autorizado.");
   const { rol } = await rolDe(usuario.id);
-  if (rol === "asesor" && exp.asesor_id !== usuario.id) throw new Error("No estás autorizado para modificar este expediente.");
-  if (rol === "operaciones" && exp.operador_id !== usuario.id) throw new Error("No estás autorizado para modificar este expediente.");
+  if (rol === "asesor" && ctx.exp?.asesor_id !== usuario.id && ctx.ot.asesor_responsable_id !== usuario.id) {
+    throw new Error("No estás autorizado para modificar esta orden de trabajo.");
+  }
+  if (rol === "operaciones" && ctx.exp?.operador_id !== usuario.id && ctx.ot.asesor_ejecutor_id !== usuario.id) {
+    throw new Error("No estás autorizado para modificar esta orden de trabajo.");
+  }
 }
 
-/** Lee el perfil de búsqueda del expediente. */
-export async function obtenerPerfilBusqueda(expedienteId: string): Promise<PerfilBusqueda | null> {
+/** Acceso por la propuesta (que pertenece a una OT). */
+async function verificarAccesoPropuesta(sb: Sb, ordenTrabajoId: string) {
+  const ctx = await cargarOrden(sb, ordenTrabajoId);
+  if (ctx) await verificarAccesoOrden(ctx);
+  return ctx;
+}
+
+export interface OrdenAsesoria {
+  id: string;
+  folio: string;
+  expedienteId: string | null;
+  estatus: string;
+  etapa: string | null;
+  etapas: EtapaOT[];
+  perfil: PerfilBusqueda;
+}
+
+/** Ficha y etapas de la OT de asesoría (para el panel de la OT). */
+export async function obtenerOrdenAsesoria(ordenTrabajoId: string): Promise<OrdenAsesoria | null> {
   await requireAdmin();
-  const sb = supabaseServidor();
-  const { data, error } = await sb.from("expedientes").select(COLUMNAS_PERFIL).eq("id", expedienteId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? filaAPerfil(data as Record<string, any>) : null;
+  const ctx = await cargarOrden(supabaseServidor(), ordenTrabajoId);
+  if (!ctx) return null;
+  return {
+    id: ctx.ot.id,
+    folio: ctx.ot.folio,
+    expedienteId: ctx.ot.expediente_id,
+    estatus: ctx.ot.estatus,
+    etapa: ctx.ot.etapa,
+    etapas: ctx.aplicables,
+    perfil: filaAPerfil(ctx.ficha),
+  };
+}
+
+/**
+ * Al iniciar una OT de asesoría: crea su ficha (el tipo de crédito se toma del
+ * expediente), la deja en su primera etapa e instancia su flujo BPM.
+ * La llama `crearOrdenTrabajo`; la OT ya existe y quien la crea ya tiene sesión.
+ */
+export async function inicializarOrdenAsesoria(
+  ordenTrabajoId: string,
+  opciones: { yaTieneCasa?: boolean } = {},
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: ot } = await sb
+      .from("ordenes_trabajo")
+      .select("id, expediente_id, tipo_negocio")
+      .eq("id", ordenTrabajoId)
+      .maybeSingle();
+    if (!ot || ot.tipo_negocio !== TIPO_OT) return { ok: false, mensaje: "La orden no es de asesoría de compra." };
+    const { data: exp } = ot.expediente_id
+      ? await sb.from("expedientes").select("tipo_credito").eq("id", ot.expediente_id).maybeSingle()
+      : { data: null };
+    const { error } = await sb.from("ot_ficha_asesoria_compra").upsert(
+      {
+        orden_trabajo_id: ot.id,
+        ya_tiene_casa: Boolean(opciones.yaTieneCasa),
+        tipo_credito: normalizarCredito(exp?.tipo_credito) ?? null,
+      },
+      { onConflict: "orden_trabajo_id", ignoreDuplicates: true },
+    );
+    if (error) throw new Error(error.message);
+    await sb.from("ordenes_trabajo").update({ etapa: "precalificacion", estatus: "en_proceso" }).eq("id", ot.id).is("etapa", null);
+    const { instanciarFlujoEnOrden } = await import("@/app/actions/bpm");
+    await instanciarFlujoEnOrden(ot.id);
+    return { ok: true };
+  } catch (err) {
+    console.error("[inicializarOrdenAsesoria]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo inicializar la orden." };
+  }
 }
 
 export type ResultadoGuardarPerfil =
@@ -85,52 +195,40 @@ export type ResultadoGuardarPerfil =
   | { ok: false; mensaje: string };
 
 /**
- * Guarda el perfil de búsqueda. Si cambia "ya tiene casa", ajusta las tareas
- * BPM (agrega o cancela las de búsqueda y negociación). No lanza: devuelve el
+ * Guarda la ficha (precalificación y perfil de búsqueda) de la OT. Si cambia
+ * "ya tiene casa", ajusta las tareas BPM y la etapa. No lanza: devuelve el
  * error como dato para mostrarlo en la tarjeta.
  */
-export async function guardarPerfilBusqueda(
-  expedienteId: string,
+export async function guardarFichaAsesoria(
+  ordenTrabajoId: string,
   entrada: EntradaPerfil,
 ): Promise<ResultadoGuardarPerfil> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
-    const { data: antes, error: errAntes } = await sb
-      .from("expedientes")
-      .select(COLUMNAS_PERFIL)
-      .eq("id", expedienteId)
-      .maybeSingle();
-    if (errAntes) throw new Error(errAntes.message);
-    if (!antes) return { ok: false, mensaje: "El expediente no existe." };
-    const filaAntes = antes as Record<string, any>;
-    await verificarAcceso(filaAntes as any);
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
 
     const r = normalizarPerfil(entrada);
     if (!r.ok) return { ok: false, mensaje: r.errores.join(" ") };
+    const p = r.perfil;
 
-    // Con el cliente ya en búsqueda o negociación, el perfil no puede quedar
-    // sin precalificación ni zonas (sería saltarse la compuerta).
-    if (filaAntes.tipo_negocio === "asesoria_compra") {
+    // Con la OT ya en búsqueda o negociación, la ficha no puede quedar sin
+    // precalificación ni zonas (sería saltarse la compuerta).
+    if (!p.yaTieneCasa) {
       const compuerta = validarCompuertaEtapa(
-        {
-          tipoNegocio: filaAntes.tipo_negocio,
-          montoCreditoPrecalificado: r.perfil.montoCreditoPrecalificado,
-          busquedaZonas: r.perfil.busquedaZonas,
-          yaTieneCasa: r.perfil.yaTieneCasa,
-        },
-        filaAntes.etapa,
+        { tipoNegocio: TIPO_OT, montoCreditoPrecalificado: p.montoCreditoPrecalificado, busquedaZonas: p.busquedaZonas, yaTieneCasa: false },
+        ctx.ot.etapa ?? "",
       );
       if (!compuerta.ok) return { ok: false, mensaje: compuerta.mensaje };
     }
 
     const { error } = await sb
-      .from("expedientes")
-      .update({ ...perfilAFila(r.perfil), ultimo_movimiento: new Date().toISOString().slice(0, 10) })
-      .eq("id", expedienteId);
+      .from("ot_ficha_asesoria_compra")
+      .upsert({ orden_trabajo_id: ordenTrabajoId, ...perfilAFila(p) }, { onConflict: "orden_trabajo_id" });
     if (error) throw new Error(error.message);
 
-    const p = r.perfil;
     const detalle = [
       p.montoCreditoPrecalificado !== null ? `Crédito precalificado ${formatoPesos(p.montoCreditoPrecalificado)}` : null,
       p.montoAhorroPropio !== null ? `ahorro ${formatoPesos(p.montoAhorroPropio)}` : null,
@@ -144,45 +242,98 @@ export async function guardarPerfilBusqueda(
     ]
       .filter(Boolean)
       .join(" · ");
-    await registrarActividad(sb, {
-      expedienteId,
-      tipo: "sistema",
-      titulo: "🔎 Perfil de búsqueda actualizado",
-      detalle,
-    });
-
-    if (Boolean(filaAntes.ya_tiene_casa) !== p.yaTieneCasa) {
-      const { reevaluarCondicionesBpm } = await import("@/app/actions/bpm");
-      await reevaluarCondicionesBpm(expedienteId);
+    if (ctx.ot.expediente_id) {
+      await registrarActividad(sb, {
+        expedienteId: ctx.ot.expediente_id,
+        tipo: "sistema",
+        titulo: `🔎 Ficha de la orden ${ctx.ot.folio} actualizada`,
+        detalle,
+      });
     }
 
-    revalidatePath(`/expediente/${expedienteId}`);
+    if (Boolean(ctx.ficha.ya_tiene_casa) !== p.yaTieneCasa) {
+      const { reevaluarCondicionesBpm } = await import("@/app/actions/bpm");
+      await reevaluarCondicionesBpm(ordenTrabajoId);
+      // Si la etapa actual dejó de aplicar (p. ej. Búsqueda), avanza a la siguiente que sí aplica.
+      const fichaNueva = { ...ctx.ficha, ya_tiene_casa: p.yaTieneCasa };
+      const etapa = normalizarEtapaActual(ctx.etapas, etapasAplicables(ctx.etapas, fichaNueva), ctx.ot.etapa);
+      if (etapa !== ctx.ot.etapa) await sb.from("ordenes_trabajo").update({ etapa }).eq("id", ordenTrabajoId);
+    }
+
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
     return { ok: true, perfil: p };
   } catch (err) {
-    console.error("[guardarPerfilBusqueda]", err);
-    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo guardar el perfil." };
+    console.error("[guardarFichaAsesoria]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo guardar la ficha." };
   }
 }
 
 /**
- * Valida la compuerta antes de mover de etapa (para avisar en la UI).
- * La validación definitiva vive en `moverEtapa`, que lanza si no se cumple.
+ * Cambia la etapa de la OT de asesoría. Aplica la compuerta (no pasa a
+ * Búsqueda sin monto precalificado y zonas) y, al entrar a Búsqueda, cruza el
+ * perfil contra el inventario. La etapa final deja la OT completada.
  */
-export async function validarCambioEtapa(expedienteId: string, etapa: string): Promise<ResultadoCompuerta> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-  const { data } = await sb.from("expedientes").select(COLUMNAS_PERFIL).eq("id", expedienteId).maybeSingle();
-  if (!data) return { ok: true };
-  const f = data as Record<string, any>;
-  return validarCompuertaEtapa(
-    {
-      tipoNegocio: f.tipo_negocio,
-      montoCreditoPrecalificado: f.monto_credito_precalificado,
-      busquedaZonas: f.busqueda_zonas,
-      yaTieneCasa: f.ya_tiene_casa,
-    },
-    etapa,
-  );
+export async function cambiarEtapaOrdenAsesoria(
+  ordenTrabajoId: string,
+  etapa: string,
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+    const destino = ctx.aplicables.find((e) => e.clave === etapa);
+    if (!destino) return { ok: false, mensaje: "Esa etapa no aplica a esta orden de trabajo." };
+    const compuerta = validarCompuertaEtapa(
+      {
+        tipoNegocio: TIPO_OT,
+        montoCreditoPrecalificado: ctx.ficha.monto_credito_precalificado,
+        busquedaZonas: ctx.ficha.busqueda_zonas,
+        yaTieneCasa: ctx.ficha.ya_tiene_casa,
+      },
+      etapa,
+    );
+    if (!compuerta.ok) return { ok: false, mensaje: compuerta.mensaje };
+
+    const cambios: Record<string, any> = { etapa, updated_at: new Date().toISOString() };
+    if (destino.esFinal) {
+      cambios.estatus = "completada";
+      cambios.fecha_conclusion = new Date().toISOString();
+    } else if (ctx.ot.estatus === "pendiente" || ctx.ot.estatus === "completada") {
+      cambios.estatus = "en_proceso";
+      cambios.fecha_conclusion = null;
+    }
+    const { error } = await sb.from("ordenes_trabajo").update(cambios).eq("id", ordenTrabajoId);
+    if (error) throw new Error(error.message);
+
+    if (ctx.ot.expediente_id) {
+      await registrarActividad(sb, {
+        expedienteId: ctx.ot.expediente_id,
+        tipo: "etapa",
+        titulo: `Orden ${ctx.ot.folio}: ${destino.nombre}`,
+      });
+    }
+    if (etapa === "busqueda") await generarSugerencias(ordenTrabajoId);
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo cambiar la etapa." };
+  }
+}
+
+/** Completa una tarea BPM pendiente de la OT por el título de su paso (pasos automáticos). */
+async function completarTareaOrden(sb: Sb, ordenTrabajoId: string, tituloPaso: string) {
+  const { data: tareas } = await sb
+    .from("bpm_expediente_tareas")
+    .select("id, estado, paso:paso_id(titulo_tarea)")
+    .eq("orden_trabajo_id", ordenTrabajoId)
+    .eq("estado", "pendiente");
+  const tarea = (tareas ?? []).find((t: any) => t.paso?.titulo_tarea === tituloPaso);
+  if (tarea) {
+    const { actualizarEstadoTarea } = await import("@/app/actions/bpm");
+    await actualizarEstadoTarea(tarea.id, "completada");
+  }
 }
 
 // ============================================================================
@@ -455,6 +606,7 @@ export async function obtenerInmuebleDeExpediente(expedienteId: string): Promise
 export interface PropuestaInmueble {
   id: string;
   expedienteId: string;
+  ordenTrabajoId: string;
   ronda: number;
   scoreMatch: number | null;
   razonesMatch: string[];
@@ -468,85 +620,68 @@ export interface PropuestaInmueble {
   inmueble: Inmueble;
 }
 
-/** Perfil de match del expediente comprador. */
-async function perfilMatchDeExpediente(sb: Sb, expedienteId: string) {
-  const { data } = await sb
-    .from("expedientes")
-    .select(COLUMNAS_PERFIL + ", tipo_credito")
-    .eq("id", expedienteId)
-    .maybeSingle();
-  if (!data) return null;
-  const f = data as Record<string, any>;
-  const p = filaAPerfil(f);
-  const perfil: PerfilMatch = { ...p, tipoCredito: f.tipo_credito ?? null };
-  return { fila: f, perfil };
+/** Perfil de match a partir de la ficha de la OT. */
+function perfilMatchDeFicha(ficha: Record<string, any>): PerfilMatch {
+  return { ...filaAPerfil(ficha), tipoCredito: ficha.tipo_credito ?? null };
 }
 
 /**
- * Cruza el perfil del comprador contra el inventario disponible y guarda las
+ * Cruza la ficha de la OT contra el inventario disponible y guarda las
  * coincidencias como propuestas `sugerida` (solo las ve SAUCEDA). No duplica
  * inmuebles ya propuestos. Completa la tarea BPM "Cruzar perfil contra
  * inventario propio" si estaba pendiente.
  */
 export async function generarSugerencias(
-  expedienteId: string,
+  ordenTrabajoId: string,
 ): Promise<{ ok: boolean; nuevas: number; evaluados: number; mensaje?: string }> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
-    const datos = await perfilMatchDeExpediente(sb, expedienteId);
-    if (!datos) return { ok: false, nuevas: 0, evaluados: 0, mensaje: "El expediente no existe." };
-    if (datos.fila.tipo_negocio !== "asesoria_compra") {
-      return { ok: false, nuevas: 0, evaluados: 0, mensaje: "Solo aplica a expedientes de asesoría de compra." };
-    }
-    if (datos.fila.ya_tiene_casa) {
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, nuevas: 0, evaluados: 0, mensaje: "La orden de trabajo no existe." };
+    if (!ctx.ot.expediente_id) return { ok: false, nuevas: 0, evaluados: 0, mensaje: "La orden no está ligada a un expediente." };
+    if (ctx.ficha.ya_tiene_casa) {
       return { ok: false, nuevas: 0, evaluados: 0, mensaje: "El cliente ya tiene casa: no hay búsqueda." };
     }
 
     const { data: inventario, error } = await sb.from("inmuebles").select("*").eq("estatus", "disponible").limit(2000);
     if (error) throw new Error(error.message);
-    const { data: yaPropuestos } = await sb.from("propuestas_inmuebles").select("inmueble_id").eq("expediente_id", expedienteId);
+    const { data: yaPropuestos } = await sb.from("propuestas_inmuebles").select("inmueble_id").eq("orden_trabajo_id", ordenTrabajoId);
     const excluidos = new Set((yaPropuestos ?? []).map((p: any) => p.inmueble_id));
     // El comprador nunca recibe como opción su propia casa (si también es vendedor).
-    const candidatos = (inventario ?? []).filter((i: any) => !excluidos.has(i.id) && i.expediente_origen_id !== expedienteId);
+    const candidatos = (inventario ?? []).filter(
+      (i: any) => !excluidos.has(i.id) && i.expediente_origen_id !== ctx.ot.expediente_id,
+    );
 
-    const ranking = rankearInmuebles(datos.perfil, candidatos as any[]);
-    const ronda = await rondaActual(sb, expedienteId);
+    const ranking = rankearInmuebles(perfilMatchDeFicha(ctx.ficha), candidatos as any[]);
+    const ronda = await rondaActual(sb, ordenTrabajoId);
     if (ranking.length > 0) {
       const { error: e } = await sb.from("propuestas_inmuebles").upsert(
         ranking.map((r) => ({
-          expediente_id: expedienteId,
+          orden_trabajo_id: ordenTrabajoId,
+          expediente_id: ctx.ot.expediente_id,
           inmueble_id: (r.inmueble as any).id,
           ronda,
           score_match: r.score,
           razones_match: r.razones,
           estatus: "sugerida",
         })),
-        { onConflict: "expediente_id,inmueble_id", ignoreDuplicates: true },
+        { onConflict: "orden_trabajo_id,inmueble_id", ignoreDuplicates: true },
       );
       if (e) throw new Error(e.message);
     }
 
     await registrarActividad(sb, {
-      expedienteId,
+      expedienteId: ctx.ot.expediente_id,
       tipo: "sistema",
-      titulo: "🏘️ Cruce contra inventario",
+      titulo: `🏘️ Cruce contra inventario (orden ${ctx.ot.folio})`,
       detalle: `Se evaluaron ${candidatos.length} inmuebles disponibles; ${ranking.length} coinciden con el perfil.`,
     });
 
     // Completar el paso de sistema del flujo BPM (desbloquea "Enviar solicitud a aliados").
-    const { data: tareas } = await sb
-      .from("bpm_expediente_tareas")
-      .select("id, estado, paso:paso_id(titulo_tarea)")
-      .eq("expediente_id", expedienteId)
-      .eq("estado", "pendiente");
-    const tareaCruce = (tareas ?? []).find((t: any) => t.paso?.titulo_tarea === "Cruzar perfil contra inventario propio");
-    if (tareaCruce) {
-      const { actualizarEstadoTarea } = await import("@/app/actions/bpm");
-      await actualizarEstadoTarea(tareaCruce.id, "completada");
-    }
+    await completarTareaOrden(sb, ordenTrabajoId, "Cruzar perfil contra inventario propio");
 
-    revalidatePath(`/expediente/${expedienteId}`);
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
     return { ok: true, nuevas: ranking.length, evaluados: candidatos.length };
   } catch (err) {
     console.error("[generarSugerencias]", err);
@@ -554,14 +689,14 @@ export async function generarSugerencias(
   }
 }
 
-/** Bandeja "Opciones": propuestas del expediente con su inmueble (vista interna). */
-export async function listarPropuestas(expedienteId: string): Promise<PropuestaInmueble[]> {
+/** Bandeja "Opciones": propuestas de la OT con su inmueble (vista interna). */
+export async function listarPropuestas(ordenTrabajoId: string): Promise<PropuestaInmueble[]> {
   await requireAdmin();
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("propuestas_inmuebles")
     .select("*, inmueble:inmueble_id(*, aliado:aliado_id(nombre))")
-    .eq("expediente_id", expedienteId)
+    .eq("orden_trabajo_id", ordenTrabajoId)
     .order("ronda", { ascending: false })
     .order("score_match", { ascending: false, nullsFirst: false });
   if (error) throw new Error(error.message);
@@ -570,6 +705,7 @@ export async function listarPropuestas(expedienteId: string): Promise<PropuestaI
   return filas.map((p: any, idx: number) => ({
     id: p.id,
     expedienteId: p.expediente_id,
+    ordenTrabajoId: p.orden_trabajo_id,
     ronda: p.ronda,
     scoreMatch: p.score_match != null ? Number(p.score_match) : null,
     razonesMatch: p.razones_match ?? [],
@@ -596,7 +732,7 @@ export async function publicarPropuesta(
     const sb = supabaseServidor();
     const { data: p } = await sb
       .from("propuestas_inmuebles")
-      .select("id, expediente_id, inmueble_id, ronda, estatus, inmueble:inmueble_id(folio, estatus)")
+      .select("id, expediente_id, orden_trabajo_id, inmueble_id, ronda, estatus, inmueble:inmueble_id(folio, estatus)")
       .eq("id", propuestaId)
       .maybeSingle();
     if (!p) return { ok: false, mensaje: "La propuesta no existe." };
@@ -605,8 +741,7 @@ export async function publicarPropuesta(
     if (estatusInmueble !== "disponible" && estatusInmueble !== "por_validar") {
       return { ok: false, mensaje: "El inmueble ya no está disponible." };
     }
-    const { data: exp } = await sb.from("expedientes").select("asesor_id, operador_id").eq("id", p.expediente_id).maybeSingle();
-    if (exp) await verificarAcceso(exp as any);
+    await verificarAccesoPropuesta(sb, p.orden_trabajo_id);
 
     // Casa de aliado aún sin validar: publicar = el asesor la revisó y la valida.
     if (estatusInmueble === "por_validar") {
@@ -624,7 +759,7 @@ export async function publicarPropuesta(
     const { count: recientes } = await sb
       .from("propuestas_inmuebles")
       .select("id", { count: "exact", head: true })
-      .eq("expediente_id", p.expediente_id)
+      .eq("orden_trabajo_id", p.orden_trabajo_id)
       .gte("publicada_en", hace15);
 
     const { error } = await sb
@@ -658,7 +793,7 @@ export async function publicarPropuesta(
     const { count } = await sb
       .from("propuestas_inmuebles")
       .select("id", { count: "exact", head: true })
-      .eq("expediente_id", p.expediente_id)
+      .eq("orden_trabajo_id", p.orden_trabajo_id)
       .eq("ronda", p.ronda)
       .not("publicada_en", "is", null);
     await registrarActividad(sb, {
@@ -667,7 +802,7 @@ export async function publicarPropuesta(
       titulo: `📤 Opción publicada al cliente (${(p as any).inmueble?.folio ?? ""})`,
       detalle: `Ronda ${p.ronda}: ${count ?? 0} opciones publicadas.`,
     });
-    revalidatePath(`/expediente/${p.expediente_id}`);
+    revalidatePath(`/ordenes-trabajo/${p.orden_trabajo_id}`);
     const publicadas = count ?? 0;
     return {
       ok: true,
@@ -716,6 +851,18 @@ export interface PasoPortal {
   estado: "hecho" | "actual" | "pendiente";
 }
 
+/** Una orden de trabajo de asesoría tal como la ve el cliente. */
+export interface ProcesoPortal {
+  folio: string;
+  titulo: string;
+  etapaNombre: string;
+  etapaDescripcion: string;
+  pasos: PasoPortal[];
+  /** Con búsqueda de casa (no aplica si el cliente ya tiene casa). */
+  conOpciones: boolean;
+  opciones: OpcionCliente[];
+}
+
 export interface PortalCliente {
   ok: boolean;
   mensaje?: string;
@@ -725,9 +872,8 @@ export interface PortalCliente {
   etapaDescripcion?: string;
   pasos?: PasoPortal[];
   asesorNombre?: string | null;
-  /** Solo asesoría de compra con búsqueda. */
-  conOpciones?: boolean;
-  opciones?: OpcionCliente[];
+  /** Órdenes de trabajo de asesoría de compra del expediente. */
+  procesos?: ProcesoPortal[];
 }
 
 const SITE = () => (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
@@ -737,7 +883,7 @@ async function expedientePorToken(sb: Sb, token: string) {
   if (!esTokenPortalValido(token)) return null;
   const { data } = await sb
     .from("expedientes")
-    .select("id, cliente, telefono, prospecto_id, tipo_negocio, etapa, ya_tiene_casa, asesor_id, asesor:asesor_id(nombre)")
+    .select("id, cliente, telefono, prospecto_id, tipo_negocio, etapa, asesor_id, asesor:asesor_id(nombre)")
     .eq("token", token)
     .maybeSingle();
   return data as any;
@@ -748,7 +894,7 @@ async function propuestaDelCliente(sb: Sb, expedienteId: string, propuestaId: st
   if (!/^[0-9a-f-]{36}$/i.test(propuestaId)) return null;
   const { data } = await sb
     .from("propuestas_inmuebles")
-    .select("id, expediente_id, estatus, vista_en, inmueble:inmueble_id(folio, precio, fraccionamiento, zona)")
+    .select("id, expediente_id, orden_trabajo_id, estatus, vista_en, inmueble:inmueble_id(folio, precio, fraccionamiento, zona)")
     .eq("id", propuestaId)
     .eq("expediente_id", expedienteId)
     .maybeSingle();
@@ -756,52 +902,80 @@ async function propuestaDelCliente(sb: Sb, expedienteId: string, propuestaId: st
   return data as any;
 }
 
-/** Portal del cliente: estatus del proceso y, en asesoría de compra, sus opciones de casa. */
+/** Pasos para el cliente a partir de una lista ordenada y la posición actual. */
+function armarPasos(lista: { id: string; nombre: string }[], actual: string | null): PasoPortal[] {
+  const idx = lista.findIndex((e) => e.id === actual);
+  return lista.map((e, i) => ({
+    id: e.id,
+    nombre: e.nombre,
+    estado: idx === -1 ? "pendiente" : i < idx ? "hecho" : i === idx ? "actual" : "pendiente",
+  }));
+}
+
+/**
+ * Portal del cliente: estatus de su expediente y, por cada orden de trabajo
+ * de asesoría de compra, su avance y sus opciones de casa.
+ */
 export async function obtenerPortalCliente(token: string): Promise<PortalCliente> {
   const sb = supabaseServidor();
   const exp = await expedientePorToken(sb, token);
   if (!exp) return { ok: false, mensaje: "Este enlace no es válido. Usa el que te enviamos por WhatsApp." };
 
-  const opcionesEtapas = { yaTieneCasa: exp.ya_tiene_casa };
-  const lista = obtenerEtapasPorNegocio(exp.tipo_negocio, opcionesEtapas).filter(
-    (e) => e.id !== "perdido" && e.id !== "en_pausa",
-  );
+  const lista = obtenerEtapasPorNegocio(exp.tipo_negocio).filter((e) => e.id !== "perdido" && e.id !== "en_pausa");
   const actual = obtenerEtapasPorId(exp.tipo_negocio)[exp.etapa];
-  const idxActual = lista.findIndex((e) => e.id === exp.etapa);
-  const pasos: PasoPortal[] = lista.map((e, i) => ({
-    id: e.id,
-    nombre: e.nombreCliente,
-    estado: idxActual === -1 ? "pendiente" : i < idxActual ? "hecho" : i === idxActual ? "actual" : "pendiente",
-  }));
+  const pasos = armarPasos(lista.map((e) => ({ id: e.id, nombre: e.nombreCliente })), exp.etapa);
 
-  const conOpciones = exp.tipo_negocio === "asesoria_compra" && !exp.ya_tiene_casa;
-  let opciones: OpcionCliente[] = [];
-  if (conOpciones) {
-    const { data: props } = await sb
-      .from("propuestas_inmuebles")
-      .select("id, estatus, publicada_en, inmueble:inmueble_id(*)")
-      .eq("expediente_id", exp.id)
-      .in("estatus", ESTATUS_VISIBLES_CLIENTE)
-      .order("publicada_en", { ascending: false });
-    const filas = (props ?? []).filter((p: any) => p.inmueble);
-    const ids = filas.map((p: any) => p.id);
-    const { data: citas } = ids.length
-      ? await sb
-          .from("agenda_citas")
-          .select("propuesta_id, fecha, hora_inicio, estado")
-          .in("propuesta_id", ids)
-          .neq("estado", "cancelada")
-          .order("fecha", { ascending: false })
-      : { data: [] as any[] };
-    const firmados = await firmarFotos(sb, filas.map((p: any) => filaAInmueble(p.inmueble)));
-    opciones = filas.map((p: any, i: number) =>
-      aOpcionCliente(
-        { id: p.id, estatus: p.estatus },
-        p.inmueble,
-        firmados[i].fotosUrl,
-        (citas ?? []).find((c: any) => c.propuesta_id === p.id) ?? null,
-      ),
-    );
+  const { data: ots } = await sb
+    .from("ordenes_trabajo")
+    .select("id")
+    .eq("expediente_id", exp.id)
+    .eq("tipo_negocio", TIPO_OT)
+    .neq("estatus", "cancelada")
+    .order("created_at", { ascending: true });
+
+  const procesos: ProcesoPortal[] = [];
+  for (const { id } of ots ?? []) {
+    const ctx = await cargarOrden(sb, id);
+    if (!ctx) continue;
+    const etapaActual = ctx.aplicables.find((e) => e.clave === ctx.ot.etapa) ?? ctx.aplicables[0];
+    const conOpciones = !ctx.ficha.ya_tiene_casa;
+    let opciones: OpcionCliente[] = [];
+    if (conOpciones) {
+      const { data: props } = await sb
+        .from("propuestas_inmuebles")
+        .select("id, estatus, publicada_en, inmueble:inmueble_id(*)")
+        .eq("orden_trabajo_id", id)
+        .in("estatus", ESTATUS_VISIBLES_CLIENTE)
+        .order("publicada_en", { ascending: false });
+      const filas = (props ?? []).filter((p: any) => p.inmueble);
+      const ids = filas.map((p: any) => p.id);
+      const { data: citas } = ids.length
+        ? await sb
+            .from("agenda_citas")
+            .select("propuesta_id, fecha, hora_inicio, estado")
+            .in("propuesta_id", ids)
+            .neq("estado", "cancelada")
+            .order("fecha", { ascending: false })
+        : { data: [] as any[] };
+      const firmados = await firmarFotos(sb, filas.map((p: any) => filaAInmueble(p.inmueble)));
+      opciones = filas.map((p: any, i: number) =>
+        aOpcionCliente(
+          { id: p.id, estatus: p.estatus },
+          p.inmueble,
+          firmados[i].fotosUrl,
+          (citas ?? []).find((c: any) => c.propuesta_id === p.id) ?? null,
+        ),
+      );
+    }
+    procesos.push({
+      folio: ctx.ot.folio,
+      titulo: ctx.ficha.ya_tiene_casa ? "Trámite de compra de tu casa" : "Búsqueda y compra de tu casa",
+      etapaNombre: etapaActual?.nombreCliente ?? "En proceso",
+      etapaDescripcion: etapaActual?.descripcionCliente ?? "",
+      pasos: armarPasos(ctx.aplicables.map((e) => ({ id: e.clave, nombre: e.nombreCliente })), ctx.ot.etapa),
+      conOpciones,
+      opciones,
+    });
   }
 
   return {
@@ -812,8 +986,7 @@ export async function obtenerPortalCliente(token: string): Promise<PortalCliente
     etapaDescripcion: actual?.descripcionCliente ?? "",
     pasos,
     asesorNombre: exp.asesor?.nombre ?? null,
-    conOpciones,
-    opciones,
+    procesos,
   };
 }
 
@@ -946,12 +1119,15 @@ export async function actualizarEstatusPropuesta(
     await requireAdmin();
     if (estatus !== "visitada" && estatus !== "ofertada") return { ok: false, mensaje: "Estatus inválido." };
     const sb = supabaseServidor();
-    const { data: p } = await sb.from("propuestas_inmuebles").select("id, expediente_id, estatus").eq("id", propuestaId).maybeSingle();
+    const { data: p } = await sb
+      .from("propuestas_inmuebles")
+      .select("id, expediente_id, orden_trabajo_id, estatus")
+      .eq("id", propuestaId)
+      .maybeSingle();
     if (!p) return { ok: false, mensaje: "La propuesta no existe." };
     const permitidos = estatus === "visitada" ? ["me_interesa", "visita_agendada"] : ["me_interesa", "visita_agendada", "visitada"];
     if (!permitidos.includes(p.estatus)) return { ok: false, mensaje: "La propuesta no está en una etapa que permita ese cambio." };
-    const { data: exp } = await sb.from("expedientes").select("asesor_id, operador_id").eq("id", p.expediente_id).maybeSingle();
-    if (exp) await verificarAcceso(exp as any);
+    await verificarAccesoPropuesta(sb, p.orden_trabajo_id);
     const { error } = await sb.from("propuestas_inmuebles").update({ estatus }).eq("id", p.id);
     if (error) throw new Error(error.message);
     await registrarActividad(sb, {
@@ -959,7 +1135,11 @@ export async function actualizarEstatusPropuesta(
       tipo: "sistema",
       titulo: estatus === "visitada" ? "🏠 Visita realizada" : "💬 Oferta presentada",
     });
-    revalidatePath(`/expediente/${p.expediente_id}`);
+    // Con la oferta presentada, la OT pasa a Negociación (si seguía en Búsqueda).
+    if (estatus === "ofertada") {
+      await sb.from("ordenes_trabajo").update({ etapa: "negociacion" }).eq("id", p.orden_trabajo_id).eq("etapa", "busqueda");
+    }
+    revalidatePath(`/ordenes-trabajo/${p.orden_trabajo_id}`);
     return { ok: true };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo actualizar." };
@@ -986,7 +1166,7 @@ export async function registrarCierreCompra(
     const sb = supabaseServidor();
     const { data: p } = await sb
       .from("propuestas_inmuebles")
-      .select("id, expediente_id, estatus, inmueble:inmueble_id(id, folio, origen, aliado_id, estatus)")
+      .select("id, expediente_id, orden_trabajo_id, estatus, inmueble:inmueble_id(id, folio, origen, aliado_id, estatus)")
       .eq("id", propuestaId)
       .maybeSingle();
     if (!p) return { ok: false, mensaje: "La propuesta no existe." };
@@ -994,31 +1174,34 @@ export async function registrarCierreCompra(
       return { ok: false, mensaje: "Solo se cierra una opción que el cliente ya visitó u ofertó." };
     }
     const inm = (p as any).inmueble;
-    const { data: exp } = await sb
-      .from("expedientes")
-      .select("id, cliente, asesor_id, operador_id")
-      .eq("id", p.expediente_id)
-      .maybeSingle();
-    if (!exp) return { ok: false, mensaje: "El expediente no existe." };
-    await verificarAcceso(exp as any);
+    const ctx = await verificarAccesoPropuesta(sb, p.orden_trabajo_id);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    const exp = { cliente: ctx.exp?.cliente ?? "" };
 
-    // Otra propuesta del mismo expediente ya elegida → no se permiten dos cierres.
+    // Otra propuesta de la misma OT ya elegida → no se permiten dos cierres.
     const { data: otra } = await sb
       .from("propuestas_inmuebles")
       .select("id")
-      .eq("expediente_id", p.expediente_id)
+      .eq("orden_trabajo_id", p.orden_trabajo_id)
       .eq("estatus", "elegida")
       .neq("id", p.id)
       .limit(1);
-    if (otra && otra.length > 0) return { ok: false, mensaje: "Este expediente ya tiene otra casa elegida." };
+    if (otra && otra.length > 0) return { ok: false, mensaje: "Esta orden de trabajo ya tiene otra casa elegida." };
 
     const ahora = new Date().toISOString();
     await sb.from("propuestas_inmuebles").update({ estatus: "elegida", respondida_en: ahora }).eq("id", p.id);
     if (inm?.id) await sb.from("inmuebles").update({ estatus: "vendido" }).eq("id", inm.id);
+    // El cierre se guarda en la ficha de la OT (no en el expediente).
     await sb
-      .from("expedientes")
-      .update({ precio_compraventa: precio, fecha_escritura: datos.fechaEscritura, ultimo_movimiento: ahora.slice(0, 10) })
-      .eq("id", p.expediente_id);
+      .from("ot_ficha_asesoria_compra")
+      .upsert(
+        { orden_trabajo_id: p.orden_trabajo_id, precio_compraventa: precio, fecha_escritura: datos.fechaEscritura },
+        { onConflict: "orden_trabajo_id" },
+      );
+    // Con la escritura firmada, la OT pasa a Entrega (si no estaba ya ahí o cerrada).
+    if (!["entrega", "cerrada"].includes(ctx.ot.etapa ?? "")) {
+      await sb.from("ordenes_trabajo").update({ etapa: "entrega", estatus: "en_proceso" }).eq("id", p.orden_trabajo_id);
+    }
 
     let comisionAliado: number | null = null;
     if (inm?.origen === "aliado" && inm.aliado_id) {
@@ -1054,6 +1237,7 @@ export async function registrarCierreCompra(
           proveedor_id: inm.aliado_id,
           asesor_id: null,
           expediente_id: p.expediente_id,
+          orden_trabajo_id: p.orden_trabajo_id,
           propuesta_id: p.id,
           fecha: datos.fechaEscritura,
           monto_venta: precio,
@@ -1101,7 +1285,7 @@ export async function registrarCierreCompra(
         .filter(Boolean)
         .join(" "),
     });
-    revalidatePath(`/expediente/${p.expediente_id}`);
+    revalidatePath(`/ordenes-trabajo/${p.orden_trabajo_id}`);
     return { ok: true, comisionAliado };
   } catch (err) {
     console.error("[registrarCierreCompra]", err);

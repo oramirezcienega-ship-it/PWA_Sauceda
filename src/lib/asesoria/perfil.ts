@@ -1,9 +1,11 @@
 /**
- * Perfil de búsqueda del comprador (asesoría de compra).
+ * Perfil de búsqueda del comprador (ficha de la OT de asesoría de compra).
  *
  * Normaliza y valida lo que captura el asesor antes de guardarlo en
- * `expedientes`. Módulo puro para poder probarlo con `node --test`.
+ * `ot_ficha_asesoria_compra`. Módulo puro para poder probarlo con `node --test`.
  */
+
+import { normalizarCredito, type TipoCredito } from "./match";
 
 export const FUENTES_PRECALIFICACION = ["infonavit", "fovissste", "bancario", "cofinavit", "otro"] as const;
 export type FuentePrecalificacion = (typeof FUENTES_PRECALIFICACION)[number];
@@ -18,6 +20,7 @@ export const ETIQUETA_FUENTE: Record<FuentePrecalificacion, string> = {
 
 /** Perfil tal como lo usa la app (camelCase). */
 export interface PerfilBusqueda {
+  tipoCredito: TipoCredito | null;
   busquedaZonas: string[];
   busquedaPrecioMin: number | null;
   busquedaPrecioMax: number | null;
@@ -32,6 +35,7 @@ export interface PerfilBusqueda {
 
 /** Lo que llega del formulario (todo opcional, números como texto o número). */
 export type EntradaPerfil = Partial<{
+  tipoCredito: string | null;
   busquedaZonas: string[] | string | null;
   busquedaPrecioMin: number | string | null;
   busquedaPrecioMax: number | string | null;
@@ -105,11 +109,16 @@ export function normalizarPerfil(entrada: EntradaPerfil): ResultadoPerfil {
     else errores.push("La fuente de precalificación no es válida.");
   }
 
+  const creditoTexto = (entrada.tipoCredito ?? "").trim();
+  const tipoCredito = creditoTexto ? normalizarCredito(creditoTexto) : null;
+  if (creditoTexto && !tipoCredito) errores.push("El tipo de crédito no es válido.");
+
   if (errores.length > 0) return { ok: false, errores };
 
   return {
     ok: true,
     perfil: {
+      tipoCredito,
       busquedaZonas: normalizarZonas(entrada.busquedaZonas),
       busquedaPrecioMin: precioMin,
       busquedaPrecioMax: precioMax,
@@ -124,9 +133,10 @@ export function normalizarPerfil(entrada: EntradaPerfil): ResultadoPerfil {
   };
 }
 
-/** Perfil → columnas de `expedientes`. */
+/** Perfil → columnas de `ot_ficha_asesoria_compra`. */
 export function perfilAFila(p: PerfilBusqueda) {
   return {
+    tipo_credito: p.tipoCredito,
     busqueda_zonas: p.busquedaZonas.length > 0 ? p.busquedaZonas : null,
     busqueda_precio_min: p.busquedaPrecioMin,
     busqueda_precio_max: p.busquedaPrecioMax,
@@ -140,10 +150,11 @@ export function perfilAFila(p: PerfilBusqueda) {
   };
 }
 
-/** Fila de `expedientes` → perfil. */
+/** Fila de `ot_ficha_asesoria_compra` → perfil. */
 export function filaAPerfil(f: Record<string, any>): PerfilBusqueda {
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
+    tipoCredito: normalizarCredito(f.tipo_credito),
     busquedaZonas: Array.isArray(f.busqueda_zonas) ? f.busqueda_zonas : [],
     busquedaPrecioMin: num(f.busqueda_precio_min),
     busquedaPrecioMax: num(f.busqueda_precio_max),

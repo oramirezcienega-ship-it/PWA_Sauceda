@@ -83,7 +83,6 @@ export interface FilaExpediente {
   status_proceso?: string | null;
   fecha_confirmacion?: string | null;
   calificacion?: CalificacionProspecto;
-  ya_tiene_casa?: boolean | null;
 }
 
 /** Fila de la BD → modelo de la app. */
@@ -135,7 +134,6 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     calificacion: fila.calificacion ?? "frio",
     empresaId: fila.empresa_id ?? null,
     empresaNombre: fila.empresas?.name ?? fila.empresa?.name ?? null,
-    yaTieneCasa: fila.ya_tiene_casa ?? false,
   };
 }
 
@@ -169,10 +167,6 @@ export function aFila(datos: DatosExpediente) {
     operador_id: datos.operadorId ?? null,
     calificacion: datos.calificacion || "frio",
     empresa_id: datos.empresaId ?? null,
-    // Solo se escribe si el formulario lo trae (no pisa el perfil de búsqueda).
-    ...(datos.yaTieneCasa !== undefined && datos.yaTieneCasa !== null
-      ? { ya_tiene_casa: Boolean(datos.yaTieneCasa) }
-      : {}),
   };
 }
 

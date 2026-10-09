@@ -179,6 +179,8 @@ export async function crearOrdenTrabajo(datos: {
   proveedorId?: string | null;
   costoProveedor?: number | null;
   proveedorConcepto?: string | null;
+  /** Solo OT de asesoría de compra: el cliente ya tiene casa. */
+  yaTieneCasa?: boolean;
 }): Promise<{ ok: boolean; id?: string; folio?: string; error?: string }> {
   try {
     await requireAdmin();
@@ -234,7 +236,9 @@ export async function crearOrdenTrabajo(datos: {
       }
     }
 
-    // Si viene con expedienteId y no prospectoId, resolver prospecto
+    // Si viene con expedienteId y no prospectoId, resolver prospecto. El tipo del
+    // expediente solo se usa si no se eligió uno: un cliente puede tener OT de
+    // distintos tipos (p. ej. asesoría de compra y después impermeabilización).
     if (expedienteId && !prospectoId) {
       const { data: exp } = await sb
         .from("expedientes")
@@ -243,8 +247,13 @@ export async function crearOrdenTrabajo(datos: {
         .maybeSingle();
       if (exp) {
         prospectoId = exp.prospecto_id;
-        if (exp.tipo_negocio) tipoNegocio = exp.tipo_negocio;
+        if (!datos.tipoNegocio && exp.tipo_negocio) tipoNegocio = exp.tipo_negocio;
       }
+    }
+
+    // La asesoría de compra vive en la OT pero cuelga del expediente del comprador.
+    if (tipoNegocio === "asesoria_compra" && !expedienteId) {
+      return { ok: false, error: "La orden de asesoría de compra se inicia desde el expediente del cliente." };
     }
 
     const folio = await generarFolioOT(sb);
@@ -281,10 +290,27 @@ export async function crearOrdenTrabajo(datos: {
       return { ok: false, error: error.message };
     }
 
+    // Asesoría de compra: ficha, primera etapa y flujo BPM propios de la OT
+    // (no lleva póliza de garantía ni documentos de obra).
+    if (tipoNegocio === "asesoria_compra") {
+      const { inicializarOrdenAsesoria } = await import("@/app/actions/asesoria-compra");
+      const ini = await inicializarOrdenAsesoria(nuevaOT.id, { yaTieneCasa: datos.yaTieneCasa });
+      if (!ini.ok) console.error("Aviso: no se pudo inicializar la OT de asesoría:", ini.mensaje);
+      if (expedienteId) {
+        const { registrarActividad } = await import("@/lib/actividades");
+        await registrarActividad(sb, {
+          expedienteId,
+          tipo: "sistema",
+          titulo: `🔑 Orden de asesoría de compra ${nuevaOT.folio} iniciada`,
+          detalle: datos.yaTieneCasa ? "El cliente ya tiene casa: va directo al trámite." : "Inicia con la precalificación del comprador.",
+        });
+      }
+    }
+
     // Documentos base en automático (recibo si aplica, póliza de garantía,
     // remisión de venta si hay cotización con precio). Best-effort: si algo
     // falla aquí no debe impedir que la OT quede creada.
-    try {
+    if (tipoNegocio !== "asesoria_compra") try {
       let clienteNombre = "Cliente Sauceda";
       let direccionClienteOT: string | null = null;
       if (prospectoId) {

@@ -124,21 +124,40 @@ export async function guardarFlujoBPM(tipoNegocio: string, pasos: Omit<BpmPaso, 
   }
 }
 
-/** Obtiene todas las tareas BPM de un expediente específico */
+/** Obtiene las tareas BPM de un expediente (las de sus órdenes de trabajo viven en cada OT) */
 export async function obtenerTareasExpediente(expedienteId: string): Promise<BpmTareaInstanciada[]> {
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("bpm_expediente_tareas")
     .select("*, paso:paso_id(*), responsable:responsable_id(nombre)")
     .eq("expediente_id", expedienteId)
+    .is("orden_trabajo_id", null)
     .order("created_at", { ascending: true });
 
   if (error) {
     console.error("Error al obtener tareas del expediente:", error);
     return [];
   }
+  return mapearTareas(data || []);
+}
 
-  return (data || []).map((t) => ({
+/** Tareas BPM de una orden de trabajo (flujos con ámbito `orden_trabajo`). */
+export async function obtenerTareasOrden(ordenTrabajoId: string): Promise<BpmTareaInstanciada[]> {
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("bpm_expediente_tareas")
+    .select("*, paso:paso_id(*), responsable:responsable_id(nombre)")
+    .eq("orden_trabajo_id", ordenTrabajoId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.error("Error al obtener tareas de la orden de trabajo:", error);
+    return [];
+  }
+  return mapearTareas(data || []);
+}
+
+function mapearTareas(data: any[]): BpmTareaInstanciada[] {
+  return data.map((t) => ({
     id: t.id,
     expedienteId: t.expediente_id,
     pasoId: t.paso_id,
@@ -162,7 +181,8 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
   const { count } = await sb
     .from("bpm_expediente_tareas")
     .select("id", { count: "exact", head: true })
-    .eq("expediente_id", expedienteId);
+    .eq("expediente_id", expedienteId)
+    .is("orden_trabajo_id", null);
 
   if (count && count > 0) return; // ya inicializado
 
@@ -177,6 +197,8 @@ export async function instanciarFlujoEnExpediente(expedienteId: string, tipoNego
   // 2. Obtener la plantilla de flujo
   const datosFlujo = await obtenerFlujoPorProducto(tipoNegocio);
   if (!datosFlujo || datosFlujo.pasos.length === 0) return;
+  // Los flujos de orden de trabajo se instancian al iniciar la OT, no con el expediente.
+  if ((datosFlujo.flujo as any).ambito === "orden_trabajo") return;
 
   // 3. Crear tareas (solo de los pasos que aplican al expediente)
   const ahora = new Date();
@@ -228,7 +250,8 @@ function construirTarea(
   condicionEfectiva: string,
   condicionHeredada: boolean,
   exp: any,
-  ahora: Date
+  ahora: Date,
+  ordenTrabajoId: string | null = null
 ) {
   const agendadaPara = new Date(ahora.getTime() + p.dias_vencimiento * 24 * 60 * 60 * 1000).toISOString();
   // Si tiene condición especial (como esperar reporte técnico), inicia en "esperando_condicion"
@@ -245,6 +268,7 @@ function construirTarea(
   };
   // Solo se escribe cuando difiere de la del paso (columna nueva, opcional).
   if (condicionHeredada) tarea.condicion_activacion_efectiva = condicionEfectiva;
+  if (ordenTrabajoId) tarea.orden_trabajo_id = ordenTrabajoId;
   return tarea;
 }
 
@@ -254,17 +278,76 @@ function condicionDeTarea(t: any): string | undefined {
 }
 
 /**
- * Reevalúa las condiciones sobre campos del expediente (p. ej. `ya_tiene_casa`)
+ * Contexto de una OT para su flujo BPM: la OT, su expediente (para asignar
+ * responsables por rol) y su ficha particular (para evaluar `condicion_campo`).
+ */
+async function contextoOrden(sb: ReturnType<typeof supabaseServidor>, ordenTrabajoId: string) {
+  const { data: ot } = await sb
+    .from("ordenes_trabajo")
+    .select("id, folio, expediente_id, tipo_negocio, asesor_responsable_id, asesor_ejecutor_id")
+    .eq("id", ordenTrabajoId)
+    .maybeSingle();
+  if (!ot?.expediente_id) return null;
+  const { data: exp } = await sb.from("expedientes").select("asesor_id, operador_id").eq("id", ot.expediente_id).maybeSingle();
+  const tablaFicha = ot.tipo_negocio === "asesoria_compra" ? "ot_ficha_asesoria_compra" : null;
+  const { data: ficha } = tablaFicha
+    ? await sb.from(tablaFicha).select("*").eq("orden_trabajo_id", ordenTrabajoId).maybeSingle()
+    : { data: null };
+  // Responsables: los del expediente; si no hay, los de la OT.
+  const responsables = {
+    asesor_id: exp?.asesor_id || ot.asesor_responsable_id || null,
+    operador_id: exp?.operador_id || ot.asesor_ejecutor_id || null,
+  };
+  return { ot, responsables, datos: (ficha as Record<string, unknown>) || {} };
+}
+
+/** Instancia el flujo BPM de una orden de trabajo (flujos con ámbito `orden_trabajo`). */
+export async function instanciarFlujoEnOrden(ordenTrabajoId: string): Promise<{ ok: boolean; tareas: number }> {
+  const sb = supabaseServidor();
+  const ctx = await contextoOrden(sb, ordenTrabajoId);
+  if (!ctx) return { ok: false, tareas: 0 };
+  const { count } = await sb
+    .from("bpm_expediente_tareas")
+    .select("id", { count: "exact", head: true })
+    .eq("orden_trabajo_id", ordenTrabajoId);
+  if (count && count > 0) return { ok: true, tareas: count };
+
+  const datosFlujo = await obtenerFlujoPorProducto(ctx.ot.tipo_negocio);
+  if (!datosFlujo || datosFlujo.pasos.length === 0) return { ok: true, tareas: 0 };
+  if ((datosFlujo.flujo as any).ambito !== "orden_trabajo") return { ok: true, tareas: 0 };
+
+  const ahora = new Date();
+  const aplicables = resolverPasosAplicables(datosFlujo.pasos as any[], ctx.datos);
+  const tareasInsert = aplicables.map(({ paso, condicionEfectiva, condicionHeredada }: any) =>
+    construirTarea(ctx.ot.expediente_id, paso, condicionEfectiva, condicionHeredada, ctx.responsables, ahora, ordenTrabajoId)
+  );
+  const { error } = await sb.from("bpm_expediente_tareas").insert(tareasInsert);
+  if (error) {
+    console.error("Error al instanciar tareas BPM de la OT:", error);
+    return { ok: false, tareas: 0 };
+  }
+  await registrarActividad(sb, {
+    expedienteId: ctx.ot.expediente_id,
+    tipo: "sistema",
+    titulo: `🚀 Flujo de trabajo de la orden ${ctx.ot.folio} inicializado`,
+    detalle: `${tareasInsert.length} tareas de ${ctx.ot.tipo_negocio}.`
+  });
+  return { ok: true, tareas: tareasInsert.length };
+}
+
+/**
+ * Reevalúa las condiciones de la ficha de la OT (p. ej. `ya_tiene_casa`)
  * después de que cambian: cancela las tareas abiertas de pasos que ya no
  * aplican, crea las de pasos que ahora sí aplican y recalcula de qué paso
  * depende cada tarea. No toca tareas completadas.
  */
-export async function reevaluarCondicionesBpm(expedienteId: string) {
+export async function reevaluarCondicionesBpm(ordenTrabajoId: string) {
   const sb = supabaseServidor();
-  const { data: exp } = await sb.from("expedientes").select("*").eq("id", expedienteId).maybeSingle();
-  if (!exp?.tipo_negocio) return;
+  const ctx = await contextoOrden(sb, ordenTrabajoId);
+  if (!ctx) return;
+  const expedienteId = ctx.ot.expediente_id as string;
 
-  const datosFlujo = await obtenerFlujoPorProducto(exp.tipo_negocio);
+  const datosFlujo = await obtenerFlujoPorProducto(ctx.ot.tipo_negocio);
   if (!datosFlujo || datosFlujo.pasos.length === 0) return;
   // Solo aplica a flujos que usan condiciones por campo.
   if (!datosFlujo.pasos.some((p: any) => p.condicion_campo)) return;
@@ -272,10 +355,10 @@ export async function reevaluarCondicionesBpm(expedienteId: string) {
   const { data: tareas } = await sb
     .from("bpm_expediente_tareas")
     .select("*, paso:paso_id(*)")
-    .eq("expediente_id", expedienteId);
+    .eq("orden_trabajo_id", ordenTrabajoId);
   if (!tareas || tareas.length === 0) return; // el flujo aún no se instancia
 
-  const aplicables = resolverPasosAplicables(datosFlujo.pasos as any[], exp);
+  const aplicables = resolverPasosAplicables(datosFlujo.pasos as any[], ctx.datos);
   const idsAplicables = new Set(aplicables.map((a) => a.paso.id));
   const abiertas = (t: any) => t.estado === "pendiente" || t.estado === "esperando_condicion";
   const ahora = new Date();
@@ -302,7 +385,7 @@ export async function reevaluarCondicionesBpm(expedienteId: string) {
     const existentes = tareas.filter((t: any) => t.paso_id === paso.id);
     const vigente = existentes.find((t: any) => t.estado !== "cancelada");
     if (!vigente) {
-      const nueva = construirTarea(expedienteId, paso, condicionEfectiva, condicionHeredada, exp, ahora);
+      const nueva = construirTarea(expedienteId, paso, condicionEfectiva, condicionHeredada, ctx.responsables, ahora, ordenTrabajoId);
       if (nueva.estado === "esperando_condicion" && yaCumplida(condicionEfectiva)) nueva.estado = "pendiente";
       await sb.from("bpm_expediente_tareas").insert(nueva);
       cambios.push(`agregada: ${paso.titulo_tarea}`);
@@ -323,11 +406,11 @@ export async function reevaluarCondicionesBpm(expedienteId: string) {
     await registrarActividad(sb, {
       expedienteId,
       tipo: "sistema",
-      titulo: "🔀 Flujo BPM ajustado al perfil del expediente",
+      titulo: `🔀 Flujo de la orden ${ctx.ot.folio} ajustado a su ficha`,
       detalle: cambios.join(" · ")
     });
   }
-  revalidatePath("/expediente/[id]");
+  revalidatePath("/ordenes-trabajo/[id]");
 }
 
 /** Sincroniza los responsables de las tareas pendientes de un expediente tras cambiar el asesor u operador */
@@ -399,12 +482,16 @@ export async function actualizarEstadoTarea(
   if (nuevoEstado === 'completada' && tareaActualizada.paso) {
     const pasoTrigger = tareaActualizada.paso.titulo_tarea; // ej: "Subir presupuesto técnico"
     
-    // Buscar tareas en el mismo expediente en estado "esperando_condicion"
-    const { data: tareasEsperando } = await sb
+    // Buscar tareas del mismo flujo (misma OT, o el expediente si no es de OT) en "esperando_condicion"
+    let consultaEsperando = sb
       .from("bpm_expediente_tareas")
       .select("*, paso:paso_id(*)")
       .eq("expediente_id", tareaActualizada.expediente_id)
       .eq("estado", "esperando_condicion");
+    consultaEsperando = tareaActualizada.orden_trabajo_id
+      ? consultaEsperando.eq("orden_trabajo_id", tareaActualizada.orden_trabajo_id)
+      : consultaEsperando.is("orden_trabajo_id", null);
+    const { data: tareasEsperando } = await consultaEsperando;
 
     if (tareasEsperando && tareasEsperando.length > 0) {
       for (const t of tareasEsperando) {
@@ -445,7 +532,8 @@ export async function activarTareasBPMPorEvento(expedienteId: string, nombreEven
     .from("bpm_expediente_tareas")
     .select("*, paso:paso_id(*)")
     .eq("expediente_id", expedienteId)
-    .eq("estado", "esperando_condicion");
+    .eq("estado", "esperando_condicion")
+    .is("orden_trabajo_id", null);
 
   if (!tareasEsperando || tareasEsperando.length === 0) return;
 
