@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ETAPAS, obtenerEtapasPorNegocio } from "@/lib/etapas";
+import { ETAPAS } from "@/lib/etapas";
 import type { DatosExpediente, CalificacionProspecto } from "@/lib/types";
 import { listarAsesoresActivos, listarOperariosActivos } from "@/app/actions/usuarios";
 import { listarEmpresasMin } from "@/app/actions/empresas";
@@ -192,10 +192,7 @@ export function FormularioExpediente({
             }
             className={INPUT}
           >
-            {(datos.tipoNegocio === "asesoria_compra"
-              ? obtenerEtapasPorNegocio("asesoria_compra", { yaTieneCasa: datos.yaTieneCasa })
-              : ETAPAS
-            ).map((etapa) => (
+            {ETAPAS.map((etapa) => (
               <option key={etapa.id} value={etapa.id}>
                 {etapa.nombre}
               </option>
@@ -270,13 +267,7 @@ export function FormularioExpediente({
         <Campo etiqueta="Tipo de negocio">
           <select
             value={datos.tipoNegocio || "traspaso_compra"}
-            onChange={(e) => {
-              const tipo = e.target.value as any;
-              actualizar("tipoNegocio", tipo);
-              // El pipeline de asesoría de compra arranca en "Captación".
-              if (tipo === "asesoria_compra" && datos.etapa === "nuevo-lead") actualizar("etapa", "captacion");
-              if (tipo !== "asesoria_compra" && datos.etapa === "captacion") actualizar("etapa", "nuevo-lead");
-            }}
+            onChange={(e) => actualizar("tipoNegocio", e.target.value as any)}
             className={INPUT}
           >
             <option value="traspaso_compra">Traspaso / Compra de casa</option>
@@ -295,20 +286,6 @@ export function FormularioExpediente({
           </select>
         </Campo>
       </div>
-
-      {datos.tipoNegocio === "asesoria_compra" && (
-        <label className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-sm text-carbon/80">
-          <input
-            type="checkbox"
-            checked={Boolean(datos.yaTieneCasa)}
-            onChange={(e) => actualizar("yaTieneCasa", e.target.checked)}
-            className="mt-0.5"
-          />
-          <span>
-            <strong>El cliente ya tiene casa.</strong> Se salta la búsqueda y la negociación y pasa directo al trámite.
-          </span>
-        </label>
-      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Campo etiqueta="Sin pagos (Tiempo)">

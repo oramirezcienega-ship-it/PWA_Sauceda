@@ -1,7 +1,7 @@
 "use client";
 
 import { useExpedientes } from "@/context/expedientes-context";
-import { TODAS_LAS_ETAPAS, IDS_ETAPAS_ASESORIA_COMPRA, etapaAnterior, etapaSiguiente, PROBABILIDAD_POR_ETAPA } from "@/lib/etapas";
+import { TODAS_LAS_ETAPAS, etapaAnterior, etapaSiguiente, PROBABILIDAD_POR_ETAPA } from "@/lib/etapas";
 import type { EtapaId, Expediente } from "@/lib/types";
 import { formatoPesos } from "@/lib/formato";
 import { TarjetaExpediente } from "./TarjetaExpediente";
@@ -22,8 +22,6 @@ export function TableroExpedientes({
     <div className="flex gap-4 overflow-x-auto scrollbar-sutil pb-6 pt-1">
       {TODAS_LAS_ETAPAS.map((etapa) => {
         const enEtapa = expedientes.filter((e) => e.etapa === etapa.id);
-        // Las columnas de asesoría de compra solo aparecen si tienen expedientes.
-        if (IDS_ETAPAS_ASESORIA_COMPRA.includes(etapa.id) && enEtapa.length === 0) return null;
         const totalMonto = enEtapa.reduce((acc, e) => acc + (Number(e.valorEstimado) || 0), 0);
         const prob = PROBABILIDAD_POR_ETAPA[etapa.id] ?? 0;
         const montoPonderado = totalMonto * prob;
@@ -69,7 +67,6 @@ export function TableroExpedientes({
                   <TarjetaExpediente expediente={exp} />
                   <ControlesMover
                     etapaActual={exp.etapa}
-                    asesoriaCompra={exp.tipoNegocio === "asesoria_compra" ? { yaTieneCasa: exp.yaTieneCasa } : undefined}
                     onMover={(destino) => moverEtapa(exp.id, destino)}
                   />
                 </div>
@@ -90,20 +87,13 @@ export function TableroExpedientes({
 /** Botones para mover un expediente a la etapa anterior o siguiente. */
 function ControlesMover({
   etapaActual,
-  asesoriaCompra,
   onMover,
 }: {
   etapaActual: EtapaId;
-  /** Solo para asesoría de compra: navega por su propio pipeline. */
-  asesoriaCompra?: { yaTieneCasa?: boolean | null };
   onMover: (destino: EtapaId) => void;
 }) {
-  const anterior = asesoriaCompra
-    ? etapaAnterior(etapaActual, "asesoria_compra", asesoriaCompra)
-    : etapaAnterior(etapaActual);
-  const siguiente = asesoriaCompra
-    ? etapaSiguiente(etapaActual, "asesoria_compra", asesoriaCompra)
-    : etapaSiguiente(etapaActual);
+  const anterior = etapaAnterior(etapaActual);
+  const siguiente = etapaSiguiente(etapaActual);
 
   return (
     <div className="mt-1.5 flex items-center justify-between gap-2">

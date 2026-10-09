@@ -4,8 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { aExpediente, aFila, type FilaExpediente } from "@/lib/supabase/mapeo";
-import { ETAPAS, TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
-import { validarCompuertaEtapa } from "@/lib/asesoria/compuerta";
+import { ETAPAS, ETAPAS_POR_ID } from "@/lib/etapas";
 import { registrarActividad } from "@/lib/actividades";
 import { enviarBienvenida } from "@/lib/bienvenida";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
@@ -40,35 +39,6 @@ function siguienteId(ids: string[]): string {
     .filter((n) => !Number.isNaN(n));
   const max = numeros.length ? Math.max(...numeros) : 0;
   return `EXP-${String(max + 1).padStart(3, "0")}`;
-}
-
-/**
- * Compuerta de precalificación (asesoría de compra): lanza un error si algún
- * expediente `asesoria_compra` no puede pasar a la etapa destino.
- */
-async function verificarCompuertaAsesoria(
-  sb: ReturnType<typeof supabaseServidor>,
-  ids: string[],
-  etapa: string,
-): Promise<void> {
-  if (ids.length === 0) return;
-  const { data } = await sb
-    .from("expedientes")
-    .select("id, tipo_negocio, monto_credito_precalificado, busqueda_zonas, ya_tiene_casa")
-    .in("id", ids)
-    .eq("tipo_negocio", "asesoria_compra");
-  for (const e of data ?? []) {
-    const r = validarCompuertaEtapa(
-      {
-        tipoNegocio: e.tipo_negocio,
-        montoCreditoPrecalificado: e.monto_credito_precalificado,
-        busquedaZonas: e.busqueda_zonas,
-        yaTieneCasa: e.ya_tiene_casa,
-      },
-      etapa,
-    );
-    if (!r.ok) throw new Error(ids.length > 1 ? `${e.id}: ${r.mensaje}` : r.mensaje);
-  }
 }
 
 /** Lista todos los expedientes (panel del admin, filtrado si es asesor). */
@@ -310,15 +280,9 @@ export async function crearExpediente(
   if (errLista) throw new Error(errLista.message);
   const id = siguienteId((existentes ?? []).map((r) => r.id as string));
 
-  const filaNueva = aFila(datos);
-  // Asesoría de compra: su pipeline arranca en "Captación".
-  if (filaNueva.tipo_negocio === "asesoria_compra" && (!filaNueva.etapa || filaNueva.etapa === "nuevo-lead")) {
-    filaNueva.etapa = "captacion";
-  }
-
   const { data, error } = await sb
     .from("expedientes")
-    .insert({ id, ...filaNueva, prospecto_id: datos.prospectoId || null, ultimo_movimiento: hoyISO() })
+    .insert({ id, ...aFila(datos), prospecto_id: datos.prospectoId || null, ultimo_movimiento: hoyISO() })
     .select("*, prospectos(origen, correo, direccion), asesor:asesor_id(nombre), operador:operador_id(nombre)")
     .single();
   if (error) throw new Error(error.message);
@@ -472,19 +436,6 @@ export async function actualizarExpediente(
   }
 
   const nuevos = aFila(datos);
-  if (nuevos.etapa && nuevos.etapa !== antes?.etapa) {
-    // La compuerta se evalúa con el tipo de negocio que quedará guardado.
-    const r = validarCompuertaEtapa(
-      {
-        tipoNegocio: nuevos.tipo_negocio,
-        montoCreditoPrecalificado: antes?.monto_credito_precalificado,
-        busquedaZonas: antes?.busqueda_zonas,
-        yaTieneCasa: nuevos.ya_tiene_casa ?? antes?.ya_tiene_casa,
-      },
-      nuevos.etapa,
-    );
-    if (!r.ok) throw new Error(r.mensaje);
-  }
   if (nuevos.etapa === "perdido") {
     nuevos.asesor_id = null;
     datos.asesorId = null;
@@ -561,12 +512,6 @@ export async function actualizarExpediente(
     void notificarAsignacionOperarioACliente(sb, id, datos.prospectoId || null, datos.operadorId);
   }
 
-  // Asesoría de compra: si cambió "ya tiene casa" o el tipo de negocio, ajustar las tareas BPM
-  if (cambios.includes("ya_tiene_casa")) {
-    const { reevaluarCondicionesBpm } = await import("@/app/actions/bpm");
-    await reevaluarCondicionesBpm(id);
-  }
-
   // Sincronizar asignados de BPM si cambió asesor u operador
   if (cambios.includes("asesor_id") || cambios.includes("operador_id")) {
     const { sincronizarAsignadosBpm } = await import("@/app/actions/bpm");
@@ -633,8 +578,6 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     }
   }
 
-  await verificarCompuertaAsesoria(sb, [id], etapa);
-
   // Si estaba en pausa, se quita la pausa (fecha, cotizaciones pausadas) antes de moverlo
   if (exp?.etapa === "en_pausa") {
     const { reactivarExpediente } = await import("@/lib/pausa-leads");
@@ -666,18 +609,8 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
   await registrarActividad(sb, {
     expedienteId: id,
     tipo: "etapa",
-    titulo: `Movido a ${TODAS_LAS_ETAPAS_POR_ID[etapa]?.nombre ?? etapa}`,
+    titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
   });
-
-  // Asesoría de compra: al entrar a Búsqueda se cruza el perfil contra el inventario.
-  if (etapa === "busqueda") {
-    try {
-      const { generarSugerencias } = await import("@/app/actions/asesoria-compra");
-      await generarSugerencias(id);
-    } catch (err) {
-      console.error("[moverEtapa] No se pudieron generar sugerencias:", err);
-    }
-  }
 
   // Trigger automático: Si la etapa pasa a valuación (y tipo_negocio es promoción venta), inicializar portal del cliente
   if (etapa === "valuacion") {
@@ -803,8 +736,6 @@ export async function moverEtapaMasivo(
   }
   const sb = supabaseServidor();
 
-  await verificarCompuertaAsesoria(sb, ids, etapa);
-
   // Obtener todos los prospecto_ids únicos
   const { data: exps } = await sb
     .from("expedientes")
@@ -837,7 +768,7 @@ export async function moverEtapaMasivo(
     await registrarActividad(sb, {
       expedienteId: id,
       tipo: "etapa",
-      titulo: `Movido a ${TODAS_LAS_ETAPAS_POR_ID[etapa]?.nombre ?? etapa}`,
+      titulo: `Movido a ${ETAPAS_POR_ID[etapa].nombre}`,
     });
     await dispararEvento(sb, "cambio-etapa", {
       expedienteId: id,

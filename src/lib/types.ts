@@ -19,15 +19,7 @@ export type EtapaId =
   | "visita"
   | "propuesta-aceptada"
   | "venta"
-  | "en_pausa"
-  // Asesoría de compra (mismos nombres que las etapas del flujo BPM)
-  | "captacion"
-  | "precalificacion"
-  | "busqueda"
-  | "negociacion"
-  | "expediente"
-  | "escrituracion"
-  | "entrega";
+  | "en_pausa";
 
 /** Definición visual y de orden de una etapa. */
 export interface Etapa {
@@ -341,8 +333,6 @@ export interface Expediente {
   empresaId?: string | null;
   /** Nombre de la empresa asociada (solo lectura, vía join). */
   empresaNombre?: string | null;
-  /** Asesoría de compra: el cliente ya tiene casa (se salta búsqueda y negociación). */
-  yaTieneCasa?: boolean | null;
 }
 
 /**

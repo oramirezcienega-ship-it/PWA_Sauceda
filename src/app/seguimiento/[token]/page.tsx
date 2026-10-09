@@ -67,7 +67,35 @@ export default async function PaginaSeguimiento({ params }: { params: { token: s
           )}
         </section>
 
-        {portal.conOpciones && <TusOpciones token={params.token} opciones={portal.opciones ?? []} />}
+        {(portal.procesos ?? []).map((proc) => (
+          <div key={proc.folio} className="space-y-4">
+            <section className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wide text-violet-900">{proc.titulo}</p>
+              <p className="mt-1 font-titular text-xl text-verde-profundo">{proc.etapaNombre}</p>
+              {proc.etapaDescripcion && <p className="mt-1 text-sm text-carbon/70">{proc.etapaDescripcion}</p>}
+              <ol className="mt-4 flex flex-wrap gap-x-1 gap-y-2">
+                {proc.pasos.map((p, i) => (
+                  <li key={p.id} className="flex items-center gap-1 text-[11px]">
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                        p.estado === "hecho"
+                          ? "bg-sauce text-crema"
+                          : p.estado === "actual"
+                          ? "bg-cielo text-white"
+                          : "bg-carbon/10 text-carbon/40"
+                      }`}
+                    >
+                      {p.estado === "hecho" ? "✓" : i + 1}
+                    </span>
+                    <span className={p.estado === "actual" ? "font-semibold text-carbon" : "text-carbon/50"}>{p.nombre}</span>
+                    {i < proc.pasos.length - 1 && <span className="mx-1 text-carbon/20">›</span>}
+                  </li>
+                ))}
+              </ol>
+            </section>
+            {proc.conOpciones && <TusOpciones token={params.token} opciones={proc.opciones} />}
+          </div>
+        ))}
 
         <p className="text-center text-[11px] text-carbon/40">
           ¿Dudas? Responde al WhatsApp de SAUCEDA y con gusto te ayudamos.

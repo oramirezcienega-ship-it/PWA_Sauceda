@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  aliadosParaExpediente,
+  aliadosParaOrden,
   lanzarBusqueda,
-  listarBusquedasExpediente,
+  listarBusquedasOrden,
   type AliadoParaBusqueda,
   type BusquedaAliado,
 } from "@/app/actions/aliados";
@@ -19,11 +19,11 @@ const COLOR_ESTADO: Record<EstadoBusqueda, string> = {
 };
 
 /**
- * Panel del expediente comprador: "Lanzar búsqueda" a aliados (preselecciona
+ * Panel de la OT de asesoría de compra: "Lanzar búsqueda" a aliados (preselecciona
  * los de la zona; bloquea a los que no tienen convenio firmado) y estado de
  * cada solicitud.
  */
-export function PanelBusquedaAliados({ expedienteId }: { expedienteId: string }) {
+export function PanelBusquedaAliados({ ordenTrabajoId }: { ordenTrabajoId: string }) {
   const [aliados, setAliados] = useState<AliadoParaBusqueda[]>([]);
   const [busquedas, setBusquedas] = useState<BusquedaAliado[]>([]);
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
@@ -33,12 +33,12 @@ export function PanelBusquedaAliados({ expedienteId }: { expedienteId: string })
   const [aviso, setAviso] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
-    const [a, b] = await Promise.all([aliadosParaExpediente(expedienteId), listarBusquedasExpediente(expedienteId)]);
+    const [a, b] = await Promise.all([aliadosParaOrden(ordenTrabajoId), listarBusquedasOrden(ordenTrabajoId)]);
     setAliados(a);
     setBusquedas(b);
     setNuevaRonda(b.length > 0);
     setSeleccion(new Set(a.filter((x) => x.sugerido).map((x) => x.id)));
-  }, [expedienteId]);
+  }, [ordenTrabajoId]);
 
   useEffect(() => {
     cargar().catch((e) => setAviso(e?.message || "No se pudo cargar."));
@@ -46,7 +46,7 @@ export function PanelBusquedaAliados({ expedienteId }: { expedienteId: string })
 
   async function lanzar() {
     setEnviando(true);
-    const r = await lanzarBusqueda(expedienteId, Array.from(seleccion), { nuevaRonda });
+    const r = await lanzarBusqueda(ordenTrabajoId, Array.from(seleccion), { nuevaRonda });
     setEnviando(false);
     setAviso(
       r.ok
