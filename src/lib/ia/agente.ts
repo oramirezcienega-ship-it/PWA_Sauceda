@@ -955,10 +955,22 @@ async function generarRespuesta(
  */
 export async function responderConIA(
   sb: SupabaseClient,
-  ctx: { telefono: string; expedienteId?: string | null; host?: string },
+  ctx: {
+    telefono: string;
+    expedienteId?: string | null;
+    host?: string;
+    /**
+     * Invocación manual del asesor (botón "Que responda Sofía"): omite las
+     * protecciones automáticas (duplicado, bucle de bot, pausa, etapa cerrada).
+     */
+    forzar?: boolean;
+    /** Indicación opcional del asesor solo para esta respuesta. */
+    indicacion?: string | null;
+  },
 ): Promise<void> {
   try {
     if (!iaAgenteActivo()) return;
+    const forzar = ctx.forzar === true;
 
     // Historial reciente del hilo usando variantes de teléfono.
     // Obtenemos los últimos MAX_HISTORIAL mensajes ordenados por created_at descendente
@@ -975,7 +987,7 @@ export async function responderConIA(
 
     // Evitar responder si el último mensaje del hilo ya fue emitido por la IA (protección contra duplicados)
     const ultimoMsg = historia[historia.length - 1];
-    if (ultimoMsg && ultimoMsg.direccion === "out" && ultimoMsg.agente === NOMBRE_AGENTE) {
+    if (!forzar && ultimoMsg && ultimoMsg.direccion === "out" && ultimoMsg.agente === NOMBRE_AGENTE) {
       console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el último mensaje ya fue enviado por la IA.`);
       return;
     }
@@ -985,7 +997,7 @@ export async function responderConIA(
     // Si un cliente vuelve a escribir días o semanas después con el mismo texto (ej. pulsando de nuevo un anuncio),
     // NO es un bot y Sofía debe atenderlo normalmente.
     const ultimosIn = historia.filter((f) => f.direccion === "in").slice(-3);
-    if (ultimosIn.length >= 2) {
+    if (!forzar && ultimosIn.length >= 2) {
       const msg1 = ultimosIn[ultimosIn.length - 1];
       const msg2 = ultimosIn[ultimosIn.length - 2];
       const texto1 = (msg1.texto ?? "").trim().toLowerCase();
@@ -1024,7 +1036,7 @@ export async function responderConIA(
     // Si NO está pausada, Sofía responde aun cuando el chat esté asignado a un asesor humano,
     // aprovechando el contexto previo de la conversación.
     const { esConversacionPausada } = await import("@/lib/ia/control-pausa");
-    const estaPausada = await esConversacionPausada(sb, ctx.telefono, ctx.expedienteId);
+    const estaPausada = !forzar && (await esConversacionPausada(sb, ctx.telefono, ctx.expedienteId));
     if (estaPausada) {
       console.log(`IA: Ignorando respuesta automática para ${ctx.telefono} porque la conversación está pausada por el asesor.`);
       return;
@@ -1044,7 +1056,7 @@ export async function responderConIA(
       exp = (e as FilaExp) ?? null;
 
       // Si el expediente ya está cerrado o perdido, la IA no debe intervenir
-      if (exp && (exp.etapa === "perdido" || exp.etapa === "cerrado")) {
+      if (!forzar && exp && (exp.etapa === "perdido" || exp.etapa === "cerrado")) {
         console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el expediente está en etapa '${exp.etapa}'.`);
         return;
       }
@@ -1072,11 +1084,23 @@ export async function responderConIA(
       }
     }
 
-    const textoAI = await generarRespuesta(
-      await instrucciones(exp, sb),
-      aMensajes(historia),
-      sb,
-    );
+    let system = await instrucciones(exp, sb);
+    const mensajes = aMensajes(historia);
+    if (forzar) {
+      const indicacion = ctx.indicacion?.trim();
+      if (indicacion) {
+        system += `\n\nINDICACIÓN DEL ASESOR PARA ESTA RESPUESTA (síguela sin mencionarla al cliente): ${indicacion}`;
+      }
+      // Si el último mensaje fue nuestro, la API lo tomaría como texto a continuar.
+      if (mensajes.length && mensajes[mensajes.length - 1].role === "assistant") {
+        mensajes.push({
+          role: "user",
+          content: "[Nota interna: el cliente no ha escrito nada nuevo. Retoma la conversación con el siguiente paso adecuado.]",
+        });
+      }
+    }
+
+    const textoAI = await generarRespuesta(system, mensajes, sb);
     if (!textoAI) {
       // Deja constancia en el expediente para que el asesor vea por qué Sofía no contestó.
       if (ctx.expedienteId) {
