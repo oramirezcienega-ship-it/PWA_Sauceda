@@ -17,9 +17,12 @@ import { WidgetBpmTareas } from "@/components/WidgetBpmTareas";
 export function PanelAsesoriaCompraOT({
   ordenTrabajoId,
   soloLectura = false,
+  flujoAparte = false,
 }: {
   ordenTrabajoId: string;
   soloLectura?: boolean;
+  /** La página dibuja el flujo BPM al final (con FlujoAsesoriaOT); el panel no lo repite. */
+  flujoAparte?: boolean;
 }) {
   const [orden, setOrden] = useState<OrdenAsesoria | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -147,15 +150,6 @@ export function PanelAsesoriaCompraOT({
         />
       </div>
 
-      {orden.expedienteId && (
-        <WidgetBpmTareas
-          key={`tareas-${version}`}
-          expedienteId={orden.expedienteId}
-          ordenTrabajoId={ordenTrabajoId}
-          tipoNegocio="asesoria_compra"
-          inicialContraido={false}
-        />
-      )}
 
       {busquedaHabilitada && (
         <>
@@ -164,6 +158,21 @@ export function PanelAsesoriaCompraOT({
           <BandejaOpciones key={`opciones-${version}-${versionOpciones}`} ordenTrabajoId={ordenTrabajoId} />
         </>
       )}
+      {!flujoAparte && orden.expedienteId && (
+        <WidgetBpmTareas
+          key={`tareas-${version}`}
+          expedienteId={orden.expedienteId}
+          ordenTrabajoId={ordenTrabajoId}
+          tipoNegocio="asesoria_compra"
+          inicialContraido
+        />
+      )}
     </div>
   );
+}
+
+/** Flujo BPM de la OT de asesoría, contraído, para mostrarlo al final de la página. */
+export function FlujoAsesoriaOT({ ordenTrabajoId, expedienteId }: { ordenTrabajoId: string; expedienteId: string | null }) {
+  if (!expedienteId) return null;
+  return <WidgetBpmTareas expedienteId={expedienteId} ordenTrabajoId={ordenTrabajoId} tipoNegocio="asesoria_compra" inicialContraido />;
 }

@@ -27,7 +27,7 @@ import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { SeccionContratoOT } from "./SeccionContratoOT";
 import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
-import { PanelAsesoriaCompraOT } from "./asesoria-compra/PanelAsesoriaCompraOT";
+import { FlujoAsesoriaOT, PanelAsesoriaCompraOT } from "./asesoria-compra/PanelAsesoriaCompraOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface DetalleOrdenTrabajoProps {
@@ -630,7 +630,7 @@ export function DetalleOrdenTrabajo({
       )}
 
       {/* 3b'. Asesoría de compra: etapas, ficha, tareas, aliados y opciones de casas */}
-      {orden.tipoNegocio === "asesoria_compra" && <PanelAsesoriaCompraOT ordenTrabajoId={orden.id} soloLectura={soloLectura} />}
+      {orden.tipoNegocio === "asesoria_compra" && <PanelAsesoriaCompraOT ordenTrabajoId={orden.id} soloLectura={soloLectura} flujoAparte />}
 
       {/* 3c. Contrato de Prestación de Servicios (obra; la asesoría de compra no lo usa) */}
       {orden.tipoNegocio !== "asesoria_compra" && (
@@ -982,6 +982,9 @@ export function DetalleOrdenTrabajo({
           </div>
         )}
       </div>
+
+      {/* Asesoría de compra: el flujo operativo va al final y contraído */}
+      {orden.tipoNegocio === "asesoria_compra" && <FlujoAsesoriaOT ordenTrabajoId={orden.id} expedienteId={orden.expedienteId ?? null} />}
 
       {/* Modal Foto Ampliada */}
       {fotoAmpliada && (
