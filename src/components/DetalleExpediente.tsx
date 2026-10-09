@@ -32,6 +32,7 @@ import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { WidgetColapsable } from "./WidgetColapsable";
 import { WidgetCampanasMautic } from "./WidgetCampanasMautic";
 import { normalizarTelefono } from "@/lib/telefono";
+import { TarjetaPerfilBusqueda } from "./asesoria-compra/TarjetaPerfilBusqueda";
 
 /**
  * Vista de detalle de un expediente.
@@ -178,10 +179,16 @@ export function DetalleExpediente({ id }: { id: string }) {
     );
   }
 
-  const anterior = etapaAnterior(expediente.etapa, expediente.tipoNegocio);
-  const siguiente = etapaSiguiente(expediente.etapa, expediente.tipoNegocio);
+  const esAsesoriaCompra = expediente.tipoNegocio === "asesoria_compra";
+  const opcionesEtapas = { yaTieneCasa: expediente.yaTieneCasa };
+  const anterior = etapaAnterior(expediente.etapa, expediente.tipoNegocio, opcionesEtapas);
+  const siguiente = etapaSiguiente(expediente.etapa, expediente.tipoNegocio, opcionesEtapas);
+  // El selector de etapa usa el pipeline de traspasos, salvo en asesoría de compra.
+  const etapasSelector = esAsesoriaCompra
+    ? obtenerEtapasPorNegocio(expediente.tipoNegocio, opcionesEtapas)
+    : ETAPAS;
 
-  const etapasLista = obtenerEtapasPorNegocio(expediente.tipoNegocio);
+  const etapasLista = obtenerEtapasPorNegocio(expediente.tipoNegocio, opcionesEtapas);
   const totalEtapas = etapasLista.length;
   const etapaActualIndex = etapasLista.findIndex(e => e.id === expediente.etapa);
   const etapaNumero = etapaActualIndex !== -1 ? etapaActualIndex + 1 : 1;
@@ -341,12 +348,12 @@ export function DetalleExpediente({ id }: { id: string }) {
               }`}
               title="Cambiar etapa del negocio"
             >
-              {!ETAPAS.some((et) => et.id === expediente.etapa) && (
+              {!etapasSelector.some((et) => et.id === expediente.etapa) && (
                 <option value={expediente.etapa}>
                   {TODAS_LAS_ETAPAS_POR_ID[expediente.etapa]?.nombre || expediente.etapa}
                 </option>
               )}
-              {ETAPAS.map((et) => (
+              {etapasSelector.map((et) => (
                 <option key={et.id} value={et.id}>
                   {et.nombre}
                 </option>
@@ -905,6 +912,37 @@ export function DetalleExpediente({ id }: { id: string }) {
             operadorNombreDefault={expediente.operadorNombre}
           />
         </WidgetColapsable>
+
+        {/* Asesoría de compra: avance del proceso y perfil de búsqueda */}
+        {esAsesoriaCompra && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-carbon/10 bg-white p-3.5 shadow-sm">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-carbon/50">
+                Avance de la asesoría de compra
+              </p>
+              <AvanceTraspaso etapa={expediente.etapa} tipoNegocio={expediente.tipoNegocio} yaTieneCasa={expediente.yaTieneCasa} />
+              <div className="mt-4 flex gap-3 border-t border-carbon/5 pt-4">
+                <button
+                  type="button"
+                  disabled={!anterior}
+                  onClick={() => anterior && moverEtapa(expediente.id, anterior.id)}
+                  className="flex-1 rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon/70 transition enabled:hover:border-sauce enabled:hover:text-sauce disabled:opacity-30"
+                >
+                  ← {anterior?.nombre ?? "Primera"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!siguiente}
+                  onClick={() => siguiente && moverEtapa(expediente.id, siguiente.id)}
+                  className="flex-1 rounded-md bg-sauce px-3 py-2 text-sm text-crema transition enabled:hover:bg-verde-profundo disabled:opacity-30"
+                >
+                  {siguiente?.nombre ?? "Última"} →
+                </button>
+              </div>
+            </div>
+            <TarjetaPerfilBusqueda expedienteId={expediente.id} onGuardado={recargar} />
+          </div>
+        )}
 
         {/* Avance por etapas (Solo visible para Traspaso / Compra de casa) */}
         {(!expediente.tipoNegocio || expediente.tipoNegocio === "traspaso_compra" || (expediente.tipoNegocio as string) === "compra" || (expediente.tipoNegocio as string) === "traspaso") && (

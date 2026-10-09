@@ -21,6 +21,14 @@ const ESTILO_ETAPA: Record<EtapaId, string> = {
   "propuesta-aceptada": "bg-sauce/20 text-verde-profundo border-sauce/40",
   venta: "bg-verde-profundo text-crema border-verde-profundo",
   en_pausa: "bg-slate-100 text-slate-700 border-slate-300",
+  // Asesoría de compra
+  captacion: "bg-cielo/15 text-cielo border-cielo/30",
+  precalificacion: "bg-sauce/15 text-sauce border-sauce/30",
+  busqueda: "bg-dorado/20 text-[#8a7233] border-dorado/40",
+  negociacion: "bg-dorado/25 text-[#8a7233] border-dorado/50",
+  expediente: "bg-sauce/20 text-verde-profundo border-sauce/40",
+  escrituracion: "bg-verde-profundo/15 text-verde-profundo border-verde-profundo/30",
+  entrega: "bg-verde-profundo/25 text-verde-profundo border-verde-profundo/40",
 };
 
 export function EtapaBadge({ etapa, tipoNegocio }: { etapa: EtapaId; tipoNegocio?: string | null }) {

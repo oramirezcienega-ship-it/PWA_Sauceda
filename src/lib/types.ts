@@ -19,7 +19,15 @@ export type EtapaId =
   | "visita"
   | "propuesta-aceptada"
   | "venta"
-  | "en_pausa";
+  | "en_pausa"
+  // Asesoría de compra (mismos nombres que las etapas del flujo BPM)
+  | "captacion"
+  | "precalificacion"
+  | "busqueda"
+  | "negociacion"
+  | "expediente"
+  | "escrituracion"
+  | "entrega";
 
 /** Definición visual y de orden de una etapa. */
 export interface Etapa {
@@ -39,6 +47,7 @@ export type TipoNegocioId =
   | "traspaso_compra"
   | "promocion_venta"
   | "solo_tramite"
+  | "asesoria_compra"
   | "construccion"
   | "construccion-impermeabilizacion"
   | "construccion-remodelacion"
@@ -57,6 +66,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Promoción Venta";
     case "solo_tramite":
       return "Solo Trámite";
+    case "asesoria_compra":
+      return "Asesoría de Compra";
     case "construccion":
       return "Sauceda Construye (General)";
     case "construccion-impermeabilizacion":
@@ -330,6 +341,8 @@ export interface Expediente {
   empresaId?: string | null;
   /** Nombre de la empresa asociada (solo lectura, vía join). */
   empresaNombre?: string | null;
+  /** Asesoría de compra: el cliente ya tiene casa (se salta búsqueda y negociación). */
+  yaTieneCasa?: boolean | null;
 }
 
 /**
