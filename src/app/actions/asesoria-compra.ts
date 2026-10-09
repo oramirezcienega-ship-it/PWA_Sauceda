@@ -331,6 +331,7 @@ export async function guardarFichaAsesoria(
       if (etapa !== ctx.ot.etapa) await sb.from("ordenes_trabajo").update({ etapa }).eq("id", ordenTrabajoId);
     }
 
+    await sincronizarTareasPrecalificacion(sb, ordenTrabajoId);
     revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
     return { ok: true, perfil: p };
   } catch (err) {
@@ -396,6 +397,7 @@ export async function cambiarEtapaOrdenAsesoria(
         titulo: `Orden ${ctx.ot.folio}: ${destino.nombre}`,
       });
     }
+    if (etapa !== ctx.aplicables[0]?.clave) await sincronizarTareasPrecalificacion(sb, ordenTrabajoId);
     if (etapa === "busqueda") await generarSugerencias(ordenTrabajoId);
     revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
     return { ok: true };
@@ -495,6 +497,7 @@ export async function guardarPrecalificacion(
       }
     }
 
+    await sincronizarTareasPrecalificacion(sb, ordenTrabajoId);
     revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
     return { ok: true };
   } catch (err) {
@@ -590,6 +593,32 @@ export async function eliminarEvidencia(ordenTrabajoId: string, ruta: string): P
   } catch (err) {
     console.error("[eliminarEvidencia]", err);
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo quitar la evidencia." };
+  }
+}
+
+/**
+ * Si la precalificación ya pasó el filtro, completa las tareas BPM de la etapa
+ * Precalificación que sigan abiertas (en orden: cada una desbloquea la
+ * siguiente). Así el flujo queda listo en "Cruzar perfil contra inventario".
+ */
+async function sincronizarTareasPrecalificacion(sb: Sb, ordenTrabajoId: string) {
+  const ctx = await cargarOrden(sb, ordenTrabajoId);
+  if (!ctx || ctx.ficha.dictamen === "no_apto") return;
+  if ((await pendientesDeFicha(sb, ctx.ficha)).length > 0) return;
+  const primera = ctx.aplicables[0]?.clave ?? "precalificacion";
+  const { actualizarEstadoTarea } = await import("@/app/actions/bpm");
+  // Máximo tantas vueltas como tareas haya en la etapa (cada vuelta completa la que quedó pendiente).
+  for (let i = 0; i < 10; i++) {
+    const { data: tareas } = await sb
+      .from("bpm_expediente_tareas")
+      .select("id, estado, paso:paso_id(etapa, orden)")
+      .eq("orden_trabajo_id", ordenTrabajoId)
+      .eq("estado", "pendiente");
+    const siguiente = (tareas ?? [])
+      .filter((t: any) => t.paso?.etapa === primera)
+      .sort((a: any, b: any) => (a.paso?.orden ?? 0) - (b.paso?.orden ?? 0))[0];
+    if (!siguiente) return;
+    await actualizarEstadoTarea(siguiente.id, "completada");
   }
 }
 

@@ -87,7 +87,7 @@ export function PanelAsesoriaCompraOT({
           })}
         </ol>
         {aviso && <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">{aviso}</p>}
-        {enPrecalificacion && !enPausa && (
+        {!enPausa && (enPrecalificacion || orden.pendientes.length > 0) && (
           <div
             className={`mt-3 rounded-md px-3 py-2 text-xs ${
               orden.pendientes.length === 0 ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"
@@ -97,7 +97,11 @@ export function PanelAsesoriaCompraOT({
               <p>✅ Precalificación completa: puede pasar a {siguiente?.nombre ?? "la siguiente etapa"}.</p>
             ) : (
               <>
-                <p className="font-semibold">Para pasar a {siguiente?.nombre ?? "la siguiente etapa"} falta:</p>
+                <p className="font-semibold">
+                  {enPrecalificacion
+                    ? `Para pasar a ${siguiente?.nombre ?? "la siguiente etapa"} falta:`
+                    : "Para buscar casas (inventario y aliados) falta:"}
+                </p>
                 <ul className="mt-1 list-disc space-y-0.5 pl-4">
                   {orden.pendientes.map((x) => (
                     <li key={x.clave}>{x.texto}</li>
