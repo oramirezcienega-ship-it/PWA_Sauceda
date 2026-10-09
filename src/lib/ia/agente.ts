@@ -23,6 +23,7 @@ import { generarAudioTTS, subirAudioAMeta, enviarWhatsAppAudio } from "@/lib/ia/
 import { supabaseServidor } from "@/lib/supabase/server";
 import { hoyMexico, pausarExpediente, reactivarExpediente } from "@/lib/pausa-leads";
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
+import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
 
 /**
  * AGENTE DE IA (Claude) para responder automáticamente las conversaciones
@@ -36,7 +37,7 @@ import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
  */
 
 const NOMBRE_AGENTE = "IA";
-const MODELO = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+const MODELO = modeloClaude();
 const MAX_HISTORIAL = 20;
 
 /** Último motivo por el que ningún proveedor de IA pudo generar respuesta. */
@@ -930,7 +931,7 @@ async function generarRespuesta(
           },
           body: JSON.stringify({
             model: MODELO,
-            max_tokens: 1500,
+            ...opcionesClaude(MODELO, { maxTokens: 1500 }),
             system: systemFinal,
             messages: mensajes,
           }),

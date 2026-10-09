@@ -11,6 +11,7 @@ import {
   ResultadoProyeccion,
   normalizarPorcentaje
 } from "@/lib/finanzas/proyeccion";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 // ============================================================
 // INTERFACES Y TIPOS DE PROYECCIONES
@@ -1268,15 +1269,15 @@ Responde ÚNICAMENTE en JSON válido con esta estructura:
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022",
-        max_tokens: 1200,
+        model: modeloClaude(),
+        ...opcionesClaude(modeloClaude(), { maxTokens: 1200 }),
         messages: [{ role: "user", content: prompt }]
       })
     });
 
     if (!res.ok) throw new Error(`Error Anthropic API: ${res.statusText}`);
     const data = await res.json();
-    const rawText = data?.content?.[0]?.text || "{}";
+    const rawText = textoDeRespuesta(data) || "{}";
     const parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
 
     return {
