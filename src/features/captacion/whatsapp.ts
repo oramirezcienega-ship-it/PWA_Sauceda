@@ -18,11 +18,6 @@ export async function triggerResponderBackground(
   telefono: string,
   expedienteId?: string | null,
 ): Promise<void> {
-  // Preferente: delegar a la Background Function para no depender del límite
-  // de tiempo del webhook. Si no está disponible, se responde aquí mismo.
-  const { delegarRespuestaIA } = await import("@/lib/ia/disparo");
-  if (await delegarRespuestaIA(supabaseServidor(), telefono, expedienteId)) return;
-
   const telNormalizado = normalizarTelefono(telefono);
   const timestampLlegada = Date.now();
   debounceMap.set(telNormalizado, timestampLlegada);

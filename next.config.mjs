@@ -49,6 +49,8 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
+    // Habilita src/instrumentation.ts (tareas de fondo del servidor).
+    instrumentationHook: true,
     serverComponentsExternalPackages: ["@opentelemetry/api", "@sparticuz/chromium", "puppeteer-core"],
     // Las fotos de evidencia (celular) suelen pesar varios MB; el límite
     // por defecto de 1MB para Server Actions las rechazaba silenciosamente.

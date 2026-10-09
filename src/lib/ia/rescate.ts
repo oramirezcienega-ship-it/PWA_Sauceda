@@ -5,8 +5,8 @@ import { normalizarTelefono } from "@/lib/telefono";
 
 /**
  * Red de seguridad de Sofía: busca conversaciones cuyo último mensaje es del
- * cliente y que quedaron sin respuesta (p. ej. Netlify cortó la función a la
- * mitad) y vuelve a intentar UNA sola vez por mensaje.
+ * cliente y que quedaron sin respuesta (p. ej. un redespliegue de Coolify cortó
+ * el proceso a la mitad) y vuelve a intentar UNA sola vez por mensaje.
  */
 
 /** Antigüedad mínima: deja terminar el flujo normal antes de intervenir. */
