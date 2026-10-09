@@ -1045,6 +1045,52 @@ export async function alternarPausaIA(
 }
 
 
+/**
+ * Botón "Que responda Sofía": el asesor vuelve a invocar a Sofía en cualquier
+ * punto de la conversación. Lee el hilo completo, responde a lo que el cliente
+ * esté preguntando y la deja encendida para que siga atendiendo.
+ */
+export async function invocarSofia(
+  telefono: string,
+  indicacion?: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+
+    // Reconectar a Sofía a la conversación.
+    if (await esConversacionPausada(sb, telefono, expedienteId)) {
+      await setConversacionPausada(sb, telefono, false, expedienteId, prospectoId);
+    }
+    await asignarAgente(telefono, "IA");
+
+    const inicio = new Date().toISOString();
+    const { responderConIA } = await import("@/lib/ia/agente");
+    await responderConIA(sb, { telefono, expedienteId, forzar: true, indicacion });
+
+    // responderConIA no devuelve resultado: confirmamos que sí salió un mensaje.
+    const { data: enviados } = await sb
+      .from("mensajes_whatsapp")
+      .select("estado")
+      .in("telefono", variantesTelefono(telefono))
+      .eq("direccion", "out")
+      .gte("created_at", inicio)
+      .limit(1);
+    const enviado = (enviados as { estado: string | null }[] | null)?.[0];
+    if (!enviado) {
+      return { ok: false, error: "Sofía no generó respuesta. Revisa las notas del expediente." };
+    }
+    if (enviado.estado?.startsWith("error")) {
+      return { ok: false, error: `Sofía respondió pero WhatsApp rechazó el envío: ${enviado.estado.slice(6)}` };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al invocar a Sofía:", err);
+    return { ok: false, error: err?.message || "No se pudo invocar a Sofía." };
+  }
+}
+
 /** Lista todos los asesores activos para reasignar conversaciones. */
 export async function listarAsesoresActivos(): Promise<{ id: string; nombre: string }[]> {
   await requireAdmin();

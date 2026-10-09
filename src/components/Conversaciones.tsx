@@ -23,6 +23,7 @@ import {
   actualizarTipoNegocioConversacion,
   corregirOrtografiaMensaje,
   alternarPausaIA,
+  invocarSofia,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
@@ -781,6 +782,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [asesores, setAsesores] = useState<{ id: string; nombre: string }[]>([]);
   const [asignando, setAsignando] = useState(false);
   const [alternandoIA, setAlternandoIA] = useState(false);
+  const [invocandoSofia, setInvocandoSofia] = useState(false);
   const [esAdmin, setEsAdmin] = useState(false);
   const [mostrarAtajos, setMostrarAtajos] = useState(false);
   const [filtroAtajos, setFiltroAtajos] = useState("");
@@ -901,6 +903,26 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
       // silencioso: el sondeo reintenta
     }
   }, []);
+
+  /** Botón "Que responda Sofía": la vuelve a invocar leyendo todo el hilo. */
+  const pedirRespuestaSofia = async (telefono: string) => {
+    const indicacion = window.prompt(
+      "Sofía leerá la conversación y responderá al cliente.\n\nIndicación opcional para Sofía (deja vacío si no hay):",
+      "",
+    );
+    if (indicacion === null) return; // canceló
+    setInvocandoSofia(true);
+    setAviso(null);
+    try {
+      const res = await invocarSofia(telefono, indicacion);
+      if (!res.ok) setAviso(humanizarError(res.error ?? "Sofía no pudo responder."));
+      await refrescar(telefono);
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setInvocandoSofia(false);
+    }
+  };
 
   // Carga inicial + plantillas aprobadas + asesores + rol.
   useEffect(() => {
@@ -2279,6 +2301,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       <span className={`h-1.5 w-1.5 rounded-full ${detalle.iaPausada ? "bg-amber-600" : "bg-emerald-600 animate-pulse"}`} />
                       <span>{detalle.iaPausada ? "⏸️ Sofía Pausada (Encender)" : "🟢 Sofía Activa (Pausar)"}</span>
                     </button>
+                    {/* Volver a invocar a Sofía */}
+                    <button
+                      type="button"
+                      onClick={() => void pedirRespuestaSofia(detalle.telefono)}
+                      disabled={invocandoSofia || alternandoIA || enviando}
+                      title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
+                      className="text-[8px] font-bold px-2 py-0.5 rounded shadow-xs transition disabled:opacity-50 flex items-center gap-1 shrink-0 border cursor-pointer bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400"
+                    >
+                      {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -2896,6 +2928,17 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         <span className={`h-2 w-2 rounded-full ${detalle.iaPausada ? "bg-amber-600" : "bg-emerald-600 animate-pulse"}`} />
                         <span>{detalle.iaPausada ? "⏸️ Sofía Pausada (Encender)" : "🟢 Sofía Activa (Pausar)"}</span>
+                      </button>
+
+                      {/* Volver a invocar a Sofía */}
+                      <button
+                        type="button"
+                        onClick={() => void pedirRespuestaSofia(detalle.telefono)}
+                        disabled={invocandoSofia || alternandoIA || enviando}
+                        title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
+                        className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer disabled:opacity-50 bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400"
+                      >
+                        {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
                       </button>
 
                       {/* Botón Calculadora Rápida de Impermeabilización */}
