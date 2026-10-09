@@ -598,7 +598,7 @@ export async function prepararSubidaFotoAliado(
   const sb = supabaseServidor();
   const aliado = await aliadoPorToken(sb, token);
   if (!aliado) return { ok: false, error: "Link no válido." };
-  return prepararSubidaFoto(nombre, `aliados/${aliado.id}`);
+  return prepararSubidaFoto(nombre, "externas");
 }
 
 /** Notifica al asesor del expediente (o al grupo) que llegó una casa de un aliado. */
@@ -648,7 +648,10 @@ export async function enviarInmuebleAliado(
     const aliado = await aliadoPorToken(sb, token);
     if (!aliado) return { ok: false, mensaje: "Este link no es válido o fue desactivado." };
 
-    const fotos = (datos.fotos ?? []).filter((f) => typeof f === "string" && f.startsWith(`aliados/${aliado.id}/`) && !f.includes(".."));
+    // Solo rutas generadas por prepararSubidaFotoAliado (carpeta externa, nombre aleatorio).
+    const fotos = (datos.fotos ?? []).filter(
+      (f) => typeof f === "string" && /^externas\/\d{4}-\d{2}\/[0-9a-f-]{36}\.(jpe?g|png|webp|heic|heif)$/i.test(f),
+    );
     if (fotos.length < MIN_FOTOS_ALIADO) return { ok: false, mensaje: `Sube al menos ${MIN_FOTOS_ALIADO} fotos.` };
     if (fotos.length > MAX_FOTOS_ALIADO) return { ok: false, mensaje: `Máximo ${MAX_FOTOS_ALIADO} fotos.` };
 

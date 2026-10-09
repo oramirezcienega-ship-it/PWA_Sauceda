@@ -35,9 +35,10 @@ export async function firmarFotos(sb: Sb, inmuebles: Inmueble[], soloPrimera = f
 }
 
 /** URL firmada de subida al bucket `inmuebles` (quien la llama ya validó sesión o token). */
-export async function prepararSubidaFoto(nombre: string, carpeta: string) {
-  const limpio = (nombre || "foto").normalize("NFD").replace(/[^\w.-]+/g, "_").slice(-60);
-  const ruta = `${carpeta}/${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}-${limpio}`;
+export async function prepararSubidaFoto(nombre: string, carpeta: "internas" | "externas") {
+  // La ruta no lleva el nombre original ni quién la subió: la URL firmada llega al cliente.
+  const ext = ((nombre || "").match(/\.(jpe?g|png|webp|heic|heif)$/i)?.[1] || "jpg").toLowerCase();
+  const ruta = `${carpeta}/${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
   const { data, error } = await supabaseServidor().storage.from(BUCKET_INMUEBLES).createSignedUploadUrl(ruta);
   if (error || !data) {
     console.error("[prepararSubidaFoto]", error);
@@ -53,4 +54,33 @@ export async function rondaActual(sb: Sb, expedienteId: string): Promise<number>
     sb.from("busquedas_aliados").select("ronda").eq("expediente_id", expedienteId).order("ronda", { ascending: false }).limit(1),
   ]);
   return Math.max(p?.[0]?.ronda ?? 1, b?.[0]?.ronda ?? 1);
+}
+
+/** Aviso al asesor del expediente por Telegram (o al grupo si no tiene vinculado). Best-effort. */
+export async function notificarAsesorTelegram(
+  sb: Sb,
+  datos: { asesorId: string | null; texto: string; expedienteId: string },
+): Promise<void> {
+  try {
+    const { obtenerConfiguracionTelegram, enviarMensajeTelegram } = await import("@/lib/telegram");
+    const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
+    if (!botToken) return;
+    let chatId: string | null = null;
+    if (datos.asesorId) {
+      const { data } = await sb.from("perfiles").select("telegram_chat_id").eq("id", datos.asesorId).maybeSingle();
+      chatId = data?.telegram_chat_id || null;
+    }
+    chatId = chatId || chatIdGrupo || null;
+    if (!chatId) return;
+    const sitio = (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+    await enviarMensajeTelegram({
+      botToken,
+      chatId,
+      parseMode: "HTML",
+      texto: datos.texto,
+      inlineKeyboard: [[{ text: "Abrir expediente", url: `${sitio}/expediente/${datos.expedienteId}` }]],
+    });
+  } catch (err) {
+    console.warn("[notificarAsesorTelegram]", err);
+  }
 }

@@ -26,19 +26,33 @@ import {
   type OrigenInmueble,
   type PerfilMatch,
 } from "@/lib/asesoria/match";
-import { firmarFotos, prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
+import { firmarFotos, notificarAsesorTelegram, prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
+import { obtenerEtapasPorId, obtenerEtapasPorNegocio } from "@/lib/etapas";
+import { obtenerIdAsesorGerardo } from "@/lib/asesores";
+import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import {
+  ESTATUS_RESPONDIBLES,
+  ESTATUS_VISIBLES_CLIENTE,
+  aOpcionCliente,
+  esMotivoDescarte,
+  esTokenPortalValido,
+  validarFechaVisita,
+  type OpcionCliente,
+} from "@/lib/asesoria/portal";
 import {
   filaInmuebleDesdeFormulario,
   type DatosInmuebleRapido,
 } from "@/lib/asesoria/inmueble-form";
 import {
   ESTATUS_INMUEBLE,
+  ETIQUETA_MOTIVO_DESCARTE,
   MAX_PUBLICADAS_POR_RONDA,
   descripcionAutomatica,
   filaAInmueble,
   type EstatusInmueble,
   type EstatusPropuesta,
   type Inmueble,
+  type MotivoDescarte,
 } from "@/lib/asesoria/inmuebles";
 
 const COLUMNAS_PERFIL =
@@ -603,12 +617,41 @@ export async function publicarPropuesta(
       if (errVal) throw new Error(errVal.message);
     }
 
+    // ¿Ya se avisó al cliente hace poco? (para no mandar un WhatsApp por cada opción publicada)
+    const hace15 = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { count: recientes } = await sb
+      .from("propuestas_inmuebles")
+      .select("id", { count: "exact", head: true })
+      .eq("expediente_id", p.expediente_id)
+      .gte("publicada_en", hace15);
+
     const { error } = await sb
       .from("propuestas_inmuebles")
       .update({ estatus: "publicada", publicada_en: new Date().toISOString() })
       .eq("id", propuestaId)
       .eq("estatus", "sugerida");
     if (error) throw new Error(error.message);
+
+    let avisoCliente: string | undefined;
+    if (!recientes) {
+      const { data: cli } = await sb.from("expedientes").select("cliente, telefono, token").eq("id", p.expediente_id).maybeSingle();
+      if (cli?.telefono && cli?.token) {
+        const nombre = String(cli.cliente || "").trim().split(/\s+/)[0];
+        const wa = await enviarWhatsAppTexto(
+          cli.telefono,
+          `Hola${nombre ? ` ${nombre}` : ""}, te compartimos nuevas opciones de casa que encontramos para ti 🏡. Revísalas y dinos cuáles te interesan o agenda una visita aquí: ${SITE()}/seguimiento/${cli.token}`,
+        );
+        avisoCliente = wa.ok
+          ? "Se avisó al cliente por WhatsApp."
+          : "No se pudo avisar por WhatsApp (puede que la ventana de 24 h esté cerrada); comparte el portal desde Conversaciones.";
+        await registrarActividad(sb, {
+          expedienteId: p.expediente_id,
+          tipo: "whatsapp",
+          titulo: wa.ok ? "📲 Aviso de nuevas opciones enviado al cliente" : "⚠️ No se pudo enviar el aviso de nuevas opciones",
+          detalle: wa.ok ? undefined : wa.error,
+        });
+      }
+    }
 
     const { count } = await sb
       .from("propuestas_inmuebles")
@@ -628,9 +671,14 @@ export async function publicarPropuesta(
       ok: true,
       publicadasEnRonda: publicadas,
       advertencia:
-        publicadas > MAX_PUBLICADAS_POR_RONDA
-          ? `Ya hay ${publicadas} opciones publicadas en la ronda ${p.ronda}; se recomiendan de 3 a ${MAX_PUBLICADAS_POR_RONDA}.`
-          : undefined,
+        [
+          publicadas > MAX_PUBLICADAS_POR_RONDA
+            ? `Ya hay ${publicadas} opciones publicadas en la ronda ${p.ronda}; se recomiendan de 3 a ${MAX_PUBLICADAS_POR_RONDA}.`
+            : null,
+          avisoCliente ?? null,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined,
     };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo publicar." };
@@ -652,4 +700,233 @@ export async function descartarSugerencia(propuestaId: string): Promise<{ ok: bo
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo descartar." };
   }
+}
+
+// ============================================================================
+// Fase 4: portal del cliente /seguimiento/[token] — "Tus opciones"
+// Todas estas acciones son públicas: validan `expedientes.token` SIEMPRE y
+// devuelven solo lo que arma `aOpcionCliente` (lista blanca de campos).
+// ============================================================================
+
+export interface PasoPortal {
+  id: string;
+  nombre: string;
+  estado: "hecho" | "actual" | "pendiente";
+}
+
+export interface PortalCliente {
+  ok: boolean;
+  mensaje?: string;
+  primerNombre?: string;
+  tipoNegocio?: string;
+  etapaNombre?: string;
+  etapaDescripcion?: string;
+  pasos?: PasoPortal[];
+  asesorNombre?: string | null;
+  /** Solo asesoría de compra con búsqueda. */
+  conOpciones?: boolean;
+  opciones?: OpcionCliente[];
+}
+
+const SITE = () => (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+
+/** Expediente por token público (columnas mínimas). */
+async function expedientePorToken(sb: Sb, token: string) {
+  if (!esTokenPortalValido(token)) return null;
+  const { data } = await sb
+    .from("expedientes")
+    .select("id, cliente, telefono, prospecto_id, tipo_negocio, etapa, ya_tiene_casa, asesor_id, asesor:asesor_id(nombre)")
+    .eq("token", token)
+    .maybeSingle();
+  return data as any;
+}
+
+/** Propuesta visible para el cliente dueño del token. */
+async function propuestaDelCliente(sb: Sb, expedienteId: string, propuestaId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(propuestaId)) return null;
+  const { data } = await sb
+    .from("propuestas_inmuebles")
+    .select("id, expediente_id, estatus, vista_en, inmueble:inmueble_id(folio, precio, fraccionamiento, zona)")
+    .eq("id", propuestaId)
+    .eq("expediente_id", expedienteId)
+    .maybeSingle();
+  if (!data || !ESTATUS_VISIBLES_CLIENTE.includes(data.estatus as EstatusPropuesta)) return null;
+  return data as any;
+}
+
+/** Portal del cliente: estatus del proceso y, en asesoría de compra, sus opciones de casa. */
+export async function obtenerPortalCliente(token: string): Promise<PortalCliente> {
+  const sb = supabaseServidor();
+  const exp = await expedientePorToken(sb, token);
+  if (!exp) return { ok: false, mensaje: "Este enlace no es válido. Usa el que te enviamos por WhatsApp." };
+
+  const opcionesEtapas = { yaTieneCasa: exp.ya_tiene_casa };
+  const lista = obtenerEtapasPorNegocio(exp.tipo_negocio, opcionesEtapas).filter(
+    (e) => e.id !== "perdido" && e.id !== "en_pausa",
+  );
+  const actual = obtenerEtapasPorId(exp.tipo_negocio)[exp.etapa];
+  const idxActual = lista.findIndex((e) => e.id === exp.etapa);
+  const pasos: PasoPortal[] = lista.map((e, i) => ({
+    id: e.id,
+    nombre: e.nombreCliente,
+    estado: idxActual === -1 ? "pendiente" : i < idxActual ? "hecho" : i === idxActual ? "actual" : "pendiente",
+  }));
+
+  const conOpciones = exp.tipo_negocio === "asesoria_compra" && !exp.ya_tiene_casa;
+  let opciones: OpcionCliente[] = [];
+  if (conOpciones) {
+    const { data: props } = await sb
+      .from("propuestas_inmuebles")
+      .select("id, estatus, publicada_en, inmueble:inmueble_id(*)")
+      .eq("expediente_id", exp.id)
+      .in("estatus", ESTATUS_VISIBLES_CLIENTE)
+      .order("publicada_en", { ascending: false });
+    const filas = (props ?? []).filter((p: any) => p.inmueble);
+    const ids = filas.map((p: any) => p.id);
+    const { data: citas } = ids.length
+      ? await sb
+          .from("agenda_citas")
+          .select("propuesta_id, fecha, hora_inicio, estado")
+          .in("propuesta_id", ids)
+          .neq("estado", "cancelada")
+          .order("fecha", { ascending: false })
+      : { data: [] as any[] };
+    const firmados = await firmarFotos(sb, filas.map((p: any) => filaAInmueble(p.inmueble)));
+    opciones = filas.map((p: any, i: number) =>
+      aOpcionCliente(
+        { id: p.id, estatus: p.estatus },
+        p.inmueble,
+        firmados[i].fotosUrl,
+        (citas ?? []).find((c: any) => c.propuesta_id === p.id) ?? null,
+      ),
+    );
+  }
+
+  return {
+    ok: true,
+    primerNombre: String(exp.cliente || "").trim().split(/\s+/)[0] || "",
+    tipoNegocio: exp.tipo_negocio,
+    etapaNombre: actual?.nombreCliente ?? "En proceso",
+    etapaDescripcion: actual?.descripcionCliente ?? "",
+    pasos,
+    asesorNombre: exp.asesor?.nombre ?? null,
+    conOpciones,
+    opciones,
+  };
+}
+
+/** El cliente abrió la opción: publicada → vista. */
+export async function marcarOpcionVista(token: string, propuestaId: string): Promise<{ ok: boolean }> {
+  const sb = supabaseServidor();
+  const exp = await expedientePorToken(sb, token);
+  if (!exp) return { ok: false };
+  const p = await propuestaDelCliente(sb, exp.id, propuestaId);
+  if (!p || p.estatus !== "publicada") return { ok: Boolean(p) };
+  await sb
+    .from("propuestas_inmuebles")
+    .update({ estatus: "vista", vista_en: new Date().toISOString() })
+    .eq("id", p.id)
+    .eq("estatus", "publicada");
+  return { ok: true };
+}
+
+/** "Me interesa" o "Descartar" (con motivo) desde el portal. */
+export async function responderOpcion(
+  token: string,
+  propuestaId: string,
+  respuesta: { accion: "me_interesa" | "descartar"; motivo?: string; comentario?: string },
+): Promise<{ ok: boolean; mensaje?: string }> {
+  const sb = supabaseServidor();
+  const exp = await expedientePorToken(sb, token);
+  if (!exp) return { ok: false, mensaje: "Enlace no válido." };
+  const p = await propuestaDelCliente(sb, exp.id, propuestaId);
+  if (!p) return { ok: false, mensaje: "Esta opción ya no está disponible." };
+  if (!ESTATUS_RESPONDIBLES.includes(p.estatus)) return { ok: false, mensaje: "Esta opción ya tiene una visita en proceso." };
+
+  const comentario = (respuesta.comentario ?? "").trim().slice(0, 500) || null;
+  const ahora = new Date().toISOString();
+  let payload: Record<string, any>;
+  if (respuesta.accion === "descartar") {
+    if (!esMotivoDescarte(respuesta.motivo)) return { ok: false, mensaje: "Elige un motivo." };
+    payload = { estatus: "descartada", motivo_descarte: respuesta.motivo, comentario_cliente: comentario, respondida_en: ahora };
+  } else {
+    payload = { estatus: "me_interesa", comentario_cliente: comentario, respondida_en: ahora };
+  }
+  payload.vista_en = p.vista_en ?? ahora;
+  const { error } = await sb.from("propuestas_inmuebles").update(payload).eq("id", p.id);
+  if (error) return { ok: false, mensaje: "No se pudo guardar tu respuesta." };
+
+  const casa = `${p.inmueble?.folio ?? ""} (${formatoPesos(Number(p.inmueble?.precio ?? 0))}${p.inmueble?.fraccionamiento ? `, ${p.inmueble.fraccionamiento}` : ""})`;
+  const titulo =
+    respuesta.accion === "descartar"
+      ? `👎 El cliente descartó ${casa}: ${ETIQUETA_MOTIVO_DESCARTE[respuesta.motivo as MotivoDescarte]}`
+      : `👍 Al cliente le interesa ${casa}`;
+  await registrarActividad(sb, { expedienteId: exp.id, tipo: "sistema", titulo, detalle: comentario ?? undefined });
+  if (respuesta.accion === "me_interesa") {
+    await notificarAsesorTelegram(sb, {
+      asesorId: exp.asesor_id,
+      expedienteId: exp.id,
+      texto: `👍 <b>${exp.id}</b>: al cliente le interesa ${casa}.${comentario ? `\n💬 ${comentario}` : ""}`,
+    });
+  }
+  return { ok: true };
+}
+
+/** "Agendar visita": crea la cita ligada a la propuesta y avisa al asesor. */
+export async function agendarVisitaOpcion(
+  token: string,
+  propuestaId: string,
+  fecha: string,
+  hora: string,
+  comentario?: string,
+): Promise<{ ok: boolean; mensaje?: string }> {
+  const sb = supabaseServidor();
+  const exp = await expedientePorToken(sb, token);
+  if (!exp) return { ok: false, mensaje: "Enlace no válido." };
+  const p = await propuestaDelCliente(sb, exp.id, propuestaId);
+  if (!p) return { ok: false, mensaje: "Esta opción ya no está disponible." };
+  if (!ESTATUS_RESPONDIBLES.includes(p.estatus)) return { ok: false, mensaje: "Esta opción ya tiene una visita agendada." };
+  const v = validarFechaVisita(fecha, hora);
+  if (!v.ok) return v;
+
+  const perfilId = exp.asesor_id || (await obtenerIdAsesorGerardo(sb));
+  if (!perfilId) return { ok: false, mensaje: "No pudimos agendar en este momento. Escríbenos por WhatsApp." };
+  const nota = (comentario ?? "").trim().slice(0, 500);
+  const { error } = await sb.from("agenda_citas").insert({
+    perfil_id: perfilId,
+    expediente_id: exp.id,
+    prospecto_id: exp.prospecto_id ?? null,
+    propuesta_id: p.id,
+    cliente_nombre: exp.cliente || "Cliente",
+    cliente_telefono: exp.telefono || "",
+    tipo_cita: "venta",
+    fecha,
+    hora_inicio: `${hora}:00`,
+    hora_fin: `${v.horaFin}:00`,
+    estado: "pendiente",
+    fraccionamiento: p.inmueble?.fraccionamiento || p.inmueble?.zona || null,
+    notas: `Visita a ${p.inmueble?.folio ?? "inmueble"} solicitada por el cliente desde su portal.${nota ? ` Comentario: ${nota}` : ""}`,
+  });
+  if (error) {
+    console.error("[agendarVisitaOpcion]", error);
+    return { ok: false, mensaje: "No se pudo agendar la visita." };
+  }
+  await sb
+    .from("propuestas_inmuebles")
+    .update({ estatus: "visita_agendada", respondida_en: new Date().toISOString(), comentario_cliente: nota || null })
+    .eq("id", p.id);
+
+  const casa = `${p.inmueble?.folio ?? ""} (${formatoPesos(Number(p.inmueble?.precio ?? 0))})`;
+  await registrarActividad(sb, {
+    expedienteId: exp.id,
+    tipo: "visita",
+    titulo: `🗓️ El cliente agendó visita a ${casa}`,
+    detalle: `${fecha} a las ${hora}. Confirma con el cliente y coordina el acceso.`,
+  });
+  await notificarAsesorTelegram(sb, {
+    asesorId: exp.asesor_id,
+    expedienteId: exp.id,
+    texto: `🗓️ <b>${exp.id}</b>: el cliente pidió visitar ${casa} el <b>${fecha}</b> a las <b>${hora}</b>.${nota ? `\n💬 ${nota}` : ""}\nConfirma la cita y coordina el acceso con el vendedor o aliado.`,
+  });
+  return { ok: true };
 }
