@@ -47,7 +47,7 @@ interface Borrador {
   montoAhorroPropio: string;
   precalificacionFuente: string;
   precalificacionFecha: string;
-  zonasTexto: string;
+  zonas: string[];
   busquedaPrecioMin: string;
   busquedaPrecioMax: string;
   busquedaRecamarasMin: string;
@@ -62,7 +62,8 @@ function aBorrador(p: PerfilBusqueda | null): Borrador {
     montoAhorroPropio: aTextoMonto(p?.montoAhorroPropio ?? null),
     precalificacionFuente: p?.precalificacionFuente ?? "",
     precalificacionFecha: p?.precalificacionFecha ?? "",
-    zonasTexto: (p?.busquedaZonas ?? []).join(", "),
+    // Siempre al menos un campo vacío para capturar la primera zona.
+    zonas: p?.busquedaZonas?.length ? [...p.busquedaZonas] : [""],
     busquedaPrecioMin: aTextoMonto(p?.busquedaPrecioMin ?? null),
     busquedaPrecioMax: aTextoMonto(p?.busquedaPrecioMax ?? null),
     busquedaRecamarasMin: p?.busquedaRecamarasMin != null ? String(p.busquedaRecamarasMin) : "",
@@ -105,7 +106,7 @@ export function TarjetaPerfilBusqueda({
       montoAhorroPropio: borrador.montoAhorroPropio,
       precalificacionFuente: borrador.precalificacionFuente,
       precalificacionFecha: borrador.precalificacionFecha,
-      busquedaZonas: normalizarZonas(borrador.zonasTexto),
+      busquedaZonas: normalizarZonas(borrador.zonas),
       busquedaPrecioMin: borrador.busquedaPrecioMin,
       busquedaPrecioMax: borrador.busquedaPrecioMax,
       busquedaRecamarasMin: borrador.busquedaRecamarasMin,
@@ -211,7 +212,7 @@ export function TarjetaPerfilBusqueda({
 
       {!cargando && editando && (
         <div className="space-y-3 text-sm">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Campo etiqueta="Crédito precalificado (crédito + subcuenta)">
               <MontoInput valor={borrador.montoCreditoPrecalificado} onCambio={(t) => set("montoCreditoPrecalificado", t)} placeholder="$850,000" />
             </Campo>
@@ -272,16 +273,40 @@ export function TarjetaPerfilBusqueda({
           </label>
 
           {!borrador.yaTieneCasa && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Campo etiqueta="Zonas, colonias o fraccionamientos (separados por coma)" ancho>
-                <input
-                  type="text"
-                  value={borrador.zonasTexto}
-                  onChange={(e) => set("zonasTexto", e.target.value)}
-                  placeholder="Villas de San Juan, Los Castillos, Centro"
-                  className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
-                />
-              </Campo>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="sm:col-span-2 lg:col-span-3">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-carbon/50">Zonas, colonias o fraccionamientos</span>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {borrador.zonas.map((zona, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={zona}
+                        onChange={(e) => set("zonas", borrador.zonas.map((z, j) => (j === i ? e.target.value : z)))}
+                        placeholder={i === 0 ? "Villas de San Juan" : `Zona ${i + 1}`}
+                        className="w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none"
+                      />
+                      {borrador.zonas.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => set("zonas", borrador.zonas.filter((_, j) => j !== i))}
+                          aria-label={`Quitar zona ${i + 1}`}
+                          className="shrink-0 rounded-md border border-carbon/15 px-2 py-1.5 text-xs text-carbon/50 hover:border-rojo hover:text-rojo"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => set("zonas", [...borrador.zonas, ""])}
+                  className="mt-2 text-xs font-semibold text-sauce hover:underline"
+                >
+                  + Agregar otra zona
+                </button>
+              </div>
               <Campo etiqueta="Precio mínimo">
                 <MontoInput valor={borrador.busquedaPrecioMin} onCambio={(t) => set("busquedaPrecioMin", t)} placeholder="$600,000" />
               </Campo>
@@ -345,7 +370,7 @@ export function TarjetaPerfilBusqueda({
 
 function Campo({ etiqueta, children, ancho }: { etiqueta: string; children: React.ReactNode; ancho?: boolean }) {
   return (
-    <label className={`block ${ancho ? "sm:col-span-2" : ""}`}>
+    <label className={`block ${ancho ? "sm:col-span-2 lg:col-span-3" : ""}`}>
       <span className="mb-1 block text-[10px] font-bold uppercase text-carbon/50">{etiqueta}</span>
       {children}
     </label>
