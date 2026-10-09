@@ -530,3 +530,21 @@ export function IconoProductos({ className = defaultClass }: IconProps) {
   );
 }
 
+
+export function IconoInventario({ className = defaultClass }: IconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9v11h14V9" />
+      <path d="M10 20v-6h4v6" />
+    </svg>
+  );
+}

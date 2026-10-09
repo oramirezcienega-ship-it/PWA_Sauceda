@@ -669,6 +669,16 @@ export async function moverEtapa(id: string, etapa: EtapaId): Promise<void> {
     titulo: `Movido a ${TODAS_LAS_ETAPAS_POR_ID[etapa]?.nombre ?? etapa}`,
   });
 
+  // Asesoría de compra: al entrar a Búsqueda se cruza el perfil contra el inventario.
+  if (etapa === "busqueda") {
+    try {
+      const { generarSugerencias } = await import("@/app/actions/asesoria-compra");
+      await generarSugerencias(id);
+    } catch (err) {
+      console.error("[moverEtapa] No se pudieron generar sugerencias:", err);
+    }
+  }
+
   // Trigger automático: Si la etapa pasa a valuación (y tipo_negocio es promoción venta), inicializar portal del cliente
   if (etapa === "valuacion") {
     await asegurarPortalCliente(sb, id);

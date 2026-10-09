@@ -33,6 +33,8 @@ import { WidgetColapsable } from "./WidgetColapsable";
 import { WidgetCampanasMautic } from "./WidgetCampanasMautic";
 import { normalizarTelefono } from "@/lib/telefono";
 import { TarjetaPerfilBusqueda } from "./asesoria-compra/TarjetaPerfilBusqueda";
+import { BandejaOpciones } from "./asesoria-compra/BandejaOpciones";
+import { BotonPublicarInventario } from "./asesoria-compra/BotonPublicarInventario";
 
 /**
  * Vista de detalle de un expediente.
@@ -941,6 +943,7 @@ export function DetalleExpediente({ id }: { id: string }) {
               </div>
             </div>
             <TarjetaPerfilBusqueda expedienteId={expediente.id} onGuardado={recargar} />
+            {!expediente.yaTieneCasa && <BandejaOpciones expedienteId={expediente.id} />}
           </div>
         )}
 
@@ -1258,6 +1261,11 @@ export function DetalleExpediente({ id }: { id: string }) {
             </Bloque>
           )}
 
+
+          {/* Vendedor: publicar su casa al inventario de la asesoría de compra */}
+          {(expediente.tipoNegocio === "promocion_venta" || expediente.tipoNegocio === "traspaso_compra") && (
+            <BotonPublicarInventario expedienteId={expediente.id} />
+          )}
 
           {/* Módulo de Promoción Venta & Portal del Cliente */}
           {(expediente.tipoNegocio === "promocion_venta" || expediente.sessionTokenClient) && (
