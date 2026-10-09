@@ -27,6 +27,7 @@ import {
   IconoProspectos,
   IconoNegocios,
   IconoEmpresas,
+  IconoInventario,
   IconoComisiones,
   IconoConstruccion,
   IconoProveedores,
@@ -524,6 +525,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           href: "/empresas",
           label: "Empresas",
           icono: IconoEmpresas,
+        },
+        {
+          href: "/inventario",
+          label: "Inventario",
+          icono: IconoInventario,
         },
         {
           href: "/comisiones",
