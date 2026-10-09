@@ -23,10 +23,14 @@ import {
 } from "@/lib/asesoria/perfil";
 import {
   rankearInmuebles,
-  TIPOS_CREDITO,
   type OrigenInmueble,
   type PerfilMatch,
 } from "@/lib/asesoria/match";
+import { firmarFotos, prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
+import {
+  filaInmuebleDesdeFormulario,
+  type DatosInmuebleRapido,
+} from "@/lib/asesoria/inmueble-form";
 import {
   ESTATUS_INMUEBLE,
   MAX_PUBLICADAS_POR_RONDA,
@@ -169,31 +173,9 @@ export async function validarCambioEtapa(expedienteId: string, etapa: string): P
 // Fase 2: inventario de inmuebles, inventario propio y sugerencias (match)
 // ============================================================================
 
-const BUCKET_INMUEBLES = "inmuebles";
 const SELECT_INMUEBLE = "*, aliado:aliado_id(nombre)";
 
 type Sb = ReturnType<typeof supabaseServidor>;
-
-/** Firma las fotos guardadas como ruta del bucket privado; las URL completas pasan tal cual. */
-async function firmarFotos(sb: Sb, inmuebles: Inmueble[], soloPrimera = false): Promise<Inmueble[]> {
-  const rutas = new Set<string>();
-  for (const i of inmuebles) {
-    for (const f of soloPrimera ? i.fotos.slice(0, 1) : i.fotos) {
-      if (f && !/^https?:\/\//i.test(f)) rutas.add(f);
-    }
-  }
-  const firmadas = new Map<string, string>();
-  if (rutas.size > 0) {
-    const { data } = await sb.storage.from(BUCKET_INMUEBLES).createSignedUrls(Array.from(rutas), 60 * 60);
-    for (const d of data ?? []) if (d.path && d.signedUrl) firmadas.set(d.path, d.signedUrl);
-  }
-  return inmuebles.map((i) => ({
-    ...i,
-    fotosUrl: (soloPrimera ? i.fotos.slice(0, 1) : i.fotos)
-      .map((f) => (/^https?:\/\//i.test(f) ? f : firmadas.get(f) || ""))
-      .filter(Boolean),
-  }));
-}
 
 export interface FiltrosInventario {
   zona?: string;
@@ -238,81 +220,6 @@ export async function prepararSubidaFotoInmueble(
   return prepararSubidaFoto(nombre, "internas");
 }
 
-/** Compartida con el link público de aliados (que valida su token antes de llamarla). */
-async function prepararSubidaFoto(nombre: string, carpeta: string) {
-  const limpio = (nombre || "foto").normalize("NFD").replace(/[^\w.-]+/g, "_").slice(-60);
-  const ruta = `${carpeta}/${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}-${limpio}`;
-  const { data, error } = await supabaseServidor().storage.from(BUCKET_INMUEBLES).createSignedUploadUrl(ruta);
-  if (error || !data) {
-    console.error("[prepararSubidaFoto]", error);
-    return { ok: false, error: "No se pudo preparar la subida de la foto." };
-  }
-  return { ok: true, ruta: data.path, token: data.token };
-}
-
-export interface DatosInmuebleRapido {
-  urlFuente?: string;
-  precio: number | string;
-  zona?: string;
-  fraccionamiento?: string;
-  colonia?: string;
-  direccionPrivada?: string;
-  metrosConstruccion?: number | string | null;
-  metrosTerreno?: number | string | null;
-  recamaras?: number | string | null;
-  banos?: number | string | null;
-  aceptaCredito?: string[];
-  tieneEscritura?: boolean | null;
-  tieneAdeudos?: boolean | null;
-  tieneLitigios?: boolean | null;
-  descripcionPublica?: string;
-  notasInternas?: string;
-  fotos?: string[];
-}
-
-function numeroONull(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(String(v).replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Valida y arma las columnas comunes de un inmueble capturado por formulario. */
-function filaDesdeFormulario(d: DatosInmuebleRapido): { ok: true; fila: Record<string, any> } | { ok: false; mensaje: string } {
-  const precio = numeroONull(d.precio);
-  if (!precio || precio <= 0) return { ok: false, mensaje: "El precio es obligatorio." };
-  const fotos = (d.fotos ?? []).filter((f) => typeof f === "string" && f && !f.includes(".."));
-  const recamaras = numeroONull(d.recamaras);
-  const banos = numeroONull(d.banos);
-  const metrosConstruccion = numeroONull(d.metrosConstruccion);
-  const metrosTerreno = numeroONull(d.metrosTerreno);
-  const zona = (d.zona ?? "").trim() || null;
-  const fraccionamiento = (d.fraccionamiento ?? "").trim() || null;
-  return {
-    ok: true,
-    fila: {
-      precio,
-      url_fuente: (d.urlFuente ?? "").trim() || null,
-      zona,
-      fraccionamiento,
-      colonia: (d.colonia ?? "").trim() || null,
-      direccion_privada: (d.direccionPrivada ?? "").trim() || null,
-      metros_construccion: metrosConstruccion,
-      metros_terreno: metrosTerreno,
-      recamaras: recamaras === null ? null : Math.round(recamaras),
-      banos,
-      acepta_credito: (d.aceptaCredito ?? []).filter((c) => (TIPOS_CREDITO as string[]).includes(c)),
-      tiene_escritura: d.tieneEscritura ?? null,
-      tiene_adeudos: d.tieneAdeudos ?? null,
-      tiene_litigios: d.tieneLitigios ?? null,
-      descripcion_publica:
-        (d.descripcionPublica ?? "").trim() ||
-        descripcionAutomatica({ fraccionamiento, zona, recamaras, banos, metrosConstruccion, metrosTerreno }),
-      notas_internas: (d.notasInternas ?? "").trim() || null,
-      fotos,
-    },
-  };
-}
-
 /** "Agregar desde portal": inmueble capturado a mano por SAUCEDA (queda disponible). */
 export async function crearInmueblePortal(
   datos: DatosInmuebleRapido,
@@ -320,7 +227,7 @@ export async function crearInmueblePortal(
   try {
     await requireAdmin();
     const usuario = await usuarioActual();
-    const r = filaDesdeFormulario(datos);
+    const r = filaInmuebleDesdeFormulario(datos);
     if (!r.ok) return r;
     if (!r.fila.url_fuente) return { ok: false, mensaje: "Pega la URL de la publicación en el portal." };
     const sb = supabaseServidor();
@@ -559,17 +466,6 @@ async function perfilMatchDeExpediente(sb: Sb, expedienteId: string) {
   return { fila: f, perfil };
 }
 
-/** Ronda actual: la mayor registrada (o 1). */
-async function rondaActual(sb: Sb, expedienteId: string): Promise<number> {
-  const { data } = await sb
-    .from("propuestas_inmuebles")
-    .select("ronda")
-    .eq("expediente_id", expedienteId)
-    .order("ronda", { ascending: false })
-    .limit(1);
-  return data?.[0]?.ronda ?? 1;
-}
-
 /**
  * Cruza el perfil del comprador contra el inventario disponible y guarda las
  * coincidencias como propuestas `sugerida` (solo las ve SAUCEDA). No duplica
@@ -684,16 +580,28 @@ export async function publicarPropuesta(
     const sb = supabaseServidor();
     const { data: p } = await sb
       .from("propuestas_inmuebles")
-      .select("id, expediente_id, ronda, estatus, inmueble:inmueble_id(folio, estatus)")
+      .select("id, expediente_id, inmueble_id, ronda, estatus, inmueble:inmueble_id(folio, estatus)")
       .eq("id", propuestaId)
       .maybeSingle();
     if (!p) return { ok: false, mensaje: "La propuesta no existe." };
     if (p.estatus !== "sugerida") return { ok: false, mensaje: "Solo se publican propuestas sugeridas." };
-    if ((p as any).inmueble?.estatus !== "disponible") {
+    const estatusInmueble = (p as any).inmueble?.estatus;
+    if (estatusInmueble !== "disponible" && estatusInmueble !== "por_validar") {
       return { ok: false, mensaje: "El inmueble ya no está disponible." };
     }
     const { data: exp } = await sb.from("expedientes").select("asesor_id, operador_id").eq("id", p.expediente_id).maybeSingle();
     if (exp) await verificarAcceso(exp as any);
+
+    // Casa de aliado aún sin validar: publicar = el asesor la revisó y la valida.
+    if (estatusInmueble === "por_validar") {
+      const usuario = await usuarioActual();
+      const { error: errVal } = await sb
+        .from("inmuebles")
+        .update({ estatus: "disponible", validado_por: usuario?.id ?? null, validado_en: new Date().toISOString() })
+        .eq("id", (p as any).inmueble_id ?? (p as any).inmueble?.id)
+        .eq("estatus", "por_validar");
+      if (errVal) throw new Error(errVal.message);
+    }
 
     const { error } = await sb
       .from("propuestas_inmuebles")
@@ -744,18 +652,4 @@ export async function descartarSugerencia(propuestaId: string): Promise<{ ok: bo
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo descartar." };
   }
-}
-
-/** Abre una nueva ronda de búsqueda (las siguientes sugerencias se cuentan aparte). */
-export async function nuevaRondaBusqueda(expedienteId: string): Promise<{ ok: boolean; ronda?: number }> {
-  await requireAdmin();
-  const sb = supabaseServidor();
-  const ronda = (await rondaActual(sb, expedienteId)) + 1;
-  // La ronda se materializa al guardar la primera sugerencia; se anota en la bitácora.
-  await registrarActividad(sb, {
-    expedienteId,
-    tipo: "sistema",
-    titulo: `🔁 Nueva ronda de búsqueda (${ronda})`,
-  });
-  return { ok: true, ronda };
 }

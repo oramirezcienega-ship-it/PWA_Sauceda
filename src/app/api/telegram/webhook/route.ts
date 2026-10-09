@@ -294,6 +294,37 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // Aliado inmobiliario sin casas para una solicitud de búsqueda: bsr:{busquedaId}
+      const mSinRes = data.match(/^bsr:([0-9a-f-]{36})$/i);
+      if (mSinRes) {
+        const { data: busq } = await sb
+          .from("busquedas_aliados")
+          .select("id, estado, expediente_id, aliado:aliado_id(nombre, telegram_chat_id)")
+          .eq("id", mSinRes[1])
+          .maybeSingle();
+        const aliado = (busq as any)?.aliado;
+        if (!busq || !aliado || String(aliado.telegram_chat_id) !== fromId) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "No pude identificar esta solicitud.", true);
+          return NextResponse.json({ ok: true });
+        }
+        if (busq.estado === "respondida") {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Ya nos enviaste casas para esta búsqueda. ¡Gracias!");
+          return NextResponse.json({ ok: true });
+        }
+        await sb
+          .from("busquedas_aliados")
+          .update({ estado: "sin_resultados", respondida_at: new Date().toISOString() })
+          .eq("id", busq.id);
+        await registrarActividad(sb, {
+          expedienteId: busq.expediente_id,
+          tipo: "sistema",
+          titulo: `🚫 ${aliado.nombre} no tiene casas para la búsqueda`,
+          detalle: "Respondió desde Telegram.",
+        });
+        await responderCallbackQueryTelegram(botToken, cb.id, "Registrado: sin casas para esta búsqueda. ¡Gracias!");
+        return NextResponse.json({ ok: true });
+      }
+
       // Acuse de lectura de una inspección compartida: c:{citaId}  (botón "Enterado")
       if (data.startsWith("c:")) {
         const [, citaId] = data.split(":");

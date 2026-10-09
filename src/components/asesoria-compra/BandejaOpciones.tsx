@@ -179,7 +179,7 @@ export function BandejaOpciones({ expedienteId }: { expedienteId: string }) {
                       onClick={() => publicar(p)}
                       className="flex-1 rounded-md bg-sauce px-2 py-1.5 text-xs font-semibold text-crema hover:bg-verde-profundo"
                     >
-                      Publicar
+                      {p.inmueble.estatus === "por_validar" ? "Validar y publicar" : "Publicar"}
                     </button>
                     <button
                       type="button"

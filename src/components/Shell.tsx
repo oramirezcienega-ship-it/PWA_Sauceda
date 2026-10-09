@@ -76,7 +76,8 @@ function esRutaPublica(path: string): boolean {
     path.startsWith("/garantia/") ||
     path.startsWith("/orden-trabajo/entrega/") ||
     path.startsWith("/orden-trabajo/remision/") ||
-    path.startsWith("/asesor/")
+    path.startsWith("/asesor/") ||
+    path.startsWith("/aliados/carga/")
   );
 }
 
@@ -530,6 +531,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           href: "/inventario",
           label: "Inventario",
           icono: IconoInventario,
+        },
+        {
+          href: "/aliados",
+          label: "Aliados",
+          icono: IconoEmpresas,
         },
         {
           href: "/comisiones",

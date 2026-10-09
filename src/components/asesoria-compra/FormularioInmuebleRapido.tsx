@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatoPesos } from "@/lib/formato";
 import { ETIQUETA_CREDITO, TIPOS_CREDITO } from "@/lib/asesoria/match";
-import type { DatosInmuebleRapido } from "@/app/actions/asesoria-compra";
+import type { DatosInmuebleRapido } from "@/lib/asesoria/inmueble-form";
 import { SubidorFotos, type PrepararSubida } from "./SubidorFotos";
 
 const INPUT =
