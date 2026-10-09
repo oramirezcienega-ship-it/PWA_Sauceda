@@ -5,11 +5,16 @@ import {
   listarAliados,
   guardarAliado,
   cambiarConvenioAliado,
+  generarConvenioAliado,
+  marcarConvenioFirmado,
+  listarComisionesAliados,
   obtenerLinkCarga,
   type Aliado,
+  type ComisionAliado,
   type DatosAliado,
 } from "@/app/actions/aliados";
-import { CONVENIO_ESTATUS, ETIQUETA_CONVENIO, type ConvenioEstatus } from "@/lib/asesoria/aliados";
+import { ETIQUETA_CONVENIO, type ConvenioEstatus } from "@/lib/asesoria/aliados";
+import { formatoPesos, formatoFecha } from "@/lib/formato";
 
 const INPUT = "w-full rounded-md border border-carbon/20 bg-white px-2.5 py-1.5 text-sm focus:border-sauce focus:outline-none";
 
@@ -33,6 +38,7 @@ const VACIO: DatosAliado & { zonasTexto: string } = {
 
 export function AliadosClient() {
   const [aliados, setAliados] = useState<Aliado[]>([]);
+  const [comisiones, setComisiones] = useState<ComisionAliado[]>([]);
   const [cargando, setCargando] = useState(true);
   const [editando, setEditando] = useState<string | "nuevo" | null>(null);
   const [form, setForm] = useState(VACIO);
@@ -40,7 +46,9 @@ export function AliadosClient() {
 
   const cargar = useCallback(async () => {
     try {
-      setAliados(await listarAliados());
+      const [a, c] = await Promise.all([listarAliados(), listarComisionesAliados()]);
+      setAliados(a);
+      setComisiones(c);
     } catch (e: any) {
       setAviso(e?.message || "No se pudieron cargar los aliados.");
     } finally {
@@ -169,20 +177,73 @@ export function AliadosClient() {
                     </div>
                   </td>
                   <td className="px-3 py-2">
-                    <select
-                      value={a.convenioEstatus}
-                      onChange={async (e) => {
-                        const r = await cambiarConvenioAliado(a.id, e.target.value as ConvenioEstatus);
-                        setAviso(r.ok ? "Convenio actualizado." : r.mensaje || "No se pudo actualizar.");
-                        await cargar();
-                      }}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COLOR_CONVENIO[a.convenioEstatus]}`}
-                      title="Solo administradores"
-                    >
-                      {CONVENIO_ESTATUS.map((c) => (
-                        <option key={c} value={c}>{ETIQUETA_CONVENIO[c]}</option>
-                      ))}
-                    </select>
+                    <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${COLOR_CONVENIO[a.convenioEstatus]}`}>
+                      {ETIQUETA_CONVENIO[a.convenioEstatus]}
+                    </span>
+                    <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                      {(a.convenioEstatus === "sin_convenio" || a.convenioEstatus === "enviado") && (
+                        <button
+                          type="button"
+                          className="text-left text-sauce underline"
+                          onClick={async () => {
+                            const r = await generarConvenioAliado(a.id);
+                            if (!r.ok) setAviso(r.mensaje || "No se pudo generar el convenio.");
+                            else if (r.porTelegram) setAviso(`Convenio ${r.folio} enviado por Telegram.`);
+                            else if (r.link) await copiar(r.link, `Convenio ${r.folio} generado. Link para el aliado copiado.`);
+                            await cargar();
+                          }}
+                        >
+                          {a.convenioEstatus === "enviado" ? "Reenviar convenio" : "Enviar convenio"}
+                        </button>
+                      )}
+                      {a.convenioContratoId && (
+                        <a href={`/aliados/${a.id}/convenio`} target="_blank" rel="noopener noreferrer" className="text-sauce underline">
+                          Ver / imprimir
+                        </a>
+                      )}
+                      {a.convenioEstatus === "enviado" && (
+                        <button
+                          type="button"
+                          className="text-left text-sauce underline"
+                          onClick={async () => {
+                            const fecha = window.prompt("Fecha de firma (AAAA-MM-DD):", new Date().toISOString().slice(0, 10));
+                            if (!fecha) return;
+                            const r = await marcarConvenioFirmado(a.id, fecha);
+                            setAviso(r.ok ? `Convenio de ${a.nombre} firmado: ya puede recibir búsquedas.` : r.mensaje || "No se pudo registrar.");
+                            await cargar();
+                          }}
+                        >
+                          Registrar firma
+                        </button>
+                      )}
+                      {a.convenioEstatus === "firmado" && (
+                        <button
+                          type="button"
+                          className="text-left text-rojo underline"
+                          onClick={async () => {
+                            if (!window.confirm(`¿Suspender el convenio de ${a.nombre}? Dejará de recibir búsquedas y su link de carga se desactiva.`)) return;
+                            const r = await cambiarConvenioAliado(a.id, "suspendido");
+                            setAviso(r.ok ? "Convenio suspendido." : r.mensaje || "No se pudo suspender.");
+                            await cargar();
+                          }}
+                        >
+                          Suspender
+                        </button>
+                      )}
+                      {a.convenioEstatus === "suspendido" && (
+                        <button
+                          type="button"
+                          className="text-left text-sauce underline"
+                          onClick={async () => {
+                            const r = await cambiarConvenioAliado(a.id, "sin_convenio");
+                            setAviso(r.ok ? "Aliado reactivado: genera y firma un convenio nuevo." : r.mensaje || "No se pudo reactivar.");
+                            await cargar();
+                          }}
+                        >
+                          Reactivar (nuevo convenio)
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 font-mono">{a.calificacion != null ? `${a.calificacion}/100` : "—"}</td>
                   <td className="px-3 py-2">
@@ -209,11 +270,6 @@ export function AliadosClient() {
                           Copiar enlace de Telegram
                         </button>
                       )}
-                      {a.convenioEstatus !== "firmado" && (
-                        <span className="text-[10px] text-carbon/40">
-                          Enviar convenio: llega con la plantilla de convenio (fase 5).
-                        </span>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -222,7 +278,62 @@ export function AliadosClient() {
           </table>
         </div>
       )}
+
+      {!cargando && <TablaComisionesAliados comisiones={comisiones} />}
     </div>
+  );
+}
+
+function TablaComisionesAliados({ comisiones }: { comisiones: ComisionAliado[] }) {
+  const pendiente = comisiones.reduce((s, c) => s + c.saldoPendiente, 0);
+  return (
+    <section className="rounded-xl border border-carbon/10 bg-white p-4">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-sm font-bold uppercase text-verde-profundo">Comisiones a aliados</h2>
+        <span className="font-mono text-sm text-rojo">Por pagar: {formatoPesos(pendiente)}</span>
+      </div>
+      {comisiones.length === 0 ? (
+        <p className="text-xs text-carbon/50">Se generan al registrar el cierre de una casa aportada por un aliado.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="text-[10px] uppercase text-carbon/50">
+              <tr>
+                <th className="py-1.5 pr-3">Fecha</th>
+                <th className="py-1.5 pr-3">Aliado</th>
+                <th className="py-1.5 pr-3">Expediente</th>
+                <th className="py-1.5 pr-3 text-right">Compraventa</th>
+                <th className="py-1.5 pr-3 text-right">Honorarios</th>
+                <th className="py-1.5 pr-3 text-right">Comisión</th>
+                <th className="py-1.5 pr-3 text-right">Saldo</th>
+                <th className="py-1.5">Estatus</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comisiones.map((c) => (
+                <tr key={c.id} className="border-t border-carbon/5">
+                  <td className="py-1.5 pr-3">{formatoFecha(`${c.fecha}T12:00:00`)}</td>
+                  <td className="py-1.5 pr-3">{c.aliadoNombre}</td>
+                  <td className="py-1.5 pr-3">
+                    {c.expedienteId ? <a href={`/expediente/${c.expedienteId}`} className="text-sauce underline">{c.expedienteId}</a> : "—"}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-mono">{formatoPesos(c.montoVenta)}</td>
+                  <td className="py-1.5 pr-3 text-right font-mono">
+                    {c.detalle.honorarios != null ? `${formatoPesos(Number(c.detalle.honorarios))} (${c.detalle.pctHonorarios}%)` : "—"}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-mono">
+                    {formatoPesos(c.montoComision)}
+                    {c.detalle.pctAliado != null && <span className="text-carbon/50"> ({c.detalle.pctAliado}%)</span>}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-mono">{formatoPesos(c.saldoPendiente)}</td>
+                  <td className="py-1.5">{c.estatus}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

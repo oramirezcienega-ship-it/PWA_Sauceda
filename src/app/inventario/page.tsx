@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { InventarioClient } from "@/components/asesoria-compra/InventarioClient";
+import { KpisAsesoriaCompra } from "@/components/asesoria-compra/KpisAsesoriaCompra";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,9 @@ export default async function PaginaInventario() {
             Casas propias (de vendedores de SAUCEDA), de aliados inmobiliarios y de portales. Solo las disponibles
             entran al cruce con los compradores.
           </p>
+        </div>
+        <div className="mb-5">
+          <KpisAsesoriaCompra />
         </div>
         <InventarioClient />
       </div>

@@ -18,6 +18,7 @@ import {
   perfilAFila,
   filaAPerfil,
   poderDeCompra,
+  aMonto,
   type EntradaPerfil,
   type PerfilBusqueda,
 } from "@/lib/asesoria/perfil";
@@ -39,6 +40,7 @@ import {
   validarFechaVisita,
   type OpcionCliente,
 } from "@/lib/asesoria/portal";
+import { calcularComisionAliado } from "@/lib/asesoria/convenio";
 import {
   filaInmuebleDesdeFormulario,
   type DatosInmuebleRapido,
@@ -929,4 +931,232 @@ export async function agendarVisitaOpcion(
     texto: `🗓️ <b>${exp.id}</b>: el cliente pidió visitar ${casa} el <b>${fecha}</b> a las <b>${hora}</b>.${nota ? `\n💬 ${nota}` : ""}\nConfirma la cita y coordina el acceso con el vendedor o aliado.`,
   });
   return { ok: true };
+}
+
+// ============================================================================
+// Fase 5: seguimiento de la propuesta, cierre y KPIs
+// ============================================================================
+
+/** El asesor registra el avance de una propuesta tras la visita (visitada / ofertada). */
+export async function actualizarEstatusPropuesta(
+  propuestaId: string,
+  estatus: "visitada" | "ofertada",
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    if (estatus !== "visitada" && estatus !== "ofertada") return { ok: false, mensaje: "Estatus inválido." };
+    const sb = supabaseServidor();
+    const { data: p } = await sb.from("propuestas_inmuebles").select("id, expediente_id, estatus").eq("id", propuestaId).maybeSingle();
+    if (!p) return { ok: false, mensaje: "La propuesta no existe." };
+    const permitidos = estatus === "visitada" ? ["me_interesa", "visita_agendada"] : ["me_interesa", "visita_agendada", "visitada"];
+    if (!permitidos.includes(p.estatus)) return { ok: false, mensaje: "La propuesta no está en una etapa que permita ese cambio." };
+    const { data: exp } = await sb.from("expedientes").select("asesor_id, operador_id").eq("id", p.expediente_id).maybeSingle();
+    if (exp) await verificarAcceso(exp as any);
+    const { error } = await sb.from("propuestas_inmuebles").update({ estatus }).eq("id", p.id);
+    if (error) throw new Error(error.message);
+    await registrarActividad(sb, {
+      expedienteId: p.expediente_id,
+      tipo: "sistema",
+      titulo: estatus === "visitada" ? "🏠 Visita realizada" : "💬 Oferta presentada",
+    });
+    revalidatePath(`/expediente/${p.expediente_id}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo actualizar." };
+  }
+}
+
+/**
+ * Cierre de la compra: la propuesta queda `elegida`, el inmueble `vendido`,
+ * se guardan el precio y la fecha de escritura y, si la casa la aportó un
+ * aliado, se crea en `comisiones` su pago (honorarios del lado comprador de
+ * `comisiones_reglas` × su % compartido). Idempotente por propuesta.
+ */
+export async function registrarCierreCompra(
+  propuestaId: string,
+  datos: { precioCompraventa: number | string; fechaEscritura: string },
+): Promise<{ ok: boolean; mensaje?: string; comisionAliado?: number | null }> {
+  try {
+    await requireAdmin();
+    const usuario = await usuarioActual();
+    const precio = aMonto(datos.precioCompraventa);
+    if (!precio || precio <= 0) return { ok: false, mensaje: "Captura el precio de compraventa." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(datos.fechaEscritura)) return { ok: false, mensaje: "Captura la fecha de firma de la escritura." };
+
+    const sb = supabaseServidor();
+    const { data: p } = await sb
+      .from("propuestas_inmuebles")
+      .select("id, expediente_id, estatus, inmueble:inmueble_id(id, folio, origen, aliado_id, estatus)")
+      .eq("id", propuestaId)
+      .maybeSingle();
+    if (!p) return { ok: false, mensaje: "La propuesta no existe." };
+    if (!["me_interesa", "visita_agendada", "visitada", "ofertada", "elegida"].includes(p.estatus)) {
+      return { ok: false, mensaje: "Solo se cierra una opción que el cliente ya visitó u ofertó." };
+    }
+    const inm = (p as any).inmueble;
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("id, cliente, asesor_id, operador_id")
+      .eq("id", p.expediente_id)
+      .maybeSingle();
+    if (!exp) return { ok: false, mensaje: "El expediente no existe." };
+    await verificarAcceso(exp as any);
+
+    // Otra propuesta del mismo expediente ya elegida → no se permiten dos cierres.
+    const { data: otra } = await sb
+      .from("propuestas_inmuebles")
+      .select("id")
+      .eq("expediente_id", p.expediente_id)
+      .eq("estatus", "elegida")
+      .neq("id", p.id)
+      .limit(1);
+    if (otra && otra.length > 0) return { ok: false, mensaje: "Este expediente ya tiene otra casa elegida." };
+
+    const ahora = new Date().toISOString();
+    await sb.from("propuestas_inmuebles").update({ estatus: "elegida", respondida_en: ahora }).eq("id", p.id);
+    if (inm?.id) await sb.from("inmuebles").update({ estatus: "vendido" }).eq("id", inm.id);
+    await sb
+      .from("expedientes")
+      .update({ precio_compraventa: precio, fecha_escritura: datos.fechaEscritura, ultimo_movimiento: ahora.slice(0, 10) })
+      .eq("id", p.expediente_id);
+
+    let comisionAliado: number | null = null;
+    if (inm?.origen === "aliado" && inm.aliado_id) {
+      const [{ data: aliado }, { data: regla }] = await Promise.all([
+        sb.from("proveedores").select("nombre, comision_compartida_pct, convenio_estatus, convenio_contrato_id").eq("id", inm.aliado_id).maybeSingle(),
+        sb
+          .from("comisiones_reglas")
+          .select("porcentaje")
+          .eq("tipo", "servicio")
+          .eq("clave", "asesoria_compra_honorarios")
+          .eq("activo", true)
+          .maybeSingle(),
+      ]);
+      if (!regla) {
+        await registrarActividad(sb, {
+          expedienteId: p.expediente_id,
+          tipo: "sistema",
+          titulo: "⚠️ Falta la regla de honorarios del lado comprador",
+          detalle: "Configura en Comisiones la regla de servicio 'asesoria_compra_honorarios' para calcular el pago al aliado.",
+        });
+      } else if (aliado && aliado.comision_compartida_pct != null) {
+        const calc = calcularComisionAliado(precio, Number(regla.porcentaje), Number(aliado.comision_compartida_pct));
+        comisionAliado = calc.montoAliado;
+        const { data: existente } = await sb
+          .from("comisiones")
+          .select("id")
+          .eq("propuesta_id", p.id)
+          .eq("tipo_comision", "aliado")
+          .neq("estatus", "cancelada")
+          .maybeSingle();
+        const fila = {
+          tipo_comision: "aliado",
+          proveedor_id: inm.aliado_id,
+          asesor_id: null,
+          expediente_id: p.expediente_id,
+          propuesta_id: p.id,
+          fecha: datos.fechaEscritura,
+          monto_venta: precio,
+          base_comisionable: calc.honorarios,
+          porcentaje_comision: calc.pctEfectivo,
+          monto_comision: calc.montoAliado,
+          saldo_pendiente: calc.montoAliado,
+          notas: `Comisión compartida con ${aliado.nombre} por ${inm.folio}.`,
+          detalles_calculo: {
+            origen: "asesoria_compra",
+            folio: inm.folio,
+            clienteNombre: exp.cliente,
+            aliado: aliado.nombre,
+            precioCompraventa: precio,
+            pctHonorarios: calc.pctHonorarios,
+            honorarios: calc.honorarios,
+            pctAliado: calc.pctAliado,
+            convenioContratoId: aliado.convenio_contrato_id,
+            convenioEstatus: aliado.convenio_estatus,
+          },
+        };
+        const { error: errCom } = existente
+          ? await sb.from("comisiones").update(fila).eq("id", existente.id)
+          : await sb.from("comisiones").insert(fila);
+        if (errCom) throw new Error(errCom.message);
+      } else {
+        await registrarActividad(sb, {
+          expedienteId: p.expediente_id,
+          tipo: "sistema",
+          titulo: "⚠️ El aliado no tiene % de comisión compartida",
+          detalle: "Captura el % en el menú Aliados y vuelve a registrar el cierre para generar su comisión.",
+        });
+      }
+    }
+
+    await registrarActividad(sb, {
+      expedienteId: p.expediente_id,
+      tipo: "sistema",
+      titulo: `🔑 Cierre: ${inm?.folio ?? "inmueble"} por ${formatoPesos(precio)}`,
+      detalle: [
+        `Escritura firmada el ${datos.fechaEscritura}.`,
+        comisionAliado !== null ? `Comisión al aliado: ${formatoPesos(comisionAliado)}.` : null,
+        usuario?.email ? `Registró: ${usuario.email}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+    revalidatePath(`/expediente/${p.expediente_id}`);
+    return { ok: true, comisionAliado };
+  } catch (err) {
+    console.error("[registrarCierreCompra]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo registrar el cierre." };
+  }
+}
+
+export interface KpisAsesoriaCompra {
+  expedientes: number;
+  diasPrecalificacionAPrimeraOpcion: number | null;
+  opcionesPorRonda: number | null;
+  tasaMeInteresa: number | null;
+  tasaVisitaAOferta: number | null;
+  cierres: number;
+  cierresPorOrigen: { propio: number; aliado: number; portal: number };
+  diasCaptacionAEscritura: number | null;
+  aliados: { nombre: string; busquedas: number; tasaRespuesta: number | null; casas: number }[];
+}
+
+const promedio = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
+
+/** KPIs de la línea (vistas v_asesoria_compra_kpis y v_asesoria_compra_aliados_kpis). */
+export async function obtenerKpisAsesoriaCompra(): Promise<KpisAsesoriaCompra> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const [{ data: filas }, { data: aliados }] = await Promise.all([
+    sb.from("v_asesoria_compra_kpis").select("*"),
+    sb.from("v_asesoria_compra_aliados_kpis").select("*").order("busquedas", { ascending: false }),
+  ]);
+  const f = (filas ?? []) as any[];
+  const num = (k: string) => f.map((r) => r[k]).filter((v) => v !== null && v !== undefined).map(Number);
+  const publicadas = f.reduce((a, r) => a + Number(r.opciones_publicadas || 0), 0);
+  const conInteres = f.reduce((a, r) => a + Number(r.opciones_con_interes || 0), 0);
+  const visitadas = f.reduce((a, r) => a + Number(r.opciones_visitadas || 0), 0);
+  const ofertadas = f.reduce((a, r) => a + Number(r.opciones_ofertadas || 0), 0);
+  const rondas = f.reduce((a, r) => a + Number(r.rondas || 0), 0);
+  const cierres = f.filter((r) => r.origen_cierre);
+  return {
+    expedientes: f.length,
+    diasPrecalificacionAPrimeraOpcion: promedio(num("dias_precalificacion_a_primera_opcion")),
+    opcionesPorRonda: rondas ? Math.round((publicadas / rondas) * 10) / 10 : null,
+    tasaMeInteresa: publicadas ? conInteres / publicadas : null,
+    tasaVisitaAOferta: visitadas ? ofertadas / visitadas : null,
+    cierres: cierres.length,
+    cierresPorOrigen: {
+      propio: cierres.filter((r) => r.origen_cierre === "propio").length,
+      aliado: cierres.filter((r) => r.origen_cierre === "aliado").length,
+      portal: cierres.filter((r) => r.origen_cierre === "portal").length,
+    },
+    diasCaptacionAEscritura: promedio(num("dias_captacion_a_escritura")),
+    aliados: ((aliados ?? []) as any[]).map((a) => ({
+      nombre: a.nombre,
+      busquedas: Number(a.busquedas),
+      tasaRespuesta: a.tasa_respuesta === null ? null : Number(a.tasa_respuesta),
+      casas: Number(a.casas_recibidas),
+    })),
+  };
 }
