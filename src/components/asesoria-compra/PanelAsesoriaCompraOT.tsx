@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { obtenerOrdenAsesoria, cambiarEtapaOrdenAsesoria, type OrdenAsesoria } from "@/app/actions/asesoria-compra";
 import { TarjetaPerfilBusqueda } from "./TarjetaPerfilBusqueda";
+import { TarjetaPrecalificacion } from "./TarjetaPrecalificacion";
 import { BandejaOpciones } from "./BandejaOpciones";
 import { PanelBusquedaAliados } from "@/components/aliados/PanelBusquedaAliados";
 import { WidgetBpmTareas } from "@/components/WidgetBpmTareas";
@@ -45,6 +46,10 @@ export function PanelAsesoriaCompraOT({
   const idx = orden.etapas.findIndex((e) => e.clave === orden.etapa);
   const anterior = idx > 0 ? orden.etapas[idx - 1] : null;
   const siguiente = idx >= 0 ? orden.etapas[idx + 1] ?? null : orden.etapas[0] ?? null;
+  const enPausa = orden.precalificacion.dictamen === "no_apto";
+  const enPrecalificacion = idx <= 0;
+  // Búsqueda y aliados solo cuando la precalificación pasó el filtro.
+  const busquedaHabilitada = !orden.perfil.yaTieneCasa && !enPausa && orden.pendientes.length === 0;
 
   async function mover(clave: string) {
     setMoviendo(true);
@@ -59,7 +64,10 @@ export function PanelAsesoriaCompraOT({
   return (
     <div className="space-y-3">
       <section className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-violet-900">🔑 Asesoría de compra · {orden.folio}</p>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-violet-900">🔑 Asesoría de compra · {orden.folio}</p>
+          {enPausa && <span className="rounded-full bg-rojo/10 px-2 py-0.5 text-[10px] font-bold uppercase text-rojo">⏸️ En pausa</span>}
+        </div>
         <ol className="flex flex-wrap gap-x-1 gap-y-2">
           {orden.etapas.map((e, i) => {
             const estado = idx === -1 ? "pendiente" : i < idx ? "hecho" : i === idx ? "actual" : "pendiente";
@@ -79,6 +87,26 @@ export function PanelAsesoriaCompraOT({
           })}
         </ol>
         {aviso && <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">{aviso}</p>}
+        {enPrecalificacion && !enPausa && (
+          <div
+            className={`mt-3 rounded-md px-3 py-2 text-xs ${
+              orden.pendientes.length === 0 ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"
+            }`}
+          >
+            {orden.pendientes.length === 0 ? (
+              <p>✅ Precalificación completa: puede pasar a {siguiente?.nombre ?? "la siguiente etapa"}.</p>
+            ) : (
+              <>
+                <p className="font-semibold">Para pasar a {siguiente?.nombre ?? "la siguiente etapa"} falta:</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {orden.pendientes.map((x) => (
+                    <li key={x.clave}>{x.texto}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        )}
         {!soloLectura && (
           <div className="mt-3 flex gap-2">
             <button
@@ -91,7 +119,7 @@ export function PanelAsesoriaCompraOT({
             </button>
             <button
               type="button"
-              disabled={!siguiente || moviendo}
+              disabled={!siguiente || moviendo || enPausa || (enPrecalificacion && orden.pendientes.length > 0)}
               onClick={() => siguiente && mover(siguiente.clave)}
               className="flex-1 rounded-md bg-sauce px-3 py-2 text-xs font-semibold text-crema enabled:hover:bg-verde-profundo disabled:opacity-30"
             >
@@ -101,7 +129,17 @@ export function PanelAsesoriaCompraOT({
         )}
       </section>
 
-      <TarjetaPerfilBusqueda key={`ficha-${version}`} ordenTrabajoId={ordenTrabajoId} perfilInicial={orden.perfil} onGuardado={cargar} />
+      <div className="space-y-3">
+        <TarjetaPerfilBusqueda key={`ficha-${version}`} ordenTrabajoId={ordenTrabajoId} perfilInicial={orden.perfil} onGuardado={cargar} />
+        <TarjetaPrecalificacion
+          key={`precal-${orden.perfil.tipoCredito ?? "ninguno"}-${version}`}
+          ordenTrabajoId={ordenTrabajoId}
+          tipoCredito={orden.perfil.tipoCredito}
+          datos={orden.precalificacion}
+          soloLectura={soloLectura}
+          onGuardado={cargar}
+        />
+      </div>
 
       {orden.expedienteId && (
         <WidgetBpmTareas
@@ -113,7 +151,7 @@ export function PanelAsesoriaCompraOT({
         />
       )}
 
-      {!orden.perfil.yaTieneCasa && (
+      {busquedaHabilitada && (
         <>
           <PanelBusquedaAliados ordenTrabajoId={ordenTrabajoId} />
           <BandejaOpciones key={`opciones-${version}`} ordenTrabajoId={ordenTrabajoId} />

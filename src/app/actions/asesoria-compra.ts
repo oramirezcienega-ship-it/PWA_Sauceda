@@ -38,7 +38,28 @@ import {
   type OrigenInmueble,
   type PerfilMatch,
 } from "@/lib/asesoria/match";
-import { firmarFotos, notificarAsesorTelegram, prepararSubidaFoto, rondaActual } from "@/lib/asesoria/servidor";
+import {
+  BUCKET_PRECALIFICACIONES,
+  cargarRequisitos,
+  firmarFotos,
+  mapaActivo,
+  notificarAsesorTelegram,
+  pendientesDeFicha,
+  prepararSubidaFoto,
+  rondaActual,
+} from "@/lib/asesoria/servidor";
+import {
+  DICTAMENES,
+  ETIQUETA_DICTAMEN,
+  evaluarRequisitos,
+  normalizarEvidencias,
+  normalizarRespuestas,
+  validarDictamen,
+  type Dictamen,
+  type PendienteCompuerta,
+  type RequisitoPrecalificacion,
+  type Respuestas,
+} from "@/lib/asesoria/precalificacion";
 import { obtenerEtapasPorId, obtenerEtapasPorNegocio } from "@/lib/etapas";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
@@ -132,13 +153,55 @@ export interface OrdenAsesoria {
   etapa: string | null;
   etapas: EtapaOT[];
   perfil: PerfilBusqueda;
+  precalificacion: PrecalificacionOT;
+  /** Lo que falta para salir de Precalificación (vacío = puede avanzar). */
+  pendientes: PendienteCompuerta[];
+  mapaActivo: boolean;
+}
+
+export interface EvidenciaConUrl {
+  ruta: string;
+  nombre: string;
+  subidoEn: string;
+  url: string | null;
+}
+
+export interface PrecalificacionOT {
+  requisitos: RequisitoPrecalificacion[];
+  respuestas: Respuestas;
+  evidencias: EvidenciaConUrl[];
+  dictamen: Dictamen | null;
+  nota: string | null;
+  dictamenEn: string | null;
+  retomarEl: string | null;
+}
+
+async function precalificacionDeFicha(sb: Sb, ficha: Record<string, any>, requisitos: RequisitoPrecalificacion[]): Promise<PrecalificacionOT> {
+  const evidencias = normalizarEvidencias(ficha.precalificacion_evidencias);
+  const urls = new Map<string, string>();
+  if (evidencias.length > 0) {
+    const { data } = await sb.storage.from(BUCKET_PRECALIFICACIONES).createSignedUrls(evidencias.map((e) => e.ruta), 60 * 60);
+    for (const d of data ?? []) if (d.path && d.signedUrl) urls.set(d.path, d.signedUrl);
+  }
+  return {
+    requisitos,
+    respuestas: (ficha.precalificacion_respuestas ?? {}) as Respuestas,
+    evidencias: evidencias.map((e) => ({ ...e, url: urls.get(e.ruta) ?? null })),
+    dictamen: (DICTAMENES as readonly string[]).includes(ficha.dictamen) ? ficha.dictamen : null,
+    nota: ficha.dictamen_nota ?? null,
+    dictamenEn: ficha.dictamen_en ?? null,
+    retomarEl: ficha.dictamen_retomar_el ?? null,
+  };
 }
 
 /** Ficha y etapas de la OT de asesoría (para el panel de la OT). */
 export async function obtenerOrdenAsesoria(ordenTrabajoId: string): Promise<OrdenAsesoria | null> {
   await requireAdmin();
-  const ctx = await cargarOrden(supabaseServidor(), ordenTrabajoId);
+  const sb = supabaseServidor();
+  const ctx = await cargarOrden(sb, ordenTrabajoId);
   if (!ctx) return null;
+  const perfil = filaAPerfil(ctx.ficha);
+  const requisitos = await cargarRequisitos(sb, perfil.tipoCredito);
   return {
     id: ctx.ot.id,
     folio: ctx.ot.folio,
@@ -146,7 +209,10 @@ export async function obtenerOrdenAsesoria(ordenTrabajoId: string): Promise<Orde
     estatus: ctx.ot.estatus,
     etapa: ctx.ot.etapa,
     etapas: ctx.aplicables,
-    perfil: filaAPerfil(ctx.ficha),
+    perfil,
+    precalificacion: await precalificacionDeFicha(sb, ctx.ficha, requisitos),
+    pendientes: await pendientesDeFicha(sb, ctx.ficha, requisitos),
+    mapaActivo: mapaActivo(),
   };
 }
 
@@ -213,6 +279,11 @@ export async function guardarFichaAsesoria(
     const r = normalizarPerfil(entrada);
     if (!r.ok) return { ok: false, mensaje: r.errores.join(" ") };
     const p = r.perfil;
+
+    // El dictamen se hizo con los requisitos de un tipo de crédito: no se cambia por debajo.
+    if (ctx.ficha.dictamen && (normalizarCredito(ctx.ficha.tipo_credito) ?? null) !== p.tipoCredito) {
+      return { ok: false, mensaje: "La precalificación ya tiene dictamen: reábrela antes de cambiar el tipo de crédito." };
+    }
 
     // Con la OT ya en búsqueda o negociación, la ficha no puede quedar sin
     // precalificación ni zonas (sería saltarse la compuerta).
@@ -285,6 +356,17 @@ export async function cambiarEtapaOrdenAsesoria(
     await verificarAccesoOrden(ctx);
     const destino = ctx.aplicables.find((e) => e.clave === etapa);
     if (!destino) return { ok: false, mensaje: "Esa etapa no aplica a esta orden de trabajo." };
+    if (ctx.ficha.dictamen === "no_apto" && etapa !== ctx.ot.etapa) {
+      return { ok: false, mensaje: "La orden está en pausa (precalificación \"No apto\"). Reábrela desde la precalificación para continuar." };
+    }
+    // Precalificación como filtro: para salir de ella todo debe estar completo.
+    const primera = ctx.aplicables[0]?.clave;
+    if (etapa !== primera) {
+      const pendientes = await pendientesDeFicha(sb, ctx.ficha);
+      if (pendientes.length > 0) {
+        return { ok: false, mensaje: `Antes de avanzar falta: ${pendientes.map((x) => x.texto).join(" ")}` };
+      }
+    }
     const compuerta = validarCompuertaEtapa(
       {
         tipoNegocio: TIPO_OT,
@@ -319,6 +401,195 @@ export async function cambiarEtapaOrdenAsesoria(
     return { ok: true };
   } catch (err) {
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo cambiar la etapa." };
+  }
+}
+
+// ============================================================================
+// Precalificación: requisitos, evidencias y dictamen (filtro para la búsqueda)
+// ============================================================================
+
+export interface EntradaPrecalificacion {
+  respuestas: Record<string, unknown>;
+  dictamen: Dictamen | null;
+  nota: string | null;
+  retomarEl: string | null;
+}
+
+/**
+ * Guarda las respuestas a los requisitos y el dictamen. "No apto" deja la OT
+ * en pausa y, si hay fecha para retomar, agenda una llamada de seguimiento al
+ * asesor. Dictamen vacío = reabrir la precalificación.
+ */
+export async function guardarPrecalificacion(
+  ordenTrabajoId: string,
+  entrada: EntradaPrecalificacion,
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const usuario = await usuarioActual();
+    const sb = supabaseServidor();
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+
+    const tipoCredito = normalizarCredito(ctx.ficha.tipo_credito);
+    const requisitos = await cargarRequisitos(sb, tipoCredito);
+    const respuestas = normalizarRespuestas(requisitos, entrada.respuestas);
+    const dictamen = entrada.dictamen && (DICTAMENES as readonly string[]).includes(entrada.dictamen) ? entrada.dictamen : null;
+    if (entrada.dictamen && !dictamen) return { ok: false, mensaje: "Dictamen no válido." };
+    if (dictamen && !tipoCredito) return { ok: false, mensaje: "Primero define el tipo de crédito del cliente en la ficha." };
+    const nota = (entrada.nota ?? "").trim().slice(0, 1000) || null;
+    const retomarEl = dictamen === "no_apto" ? (entrada.retomarEl ?? "").trim() || null : null;
+
+    const evaluacion = evaluarRequisitos(requisitos, respuestas);
+    const evidencias = normalizarEvidencias(ctx.ficha.precalificacion_evidencias).length;
+    const errores = validarDictamen({ dictamen, nota, retomarEl }, evaluacion, evidencias);
+    if (errores.length > 0) return { ok: false, mensaje: errores.join(" ") };
+
+    const cambioDictamen = dictamen !== (ctx.ficha.dictamen ?? null);
+    const { error } = await sb.from("ot_ficha_asesoria_compra").upsert(
+      {
+        orden_trabajo_id: ordenTrabajoId,
+        precalificacion_respuestas: respuestas,
+        dictamen,
+        dictamen_nota: dictamen ? nota : null,
+        dictamen_retomar_el: retomarEl,
+        ...(cambioDictamen ? { dictamen_en: dictamen ? new Date().toISOString() : null, dictamen_por: dictamen ? usuario?.id ?? null : null } : {}),
+      },
+      { onConflict: "orden_trabajo_id" },
+    );
+    if (error) throw new Error(error.message);
+
+    if (cambioDictamen && ctx.ot.expediente_id) {
+      const titulo = dictamen
+        ? `📋 Precalificación ${ctx.ot.folio}: ${ETIQUETA_DICTAMEN[dictamen]}`
+        : `📋 Precalificación ${ctx.ot.folio} reabierta`;
+      const detalle = [
+        `${evaluacion.cumplen} de ${evaluacion.total} requisitos cumplen`,
+        nota,
+        retomarEl ? `retomar el ${retomarEl}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      await registrarActividad(sb, { expedienteId: ctx.ot.expediente_id, tipo: "sistema", titulo, detalle });
+    }
+
+    // Pausa con recordatorio: llamada de seguimiento en la agenda del asesor.
+    if (cambioDictamen && dictamen === "no_apto" && retomarEl) {
+      const perfilId = ctx.exp?.asesor_id || ctx.ot.asesor_responsable_id || usuario?.id;
+      if (perfilId) {
+        const { error: e } = await sb.from("agenda_citas").insert({
+          perfil_id: perfilId,
+          prospecto_id: ctx.ot.prospecto_id ?? null,
+          expediente_id: ctx.ot.expediente_id ?? null,
+          cliente_nombre: ctx.exp?.cliente || "Cliente",
+          cliente_telefono: ctx.exp?.telefono || "",
+          tipo_cita: "llamada",
+          fecha: retomarEl,
+          hora_inicio: "10:00",
+          hora_fin: "10:30",
+          notas: `Retomar precalificación de la orden ${ctx.ot.folio}. Motivo de la pausa: ${nota}`,
+          estado: "pendiente",
+        });
+        if (e) console.error("[guardarPrecalificacion] recordatorio", e);
+      }
+    }
+
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("[guardarPrecalificacion]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo guardar la precalificación." };
+  }
+}
+
+const EXT_EVIDENCIA = /\.(pdf|jpe?g|png|webp|heic|heif)$/i;
+const MAX_EVIDENCIAS = 10;
+
+/** URL firmada para subir una evidencia al bucket privado `precalificaciones`. */
+export async function prepararSubidaEvidencia(
+  ordenTrabajoId: string,
+  nombre: string,
+): Promise<{ ok: boolean; ruta?: string; token?: string; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const ctx = await cargarOrden(sb, ordenTrabajoId);
+  if (!ctx) return { ok: false, error: "La orden de trabajo no existe." };
+  await verificarAccesoOrden(ctx);
+  if (normalizarEvidencias(ctx.ficha.precalificacion_evidencias).length >= MAX_EVIDENCIAS) {
+    return { ok: false, error: `Máximo ${MAX_EVIDENCIAS} evidencias.` };
+  }
+  const ext = (nombre || "").match(EXT_EVIDENCIA)?.[1]?.toLowerCase();
+  if (!ext) return { ok: false, error: "Solo se aceptan PDF o imágenes (JPG, PNG, WEBP, HEIC)." };
+  // Ruta opaca: sin el nombre original del archivo ni datos del cliente.
+  const ruta = `${ctx.ot.id}/${crypto.randomUUID()}.${ext === "jpeg" ? "jpg" : ext}`;
+  const { data, error } = await sb.storage.from(BUCKET_PRECALIFICACIONES).createSignedUploadUrl(ruta);
+  if (error || !data) {
+    console.error("[prepararSubidaEvidencia]", error);
+    return { ok: false, error: "No se pudo preparar la subida." };
+  }
+  return { ok: true, ruta: data.path, token: data.token };
+}
+
+/** Registra en la ficha una evidencia ya subida. */
+export async function registrarEvidencia(
+  ordenTrabajoId: string,
+  ruta: string,
+  nombre: string,
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+    // Solo rutas generadas por prepararSubidaEvidencia para esta misma OT.
+    const archivo = ruta.startsWith(`${ctx.ot.id}/`) ? ruta.slice(ctx.ot.id.length + 1) : "";
+    if (!/^[0-9a-f-]{36}\.(pdf|jpg|png|webp|heic|heif)$/i.test(archivo)) return { ok: false, mensaje: "Ruta de evidencia no válida." };
+    const { data: existe } = await sb.storage.from(BUCKET_PRECALIFICACIONES).list(ctx.ot.id, { search: archivo, limit: 1 });
+    if (!existe?.some((o) => o.name === archivo)) return { ok: false, mensaje: "El archivo no se subió." };
+
+    const actuales = normalizarEvidencias(ctx.ficha.precalificacion_evidencias);
+    if (actuales.some((e) => e.ruta === ruta)) return { ok: true };
+    if (actuales.length >= MAX_EVIDENCIAS) return { ok: false, mensaje: `Máximo ${MAX_EVIDENCIAS} evidencias.` };
+    const lista = [...actuales, { ruta, nombre: (nombre || "evidencia").slice(0, 120), subidoEn: new Date().toISOString() }];
+    const { error } = await sb
+      .from("ot_ficha_asesoria_compra")
+      .upsert({ orden_trabajo_id: ordenTrabajoId, precalificacion_evidencias: lista }, { onConflict: "orden_trabajo_id" });
+    if (error) throw new Error(error.message);
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("[registrarEvidencia]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo registrar la evidencia." };
+  }
+}
+
+/** Quita una evidencia (no deja sin evidencia un dictamen favorable). */
+export async function eliminarEvidencia(ordenTrabajoId: string, ruta: string): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+    const actuales = normalizarEvidencias(ctx.ficha.precalificacion_evidencias);
+    if (!actuales.some((e) => e.ruta === ruta)) return { ok: true };
+    const lista = actuales.filter((e) => e.ruta !== ruta);
+    if (lista.length === 0 && (ctx.ficha.dictamen === "apto" || ctx.ficha.dictamen === "apto_condiciones")) {
+      return { ok: false, mensaje: "El dictamen favorable necesita al menos una evidencia. Sube otra antes de quitar esta." };
+    }
+    const { error } = await sb
+      .from("ot_ficha_asesoria_compra")
+      .update({ precalificacion_evidencias: lista })
+      .eq("orden_trabajo_id", ordenTrabajoId);
+    if (error) throw new Error(error.message);
+    await sb.storage.from(BUCKET_PRECALIFICACIONES).remove([ruta]);
+    revalidatePath(`/ordenes-trabajo/${ordenTrabajoId}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("[eliminarEvidencia]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo quitar la evidencia." };
   }
 }
 
@@ -642,6 +913,10 @@ export async function generarSugerencias(
     if (!ctx.ot.expediente_id) return { ok: false, nuevas: 0, evaluados: 0, mensaje: "La orden no está ligada a un expediente." };
     if (ctx.ficha.ya_tiene_casa) {
       return { ok: false, nuevas: 0, evaluados: 0, mensaje: "El cliente ya tiene casa: no hay búsqueda." };
+    }
+    const pendientes = await pendientesDeFicha(sb, ctx.ficha);
+    if (pendientes.length > 0) {
+      return { ok: false, nuevas: 0, evaluados: 0, mensaje: `Antes de buscar falta: ${pendientes.map((x) => x.texto).join(" ")}` };
     }
 
     const { data: inventario, error } = await sb.from("inmuebles").select("*").eq("estatus", "disponible").limit(2000);
