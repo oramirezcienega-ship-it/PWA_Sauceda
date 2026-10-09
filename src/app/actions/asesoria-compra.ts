@@ -33,7 +33,19 @@ import {
   type PerfilBusqueda,
 } from "@/lib/asesoria/perfil";
 import {
+  candidataAInmueble,
+  criteriosDeFicha,
+  describirCriterios,
+  dominioDe,
+  enlacesPortales,
+  limpiarCandidatas,
+  normalizarUrl,
+  type Candidata,
+} from "@/lib/asesoria/busqueda-web";
+import {
+  calcularMatch,
   normalizarCredito,
+  normalizarTexto,
   rankearInmuebles,
   type OrigenInmueble,
   type PerfilMatch,
@@ -1647,4 +1659,287 @@ export async function obtenerKpisAsesoriaCompra(): Promise<KpisAsesoriaCompra> {
       casas: Number(a.casas_recibidas),
     })),
   };
+}
+
+// ============================================================================
+// Búsqueda de casas en internet (IA en portales, link o texto pegado)
+// ============================================================================
+
+export type TipoBusquedaWeb = "portales" | "link" | "texto";
+
+export interface BusquedaWeb {
+  id: string;
+  tipo: TipoBusquedaWeb;
+  estado: "en_proceso" | "lista" | "error";
+  descripcion: string;
+  candidatas: Candidata[];
+  mensaje: string | null;
+  createdAt: string;
+}
+
+export interface PanelBusquedaWeb {
+  criterios: string;
+  enlaces: { nombre: string; url: string }[];
+  busquedas: BusquedaWeb[];
+}
+
+const MAX_BUSQUEDAS_WEB_DIA = 20;
+
+function filaABusquedaWeb(f: Record<string, any>): BusquedaWeb {
+  const e = (f.entrada ?? {}) as Record<string, any>;
+  const descripcion =
+    f.tipo === "portales" ? `Búsqueda en portales (${(e.criterios?.zonas ?? []).length} zonas)` : f.tipo === "link" ? `Link: ${e.url}` : "Texto pegado";
+  return {
+    id: f.id,
+    tipo: f.tipo,
+    estado: f.estado,
+    descripcion,
+    candidatas: limpiarCandidatas(f.candidatas, { max: 20 }),
+    mensaje: f.mensaje ?? null,
+    createdAt: f.created_at,
+  };
+}
+
+/** Criterios, accesos directos a portales y últimas búsquedas de la OT. */
+export async function obtenerPanelBusquedaWeb(ordenTrabajoId: string): Promise<PanelBusquedaWeb> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const ctx = await cargarOrden(sb, ordenTrabajoId);
+  if (!ctx) throw new Error("La orden de trabajo no existe.");
+  const criterios = criteriosDeFicha(filaAPerfil(ctx.ficha));
+  const { data } = await sb
+    .from("busquedas_web")
+    .select("*")
+    .eq("orden_trabajo_id", ordenTrabajoId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  // Una búsqueda que lleva más de 20 minutos "en proceso" se dio por perdida.
+  const limite = Date.now() - 20 * 60 * 1000;
+  const busquedas = (data ?? []).map((f: any) =>
+    f.estado === "en_proceso" && new Date(f.created_at).getTime() < limite
+      ? { ...f, estado: "error", mensaje: "La búsqueda no terminó. Intenta de nuevo." }
+      : f,
+  );
+  return {
+    criterios: describirCriterios(criterios),
+    enlaces: enlacesPortales(criterios).map((e) => ({ nombre: e.portal.nombre, url: e.url })),
+    busquedas: busquedas.map(filaABusquedaWeb),
+  };
+}
+
+/** Lanza la búsqueda en segundo plano (Netlify Background Function) o en línea en desarrollo. */
+async function despacharBusquedaWeb(sb: Sb, id: string) {
+  const base = (process.env.SITE_URL || process.env.URL || "").replace(/\/$/, "");
+  if (base && process.env.CRON_SECRET) {
+    try {
+      const r = await fetch(`${base}/.netlify/functions/busqueda-web-background`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${process.env.CRON_SECRET}` },
+        body: JSON.stringify({ id }),
+        cache: "no-store",
+      });
+      if (r.ok || r.status === 202) return;
+      console.warn("[despacharBusquedaWeb] la función en segundo plano respondió", r.status);
+    } catch (err) {
+      console.warn("[despacharBusquedaWeb] no se pudo llamar a la función en segundo plano", err);
+    }
+  }
+  // Desarrollo local (o sin función en segundo plano): procesar aquí mismo.
+  const { procesarBusquedaWeb } = await import("@/lib/asesoria/ia-busqueda");
+  await procesarBusquedaWeb(sb, id);
+}
+
+/**
+ * Inicia una búsqueda en internet para la OT: con IA en portales (criterios
+ * de la ficha, sin datos del cliente), leyendo un link o extrayendo de texto.
+ */
+export async function iniciarBusquedaWeb(
+  ordenTrabajoId: string,
+  datos: { tipo: TipoBusquedaWeb; url?: string; texto?: string },
+): Promise<{ ok: boolean; id?: string; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const usuario = await usuarioActual();
+    const sb = supabaseServidor();
+    const ctx = await cargarOrden(sb, ordenTrabajoId);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+    if (ctx.ficha.ya_tiene_casa) return { ok: false, mensaje: "El cliente ya tiene casa: no hay búsqueda." };
+    const pendientes = await pendientesDeFicha(sb, ctx.ficha);
+    if (pendientes.length > 0) {
+      return { ok: false, mensaje: `Antes de buscar falta: ${pendientes.map((x) => x.texto).join(" ")}` };
+    }
+    if (!process.env.ANTHROPIC_API_KEY) return { ok: false, mensaje: "Falta configurar ANTHROPIC_API_KEY." };
+
+    let entrada: Record<string, unknown>;
+    if (datos.tipo === "portales") {
+      entrada = { criterios: criteriosDeFicha(filaAPerfil(ctx.ficha)) };
+    } else if (datos.tipo === "link") {
+      const url = normalizarUrl(datos.url ?? "");
+      if (!url) return { ok: false, mensaje: "Pega un link válido (https://…)." };
+      entrada = { url };
+    } else if (datos.tipo === "texto") {
+      const texto = (datos.texto ?? "").trim();
+      if (texto.length < 40) return { ok: false, mensaje: "Pega el texto completo del anuncio." };
+      const url = datos.url ? normalizarUrl(datos.url) : null;
+      entrada = { texto: texto.slice(0, 15000), url };
+    } else {
+      return { ok: false, mensaje: "Tipo de búsqueda no válido." };
+    }
+
+    // Una a la vez por orden y un tope diario (cada búsqueda con IA tiene costo).
+    const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recientes } = await sb
+      .from("busquedas_web")
+      .select("id, estado, created_at")
+      .eq("orden_trabajo_id", ordenTrabajoId)
+      .gte("created_at", desde);
+    const enCurso = (recientes ?? []).filter(
+      (b: any) => b.estado === "en_proceso" && Date.now() - new Date(b.created_at).getTime() < 20 * 60 * 1000,
+    );
+    if (enCurso.length > 0) return { ok: false, mensaje: "Ya hay una búsqueda en proceso para esta orden; espera a que termine." };
+    if ((recientes ?? []).length >= MAX_BUSQUEDAS_WEB_DIA) {
+      return { ok: false, mensaje: `Límite de ${MAX_BUSQUEDAS_WEB_DIA} búsquedas por día para esta orden.` };
+    }
+
+    const { data: fila, error } = await sb
+      .from("busquedas_web")
+      .insert({ orden_trabajo_id: ordenTrabajoId, tipo: datos.tipo, entrada, creado_por: usuario?.id ?? null })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    await despacharBusquedaWeb(sb, fila.id);
+    return { ok: true, id: fila.id };
+  } catch (err) {
+    console.error("[iniciarBusquedaWeb]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo iniciar la búsqueda." };
+  }
+}
+
+/** Candidata de una búsqueda de la OT (valida que la búsqueda sea de esa OT). */
+async function candidataDeBusqueda(sb: Sb, busquedaId: string, url: string) {
+  const { data: fila } = await sb.from("busquedas_web").select("*").eq("id", busquedaId).maybeSingle();
+  if (!fila) return null;
+  const crudas: any[] = Array.isArray(fila.candidatas) ? fila.candidatas : [];
+  const indice = crudas.findIndex((c) => normalizarUrl(String(c?.url ?? "")) === normalizarUrl(url));
+  if (indice < 0) return null;
+  const [candidata] = limpiarCandidatas([crudas[indice]]);
+  return candidata ? { fila, crudas, indice, candidata } : null;
+}
+
+/**
+ * Pasa una candidata al inventario (origen portal, por validar) y la deja como
+ * sugerencia de la OT. Al publicarla al cliente queda validada.
+ */
+export async function agregarCandidataWeb(
+  busquedaId: string,
+  url: string,
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const encontrada = await candidataDeBusqueda(sb, busquedaId, url);
+    if (!encontrada) return { ok: false, mensaje: "La candidata ya no existe." };
+    const { fila, crudas, indice, candidata } = encontrada;
+    const ctx = await cargarOrden(sb, fila.orden_trabajo_id);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+    if (!candidata.precio) return { ok: false, mensaje: "La publicación no trae precio; agrégala a mano desde Inventario." };
+    if (!/^https?:\/\//.test(candidata.url) || candidata.url.includes("sin-url.invalid")) {
+      return { ok: false, mensaje: "La candidata no tiene link de la publicación; agrégala a mano desde Inventario." };
+    }
+
+    // Reusar el inmueble si esa publicación ya está en el inventario.
+    let inmuebleId: string | null = null;
+    const { data: existente } = await sb.from("inmuebles").select("id").eq("url_fuente", candidata.url).limit(1).maybeSingle();
+    if (existente) inmuebleId = existente.id;
+    else {
+      const r = filaInmuebleDesdeFormulario(candidataAInmueble(candidata));
+      if (!r.ok) return { ok: false, mensaje: r.mensaje };
+      const { data: nuevo, error } = await sb
+        .from("inmuebles")
+        .insert({ ...r.fila, origen: "portal", estatus: "por_validar", ciudad: candidata.ciudad || "León" })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      inmuebleId = nuevo.id;
+    }
+
+    const { data: inm } = await sb.from("inmuebles").select("*").eq("id", inmuebleId).single();
+    // Para el score se evalúa como si estuviera disponible (se valida al publicar).
+    const match = calcularMatch(perfilMatchDeFicha(ctx.ficha), { ...(inm as any), estatus: "disponible" });
+    const ronda = await rondaActual(sb, ctx.ot.id);
+    const { error: e } = await sb.from("propuestas_inmuebles").upsert(
+      {
+        orden_trabajo_id: ctx.ot.id,
+        expediente_id: ctx.ot.expediente_id,
+        inmueble_id: inmuebleId,
+        ronda,
+        score_match: match.score,
+        razones_match: ["🌐 Encontrada en internet: confirma disponibilidad y comisión con el anunciante", ...match.razones],
+        estatus: "sugerida",
+      },
+      { onConflict: "orden_trabajo_id,inmueble_id", ignoreDuplicates: true },
+    );
+    if (e) throw new Error(e.message);
+
+    crudas[indice] = { ...crudas[indice], inmuebleId };
+    await sb.from("busquedas_web").update({ candidatas: crudas }).eq("id", busquedaId);
+    if (ctx.ot.expediente_id) {
+      await registrarActividad(sb, {
+        expedienteId: ctx.ot.expediente_id,
+        tipo: "sistema",
+        titulo: `🌐 Opción de internet agregada a la orden ${ctx.ot.folio}`,
+        detalle: `${candidata.titulo}${candidata.precio ? ` · ${formatoPesos(candidata.precio)}` : ""}`,
+      });
+    }
+    revalidatePath(`/ordenes-trabajo/${ctx.ot.id}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("[agregarCandidataWeb]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo agregar la candidata." };
+  }
+}
+
+/** Da de alta al anunciante de una candidata como aliado prospecto (sin convenio). */
+export async function invitarAnuncianteComoAliado(
+  busquedaId: string,
+  url: string,
+): Promise<{ ok: boolean; aliadoId?: string; yaExistia?: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const encontrada = await candidataDeBusqueda(sb, busquedaId, url);
+    if (!encontrada) return { ok: false, mensaje: "La candidata ya no existe." };
+    const { fila, candidata } = encontrada;
+    const ctx = await cargarOrden(sb, fila.orden_trabajo_id);
+    if (!ctx) return { ok: false, mensaje: "La orden de trabajo no existe." };
+    await verificarAccesoOrden(ctx);
+    const nombre = candidata.anuncianteNombre;
+    if (!nombre) return { ok: false, mensaje: "La publicación no muestra quién la anuncia. Revisa el link y dalo de alta en Aliados." };
+
+    const telefono = (candidata.anuncianteTelefono ?? "").replace(/[^\d+]/g, "");
+    const { data: aliados } = await sb.from("proveedores").select("id, nombre, telefono").eq("es_aliado_inmobiliario", true);
+    const igual = (aliados ?? []).find(
+      (a: any) =>
+        (telefono && String(a.telefono ?? "").replace(/[^\d+]/g, "").endsWith(telefono.slice(-10))) ||
+        normalizarTexto(a.nombre) === normalizarTexto(nombre),
+    );
+    if (igual) return { ok: true, aliadoId: igual.id, yaExistia: true };
+
+    const { guardarAliado } = await import("@/app/actions/aliados");
+    const zonas = [candidata.fraccionamiento, candidata.colonia, candidata.zona].filter(Boolean) as string[];
+    const r = await guardarAliado({
+      nombre,
+      telefono: candidata.anuncianteTelefono ?? "",
+      whatsapp: telefono || undefined,
+      zonasCobertura: zonas,
+      notas: `Prospecto encontrado en internet (${dominioDe(candidata.url) ?? "portal"}): ${candidata.url}\nPendiente: contactar y proponer convenio de comisión compartida.`,
+    });
+    if (!r.ok) return { ok: false, mensaje: r.mensaje };
+    return { ok: true, aliadoId: r.id };
+  } catch (err) {
+    console.error("[invitarAnuncianteComoAliado]", err);
+    return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo dar de alta al aliado." };
+  }
 }

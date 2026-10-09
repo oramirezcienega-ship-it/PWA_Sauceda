@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { obtenerOrdenAsesoria, cambiarEtapaOrdenAsesoria, type OrdenAsesoria } from "@/app/actions/asesoria-compra";
 import { TarjetaPerfilBusqueda } from "./TarjetaPerfilBusqueda";
 import { TarjetaPrecalificacion } from "./TarjetaPrecalificacion";
+import { PanelBusquedaInternet } from "./PanelBusquedaInternet";
 import { BandejaOpciones } from "./BandejaOpciones";
 import { PanelBusquedaAliados } from "@/components/aliados/PanelBusquedaAliados";
 import { WidgetBpmTareas } from "@/components/WidgetBpmTareas";
@@ -25,6 +26,7 @@ export function PanelAsesoriaCompraOT({
   const [moviendo, setMoviendo] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [versionOpciones, setVersionOpciones] = useState(0);
 
   const cargar = useCallback(async () => {
     try {
@@ -158,7 +160,8 @@ export function PanelAsesoriaCompraOT({
       {busquedaHabilitada && (
         <>
           <PanelBusquedaAliados ordenTrabajoId={ordenTrabajoId} />
-          <BandejaOpciones key={`opciones-${version}`} ordenTrabajoId={ordenTrabajoId} />
+          <PanelBusquedaInternet ordenTrabajoId={ordenTrabajoId} onAgregada={() => setVersionOpciones((v) => v + 1)} />
+          <BandejaOpciones key={`opciones-${version}-${versionOpciones}`} ordenTrabajoId={ordenTrabajoId} />
         </>
       )}
     </div>

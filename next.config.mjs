@@ -15,13 +15,15 @@ const csp = [
   "frame-ancestors 'self'",
   "form-action 'self'",
   "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:* http://192.168.100.*",
-  "font-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  `script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com${esDev ? " 'unsafe-eval'" : ""}`,
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.saucedamx.com wss://*.saucedamx.com http://localhost:* http://127.0.0.1:* http://192.168.100.* https://cloudflareinsights.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  // Google Maps JavaScript API (zonas de búsqueda): scripts, teselas y Places API.
+  `script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.ggpht.com https://*.googleusercontent.com blob:${esDev ? " 'unsafe-eval'" : ""}`,
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.saucedamx.com wss://*.saucedamx.com http://localhost:* http://127.0.0.1:* http://192.168.100.* https://cloudflareinsights.com https://*.googleapis.com https://*.google.com https://*.gstatic.com data: blob:",
+  "frame-src 'self' https://*.google.com",
   "media-src 'self' blob: https: http://localhost:* http://127.0.0.1:* http://192.168.100.*",
   "manifest-src 'self'",
-  "worker-src 'self'",
+  "worker-src 'self' blob:",
 ].join("; ");
 
 // Cabeceras de seguridad aplicadas a TODAS las rutas.
