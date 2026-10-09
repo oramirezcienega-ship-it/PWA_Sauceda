@@ -13,6 +13,10 @@
 [functions]
   external_node_modules = ["@opentelemetry/api"]
 
+# Red de seguridad de Sofía: reintenta conversaciones que quedaron sin respuesta.
+[functions."rescate-ia"]
+  schedule = "*/2 * * * *"
+
 
 [[headers]]
   for = "/*"
