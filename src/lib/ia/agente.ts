@@ -392,17 +392,17 @@ B) Si está interesado en la PROMOCIÓN DE VIVIENDAS (Servicio 8 - tipo_negocio:
 Pregunta de forma amigable:
 1. Ubicación de la casa (fraccionamiento, colonia o ciudad).
 2. Cuál es el precio aproximado en el que desean venderla.
-3. Menciona que cobramos una comisión por la venta y que un asesor le contactará para dar detalles exactos.
+3. Menciona que cobramos una comisión por la venta y coordina la atención con micro-compromiso de doble alternativa: "¿Te queda más cómodo que nuestro asesor te contacte hoy por la tarde o mañana por la mañana para revisar los detalles?"
 
 C) Si está interesado en el ARMADO DE EXPEDIENTE O ASESORÍA DE TRÁMITES (Servicio 9 - tipo_negocio: 'solo_tramite'):
 - Si el cliente busca saber si es apto para un crédito INFONAVIT, consultar sus puntos, precalificación o evaluar viabilidad:
   * Confírmale cálidamente que con mucho gusto podemos ayudarle a revisar si es apto/viable para su crédito INFONAVIT.
   * Resalta explícitamente que la asesoría inicial para saber si es apto es 100% SIN COSTO.
-  * Indícale que un asesor especializado le contactará en breve para revisar su situación, resolver sus dudas y orientarle paso a paso.
+  * Coordina la atención con micro-compromiso de doble alternativa: "¿Prefieres que el asesor especializado te contacte hoy por la tarde o mañana por la mañana para revisar tus opciones y puntos con calma?"
 - Si busca el trámite de una compraventa o traspaso ya acordado entre particulares:
   1. Pregunta si ya tienen un comprador o vendedor interesado.
   2. Pregunta si la operación se realizará con crédito INFONAVIT.
-  3. Menciona que nosotros nos encargamos del armado del expediente y trámite integral, y que un asesor le contactará para cotizar el servicio.
+  3. Menciona que nosotros nos encargamos del armado del expediente y trámite integral, y que un asesor le contactará para cotizar el servicio. "¿Te queda mejor hoy por la tarde o mañana por la mañana para que te marque el asesor?"
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
 Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, que se recomienda en el PASO 1:
@@ -1595,6 +1595,28 @@ export async function responderConIA(
         }
       }
 
+      // --- DETECCIÓN INTELIGENTE DE LEAD CALIENTE (Sofía IA) ---
+      const valorEst = Number(updates.valor_estimado || exp?.valor_estimado || 0);
+      const saldoDeu = Number(updates.saldo_deuda || exp?.saldo_deuda || 0);
+      const metrosNum = Number((datosExtraidos as any).metros || 0);
+      const colOZona = Boolean((datosExtraidos as any).colonia || updates.fraccionamiento || exp?.fraccionamiento);
+      const citaAceptada = (datosExtraidos as any).paso_flujo === "paso_3" || (datosExtraidos as any).cita_confirmada === true;
+
+      const esLeadCaliente = Boolean(
+        valorEst > 0 ||
+        saldoDeu > 0 ||
+        metrosNum > 0 ||
+        citaAceptada ||
+        (colOZona && (updates.tipo_negocio === "construccion-remodelacion" || updates.tipo_negocio === "construccion-piso-estampado"))
+      );
+
+      if (esLeadCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
+        updates.calificacion = "caliente";
+        if (!datosExtraidos.avisar_asesor) {
+          datosExtraidos.avisar_asesor = `🔥 LEAD CALIENTE DETECTADO: Perfilado con datos clave (${updates.tipo_negocio || exp?.tipo_negocio || "general"}). Dar seguimiento prioritario.`;
+        }
+      }
+
       // Guardar actualizaciones de datos extraídos en base de datos
       if (Object.keys(updates).length > 0) {
         const { error: errUpdate } = await sb
@@ -1605,14 +1627,22 @@ export async function responderConIA(
         if (errUpdate) {
           console.error("IA: Error al actualizar expediente con datos:", errUpdate);
         } else {
-          // Si actualizamos el teléfono, también lo actualizamos en el prospecto enlazado
-          if (updates.telefono && exp?.prospecto_id) {
-            const { error: errUpdatePr } = await sb
-              .from("prospectos")
-              .update({ telefono: updates.telefono })
-              .eq("id", exp.prospecto_id);
-            if (errUpdatePr) {
-              console.error("IA: Error al actualizar prospecto con teléfono real:", errUpdatePr);
+          // Si actualizamos el teléfono o calificación, también actualizamos el prospecto enlazado
+          if (exp?.prospecto_id) {
+            const updatesPr: Record<string, unknown> = {};
+            if (updates.telefono) updatesPr.telefono = updates.telefono;
+            if (updates.calificacion === "caliente") {
+              updatesPr.calificacion = "caliente";
+              updatesPr.estatus = "sql";
+            }
+            if (Object.keys(updatesPr).length > 0) {
+              const { error: errUpdatePr } = await sb
+                .from("prospectos")
+                .update(updatesPr)
+                .eq("id", exp.prospecto_id);
+              if (errUpdatePr) {
+                console.error("IA: Error al actualizar prospecto con datos:", errUpdatePr);
+              }
             }
           }
 
@@ -1622,19 +1652,21 @@ export async function responderConIA(
           await registrarActividad(sb, {
             expedienteId: ctx.expedienteId,
             tipo: "sistema",
-            titulo: "Datos de propiedad actualizados por IA",
+            titulo: updates.calificacion === "caliente" ? "🔥 Prospecto Calificado como LEAD CALIENTE" : "Datos de propiedad actualizados por IA",
             detalle: `Extraídos del chat: ${detalleActividad}`,
           });
-          if (updates.etapa && exp?.prospecto_id) {
+          if ((updates.etapa || updates.calificacion) && exp?.prospecto_id) {
             try {
               const { sincronizarConectorMautic } = await import("@/lib/conector-rudder-mautic");
               void sincronizarConectorMautic({
                 userId: exp.prospecto_id,
-                etapa: updates.etapa,
+                etapa: updates.etapa || exp.etapa,
+                calificacion: updates.calificacion || exp.calificacion,
+                tags: updates.calificacion === "caliente" ? ["lead-caliente"] : undefined,
                 descalificado: updates.etapa === "perdido" || updates.etapa === "fuera_de_zona",
               });
             } catch (syncErr) {
-              console.error("[IA Sync Mautic] Error sincronizando etapa a Mautic:", syncErr);
+              console.error("[IA Sync Mautic] Error sincronizando etapa/calificación a Mautic:", syncErr);
             }
           }
         }
