@@ -2,8 +2,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { registrarActividad } from "@/lib/actividades";
 import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/telegram";
 
-/** No se repite el mismo aviso para el mismo chat dentro de esta ventana. */
-const VENTANA_DEDUPE_MS = 6 * 60 * 60 * 1000;
+/**
+ * Un aviso por conversación dentro de esta ventana, aunque Sofía redacte el
+ * motivo distinto en cada turno (antes se comparaba el texto exacto y pasaban todos).
+ */
+const VENTANA_DEDUPE_MS = 4 * 60 * 60 * 1000;
+/** Urgentes y leads calientes sí pueden repetirse, pero no más de uno por hora por conversación. */
+const VENTANA_DEDUPE_URGENTE_MS = 60 * 60 * 1000;
+
+const PREFIJO_TITULO = "🙋 Sofía pide apoyo";
+
+/** Cliente molesto, cita/visita o pago: siempre amerita interrumpir al asesor. */
+const RE_URGENTE = /molest|inconform|queja|reclam|no lleg|no asisti|cancel|liga de (mercado )?pago|anticipo|visita t[eé]cnica|urgente/i;
+
+/** Avisos que ameritan Telegram; el resto se queda como notificación in-app. */
+function clasificarAviso(motivo: string): { urgente: boolean; telegram: boolean } {
+  const urgente = RE_URGENTE.test(motivo);
+  const caliente = motivo.includes("LEAD CALIENTE");
+  return { urgente, telegram: urgente || caliente };
+}
+
+/** Últimos 10 dígitos: el mismo chat llega a veces con y sin el 52. */
+function claveTelefono(telefono: string): string {
+  const digitos = telefono.replace(/\D/g, "");
+  return digitos.length >= 10 ? digitos.slice(-10) : telefono;
+}
 
 function escaparHtml(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -12,7 +35,8 @@ function escaparHtml(t: string): string {
 /**
  * Aviso de Sofía a un asesor humano ("transfiere a un asesor") sin pausar la IA:
  * notificación in-app (asesor del expediente + administradores), mensaje de
- * Telegram (chat personal del asesor o, si no tiene, el grupo) y actividad en
+ * Telegram solo si es urgente o lead caliente (chat personal del asesor o, si
+ * no tiene, el grupo) y actividad en
  * la bitácora. Nunca lanza: un fallo aquí no debe frenar la respuesta al cliente.
  */
 export async function avisarAsesorDesdeIA(
@@ -30,15 +54,16 @@ export async function avisarAsesorDesdeIA(
     const motivo = datos.motivo.trim().slice(0, 300);
     if (!motivo) return;
     const enlace = `/conversaciones?tel=${encodeURIComponent(datos.telefono)}`;
-    const titulo = `🙋 Sofía pide apoyo: ${datos.nombreCliente || datos.telefono}`;
+    const titulo = `${PREFIJO_TITULO}: ${datos.nombreCliente || datos.telefono}`;
+    const { telegram } = clasificarAviso(motivo);
 
     // Evita repetir el aviso si Sofía lo vuelve a marcar en los siguientes turnos.
-    const desde = new Date(Date.now() - VENTANA_DEDUPE_MS).toISOString();
+    const desde = new Date(Date.now() - (telegram ? VENTANA_DEDUPE_URGENTE_MS : VENTANA_DEDUPE_MS)).toISOString();
     const { data: previos } = await sb
       .from("notificaciones")
       .select("id")
-      .eq("enlace", enlace)
-      .eq("cuerpo", motivo)
+      .like("titulo", `${PREFIJO_TITULO}%`)
+      .like("enlace", `%${claveTelefono(datos.telefono)}`)
       .gte("created_at", desde)
       .limit(1);
     if (previos && previos.length > 0) return;
@@ -64,7 +89,7 @@ export async function avisarAsesorDesdeIA(
     const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
     const asesor = lista.find((p) => p.id === datos.asesorId);
     const chatId = asesor?.telegram_chat_id || chatIdGrupo;
-    if (botToken && chatId) {
+    if (telegram && botToken && chatId) {
       const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
       await enviarMensajeTelegram({
         botToken,

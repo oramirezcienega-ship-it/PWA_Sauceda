@@ -217,6 +217,7 @@ interface FilaExp {
   campaign_name?: string | null;
   adset_name?: string | null;
   ad_name?: string | null;
+  calificacion?: string | null;
 }
 
 function formatearFechaLegible(fechaStr: string, horaStr: string): string {
@@ -708,7 +709,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "pospone_fecha": "Si cliente_pospone: la fecha que dijo como 'YYYY-MM' o 'YYYY-MM-DD' (en el futuro); null si no dio fecha",
     "pospone_motivo": "Si cliente_pospone: el motivo en pocas palabras (ej. 'hasta diciembre por presupuesto'); de lo contrario null",
     "cliente_retoma": "true SOLO si el negocio está EN PAUSA y el cliente muestra intención clara de retomar ya; de lo contrario null",
-    "avisar_asesor": "Motivo breve (máx. 200 caracteres) SOLO cuando el MÓDULO: VISITA TÉCNICA EN SITIO indique avisar a un asesor en este turno; de lo contrario null",
+    "avisar_asesor": "Motivo breve (máx. 200 caracteres) SOLO en estos casos: (a) el MÓDULO: VISITA TÉCNICA EN SITIO indique avisar a un asesor en este turno, (b) el cliente está molesto, se queja, reclama una cita/visita no atendida o una cotización no entregada, o (c) hay un tema de pago/anticipo que debe resolver un humano. NO lo uses para pedidos rutinarios (catálogo, fotos, ejemplos, horario preferido de contacto, que retoma el proyecto, datos del proyecto): el asesor ya ve esa información en el CRM. Si ya avisaste en un turno anterior de esta conversación por el mismo tema, pon null. En cualquier otro caso null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null",
     "nss": "Número de Seguridad Social (NSS de 11 dígitos, solo números) si el cliente lo proporcionó para Infonavit, de lo contrario null",
     "fecha_nacimiento": "Fecha de nacimiento del cliente (formato DD/MM/AAAA) si la proporcionó para su precalificación de Infonavit, de lo contrario null"
@@ -1084,7 +1085,7 @@ export async function responderConIA(
       const { data: e } = await sb
         .from("expedientes")
         .select(
-          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado, campaign_name, adset_name, ad_name"
+          "cliente, primer_apellido, fraccionamiento, etapa, situacion, tipo_credito, tipo_negocio, direccion_propiedad, link_google_maps, necesidad, valor_estimado, saldo_deuda, telefono, canal_id, prospecto_id, sin_pagos, estado_fisico, habitada, asesor_id, ultimo_paso_flujo, ultimo_paso_alcanzado, campaign_name, adset_name, ad_name, calificacion"
         )
         .eq("id", ctx.expedienteId)
         .maybeSingle();
@@ -1663,20 +1664,22 @@ export async function responderConIA(
       const valorEst = Number(updates.valor_estimado || exp?.valor_estimado || 0);
       const saldoDeu = Number(updates.saldo_deuda || exp?.saldo_deuda || 0);
       const metrosNum = Number((datosExtraidos as any).metros || 0);
-      const colOZona = Boolean((datosExtraidos as any).colonia || updates.fraccionamiento || exp?.fraccionamiento);
       const citaAceptada = (datosExtraidos as any).paso_flujo === "paso_3" || (datosExtraidos as any).cita_confirmada === true;
       const tieneDatosInfonavit = Boolean((datosExtraidos as any).nss || (datosExtraidos as any).fecha_nacimiento);
 
+      // Dar colonia/zona ya no basta: casi cualquier lead de remodelación la da al
+      // segundo mensaje y el aviso dejaba de distinguir a los realmente avanzados.
       const esLeadCaliente = Boolean(
         valorEst > 0 ||
         saldoDeu > 0 ||
         metrosNum > 0 ||
         citaAceptada ||
-        tieneDatosInfonavit ||
-        (colOZona && (updates.tipo_negocio === "construccion-remodelacion" || updates.tipo_negocio === "construccion-piso-estampado"))
+        tieneDatosInfonavit
       );
 
-      if (esLeadCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
+      // Solo en la transición a caliente: si ya lo era, no se vuelve a avisar.
+      const yaEraCaliente = exp?.calificacion === "caliente";
+      if (esLeadCaliente && !yaEraCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
         updates.calificacion = "caliente";
         if (!datosExtraidos.avisar_asesor) {
           datosExtraidos.avisar_asesor = tieneDatosInfonavit
