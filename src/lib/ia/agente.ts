@@ -398,7 +398,10 @@ C) Si está interesado en el ARMADO DE EXPEDIENTE O ASESORÍA DE TRÁMITES (Serv
 - Si el cliente busca saber si es apto para un crédito INFONAVIT, consultar sus puntos, precalificación o evaluar viabilidad:
   * Confírmale cálidamente que con mucho gusto podemos ayudarle a revisar si es apto/viable para su crédito INFONAVIT.
   * Resalta explícitamente que la asesoría inicial para saber si es apto es 100% SIN COSTO.
-  * Coordina la atención con micro-compromiso de doble alternativa: "¿Prefieres que el asesor especializado te contacte hoy por la tarde o mañana por la mañana para revisar tus opciones y puntos con calma?"
+  * EXTRACCIÓN CRÍTICA DE REQUISITOS (Precalificación oficial): Solicita de inmediato su Número de Seguridad Social (NSS de 11 dígitos) y su fecha de nacimiento (DD/MM/AAAA) con calidez y naturalidad:
+    "¡Con mucho gusto! La asesoría inicial es 100% sin costo. Para consultar tu precalificación oficial en el portal de Infonavit y decirte exactamente cuántos puntos y qué saldo tienes disponible en tu subcuenta, ¿me compartes tu NSS (11 dígitos) y tu fecha de nacimiento?"
+  * Si el cliente ya proporcionó su NSS y fecha de nacimiento (o los incluye en su mensaje): regístralos en los datos extraídos ("nss" y "fecha_nacimiento"), agradécele cordialmente y coordina la llamada del asesor con micro-compromiso de doble alternativa:
+    "¡Excelente! Ya registré tus datos. ¿Te queda mejor hoy por la tarde o mañana por la mañana para que te marque nuestro asesor especializado con el resultado de tu precalificación?"
 - Si busca el trámite de una compraventa o traspaso ya acordado entre particulares:
   1. Pregunta si ya tienen un comprador o vendedor interesado.
   2. Pregunta si la operación se realizará con crédito INFONAVIT.
@@ -637,6 +640,24 @@ Si notas en los "Datos del cliente" abajo que el teléfono de contacto figura co
 REGLA DE CORREO ELECTRÓNICO (CRÍTICA):
 NUNCA solicites el correo electrónico al inicio del saludo ni en los primeros mensajes. Sofía debe solicitar el correo electrónico únicamente cuando el cliente demuestre un interés real en un servicio, solicite información detallada/cotización por escrito, o se esté acordando el seguimiento con un asesor. En ese momento de interés maduro, solicita amablemente su correo electrónico como dato complementario de contacto para enviarle la información o confirmación.
 
+REGLA DE RESCATE DE NOMBRE REAL (CRÍTICA — Anti-Alias de WhatsApp):
+Si notas en los "Datos del cliente" abajo que el nombre del cliente figura como un punto (".", ".."), emojis (ej. "❤️❤️", "🌴🏝️🌴", "😘"), caracteres especiales, o tiene menos de 3 letras válidas:
+- NUNCA uses esos emojis o signos para dirigirte al cliente.
+- En tu primer o segundo turno de respuesta, incluye de forma muy natural y amable la pregunta:
+  "Por cierto, ¿cuál es tu nombre para registrarte correctamente con nuestro asesor?"
+- Cuando el cliente responda indicando su nombre (ej. "Me llamo Carlos", "Soy Martha", "Santos"), asigna en "datosExtraidos": "cliente_nombre": "Carlos" (solo el nombre de persona limpio).
+
+REGLA DE PIVOTE DE VENTA CRUZADA (CRÍTICA — Ecosistema Sauceda):
+Si el cliente dice "Ya lo resolví", "Ya no lo ocupo", "Ya me ayudaron" o indica que ya no requiere el servicio original:
+NUNCA te despidas cerrando la puerta sin antes presentar una alternativa del ecosistema Sauceda.
+Felicítalo cordialmente por haberlo solucionado y abre educadamente la puerta a las otras especialidades de SAUCEDA:
+"¡Excelente que ya quedó resuelto! Por cierto, en SAUCEDA también apoyamos a propietarios con [Remodelación de espacios / Acabados en concreto estampado / Mantenimiento y lavado de cisternas / Impermeabilización de techos / Asesoría en créditos Infonavit]. ¿Hay algún otro proyecto en tu hogar o patrimonio que tengas en mente para los próximos meses?"
+- Si el cliente responde que sí le interesa otro servicio, cambia amablemente el flujo y actualiza "tipo_negocio".
+- Si el cliente confirma que por el momento no necesita nada más, entonces sí despídete con calidez deseándole un excelente día.
+
+REGLA DE RESPUESTAS CORTAS Y REACCIONES (CRÍTICA):
+Si el cliente responde con un monosílabo o mensaje muy corto ("Si", "Ok", "Muy bien", "Ssi") o una reacción con emoji ("👍"), NUNCA cierres la conversación con un agradecimiento pasivo. Impulsa de inmediato el siguiente paso del servicio con una pregunta cerrada de doble alternativa o pidiendo el siguiente dato clave (ej. "¿Prefieres que agendemos la llamada hoy por la tarde o mañana a las 11:00 am?", o "¿Tu azotea es de losa de concreto o de lámina?").
+
 Una vez que tengas los datos mínimos recopilados para el flujo correspondiente:
 - Comunícales con amabilidad que con esta información nuestro equipo preparará la propuesta o se pondrá en contacto para los siguientes pasos.
 - Infórmales que les daremos respuesta directamente por este chat de WhatsApp.
@@ -688,7 +709,9 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "pospone_motivo": "Si cliente_pospone: el motivo en pocas palabras (ej. 'hasta diciembre por presupuesto'); de lo contrario null",
     "cliente_retoma": "true SOLO si el negocio está EN PAUSA y el cliente muestra intención clara de retomar ya; de lo contrario null",
     "avisar_asesor": "Motivo breve (máx. 200 caracteres) SOLO cuando el MÓDULO: VISITA TÉCNICA EN SITIO indique avisar a un asesor en este turno; de lo contrario null",
-    "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null"
+    "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null",
+    "nss": "Número de Seguridad Social (NSS de 11 dígitos, solo números) si el cliente lo proporcionó para Infonavit, de lo contrario null",
+    "fecha_nacimiento": "Fecha de nacimiento del cliente (formato DD/MM/AAAA) si la proporcionó para su precalificación de Infonavit, de lo contrario null"
   }
 }
 
@@ -1149,6 +1172,8 @@ export async function responderConIA(
       avisar_asesor?: string | null;
       cliente_nombre?: string | null;
       telefono_real?: string | null;
+      nss?: string | null;
+      fecha_nacimiento?: string | null;
     } = {};
 
     let limpio = "";
@@ -1345,12 +1370,51 @@ export async function responderConIA(
         updates.link_google_maps = linkMaps;
       }
       if ((datosExtraidos as any).cliente_nombre) {
-        updates.cliente = (datosExtraidos as any).cliente_nombre;
+        const nomLimpio = String((datosExtraidos as any).cliente_nombre).trim();
+        // Validar que sea un nombre real de persona y no emojis o puntuación
+        if (nomLimpio.length >= 3 && /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(nomLimpio)) {
+          updates.cliente = nomLimpio;
+        }
       }
       if ((datosExtraidos as any).cliente_telefono) {
         const telLimpio = String((datosExtraidos as any).cliente_telefono).replace(/\D/g, "");
         if (telLimpio.length >= 10) {
           updates.telefono = telLimpio.slice(-10);
+        }
+      }
+
+      // Extracción de datos para precalificación Infonavit (NSS y Fecha de Nacimiento)
+      if ((datosExtraidos as any).nss || (datosExtraidos as any).fecha_nacimiento) {
+        const nssLimpio = (datosExtraidos as any).nss ? String((datosExtraidos as any).nss).replace(/\D/g, "") : "";
+        const fnLimpia = (datosExtraidos as any).fecha_nacimiento ? String((datosExtraidos as any).fecha_nacimiento).trim() : "";
+        const datosInfonavit = [
+          nssLimpio && `NSS: ${nssLimpio}`,
+          fnLimpia && `F.Nac: ${fnLimpia}`
+        ].filter(Boolean).join(" | ");
+
+        if (datosInfonavit) {
+          updates.necesidad = updates.necesidad
+            ? `${updates.necesidad} [${datosInfonavit}]`
+            : `Precalificación Infonavit [${datosInfonavit}]`;
+
+          if (exp?.prospecto_id) {
+            try {
+              const { data: prActual } = await sb
+                .from("prospectos")
+                .select("notas")
+                .eq("id", exp.prospecto_id)
+                .maybeSingle();
+              const notasPrev = prActual?.notas || "";
+              if (!notasPrev.includes(datosInfonavit)) {
+                await sb
+                  .from("prospectos")
+                  .update({ notas: notasPrev ? `${notasPrev}\n[IA Precalificación] ${datosInfonavit}` : `[IA Precalificación] ${datosInfonavit}` })
+                  .eq("id", exp.prospecto_id);
+              }
+            } catch (errNotas) {
+              console.error("IA: Error al guardar datos Infonavit en prospectos.notas:", errNotas);
+            }
+          }
         }
       }
 
@@ -1601,19 +1665,23 @@ export async function responderConIA(
       const metrosNum = Number((datosExtraidos as any).metros || 0);
       const colOZona = Boolean((datosExtraidos as any).colonia || updates.fraccionamiento || exp?.fraccionamiento);
       const citaAceptada = (datosExtraidos as any).paso_flujo === "paso_3" || (datosExtraidos as any).cita_confirmada === true;
+      const tieneDatosInfonavit = Boolean((datosExtraidos as any).nss || (datosExtraidos as any).fecha_nacimiento);
 
       const esLeadCaliente = Boolean(
         valorEst > 0 ||
         saldoDeu > 0 ||
         metrosNum > 0 ||
         citaAceptada ||
+        tieneDatosInfonavit ||
         (colOZona && (updates.tipo_negocio === "construccion-remodelacion" || updates.tipo_negocio === "construccion-piso-estampado"))
       );
 
       if (esLeadCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
         updates.calificacion = "caliente";
         if (!datosExtraidos.avisar_asesor) {
-          datosExtraidos.avisar_asesor = `🔥 LEAD CALIENTE DETECTADO: Perfilado con datos clave (${updates.tipo_negocio || exp?.tipo_negocio || "general"}). Dar seguimiento prioritario.`;
+          datosExtraidos.avisar_asesor = tieneDatosInfonavit
+            ? `🔥 LEAD CALIENTE DETECTADO (INFONAVIT): Datos de precalificación capturados (${updates.necesidad || "Trámite"}). Dar seguimiento prioritario.`
+            : `🔥 LEAD CALIENTE DETECTADO: Perfilado con datos clave (${updates.tipo_negocio || exp?.tipo_negocio || "general"}). Dar seguimiento prioritario.`;
         }
       }
 
@@ -1627,10 +1695,11 @@ export async function responderConIA(
         if (errUpdate) {
           console.error("IA: Error al actualizar expediente con datos:", errUpdate);
         } else {
-          // Si actualizamos el teléfono o calificación, también actualizamos el prospecto enlazado
+          // Si actualizamos el teléfono, nombre o calificación, también actualizamos el prospecto enlazado
           if (exp?.prospecto_id) {
             const updatesPr: Record<string, unknown> = {};
             if (updates.telefono) updatesPr.telefono = updates.telefono;
+            if (updates.cliente) updatesPr.nombre = updates.cliente;
             if (updates.calificacion === "caliente") {
               updatesPr.calificacion = "caliente";
               updatesPr.estatus = "sql";
