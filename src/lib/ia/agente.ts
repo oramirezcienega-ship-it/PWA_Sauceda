@@ -413,18 +413,73 @@ Pregunta de forma amigable:
 2. Cuál es el precio aproximado en el que desean venderla.
 3. Menciona que cobramos una comisión por la venta y coordina la atención con micro-compromiso de doble alternativa: "¿Te queda más cómodo que nuestro asesor te contacte hoy por la tarde o mañana por la mañana para revisar los detalles?"
 
-C) Si está interesado en el ARMADO DE EXPEDIENTE O ASESORÍA DE TRÁMITES (Servicio 9 - tipo_negocio: 'solo_tramite'):
-- Si el cliente busca saber si es apto para un crédito INFONAVIT, consultar sus puntos, precalificación o evaluar viabilidad:
-  * Confírmale cálidamente que con mucho gusto podemos ayudarle a revisar si es apto/viable para su crédito INFONAVIT.
-  * Resalta explícitamente que la asesoría inicial para saber si es apto es 100% SIN COSTO.
-  * EXTRACCIÓN CRÍTICA DE REQUISITOS (Precalificación oficial): Solicita de inmediato su Número de Seguridad Social (NSS de 11 dígitos) y su fecha de nacimiento (DD/MM/AAAA) con calidez y naturalidad:
-    "¡Con mucho gusto! La asesoría inicial es 100% sin costo. Para consultar tu precalificación oficial en el portal de Infonavit y decirte exactamente cuántos puntos y qué saldo tienes disponible en tu subcuenta, ¿me compartes tu NSS (11 dígitos) y tu fecha de nacimiento?"
-  * Si el cliente ya proporcionó su NSS y fecha de nacimiento (o los incluye en su mensaje): regístralos en los datos extraídos ("nss" y "fecha_nacimiento"), agradécele cordialmente y coordina la llamada del asesor con micro-compromiso de doble alternativa:
-    "¡Excelente! Ya registré tus datos. ¿Te queda mejor hoy por la tarde o mañana por la mañana para que te marque nuestro asesor especializado con el resultado de tu precalificación?"
-- Si busca el trámite de una compraventa o traspaso ya acordado entre particulares:
-  1. Pregunta si ya tienen un comprador o vendedor interesado.
-  2. Pregunta si la operación se realizará con crédito INFONAVIT.
-  3. Menciona que nosotros nos encargamos del armado del expediente y trámite integral, y que un asesor le contactará para cotizar el servicio. "¿Te queda mejor hoy por la tarde o mañana por la mañana para que te marque el asesor?"
+C) Si está interesado en ASESORÍA DE COMPRA O TRÁMITES INFONAVIT (tipo_negocio: 'asesoria_compra' o 'solo_tramite'):
+Cuando el prospecto muestre interés en comprar casa, consultar su crédito INFONAVIT, puntos, o tramitar una compraventa/traspaso, debes guiarlo con naturalidad a través del siguiente embudo:
+
+---
+
+#### 1. LA GRAN BIFURCACIÓN INICIAL:
+Identifica de inmediato si ya tiene el inmueble o si busca casa:
+"¡Hola! Te damos la bienvenida a SAUCEDA Bienes Raíces. Para orientarte con la mejor solución:
+¿Ya tienes vista o apalabrada la casa que vas a comprar, o necesitas que te ayudemos a encontrar opciones en León dentro de tu presupuesto?"
+
+---
+
+#### RAMA A: YA TIENE CASA / TRATO DIRECTO (tipo_negocio: 'solo_tramite', ya_tiene_casa: true)
+Aplica cuando el cliente dice que ya tiene comprador, ya tiene vendedor, o pregunta directamente "¿Cuánto cuesta el trámite?":
+
+1. ANCLAJE DE VALOR Y PRECIO INMEDIATO (PROHIBIDO EVADIR EL COSTO):
+   "En SAUCEDA nuestro servicio de Gestión Integral y Armado de Expediente INFONAVIT tiene una tarifa única fija de $15,000 MXN (esquema 50/50: $7,500 de anticipo al inicio y $7,500 a la firma en notaría).
+   No cobramos comisiones del 5% como las agencias tradicionales.
+   Incluye: avalúo comercial certificado, certificado de libertad de gravamen (CLG), gestión de cartas saldo si hay deuda previa, integración del paquete técnico ante INFONAVIT y acompañamiento presencial en notaría."
+
+2. CALIFICACIÓN RÁPIDA DEL INMUEBLE:
+   - ¿En qué colonia o fraccionamiento de León está ubicada la casa?
+   - ¿La propiedad tiene algún gravamen o adeudo activo (INFONAVIT, banco)?
+
+3. PROTOCOLO DE CITA EN SALA OPEN WORK:
+   Una vez confirmada la ubicación y viabilidad:
+   "Para revisar las escrituras de la propiedad, explicarles el cronograma hasta la firma notarial y formalizar el contrato de servicios y anticipo, los esperamos en nuestra sala de atención en León. ¿Les queda más cómodo acudir por la mañana o por la tarde?"
+
+---
+
+#### RAMA B: BUSCA COMPRAR CASA (tipo_negocio: 'asesoria_compra', ya_tiene_casa: false)
+Aplica cuando el cliente no tiene casa elegida y busca opciones con su crédito:
+
+PASO 1: COMPUERTA DE PRECALIFICACIÓN (Filtro de Viabilidad)
+- Pregunta si ya tiene su precalificación oficial descargada:
+  "Para saber con total exactitud para qué casas te alcanza y no hacerte perder tiempo, ¿ya cuentas con tu captura de precalificación de Mi Cuenta Infonavit o sabes cuánto te prestan aproximadamente?"
+
+- Si el cliente comparte el monto o la captura:
+  Agradece, valida los números y pasa al PASO 2.
+
+- Si el cliente dice que no tiene cuenta, olvidó su contraseña o el portal le marca error de correo/teléfono:
+  "¡No te preocupes! Muchos clientes tienen desactualizados sus datos. Esos accesos solo los puedes corregir tú directamente ante el Instituto por seguridad:
+  1. Puedes llamar a Infonatel al 800 008 3900.
+  2. O acudir al CESI INFONAVIT en León con tu INE vigente para que te actualicen tu correo en minutos.
+  
+  👉 Mientras lo resuelves, para darte un estimado preliminar en este momento:
+  ¿Cuánto ganas al mes aproximadamente registrado ante el IMSS y qué edad tienes?"
+
+PASO 2: LEVANTAMIENTO DE EXPECTATIVAS DE COMPRA
+Recaba una a una las variables clave:
+1. Ahorro propio: "Además de lo que te preste INFONAVIT, ¿cuentas con algún ahorro o guardadito en efectivo para enganche o escrituras?"
+2. Zonas: "¿En qué zonas, sectores o colonias de León te gustaría vivir? (ej. Zona Sur, Héroes de León, Joyas, Delta, Maravillas...)"
+3. Inmueble: "¿Buscas casa o departamento, y cuántas recámaras como mínimo necesita tu familia?"
+4. Plazo: "¿En cuánto tiempo planeas mudarte: inmediato, de 1 a 3 meses, o vas con calma?"
+
+PASO 3: CIERRE Y PROMESA DE MARCA ("NOS QUEDAMOS CON LA TAREA")
+Una vez recabadas las expectativas:
+"¡Excelente, [Nombre]! Tu perfil ha quedado registrado:
+📊 Presupuesto estimado: [$X]
+📍 Zonas: [Zonas mencionadas]
+🏠 Inmueble: [Casa/Depa de N recámaras]
+
+En SAUCEDA nos quedamos con la tarea a partir de este momento. Nuestro equipo va a cruzar tu perfil con nuestro inventario y la red de propiedades verificadas en León para seleccionar únicamente opciones que tu crédito cubra al 100% y sin riesgos legales.
+Te estaremos enviando las mejores opciones por este chat y un asesor te contactará para afinar detalles."
+
+REGLA ESTRICTA DE SALAS OPEN WORK:
+PROHIBIDO invitar o agendar citas presenciales en esta etapa preliminar. Las visitas físicas se reservan exclusivamente para cuando el cliente seleccione una propiedad en firme para formalizar el convenio y pago inicial.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
 Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, accesible y sin presión. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, que se recomienda en el PASO 1:
@@ -751,8 +806,15 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
-    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
-    "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Impermeabilización de azotea de 40m², gotea ahora' o 'Venta de casa por cambio de ciudad'), de lo contrario null",
+    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'asesoria_compra', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
+    "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Compra de vivienda con crédito Infonavit en zona sur' o 'Gestión de trámite $15,000 MXN para casa en Héroes de León'), de lo contrario null",
+    "ya_tiene_casa": "Boolean (true si el cliente ya tiene la casa vista/apalabrada o trámite directo, false si busca comprar casa/opciones), de lo contrario null",
+    "monto_credito_precalificado": "Número entero con el monto de crédito precalificado INFONAVIT (ej. 650000) si el cliente lo mencionó, de lo contrario null",
+    "monto_ahorro_propio": "Número entero con el ahorro propio o enganche disponible (ej. 50000) si el cliente lo mencionó, de lo contrario null",
+    "busqueda_zonas": "Arreglo de strings con las zonas o colonias de León que le interesan para comprar (ej. ['Héroes de León', 'Delta']) si las mencionó, de lo contrario null",
+    "busqueda_recamaras_min": "Número entero con la cantidad mínima de recámaras que busca (ej. 2), de lo contrario null",
+    "tipo_inmueble": "'casa', 'departamento' o 'cualquiera' si el cliente especificó qué tipo de vivienda busca, de lo contrario null",
+    "plazo_mudanza": "'inmediato', '1_3_meses' o '3_6_meses' según el tiempo en que planea mudarse si lo mencionó, de lo contrario null",
     "colonia": "La colonia de León proporcionada por el cliente si la mencionó, de lo contrario null",
     "direccion": "La dirección de la propiedad tal como la dio el cliente (calle, número, colonia, referencias) si la escribió en cualquier mensaje de la conversación, de lo contrario null. No la inventes ni la completes con solo la colonia",
     "link_google_maps": "El enlace de Google Maps (maps.google, goo.gl/maps, maps.app.goo.gl) si el cliente compartió su ubicación como link, de lo contrario null",
@@ -1485,6 +1547,113 @@ export async function responderConIA(
             } catch (errNotas) {
               console.error("IA: Error al guardar datos Infonavit en prospectos.notas:", errNotas);
             }
+          }
+        }
+      }
+
+      // Persistencia de Asesoría de Compra / Solo Trámite (INFONAVIT)
+      const dInf = datosExtraidos as any;
+      const esAsesoriaOInfonavit =
+        updates.tipo_negocio === "asesoria_compra" ||
+        updates.tipo_negocio === "solo_tramite" ||
+        exp?.tipo_negocio === "asesoria_compra" ||
+        exp?.tipo_negocio === "solo_tramite" ||
+        dInf?.monto_credito_precalificado !== undefined ||
+        dInf?.ya_tiene_casa !== undefined;
+
+      if (esAsesoriaOInfonavit) {
+        if (dInf.monto_credito_precalificado) {
+          const mCred = Number(dInf.monto_credito_precalificado);
+          const mAhorro = dInf.monto_ahorro_propio ? Number(dInf.monto_ahorro_propio) : 0;
+          if (mCred > 0) {
+            updates.valor_estimado = Math.round(mCred + mAhorro);
+            updates.tipo_credito = "INFONAVIT";
+          }
+        }
+        if (Array.isArray(dInf.busqueda_zonas) && dInf.busqueda_zonas.length > 0) {
+          updates.fraccionamiento = dInf.busqueda_zonas.join(", ");
+        }
+
+        // Construir o enriquecer necesidad
+        if (dInf.necesidad) {
+          updates.necesidad = dInf.necesidad;
+        } else if (updates.tipo_negocio === "solo_tramite" || dInf.ya_tiene_casa === true) {
+          const col = dInf.colonia || updates.fraccionamiento || exp?.fraccionamiento || "";
+          updates.necesidad = `Gestión y Armado de Expediente INFONAVIT ($15,000 MXN) - Trato directo${col ? ` en ${col}` : ""}`;
+        } else if (updates.tipo_negocio === "asesoria_compra" || dInf.ya_tiene_casa === false) {
+          const partesAsesoria = [
+            dInf.monto_credito_precalificado && `Crédito: $${Number(dInf.monto_credito_precalificado).toLocaleString("es-MX")}`,
+            dInf.monto_ahorro_propio && `Ahorro: $${Number(dInf.monto_ahorro_propio).toLocaleString("es-MX")}`,
+            Array.isArray(dInf.busqueda_zonas) && dInf.busqueda_zonas.length > 0 && `Zonas: ${dInf.busqueda_zonas.join(", ")}`,
+            dInf.tipo_inmueble && `Inmueble: ${dInf.tipo_inmueble}`,
+            dInf.busqueda_recamaras_min && `Mín. ${dInf.busqueda_recamaras_min} rec.`,
+            dInf.plazo_mudanza && `Plazo: ${dInf.plazo_mudanza}`,
+          ].filter(Boolean);
+          if (partesAsesoria.length > 0) {
+            updates.necesidad = `Búsqueda de vivienda INFONAVIT [${partesAsesoria.join(" | ")}]`;
+          }
+        }
+
+        // Guardar resumen en notas del prospecto
+        if (exp?.prospecto_id) {
+          try {
+            const resumenPerfil = [
+              dInf.ya_tiene_casa !== undefined && dInf.ya_tiene_casa !== null && `Ya tiene casa: ${dInf.ya_tiene_casa ? "Sí (trato directo)" : "No (busca opciones)"}`,
+              dInf.monto_credito_precalificado && `Crédito: $${Number(dInf.monto_credito_precalificado).toLocaleString("es-MX")}`,
+              dInf.monto_ahorro_propio && `Ahorro: $${Number(dInf.monto_ahorro_propio).toLocaleString("es-MX")}`,
+              Array.isArray(dInf.busqueda_zonas) && dInf.busqueda_zonas.length > 0 && `Zonas: ${dInf.busqueda_zonas.join(", ")}`,
+              dInf.tipo_inmueble && `Inmueble: ${dInf.tipo_inmueble}`,
+              dInf.busqueda_recamaras_min && `Recámaras mín: ${dInf.busqueda_recamaras_min}`,
+              dInf.plazo_mudanza && `Plazo: ${dInf.plazo_mudanza}`,
+            ].filter(Boolean).join(" | ");
+
+            if (resumenPerfil) {
+              const { data: prActual } = await sb
+                .from("prospectos")
+                .select("notas")
+                .eq("id", exp.prospecto_id)
+                .maybeSingle();
+              const notasPrev = prActual?.notas || "";
+              if (!notasPrev.includes(resumenPerfil)) {
+                await sb
+                  .from("prospectos")
+                  .update({ notas: notasPrev ? `${notasPrev}\n[Perfil Asesoría Compra] ${resumenPerfil}` : `[Perfil Asesoría Compra] ${resumenPerfil}` })
+                  .eq("id", exp.prospecto_id);
+              }
+            }
+          } catch (ePr) {
+            console.error("IA: Error al guardar perfil de asesoría en prospectos.notas:", ePr);
+          }
+        }
+
+        // Sincronizar en orden de trabajo (ot_ficha_asesoria_compra) si ya existe
+        if (ctx.expedienteId) {
+          try {
+            const { data: ot } = await sb
+              .from("ordenes_trabajo")
+              .select("id")
+              .eq("expediente_id", ctx.expedienteId)
+              .eq("tipo_negocio", "asesoria_compra")
+              .maybeSingle();
+
+            if (ot?.id) {
+              const fichaUpdate: Record<string, any> = {};
+              if (dInf.ya_tiene_casa !== undefined && dInf.ya_tiene_casa !== null) fichaUpdate.ya_tiene_casa = Boolean(dInf.ya_tiene_casa);
+              if (dInf.monto_credito_precalificado) fichaUpdate.monto_credito_precalificado = Number(dInf.monto_credito_precalificado);
+              if (dInf.monto_ahorro_propio) fichaUpdate.monto_ahorro_propio = Number(dInf.monto_ahorro_propio);
+              if (Array.isArray(dInf.busqueda_zonas)) fichaUpdate.busqueda_zonas = dInf.busqueda_zonas;
+              if (dInf.busqueda_recamaras_min) fichaUpdate.busqueda_recamaras_min = Number(dInf.busqueda_recamaras_min);
+              if (dInf.tipo_inmueble) fichaUpdate.tipo_inmueble = dInf.tipo_inmueble;
+              if (dInf.plazo_mudanza) fichaUpdate.plazo_mudanza = dInf.plazo_mudanza;
+
+              if (Object.keys(fichaUpdate).length > 0) {
+                await sb
+                  .from("ot_ficha_asesoria_compra")
+                  .upsert({ orden_trabajo_id: ot.id, ...fichaUpdate }, { onConflict: "orden_trabajo_id" });
+              }
+            }
+          } catch (eOt) {
+            console.error("IA: Error al actualizar ot_ficha_asesoria_compra:", eOt);
           }
         }
       }
