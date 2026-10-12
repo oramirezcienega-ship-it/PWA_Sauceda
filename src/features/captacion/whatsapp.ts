@@ -236,9 +236,24 @@ async function obtenerOCrearProspecto(
   if (existentes && existentes.length > 0) {
     const pr = existentes[0];
     const updateAttrs: any = {};
-    if (campaign_name && campaign_name !== pr.campaign_name) updateAttrs.campaign_name = campaign_name;
-    if (adset_name && adset_name !== pr.adset_name) updateAttrs.adset_name = adset_name;
-    if (ad_name && ad_name !== pr.ad_name) updateAttrs.ad_name = ad_name;
+    const esFallbackEstimado = ad_name === "Atribución Estimada (Pauta Activa)";
+
+    // Si viene de fallback estimado, solo rellenar si el prospecto no tenía ya campaña previa
+    if (campaign_name && campaign_name !== pr.campaign_name) {
+      if (!esFallbackEstimado || !pr.campaign_name) {
+        updateAttrs.campaign_name = campaign_name;
+      }
+    }
+    if (adset_name && adset_name !== pr.adset_name) {
+      if (!esFallbackEstimado || !pr.adset_name) {
+        updateAttrs.adset_name = adset_name;
+      }
+    }
+    if (ad_name && ad_name !== pr.ad_name) {
+      if (!esFallbackEstimado || !pr.ad_name) {
+        updateAttrs.ad_name = ad_name;
+      }
+    }
 
     if (Object.keys(updateAttrs).length > 0) {
       await sb.from("prospectos").update(updateAttrs).eq("id", pr.id);
@@ -356,6 +371,165 @@ export async function comprobarYSalirDeSecuenciaPorMensaje(
   }
 }
 
+/** Etiqueta oficial asignada a atribuciones estimadas cuando Meta descarta el payload */
+export const ATRIBUCION_ESTIMADA_LABEL = "Atribución Estimada (Pauta Activa)";
+
+/** Reglas de palabras clave de servicio para asignación de fallback de campañas activas */
+export interface ReglaServicioFallback {
+  id: string;
+  nombre: string;
+  patron: RegExp;
+  terminosBusqueda: string[];
+  campanaDefault: string;
+  adsetDefault: string;
+}
+
+export const REGLAS_FALLBACK_SERVICIOS: ReglaServicioFallback[] = [
+  {
+    id: "impermeabilizacion",
+    nombre: "Impermeabilización",
+    patron: /(?:impermeabili|gotera|filtraci|humedad|azotea|rollo\s*prefabricado|acrilic|malla|techo\s*filtr|fuga\s*en\s*techo)/i,
+    terminosBusqueda: ["impermeabili", "imper"],
+    campanaDefault: "SAUCEDA Construye Impermeabilizacion - Jul 2026",
+    adsetDefault: "Impermeabilizacion",
+  },
+  {
+    id: "remodelacion",
+    nombre: "Remodelación",
+    patron: /(?:remodela|acabado|azulejo|cocina|bañ|recamar|amplia|albanil|muro|tablaroca|yeso|piso\s*ceram)/i,
+    terminosBusqueda: ["remodela", "construye"],
+    campanaDefault: "SAUCEDA Construye Remodelacion - Jul 2026",
+    adsetDefault: "Remodelacion",
+  },
+  {
+    id: "herreria",
+    nombre: "Herrería",
+    patron: /(?:herreri|porton|protecci|barandal|reja|techumbr|saguan|zaguan|estructura\s*metal)/i,
+    terminosBusqueda: ["herreri", "porton"],
+    campanaDefault: "SAUCEDA Construye Herreria - Jul 2026",
+    adsetDefault: "Herreria",
+  },
+  {
+    id: "cisternas_tinacos",
+    nombre: "Cisternas y Tinacos",
+    patron: /(?:tinaco|rotoplas|cisterna|aljibe|lavado\s*de\s*tinaco|lavado\s*de\s*cisterna)/i,
+    terminosBusqueda: ["cisterna", "tinaco", "aljibe"],
+    campanaDefault: "SAUCEDA Cisternas y Tinacos - Jul 2026",
+    adsetDefault: "Cisternas y Tinacos",
+  },
+  {
+    id: "piso_estampado",
+    nombre: "Piso Estampado",
+    patron: /(?:estampado|concreto\s*estampado|piso\s*estampado)/i,
+    terminosBusqueda: ["estampado", "piso estampado"],
+    campanaDefault: "SAUCEDA Construye Piso Estampado - Jul 2026",
+    adsetDefault: "Piso Estampado",
+  },
+  {
+    id: "inmobiliaria_traspasos",
+    nombre: "Traspasos e Inmobiliaria",
+    patron: /(?:traspaso|infonavit|compramos\s*tu\s*casa|vender\s*casa|comprar\s*casa|credito\s*hipotecario)/i,
+    terminosBusqueda: ["leads", "traspaso", "compramos"],
+    campanaDefault: "Sauceda Campaña leads 05.2026",
+    adsetDefault: "Sauceda Leads",
+  },
+];
+
+/**
+ * Resuelve el edge case de Meta Ads (Click-to-WhatsApp donde el usuario edita o borra el texto predeterminado):
+ * 1. Comprueba si el mensaje del cliente contiene palabras clave de algún servicio activo.
+ * 2. Si coincide, busca en `meta_ads_gastos` si hay una campaña activa en la fecha.
+ * 3. Si existe, usa esa campaña; si no, recurre a la campaña activa correspondiente en el catálogo.
+ * 4. Asigna la etiqueta `ad_name: "Atribución Estimada (Pauta Activa)"`.
+ */
+export async function inferirAtribucionFallbackMeta(
+  sb: ReturnType<typeof supabaseServidor>,
+  primerMensaje: string,
+  fechaReferencia?: string,
+): Promise<{ campaign_name: string; adset_name: string; ad_name: string } | null> {
+  const msg = (primerMensaje || "").trim();
+  if (!msg) return null;
+
+  // 1. Identificar si el mensaje coincide con alguna regla de servicio por palabras clave
+  const reglaCoincidente = REGLAS_FALLBACK_SERVICIOS.find((r) => r.patron.test(msg));
+  if (!reglaCoincidente) {
+    return null;
+  }
+
+  const fechaHoy = fechaReferencia || hoyISO();
+
+  try {
+    // 2. Revisar si ese día hay una campaña activa en `meta_ads_gastos`
+    const { data: gastosActivos, error: errGastos } = await sb
+      .from("meta_ads_gastos")
+      .select("campaign_name, centro_costos, producto_servicio, fecha_inicio, fecha_fin")
+      .lte("fecha_inicio", fechaHoy)
+      .or(`fecha_fin.is.null,fecha_fin.gte.${fechaHoy}`)
+      .neq("estatus_contable", "RECHAZADO")
+      .order("fecha_inicio", { ascending: false });
+
+    if (errGastos) {
+      console.warn("[Atribución Fallback] Advertencia al consultar meta_ads_gastos activos:", errGastos.message);
+    }
+
+    let campanaEncontrada: { campaign_name: string; adset_name?: string } | null = null;
+
+    const coincideConServicio = (item: any, terminos: string[]) => {
+      const textoItem = [item.campaign_name, item.centro_costos, item.producto_servicio]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return terminos.some((t) => textoItem.includes(t.toLowerCase()));
+    };
+
+    if (gastosActivos && gastosActivos.length > 0) {
+      const gastoMatch = gastosActivos.find((g) => coincideConServicio(g, reglaCoincidente.terminosBusqueda));
+      if (gastoMatch && gastoMatch.campaign_name) {
+        campanaEncontrada = {
+          campaign_name: gastoMatch.campaign_name,
+          adset_name: gastoMatch.producto_servicio || reglaCoincidente.adsetDefault,
+        };
+      }
+    }
+
+    // 3. Si no hubo registro activo para hoy, revisar campañas recientes en meta_ads_gastos (últimos 60 días)
+    if (!campanaEncontrada) {
+      const { data: gastosRecientes } = await sb
+        .from("meta_ads_gastos")
+        .select("campaign_name, centro_costos, producto_servicio, fecha_inicio, fecha_fin")
+        .neq("estatus_contable", "RECHAZADO")
+        .order("fecha_inicio", { ascending: false })
+        .limit(50);
+
+      if (gastosRecientes && gastosRecientes.length > 0) {
+        const matchReciente = gastosRecientes.find((g) => coincideConServicio(g, reglaCoincidente.terminosBusqueda));
+        if (matchReciente && matchReciente.campaign_name) {
+          campanaEncontrada = {
+            campaign_name: matchReciente.campaign_name,
+            adset_name: matchReciente.producto_servicio || reglaCoincidente.adsetDefault,
+          };
+        }
+      }
+    }
+
+    const campaign_name = campanaEncontrada?.campaign_name || reglaCoincidente.campanaDefault;
+    const adset_name = campanaEncontrada?.adset_name || reglaCoincidente.adsetDefault;
+
+    return {
+      campaign_name,
+      adset_name,
+      ad_name: ATRIBUCION_ESTIMADA_LABEL,
+    };
+  } catch (err) {
+    console.error("[Atribución Fallback] Error en consulta de fallback:", err);
+    return {
+      campaign_name: reglaCoincidente.campanaDefault,
+      adset_name: reglaCoincidente.adsetDefault,
+      ad_name: ATRIBUCION_ESTIMADA_LABEL,
+    };
+  }
+}
+
 /**
  * Registra un lead entrante de WhatsApp.
  * Crea (o reutiliza) el prospecto por teléfono con origen "whatsapp", y le
@@ -390,9 +564,9 @@ export async function registrarLeadWhatsApp(
   const variantesTel = variantesTelefono(lead.telefono);
 
   // Atribución de campaña
-  let campaign_name = "";
-  let adset_name = "";
-  let ad_name = "";
+  let campaign_name = lead.campaign_name || "";
+  let adset_name = lead.adset_name || "";
+  let ad_name = lead.ad_name || "";
 
   if (lead.referral) {
     if (lead.referral.headline) {
@@ -417,6 +591,17 @@ export async function registrarLeadWhatsApp(
       } catch (adErr) {
         console.error("Error al consultar detalles de ad_id en Graph API desde WhatsApp:", adErr);
       }
+    }
+  }
+
+  // Fallback de Atribución (Edge Case de Meta: cuando el cliente borra o edita el texto del anuncio en Click-to-WhatsApp)
+  if (!campaign_name) {
+    const fallback = await inferirAtribucionFallbackMeta(sb, lead.mensaje ?? "");
+    if (fallback) {
+      campaign_name = fallback.campaign_name;
+      adset_name = fallback.adset_name;
+      ad_name = fallback.ad_name;
+      console.log(`[Atribución Fallback] Asignada campaña estimada para lead ${lead.telefono}: ${campaign_name} / ${adset_name} / ${ad_name}`);
     }
   }
 
@@ -526,10 +711,23 @@ export async function registrarLeadWhatsApp(
       lead.mensaje ?? ""
     }`.trim();
 
+    const esFallbackEstimado = ad_name === ATRIBUCION_ESTIMADA_LABEL;
     const updateData: any = { notas: nota, ultimo_movimiento: hoyISO() };
-    if (campaign_name && campaign_name !== exp.campaign_name) updateData.campaign_name = campaign_name;
-    if (adset_name && adset_name !== exp.adset_name) updateData.adset_name = adset_name;
-    if (ad_name && ad_name !== exp.ad_name) updateData.ad_name = ad_name;
+    if (campaign_name && campaign_name !== exp.campaign_name) {
+      if (!esFallbackEstimado || !exp.campaign_name) {
+        updateData.campaign_name = campaign_name;
+      }
+    }
+    if (adset_name && adset_name !== exp.adset_name) {
+      if (!esFallbackEstimado || !exp.adset_name) {
+        updateData.adset_name = adset_name;
+      }
+    }
+    if (ad_name && ad_name !== exp.ad_name) {
+      if (!esFallbackEstimado || !exp.ad_name) {
+        updateData.ad_name = ad_name;
+      }
+    }
 
     // Si el expediente no tenía teléfono o cambió de línea (puente), sincronizar el teléfono actual
     if (!exp.telefono) {
