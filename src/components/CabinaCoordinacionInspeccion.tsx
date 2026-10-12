@@ -9,6 +9,7 @@ import {
   enviarOpcionesClienteAction,
   previsualizarOpcionesClienteAction,
   confirmarCitaFinalCoordinacionAction,
+  confirmarOpcionProveedorAction,
   obtenerCoordinacionActivaProspectoAction,
   cancelarCoordinacionActivaAction,
   obtenerConfiguracionTelegramAction,
@@ -368,6 +369,25 @@ export function CabinaCoordinacionInspeccion({
         setMensaje({
           tipo: "ok",
           texto: `🎉 ¡Inspección técnica confirmada con éxito! Se agendó en el sistema, se confirmó a ${clienteNombre} y se notificó de vuelta a los 2 asesores.`,
+        });
+        await cargarCoordinacion();
+        if (onCitaConfirmada) onCitaConfirmada();
+      } else {
+        setMensaje({ tipo: "error", texto: res.error || "No se pudo confirmar la cita." });
+      }
+    });
+  };
+
+  // Confirmación directa de una opción con el técnico (Remodelación/1 clic)
+  const handleConfirmarOpcionProveedor = (opcId: string) => {
+    if (!coordinacion) return;
+    startTransition(async () => {
+      setMensaje(null);
+      const res = await confirmarOpcionProveedorAction(coordinacion.id, opcId, prospectoId);
+      if (res.ok) {
+        setMensaje({
+          tipo: "ok",
+          texto: `🎉 ¡Inspección confirmada para la Opción ${opcId}! Cita creada en agenda, cliente confirmado por WhatsApp y notificaciones enviadas.`,
         });
         await cargarCoordinacion();
         if (onCitaConfirmada) onCitaConfirmada();
@@ -1007,8 +1027,45 @@ export function CabinaCoordinacionInspeccion({
               <div className="border-t border-slate-100 pt-3">
                 <h5 className="text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
                   <span>🎯</span>
-                  <span>Paso 4: El Cliente ya eligió horario · Confirmar Cita y Notificar Asesores</span>
+                  <span>Paso 4: El Cliente o Proveedor eligió horario · Confirmar Cita</span>
                 </h5>
+
+                {/* Botones directos de 1 clic para las opciones propuestas */}
+                {coordinacion.opcionesHorarios && coordinacion.opcionesHorarios.length > 0 && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 mb-3">
+                    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                      <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                        <span>⚡</span>
+                        <span>Confirmar Opción Acordada (1 Clic):</span>
+                      </span>
+                      <span className="text-[10px] text-indigo-700 font-mono">Crea cita + notifica cliente y técnico</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {coordinacion.opcionesHorarios.map((opc) => (
+                        <button
+                          key={opc.id}
+                          type="button"
+                          onClick={() => handleConfirmarOpcionProveedor(opc.id)}
+                          disabled={isPending}
+                          className="p-2.5 rounded-lg bg-white border border-indigo-300 hover:border-indigo-600 hover:bg-indigo-50/50 text-left transition flex items-center justify-between gap-2 shadow-2xs group cursor-pointer disabled:opacity-50"
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-indigo-900 group-hover:text-indigo-950">
+                              Opción {opc.id}
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-medium">
+                              {opc.label}
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold bg-indigo-600 text-white px-2.5 py-1 rounded-md group-hover:bg-indigo-700 shrink-0">
+                            ✓ Confirmar
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex-1 min-w-[200px]">
                     <select

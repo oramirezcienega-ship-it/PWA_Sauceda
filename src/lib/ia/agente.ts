@@ -24,6 +24,11 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { hoyMexico, pausarExpediente, reactivarExpediente } from "@/lib/pausa-leads";
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
+import {
+  calcularSlotsVespertinosRemodelacion,
+  type SlotVespertinoRemodelacion,
+  registrarPropuestaRemodelacionDesdeIA,
+} from "@/lib/coordinacion-inspecciones";
 
 /**
  * AGENTE DE IA (Claude) para responder automáticamente las conversaciones
@@ -358,6 +363,12 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const finalSlots = slots.length >= 3 ? slots : generarSlotsFallback();
   const opcionesTexto = finalSlots.map((s, idx) => `Opción ${idx + 1}: ${s.texto}`).join("\n");
 
+  // 3. Slots vespertinos para agendamiento de Remodelación (> 17:00 hrs)
+  const slotsVespertinosRemodelacion = calcularSlotsVespertinosRemodelacion();
+  const opcionesVespertinasRemodelacionTexto = slotsVespertinosRemodelacion
+    .map((s, idx) => `*${idx + 1}️⃣ ${s.label}*`)
+    .join("\n");
+
   const base = `Eres el asistente virtual de SAUCEDA Bienes Raíces y SAUCEDA Construye, una empresa en León, Guanajuato, México. Tu objetivo principal es identificar cuál de nuestros servicios le interesa al cliente, resolver sus dudas y calificar el caso para que el equipo humano pueda continuar.
 
 Ofrecemos soluciones integrales para la vivienda, todo en un solo lugar. Contamos con los siguientes servicios principales:
@@ -491,11 +502,37 @@ E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA 
   4. Menciona de forma amigable que un asesor del equipo humano le contactará a la brevedad por este chat para revisar los detalles de su proyecto y darle un presupuesto.
 
 F) Si está interesado en REMODELACIÓN O AMPLIACIÓN (Servicio 1 - tipo_negocio: 'construccion-remodelacion'):
-  Debes enfocar la conversación específicamente en su proyecto de remodelación o ampliación. Pregunta de forma amigable y progresiva (una a la vez):
-  1. ¿Qué espacio o área deseas remodelar o ampliar (por ejemplo, recámaras, cochera, cocina, baño, segunda planta, etc.)?
-  2. ¿En qué colonia o zona se encuentra la propiedad?
-  3. ¿Cuál es tu nombre y número de teléfono de contacto (si no está registrado)?
-  4. Menciona que un asesor de nuestro equipo se pondrá en contacto con él a la brevedad por este chat para revisar su proyecto y darle seguimiento con el presupuesto.
+  En la vertical de remodelación (baños, cocinas, recámaras, acabados, segunda planta), la venta se cierra con la visita técnica presencial en sitio.
+  PROHIBIDO despedirte diciendo que "un asesor lo contactará a la brevedad" o dejar el lead enfriándose.
+  Debes guiar la conversación con calidez a través del siguiente flujo de agendamiento vespertino semi-automatizado:
+
+  - PASO 1: DETECCIÓN DEL ESPACIO Y ZONA
+    Si el cliente muestra interés inicial, pregunta de forma amigable qué área o espacio desea remodelar (por ejemplo, baño, cocina, recámara, acabados) y en qué colonia o fraccionamiento se ubica su propiedad.
+    Si el cliente ya te dijo el espacio o ya conoces la colonia, pasa DIRECTAMENTE al PASO 2.
+
+  - PASO 2: PROPUESTA DE SLOTS VESPERTINOS (A partir de las 5:00 PM)
+    En cuanto el cliente indique el área a remodelar y/o su colonia o zona, presenta de inmediato nuestras 4 opciones vespertinas disponibles para su ruta:
+    "¡Excelente! Para tu proyecto de remodelación, te asignamos a nuestro Especialista Técnico en Obra para revisar en sitio las medidas y entregarte la propuesta formal sin costo.
+
+    Para coordinar su ruta vespertina de esta semana, tenemos estas opciones disponibles:
+${opcionesVespertinasRemodelacionTexto}
+
+    Por favor **indícanos 2 opciones que te acomoden** para apartar tu espacio prioritario en su ruta."
+
+  - PASO 3: RECEPCIÓN DE LAS 2 OPCIONES Y SOLICITUD DE UBICACIÓN (Sin silencios)
+    Cuando el cliente responda indicando sus 2 opciones viables (por ejemplo: "puedo la 1 y la 3", "la 1 y la 2", "el martes a las 5:30 y el miércoles a las 6:30"):
+    * Aparta ambas opciones de inmediato y mantén la conversación activa solicitando su domicilio completo y ubicación de WhatsApp para trazar la llegada mientras el sistema coordina con el técnico:
+    "¡Perfecto! Apartamos ambas opciones en sistema. Mientras validamos la ruta con el técnico asignado para confirmarte cuál queda fija:
+    ¿Nos compartes tu **calle, número y si te es posible tu ubicación de WhatsApp** para trazar la llegada?"
+    * En "datosExtraidos" asigna obligatoriamente:
+      - "opciones_remodelacion_cliente": un arreglo con los 2 números o códigos de las opciones elegidas (ej. ["1", "3"]). Si solo mencionó 1 opción, pon ["1"].
+      - "colonia": el nombre de la colonia si lo dio.
+
+  - PASO 4: CONFIRMACIÓN DE RECEPCIÓN DE DIRECCIÓN Y UBICACIÓN
+    Cuando el cliente comparta su calle, número, referencias o su enlace/ubicación de WhatsApp:
+    * Registra en "datosExtraidos": "direccion" (calle y número exterior/interior) y "link_google_maps" si envió un enlace.
+    * Responde confirmando calurosamente que la ubicación quedó registrada y que en unos momentos se le confirma cuál opción quedó fija:
+    "¡Excelente, muchas gracias! Ya quedó registrada tu ubicación completa para la llegada del técnico. Estamos afinando el horario con su ruta y en unos momentos te confirmamos cuál de tus 2 opciones quedó fija. ¡Seguimos en contacto por aquí!"
 
 G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concreto Estampado - tipo_negocio: 'construccion-piso-estampado'):
   Debes enfocar la conversación en su proyecto de concreto y piso estampado para cocheras, patios, terrazas, pasillos o áreas comerciales. Pregunta de forma amigable y progresiva (una a la vez):
@@ -617,7 +654,11 @@ REGLA DE FORMAS DE PAGO (CRÍTICA):
   - EXCEPCIÓN: en la visita técnica sí explicas la liga de pago de Mercado Pago del anticipo y que el resto se paga en efectivo o con tarjeta (MÓDULO: VISITA TÉCNICA EN SITIO).
 
 REGLA DE AGENDAMIENTO PARA CONSTRUCCIÓN (CRÍTICA):
-  Para cualquier servicio de la vertical SAUCEDA Construye (remodelación, impermeabilización, pintura, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL y lo decide el asesor. PROHIBIDO que Sofía ofrezca por iniciativa propia visitas, inspecciones o revisiones en domicilio, y PROHIBIDO describirlas como "gratuitas", "sin costo" o "sin compromiso". Cuando el cliente esté interesado, solo dile que un asesor le contactará para darle seguimiento. ÚNICA EXCEPCIÓN: si el cliente PIDE una visita en impermeabilización, mantenimiento o pintura, aplica el MÓDULO: VISITA TÉCNICA EN SITIO (visita técnica con costo; la cita la confirma el asesor). El objetivo absoluto de Sofía es calificar al cliente y recopilar los datos básicos (servicio de interés, metros o área, colonia, nombre y teléfono) para que el equipo humano proceda a coordinar y agendar la cita.
+  Para los servicios de la vertical SAUCEDA Construye (impermeabilización, herrería, cisternas/aljibes, albañilería, losa/concreto, etc.), todo agendamiento de visitas o citas es MANUAL y lo decide el asesor. PROHIBIDO que Sofía ofrezca por iniciativa propia visitas o inspecciones descritas como "gratuitas" o "sin compromiso", y cuando el cliente esté interesado en esos servicios, dile que un asesor le contactará para darle seguimiento.
+  ÚNICAS DOS EXCEPCIONES:
+  1. EN REMODELACIÓN ('construccion-remodelacion'): aplica el flujo de agendamiento vespertino (ofrecer las 4 opciones vespertinas sin costo y solicitar 2 opciones según el flujo F).
+  2. SI EL CLIENTE PIDE UNA VISITA en impermeabilización, mantenimiento o pintura: aplica el MÓDULO: VISITA TÉCNICA EN SITIO (visita técnica con costo; la cita la confirma el asesor).
+  El objetivo de Sofía es calificar al cliente y recopilar los datos clave para coordinar la cita de forma ágil y oportuna.
 
 REGLA DE EVITAR PREGUNTA DE GOTERAS (CRÍTICA):
   NUNCA le preguntes al cliente si el servicio es para impermeabilizar toda la azotea o solo para reparar algunas goteras, ni hagas preguntas similares. Siempre asume y atiende el servicio completo de impermeabilización en base a los metros cuadrados totales indicados por el cliente (el costo final lo confirma un asesor).
@@ -711,6 +752,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "cliente_retoma": "true SOLO si el negocio está EN PAUSA y el cliente muestra intención clara de retomar ya; de lo contrario null",
     "avisar_asesor": "Motivo breve (máx. 200 caracteres) SOLO en estos casos: (a) el MÓDULO: VISITA TÉCNICA EN SITIO indique avisar a un asesor en este turno, (b) el cliente está molesto, se queja, reclama una cita/visita no atendida o una cotización no entregada, o (c) hay un tema de pago/anticipo que debe resolver un humano. NO lo uses para pedidos rutinarios (catálogo, fotos, ejemplos, horario preferido de contacto, que retoma el proyecto, datos del proyecto): el asesor ya ve esa información en el CRM. Si ya avisaste en un turno anterior de esta conversación por el mismo tema, pon null. En cualquier otro caso null",
     "hora_inspeccion_confirmada": "La hora de inicio en formato HH:MM:SS del slot seleccionado si el cliente eligió una de las 3 opciones (ej. '${finalSlots[0]?.raw.hora}'), de lo contrario null",
+    "opciones_remodelacion_cliente": "Arreglo con los 2 números o códigos de opciones de inspección vespertina elegidas por el cliente (ej. ['1', '3']), de lo contrario null",
     "nss": "Número de Seguridad Social (NSS de 11 dígitos, solo números) si el cliente lo proporcionó para Infonavit, de lo contrario null",
     "fecha_nacimiento": "Fecha de nacimiento del cliente (formato DD/MM/AAAA) si la proporcionó para su precalificación de Infonavit, de lo contrario null"
   }
@@ -1660,11 +1702,95 @@ export async function responderConIA(
         }
       }
 
+      // --- DETECCIÓN Y DISPARO DE COORDINACIÓN VESPERTINA (REMODELACIÓN) ---
+      const opcionesRemodelacion = (datosExtraidos as any).opciones_remodelacion_cliente;
+      const esRemodelacion = (updates.tipo_negocio === "construccion-remodelacion" || exp?.tipo_negocio === "construccion-remodelacion");
+
+      if (esRemodelacion && Array.isArray(opcionesRemodelacion) && opcionesRemodelacion.length > 0) {
+        try {
+          const slotsDisponibles = calcularSlotsVespertinosRemodelacion();
+          const slotsElegidos: { id: string; fecha: string; horaInicio: string; horaFin?: string; label: string }[] = [];
+
+          for (let i = 0; i < opcionesRemodelacion.length && i < 2; i++) {
+            const raw = String(opcionesRemodelacion[i]).trim();
+            const matchSlot = slotsDisponibles.find(
+              (s) => s.id === raw || s.codigo.toLowerCase() === raw.toLowerCase()
+            );
+            if (matchSlot) {
+              slotsElegidos.push({
+                id: i === 0 ? "A" : "B",
+                fecha: matchSlot.fecha,
+                horaInicio: matchSlot.horaInicio,
+                horaFin: matchSlot.horaFin,
+                label: matchSlot.label,
+              });
+            }
+          }
+
+          if (slotsElegidos.length > 0) {
+            // Si el cliente dio solo 1 opción, agregar la siguiente disponible como alternativa B
+            if (slotsElegidos.length === 1) {
+              const otroSlot = slotsDisponibles.find((s) => s.id !== slotsElegidos[0].id) || slotsDisponibles[1];
+              if (otroSlot) {
+                slotsElegidos.push({
+                  id: "B",
+                  fecha: otroSlot.fecha,
+                  horaInicio: otroSlot.horaInicio,
+                  horaFin: otroSlot.horaFin,
+                  label: otroSlot.label,
+                });
+              }
+            }
+
+            const clienteNombreCompleto = [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" ") || updates.cliente || "Cliente Remodelación";
+            const ubicacionRemod = updates.direccion || updates.colonia || exp?.fraccionamiento || "León, Gto.";
+
+            const resRemod = await registrarPropuestaRemodelacionDesdeIA(sb, {
+              prospectoId: exp?.prospecto_id ?? null,
+              expedienteId: ctx.expedienteId ?? null,
+              clienteNombre: clienteNombreCompleto,
+              clienteTelefono: exp?.telefono || ctx.telefono,
+              colonia: updates.colonia || exp?.fraccionamiento || null,
+              ubicacion: ubicacionRemod,
+              detallesProyecto: updates.necesidad || exp?.necesidad || "Remodelación en sitio",
+              opcionesSeleccionadas: slotsElegidos,
+              tecnicoId: updates.asesor_id || exp?.asesor_id || exp?.operador_id || null,
+            });
+
+            if (resRemod.ok) {
+              console.log(`[IA Coordinación] Propuesta de remodelación despachada al técnico (${resRemod.coordinacionId})`);
+            }
+          }
+        } catch (errRemod) {
+          console.error("IA: Error al registrar propuesta de inspección de remodelación:", errRemod);
+        }
+      }
+
+      // Sincronizar dirección y geolocalización a la coordinación activa si el cliente la proporcionó
+      if ((updates.direccion || updates.link_google_maps) && (exp?.prospecto_id || ctx.expedienteId)) {
+        try {
+          const coordUpdates: Record<string, any> = {};
+          if (updates.direccion) {
+            coordUpdates.ubicacion = updates.direccion;
+          }
+          if (updates.link_google_maps) {
+            coordUpdates.detalles_tecnicos = `${exp?.necesidad || "Remodelación"}. Ubicación GPS: ${updates.link_google_maps}`;
+          }
+          await sb
+            .from("coordinaciones_inspeccion")
+            .update(coordUpdates)
+            .match(ctx.expedienteId ? { expediente_id: ctx.expedienteId } : { prospecto_id: exp?.prospecto_id })
+            .in("estado", ["propuesta_enviada", "evaluando"]);
+        } catch (updCoordErr) {
+          console.warn("IA: No se pudo actualizar ubicación en coordinaciones_inspeccion:", updCoordErr);
+        }
+      }
+
       // --- DETECCIÓN INTELIGENTE DE LEAD CALIENTE (Sofía IA) ---
       const valorEst = Number(updates.valor_estimado || exp?.valor_estimado || 0);
       const saldoDeu = Number(updates.saldo_deuda || exp?.saldo_deuda || 0);
       const metrosNum = Number((datosExtraidos as any).metros || 0);
-      const citaAceptada = (datosExtraidos as any).paso_flujo === "paso_3" || (datosExtraidos as any).cita_confirmada === true;
+      const citaAceptada = (datosExtraidos as any).paso_flujo === "paso_3" || (datosExtraidos as any).cita_confirmada === true || Boolean(Array.isArray(opcionesRemodelacion) && opcionesRemodelacion.length > 0);
       const tieneDatosInfonavit = Boolean((datosExtraidos as any).nss || (datosExtraidos as any).fecha_nacimiento);
 
       // Dar colonia/zona ya no basta: casi cualquier lead de remodelación la da al

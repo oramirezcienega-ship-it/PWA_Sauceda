@@ -8,7 +8,9 @@ import {
 import {
   registrarVotosAsesorCoordinacion,
   marcarAsesorEnteradoCoordinacion,
+  confirmarOpcionProveedor,
 } from "@/lib/coordinacion-inspecciones";
+import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
 import { registrarActividad } from "@/lib/actividades";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
@@ -404,6 +406,93 @@ export async function POST(req: NextRequest) {
 
         await marcarAsesorEnteradoCoordinacion(sb, coordId, match.id, "telegram");
         await responderCallbackQueryTelegram(botToken, cb.id, "👀 Registrado: quedaste enterado de la propuesta.");
+        return NextResponse.json({ ok: true });
+      }
+
+      // Confirmación directa del proveedor técnico (Remodelación: Aceptar Opción A / Opción B)
+      // Formato: conf_prov:{coordinacionId}:{opcId}
+      if (data.startsWith("conf_prov:")) {
+        const [, coordId, opcId] = data.split(":");
+        const { data: coord } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("*")
+          .eq("id", coordId)
+          .single();
+
+        if (!coord || coord.estado === "confirmada") {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Esta inspección ya fue confirmada o no está activa.");
+          return NextResponse.json({ ok: true });
+        }
+
+        // Identificar al técnico por telegram_chat_id o username
+        let asesorId: string | null = null;
+        let asesorNombre = from.first_name || "Especialista Técnico";
+
+        const { data: perfiles = [] } = await sb
+          .from("perfiles")
+          .select("id, nombre, telegram_chat_id, telegram_username")
+          .in("id", coord.asesores_ids || []);
+
+        const listaPerfiles = perfiles || [];
+        const matchingPerfil = listaPerfiles.find(
+          (p) =>
+            p.telegram_chat_id === fromId ||
+            (username && p.telegram_username?.toLowerCase() === username.toLowerCase())
+        );
+
+        if (matchingPerfil) {
+          asesorId = matchingPerfil.id;
+          asesorNombre = matchingPerfil.nombre;
+        } else if (listaPerfiles.length > 0) {
+          asesorId = listaPerfiles[0].id;
+          asesorNombre = listaPerfiles[0].nombre;
+        }
+
+        const resConf = await confirmarOpcionProveedor(sb, coordId, opcId, asesorId || undefined);
+        if (resConf.ok) {
+          await responderCallbackQueryTelegram(botToken, cb.id, `✅ ¡Cita confirmada para Opción ${opcId}!`);
+          await enviarMensajeTelegram({
+            botToken,
+            chatId: String(cb.message?.chat?.id || fromId),
+            texto: `✅ *INSPECCIÓN DE REMODELACIÓN CONFIRMADA*\n\nEl especialista *${asesorNombre}* aceptó la *Opción ${opcId}* para el cliente *${coord.cliente_nombre}*.\n\nLa cita ya quedó agendada y el cliente recibió su confirmación definitiva por WhatsApp.`,
+          });
+        } else {
+          await responderCallbackQueryTelegram(botToken, cb.id, `Error: ${resConf.error || "No se pudo confirmar"}`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Rechazo de opciones por el proveedor técnico
+      // Formato: rej_prov:{coordinacionId}
+      if (data.startsWith("rej_prov:")) {
+        const [, coordId] = data.split(":");
+        const { data: coord } = await sb
+          .from("coordinaciones_inspeccion")
+          .select("*")
+          .eq("id", coordId)
+          .single();
+
+        if (coord) {
+          await responderCallbackQueryTelegram(botToken, cb.id, "Registrado. Se notificó de inmediato a Gerencia.");
+          
+          const opciones = (coord.opciones_horarios as any[]) || [];
+          const opcA = opciones[0]?.label || "Opción A";
+          const opcB = opciones[1]?.label || "Opción B";
+
+          const msgOscar = `⚠️ *PROVEEDOR RECHAZÓ OPCIONES DE INSPECCIÓN*\n\n` +
+            `El técnico indicó que NO puede en las opciones para *${coord.cliente_nombre}* (${coord.cliente_telefono}) en ${coord.ubicacion}.\n` +
+            `Opciones que propuso el cliente: ${opcA} | ${opcB}\n\n` +
+            `👉 *Entra al CRM para reasignar técnico o contactar al cliente.*`;
+
+          // Alerta WhatsApp a Oscar
+          await enviarWhatsAppTexto("4778110444", msgOscar).catch(() => {});
+
+          await enviarMensajeTelegram({
+            botToken,
+            chatId: String(cb.message?.chat?.id || fromId),
+            texto: `⚠️ *AVISO REGISTRADO:* Se informó que no puedes en estas opciones. Gerencia (Oscar) ya fue notificada para coordinar la reprogramación.`,
+          });
+        }
         return NextResponse.json({ ok: true });
       }
 
