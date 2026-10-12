@@ -52,12 +52,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   const proy = (datos.proyecto || "").toLowerCase();
   const expFolio = datos.expedienteId?.trim() || "EXP-001";
 
+  // Enlace ultra-corto de cero fricción: wa.me/524774654700?text=Cita+EXP-XXX
+  const textoPrellenadoUniversal = `Cita ${expFolio}`;
+  const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenadoUniversal);
+
   // 1. Remodelación
   if (tipo.includes("remodela") || proy.includes("remodela") || proy.includes("baño") || proy.includes("cocina")) {
     const espacio = datos.proyecto?.trim() || "remodelación";
-    const textoPrellenado = `Hola Paulina, revise mi cita de ${espacio} ${expFolio}`;
-    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
     const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... vi que nos solicitaste información para la remodelación de tu ${espacio}${coloniaLimpia} y queremos coordinar la visita de levantamiento con nuestro especialista técnico para entregarte la propuesta formal sin costo.\n\n` +
       `Para coordinar tu horario y apartar tu espacio prioritario en su ruta, entra a nuestro canal oficial por este enlace directo:\n` +
@@ -67,15 +68,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     return {
       textoCompleto: cuerpoMensaje,
       enlacePuente: enlace,
-      textoPrellenadoWhatsApp: textoPrellenado,
+      textoPrellenadoWhatsApp: textoPrellenadoUniversal,
     };
   }
 
   // 2. Impermeabilización
   if (tipo.includes("impermea") || proy.includes("impermea") || proy.includes("gotera") || proy.includes("azotea") || proy.includes("techo")) {
-    const textoPrellenado = `Hola Paulina, revise mi cita de impermeabilizacion ${expFolio}`;
-    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
     const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... dando seguimiento a la impermeabilización de tu azotea${coloniaLimpia}, tenemos disponibilidad para que el técnico pase a medir tus metros cuadrados y revisar el estado de la losa sin costo.\n\n` +
       `Para coordinar tu horario de visita, entra a nuestro canal oficial por este enlace directo:\n` +
@@ -85,15 +83,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     return {
       textoCompleto: cuerpoMensaje,
       enlacePuente: enlace,
-      textoPrellenadoWhatsApp: textoPrellenado,
+      textoPrellenadoWhatsApp: textoPrellenadoUniversal,
     };
   }
 
   // 3. Herrería
   if (tipo.includes("herreria") || proy.includes("herreria") || proy.includes("porton") || proy.includes("proteccion") || proy.includes("barandal")) {
-    const textoPrellenado = `Hola Paulina, revise mi cita de herreria ${expFolio}`;
-    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
     const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... para tu proyecto de herrería (portón/protecciones/estructura)${coloniaLimpia}, queremos coordinar la toma de medidas en sitio sin compromiso con nuestro maestro herrero.\n\n` +
       `Para elegir el horario que mejor te acomode, continúa por nuestro canal oficial aquí:\n` +
@@ -103,15 +98,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     return {
       textoCompleto: cuerpoMensaje,
       enlacePuente: enlace,
-      textoPrellenadoWhatsApp: textoPrellenado,
+      textoPrellenadoWhatsApp: textoPrellenadoUniversal,
     };
   }
 
   // 4. Piso Estampado
   if (tipo.includes("estampado") || proy.includes("estampado")) {
-    const textoPrellenado = `Hola Paulina, revise mi cita de piso estampado ${expFolio}`;
-    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
     const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... para tu proyecto de piso estampado${coloniaLimpia}, nuestro especialista puede visitarte para validar el área y mostrarte el muestrario físico de texturas y colores.\n\n` +
       `Para agendar tu visita, entra a nuestro canal oficial por este enlace:\n` +
@@ -121,7 +113,7 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     return {
       textoCompleto: cuerpoMensaje,
       enlacePuente: enlace,
-      textoPrellenadoWhatsApp: textoPrellenado,
+      textoPrellenadoWhatsApp: textoPrellenadoUniversal,
     };
   }
 
@@ -133,9 +125,6 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     proy.includes("tinaco") ||
     proy.includes("aljibe")
   ) {
-    const textoPrellenado = `Hola Paulina, revise el servicio de cisterna ${expFolio}`;
-    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
     const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... para el mantenimiento y lavado de tu cisterna/aljibe o tinaco${coloniaLimpia}, podemos agendar la visita de diagnóstico y servicio con nuestro técnico de fontanería.\n\n` +
       `Por favor continúa por nuestro canal oficial para coordinar el horario:\n` +
@@ -145,7 +134,7 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     return {
       textoCompleto: cuerpoMensaje,
       enlacePuente: enlace,
-      textoPrellenadoWhatsApp: textoPrellenado,
+      textoPrellenadoWhatsApp: textoPrellenadoUniversal,
     };
   }
 
@@ -165,9 +154,6 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     proy.includes("tramite") ||
     proy.includes("trámite")
   ) {
-    const textoPrellenado = `Hola Paulina, revise mi asesoria de casa ${expFolio}`;
-    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
     const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... dando seguimiento a la asesoría para la adquisición / trámite de tu casa${coloniaLimpia}, nuestro asesor patrimonial puede coordinar la sesión para revisar tu expediente y opciones disponibles sin costo.\n\n` +
       `Para coordinar tu horario de atención, entra a nuestro canal oficial por este enlace directo:\n` +
@@ -177,15 +163,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     return {
       textoCompleto: cuerpoMensaje,
       enlacePuente: enlace,
-      textoPrellenadoWhatsApp: textoPrellenado,
+      textoPrellenadoWhatsApp: textoPrellenadoUniversal,
     };
   }
 
   // 7. Fallback general para otros servicios
   const proyectoGenerico = datos.proyecto?.trim() || "tu proyecto";
-  const textoPrellenado = `Hola Paulina, revise mi cita ${expFolio}`;
-  const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
-
   const cuerpoMensaje =
     `Hola ${primerNombre}, buen día... dando seguimiento a ${proyectoGenerico}${coloniaLimpia}, nos gustaría coordinar tu atención con nuestro equipo para brindarte la propuesta sin costo.\n\n` +
     `Para coordinar tu horario prioritario, entra a nuestro canal oficial por este enlace directo:\n` +
@@ -195,7 +178,7 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   return {
     textoCompleto: cuerpoMensaje,
     enlacePuente: enlace,
-    textoPrellenadoWhatsApp: textoPrellenado,
+    textoPrellenadoWhatsApp: textoPrellenadoUniversal,
   };
 }
 
