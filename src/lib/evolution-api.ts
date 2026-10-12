@@ -3,10 +3,10 @@ import { MARCA } from "@/lib/marca";
 
 /**
  * CONFIGURACIÓN DE EVOLUTION API v2 (Línea Móvil Secundaria de Rescate)
- * Servidor Proxmox (Casa): 192.168.100.253:8080 / 100.96.122.113:8080
+ * Servidor Proxmox (Casa): 192.168.100.253:8085 / 100.96.122.113:8085
  */
 export const EVOLUTION_CONFIG = {
-  baseUrl: process.env.EVOLUTION_API_URL || "http://192.168.100.253:8080",
+  baseUrl: process.env.EVOLUTION_API_URL || "http://192.168.100.253:8085",
   apiKey: process.env.EVOLUTION_API_KEY || "sauceda_evolution_api_key_2026",
   instanceName: process.env.EVOLUTION_INSTANCE_NAME || "linea-rescate",
   // Número oficial de SAUCEDA para el enlace puente (524774654700)
