@@ -423,9 +423,9 @@ export async function registrarLeadWhatsApp(
   // Prospecto (persona): se busca o se crea por teléfono.
   const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name);
 
-  // 1. Detección de token de expediente o cotización (Handshake Enlace Puente wa.me)
-  // Formato esperado: [EXP-XXX], [COT-XXX], EXP-XXX o COT-XXX
-  const tokenMatch = (lead.mensaje ?? "").match(/(?:EXP|COT)-[A-Za-z0-9-_]+/i);
+  // 1. Detección de token universal (Handshake Enlace Puente wa.me)
+  // Formato universal esperado: [EXP-XXX], [COT-XXX], [PRO-XXX], EXP-XXX, COT-XXX o PRO-XXX
+  const tokenMatch = (lead.mensaje ?? "").match(/(?:EXP|COT|PRO)-[A-Za-z0-9-_]+/i);
   let expEncontrado: {
     id: string;
     notas: string;
@@ -436,21 +436,73 @@ export async function registrarLeadWhatsApp(
     cliente?: string;
     telefono?: string;
     prospecto_id?: string;
+    fraccionamiento?: string;
   } | null = null;
   let handshakePorToken = false;
 
   if (tokenMatch) {
     const tokenId = tokenMatch[0].toUpperCase();
-    const { data: eToken } = await sb
-      .from("expedientes")
-      .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id")
-      .eq("id", tokenId)
-      .maybeSingle();
 
-    if (eToken) {
-      expEncontrado = eToken as any;
-      handshakePorToken = true;
-      console.log(`[WhatsApp Puente] Handshake exitoso: mensaje vinculado a expediente ${eToken.id} mediante token [${tokenId}]`);
+    if (tokenId.startsWith("PRO-")) {
+      // Buscar el expediente asociado a este folio de prospecto
+      const { data: exps } = await sb
+        .from("expedientes")
+        .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+        .eq("prospecto_id", tokenId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (exps && exps.length > 0) {
+        expEncontrado = exps[0] as any;
+        handshakePorToken = true;
+        console.log(`[WhatsApp Puente Universal] Handshake exitoso: token prospecto [${tokenId}] vinculado a expediente ${expEncontrado?.id}`);
+      }
+    } else if (tokenId.startsWith("COT-")) {
+      // Buscar expediente directamente por id o a través de la tabla cotizaciones
+      const { data: eCot } = await sb
+        .from("expedientes")
+        .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+        .eq("id", tokenId)
+        .maybeSingle();
+
+      if (eCot) {
+        expEncontrado = eCot as any;
+        handshakePorToken = true;
+      } else {
+        const { data: cot } = await sb
+          .from("cotizaciones")
+          .select("expediente_id")
+          .eq("id", tokenId)
+          .maybeSingle();
+
+        if (cot?.expediente_id) {
+          const { data: expDeCot } = await sb
+            .from("expedientes")
+            .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+            .eq("id", cot.expediente_id)
+            .maybeSingle();
+          if (expDeCot) {
+            expEncontrado = expDeCot as any;
+            handshakePorToken = true;
+          }
+        }
+      }
+      if (handshakePorToken) {
+        console.log(`[WhatsApp Puente Universal] Handshake exitoso: cotización [${tokenId}] vinculada a expediente ${expEncontrado?.id}`);
+      }
+    } else {
+      // Folio EXP-XXX
+      const { data: eToken } = await sb
+        .from("expedientes")
+        .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id, fraccionamiento")
+        .eq("id", tokenId)
+        .maybeSingle();
+
+      if (eToken) {
+        expEncontrado = eToken as any;
+        handshakePorToken = true;
+        console.log(`[WhatsApp Puente Universal] Handshake exitoso: token expediente [${tokenId}] vinculado a ${eToken.id}`);
+      }
     }
   }
 

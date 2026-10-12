@@ -16,6 +16,7 @@ interface ModalRescateMovilProps {
   expedienteId?: string;
   prospectoId?: string;
   proyecto?: string;
+  tipoNegocio?: string | null;
   colonia?: string;
   onEnviado?: () => void;
 }
@@ -28,6 +29,7 @@ export function ModalRescateMovil({
   expedienteId,
   prospectoId,
   proyecto,
+  tipoNegocio,
   colonia,
   onEnviado,
 }: ModalRescateMovilProps) {
@@ -41,6 +43,7 @@ export function ModalRescateMovil({
   const { textoCompleto, enlacePuente, textoPrellenadoWhatsApp } = generarMensajeRescate({
     clienteNombre,
     proyecto: proyecto || "remodelación",
+    tipoNegocio,
     colonia,
     expedienteId: expFolio,
   });

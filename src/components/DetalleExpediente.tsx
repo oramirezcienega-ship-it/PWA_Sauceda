@@ -1311,6 +1311,7 @@ export function DetalleExpediente({ id }: { id: string }) {
           clienteNombre={expediente.cliente}
           expedienteId={expediente.id}
           prospectoId={expediente.prospectoId || undefined}
+          tipoNegocio={expediente.tipoNegocio}
           proyecto={expediente.tipoNegocio ? labelTipoNegocio(expediente.tipoNegocio as any) : "Remodelación"}
           colonia={expediente.fraccionamiento || undefined}
           onEnviado={() => recargar()}

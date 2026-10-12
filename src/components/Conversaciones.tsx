@@ -3243,6 +3243,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           clienteNombre={detalle.nombre}
           expedienteId={detalle.expedienteId || undefined}
           prospectoId={detalle.prospectoId || undefined}
+          tipoNegocio={detalle.tipoNegocio}
           proyecto={detalle.tipoNegocio ? labelTipoNegocio(detalle.tipoNegocio as any) : "Remodelación"}
           onEnviado={() => refrescar(detalle.telefono)}
         />

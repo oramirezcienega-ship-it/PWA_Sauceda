@@ -213,6 +213,180 @@ export function calcularSlotsVespertinosRemodelacion(fechaReferencia: Date = new
   return slots;
 }
 
+export type SlotHorarioVertical = SlotVespertinoRemodelacion;
+
+/**
+ * MATRIZ UNIVERSAL DE HORARIOS POR VERTICAL DE NEGOCIO
+ * Calcula 4 opciones de horario según la línea de servicio:
+ * - Remodelación: Vespertinas prioritarias (17:30 y 18:30 hrs)
+ * - Impermeabilización: Matutinas y Vespertinas (10:30 y 16:30 hrs)
+ * - Herrería: Matutinas y Vespertinas (11:00 y 17:00 hrs)
+ * - Piso Estampado: Matutinas y Vespertinas (10:00 y 16:00 hrs)
+ * - Cisternas / Tinacos: Matutinas prioritarias (10:00 y 12:30 hrs)
+ * - Bienes Raíces / Traspasos: Horario de oficina (11:00 y 16:30 hrs)
+ */
+export function calcularSlotsPorVertical(
+  tipoNegocio?: string,
+  fechaReferencia: Date = new Date()
+): SlotHorarioVertical[] {
+  const tipo = (tipoNegocio || "").toLowerCase();
+
+  // Si es remodelación, aplicar vespertinas de obra
+  if (tipo === "construccion-remodelacion" || !tipo) {
+    return calcularSlotsVespertinosRemodelacion(fechaReferencia);
+  }
+
+  const tz = "America/Mexico_City";
+  const diaSemanaFormatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, weekday: "long" });
+  const fechaCompletaFormatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "long" });
+
+  const dias: Date[] = [];
+  const d = new Date(fechaReferencia);
+
+  // Buscar los próximos 2 días hábiles (saltando domingos) a partir de mañana
+  while (dias.length < 2) {
+    d.setDate(d.getDate() + 1);
+    const diaNum = new Date(d.toLocaleString("en-US", { timeZone: tz })).getDay();
+    if (diaNum !== 0) {
+      dias.push(new Date(d));
+    }
+  }
+
+  const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const slots: SlotHorarioVertical[] = [];
+
+  const manana = new Date(fechaReferencia);
+  manana.setDate(manana.getDate() + 1);
+  const esManana = (date: Date) => date.getDate() === manana.getDate();
+
+  // Configuración de franjas por vertical
+  let h1Inicio = "10:30:00";
+  let h1Fin = "11:30:00";
+  let h1LabelHora = "10:30 AM";
+
+  let h2Inicio = "16:30:00";
+  let h2Fin = "17:30:00";
+  let h2LabelHora = "4:30 PM";
+
+  if (tipo === "construccion-mantenimiento-cisternas" || tipo === "construccion-mantenimiento-tinacos") {
+    // Matutinas prioritarias
+    h1Inicio = "10:00:00";
+    h1Fin = "11:30:00";
+    h1LabelHora = "10:00 AM";
+
+    h2Inicio = "12:30:00";
+    h2Fin = "14:00:00";
+    h2LabelHora = "12:30 PM";
+  } else if (tipo === "construccion-herreria") {
+    h1Inicio = "11:00:00";
+    h1Fin = "12:00:00";
+    h1LabelHora = "11:00 AM";
+
+    h2Inicio = "17:00:00";
+    h2Fin = "18:00:00";
+    h2LabelHora = "5:00 PM";
+  } else if (tipo === "construccion-piso-estampado") {
+    h1Inicio = "10:00:00";
+    h1Fin = "11:00:00";
+    h1LabelHora = "10:00 AM";
+
+    h2Inicio = "16:00:00";
+    h2Fin = "17:00:00";
+    h2LabelHora = "4:00 PM";
+  } else if (tipo === "traspaso_compra" || tipo === "solo_tramite" || tipo === "bienes_raices") {
+    h1Inicio = "11:00:00";
+    h1Fin = "12:00:00";
+    h1LabelHora = "11:00 AM";
+
+    h2Inicio = "16:30:00";
+    h2Fin = "17:30:00";
+    h2LabelHora = "4:30 PM";
+  }
+
+  // Día 1
+  const dia1 = dias[0];
+  const dia1Nombre = capitalizar(diaSemanaFormatter.format(dia1));
+  const dia1Prefijo = esManana(dia1) ? `Mañana ${dia1Nombre}` : dia1Nombre;
+  const dia1FechaISO = dia1.toISOString().slice(0, 10);
+  const dia1FechaCompleta = fechaCompletaFormatter.format(dia1);
+
+  slots.push({
+    id: "1",
+    codigo: "A",
+    fecha: dia1FechaISO,
+    horaInicio: h1Inicio,
+    horaFin: h1Fin,
+    label: `${dia1Prefijo} a las ${h1LabelHora}`,
+    textoCompleto: `${dia1Prefijo} ${dia1FechaCompleta} a las ${h1LabelHora}`,
+  });
+
+  slots.push({
+    id: "2",
+    codigo: "B",
+    fecha: dia1FechaISO,
+    horaInicio: h2Inicio,
+    horaFin: h2Fin,
+    label: `${dia1Prefijo} a las ${h2LabelHora}`,
+    textoCompleto: `${dia1Prefijo} ${dia1FechaCompleta} a las ${h2LabelHora}`,
+  });
+
+  // Día 2
+  const dia2 = dias[1];
+  const dia2Nombre = capitalizar(diaSemanaFormatter.format(dia2));
+  const dia2FechaISO = dia2.toISOString().slice(0, 10);
+  const dia2FechaCompleta = fechaCompletaFormatter.format(dia2);
+
+  slots.push({
+    id: "3",
+    codigo: "C",
+    fecha: dia2FechaISO,
+    horaInicio: h1Inicio,
+    horaFin: h1Fin,
+    label: `${dia2Nombre} a las ${h1LabelHora}`,
+    textoCompleto: `${dia2Nombre} ${dia2FechaCompleta} a las ${h1LabelHora}`,
+  });
+
+  slots.push({
+    id: "4",
+    codigo: "D",
+    fecha: dia2FechaISO,
+    horaInicio: h2Inicio,
+    horaFin: h2Fin,
+    label: `${dia2Nombre} a las ${h2LabelHora}`,
+    textoCompleto: `${dia2Nombre} ${dia2FechaCompleta} a las ${h2LabelHora}`,
+  });
+
+  return slots;
+}
+
+/**
+ * Resuelve el rol y título oficial del especialista requerido según la vertical
+ */
+export function obtenerRolEspecialistaPorVertical(tipoNegocio?: string): {
+  rol: string;
+  tituloEspecialista: string;
+} {
+  switch ((tipoNegocio || "").toLowerCase()) {
+    case "construccion-remodelacion":
+      return { rol: "operaciones", tituloEspecialista: "Contratista / Arquitecto de Obra" };
+    case "construccion-impermeabilizacion":
+      return { rol: "operaciones", tituloEspecialista: "Técnico de Azoteas / Cuadrilla" };
+    case "construccion-herreria":
+      return { rol: "operaciones", tituloEspecialista: "Maestro Herrero / Estructuras" };
+    case "construccion-piso-estampado":
+      return { rol: "operaciones", tituloEspecialista: "Técnico de Pavimentos" };
+    case "construccion-mantenimiento-cisternas":
+    case "construccion-mantenimiento-tinacos":
+      return { rol: "operaciones", tituloEspecialista: "Técnico de Fontanería / Lavado" };
+    case "traspaso_compra":
+    case "solo_tramite":
+    case "bienes_raices":
+      return { rol: "asesor", tituloEspecialista: "Asesor Inmobiliario / Notarial" };
+    default:
+      return { rol: "operaciones", tituloEspecialista: "Especialista Técnico en Obra" };
+  }
+}
+
 const DIAS_CLAVE = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
 
 /**
@@ -734,13 +908,14 @@ export async function verificarYActualizarSLAInspecciones(
         const opcAText = opciones[0]?.label || "Opción 1";
         const opcBText = opciones[1]?.label || "Opción 2";
 
-        const msgOscar = `⚠️ *SLA VENCIDO (${coord.sla_minutos || 30} MIN): INSPECCIÓN SIN CONFIRMAR*\n\n` +
-          `*Cliente:* ${coord.cliente_nombre} (\`${coord.cliente_telefono}\`) — ${coord.ubicacion || coord.fraccionamiento || "León"}\n` +
-          `*Proyecto:* ${coord.servicio_nombre || "Remodelación"} (${coord.detalles_tecnicos || "Visita en sitio"})\n` +
-          `*Opciones solicitadas:*\n` +
+        const msgOscar = `⚠️ *SLA VENCIDO (30 MIN): COORDINACIÓN SIN RESPUESTA*\n\n` +
+          `*Servicio:* ${coord.servicio_nombre || "Coordinación Técnica"}\n` +
+          `*Cliente:* ${coord.cliente_nombre} (\`${coord.cliente_telefono}\`)\n` +
+          `*Zona:* ${coord.ubicacion || coord.fraccionamiento || "León"}\n` +
+          `*Opciones:*\n` +
           `🅰️ ${opcAText}\n` +
           `🅱️ ${opcBText}\n\n` +
-          `*Acción requerida:* Confirmar manualmente con el proveedor o en el CRM.`;
+          `👉 *Por favor confirma con el técnico asignado o directamente en el CRM.*`;
 
         // Alerta WhatsApp a Oscar
         await enviarWhatsAppTexto("4778110444", msgOscar).catch(() => {});
