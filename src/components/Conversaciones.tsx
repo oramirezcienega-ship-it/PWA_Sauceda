@@ -730,7 +730,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [filtroPlantillasModo, setFiltroPlantillasModo] = useState<"recomendadas" | "todas">("recomendadas");
   const [busquedaPlantilla, setBusquedaPlantilla] = useState<string>("");
   const [modalCatalogoAbierto, setModalCatalogoAbierto] = useState(false);
-  const [modoVistaPlantillas, setModoVistaPlantillas] = useState<"tarjetas" | "select">("tarjetas");
+  const [plantillasColapsadas, setPlantillasColapsadas] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [cambiandoTipoNegocio, setCambiandoTipoNegocio] = useState(false);
@@ -1188,11 +1188,14 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
   }
 
   const plantilla = plantillas.find((p) => p.nombre === plantillaSel);
+  // Fuera de la ventana de 24h de WhatsApp solo se puede enviar plantilla: se oculta el editor de texto.
+  const ventanaCerradaWA = !!detalle && !detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp";
 
   // Al cambiar de cliente, restablecer a vista de recomendadas
   useEffect(() => {
     setFiltroPlantillasModo("recomendadas");
     setBusquedaPlantilla("");
+    setPlantillasColapsadas(false);
   }, [detalle?.telefono]);
 
   const {
@@ -2540,302 +2543,233 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                 )}
 
                 <div className="space-y-1.5 relative">
-                  {/* Advertencia de ventana de 24h expirada (solo WhatsApp) */}
-                  {!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp" && (
-                    <div className="rounded-xl border border-sauce/20 bg-sauce/5 p-4 space-y-3">
-                      <div className="flex items-start gap-1.5 text-xs text-verde-profundo font-semibold leading-relaxed">
-                        <span className="shrink-0">⚠️</span>
-                        <div>
-                          <p><strong>Ventana de 24h cerrada:</strong> Para reactivar este chat, debes enviar una plantilla aprobada por Meta.</p>
-                        </div>
-                      </div>
-                      
-                      {plantillas.length === 0 ? (
-                        <p className="text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {/* Barra de Filtros Rápidos, Modos de Vista y Búsqueda */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-carbon/10 pb-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {infoNegocioPlantillas ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => setFiltroPlantillasModo("recomendadas")}
-                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                      filtroPlantillasModo === "recomendadas"
-                                        ? "bg-sauce text-crema shadow-xs"
-                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
-                                    }`}
-                                    title={`Mostrar plantillas específicas de ${infoNegocioPlantillas.nombreLegible} y operativas`}
-                                  >
-                                    <span>{infoNegocioPlantillas.icono}</span>
-                                    <span>Recomendadas ({totalPlantillasRecomendadas})</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setFiltroPlantillasModo("todas")}
-                                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                      filtroPlantillasModo === "todas"
-                                        ? "bg-sauce text-crema shadow-xs"
-                                        : "bg-white border border-carbon/15 text-carbon/70 hover:bg-carbon/5"
-                                    }`}
-                                    title="Mostrar todas las plantillas registradas"
-                                  >
-                                    <span>🌐</span>
-                                    <span>Todas las líneas ({plantillas.length})</span>
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="text-[11px] font-bold text-verde-profundo flex items-center gap-1">
-                                  <span>📝</span>
-                                  <span>{plantillas.length} plantillas disponibles</span>
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {/* Buscador de plantillas */}
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  value={busquedaPlantilla}
-                                  onChange={(e) => setBusquedaPlantilla(e.target.value)}
-                                  placeholder="🔍 Buscar..."
-                                  className="bg-white border border-carbon/15 rounded-md px-2 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce w-28 sm:w-36"
-                                />
-                                {busquedaPlantilla && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setBusquedaPlantilla("")}
-                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
-                                    title="Limpiar búsqueda"
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Selector de modo de vista: Tarjetas vs Dropdown */}
-                              <div className="inline-flex rounded-md border border-carbon/15 bg-white p-0.5 shadow-2xs">
-                                <button
-                                  type="button"
-                                  onClick={() => setModoVistaPlantillas("tarjetas")}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                    modoVistaPlantillas === "tarjetas"
-                                      ? "bg-sauce text-crema"
-                                      : "text-carbon/60 hover:text-carbon"
-                                  }`}
-                                  title="Ver plantillas en tarjetas visuales con texto completo"
-                                >
-                                  <span>🎨</span>
-                                  <span>Tarjetas</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setModoVistaPlantillas("select")}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
-                                    modoVistaPlantillas === "select"
-                                      ? "bg-sauce text-crema"
-                                      : "text-carbon/60 hover:text-carbon"
-                                  }`}
-                                  title="Ver como lista desplegable compacta"
-                                >
-                                  <span>📋</span>
-                                  <span>Lista</span>
-                                </button>
-                              </div>
-
-                              {/* Botón Catálogo Visual Completo */}
-                              <button
-                                type="button"
-                                onClick={() => setModalCatalogoAbierto(true)}
-                                className="px-2 py-1 rounded text-[10px] font-bold bg-sauce/15 hover:bg-sauce/25 text-verde-profundo border border-sauce/30 transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                                title="Abrir ventana con catálogo visual grande de todas las plantillas"
-                              >
-                                <span>🔍</span>
-                                <span>Catálogo Completo</span>
-                              </button>
-                            </div>
+                  {/* Ventana de 24h cerrada (solo WhatsApp): selector compacto de plantilla en dos paneles */}
+                  {ventanaCerradaWA && (
+                    <div className="rounded-xl border border-amber-300/70 bg-amber-50/40 overflow-hidden">
+                      {/* Encabezado */}
+                      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-amber-200/80 bg-amber-50">
+                        <span className="text-sm shrink-0">🔒</span>
+                        <p className="text-[11px] leading-snug text-amber-900 flex-1 min-w-[180px]">
+                          <strong>Ventana de 24h cerrada.</strong>{" "}
+                          <span className="text-amber-900/80">Solo puedes reactivar el chat con una plantilla aprobada por Meta.</span>
+                        </p>
+                        {plantillas.length > 0 && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setModalCatalogoAbierto(true)}
+                              className="px-2 py-1 rounded-md text-[10px] font-bold bg-white hover:bg-sauce/10 text-verde-profundo border border-carbon/15 transition cursor-pointer"
+                              title="Abrir catálogo visual grande de todas las plantillas"
+                            >
+                              ⤢ Catálogo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPlantillasColapsadas((v) => !v)}
+                              className="px-2 py-1 rounded-md text-[10px] font-bold bg-sauce hover:bg-verde-profundo text-crema transition cursor-pointer"
+                              title={plantillasColapsadas ? "Mostrar plantillas" : "Ocultar plantillas para leer la conversación"}
+                            >
+                              {plantillasColapsadas ? "▴ Elegir plantilla" : "▾ Ocultar"}
+                            </button>
                           </div>
+                        )}
+                      </div>
 
-                          {/* Vista en Tarjetas Visuales (por defecto) */}
-                          {modoVistaPlantillas === "tarjetas" ? (
-                            <div className="space-y-3 max-h-80 overflow-y-auto p-1 scrollbar-sutil">
-                              {gruposPlantillas.length === 0 ? (
-                                <p className="text-center py-6 text-xs text-carbon/40">
-                                  No hay plantillas con ese criterio de búsqueda.
-                                </p>
-                              ) : (
-                                gruposPlantillas.map((grupo) => (
-                                  <div key={grupo.id} className="space-y-1.5">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-verde-profundo uppercase tracking-wider bg-carbon/5 px-2.5 py-1 rounded-md">
-                                      <span>{grupo.icono}</span>
-                                      <span>{grupo.label}</span>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                      {grupo.plantillas.map((p) => {
-                                        const esSel = p.nombre === plantillaSel;
-                                        return (
-                                          <div
-                                            key={p.nombre}
-                                            onClick={() => seleccionarPlantilla(p.nombre)}
-                                            className={`rounded-xl border p-3 transition-all duration-150 cursor-pointer text-left flex flex-col justify-between ${
-                                              esSel
-                                                ? "border-sauce bg-sauce/10 ring-2 ring-sauce shadow-sm"
-                                                : "border-carbon/15 bg-white hover:border-sauce/60 hover:shadow-xs"
-                                            }`}
-                                          >
-                                            <div className="space-y-1.5">
-                                              <div className="flex items-center justify-between gap-1 flex-wrap">
-                                                <span className="font-mono text-xs font-bold text-carbon">
-                                                  {p.nombre}
-                                                </span>
-                                                <div className="flex items-center gap-1">
-                                                  <span className="text-[9px] bg-carbon/5 text-carbon/60 px-1.5 py-0.5 rounded font-mono font-bold">
-                                                    {p.idioma}
-                                                  </span>
-                                                  <span className="text-[9px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
-                                                    {p.categoria}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                              <p className="text-xs text-carbon/80 whitespace-pre-line font-sans line-clamp-3 bg-crema/25 p-2 rounded-md border border-carbon/5 leading-relaxed">
-                                                {p.cuerpo}
-                                              </p>
-                                            </div>
-                                            <div className="mt-2 pt-1.5 border-t border-carbon/10 flex items-center justify-between text-[10px]">
-                                              <span className="text-carbon/50 font-mono">
-                                                {p.parametros > 0 ? `${p.parametros} variable${p.parametros === 1 ? "" : "s"}` : "Sin variables"}
-                                              </span>
-                                              <span className={`font-bold transition-colors ${esSel ? "text-sauce font-extrabold" : "text-carbon/60 group-hover:text-sauce"}`}>
-                                                {esSel ? "✓ Seleccionada" : "Elegir →"}
-                                              </span>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
+                      {plantillas.length === 0 ? (
+                        <p className="px-3 py-3 text-xs text-carbon/50">No hay plantillas de WhatsApp aprobadas disponibles en este momento.</p>
+                      ) : (
+                        !plantillasColapsadas && (
+                          <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] h-[min(360px,46vh)] bg-white">
+                            {/* Panel izquierdo: filtros + lista */}
+                            <div className={`${plantilla ? "hidden md:flex" : "flex"} flex-col min-h-0 border-r border-carbon/10`}>
+                              <div className="shrink-0 flex items-center gap-1.5 p-2 border-b border-carbon/10">
+                                {infoNegocioPlantillas && (
+                                  <div className="inline-flex shrink-0 rounded-md border border-carbon/15 bg-carbon/5 p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setFiltroPlantillasModo("recomendadas")}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                        filtroPlantillasModo === "recomendadas" ? "bg-white text-verde-profundo shadow-2xs" : "text-carbon/55 hover:text-carbon"
+                                      }`}
+                                      title={`Plantillas de ${infoNegocioPlantillas.nombreLegible} y operativas`}
+                                    >
+                                      {infoNegocioPlantillas.icono} Sugeridas {totalPlantillasRecomendadas}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setFiltroPlantillasModo("todas")}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                        filtroPlantillasModo === "todas" ? "bg-white text-verde-profundo shadow-2xs" : "text-carbon/55 hover:text-carbon"
+                                      }`}
+                                      title="Todas las plantillas registradas"
+                                    >
+                                      Todas {plantillas.length}
+                                    </button>
                                   </div>
-                                ))
-                              )}
-                            </div>
-                          ) : (
-                            /* Vista en Lista Desplegable (<select>) */
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="block text-[10px] font-bold text-carbon/60 uppercase tracking-wider">
-                                  Seleccionar Plantilla:
-                                </label>
-                                <span className="text-[10px] text-carbon/40 font-medium">
-                                  {totalPlantillasFiltradas} {totalPlantillasFiltradas === 1 ? "opción" : "opciones"} en el listado
-                                </span>
-                              </div>
-                              <select
-                                value={plantillaSel}
-                                onChange={(e) => seleccionarPlantilla(e.target.value)}
-                                className="w-full bg-white border border-carbon/15 rounded-lg px-3 py-2 text-xs text-carbon/80 focus:outline-none focus:border-sauce cursor-pointer font-medium"
-                              >
-                                <option value="">— selecciona una plantilla —</option>
-                                {gruposPlantillas.map((grupo) => (
-                                  <optgroup key={grupo.id} label={`${grupo.icono} ${grupo.label}`}>
-                                    {grupo.plantillas.map((p) => {
-                                      const snippet = p.cuerpo
-                                        ? ` - "${p.cuerpo.replace(/\n/g, " ").substring(0, 48)}${p.cuerpo.length > 48 ? "..." : ""}"`
-                                        : "";
-                                      return (
-                                        <option key={p.nombre} value={p.nombre}>
-                                          {p.nombre} ({p.categoria}){snippet}
-                                        </option>
-                                      );
-                                    })}
-                                  </optgroup>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-
-                          {plantilla && (
-                            <div className="bg-white p-3 rounded-lg border border-carbon/10 space-y-2.5 shadow-2xs">
-                              <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-carbon/5 pb-1.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-bold text-verde-profundo uppercase tracking-wider">
-                                    Vista previa:
-                                  </span>
-                                  <span className="font-mono text-xs font-semibold text-carbon">
-                                    {plantilla.nombre}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] bg-carbon/5 text-carbon/70 px-1.5 py-0.5 rounded font-mono font-bold">
-                                    {plantilla.idioma}
-                                  </span>
-                                  <span className="text-[10px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">
-                                    {plantilla.categoria}
-                                  </span>
-                                  {plantilla.parametros > 0 && (
-                                    <span className="text-[10px] bg-dorado/15 text-dorado px-1.5 py-0.5 rounded font-bold">
-                                      {plantilla.parametros} var{plantilla.parametros === 1 ? "" : "s"}
-                                    </span>
+                                )}
+                                <div className="relative flex-1 min-w-0">
+                                  <input
+                                    type="text"
+                                    value={busquedaPlantilla}
+                                    onChange={(e) => setBusquedaPlantilla(e.target.value)}
+                                    placeholder="🔍 Buscar plantilla…"
+                                    className="w-full bg-white border border-carbon/15 rounded-md pl-2 pr-6 py-1 text-xs text-carbon placeholder:text-carbon/40 focus:outline-none focus:border-sauce"
+                                  />
+                                  {busquedaPlantilla && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setBusquedaPlantilla("")}
+                                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-carbon/40 hover:text-carbon p-0.5 cursor-pointer"
+                                      title="Limpiar búsqueda"
+                                    >
+                                      ✕
+                                    </button>
                                   )}
                                 </div>
                               </div>
 
-                              <p className="text-xs text-carbon/80 whitespace-pre-line font-mono bg-crema/20 p-2.5 rounded-md border border-carbon/5 leading-relaxed">
-                                {plantilla.cuerpo}
-                              </p>
-                              
-                              {plantilla.parametros > 0 && (
-                                <div className="pt-2 border-t border-carbon/5 space-y-2">
-                                  <p className="text-[10px] font-bold text-carbon/50 uppercase tracking-wider">
-                                    Variables dinámicas del mensaje:
-                                  </p>
-                                  <div className="grid grid-cols-1 gap-2">
-                                    {Array.from({ length: plantilla.parametros }).map((_, i) => (
-                                      <div key={i} className="flex items-center gap-2">
-                                        <span className="text-[10px] font-mono text-carbon/60 font-bold shrink-0 w-8">
-                                          {"{{"}{i + 1}{"}}"}
-                                        </span>
-                                        <input
-                                          type="text"
-                                          placeholder={
-                                            i === 0
-                                              ? `Nombre del cliente (ej. ${detalle?.nombre?.split(" ")[0] || "Angel"})`
-                                              : i === 1
-                                              ? "Servicio / Detalle"
-                                              : `Valor para variable ${i + 1}`
-                                          }
-                                          value={params[i] || ""}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setParams((prev) => {
-                                              const copy = [...prev];
-                                              copy[i] = val;
-                                              return copy;
-                                            });
-                                          }}
-                                          className="flex-1 bg-carbon/5 border border-carbon/15 rounded-md px-2.5 py-1 text-xs text-carbon outline-none focus:border-sauce focus:bg-white transition"
-                                        />
+                              <div className="flex-1 min-h-0 overflow-y-auto scrollbar-sutil">
+                                {gruposPlantillas.length === 0 ? (
+                                  <p className="text-center py-6 text-xs text-carbon/40">Sin resultados para esa búsqueda.</p>
+                                ) : (
+                                  gruposPlantillas.map((grupo) => (
+                                    <div key={grupo.id}>
+                                      <div className="sticky top-0 z-10 flex items-center gap-1.5 text-[9px] font-bold text-carbon/50 uppercase tracking-wider bg-slate-50/95 backdrop-blur px-3 py-1 border-b border-carbon/5">
+                                        <span>{grupo.icono}</span>
+                                        <span className="truncate">{grupo.label}</span>
                                       </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              <div className="pt-2 flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={enviarPlantilla}
-                                  disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
-                                  className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-3 py-1.5 transition disabled:opacity-50 cursor-pointer shadow-xs flex items-center gap-1.5"
-                                >
-                                  <span>⚡</span>
-                                  <span>{enviando ? "Enviando..." : "Enviar Plantilla"}</span>
-                                </button>
+                                      {grupo.plantillas.map((p) => {
+                                        const esSel = p.nombre === plantillaSel;
+                                        return (
+                                          <button
+                                            key={p.nombre}
+                                            type="button"
+                                            onClick={() => seleccionarPlantilla(p.nombre)}
+                                            className={`w-full text-left px-3 py-2 border-b border-carbon/5 border-l-2 transition cursor-pointer ${
+                                              esSel ? "bg-sauce/10 border-l-sauce" : "border-l-transparent hover:bg-carbon/[0.03]"
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <span className={`flex-1 min-w-0 truncate text-xs font-semibold ${esSel ? "text-verde-profundo" : "text-carbon"}`}>
+                                                {p.nombre.replace(/_/g, " ")}
+                                              </span>
+                                              {p.parametros > 0 && (
+                                                <span className="shrink-0 text-[9px] font-mono text-carbon/40" title={`${p.parametros} variable(s)`}>
+                                                  {`{${p.parametros}}`}
+                                                </span>
+                                              )}
+                                              <span className="shrink-0 text-[9px] uppercase tracking-wide text-carbon/40">
+                                                {p.categoria?.toLowerCase() === "marketing" ? "MKT" : p.categoria?.toLowerCase() === "utility" ? "UTIL" : p.categoria}
+                                              </span>
+                                            </div>
+                                            <p className="mt-0.5 text-[11px] text-carbon/55 truncate">{p.cuerpo?.replace(/\s+/g, " ")}</p>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </div>
-                          )}
-                        </div>
+
+                            {/* Panel derecho: vista previa + variables + enviar */}
+                            <div className={`${plantilla ? "flex" : "hidden md:flex"} flex-col min-h-0 bg-crema/20`}>
+                              {!plantilla ? (
+                                <div className="flex-1 flex flex-col items-center justify-center gap-1 p-6 text-center">
+                                  <span className="text-2xl opacity-40">💬</span>
+                                  <p className="text-xs font-semibold text-carbon/60">Elige una plantilla de la lista</p>
+                                  <p className="text-[11px] text-carbon/40">Verás aquí cómo le llegará al cliente antes de enviarla.</p>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-carbon/10 bg-white">
+                                    <button
+                                      type="button"
+                                      onClick={() => seleccionarPlantilla("")}
+                                      className="md:hidden text-xs text-carbon/60 hover:text-carbon px-1 cursor-pointer"
+                                      title="Volver a la lista"
+                                    >
+                                      ←
+                                    </button>
+                                    <span className="flex-1 min-w-0 truncate font-mono text-[11px] font-semibold text-carbon" title={plantilla.nombre}>
+                                      {plantilla.nombre}
+                                    </span>
+                                    <span className="shrink-0 text-[9px] bg-carbon/5 text-carbon/60 px-1.5 py-0.5 rounded font-mono font-bold">{plantilla.idioma}</span>
+                                    <span className="shrink-0 text-[9px] bg-sauce/10 text-verde-profundo px-1.5 py-0.5 rounded font-bold">{plantilla.categoria}</span>
+                                  </div>
+
+                                  <div className="flex-1 min-h-0 overflow-y-auto scrollbar-sutil p-3 space-y-3">
+                                    {/* Burbuja tal como la verá el cliente */}
+                                    <div className="flex justify-end">
+                                      <div className="max-w-[95%] rounded-2xl rounded-tr-sm bg-sauce text-crema px-3 py-2 text-xs leading-relaxed whitespace-pre-line shadow-2xs">
+                                        {(plantilla.cuerpo || "").split(/(\{\{\d+\}\})/g).map((trozo, i) => {
+                                          const m = trozo.match(/^\{\{(\d+)\}\}$/);
+                                          if (!m) return <span key={i}>{trozo}</span>;
+                                          const valor = params[Number(m[1]) - 1];
+                                          return valor ? (
+                                            <span key={i} className="font-semibold underline decoration-crema/40 underline-offset-2">{valor}</span>
+                                          ) : (
+                                            <span key={i} className="rounded bg-amber-300/90 text-amber-950 px-1 font-mono text-[10px]">{trozo}</span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {plantilla.parametros > 0 && (
+                                      <div className="space-y-1.5">
+                                        <p className="text-[10px] font-bold text-carbon/50 uppercase tracking-wider">Completa las variables</p>
+                                        {Array.from({ length: plantilla.parametros }).map((_, i) => (
+                                          <label key={i} className="flex items-center gap-2">
+                                            <span className="text-[10px] font-mono text-carbon/50 font-bold shrink-0 w-9">{`{{${i + 1}}}`}</span>
+                                            <input
+                                              type="text"
+                                              placeholder={
+                                                i === 0
+                                                  ? `Nombre del cliente (ej. ${detalle?.nombre?.split(" ")[0] || "Angel"})`
+                                                  : i === 1
+                                                  ? "Servicio / Detalle"
+                                                  : `Valor para variable ${i + 1}`
+                                              }
+                                              value={params[i] || ""}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                setParams((prev) => {
+                                                  const copy = [...prev];
+                                                  copy[i] = val;
+                                                  return copy;
+                                                });
+                                              }}
+                                              className={`flex-1 min-w-0 bg-white border rounded-md px-2.5 py-1 text-xs text-carbon outline-none focus:border-sauce transition ${
+                                                params[i] ? "border-carbon/15" : "border-amber-400"
+                                              }`}
+                                            />
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-t border-carbon/10 bg-white">
+                                    <span className="text-[10px] text-carbon/45">
+                                      {plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros
+                                        ? `Faltan ${plantilla.parametros - params.filter(Boolean).length} variable(s)`
+                                        : "Lista para enviar"}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={enviarPlantilla}
+                                      disabled={enviando || (plantilla.parametros > 0 && params.filter(Boolean).length < plantilla.parametros)}
+                                      className="rounded-md bg-sauce hover:bg-verde-profundo text-crema text-xs font-bold px-4 py-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs flex items-center gap-1.5"
+                                    >
+                                      <span>➤</span>
+                                      <span>{enviando ? "Enviando..." : "Enviar plantilla"}</span>
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
                   )}
@@ -2870,7 +2804,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
 
                   {/* Fila de controles superiores (Atajos e información & Respuestas Rápidas) */}
                   <div className="flex flex-wrap items-center justify-between gap-y-1.5 text-[11px] text-carbon/40 px-1">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className={`flex flex-wrap items-center gap-2 ${ventanaCerradaWA ? "hidden" : ""}`}>
                       <span>Escribe <strong className="text-sauce">#</strong> para respuestas rápidas</span>
                       {asesores.length > 0 && (
                         <div className="inline-flex items-center gap-1 bg-carbon/5 px-2 py-0.5 rounded border border-carbon/10 text-[10px]">
@@ -2936,7 +2870,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         onClick={() => void pedirRespuestaSofia(detalle.telefono)}
                         disabled={invocandoSofia || alternandoIA || enviando}
                         title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
-                        className="flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer disabled:opacity-50 bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400"
+                        className={`${ventanaCerradaWA ? "hidden" : "flex"} items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer disabled:opacity-50 bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400`}
                       >
                         {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
                       </button>
@@ -3008,6 +2942,8 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           )}
                         </span>
                       )}
+                      {!ventanaCerradaWA && (
+                      <>
                       {detalle?.prospectoId && (
                         <button
                           type="button"
@@ -3072,11 +3008,13 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       >
                         ⚡ Respuestas Rápidas
                       </button>
+                      </>
+                      )}
                     </div>
                   </div>
 
-                  {/* Caja de Texto + Botón de Enviar */}
-                  <div className="flex items-end gap-2">
+                  {/* Caja de Texto + Botón de Enviar (oculta si solo se puede enviar plantilla) */}
+                  <div className={`${ventanaCerradaWA ? "hidden" : "flex"} items-end gap-2`}>
                     <textarea
                       ref={textareaRef}
                       value={texto}
