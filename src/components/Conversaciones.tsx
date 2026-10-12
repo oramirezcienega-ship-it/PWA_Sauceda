@@ -39,6 +39,7 @@ import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabi
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
 import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
+import { ModalRescateMovil } from "./ModalRescateMovil";
 import {
   obtenerEnvioLeadTelegramAction,
   marcarLeadRevisadoManualAction,
@@ -802,6 +803,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
   const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
+  const [mostrarRescateMovil, setMostrarRescateMovil] = useState(false);
   const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
   // Formulario para posponer (etapa "En pausa"): fecha para retomar y motivo
   const [posponer, setPosponer] = useState<{ fecha: string; motivo: string } | null>(null);
@@ -2897,6 +2899,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           <span>Coordinar Inspección</span>
                         </button>
                       )}
+                      {/* Botón: Rescate Móvil (Estrategia de Doble Línea / Evolution API) */}
+                      {detalle?.telefono && canalDe(detalle.telefono) === "whatsapp" && (
+                        <button
+                          type="button"
+                          onClick={() => setMostrarRescateMovil(true)}
+                          title="Generar mensaje de rescate móvil desde la línea secundaria con enlace puente wa.me [EXP-XXX]"
+                          className="flex items-center gap-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>📲</span>
+                          <span>Rescate Móvil</span>
+                        </button>
+                      )}
                       {/* Pasar el lead a un asesor por Telegram (con vista previa y acuse) */}
                       <button
                         type="button"
@@ -3219,6 +3233,20 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         tipoNegocio={detalle?.tipoNegocio}
         nombreCliente={detalle?.nombre}
       />
+
+      {/* Modal de Rescate Móvil (Doble Línea / Evolution API) */}
+      {mostrarRescateMovil && detalle && (
+        <ModalRescateMovil
+          abierto={mostrarRescateMovil}
+          onCerrar={() => setMostrarRescateMovil(false)}
+          telefono={detalle.telefono}
+          clienteNombre={detalle.nombre}
+          expedienteId={detalle.expedienteId || undefined}
+          prospectoId={detalle.prospectoId || undefined}
+          proyecto={detalle.tipoNegocio ? labelTipoNegocio(detalle.tipoNegocio as any) : "Remodelación"}
+          onEnviado={() => refrescar(detalle.telefono)}
+        />
+      )}
 
       {/* Modal / Bottom Sheet de Catálogo de Respuestas Rápidas */}
       {mostrarDropdownMenu && (

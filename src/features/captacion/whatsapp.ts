@@ -423,16 +423,54 @@ export async function registrarLeadWhatsApp(
   // Prospecto (persona): se busca o se crea por teléfono.
   const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name);
 
-  // Dedupe del expediente por teléfono (cualquier formato equivalente).
-  const { data: existentes } = await sb
-    .from("expedientes")
-    .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente")
-    .in("telefono", variantesTel)
-    .limit(1);
+  // 1. Detección de token de expediente o cotización (Handshake Enlace Puente wa.me)
+  // Formato esperado: [EXP-XXX], [COT-XXX], EXP-XXX o COT-XXX
+  const tokenMatch = (lead.mensaje ?? "").match(/(?:EXP|COT)-[A-Za-z0-9-_]+/i);
+  let expEncontrado: {
+    id: string;
+    notas: string;
+    campaign_name?: string;
+    adset_name?: string;
+    ad_name?: string;
+    tipo_negocio?: string;
+    cliente?: string;
+    telefono?: string;
+    prospecto_id?: string;
+  } | null = null;
+  let handshakePorToken = false;
 
-  if (existentes && existentes.length > 0) {
-    const exp = existentes[0] as { id: string; notas: string; campaign_name?: string; adset_name?: string; ad_name?: string; tipo_negocio?: string; cliente?: string };
-    const nota = `${exp.notas ?? ""}\n[WhatsApp ${hoyISO()}] ${
+  if (tokenMatch) {
+    const tokenId = tokenMatch[0].toUpperCase();
+    const { data: eToken } = await sb
+      .from("expedientes")
+      .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id")
+      .eq("id", tokenId)
+      .maybeSingle();
+
+    if (eToken) {
+      expEncontrado = eToken as any;
+      handshakePorToken = true;
+      console.log(`[WhatsApp Puente] Handshake exitoso: mensaje vinculado a expediente ${eToken.id} mediante token [${tokenId}]`);
+    }
+  }
+
+  // Dedupe del expediente por teléfono si no se resolvió por token
+  if (!expEncontrado) {
+    const { data: existentes } = await sb
+      .from("expedientes")
+      .select("id, notas, campaign_name, adset_name, ad_name, tipo_negocio, cliente, telefono, prospecto_id")
+      .in("telefono", variantesTel)
+      .limit(1);
+
+    if (existentes && existentes.length > 0) {
+      expEncontrado = existentes[0] as any;
+    }
+  }
+
+  if (expEncontrado) {
+    const exp = expEncontrado;
+    const prefijoNota = handshakePorToken ? `[WhatsApp Puente Token ${hoyISO()}]` : `[WhatsApp ${hoyISO()}]`;
+    const nota = `${exp.notas ?? ""}\n${prefijoNota} ${
       lead.mensaje ?? ""
     }`.trim();
 
@@ -440,6 +478,11 @@ export async function registrarLeadWhatsApp(
     if (campaign_name && campaign_name !== exp.campaign_name) updateData.campaign_name = campaign_name;
     if (adset_name && adset_name !== exp.adset_name) updateData.adset_name = adset_name;
     if (ad_name && ad_name !== exp.ad_name) updateData.ad_name = ad_name;
+
+    // Si el expediente no tenía teléfono o cambió de línea (puente), sincronizar el teléfono actual
+    if (!exp.telefono) {
+      updateData.telefono = telefono;
+    }
 
     // Si el tipo de negocio era traspaso_compra (default), cayó en "otro" o no tenía, y ahora se detecta algo específico, lo actualizamos.
     if (exp.tipo_negocio === "traspaso_compra" || !exp.tipo_negocio || exp.tipo_negocio === "otro") {
@@ -460,11 +503,14 @@ export async function registrarLeadWhatsApp(
       .from("expedientes")
       .update(updateData)
       .eq("id", exp.id);
+
+    const efectivoProspectoId = exp.prospecto_id || prospectoId;
+
     const nuevo = await guardarMensajeEntrante(sb, {
       telefono,
       texto: lead.mensaje ?? "",
       expedienteId: exp.id,
-      prospectoId,
+      prospectoId: efectivoProspectoId,
       waMessageId: lead.waMessageId,
     });
 
@@ -473,7 +519,7 @@ export async function registrarLeadWhatsApp(
       await manejarFlujoAudio(sb, {
         telefono,
         expedienteId: exp.id,
-        prospectoId,
+        prospectoId: efectivoProspectoId,
         clienteNombre: exp.cliente || "",
         tipoNegocio: exp.tipo_negocio || "Por definir"
       });

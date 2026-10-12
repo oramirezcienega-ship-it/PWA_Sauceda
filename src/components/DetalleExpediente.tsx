@@ -33,6 +33,7 @@ import { WidgetColapsable } from "./WidgetColapsable";
 import { WidgetCampanasMautic } from "./WidgetCampanasMautic";
 import { normalizarTelefono } from "@/lib/telefono";
 import { BotonPublicarInventario } from "./asesoria-compra/BotonPublicarInventario";
+import { ModalRescateMovil } from "./ModalRescateMovil";
 
 /**
  * Vista de detalle de un expediente.
@@ -60,6 +61,7 @@ export function DetalleExpediente({ id }: { id: string }) {
 
   // Estado para programación de llamada
   const [mostrarFormLlamada, setMostrarFormLlamada] = useState(false);
+  const [mostrarRescate, setMostrarRescate] = useState(false);
   const [perfiles, setPerfiles] = useState<{ id: string; nombre: string; rol: string }[]>([]);
   const [perfilLlamadaId, setPerfilLlamadaId] = useState("");
   const [fechaLlamada, setFechaLlamada] = useState("");
@@ -456,6 +458,14 @@ export function DetalleExpediente({ id }: { id: string }) {
                   >
                     <span>💬 WhatsApp</span>
                   </a>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarRescate(true)}
+                    title="Generar mensaje de rescate móvil desde la línea secundaria con enlace puente wa.me [EXP-XXX]"
+                    className="inline-flex items-center gap-1 rounded bg-teal-50 hover:bg-teal-100 border border-teal-300 text-teal-800 px-2 py-1 text-[10px] font-semibold transition shadow-2xs cursor-pointer"
+                  >
+                    <span>📲 Rescate</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1291,6 +1301,21 @@ export function DetalleExpediente({ id }: { id: string }) {
           </WidgetColapsable>
         </div>
       </div>
+
+      {/* Modal de Rescate Móvil (Doble Línea / Evolution API) */}
+      {mostrarRescate && expediente.telefono && (
+        <ModalRescateMovil
+          abierto={mostrarRescate}
+          onCerrar={() => setMostrarRescate(false)}
+          telefono={expediente.telefono}
+          clienteNombre={expediente.cliente}
+          expedienteId={expediente.id}
+          prospectoId={expediente.prospectoId || undefined}
+          proyecto={expediente.tipoNegocio ? labelTipoNegocio(expediente.tipoNegocio as any) : "Remodelación"}
+          colonia={expediente.fraccionamiento || undefined}
+          onEnviado={() => recargar()}
+        />
+      )}
       </div>
   );
 }

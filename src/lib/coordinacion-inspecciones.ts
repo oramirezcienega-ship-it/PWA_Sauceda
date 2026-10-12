@@ -734,7 +734,13 @@ export async function verificarYActualizarSLAInspecciones(
         const opcAText = opciones[0]?.label || "Opción 1";
         const opcBText = opciones[1]?.label || "Opción 2";
 
-        const msgOscar = `⚠️ *SLA VENCIDO: INSPECCIÓN SIN CONFIRMAR*\n\nEl proveedor no ha confirmado la visita para el cliente *${coord.cliente_nombre}* (${coord.cliente_telefono}) en ${coord.ubicacion}.\n\nOpciones solicitadas:\n🅰️ ${opcAText}\n🅱️ ${opcBText}\n\n👉 *Entra al CRM o comunícate con el proveedor para cerrar la cita.*`;
+        const msgOscar = `⚠️ *SLA VENCIDO (${coord.sla_minutos || 30} MIN): INSPECCIÓN SIN CONFIRMAR*\n\n` +
+          `*Cliente:* ${coord.cliente_nombre} (\`${coord.cliente_telefono}\`) — ${coord.ubicacion || coord.fraccionamiento || "León"}\n` +
+          `*Proyecto:* ${coord.servicio_nombre || "Remodelación"} (${coord.detalles_tecnicos || "Visita en sitio"})\n` +
+          `*Opciones solicitadas:*\n` +
+          `🅰️ ${opcAText}\n` +
+          `🅱️ ${opcBText}\n\n` +
+          `*Acción requerida:* Confirmar manualmente con el proveedor o en el CRM.`;
 
         // Alerta WhatsApp a Oscar
         await enviarWhatsAppTexto("4778110444", msgOscar).catch(() => {});
