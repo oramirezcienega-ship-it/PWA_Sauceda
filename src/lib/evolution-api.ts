@@ -60,10 +60,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   if (tipo.includes("remodela") || proy.includes("remodela") || proy.includes("baño") || proy.includes("cocina")) {
     const espacio = datos.proyecto?.trim() || "remodelación";
     const cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... vi que nos solicitaste información para la remodelación de tu ${espacio}${coloniaLimpia} y queremos coordinar la visita de levantamiento con nuestro especialista técnico para entregarte la propuesta formal sin costo.\n\n` +
-      `Para coordinar tu horario y apartar tu espacio prioritario en su ruta, entra a nuestro canal oficial por este enlace directo:\n` +
-      `👉 ${enlace}\n\n` +
-      `¡Quedo a tus órdenes! 🏡\n— Paulina, tu asesora comercial en SAUCEDA`;
+      `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Vi tu solicitud para la remodelación de tu ${espacio}${coloniaLimpia} 🏡\n\n` +
+      `Queremos coordinar la visita de nuestro especialista técnico para tomar medidas y entregarte la propuesta formal sin costo.\n\n` +
+      `Para apartar tu horario prioritario en su ruta, solo sigue estos 2 pasos rápidos:\n` +
+      `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+      `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+      `*(O si te es más cómodo, dime por aquí mismo qué día después de las 5:00 PM te queda mejor y te anoto con gusto).* ✨\n` +
+      `— Paulina, tu asesora comercial en SAUCEDA`;
 
     return {
       textoCompleto: cuerpoMensaje,
@@ -75,10 +78,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   // 2. Impermeabilización
   if (tipo.includes("impermea") || proy.includes("impermea") || proy.includes("gotera") || proy.includes("azotea") || proy.includes("techo")) {
     const cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... dando seguimiento a la impermeabilización de tu azotea${coloniaLimpia}, tenemos disponibilidad para que el técnico pase a medir tus metros cuadrados y revisar el estado de la losa sin costo.\n\n` +
-      `Para coordinar tu horario de visita, entra a nuestro canal oficial por este enlace directo:\n` +
-      `👉 ${enlace}\n\n` +
-      `¡Seguimos a tus órdenes! 💧\n— Paulina, tu asesora comercial en SAUCEDA`;
+      `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Dando seguimiento a la impermeabilización de tu azotea${coloniaLimpia} 💧\n\n` +
+      `Tenemos disponibilidad para que el técnico pase a medir tus metros cuadrados y revisar el estado de la losa sin costo.\n\n` +
+      `Para apartar tu horario prioritario en su ruta, solo sigue estos 2 pasos rápidos:\n` +
+      `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+      `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+      `*(O si te es más cómodo, dime por aquí mismo qué día después de las 5:00 PM te queda mejor y te anoto con gusto).* ✨\n` +
+      `— Paulina, tu asesora comercial en SAUCEDA`;
 
     return {
       textoCompleto: cuerpoMensaje,
@@ -90,10 +96,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   // 3. Herrería
   if (tipo.includes("herreria") || proy.includes("herreria") || proy.includes("porton") || proy.includes("proteccion") || proy.includes("barandal")) {
     const cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... para tu proyecto de herrería (portón/protecciones/estructura)${coloniaLimpia}, queremos coordinar la toma de medidas en sitio sin compromiso con nuestro maestro herrero.\n\n` +
-      `Para elegir el horario que mejor te acomode, continúa por nuestro canal oficial aquí:\n` +
-      `👉 ${enlace}\n\n` +
-      `¡Con gusto te atendemos! ⚒️\n— Paulina, tu asesora comercial en SAUCEDA`;
+      `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Dando seguimiento a tu proyecto de herrería (portón/protecciones/estructura)${coloniaLimpia} ⚒️\n\n` +
+      `Queremos coordinar la toma de medidas en sitio sin compromiso con nuestro maestro herrero.\n\n` +
+      `Para apartar tu horario prioritario en su ruta, solo sigue estos 2 pasos rápidos:\n` +
+      `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+      `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+      `*(O si te es más cómodo, dime por aquí mismo qué día después de las 5:00 PM te queda mejor y te anoto con gusto).* ✨\n` +
+      `— Paulina, tu asesora comercial en SAUCEDA`;
 
     return {
       textoCompleto: cuerpoMensaje,
@@ -105,10 +114,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   // 4. Piso Estampado
   if (tipo.includes("estampado") || proy.includes("estampado")) {
     const cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... para tu proyecto de piso estampado${coloniaLimpia}, nuestro especialista puede visitarte para validar el área y mostrarte el muestrario físico de texturas y colores.\n\n` +
-      `Para agendar tu visita, entra a nuestro canal oficial por este enlace:\n` +
-      `👉 ${enlace}\n\n` +
-      `¡A tus órdenes! 🧱\n— Paulina, tu asesora comercial en SAUCEDA`;
+      `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Para tu proyecto de piso estampado${coloniaLimpia} 🧱\n\n` +
+      `Nuestro especialista puede visitarte para validar el área y mostrarte el muestrario físico de texturas y colores sin costo.\n\n` +
+      `Para apartar tu horario prioritario en su ruta, solo sigue estos 2 pasos rápidos:\n` +
+      `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+      `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+      `*(O si te es más cómodo, dime por aquí mismo qué día después de las 5:00 PM te queda mejor y te anoto con gusto).* ✨\n` +
+      `— Paulina, tu asesora comercial en SAUCEDA`;
 
     return {
       textoCompleto: cuerpoMensaje,
@@ -126,10 +138,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     proy.includes("aljibe")
   ) {
     const cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... para el mantenimiento y lavado de tu cisterna/aljibe o tinaco${coloniaLimpia}, podemos agendar la visita de diagnóstico y servicio con nuestro técnico de fontanería.\n\n` +
-      `Por favor continúa por nuestro canal oficial para coordinar el horario:\n` +
-      `👉 ${enlace}\n\n` +
-      `¡Quedamos al pendiente! 🚰\n— Paulina, tu asesora comercial en SAUCEDA`;
+      `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Para el mantenimiento y lavado de tu cisterna/aljibe o tinaco${coloniaLimpia} 🚰\n\n` +
+      `Podemos agendar la visita de diagnóstico y servicio con nuestro técnico de fontanería.\n\n` +
+      `Para apartar tu horario prioritario en su ruta, solo sigue estos 2 pasos rápidos:\n` +
+      `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+      `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+      `*(O si te es más cómodo, dime por aquí mismo qué día te queda mejor y te anoto con gusto).* ✨\n` +
+      `— Paulina, tu asesora comercial en SAUCEDA`;
 
     return {
       textoCompleto: cuerpoMensaje,
@@ -155,10 +170,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     proy.includes("trámite")
   ) {
     const cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... dando seguimiento a la asesoría para la adquisición / trámite de tu casa${coloniaLimpia}, nuestro asesor patrimonial puede coordinar la sesión para revisar tu expediente y opciones disponibles sin costo.\n\n` +
-      `Para coordinar tu horario de atención, entra a nuestro canal oficial por este enlace directo:\n` +
-      `👉 ${enlace}\n\n` +
-      `¡Estamos para apoyarte! 🏠\n— Paulina, tu asesora comercial en SAUCEDA`;
+      `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Dando seguimiento a la asesoría para la compra / trámite de tu casa${coloniaLimpia} 🏠\n\n` +
+      `Nuestro asesor patrimonial puede coordinar la sesión para revisar tu expediente y opciones disponibles sin costo.\n\n` +
+      `Para apartar tu horario de atención, solo sigue estos 2 pasos rápidos:\n` +
+      `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+      `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+      `*(O si te es más cómodo, dime por aquí mismo si te queda mejor por la mañana o por la tarde).* ✨\n` +
+      `— Paulina, tu asesora comercial en SAUCEDA`;
 
     return {
       textoCompleto: cuerpoMensaje,
@@ -170,10 +188,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   // 7. Fallback general para otros servicios
   const proyectoGenerico = datos.proyecto?.trim() || "tu proyecto";
   const cuerpoMensaje =
-    `Hola ${primerNombre}, buen día... dando seguimiento a ${proyectoGenerico}${coloniaLimpia}, nos gustaría coordinar tu atención con nuestro equipo para brindarte la propuesta sin costo.\n\n` +
-    `Para coordinar tu horario prioritario, entra a nuestro canal oficial por este enlace directo:\n` +
-    `👉 ${enlace}\n\n` +
-    `¡Con gusto te atendemos! 🏡\n— Paulina, tu asesora comercial en SAUCEDA`;
+    `Hola ${primerNombre}, buen día... te escribe Paulina de SAUCEDA. Dando seguimiento a ${proyectoGenerico}${coloniaLimpia} 🏡\n\n` +
+    `Nos gustaría coordinar tu atención con nuestro equipo para brindarte la propuesta sin costo.\n\n` +
+    `Para apartar tu horario, solo sigue estos 2 pasos rápidos:\n` +
+    `1️⃣ Toca este enlace azul: 👉 ${enlace}\n` +
+    `2️⃣ Presiona Enviar y nuestro sistema te mostrará de inmediato los días y horarios disponibles.\n\n` +
+    `*(O si te es más cómodo, dime por aquí mismo qué día te queda mejor y te anoto con gusto).* ✨\n` +
+    `— Paulina, tu asesora comercial en SAUCEDA`;
 
   return {
     textoCompleto: cuerpoMensaje,
