@@ -37,7 +37,7 @@ function armarEnlaceWhatsAppLimpio(numero: string, texto: string): string {
     .replace(/%20/g, "+")
     .replace(/%2C/g, ",")
     .replace(/%2F/g, "/");
-  return `https://wa.me/${numero}?text=${query}`;
+  return `wa.me/${numero}?text=${query}`;
 }
 
 export function generarMensajeRescate(datos: DatosRescateLead): {
