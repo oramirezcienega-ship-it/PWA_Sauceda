@@ -27,6 +27,19 @@ export interface DatosRescateLead {
  * al tipo de negocio del expediente, firmado por Paulina, con el token [EXP-XXX]
  * incrustado en el enlace wa.me hacia la línea oficial.
  */
+/**
+ * Genera un enlace a wa.me limpio, legible y sin códigos crudos (%20, %5B, %5D).
+ * Usa '+' para los espacios y sin corchetes innecesarios para que sea estético.
+ */
+function armarEnlaceWhatsAppLimpio(numero: string, texto: string): string {
+  const textoLimpio = texto.replace(/[\[\]]/g, "").trim();
+  const query = encodeURIComponent(textoLimpio)
+    .replace(/%20/g, "+")
+    .replace(/%2C/g, ",")
+    .replace(/%2F/g, "/");
+  return `https://wa.me/${numero}?text=${query}`;
+}
+
 export function generarMensajeRescate(datos: DatosRescateLead): {
   textoCompleto: string;
   enlacePuente: string;
@@ -36,17 +49,16 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   const primerNombre = nombreLimpio.split(" ")[0] || "Cliente";
   const coloniaLimpia = datos.colonia?.trim() ? ` en ${datos.colonia.trim()}` : "";
   const tipo = (datos.tipoNegocio || "").toLowerCase();
+  const proy = (datos.proyecto || "").toLowerCase();
+  const expFolio = datos.expedienteId?.trim() || "EXP-001";
 
-  let servicioPrellenado = "servicio";
-  let cuerpoMensaje = "";
-
-  if (tipo === "construccion-remodelacion") {
+  // 1. Remodelación
+  if (tipo.includes("remodela") || proy.includes("remodela") || proy.includes("baño") || proy.includes("cocina")) {
     const espacio = datos.proyecto?.trim() || "remodelación";
-    servicioPrellenado = `remodelación de ${espacio}`;
-    const textoPrellenado = `Hola Paulina, revisé la cita de mi ${espacio} [${datos.expedienteId}]`;
-    const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+    const textoPrellenado = `Hola Paulina, revise mi cita de ${espacio} ${expFolio}`;
+    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-    cuerpoMensaje =
+    const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... vi que nos solicitaste información para la remodelación de tu ${espacio}${coloniaLimpia} y queremos coordinar la visita de levantamiento con nuestro especialista técnico para entregarte la propuesta formal sin costo.\n\n` +
       `Para coordinar tu horario y apartar tu espacio prioritario en su ruta, entra a nuestro canal oficial por este enlace directo:\n` +
       `👉 ${enlace}\n\n` +
@@ -59,12 +71,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     };
   }
 
-  if (tipo === "construccion-impermeabilizacion") {
-    servicioPrellenado = "impermeabilización";
-    const textoPrellenado = `Hola Paulina, revisé la cita de mi azotea [${datos.expedienteId}]`;
-    const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+  // 2. Impermeabilización
+  if (tipo.includes("impermea") || proy.includes("impermea") || proy.includes("gotera") || proy.includes("azotea") || proy.includes("techo")) {
+    const textoPrellenado = `Hola Paulina, revise mi cita de impermeabilizacion ${expFolio}`;
+    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-    cuerpoMensaje =
+    const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... dando seguimiento a la impermeabilización de tu azotea${coloniaLimpia}, tenemos disponibilidad para que el técnico pase a medir tus metros cuadrados y revisar el estado de la losa sin costo.\n\n` +
       `Para coordinar tu horario de visita, entra a nuestro canal oficial por este enlace directo:\n` +
       `👉 ${enlace}\n\n` +
@@ -77,12 +89,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     };
   }
 
-  if (tipo === "construccion-herreria") {
-    servicioPrellenado = "herrería";
-    const textoPrellenado = `Hola Paulina, revisé la cita de herrería [${datos.expedienteId}]`;
-    const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+  // 3. Herrería
+  if (tipo.includes("herreria") || proy.includes("herreria") || proy.includes("porton") || proy.includes("proteccion") || proy.includes("barandal")) {
+    const textoPrellenado = `Hola Paulina, revise mi cita de herreria ${expFolio}`;
+    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-    cuerpoMensaje =
+    const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... para tu proyecto de herrería (portón/protecciones/estructura)${coloniaLimpia}, queremos coordinar la toma de medidas en sitio sin compromiso con nuestro maestro herrero.\n\n` +
       `Para elegir el horario que mejor te acomode, continúa por nuestro canal oficial aquí:\n` +
       `👉 ${enlace}\n\n` +
@@ -95,12 +107,12 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     };
   }
 
-  if (tipo === "construccion-piso-estampado") {
-    servicioPrellenado = "piso estampado";
-    const textoPrellenado = `Hola Paulina, revisé la cita de piso estampado [${datos.expedienteId}]`;
-    const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+  // 4. Piso Estampado
+  if (tipo.includes("estampado") || proy.includes("estampado")) {
+    const textoPrellenado = `Hola Paulina, revise mi cita de piso estampado ${expFolio}`;
+    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-    cuerpoMensaje =
+    const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... para tu proyecto de piso estampado${coloniaLimpia}, nuestro especialista puede visitarte para validar el área y mostrarte el muestrario físico de texturas y colores.\n\n` +
       `Para agendar tu visita, entra a nuestro canal oficial por este enlace:\n` +
       `👉 ${enlace}\n\n` +
@@ -113,12 +125,18 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     };
   }
 
-  if (tipo === "construccion-mantenimiento-cisternas" || tipo === "construccion-mantenimiento-tinacos") {
-    servicioPrellenado = "cisterna y tinaco";
-    const textoPrellenado = `Hola Paulina, revisé el servicio de cisterna [${datos.expedienteId}]`;
-    const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+  // 5. Mantenimiento de Cisternas / Tinacos
+  if (
+    tipo.includes("cisterna") ||
+    tipo.includes("tinaco") ||
+    proy.includes("cisterna") ||
+    proy.includes("tinaco") ||
+    proy.includes("aljibe")
+  ) {
+    const textoPrellenado = `Hola Paulina, revise el servicio de cisterna ${expFolio}`;
+    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-    cuerpoMensaje =
+    const cuerpoMensaje =
       `Hola ${primerNombre}, buen día... para el mantenimiento y lavado de tu cisterna/aljibe o tinaco${coloniaLimpia}, podemos agendar la visita de diagnóstico y servicio con nuestro técnico de fontanería.\n\n` +
       `Por favor continúa por nuestro canal oficial para coordinar el horario:\n` +
       `👉 ${enlace}\n\n` +
@@ -131,14 +149,28 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     };
   }
 
-  if (tipo === "traspaso_compra" || tipo === "solo_tramite" || tipo === "bienes_raices") {
-    servicioPrellenado = "asesoría patrimonial";
-    const textoPrellenado = `Hola Paulina, revisé la asesoría de mi casa [${datos.expedienteId}]`;
-    const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+  // 6. Bienes Raíces / Traspaso / Compra Directa / Asesoría de Compra / Trámite Infonavit
+  if (
+    tipo === "traspaso_compra" ||
+    tipo === "solo_tramite" ||
+    tipo === "promocion_venta" ||
+    tipo.includes("bienes_raices") ||
+    tipo.includes("inmobiliaria") ||
+    proy.includes("compra") ||
+    proy.includes("casa") ||
+    proy.includes("asesoría") ||
+    proy.includes("asesoria") ||
+    proy.includes("traspaso") ||
+    proy.includes("infonavit") ||
+    proy.includes("tramite") ||
+    proy.includes("trámite")
+  ) {
+    const textoPrellenado = `Hola Paulina, revise mi asesoria de casa ${expFolio}`;
+    const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-    cuerpoMensaje =
-      `Hola ${primerNombre}, buen día... para la asesoría de tu casa / trámite INFONAVIT${coloniaLimpia}, nuestro asesor patrimonial puede coordinar la sesión de revisión de expediente y precalificación.\n\n` +
-      `Para agendar tu sesión de asesoría, entra a nuestro canal oficial aquí:\n` +
+    const cuerpoMensaje =
+      `Hola ${primerNombre}, buen día... dando seguimiento a la asesoría para la adquisición / trámite de tu casa${coloniaLimpia}, nuestro asesor patrimonial puede coordinar la sesión para revisar tu expediente y opciones disponibles sin costo.\n\n` +
+      `Para coordinar tu horario de atención, entra a nuestro canal oficial por este enlace directo:\n` +
       `👉 ${enlace}\n\n` +
       `¡Estamos para apoyarte! 🏠\n— Paulina, tu asesora comercial en SAUCEDA`;
 
@@ -149,13 +181,13 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
     };
   }
 
-  // Fallback general para otros servicios
+  // 7. Fallback general para otros servicios
   const proyectoGenerico = datos.proyecto?.trim() || "tu proyecto";
-  const textoPrellenado = `Hola Paulina, revisé la cita de mi servicio [${datos.expedienteId}]`;
-  const enlace = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(textoPrellenado)}`;
+  const textoPrellenado = `Hola Paulina, revise mi cita ${expFolio}`;
+  const enlace = armarEnlaceWhatsAppLimpio(EVOLUTION_CONFIG.numeroOficial, textoPrellenado);
 
-  cuerpoMensaje =
-    `Hola ${primerNombre}, buen día... dando seguimiento a ${proyectoGenerico}${coloniaLimpia}, queremos coordinar la visita de nuestro especialista técnico sin costo.\n\n` +
+  const cuerpoMensaje =
+    `Hola ${primerNombre}, buen día... dando seguimiento a ${proyectoGenerico}${coloniaLimpia}, nos gustaría coordinar tu atención con nuestro equipo para brindarte la propuesta sin costo.\n\n` +
     `Para coordinar tu horario prioritario, entra a nuestro canal oficial por este enlace directo:\n` +
     `👉 ${enlace}\n\n` +
     `¡Con gusto te atendemos! 🏡\n— Paulina, tu asesora comercial en SAUCEDA`;
@@ -243,7 +275,7 @@ export async function enviarMensajeTextoEvolution(
       options: {
         delay: 1200,
         presence: "composing",
-        linkPreview: true,
+        linkPreview: false,
       },
     };
 

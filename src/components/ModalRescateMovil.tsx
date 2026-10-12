@@ -42,7 +42,7 @@ export function ModalRescateMovil({
   const expFolio = expedienteId || "EXP-001";
   const { textoCompleto, enlacePuente, textoPrellenadoWhatsApp } = generarMensajeRescate({
     clienteNombre,
-    proyecto: proyecto || "remodelación",
+    proyecto: proyecto || (tipoNegocio?.includes("remodela") ? "remodelación" : undefined),
     tipoNegocio,
     colonia,
     expedienteId: expFolio,
