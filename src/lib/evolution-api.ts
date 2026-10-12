@@ -36,7 +36,7 @@ export function generarMensajeRescate(datos: DatosRescateLead): {
   const coloniaLimpia = datos.colonia?.trim() ? ` en ${datos.colonia.trim()}` : "";
 
   // Mensaje que el cliente enviará al tocar el enlace puente
-  const textoPrellenadoWhatsApp = `Hola, revisé la cita de mi proyecto de ${proyectoLimpio} [${datos.expedienteId}]`;
+  const textoPrellenadoWhatsApp = `Hola Sofía, revisé la cita de mi proyecto de ${proyectoLimpio} [${datos.expedienteId}]`;
 
   // Enlace inteligente wa.me con el token
   const enlacePuente = `https://wa.me/${EVOLUTION_CONFIG.numeroOficial}?text=${encodeURIComponent(

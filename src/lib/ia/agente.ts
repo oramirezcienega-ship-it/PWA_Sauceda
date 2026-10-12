@@ -503,8 +503,20 @@ E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA 
 
 F) Si está interesado en REMODELACIÓN O AMPLIACIÓN (Servicio 1 - tipo_negocio: 'construccion-remodelacion'):
   En la vertical de remodelación (baños, cocinas, recámaras, acabados, segunda planta), la venta se cierra con la visita técnica presencial en sitio.
+  Identidad del Agente: En remodelación, eres Sofía, tu asesora comercial en SAUCEDA Construye (habla y firma en primera persona, cercana y profesional como asesora comercial del equipo).
   PROHIBIDO despedirte diciendo que "un asesor lo contactará a la brevedad" o dejar el lead enfriándose.
   Debes guiar la conversación con calidez a través del siguiente flujo de agendamiento vespertino semi-automatizado:
+
+  - CASO ESPECIAL: MENSAJE CON TOKEN DE EXPEDIENTE / ENLACE PUENTE ([EXP-XXX]):
+    Si el mensaje del cliente contiene un token como [EXP-XXX] o dice algo similar a "Hola Sofía, revisé la cita de mi baño [EXP-XXX]":
+    * NO hagas preguntas repetitivas ni pidas que vuelva a explicar qué área desea remodelar o en qué colonia está.
+    * Salúdalo de inmediato reconociendo al cliente y su proyecto en su colonia según los datos registrados en el expediente:
+      "¡Hola! Qué gusto saludarte por la línea oficial. Ya tengo registrado tu proyecto de remodelación${exp?.fraccionamiento ? ` en ${exp.fraccionamiento}` : ""}. Para coordinar la visita de nuestro Especialista Técnico en Obra para revisar en sitio las medidas y darte la propuesta formal sin costo, ¿cuál de los siguientes horarios vespertinos te acomoda mejor?
+
+${opcionesVespertinasRemodelacionTexto}
+
+      Por favor indícanos 2 opciones que te acomoden para apartar tu espacio prioritario en su ruta."
+    * Pasa directamente a esperar la confirmación de sus 2 opciones (PASO 3).
 
   - PASO 1: DETECCIÓN DEL ESPACIO Y ZONA
     Si el cliente muestra interés inicial, pregunta de forma amigable qué área o espacio desea remodelar (por ejemplo, baño, cocina, recámara, acabados) y en qué colonia o fraccionamiento se ubica su propiedad.
@@ -1050,15 +1062,24 @@ export async function responderConIA(
     if (!iaAgenteActivo()) return;
     const forzar = ctx.forzar === true;
 
-    // Historial reciente del hilo usando variantes de teléfono.
+    // Historial reciente del hilo usando variantes de teléfono o expediente enlazado (puente).
     // Obtenemos los últimos MAX_HISTORIAL mensajes ordenados por created_at descendente
     // y los invertimos para alimentar a la IA en estricto orden cronológico reciente.
-    const { data } = await sb
+    const variantes = variantesTelefono(ctx.telefono);
+    let queryMsg = sb
       .from("mensajes_whatsapp")
       .select("direccion, texto, agente, created_at")
-      .in("telefono", variantesTelefono(ctx.telefono))
       .order("created_at", { ascending: false })
       .limit(MAX_HISTORIAL);
+
+    if (ctx.expedienteId) {
+      const vStr = variantes.map((v) => `"${v}"`).join(",");
+      queryMsg = queryMsg.or(`telefono.in.(${vStr}),expediente_id.eq.${ctx.expedienteId}`);
+    } else {
+      queryMsg = queryMsg.in("telefono", variantes);
+    }
+
+    const { data } = await queryMsg;
     const historiaDesc = (data as FilaMsg[]) ?? [];
     const historia = historiaDesc.reverse();
     if (historia.length === 0) return;
