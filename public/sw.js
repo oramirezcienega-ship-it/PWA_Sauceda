@@ -7,10 +7,10 @@
   y manejo offline de la capa de captación/portal del cliente.
 */
 
-const CACHE = "sauceda-shell-v3";
+const CACHE = "sauceda-shell-v4"; // v4: logos SAUCEDA v3 (public/brand)
 // No se precachea "/" (es el panel privado): si se cacheara con sesión, luego
 // se le mostraría a un usuario sin sesión. El respaldo offline es /login.
-const RECURSOS = ["/login", "/manifest.json", "/icons/icon.svg"];
+const RECURSOS = ["/login", "/manifest.json", "/brand/icon-192.png", "/brand/favicon.svg"];
 
 // Instala y precachea el shell mínimo.
 self.addEventListener("install", (event) => {

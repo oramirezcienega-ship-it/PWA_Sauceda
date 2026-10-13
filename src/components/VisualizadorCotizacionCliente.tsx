@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { aceptarCotizacionCliente } from "@/app/actions/cotizaciones";
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo } from "@/lib/types";
 
+import { Logo, MembreteMarca } from "@/components/marca/Logo";
 interface VisualizadorCotizacionClienteProps {
   cotizacion: Omit<Cotizacion, "notasInternas" | "costoEstimado">;
   conceptos: Omit<CotizacionConcepto, "costoUnitario">[];
@@ -156,10 +157,7 @@ export function VisualizadorCotizacionCliente({
       
       {/* Encabezado Logo */}
       <div className="text-center mb-8 print:hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="SAUCEDA" className="mx-auto h-16 w-16 mb-2" />
-        <h1 className="font-display text-2xl font-bold tracking-tight text-verde-profundo">SAUCEDA</h1>
-        <p className="font-mono text-[10px] tracking-[0.2em] text-dorado uppercase">Construye</p>
+        <MembreteMarca centrado alto="h-14" />
       </div>
 
       {!modoDocumento && (exito || estatus === "aceptada") ? (
@@ -206,10 +204,7 @@ export function VisualizadorCotizacionCliente({
 
             {/* Logo exclusivo para impresión a la derecha */}
             <div className="hidden print:flex flex-col items-center self-center shrink-0 ml-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="SAUCEDA" className="h-10 w-10" />
-              <div className="font-display text-[10px] font-bold tracking-tight text-verde-profundo leading-none mt-1">SAUCEDA</div>
-              <div className="font-mono text-[6px] tracking-[0.15em] text-dorado uppercase leading-none mt-0.5">Construye</div>
+              <Logo variante="horizontal" className="h-9 w-auto" />
             </div>
           </div>
 

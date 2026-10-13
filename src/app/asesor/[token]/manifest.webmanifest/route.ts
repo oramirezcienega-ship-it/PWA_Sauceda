@@ -12,7 +12,10 @@ export function GET(_req: Request, { params }: { params: { token: string } }) {
       display: "standalone",
       background_color: "#F5F1E8",
       theme_color: "#2D4A2B",
-      icons: [{ src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml" }],
+      icons: [
+        { src: "/brand/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+        { src: "/brand/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      ],
     },
     { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "no-store" } }
   );

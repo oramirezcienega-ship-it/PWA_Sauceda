@@ -2627,8 +2627,7 @@ export async function enviarNotificacionEntregaCliente(params: {
         <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#FDFCFA;border-radius:16px;overflow:hidden;border:1px solid #E6E1D8;box-shadow:0 4px 16px rgba(0,0,0,0.05);">
           <!-- Header Corporativo -->
           <div style="background:#2D4A2B;padding:26px 20px;text-align:center;">
-            <img src="${SITE_URL}/logo.svg" width="48" height="48" alt="SAUCEDA" style="display:block;margin:0 auto 8px;" />
-            <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
+            <img src="${SITE_URL}/brand/horizontal-negativo-800.png" width="200" height="54" alt="SAUCEDA" style="display:block;margin:0 auto 8px;border:0;" />
             <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">CONSTRUCCIÓN & BIENES RAÍCES</div>
           </div>
 

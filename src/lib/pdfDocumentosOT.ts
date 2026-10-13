@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 
+import { dibujarLogoPdf } from "@/lib/marca-pdf";
 /**
  * PDFs de los documentos de una orden de trabajo (póliza de garantía y recibos de pago)
  * generados en servidor, para enviarlos por Telegram listos para imprimir.
@@ -27,14 +28,9 @@ function encabezado(doc: jsPDF, titulo: string, referencia: string): number {
   const w = doc.internal.pageSize.getWidth();
   doc.setFillColor(...VERDE_PROFUNDO);
   doc.rect(0, 0, w, 24, "F");
+  dibujarLogoPdf(doc, MARGEN, 6, 12, "negativo");
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(17);
-  doc.text("SAUCEDA", MARGEN, 12);
-  doc.setFontSize(7.5);
-  doc.setTextColor(...DORADO);
-  doc.text("SOLUCIONES INMOBILIARIAS & CONSTRUCCIÓN", MARGEN, 17.5);
-  doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.text(titulo.toUpperCase(), w - MARGEN, 11, { align: "right" });
   doc.setFont("courier", "bold");

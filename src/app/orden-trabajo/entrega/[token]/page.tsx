@@ -3,6 +3,7 @@ import { obtenerEntregaOrdenTrabajoPorToken } from "@/app/actions/ordenes-trabaj
 import { MARCA } from "@/lib/marca";
 import Link from "next/link";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 export const dynamic = "force-dynamic";
 
 interface PaginaEntregaProps {
@@ -75,21 +76,9 @@ export default async function PaginaEntregaCliente({ params }: PaginaEntregaProp
         <div className="rounded-3xl border border-carbon/10 bg-white p-6 sm:p-10 shadow-xl print:border-none print:shadow-none">
           {/* Encabezado Corporativo */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-b border-carbon/10 pb-8">
-            <div className="flex items-center gap-4 text-center sm:text-left">
-              <div className="h-16 w-16 rounded-2xl bg-verde-profundo text-white flex items-center justify-center font-bold text-2xl shadow-sm">
-                S
-              </div>
-              <div>
-                <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo">
-                  SAUCEDA
-                </h1>
-                <p className="text-[11px] font-bold tracking-widest uppercase text-sauce">
-                  Construcción & Bienes Raíces
-                </p>
-                <p className="text-xs text-carbon/60 mt-0.5">
-                  Reporte Digital de Entrega de Trabajos
-                </p>
-              </div>
+            <div className="flex flex-col items-center gap-2 text-center sm:items-start sm:text-left">
+              <MembreteMarca alto="h-12" className="flex flex-col items-center sm:items-start" />
+              <p className="text-xs text-carbon/60">Reporte Digital de Entrega de Trabajos</p>
             </div>
 
             <div className="text-center sm:text-right">

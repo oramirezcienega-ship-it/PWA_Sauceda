@@ -46,8 +46,7 @@ function plantilla(titulo: string, cuerpo: string, urlPortal: string): string {
     : "";
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;">
     <div style="background:#2D4A2B;padding:20px;text-align:center;">
-      <img src="${SITE_URL}/logo.svg" width="48" height="48" alt="SAUCEDA" style="display:block;margin:0 auto 8px;" />
-      <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
+      <img src="${SITE_URL}/brand/horizontal-negativo-800.png" width="200" height="54" alt="SAUCEDA" style="display:block;margin:0 auto 8px;border:0;" />
       <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">BIENES RAÍCES</div>
     </div>
     <div style="padding:24px;background:#F5F1E8;color:#1A1A1A;">
@@ -174,8 +173,7 @@ function plantillaAgente(
     : "";
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;">
     <div style="background:#2D4A2B;padding:20px;text-align:center;">
-      <img src="${SITE_URL}/logo.svg" width="48" height="48" alt="SAUCEDA" style="display:block;margin:0 auto 8px;" />
-      <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
+      <img src="${SITE_URL}/brand/horizontal-negativo-800.png" width="200" height="54" alt="SAUCEDA" style="display:block;margin:0 auto 8px;border:0;" />
       <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">CRM NOTIFICACIONES</div>
     </div>
     <div style="padding:24px;background:#F5F1E8;color:#1A1A1A;">

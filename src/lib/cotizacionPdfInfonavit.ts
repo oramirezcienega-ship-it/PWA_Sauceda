@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { Cotizacion } from "@/lib/types";
 
+import { dibujarLogoPdf } from "@/lib/marca-pdf";
 // Paleta oficial de marca SAUCEDA
 const VERDE_PROFUNDO = [45, 74, 43]; // #2D4A2B
 const SAUCE = [92, 122, 82]; // #5C7A52
@@ -70,20 +71,7 @@ export function generarPdfCotizacionInfonavit(
   doc.text(cotizacion.id, margin + 74, y);
 
   // Logo derecha
-  const logoX = pageWidth - margin - 22;
-  doc.setFillColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.circle(logoX + 11, y - 5, 6, "F");
-  doc.setTextColor(BLANCO[0], BLANCO[1], BLANCO[2]);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("S", logoX + 11, y - 2.8, { align: "center" });
-
-  doc.setFontSize(8);
-  doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("SAUCEDA", logoX + 11, y + 4, { align: "center" });
-  doc.setFontSize(5);
-  doc.setTextColor(DORADO[0], DORADO[1], DORADO[2]);
-  doc.text("BIENES RAÍCES", logoX + 11, y + 6.5, { align: "center" });
+  dibujarLogoPdf(doc, pageWidth - margin, y - 9, 10, "color", "derecha");
 
   y += 6;
   // Título Principal

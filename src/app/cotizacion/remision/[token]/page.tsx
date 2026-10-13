@@ -3,6 +3,7 @@ import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -51,10 +52,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
       <div className="w-full max-w-3xl bg-white border border-carbon/10 p-12 sm:p-16 rounded-2xl shadow-lg print:shadow-none print:border-none print:p-0 print:max-w-none print:rounded-none text-carbon font-cuerpo">
         {/* Encabezado Opcional/Identidad */}
         <div className="border-b-2 border-sauce pb-6 mb-8 print:pb-4 print:mb-5 flex justify-between items-end">
-          <div>
-            <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo uppercase">SAUCEDA</h1>
-            <p className="font-titular text-xs font-semibold tracking-wider text-sauce uppercase mt-0.5">Construye</p>
-          </div>
+          <MembreteMarca />
           <div className="text-right">
             <h2 className="font-titular text-lg font-bold text-carbon uppercase tracking-wide">
               {remision.tipo === "factura" ? "FACTURA DE VENTA" : "REMISIÓN DE ENTREGA"}

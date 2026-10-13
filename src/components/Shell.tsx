@@ -1,5 +1,6 @@
 "use client";
 
+import { Logo } from "@/components/marca/Logo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -233,8 +234,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
     const options: any = {
       body: n.cuerpo,
-      icon: "/icons/icon.svg",
-      badge: "/icons/icon.svg",
+      icon: "/brand/icon-192.png",
+      badge: "/brand/icon-192.png",
       tag: "sauceda-pwa-notif-" + n.id,
       renotify: true,
       requireInteraction: true, // Notificación persistente tanto en Android como iOS PWA
@@ -249,7 +250,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     } else {
       new Notification(n.titulo, {
         body: n.cuerpo,
-        icon: "/icons/icon.svg",
+        icon: "/brand/icon-192.png",
         requireInteraction: true
       });
     }
@@ -701,21 +702,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   const marca = (
-    <Link href="/" className="flex items-center gap-2.5 px-3 py-3 leading-none group">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/logo.svg"
-        alt="SAUCEDA"
-        className="h-8.5 w-8.5 transition-transform duration-200 group-hover:scale-105"
-      />
-      <span className="flex flex-col">
-        <span className="font-display text-[19px] font-bold tracking-tight text-white group-hover:text-dorado transition-colors">
-          SAUCEDA
-        </span>
-        <span className="font-cuerpo text-[9px] uppercase tracking-[0.22em] text-dorado font-semibold">
-          Bienes Raíces
-        </span>
-      </span>
+    <Link href="/" className="flex items-center px-3 py-3 leading-none" title="Inicio">
+      <Logo variante="horizontal" tono="negativo" className="h-9 w-auto max-w-full" />
     </Link>
   );
 
@@ -1006,9 +994,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </button>
         </div>
         <Link href="/" className="flex min-w-0 items-center gap-2 leading-none">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="SAUCEDA" className="h-7 w-7 shrink-0" />
-          <span className="hidden min-[400px]:inline font-display text-lg font-semibold">SAUCEDA</span>
+          <Logo variante="simbolo" tono="negativo" className="h-7 w-auto shrink-0 min-[400px]:hidden" />
+          <Logo variante="horizontal" tono="negativo" className="hidden h-7 w-auto min-[400px]:block" />
         </Link>
         <div className="flex items-center gap-1">
           <button
