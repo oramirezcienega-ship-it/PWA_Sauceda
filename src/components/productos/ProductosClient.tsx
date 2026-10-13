@@ -28,6 +28,7 @@ import {
 import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
+import { CostosInspeccionPanel } from "@/components/productos/CostosInspeccionPanel";
 import {
   MEDIDAS_TARIFA,
   combinarCostosEnTarifas,
@@ -704,6 +705,8 @@ export function ProductosClient({
       {/* ============================================================ */}
       {tabActiva === "productos" && (
         <div className="space-y-4">
+          <CostosInspeccionPanel />
+
           {/* Barra de Filtros y Selector de Modo de Vista */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-carbon/10 shadow-xs">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">

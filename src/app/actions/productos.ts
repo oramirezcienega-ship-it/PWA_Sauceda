@@ -1,7 +1,13 @@
 "use server";
 
 import { preciosImpermeabilizacionDeCatalogo, type PreciosImpermeabilizacion } from "@/lib/ia/precios-imper";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import {
+  CLAVE_COSTOS_INSPECCION,
+  cargarCostosInspeccion,
+  normalizarCostosInspeccion,
+  type CostosInspeccion,
+} from "@/lib/costo-inspeccion";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { normalizarCostosVolumen, type CostoVolumen } from "@/lib/costos-volumen";
 import type { 
@@ -895,4 +901,32 @@ export async function prepararSubidaVideoProducto(
   if (error || !data) return { ok: false, error: error?.message || "No se pudo preparar la subida del video." };
   const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(data.path);
   return { ok: true, ruta: data.path, token: data.token, url: urlData.publicUrl };
+}
+
+// ============================================================
+// COSTO DE LA VISITA TÉCNICA / INSPECCIÓN POR LÍNEA DE NEGOCIO
+// ============================================================
+
+/** Costos de la visita técnica por línea (los usa Sofía). */
+export async function obtenerCostosInspeccion(): Promise<CostosInspeccion> {
+  await requireAdmin();
+  return cargarCostosInspeccion(supabaseServidor());
+}
+
+/** Guarda los costos de la visita técnica por línea. Solo administradores. */
+export async function guardarCostosInspeccion(costos: CostosInspeccion): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdministrador();
+    const limpios = normalizarCostosInspeccion(costos);
+    const { error } = await supabaseServidor()
+      .from("configuracion_agente")
+      .upsert(
+        { clave: CLAVE_COSTOS_INSPECCION, valor: JSON.stringify(limpios), updated_at: new Date().toISOString() },
+        { onConflict: "clave" }
+      );
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "No se pudieron guardar los costos." };
+  }
 }
