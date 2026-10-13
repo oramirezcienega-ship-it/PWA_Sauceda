@@ -26,19 +26,21 @@ function cargarEnv() {
 
 async function main() {
   cargarEnv();
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const sb = createClient(url, key);
 
   const telefono = "524778110444";
 
-  console.log("=== INICIANDO SIMULACIÓN DE LEAD DE IMPERMEABILIZACIÓN ===");
+  console.log("=== INICIANDO SIMULACIÓN DE LEAD DE TRÁMITE / ASESORÍA INFONAVIT ===");
 
   // 1. Limpieza de datos previos
   console.log("Limpiando datos previos...");
   await sb.from("mensajes_whatsapp").delete().eq("telefono", telefono);
+  await sb.from("expedientes").delete().or("id.eq.EXP-OSCAR-TEST,prospecto_id.eq.PRO-OSCAR-TEST");
+  await sb.from("prospectos").delete().eq("id", "PRO-OSCAR-TEST");
   
-  // Buscar si hay expediente o prospecto previo
+  // Buscar si hay expediente o prospecto previo por teléfono
   const { data: prevPros } = await sb.from("prospectos").select("id").eq("telefono", telefono);
   if (prevPros && prevPros.length > 0) {
     const ids = prevPros.map(p => p.id);
@@ -48,7 +50,7 @@ async function main() {
   
   console.log("Base de datos limpia para pruebas.");
 
-  // 2. Crear prospecto y expediente ficticios
+  // 2. Crear prospecto y expediente
   console.log("Creando prospecto de prueba...");
   const { data: prospecto, error: errPr } = await sb
     .from("prospectos")
@@ -58,7 +60,10 @@ async function main() {
       telefono: telefono,
       origen: "whatsapp",
       estatus: "nuevo",
-      calificacion: "frio"
+      calificacion: "caliente",
+      campaign_name: "SAUCEDA Compra Tramite - Sep 2026",
+      ad_name: "Tramite Asesoria Gratis",
+      adset_name: "Tramite y Asesoria"
     })
     .select()
     .single();
@@ -77,9 +82,13 @@ async function main() {
       prospecto_id: prospecto.id,
       cliente: "Oscar",
       telefono: telefono,
-      tipo_negocio: "construccion-impermeabilizacion",
+      tipo_negocio: "solo_tramite",
+      campaign_name: "SAUCEDA Compra Tramite - Sep 2026",
+      ad_name: "Tramite Asesoria Gratis",
+      adset_name: "Tramite y Asesoria",
       etapa: "nuevo-lead",
-      fraccionamiento: ""
+      fraccionamiento: "Por definir",
+      situacion: "Lead entrante desde campaña de trámite y asesoría Infonavit."
     })
     .select()
     .single();
@@ -93,8 +102,9 @@ async function main() {
   console.log("\n¡Emulación de Lead completada con éxito!");
   console.log(`Prospecto: ${prospecto.nombre} (${prospecto.telefono})`);
   console.log(`Expediente ID: ${expediente.id} | Tipo Negocio: ${expediente.tipo_negocio} | Etapa: ${expediente.etapa}`);
-  console.log("\nAhora puedes abrir tu WhatsApp y enviar cualquier mensaje (por ejemplo: 'Hola, me interesa impermeabilizar') al número de prueba de WhatsApp.");
-  console.log("Sofía detectará el expediente y te responderá en tiempo real siguiendo el nuevo flujo.");
+  console.log(`Campaña: ${expediente.campaign_name} | Anuncio: ${expediente.ad_name}`);
+  console.log("\nAhora puedes abrir tu WhatsApp y enviar cualquier mensaje (por ejemplo: 'Hola, vi su anuncio') al número de WhatsApp de Sauceda (477 465 4700).");
+  console.log("Sofía detectará el expediente y te responderá en tiempo real con la bifurcación inicial de trámite/compra.");
 }
 
 main().catch(console.error);
