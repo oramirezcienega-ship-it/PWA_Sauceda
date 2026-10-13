@@ -1485,6 +1485,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "mantenimiento": "Mantenimiento Postventa",
     "construccion-mantenimiento-cisternas": "Mantenimiento Cisternas",
     "construccion-mantenimiento-tinacos": "Mantenimiento Tinacos",
+    "construccion-mantenimiento-calentadores": "Mantenimiento Calentadores Solares",
     "construccion_mantenimiento_tinacos": "Mantenimiento Tinacos",
     "mantenimiento_tinacos": "Mantenimiento Tinacos",
     "construccion_mantenimiento_cisternas": "Mantenimiento Cisternas",

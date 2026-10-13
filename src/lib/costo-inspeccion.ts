@@ -18,6 +18,7 @@ export const LINEAS_INSPECCION: { tipo: string; etiqueta: string }[] = [
   { tipo: "construccion-piso-estampado", etiqueta: "Piso / concreto estampado" },
   { tipo: "construccion-herreria", etiqueta: "Herrería" },
   { tipo: "construccion-mantenimiento-tinacos", etiqueta: "Mantenimiento de tinacos" },
+  { tipo: "construccion-mantenimiento-calentadores", etiqueta: "Mantenimiento de calentadores solares" },
   { tipo: "construccion-mantenimiento-cisternas", etiqueta: "Mantenimiento de cisternas / aljibes" },
   { tipo: "construccion-mantenimiento-postventa", etiqueta: "Mantenimiento postventa" },
 ];

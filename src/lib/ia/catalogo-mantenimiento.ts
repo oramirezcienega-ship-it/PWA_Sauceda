@@ -6,11 +6,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * ficha/facts, garantía, precio y fotos), así que basta editar el producto para cambiarlo.
  */
 
-export type ServicioMant = "cisternas" | "tinacos";
+export type ServicioMant = "cisternas" | "tinacos" | "calentadores";
 
 export const ETIQUETA_SERVICIO_MANT: Record<ServicioMant, string> = {
   cisternas: "Mantenimiento de cisternas",
   tinacos: "Limpieza y mantenimiento de tinacos",
+  calentadores: "Mantenimiento de calentador solar",
 };
 
 export interface FotoMant {
@@ -39,11 +40,13 @@ export interface ProductoMant {
 export function servicioDeTipoNegocio(tipo?: string | null): ServicioMant | null {
   if (tipo === "construccion-mantenimiento-tinacos") return "tinacos";
   if (tipo === "construccion-mantenimiento-cisternas") return "cisternas";
+  if (tipo === "construccion-mantenimiento-calentadores") return "calentadores";
   return null;
 }
 
 function servicioDeNombre(nombre: string): ServicioMant | null {
   const n = (nombre || "").toLowerCase();
+  if (n.includes("calentador") || n.includes("solar")) return "calentadores";
   if (n.includes("tinaco")) return "tinacos";
   if (n.includes("cisterna") || n.includes("aljibe")) return "cisternas";
   return null;
@@ -55,7 +58,7 @@ export async function cargarServiciosMantenimiento(
   const { data } = await sb
     .from("productos_servicios")
     .select("id, nombre, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad")
-    .or("nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%");
+    .or("nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%,nombre.ilike.%calentador%");
 
   const out: Partial<Record<ServicioMant, ProductoMant>> = {};
   for (const f of data || []) {

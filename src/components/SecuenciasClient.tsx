@@ -79,7 +79,7 @@ export function SecuenciasClient() {
 
   // Estado para el Monitoreo en Tiempo Real (Analytics)
   const [filtroEstadoMonitoreo, setFiltroEstadoMonitoreo] = useState<"todos" | "activo" | "respondio" | "otros">("todos");
-  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "construccion-piso-estampado" | "construccion-mantenimiento-postventa" | "construccion-mantenimiento-cisternas" | "construccion-mantenimiento-tinacos" | "construccion-herreria" | "otro">("todos");
+  const [filtroNegocioMonitoreo, setFiltroNegocioMonitoreo] = useState<"todos" | "traspaso_compra" | "promocion_venta" | "solo_tramite" | "construccion" | "construccion-impermeabilizacion" | "construccion-remodelacion" | "construccion-piso-estampado" | "construccion-mantenimiento-postventa" | "construccion-mantenimiento-cisternas" | "construccion-mantenimiento-tinacos" | "construccion-mantenimiento-calentadores" | "construccion-herreria" | "otro">("todos");
   const [busquedaLeadMonitoreo, setBusquedaLeadMonitoreo] = useState("");
 
   const enrollmentsFiltrados = useMemo(() => {
@@ -758,6 +758,7 @@ export function SecuenciasClient() {
                     <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
                     <option value="construccion-mantenimiento-cisternas">Sauceda Construye (Mantenimiento Cisternas)</option>
                     <option value="construccion-mantenimiento-tinacos">Sauceda Construye (Mantenimiento Tinacos)</option>
+                    <option value="construccion-mantenimiento-calentadores">Sauceda Construye (Mantenimiento Calentadores Solares)</option>
                     <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
                   </select>
                 </div>
@@ -1166,6 +1167,7 @@ export function SecuenciasClient() {
                       <option value="construccion-mantenimiento-postventa">Sauceda Construye (Mantenimiento Postventa)</option>
                       <option value="construccion-mantenimiento-cisternas">Sauceda Construye (Mantenimiento Cisternas)</option>
                       <option value="construccion-mantenimiento-tinacos">Sauceda Construye (Mantenimiento Tinacos)</option>
+                    <option value="construccion-mantenimiento-calentadores">Sauceda Construye (Mantenimiento Calentadores Solares)</option>
                       <option value="construccion-herreria">Sauceda Construye (Herrería)</option>
                       <option value="otro">Otro</option>
                     </select>
@@ -1256,6 +1258,7 @@ export function SecuenciasClient() {
                                          en.expediente.tipo_negocio === "construccion-mantenimiento-postventa" ? "Mantenimiento" :
                                          en.expediente.tipo_negocio === "construccion-mantenimiento-cisternas" ? "Cisternas" :
                                          en.expediente.tipo_negocio === "construccion-mantenimiento-tinacos" ? "Tinacos" :
+                                         en.expediente.tipo_negocio === "construccion-mantenimiento-calentadores" ? "Calentadores" :
                                          en.expediente.tipo_negocio === "construccion-remodelacion" ? "Remodelación" :
                                          en.expediente.tipo_negocio === "construccion" ? "Construcción" :
                                          en.expediente.tipo_negocio === "traspaso_compra" ? "Compra Directa" :

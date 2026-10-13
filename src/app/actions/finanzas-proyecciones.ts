@@ -80,6 +80,7 @@ const NOMBRES_TIPO_NEGOCIO: Record<string, string> = {
   "construccion-mantenimiento-postventa": "Mantenimiento Residencial y Comercial",
   "construccion-mantenimiento-cisternas": "Mantenimiento Cisternas",
   "construccion-mantenimiento-tinacos": "Mantenimiento Tinacos",
+  "construccion-mantenimiento-calentadores": "Mantenimiento Calentadores Solares",
   "construccion-herreria": "Herrería y Estructuras",
   construccion: "Construcción General",
   traspaso_compra: "Traspaso / Compra Inmobiliaria",

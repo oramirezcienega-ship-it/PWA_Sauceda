@@ -47,6 +47,7 @@ export type TipoNegocioId =
   | "construccion-mantenimiento-postventa"
   | "construccion-mantenimiento-cisternas"
   | "construccion-mantenimiento-tinacos"
+  | "construccion-mantenimiento-calentadores"
   | "construccion-herreria"
   | "otro";
 
@@ -74,6 +75,8 @@ export function labelTipoNegocio(tipo: string): string {
       return "Sauceda Construye (Mantenimiento Cisternas)";
     case "construccion-mantenimiento-tinacos":
       return "Sauceda Construye (Mantenimiento Tinacos)";
+    case "construccion-mantenimiento-calentadores":
+      return "Sauceda Construye (Mantenimiento Calentadores Solares)";
     case "construccion-herreria":
       return "Sauceda Construye (Herrería)";
     case "otro":
@@ -124,6 +127,15 @@ export function detectarTipoNegocio(
     texto.includes("estampado")
   ) {
     return "construccion-piso-estampado";
+  }
+
+  // 3a. Mantenimiento de Calentadores Solares (campaña de Meta o lo que escribe el cliente).
+  // Va antes de Postventa: la campaña suele decir "mantenimiento" y caería ahí.
+  if (
+    /calentador|boiler|b[oó]iler|termotanque/.test(texto) ||
+    (/solar/.test(campLower) && !/imperme/.test(texto))
+  ) {
+    return "construccion-mantenimiento-calentadores";
   }
 
   // 3. Mantenimiento de Tinacos vs. Cisternas/Aljibes (alta prioridad por Campaña de Meta / palabras clave).

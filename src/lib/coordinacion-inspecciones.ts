@@ -268,7 +268,7 @@ export function calcularSlotsPorVertical(
   let h2Fin = "17:30:00";
   let h2LabelHora = "4:30 PM";
 
-  if (tipo === "construccion-mantenimiento-cisternas" || tipo === "construccion-mantenimiento-tinacos") {
+  if (tipo === "construccion-mantenimiento-cisternas" || tipo === "construccion-mantenimiento-tinacos" || tipo === "construccion-mantenimiento-calentadores") {
     // Matutinas prioritarias
     h1Inicio = "10:00:00";
     h1Fin = "11:30:00";
@@ -378,6 +378,8 @@ export function obtenerRolEspecialistaPorVertical(tipoNegocio?: string): {
     case "construccion-mantenimiento-cisternas":
     case "construccion-mantenimiento-tinacos":
       return { rol: "operaciones", tituloEspecialista: "Técnico de Fontanería / Lavado" };
+    case "construccion-mantenimiento-calentadores":
+      return { rol: "operaciones", tituloEspecialista: "Técnico en Calentadores Solares" };
     case "traspaso_compra":
     case "solo_tramite":
     case "bienes_raices":

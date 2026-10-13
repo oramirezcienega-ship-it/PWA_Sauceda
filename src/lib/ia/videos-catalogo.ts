@@ -59,6 +59,7 @@ export function videosParaPrompt(productos: ProductoConVideos[]): string {
 const CLAVE_TIPO_NEGOCIO: Record<string, RegExp> = {
   "construccion-impermeabilizacion": /imperme/i,
   "construccion-mantenimiento-tinacos": /tinaco/i,
+  "construccion-mantenimiento-calentadores": /calentador|solar/i,
   "construccion-mantenimiento-cisternas": /cisterna|aljibe/i,
   "construccion-remodelacion": /remodel/i,
   "construccion-piso-estampado": /estampad|piso/i,

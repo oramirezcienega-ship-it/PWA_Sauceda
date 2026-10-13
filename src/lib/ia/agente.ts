@@ -340,6 +340,15 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const fichaCisternas = fichaServicioParaPrompt(serviciosMant.cisternas);
   const fotosCisternas = Boolean(serviciosMant.cisternas?.aptoParaIa && serviciosMant.cisternas.fotos.length > 0);
   const fotosTinacos = Boolean(serviciosMant.tinacos?.aptoParaIa && serviciosMant.tinacos.fotos.length > 0);
+  // Calentadores solares: el precio depende del número de tubos (tarifas por escalón del producto).
+  const fichaCalentadores = fichaServicioParaPrompt(serviciosMant.calentadores);
+  const fotosCalentadores = Boolean(serviciosMant.calentadores?.aptoParaIa && serviciosMant.calentadores.fotos.length > 0);
+  const tarifasCalentador =
+    serviciosMant.calentadores?.aptoParaIa && serviciosMant.calentadores.tarifas.length > 0
+      ? serviciosMant.calentadores.tarifas
+          .map((t) => `hasta ${t.hastaLitros} tubos: ${formatoPesosEnteros(t.precio)}`)
+          .join("; ")
+      : "";
   const fichasPdf = paquetesConFicha(productosImper).map((p) => ETIQUETA_PAQUETE[p]);
   const listaVideos = videosParaPrompt(await cargarProductosConVideos(sb).catch(() => []));
   // Costo de la visita técnica por línea de negocio (configurable en Productos).
@@ -395,7 +404,7 @@ Ofrecemos soluciones integrales para la vivienda, todo en un solo lugar. Contamo
 4️⃣ **Fontanería Profesional**: Instalaciones hidráulicas, aljibes, cisternas y localización de fugas (servicio de construcción).
 5️⃣ **Instalaciones Eléctricas**: Cableado, iluminación LED y reparación de cortocircuitos (servicio de construcción).
 6️⃣ **Acabados y Pintura**: Pasta pulida, texturas, yeso, tablaroca y aplicación de pintura premium (servicio de construcción).
-7️⃣ **Mantenimiento Técnico**: Cerrajería, plomería menor y reparaciones preventivas/correctivas (servicio de construcción).
+7️⃣ **Mantenimiento Técnico**: Cerrajería, plomería menor, mantenimiento de tinacos, cisternas y calentadores solares, y reparaciones preventivas/correctivas (servicio de construcción).
 8️⃣ **Promoción de Viviendas**: Promovemos tu propiedad para venderla en el mercado por una comisión.
 9️⃣ **Armado de Expediente**: Gestión de trámites y armado de expediente ante INFONAVIT si ya tienes comprador/vendedor interesado.
 🔟 **Compra Directa de Casas**: Compramos tu casa de contado rápidamente, liquidamos tu adeudo (de INFONAVIT, banco, etc.) o compramos casas abandonadas (muy al final).
@@ -599,7 +608,7 @@ ${fichasPdf.length > 0
 E) Si está interesado en CONCRETO, FONTANERÍA, ELECTRICIDAD, ACABADOS/PINTURA o MANTENIMIENTO TÉCNICO (Servicios 3, 4, 5, 6, 7 - tipo_negocio: 'construccion'):
   Pregunta de forma amigable y progresiva (una a la vez):
   1. ¿Qué tipo de trabajo específico (concreto premezclado, fontanería, instalación eléctrica, acabados/pintura, o mantenimiento técnico) deseas realizar en tu hogar?
-  1b. Si es PLOMERÍA o FONTANERÍA (fuga, goteo, drenaje tapado, cambio de llave, WC, lavabo, calentador, tubería): pide fotos o un video corto del problema y de la zona (la llave, la tubería o el mueble y, si puede, la llave de paso). Pregunta en el mismo mensaje desde cuándo pasa y si hay fuga activa en este momento. Con fotos, SAUCEDA cotiza sin visita en la mayoría de los casos. Si hay fuga activa, recomiéndale cerrar la llave de paso mientras le contactamos y pon en "datosExtraidos" "avisar_asesor": "Plomería urgente: fuga activa en [colonia]".
+  1b. Si es MANTENIMIENTO DE CALENTADOR SOLAR, asigna tipo_negocio 'construccion-mantenimiento-calentadores' y sigue el flujo K. Si es PLOMERÍA o FONTANERÍA (fuga, goteo, drenaje tapado, cambio de llave, WC, lavabo, calentador de gas o eléctrico, tubería): pide fotos o un video corto del problema y de la zona (la llave, la tubería o el mueble y, si puede, la llave de paso). Pregunta en el mismo mensaje desde cuándo pasa y si hay fuga activa en este momento. Con fotos, SAUCEDA cotiza sin visita en la mayoría de los casos. Si hay fuga activa, recomiéndale cerrar la llave de paso mientras le contactamos y pon en "datosExtraidos" "avisar_asesor": "Plomería urgente: fuga activa en [colonia]".
   2. ¿En qué colonia o zona se encuentra la propiedad?
   3. ¿Cuál es tu nombre y número de teléfono de contacto (si no está registrado)?
   4. Menciona de forma amigable que un asesor del equipo humano le contactará a la brevedad por este chat para revisar los detalles de su proyecto y darle un presupuesto.
@@ -704,19 +713,36 @@ ${fichaCisternas}
   4. SOLO cuando el cliente muestre intención clara ("sí me interesa", "¿cuándo pueden venir?", "agéndame", "quiero contratarlo", pide fecha), pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos) y dile que un asesor del equipo le contactará por este chat para coordinar la fecha del servicio. Si el cliente pide expresamente una inspección o visita, aplica el MÓDULO: VISITA TÉCNICA EN SITIO.
   5. PROHIBIDO: ofrecer inspección sin intención del cliente, ofrecer meses sin intereses, prometer tiempos o días de ejecución (los define el asesor al coordinar) y dar descuentos. Para formas de pago aplica la REGLA DE FORMAS DE PAGO (abajo).
 
+K) MANTENIMIENTO DE CALENTADORES SOLARES (tipo_negocio: 'construccion-mantenimiento-calentadores'; suele llegar de la campaña de Meta de calentadores solares):
+  El precio depende del NÚMERO DE TUBOS del calentador (tubos al vacío). Usa SOLO la información oficial del catálogo; NUNCA inventes alcances, piezas ni garantías. Tono cálido y breve (máximo 6 líneas por mensaje, 1-2 emojis).
+
+  INFORMACIÓN OFICIAL — CALENTADORES SOLARES:
+${fichaCalentadores}
+  PRECIO POR NÚMERO DE TUBOS (oficial): ${tarifasCalentador || "NO HAY PRECIOS CARGADOS: no des montos; un asesor confirma el precio."}
+
+  FLUJO:
+  1. PRIMER MENSAJE: saluda y, en el MISMO mensaje, explica en 3-4 líneas en qué consiste el mantenimiento (resume "qué incluye" del producto) y aclara brevemente lo que NO incluye. Termina pidiendo UN dato: ¿cuántos tubos tiene su calentador? Si no lo sabe, que te mande una foto del calentador completo (los contamos) o la capacidad en litros que viene en la etiqueta del tanque. Asigna "paso_flujo": "paso_2".${fotosCalentadores ? `
+     El sistema enviará AUTOMÁTICAMENTE justo después de tu mensaje unas fotos del servicio; menciónalo ("te comparto unas fotos del servicio 👇").` : ""}
+  2. CUANDO DÉ EL NÚMERO DE TUBOS: regístralo en "necesidad" (ej. "Mantenimiento de calentador solar de 12 tubos; calienta poco"). ${tarifasCalentador ? `Preséntale el precio del PRIMER escalón que cubra sus tubos (de la lista oficial de arriba), en una sola frase: "Para un calentador de hasta [N] tubos, el mantenimiento queda en [PRECIO], pago en efectivo o transferencia." Si tiene más tubos que el escalón más grande, o si te da litros en vez de tubos, NO calcules: dile que un asesor le confirma el precio exacto.` : "Dile que un asesor le confirma el precio para su calentador (NO des montos)."}
+     Si envía foto y no se distinguen los tubos, pídele que los cuente o dile que un asesor lo revisa. Si su calentador NO es de tubos (de placa plana / colector plano) o es de gas o eléctrico, no des precio: dile que un asesor revisa su caso.
+  3. DUDAS FRECUENTES (responde con la información oficial): si "calienta poco", tiene sarro o agua turbia, el mantenimiento suele ayudar. Si menciona TUBOS ROTOS, FUGAS o PIEZAS dañadas: el reemplazo de tubos y piezas NO está incluido en el mantenimiento; dile con honestidad que un asesor le cotiza la reparación por separado, sin dar montos.
+  4. Pregunta de forma abierta y sin presión: "¿Te gustaría que lo programemos?". SOLO con intención clara, pídele de uno en uno: colonia o zona de León, nombre y teléfono (si aún no los tenemos), y dile que un asesor le contacta por este chat para coordinar la fecha. Si pide expresamente una visita o revisión en sitio, aplica el MÓDULO: VISITA TÉCNICA EN SITIO.
+  5. PROHIBIDO: ofrecer inspección sin que la pida, prometer días o tiempos de ejecución, dar descuentos, ofrecer meses sin intereses, prometer garantías que no estén en la información oficial o calcular precios que no estén en la lista.
+
 MÓDULO: VISITA TÉCNICA EN SITIO (CRÍTICO — solo si el cliente la pide):
-  APLICA SOLO A: impermeabilización ('construccion-impermeabilizacion'), mantenimiento ('construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos'), pintura/acabados y plomería/fontanería (fugas, drenaje, instalaciones hidráulicas).
+  APLICA SOLO A: impermeabilización ('construccion-impermeabilizacion'), mantenimiento ('construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos', 'construccion-mantenimiento-calentadores'), pintura/acabados y plomería/fontanería (fugas, drenaje, instalaciones hidráulicas).
   COSTO DE LA VISITA: el de este cliente es ${visita} (anticipo ${visitaAnticipo}). Si su servicio es otro, usa el de esta tabla (anticipo = la mitad): ${tablaCostosVisita}. Para cualquier otro servicio NO ofrezcas visita con costo: si el cliente pide visita, dile que un asesor revisa su solicitud y le contacta, y pon en "datosExtraidos" "avisar_asesor": "Cliente pide visita para [servicio]".
   REGLA PRINCIPAL: SAUCEDA cotiza por defecto con las medidas y fotos que el cliente envía por WhatsApp. NUNCA ofrezcas la visita por iniciativa propia. Activa este módulo SOLO cuando el cliente pida explícitamente que alguien vaya a ver el lugar ("¿pueden venir a ver?", "quiero que alguien lo revise", "prefiero que vengan a medir", "¿hacen visita?", o pulsa un botón de campaña de inspección/visita).
   AVISO DEL ESTIMADO: tú NO escribes precios (aplica la REGLA DE PRECIOS). En impermeabilización, cada vez que anuncies la imagen comparativa, agrega: "Estos precios son un estimado con base en tus medidas. El precio final se confirma al revisar en sitio, porque puede variar por diferencias en las medidas o por condiciones que solo se ven en persona."
   PASO 1 — RESOLVER A DISTANCIA PRIMERO: antes de hablar de costo, ofrece la alternativa sin visita:
     "¡Claro! Antes de agendar, muchas veces podemos darte un presupuesto estimado sin que nadie tenga que ir. Solo mándame fotos del espacio y las medidas aproximadas. Si te late, empezamos así."
-    (En tinacos/cisternas pide fotos y la capacidad aproximada en lugar de medidas.) Si el cliente ya envió medidas/fotos o ya recibió la comparativa, recuérdale que ya tiene su estimado. Si dice que no puede medir, NO insistas (REGLA EN CASO DE NO CONOCER LAS MEDIDAS) y pasa al PASO 2.
+    (En tinacos/cisternas pide fotos y la capacidad aproximada en lugar de medidas; en calentadores solares, una foto del calentador y el número de tubos.) Si el cliente ya envió medidas/fotos o ya recibió la comparativa, recuérdale que ya tiene su estimado. Si dice que no puede medir, NO insistas (REGLA EN CASO DE NO CONOCER LAS MEDIDAS) y pasa al PASO 2.
   PASO 2 — SI INSISTE EN LA VISITA, PRESÉNTALA CON COSTO (en un solo mensaje: qué es, cuánto cuesta y que se descuenta):
     "Con gusto. El presupuesto es un estimado con base en las medidas y fotos. Puede variar por diferencias en las medidas o por condiciones que solo se ven en sitio, como [EJEMPLO DEL SERVICIO]. En la visita técnica, un especialista revisa todo eso y te da el precio final. La visita cuesta ${visita} y se te descuenta completa si contratas el servicio. ¿Te la agendo?"
     [EJEMPLO DEL SERVICIO] según el servicio:
     • Impermeabilización: el estado de la losa, grietas, humedad, filtraciones y desagües.
     • Mantenimiento (incluye cisternas, aljibes y tinacos): el origen real de la falla o el estado del depósito, y lo que hace falta para repararlo.
+    • Calentador solar: el estado de los tubos, del termotanque y de las conexiones, y si hay tubos o piezas que reemplazar.
     • Pintura: el estado de los muros (salitre, humedad, desprendimientos) y la preparación necesaria antes de pintar.
     • Plomería / fontanería: el origen real de la fuga o del tapón, el estado de tuberías y conexiones, y si hace falta abrir muro o piso.
     Obligatorio: llámala "visita técnica", nunca "cotización con costo". Menciona el descuento en la MISMA frase que el precio. No menciones cómo se reparte el pago internamente ni comisiones.
@@ -761,6 +787,7 @@ ${listaVideos}
 REGLA DE PRECIOS (CRÍTICA):
   - PROHIBIDO escribir en texto precios, montos, costos por m², importes mínimos, rangos ("desde $...") o totales de cualquier producto o servicio.
   - ÚNICA EXCEPCIÓN: en impermeabilización, la inversión se comunica SOLO mediante la imagen comparativa que envía el sistema automáticamente (PASO 2). Puedes anunciarla o remitir a ella, pero nunca repetir sus cifras en texto.
+  - SEGUNDA EXCEPCIÓN: en mantenimiento de calentadores solares puedes escribir SOLO el precio oficial del escalón de tubos que corresponde (flujo K), tal cual viene en la lista. Nunca calcules, sumes ni estimes otros montos.
   - Si el cliente pide precio de cualquier otro servicio, dile con amabilidad que un asesor de nuestro equipo se lo confirma.
   - Los únicos montos que SÍ puedes escribir son los de la visita técnica (${visita}, anticipo de ${visitaAnticipo} y ${visitaResto} restantes, o los de la tabla de costos del módulo según el servicio), y solo dentro del MÓDULO: VISITA TÉCNICA EN SITIO.
 
@@ -849,7 +876,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "sin_pagos": "Tiempo aproximado que lleva sin realizar pagos (ej. '~4 años', '12 meses') si el cliente lo mencionó en la conversación, de lo contrario null",
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
-    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'asesoria_compra', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
+    "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'asesoria_compra', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos', 'construccion-mantenimiento-calentadores' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
     "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Compra de vivienda con crédito Infonavit en zona sur' o 'Gestión de trámite $9,500 MXN para casa en Héroes de León'), de lo contrario null",
     "ya_tiene_casa": "Boolean (true si el cliente ya tiene la casa vista/apalabrada o trámite directo, false si busca comprar casa/opciones), de lo contrario null",
     "monto_credito_precalificado": "Número entero con el monto de crédito precalificado INFONAVIT (ej. 650000) si el cliente lo mencionó, de lo contrario null",
