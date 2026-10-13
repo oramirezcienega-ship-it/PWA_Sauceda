@@ -1043,11 +1043,12 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
             const insertPayload: Record<string, any> = {
               telefono: destinatario,
               direccion: "out",
-              texto: "[Campaña Mautic / Plantilla WhatsApp]",
+              // No sabemos quién lo envió (Mautic, otra herramienta o un envío del CRM que no
+              // se guardó): no se atribuye a ninguna campaña para no confundir al asesor.
+              texto: "[Mensaje de WhatsApp enviado sin registro en el CRM (plantilla o automatización externa)]",
               wa_message_id: waMessageId,
               estado: nuevoEstado,
-              agente: "Mautic Automatización",
-              campana_origen: "Campaña Mautic",
+              agente: "Envío sin registro",
               canal_id: "whatsapp",
               created_at: status.timestamp && !isNaN(parseInt(status.timestamp, 10))
                 ? new Date(parseInt(status.timestamp, 10) * 1000).toISOString()
@@ -1075,7 +1076,7 @@ export async function procesarEstadosWhatsApp(payload: any): Promise<void> {
               const insertBasico: Record<string, any> = {
                 telefono: destinatario,
                 direccion: "out",
-                texto: "[Campaña Mautic / Plantilla WhatsApp]",
+                texto: "[Mensaje de WhatsApp enviado sin registro en el CRM (plantilla o automatización externa)]",
                 wa_message_id: waMessageId,
                 estado: nuevoEstado,
                 canal_id: "whatsapp",
