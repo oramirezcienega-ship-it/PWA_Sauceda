@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { MembreteMarca } from "@/components/marca/Logo";
+import { nombreTitularRemision } from "@/lib/remision-titular";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -66,7 +67,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
         <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 text-xs border-b pb-6 mb-6 print:pb-4 print:mb-4">
           <div className="space-y-1.5">
             <h4 className="font-bold text-carbon/50 uppercase text-[10px] tracking-wider">Cliente</h4>
-            <div className="font-semibold text-sm text-verde-profundo">{cotizacion.prospectoNombre}</div>
+            <div className="font-semibold text-sm text-verde-profundo">{nombreTitularRemision(remision.tipo, remision.datosDocumento, cotizacion.prospectoNombre)}</div>
             {cotizacion.prospectoTelefono && (
               <div className="text-carbon/70">Teléfono: {cotizacion.prospectoTelefono}</div>
             )}
@@ -150,7 +151,7 @@ export default async function RemisionPublicPage({ params }: RemisionPageProps) 
             <div className="h-16 flex items-end justify-center">
               {/* Espacio para firma */}
             </div>
-            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">{cotizacion.prospectoNombre}</div>
+            <div className="border-t border-carbon/20 pt-2 font-semibold text-carbon/80">{nombreTitularRemision(remision.tipo, remision.datosDocumento, cotizacion.prospectoNombre)}</div>
             <div className="text-[10px] text-carbon/50 uppercase">Firma del Cliente (Conformidad)</div>
           </div>
         </div>

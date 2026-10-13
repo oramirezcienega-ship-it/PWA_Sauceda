@@ -1122,6 +1122,8 @@ export async function crearReciboPago(datos: {
   notas?: string;
   /** Persona (perfil) que recibe el dinero. Si no se indica, el usuario en sesión. */
   recibidoPorId?: string | null;
+  /** A nombre de quién sale el recibo (puede ser distinto del contacto). Vacío = nombre del contacto. */
+  clienteNombre?: string | null;
 }): Promise<{ ok: boolean; recibo?: ReciboPago; error?: string }> {
   try {
     await requireAdmin();
@@ -1193,7 +1195,7 @@ export async function crearReciboPago(datos: {
         orden_trabajo_id: datos.ordenTrabajoId,
         expediente_id: ot.expediente_id,
         cotizacion_id: ot.cotizacion_id,
-        cliente_nombre: prospecto?.nombre || "Cliente Sauceda",
+        cliente_nombre: datos.clienteNombre?.trim() || prospecto?.nombre || "Cliente Sauceda",
         cliente_telefono: prospecto?.telefono || null,
         cliente_direccion: null,
         monto,
@@ -1286,6 +1288,7 @@ async function repartirEnRecibos(datos: {
   conceptoBase?: string;
   referenciaPago?: string;
   notas?: string;
+  clienteNombre?: string | null;
 }): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
   const n = Math.min(12, Math.max(1, Math.floor(Number(datos.numRecibos) || 1)));
   const total = Math.round(Number(datos.montoTotal) * 100) / 100;
@@ -1313,6 +1316,7 @@ async function repartirEnRecibos(datos: {
       fechaPago: datos.fechaPago,
       notas: datos.notas,
       recibidoPorId: datos.recibidoPorId,
+      clienteNombre: datos.clienteNombre,
     });
     if (!res.ok || !res.recibo) {
       return {
@@ -1337,6 +1341,7 @@ export async function emitirRecibosEnPartes(datos: {
   concepto?: string;
   referenciaPago?: string;
   notas?: string;
+  clienteNombre?: string | null;
 }): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
   try {
     await requireAdmin();
@@ -1359,6 +1364,7 @@ export async function emitirRecibosEnPartes(datos: {
       conceptoBase: datos.concepto,
       referenciaPago: datos.referenciaPago,
       notas: datos.notas,
+      clienteNombre: datos.clienteNombre,
     });
   } catch (err: any) {
     return { ok: false, recibos: [], error: err?.message || "Error al emitir los recibos." };
@@ -1428,6 +1434,8 @@ export async function actualizarReciboPago(
     fechaPago?: string;
     notas?: string;
     recibidoPorId?: string | null;
+    /** A nombre de quién sale el recibo. */
+    clienteNombre?: string;
   }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -1461,6 +1469,10 @@ export async function actualizarReciboPago(
     }
     if (datos.fechaPago) cambios.fecha_pago = datos.fechaPago;
     if (datos.notas !== undefined) cambios.notas = datos.notas.trim() || null;
+    if (datos.clienteNombre !== undefined) {
+      if (!datos.clienteNombre.trim()) return { ok: false, error: "Indica a nombre de quién sale el recibo." };
+      cambios.cliente_nombre = datos.clienteNombre.trim();
+    }
 
     if (datos.recibidoPorId) {
       const { data: perf } = await sb
@@ -1799,12 +1811,108 @@ export async function obtenerGarantiaOTPorToken(
 }
 
 /** 11. Generar Remisión de Entrega o Factura directamente desde la Orden de Trabajo */
+function aRemisionFacturaBasica(rem: any): RemisionFactura {
+  return {
+    id: rem.id,
+    cotizacionId: rem.cotizacion_id,
+    ordenTrabajoId: rem.orden_trabajo_id,
+    expedienteId: rem.expediente_id,
+    tipo: rem.tipo,
+    folio: rem.folio,
+    fecha: rem.fecha,
+    tipoCambio: Number(rem.tipo_cambio || 1.0),
+    datosDocumento: rem.datos_documento || {},
+    serviciosExtra: Number(rem.servicios_extra || 0),
+    costoFinanciero: Number(rem.costo_financiero || 0),
+    otrosGastos: Number(rem.otros_gastos || 0),
+    montoSubtotal: Number(rem.monto_subtotal || 0),
+    montoTotal: Number(rem.monto_total || 0),
+    createdAt: rem.created_at,
+    updatedAt: rem.updated_at,
+  };
+}
+
+/**
+ * Edita los datos del documento de una remisión o factura ya emitida: a nombre de
+ * quién sale, quién recibe, dirección y datos fiscales. No toca montos ni costos.
+ * Con la orden de trabajo completada queda cerrada (un administrador la reabre).
+ */
+export async function actualizarDatosDocumentoRemision(
+  remisionId: string,
+  datos: {
+    nombreCliente?: string;
+    personaRecibe?: string;
+    direccionEntrega?: string;
+    rfc?: string;
+    razonSocial?: string;
+    regimenFiscal?: string;
+    usoCfdi?: string;
+  }
+): Promise<{ ok: boolean; remision?: RemisionFactura; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: rem } = await sb
+      .from("remisiones_facturas")
+      .select("id, tipo, orden_trabajo_id, datos_documento")
+      .eq("id", remisionId)
+      .maybeSingle();
+    if (!rem) return { ok: false, error: "Remisión no encontrada." };
+
+    if (rem.orden_trabajo_id) {
+      const otCerrada = (await ordenesCerradas(sb, [rem.orden_trabajo_id])).get(rem.orden_trabajo_id);
+      if (otCerrada) {
+        return {
+          ok: false,
+          error: `La orden ${otCerrada} ya está completada: su ${rem.tipo === "factura" ? "factura" : "remisión"} quedó cerrada. Un administrador debe reabrir la orden para corregirla.`,
+        };
+      }
+    }
+
+    const doc: Record<string, any> = { ...(rem.datos_documento || {}) };
+    const limpiar = (v: string | undefined) => (v === undefined ? undefined : v.trim());
+    const campos: Array<[keyof typeof datos, string]> = [
+      ["nombreCliente", "nombreCliente"],
+      ["personaRecibe", "personaRecibe"],
+      ["direccionEntrega", "direccionEntrega"],
+      ["razonSocial", "razonSocial"],
+      ["regimenFiscal", "regimenFiscal"],
+      ["usoCfdi", "usoCfdi"],
+    ];
+    for (const [entrada, llave] of campos) {
+      const v = limpiar(datos[entrada]);
+      if (v !== undefined) doc[llave] = v;
+    }
+    if (datos.rfc !== undefined) doc.rfc = datos.rfc.trim().toUpperCase();
+
+    if (rem.tipo === "factura" && !String(doc.razonSocial || "").trim()) {
+      return { ok: false, error: "La factura necesita razón social." };
+    }
+
+    const { data: actualizada, error } = await sb
+      .from("remisiones_facturas")
+      .update({ datos_documento: doc, updated_at: new Date().toISOString() })
+      .eq("id", remisionId)
+      .select("*")
+      .single();
+    if (error || !actualizada) return { ok: false, error: error?.message || "No se pudo guardar." };
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/remisiones");
+    return { ok: true, remision: aRemisionFacturaBasica(actualizada) };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al actualizar la remisión." };
+  }
+}
+
 export async function generarRemisionDesdeOrdenTrabajo(datos: {
   ordenTrabajoId: string;
   tipo: "remision" | "factura";
   fecha?: string;
   direccionEntrega?: string;
   personaRecibe?: string;
+  /** Remisión: a nombre de quién sale (puede ser distinto del contacto). */
+  nombreCliente?: string;
   rfc?: string;
   razonSocial?: string;
   regimenFiscal?: string;
@@ -1886,6 +1994,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         : {
             direccionEntrega:
               datos.direccionEntrega?.trim() || ot.prospectos?.direccion || "León, Guanajuato",
+            nombreCliente: datos.nombreCliente?.trim() || (ot.prospectos as any)?.nombre || "",
             personaRecibe: datos.personaRecibe?.trim() || ot.prospectos?.nombre || "",
             fechaInstalacion:
               datos.fecha ||
