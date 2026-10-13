@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatoPesos } from "@/lib/formato";
-import type { DatosOfertaProveedorProducto, FotoOfertaProveedor, OfertaProveedorProducto } from "@/lib/types";
+import type { DatosOfertaProveedorProducto, FotoOfertaProveedor, OfertaProveedorProducto, TarifaCapacidad } from "@/lib/types";
+import { CAPACIDADES_COMUNES_LITROS } from "@/lib/tarifas-capacidad";
 import { guardarOfertaProveedor, listarProductosParaOferta } from "@/app/actions/proveedor-productos";
 import { listarProveedoresMin } from "@/app/actions/proveedores";
 import { subirFichaTecnicaProducto, subirImagenProducto } from "@/app/actions/productos";
@@ -23,7 +24,17 @@ interface ModalOfertaProveedorProps {
   onGuardada: (oferta: OfertaProveedorProducto) => void;
 }
 
-type ProductoOpcion = { id: string; nombre: string; unidad: string; precioUnitario: number; categoria: string };
+type ProductoOpcion = {
+  id: string;
+  nombre: string;
+  unidad: string;
+  precioUnitario: number;
+  categoria: string;
+  tarifasCapacidad: TarifaCapacidad[];
+};
+
+/** Servicios que normalmente se cobran por tamaño del depósito. */
+const RE_POR_CAPACIDAD = /tinaco|aljib|cisterna/i;
 
 const inputCls =
   "w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs text-carbon outline-none focus:border-sauce bg-white";
@@ -47,6 +58,15 @@ export function ModalOfertaProveedor({
   const [costoUnitario, setCostoUnitario] = useState(oferta ? String(oferta.costoUnitario) : "");
   const [costosVolumen, setCostosVolumen] = useState<{ hasta: string; costo: string }[]>(
     (oferta?.costosVolumen || []).map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) }))
+  );
+  const [tarifasCapacidad, setTarifasCapacidad] = useState<{ hastaLitros: string; costo: string }[]>(
+    (oferta?.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), costo: String(t.costo) }))
+  );
+  const [porCapacidad, setPorCapacidad] = useState(
+    !!oferta &&
+      (oferta.tarifasCapacidad.length > 0 ||
+        oferta.productoTarifasCapacidad.length > 0 ||
+        RE_POR_CAPACIDAD.test(oferta.productoNombre))
   );
   const [cantidadMinima, setCantidadMinima] = useState(oferta?.cantidadMinima ? String(oferta.cantidadMinima) : "");
   const [montoMinimo, setMontoMinimo] = useState(oferta?.montoMinimo ? String(oferta.montoMinimo) : "");
@@ -77,6 +97,30 @@ export function ModalOfertaProveedor({
   }, [proveedorIdFijo]);
 
   const producto = productos.find((p) => p.id === productoId);
+  const tarifasVenta = producto?.tarifasCapacidad ?? oferta?.productoTarifasCapacidad ?? [];
+
+  // Al elegir un producto nuevo, activa el costo por capacidad si aplica y precarga sus escalones.
+  useEffect(() => {
+    if (oferta || !producto) return;
+    const aplica = producto.tarifasCapacidad.length > 0 || RE_POR_CAPACIDAD.test(producto.nombre);
+    setPorCapacidad(aplica);
+    setTarifasCapacidad(
+      aplica && producto.tarifasCapacidad.length > 0
+        ? producto.tarifasCapacidad.map((t) => ({ hastaLitros: String(t.hastaLitros), costo: "" }))
+        : []
+    );
+  }, [oferta, producto]);
+
+  function cargarCapacidadesComunes() {
+    setTarifasCapacidad((prev) => {
+      const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
+      const nuevas = CAPACIDADES_COMUNES_LITROS.filter((l) => !existentes.has(l)).map((l) => ({
+        hastaLitros: String(l),
+        costo: "",
+      }));
+      return [...prev, ...nuevas].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
+    });
+  }
   const unidad = producto?.unidad || oferta?.productoUnidad || "unidad";
   const precioVenta = producto?.precioUnitario ?? oferta?.productoPrecioUnitario ?? 0;
   const costoNum = Number(costoUnitario || 0);
@@ -100,6 +144,13 @@ export function ModalOfertaProveedor({
           costosVolumen
             .filter((r) => r.hasta && r.costo)
             .map((r) => [Number(r.hasta), Number(r.costo)])
+            .sort((a, b) => a[0] - b[0])
+        ) ||
+      JSON.stringify(oferta.tarifasCapacidad.map((t) => [t.hastaLitros, t.costo])) !==
+        JSON.stringify(
+          (porCapacidad ? tarifasCapacidad : [])
+            .filter((t) => t.hastaLitros !== "" && t.costo !== "")
+            .map((t) => [Number(t.hastaLitros), Number(t.costo)])
             .sort((a, b) => a[0] - b[0])
         ));
 
@@ -146,6 +197,11 @@ export function ModalOfertaProveedor({
       costosVolumen: costosVolumen
         .filter((r) => r.hasta !== "" && r.costo !== "")
         .map((r) => ({ hasta: Number(r.hasta), costo: Number(r.costo) })),
+      tarifasCapacidad: porCapacidad
+        ? tarifasCapacidad
+            .filter((t) => t.hastaLitros !== "" && t.costo !== "")
+            .map((t) => ({ hastaLitros: Number(t.hastaLitros), costo: Number(t.costo) }))
+        : [],
       cantidadMinima: Number(cantidadMinima || 0),
       montoMinimo: Number(montoMinimo || 0),
       descripcionProceso,
@@ -246,7 +302,7 @@ export function ModalOfertaProveedor({
             <div className="font-bold text-verde-profundo">💲 Costo del proveedor</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
-                <label className={labelCls}>Costo por {unidad}</label>
+                <label className={labelCls}>{porCapacidad ? "Costo base (opcional)" : `Costo por ${unidad}`}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -293,6 +349,13 @@ export function ModalOfertaProveedor({
             </div>
 
             {productoId && (
+              <label className="flex items-center gap-2 cursor-pointer font-semibold text-carbon/80">
+                <input type="checkbox" checked={porCapacidad} onChange={(e) => setPorCapacidad(e.target.checked)} />
+                Se cobra por capacidad en litros (tinacos, aljibes, cisternas)
+              </label>
+            )}
+
+            {productoId && !porCapacidad && (
               <div className="flex flex-wrap gap-4 text-[11px] text-carbon/70">
                 <span>
                   Precio de venta: <b className="font-mono text-carbon">{formatoPesos(precioVenta)}</b>/{unidad}
@@ -306,6 +369,96 @@ export function ModalOfertaProveedor({
               </div>
             )}
 
+            {porCapacidad && (
+              <div className="rounded-lg border border-carbon/10 bg-white p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="font-semibold text-carbon/80">📏 Costo por capacidad (litros)</span>
+                    <p className="text-[10.5px] text-carbon/50 mt-0.5">
+                      Se aplica el primer escalón que cubre los litros del cliente. El precio de venta de cada escalón se
+                      captura en el producto (pestaña Argumentos de Venta y Sofía).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={cargarCapacidadesComunes}
+                    className="shrink-0 rounded-lg border border-carbon/20 px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
+                  >
+                    Cargar capacidades comunes
+                  </button>
+                </div>
+                {tarifasCapacidad.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
+                      <span className="w-28">Capacidad (L)</span>
+                      <span className="w-28">Costo proveedor</span>
+                      <span className="w-24 text-right">Precio venta</span>
+                      <span className="w-28 text-right">Margen</span>
+                    </div>
+                    {tarifasCapacidad.map((t, i) => {
+                      const venta = tarifasVenta.find((v) => v.hastaLitros === Number(t.hastaLitros))?.precio ?? null;
+                      const costo = t.costo === "" ? null : Number(t.costo);
+                      const margenEsc = venta !== null && costo !== null ? venta - costo : null;
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={t.hastaLitros}
+                            onChange={(e) =>
+                              setTarifasCapacidad((prev) =>
+                                prev.map((x, j) => (j === i ? { ...x, hastaLitros: e.target.value } : x))
+                              )
+                            }
+                            className={`${inputCls} w-28`}
+                            placeholder="Litros"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={t.costo}
+                            onChange={(e) =>
+                              setTarifasCapacidad((prev) => prev.map((x, j) => (j === i ? { ...x, costo: e.target.value } : x)))
+                            }
+                            className={`${inputCls} w-28`}
+                            placeholder="$ costo"
+                          />
+                          <span className="w-24 text-right font-mono text-carbon/70">
+                            {venta !== null ? formatoPesos(venta) : "—"}
+                          </span>
+                          <span
+                            className={`w-28 text-right font-mono ${
+                              margenEsc === null ? "text-carbon/40" : margenEsc >= 0 ? "text-emerald-700" : "text-rojo"
+                            }`}
+                          >
+                            {margenEsc === null
+                              ? "—"
+                              : `${formatoPesos(margenEsc)} (${venta ? ((margenEsc / venta) * 100).toFixed(0) : 0}%)`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setTarifasCapacidad((prev) => prev.filter((_, j) => j !== i))}
+                            className="text-rojo px-2"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setTarifasCapacidad((prev) => [...prev, { hastaLitros: "", costo: "" }])}
+                      className="text-sauce font-semibold hover:underline"
+                    >
+                      + Agregar capacidad
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!porCapacidad && (
             <div>
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-carbon/80">Costo por volumen (opcional)</span>
@@ -355,6 +508,7 @@ export function ModalOfertaProveedor({
                 </div>
               ))}
             </div>
+            )}
 
             {costoCambio && (
               <div>

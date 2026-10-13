@@ -1304,8 +1304,12 @@ export interface OfertaProveedorProducto {
   /** Precio de venta del producto al cliente (solo lectura, vía join). */
   productoPrecioUnitario: number;
   productoCategoria: string;
+  /** Tarifas por capacidad del producto (precio de venta por escalón; solo lectura, vía join). */
+  productoTarifasCapacidad: TarifaCapacidad[];
   costoUnitario: number;
   costosVolumen: { hasta: number; costo: number }[];
+  /** Costo del proveedor por capacidad en litros (tinacos, aljibes). */
+  tarifasCapacidad: { hastaLitros: number; costo: number }[];
   cantidadMinima: number;
   montoMinimo: number;
   descripcionProceso: string;
@@ -1334,6 +1338,7 @@ export type DatosOfertaProveedorProducto = Omit<
   | "productoUnidad"
   | "productoPrecioUnitario"
   | "productoCategoria"
+  | "productoTarifasCapacidad"
   | "updatedAt"
 >;
 

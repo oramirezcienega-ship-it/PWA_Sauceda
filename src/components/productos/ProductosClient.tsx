@@ -28,6 +28,7 @@ import {
 import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
+import { CAPACIDADES_COMUNES_LITROS, combinarCostosEnTarifas } from "@/lib/tarifas-capacidad";
 
 /** Duración en segundos de un video local (null si el navegador no la puede leer). */
 function leerDuracionVideo(file: File): Promise<number | null> {
@@ -2006,7 +2007,7 @@ export function ProductosClient({
                         onClick={() =>
                           setFormTarifas((prev) => {
                             const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
-                            const comunes = [450, 750, 1100, 1500, 2500, 5000].filter((l) => !existentes.has(l));
+                            const comunes = CAPACIDADES_COMUNES_LITROS.filter((l) => !existentes.has(l));
                             return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
                           })
                         }
@@ -2130,13 +2131,32 @@ export function ProductosClient({
                   id={prodEditando.id}
                   onPreferidoCambiado={(o) => {
                     // El preferido ya actualizó el catálogo; reflejarlo en el formulario para no pisarlo al guardar.
-                    setFormCostoUnitario(String(o.costoUnitario));
+                    if (o.costoUnitario > 0 || o.tarifasCapacidad.length === 0) setFormCostoUnitario(String(o.costoUnitario));
                     setFormCantidadMinima(o.cantidadMinima ? String(o.cantidadMinima) : "");
                     setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+                    const tarifas =
+                      o.tarifasCapacidad.length > 0
+                        ? combinarCostosEnTarifas(o.productoTarifasCapacidad, o.tarifasCapacidad)
+                        : o.productoTarifasCapacidad;
+                    if (o.tarifasCapacidad.length > 0) {
+                      setFormTarifas(
+                        tarifas.map((t) => ({
+                          hastaLitros: String(t.hastaLitros),
+                          costo: t.costo === null ? "" : String(t.costo),
+                          precio: t.precio === null ? "" : String(t.precio),
+                        }))
+                      );
+                    }
                     setProductos((prev) =>
                       prev.map((p) =>
                         p.id === o.productoId
-                          ? { ...p, costoUnitario: o.costoUnitario, cantidadMinima: o.cantidadMinima, costosVolumen: o.costosVolumen }
+                          ? {
+                              ...p,
+                              costoUnitario: o.costoUnitario,
+                              cantidadMinima: o.cantidadMinima,
+                              costosVolumen: o.costosVolumen,
+                              tarifasCapacidad: tarifas,
+                            }
                           : p
                       )
                     );

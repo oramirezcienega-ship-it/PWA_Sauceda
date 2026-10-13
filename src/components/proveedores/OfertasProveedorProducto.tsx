@@ -172,6 +172,15 @@ export function OfertasProveedorProducto({ modo, id, onPreferidoCambiado }: Ofer
                         {o.costosVolumen.length > 0 && (
                           <div className="text-[10px] text-carbon/50">{o.costosVolumen.length} rango(s) por volumen</div>
                         )}
+                        {o.tarifasCapacidad.length > 0 && (
+                          <div className="text-[10px] text-carbon/60">
+                            {o.tarifasCapacidad
+                              .slice(0, 3)
+                              .map((t) => `${t.hastaLitros.toLocaleString("es-MX")} L ${formatoPesos(t.costo)}`)
+                              .join(" · ")}
+                            {o.tarifasCapacidad.length > 3 ? " …" : ""}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
                         {formatoPesos(o.productoPrecioUnitario)}
@@ -249,6 +258,42 @@ export function OfertasProveedorProducto({ modo, id, onPreferidoCambiado }: Ofer
                               />
                               <Detalle titulo="Zonas" texto={o.zonasCobertura} />
                               <Detalle titulo="Notas" texto={o.notas} />
+                              {o.tarifasCapacidad.length > 0 && (
+                                <div>
+                                  <div className="text-[10px] uppercase font-bold text-carbon/50">Costo por capacidad</div>
+                                  <table className="mt-1 text-[11px]">
+                                    <thead>
+                                      <tr className="text-carbon/50">
+                                        <th className="pr-4 text-left font-semibold">Capacidad</th>
+                                        <th className="pr-4 text-right font-semibold">Costo</th>
+                                        <th className="pr-4 text-right font-semibold">Venta</th>
+                                        <th className="text-right font-semibold">Margen</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {o.tarifasCapacidad.map((t) => {
+                                        const venta =
+                                          o.productoTarifasCapacidad.find((v) => v.hastaLitros === t.hastaLitros)?.precio ?? null;
+                                        const m = venta !== null ? venta - t.costo : null;
+                                        return (
+                                          <tr key={t.hastaLitros} className="font-mono">
+                                            <td className="pr-4">{t.hastaLitros.toLocaleString("es-MX")} L</td>
+                                            <td className="pr-4 text-right">{formatoPesos(t.costo)}</td>
+                                            <td className="pr-4 text-right">{venta !== null ? formatoPesos(venta) : "—"}</td>
+                                            <td
+                                              className={`text-right ${
+                                                m === null ? "text-carbon/40" : m >= 0 ? "text-emerald-700" : "text-rojo"
+                                              }`}
+                                            >
+                                              {m === null ? "—" : formatoPesos(m)}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
                               {o.costosVolumen.length > 0 && (
                                 <div>
                                   <div className="text-[10px] uppercase font-bold text-carbon/50">Costo por volumen</div>
