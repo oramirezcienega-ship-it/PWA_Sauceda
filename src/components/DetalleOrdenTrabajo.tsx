@@ -691,7 +691,15 @@ export function DetalleOrdenTrabajo({
                     >
                       PDF
                     </a>
-                    {!soloLectura && (
+                    {!soloLectura && orden.estatus === "completada" && (
+                      <span
+                        className="px-1 text-[11px]"
+                        title="Orden completada: el recibo quedó cerrado. Un administrador puede reabrir la orden para corregirlo."
+                      >
+                        🔒
+                      </span>
+                    )}
+                    {!soloLectura && orden.estatus !== "completada" && (
                       <>
                         <button
                           type="button"

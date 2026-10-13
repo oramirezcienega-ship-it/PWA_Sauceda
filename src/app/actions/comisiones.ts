@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { errorSiComisionesCerradas } from "@/lib/cierre-ot";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import type {
   Comision,
@@ -787,6 +788,9 @@ export async function ajustarComisionManual(datos: {
     await requireAdmin();
     const sb = supabaseServidor();
 
+    const cerrada = await errorSiComisionesCerradas(sb, [datos.comisionId]);
+    if (cerrada) return { ok: false, error: cerrada };
+
     const { data: comisionActual, error: errBusq } = await sb
       .from("comisiones")
       .select("id, monto_pagado, estatus")
@@ -844,6 +848,9 @@ export async function cancelarComision(datos: {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
+
+    const cerrada = await errorSiComisionesCerradas(sb, [datos.comisionId]);
+    if (cerrada) return { ok: false, error: cerrada };
 
     const { data: com, error: errBusq } = await sb
       .from("comisiones")
@@ -918,6 +925,9 @@ export async function eliminarComision(datos: {
     await requireAdmin();
     const sb = supabaseServidor();
 
+    const cerrada = await errorSiComisionesCerradas(sb, [datos.comisionId]);
+    if (cerrada) return { ok: false, error: cerrada };
+
     const { data: com, error: errBusq } = await sb
       .from("comisiones")
       .select("id, monto_pagado, cita_id")
@@ -964,6 +974,9 @@ export async function eliminarComisionesMasivas(datos: {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
+
+    const cerradas = await errorSiComisionesCerradas(sb, datos.comisionIds || []);
+    if (cerradas) return { ok: false, error: cerradas };
 
     if (!datos.comisionIds || datos.comisionIds.length === 0) {
       return { ok: false, error: "No se seleccionaron comisiones para eliminar." };
@@ -1028,6 +1041,9 @@ export async function cancelarComisionesMasivas(datos: {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
+
+    const cerradas = await errorSiComisionesCerradas(sb, datos.comisionIds || []);
+    if (cerradas) return { ok: false, error: cerradas };
 
     if (!datos.comisionIds || datos.comisionIds.length === 0) {
       return { ok: false, error: "No se seleccionaron comisiones para cancelar." };
@@ -1100,6 +1116,9 @@ export async function editarComisionesMasivas(datos: {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
+
+    const cerradas = await errorSiComisionesCerradas(sb, datos.comisionIds || []);
+    if (cerradas) return { ok: false, error: cerradas };
 
     if (!datos.comisionIds || datos.comisionIds.length === 0) {
       return { ok: false, error: "No se seleccionaron comisiones para editar." };

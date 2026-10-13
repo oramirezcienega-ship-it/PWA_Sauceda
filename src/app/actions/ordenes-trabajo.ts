@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { ESTATUS_OT_CERRADA, mensajeOtCerrada, ordenesCerradas } from "@/lib/cierre-ot";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { estadoContratoDeOrden } from "@/app/actions/contratos";
 import { armarGarantiaDesdeCotizacion } from "@/lib/garantia-producto";
@@ -756,6 +757,21 @@ export async function actualizarEstatusOrdenTrabajo(
     await requireAdmin();
     const sb = supabaseServidor();
 
+    // Reabrir una OT completada vuelve editables sus recibos y comisiones: solo un administrador.
+    if (nuevoEstatus !== ESTATUS_OT_CERRADA) {
+      const { data: otActual } = await sb.from("ordenes_trabajo").select("estatus, folio").eq("id", ordenId).maybeSingle();
+      if (otActual?.estatus === ESTATUS_OT_CERRADA) {
+        const usuarioReabre = await usuarioActual();
+        const esAdminReabre = usuarioReabre ? (await rolDe(usuarioReabre.id)).rol === "admin" : false;
+        if (!esAdminReabre) {
+          return {
+            ok: false,
+            error: `La orden ${otActual.folio || ""} ya está completada; solo un administrador puede reabrirla.`,
+          };
+        }
+      }
+    }
+
     // La OT no pasa a "En proceso" sin contrato firmado (si nace de una
     // cotización). Un administrador puede forzarlo; queda en la bitácora.
     if (nuevoEstatus === "en_proceso") {
@@ -1425,6 +1441,10 @@ export async function actualizarReciboPago(
       .maybeSingle();
     if (!actual) return { ok: false, error: "Recibo no encontrado." };
 
+    // Con la orden de trabajo completada, sus recibos quedan cerrados.
+    const otCerrada = (await ordenesCerradas(sb, [actual.orden_trabajo_id])).get(actual.orden_trabajo_id);
+    if (otCerrada) return { ok: false, error: mensajeOtCerrada(otCerrada, "recibos") };
+
     const cambios: Record<string, any> = { updated_at: new Date().toISOString() };
 
     if (datos.monto !== undefined) {
@@ -1479,6 +1499,10 @@ export async function eliminarReciboPago(reciboId: string): Promise<{ ok: boolea
       .eq("id", reciboId)
       .maybeSingle();
     if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    // Con la orden de trabajo completada, sus recibos quedan cerrados.
+    const otCerrada = (await ordenesCerradas(sb, [actual.orden_trabajo_id])).get(actual.orden_trabajo_id);
+    if (otCerrada) return { ok: false, error: mensajeOtCerrada(otCerrada, "recibos") };
 
     // No se elimina si una comisión ligada a este recibo ya tiene pagos aplicados
     const { data: coms } = await sb
