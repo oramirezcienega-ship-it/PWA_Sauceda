@@ -1,7 +1,8 @@
 "use server";
 
 import { supabaseServidor } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import { generarTokenCarga } from "@/lib/asesoria/aliados";
 import { normalizarCostosVolumen } from "@/lib/costos-volumen";
 import { combinarCostosEnTarifas, costosCapacidadAJson, normalizarCostosCapacidad } from "@/lib/tarifas-capacidad";
 import type {
@@ -56,6 +57,8 @@ function aOferta(fila: any): OfertaProveedorProducto {
     preferido: fila.preferido === true,
     activo: fila.activo !== false,
     notas: fila.notas || "",
+    pendienteRevision: fila.pendiente_revision === true,
+    actualizadoPorProveedorAt: fila.actualizado_por_proveedor_at || null,
     updatedAt: fila.updated_at,
   };
 }
@@ -83,6 +86,8 @@ function aFilaOferta(d: DatosOfertaProveedorProducto) {
     preferido: d.preferido === true,
     activo: d.activo !== false,
     notas: (d.notas || "").trim(),
+    // Guardar desde el CRM cuenta como revisión de lo que capturó el proveedor.
+    pendiente_revision: false,
   };
 }
 
@@ -351,4 +356,54 @@ export async function obtenerHistorialOferta(ofertaId: string): Promise<Historia
     fecha: h.fecha,
     motivo: h.motivo || null,
   }));
+}
+
+/** Marca como revisada la actualización del proveedor; si es la preferida, copia su costo al catálogo. */
+export async function marcarOfertaRevisada(ofertaId: string): Promise<{ ok: boolean; oferta?: OfertaProveedorProducto; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("proveedor_productos")
+    .update({ pendiente_revision: false })
+    .eq("id", ofertaId)
+    .select(SELECT_OFERTA)
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const oferta = aOferta(data);
+  if (oferta.preferido) await sincronizarCostoProducto(sb, oferta);
+  return { ok: true, oferta };
+}
+
+// ============================================================================
+// Link público de precios del proveedor (/precios-proveedor/[token])
+// ============================================================================
+
+const SITE_URL = () => (process.env.SITE_URL || "https://crm.saucedamx.com").replace(/\/$/, "");
+const linkPrecios = (token: string) => `${SITE_URL()}/precios-proveedor/${token}`;
+
+/** Link permanente para que el proveedor actualice sus precios (lo crea si no existe; `regenerar` invalida el anterior). */
+export async function obtenerLinkPreciosProveedor(
+  proveedorId: string,
+  regenerar = false
+): Promise<{ ok: boolean; link?: string; telefono?: string; error?: string }> {
+  try {
+    if (regenerar) await requireAdministrador();
+    else await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: p } = await sb
+      .from("proveedores")
+      .select("token_precios, telefono")
+      .eq("id", proveedorId)
+      .maybeSingle();
+    if (!p) return { ok: false, error: "El proveedor no existe." };
+    let token = p.token_precios as string | null;
+    if (!token || regenerar) {
+      token = generarTokenCarga(crypto.getRandomValues(new Uint8Array(32)));
+      const { error } = await sb.from("proveedores").update({ token_precios: token }).eq("id", proveedorId);
+      if (error) return { ok: false, error: error.message };
+    }
+    return { ok: true, link: linkPrecios(token), telefono: p.telefono || "" };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "No se pudo obtener el link." };
+  }
 }

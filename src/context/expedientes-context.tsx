@@ -76,6 +76,8 @@ function esRutaPublica(path: string | null): boolean {
     path.startsWith("/c/") ||
     path.startsWith("/a/") ||
     path.startsWith("/asesor/") ||
+    path.startsWith("/aliados/carga/") ||
+    path.startsWith("/precios-proveedor/") ||
     (path.startsWith("/expediente/") && path.replace("/expediente/", "").length >= 24)
   );
 }

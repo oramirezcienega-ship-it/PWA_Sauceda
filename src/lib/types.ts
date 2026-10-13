@@ -1354,6 +1354,9 @@ export interface OfertaProveedorProducto {
   preferido: boolean;
   activo: boolean;
   notas: string;
+  /** El proveedor la actualizó desde su link y falta revisarla en el CRM. */
+  pendienteRevision: boolean;
+  actualizadoPorProveedorAt: string | null;
   updatedAt: string;
 }
 
@@ -1367,6 +1370,8 @@ export type DatosOfertaProveedorProducto = Omit<
   | "productoPrecioUnitario"
   | "productoCategoria"
   | "productoTarifasCapacidad"
+  | "pendienteRevision"
+  | "actualizadoPorProveedorAt"
   | "updatedAt"
 >;
 

@@ -8,7 +8,9 @@ import {
   listarOfertasPorProducto,
   listarOfertasPorProveedor,
   marcarOfertaPreferida,
+  marcarOfertaRevisada,
   obtenerHistorialOferta,
+  obtenerLinkPreciosProveedor,
 } from "@/app/actions/proveedor-productos";
 import { ModalOfertaProveedor } from "./ModalOfertaProveedor";
 
@@ -70,6 +72,17 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
     await cargar();
   }
 
+  async function handleRevisada(o: OfertaProveedorProducto) {
+    const res = await marcarOfertaRevisada(o.id);
+    if (!res.ok || !res.oferta) return alert(res.error || "No se pudo marcar como revisada.");
+    onProductoActualizado?.(res.oferta);
+    setHistorial((prev) => {
+      const { [o.id]: _, ...resto } = prev;
+      return resto;
+    });
+    await cargar();
+  }
+
   async function handleEliminar(o: OfertaProveedorProducto) {
     const nombre = modo === "proveedor" ? o.productoNombre : o.proveedorNombre;
     if (!confirm(`¿Quitar "${nombre}" de esta lista? El historial de costos de esta oferta también se borra.`)) return;
@@ -107,14 +120,24 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
               : "Compara costo, margen y condiciones. El ⭐ preferido define el costo del producto en el catálogo."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setModal({ oferta: null })}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-sauce px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-verde-profundo transition shrink-0"
-        >
-          + {modo === "proveedor" ? "Agregar producto" : "Agregar proveedor"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {modo === "proveedor" && <LinkPreciosProveedor proveedorId={id} />}
+          <button
+            type="button"
+            onClick={() => setModal({ oferta: null })}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-sauce px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-verde-profundo transition shrink-0"
+          >
+            + {modo === "proveedor" ? "Agregar producto" : "Agregar proveedor"}
+          </button>
+        </div>
       </div>
+
+      {ofertas && ofertas.some((o) => o.pendienteRevision) && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          🔔 El proveedor actualizó {ofertas.filter((o) => o.pendienteRevision).length} producto(s) desde su link.
+          Revisa los cambios y da clic en <b>Revisado</b>; hasta entonces su costo no se usa en el catálogo.
+        </div>
+      )}
 
       {ofertas === null ? (
         <div className="p-8 text-center text-carbon/50">Cargando…</div>
@@ -157,6 +180,18 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                             {o.preferido && <span title="Proveedor preferido">⭐</span>}
                             {modo === "proveedor" ? o.productoNombre : o.proveedorNombre}
                             {!o.activo && <span className="text-[9px] rounded bg-carbon/10 px-1">inactiva</span>}
+                            {o.pendienteRevision && (
+                              <span
+                                className="text-[9px] rounded bg-amber-100 text-amber-800 px-1 font-bold"
+                                title={
+                                  o.actualizadoPorProveedorAt
+                                    ? `Actualizado por el proveedor el ${formatoFecha(o.actualizadoPorProveedorAt)}`
+                                    : undefined
+                                }
+                              >
+                                🔔 actualizado por proveedor
+                              </span>
+                            )}
                             {modo === "producto" && !o.proveedorActivo && (
                               <span className="text-[9px] rounded bg-rojo/10 text-rojo px-1">proveedor inactivo</span>
                             )}
@@ -220,6 +255,16 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap space-x-1">
+                        {o.pendienteRevision && (
+                          <button
+                            type="button"
+                            onClick={() => handleRevisada(o)}
+                            title="Aceptar lo que capturó el proveedor"
+                            className="rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600"
+                          >
+                            ✓ Revisado
+                          </button>
+                        )}
                         {!o.preferido && (
                           <button
                             type="button"
@@ -384,6 +429,102 @@ function Detalle({ titulo, texto, multilinea }: { titulo: string; texto: string;
     <div>
       <div className="text-[10px] uppercase font-bold text-carbon/50">{titulo}</div>
       <div className={`text-carbon/80 ${multilinea ? "whitespace-pre-line" : ""}`}>{texto}</div>
+    </div>
+  );
+}
+
+/** Link para que el proveedor actualice sus precios sin usuario: copiar, enviar por WhatsApp o regenerar. */
+function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [telefono, setTelefono] = useState("");
+  const [copiado, setCopiado] = useState(false);
+  const [cargando, setCargando] = useState(false);
+
+  async function obtener(regenerar = false) {
+    if (regenerar && !confirm("El link anterior dejará de funcionar. ¿Generar uno nuevo?")) return;
+    setCargando(true);
+    const res = await obtenerLinkPreciosProveedor(proveedorId, regenerar);
+    setCargando(false);
+    if (!res.ok || !res.link) return alert(res.error || "No se pudo obtener el link.");
+    setLink(res.link);
+    setTelefono(res.telefono || "");
+    setAbierto(true);
+  }
+
+  async function copiar() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      prompt("Copia el link:", link);
+    }
+  }
+
+  const digitos = telefono.replace(/\D/g, "");
+  const telWa = digitos.length === 10 ? `52${digitos}` : digitos;
+  const textoWa = link
+    ? `Hola, te comparto tu link de SAUCEDA para actualizar tus costos, garantía, proceso y fotos de los servicios que nos ofreces: ${link}`
+    : "";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => (abierto ? setAbierto(false) : obtener())}
+        disabled={cargando}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-semibold text-carbon/80 hover:border-sauce hover:text-sauce disabled:opacity-50"
+      >
+        🔗 Link para el proveedor
+      </button>
+      {abierto && link && (
+        <div className="absolute right-0 z-20 mt-2 w-80 max-w-[90vw] space-y-2 rounded-xl border border-carbon/15 bg-white p-3 shadow-lg">
+          <p className="text-[11px] text-carbon/60">
+            El proveedor abre este link sin usuario ni contraseña, desde el celular o la computadora. Ve y edita solo su
+            costo, garantía, proceso, tiempos y fotos; nunca nuestro precio de venta.
+          </p>
+          <input
+            readOnly
+            value={link}
+            onFocus={(e) => e.target.select()}
+            className="w-full rounded border border-carbon/20 px-2 py-1 font-mono text-[10.5px]"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={copiar}
+              className="rounded-md bg-sauce px-2.5 py-1 text-[11px] font-semibold text-white"
+            >
+              {copiado ? "✓ Copiado" : "Copiar"}
+            </button>
+            <a
+              href={`https://wa.me/${telWa}?text=${encodeURIComponent(textoWa)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white"
+            >
+              WhatsApp
+            </a>
+            <a
+              href={link}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-carbon/20 px-2.5 py-1 text-[11px] font-semibold text-carbon/70"
+            >
+              Ver como proveedor
+            </a>
+            <button
+              type="button"
+              onClick={() => obtener(true)}
+              className="rounded-md border border-rojo/30 px-2.5 py-1 text-[11px] font-semibold text-rojo"
+            >
+              Regenerar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
