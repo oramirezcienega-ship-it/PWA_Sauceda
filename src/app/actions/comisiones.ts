@@ -1722,29 +1722,18 @@ export async function sincronizarComisionParaRemision(
         .eq("id", rem.orden_trabajo_id)
         .maybeSingle();
       if (!asesorId) {
-        asesorId = ot?.asesor_responsable_id || ot?.asesor_ejecutor_id || null;
+        // Vendedor = responsable de la OT; el técnico que ejecuta (asesor_ejecutor_id) no comisiona la venta.
+        asesorId = ot?.asesor_responsable_id || null;
       }
       if (ot?.costo_proveedor) {
         otCostoProveedor = Number(ot.costo_proveedor);
       }
     }
 
-    if (!asesorId) {
-      // Si no hay asesor asignado explícito, buscar el primer asesor activo
-      const { data: defaultAsesor } = await sb
-        .from("perfiles")
-        .select("id")
-        .eq("rol", "asesor")
-        .eq("activo", true)
-        .order("nombre", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      asesorId = defaultAsesor?.id || null;
-    }
+    // Sin vendedor/asesor asignado no hay comisión (antes se le daba al primer asesor por orden alfabético).
 
     if (!asesorId) {
-      return { ok: false, error: "No se encontró ningún asesor activo para comisionar la venta." };
+      return { ok: true, error: "La venta no tiene vendedor asignado: no genera comisión." };
     }
 
     if (!(await asesorGeneraComisiones(sb, asesorId))) {
@@ -1996,7 +1985,8 @@ export async function sincronizarComisionParaRecibo(
         .eq("id", rec.orden_trabajo_id)
         .maybeSingle();
       costoProveedorRec = Number(ot?.costo_proveedor || 0);
-      asesorId = ot?.asesor_ejecutor_id || ot?.asesor_responsable_id || null;
+      // Vendedor = responsable de la OT; el técnico que ejecuta (asesor_ejecutor_id) no comisiona la venta.
+      asesorId = ot?.asesor_responsable_id || null;
       if (!asesorId && ot?.prospecto_id) {
         const { data: prosOt } = await sb
           .from("prospectos")
@@ -2033,21 +2023,10 @@ export async function sincronizarComisionParaRecibo(
       asesorId = exp?.asesor_id || null;
     }
 
-    if (!asesorId) {
-      const { data: defaultAsesor } = await sb
-        .from("perfiles")
-        .select("id")
-        .eq("rol", "asesor")
-        .eq("activo", true)
-        .order("nombre", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      asesorId = defaultAsesor?.id || null;
-    }
+    // Sin vendedor/asesor asignado no hay comisión (antes se le daba al primer asesor por orden alfabético).
 
     if (!asesorId) {
-      return { ok: false, error: "No se encontró ningún asesor activo para comisionar la venta." };
+      return { ok: true, error: "La venta no tiene vendedor asignado: no genera comisión." };
     }
 
     if (!(await asesorGeneraComisiones(sb, asesorId))) {
@@ -2187,6 +2166,13 @@ export async function sincronizarComisionParaInspeccion(
     citaData?: any;
     /** Regenera la comisión aunque el admin la haya eliminado antes. */
     forzar?: boolean;
+    /**
+     * Crear la comisión si aún no existe. Las inspecciones ya no comisionan en
+     * automático: solo cuando un humano la marca como ejecutada y comisionable.
+     * Sin esto, la función solo actualiza una comisión que ya existía (p. ej. si
+     * se reasigna el asesor de la cita).
+     */
+    crear?: boolean;
   }
 ): Promise<{ ok: boolean; comisionId?: string; error?: string }> {
   try {
@@ -2258,20 +2244,10 @@ export async function sincronizarComisionParaInspeccion(
       asesorId = pros?.asesor_id || null;
     }
 
-    if (!asesorId) {
-      const { data: defaultAsesor } = await sb
-        .from("perfiles")
-        .select("id")
-        .eq("rol", "asesor")
-        .eq("activo", true)
-        .order("nombre", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      asesorId = defaultAsesor?.id || null;
-    }
+    // Sin vendedor/asesor asignado no hay comisión (antes se le daba al primer asesor por orden alfabético).
 
     if (!asesorId) {
-      return { ok: false, error: "No se encontró ningún asesor asignado para comisionar la inspección." };
+      return { ok: true, error: "La inspección no tiene asesor asignado: no genera comisión." };
     }
 
     if (!(await asesorGeneraComisiones(sb, asesorId))) {
@@ -2358,7 +2334,10 @@ export async function sincronizarComisionParaInspeccion(
       return { ok: true, comisionId: comisionExistente.id };
     }
 
-    // 5. Crear nueva comisión por inspección técnica ejecutada
+    // 5. Crear nueva comisión por inspección técnica ejecutada (solo si un humano lo pidió)
+    if (!opciones?.crear && !opciones?.forzar) {
+      return { ok: true };
+    }
     const { data: nuevaCom, error: errIns } = await sb
       .from("comisiones")
       .insert({

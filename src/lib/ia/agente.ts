@@ -34,7 +34,6 @@ import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
 import {
   calcularSlotsVespertinosRemodelacion,
   type SlotVespertinoRemodelacion,
-  registrarPropuestaRemodelacionDesdeIA,
 } from "@/lib/coordinacion-inspecciones";
 
 /**
@@ -2012,21 +2011,18 @@ export async function responderConIA(
             const clienteNombreCompleto = [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" ") || updates.cliente || "Cliente Remodelación";
             const ubicacionRemod = updates.direccion || updates.colonia || exp?.fraccionamiento || "León, Gto.";
 
-            const resRemod = await registrarPropuestaRemodelacionDesdeIA(sb, {
-              prospectoId: exp?.prospecto_id ?? null,
+            // Sofía ya no agenda ni despacha propuestas de inspección por su cuenta: se avisa al
+            // asesor con las opciones que eligió el cliente y él decide si coordina la visita.
+            await avisarAsesorDesdeIA(sb, {
+              telefono: ctx.telefono,
+              motivo: `Remodelación: el cliente pide visita en ${ubicacionRemod}. Opciones que eligió: ${slotsElegidos
+                .map((x) => x.label)
+                .join(" / ")}. Coordínala tú si procede.`,
               expedienteId: ctx.expedienteId ?? null,
-              clienteNombre: clienteNombreCompleto,
-              clienteTelefono: exp?.telefono || ctx.telefono,
-              colonia: updates.colonia || exp?.fraccionamiento || null,
-              ubicacion: ubicacionRemod,
-              detallesProyecto: updates.necesidad || exp?.necesidad || "Remodelación en sitio",
-              opcionesSeleccionadas: slotsElegidos,
-              tecnicoId: updates.asesor_id || exp?.asesor_id || exp?.operador_id || null,
+              prospectoId: exp?.prospecto_id ?? null,
+              asesorId: updates.asesor_id || exp?.asesor_id || null,
+              nombreCliente: clienteNombreCompleto,
             });
-
-            if (resRemod.ok) {
-              console.log(`[IA Coordinación] Propuesta de remodelación despachada al técnico (${resRemod.coordinacionId})`);
-            }
           }
         } catch (errRemod) {
           console.error("IA: Error al registrar propuesta de inspección de remodelación:", errRemod);
