@@ -44,6 +44,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     fichaTecnicaUrl: fila.ficha_tecnica_url || null,
     fichaTecnicaNombre: fila.ficha_tecnica_nombre || null,
     tarifasCapacidad: normalizarTarifasCapacidad(fila.tarifas_capacidad),
+    tarifaMedida: fila.tarifa_medida === "tubos" ? "tubos" : "litros",
     cantidadMinima: Number(fila.cantidad_minima || 0),
     costosVolumen: normalizarCostosVolumen(fila.costos_volumen),
     createdAt: fila.created_at,
@@ -232,6 +233,7 @@ export async function crearProductoServicio(datos: {
   fichaTecnicaUrl?: string | null;
   fichaTecnicaNombre?: string | null;
   tarifasCapacidad?: TarifaCapacidad[];
+  tarifaMedida?: "litros" | "tubos";
   cantidadMinima?: number;
   costosVolumen?: CostoVolumen[];
 }): Promise<ProductoServicio> {
@@ -271,6 +273,7 @@ export async function crearProductoServicio(datos: {
       ficha_tecnica_url: datos.fichaTecnicaUrl || null,
       ficha_tecnica_nombre: datos.fichaTecnicaUrl ? datos.fichaTecnicaNombre || null : null,
       tarifas_capacidad: tarifasAJson(datos.tarifasCapacidad),
+      tarifa_medida: datos.tarifaMedida === "tubos" ? "tubos" : "litros",
       cantidad_minima: Math.max(0, Number(datos.cantidadMinima || 0)),
       costos_volumen: normalizarCostosVolumen(datos.costosVolumen),
     })
@@ -306,6 +309,7 @@ export async function editarProductoServicio(
     fichaTecnicaUrl?: string | null;
     fichaTecnicaNombre?: string | null;
     tarifasCapacidad?: TarifaCapacidad[];
+    tarifaMedida?: "litros" | "tubos";
     cantidadMinima?: number;
     costosVolumen?: CostoVolumen[];
   }
@@ -343,6 +347,9 @@ export async function editarProductoServicio(
   }
   if (datos.tarifasCapacidad !== undefined) {
     updatePayload.tarifas_capacidad = tarifasAJson(datos.tarifasCapacidad);
+  }
+  if (datos.tarifaMedida !== undefined) {
+    updatePayload.tarifa_medida = datos.tarifaMedida === "tubos" ? "tubos" : "litros";
   }
   if (datos.codigoSubcuenta !== undefined) {
     updatePayload.codigo_subcuenta = datos.codigoSubcuenta || null;

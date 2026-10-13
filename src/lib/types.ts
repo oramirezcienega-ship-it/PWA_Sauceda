@@ -1189,6 +1189,8 @@ export interface ProductoServicio {
   fichaTecnicaNombre?: string | null;
   /** Precio por escalón de capacidad (litros), para servicios como limpieza de tinacos/cisternas. */
   tarifasCapacidad?: TarifaCapacidad[];
+  /** Medida de los escalones de tarifasCapacidad: litros (tinacos, aljibes) o tubos (calentadores solares). */
+  tarifaMedida?: "litros" | "tubos";
   /** Cantidad mínima de cobro, en la unidad del producto (0 = sin mínimo). */
   cantidadMinima?: number;
   /** Costo del proveedor por rango de cantidad (interno). */
@@ -1334,6 +1336,8 @@ export interface OfertaProveedorProducto {
   productoCategoria: string;
   /** Tarifas por capacidad del producto (precio de venta por escalón; solo lectura, vía join). */
   productoTarifasCapacidad: TarifaCapacidad[];
+  /** Medida de los escalones del producto (litros o tubos). */
+  productoTarifaMedida: "litros" | "tubos";
   costoUnitario: number;
   costosVolumen: { hasta: number; costo: number }[];
   /** Costo del proveedor por capacidad en litros (tinacos, aljibes). */
@@ -1370,6 +1374,7 @@ export type DatosOfertaProveedorProducto = Omit<
   | "productoPrecioUnitario"
   | "productoCategoria"
   | "productoTarifasCapacidad"
+  | "productoTarifaMedida"
   | "pendienteRevision"
   | "actualizadoPorProveedorAt"
   | "updatedAt"

@@ -28,7 +28,12 @@ import {
 import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
-import { CAPACIDADES_COMUNES_LITROS, combinarCostosEnTarifas } from "@/lib/tarifas-capacidad";
+import {
+  MEDIDAS_TARIFA,
+  combinarCostosEnTarifas,
+  medidaSugeridaPorNombre,
+  type MedidaTarifa,
+} from "@/lib/tarifas-capacidad";
 
 /** Duración en segundos de un video local (null si el navegador no la puede leer). */
 function leerDuracionVideo(file: File): Promise<number | null> {
@@ -109,6 +114,7 @@ export function ProductosClient({
   const [formFotos, setFormFotos] = useState<FotoProducto[]>([]);
   const [formVideos, setFormVideos] = useState<VideoProducto[]>([]);
   const [formTarifas, setFormTarifas] = useState<{ hastaLitros: string; costo: string; precio: string }[]>([]);
+  const [formTarifaMedida, setFormTarifaMedida] = useState<MedidaTarifa>("litros");
   const [formFichaUrl, setFormFichaUrl] = useState("");
   const [formFichaNombre, setFormFichaNombre] = useState("");
   const [subiendoFicha, setSubiendoFicha] = useState(false);
@@ -188,6 +194,7 @@ export function ProductosClient({
     setFormFichaUrl("");
     setFormFichaNombre("");
     setFormTarifas([]);
+    setFormTarifaMedida("litros");
     setFormCantidadMinima("");
     setFormCostosVolumen([]);
     setFormComposicionApu([]);
@@ -217,6 +224,7 @@ export function ProductosClient({
     setFormFotos(p.fotos || []);
     setFormVideos(p.videos || []);
     setFormFichaUrl(p.fichaTecnicaUrl || "");
+    setFormTarifaMedida(p.tarifaMedida || medidaSugeridaPorNombre(p.nombre) || "litros");
     setFormTarifas((p.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), costo: t.costo === null || t.costo === undefined ? "" : String(t.costo), precio: t.precio === null ? "" : String(t.precio) })));
     setFormFichaNombre(p.fichaTecnicaNombre || "");
     setTabModalProd("general");
@@ -285,6 +293,7 @@ export function ProductosClient({
             costo: t.costo.trim() === "" ? null : Number(t.costo),
             precio: t.precio.trim() === "" ? null : Number(t.precio),
           })),
+        tarifaMedida: formTarifaMedida,
         fichaTecnicaUrl: formFichaUrl || null,
         fichaTecnicaNombre: formFichaNombre || null,
       };
@@ -1996,31 +2005,46 @@ export function ProductosClient({
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <span className="font-semibold text-carbon block">📏 Tarifas por capacidad (litros)</span>
+                        <span className="font-semibold text-carbon block">📏 Tarifas por escalón</span>
                         <p className="text-[11px] text-carbon/60 mt-0.5">
-                          Para servicios cuyo precio depende del tamaño (tinacos, cisternas). Sofía cotiza el primer escalón cuya capacidad
-                          cubra los litros del cliente. El costo del proveedor es interno: Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
+                          Para servicios cuyo precio depende del tamaño: litros (tinacos, cisternas) o número de tubos (calentadores
+                          solares). Se cotiza el primer escalón que cubra la medida del cliente. El costo del proveedor es interno:
+                          Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
                         </p>
+                        <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-carbon/80">
+                          Se mide en:
+                          <select
+                            value={formTarifaMedida}
+                            onChange={(e) => setFormTarifaMedida(e.target.value as MedidaTarifa)}
+                            className="rounded-lg border border-carbon/20 bg-white px-2 py-1"
+                          >
+                            {(Object.keys(MEDIDAS_TARIFA) as MedidaTarifa[]).map((m) => (
+                              <option key={m} value={m}>
+                                {MEDIDAS_TARIFA[m].etiqueta} ({MEDIDAS_TARIFA[m].ejemplos})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
                       <button
                         type="button"
                         onClick={() =>
                           setFormTarifas((prev) => {
                             const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
-                            const comunes = CAPACIDADES_COMUNES_LITROS.filter((l) => !existentes.has(l));
+                            const comunes = MEDIDAS_TARIFA[formTarifaMedida].comunes.filter((l) => !existentes.has(l));
                             return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
                           })
                         }
                         className="shrink-0 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
                       >
-                        Cargar capacidades comunes
+                        Cargar medidas comunes
                       </button>
                     </div>
                     {formTarifas.length > 0 && (
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
                           <span className="w-14" />
-                          <span className="w-28">Capacidad (L)</span>
+                          <span className="w-28">{MEDIDAS_TARIFA[formTarifaMedida].etiqueta}</span>
                           <span className="w-[4.5rem]" />
                           <span className="w-32">Precio proveedor</span>
                           <span className="w-32">Precio de venta</span>
@@ -2040,7 +2064,9 @@ export function ProductosClient({
                                 onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
                                 className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
                               />
-                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">litros → $</span>
+                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">
+                                {MEDIDAS_TARIFA[formTarifaMedida].etiqueta.toLowerCase()} → $
+                              </span>
                               <input
                                 type="number"
                                 min={0}

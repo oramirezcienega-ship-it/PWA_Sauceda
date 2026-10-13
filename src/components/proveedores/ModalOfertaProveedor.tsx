@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatoPesos } from "@/lib/formato";
 import type { DatosOfertaProveedorProducto, FotoOfertaProveedor, OfertaProveedorProducto, TarifaCapacidad } from "@/lib/types";
-import { CAPACIDADES_COMUNES_LITROS } from "@/lib/tarifas-capacidad";
+import { MEDIDAS_TARIFA, medidaSugeridaPorNombre, type MedidaTarifa } from "@/lib/tarifas-capacidad";
 import { guardarOfertaProveedor, listarProductosParaOferta } from "@/app/actions/proveedor-productos";
 import { listarProveedoresMin } from "@/app/actions/proveedores";
 import {
@@ -36,10 +36,8 @@ type ProductoOpcion = {
   precioUnitario: number;
   categoria: string;
   tarifasCapacidad: TarifaCapacidad[];
+  tarifaMedida: MedidaTarifa;
 };
-
-/** Servicios que normalmente se cobran por tamaño del depósito. */
-const RE_POR_CAPACIDAD = /tinaco|aljib|cisterna/i;
 
 type FilaCapacidad = { hastaLitros: string; costo: string; precio: string };
 
@@ -99,7 +97,7 @@ export function ModalOfertaProveedor({
     !!oferta &&
       (oferta.tarifasCapacidad.length > 0 ||
         oferta.productoTarifasCapacidad.length > 0 ||
-        RE_POR_CAPACIDAD.test(oferta.productoNombre))
+        medidaSugeridaPorNombre(oferta.productoNombre) !== null)
   );
   const [cantidadMinima, setCantidadMinima] = useState(oferta?.cantidadMinima ? String(oferta.cantidadMinima) : "");
   const [montoMinimo, setMontoMinimo] = useState(oferta?.montoMinimo ? String(oferta.montoMinimo) : "");
@@ -167,6 +165,7 @@ export function ModalOfertaProveedor({
         costoUnitario: 0,
         centroCostoId: npCentroCostoId || null,
         aptoParaIa: false,
+        tarifaMedida: medidaSugeridaPorNombre(npNombre) ?? "litros",
       });
       setProductos((prev) =>
         [
@@ -178,6 +177,7 @@ export function ModalOfertaProveedor({
             precioUnitario: nuevo.precioUnitario,
             categoria: nuevo.categoria || "General",
             tarifasCapacidad: [],
+            tarifaMedida: nuevo.tarifaMedida || "litros",
           },
         ].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
       );
@@ -195,11 +195,13 @@ export function ModalOfertaProveedor({
     }
   }
   const tarifasVenta = producto?.tarifasCapacidad ?? oferta?.productoTarifasCapacidad ?? [];
+  const medida: MedidaTarifa = producto?.tarifaMedida ?? oferta?.productoTarifaMedida ?? "litros";
+  const infoMedida = MEDIDAS_TARIFA[medida];
 
   // Al elegir un producto nuevo, activa el costo por capacidad si aplica y precarga sus escalones.
   useEffect(() => {
     if (oferta || !producto) return;
-    const aplica = producto.tarifasCapacidad.length > 0 || RE_POR_CAPACIDAD.test(producto.nombre);
+    const aplica = producto.tarifasCapacidad.length > 0 || medidaSugeridaPorNombre(producto.nombre) !== null;
     setPorCapacidad(aplica);
     setPrecioVentaBase(String(producto.precioUnitario));
     setTarifasCapacidad(aplica ? filasCapacidad([], producto.tarifasCapacidad) : []);
@@ -208,7 +210,7 @@ export function ModalOfertaProveedor({
   function cargarCapacidadesComunes() {
     setTarifasCapacidad((prev) => {
       const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
-      const nuevas = CAPACIDADES_COMUNES_LITROS.filter((l) => !existentes.has(l)).map((l) => ({
+      const nuevas = MEDIDAS_TARIFA[medida].comunes.filter((l) => !existentes.has(l)).map((l) => ({
         hastaLitros: String(l),
         costo: "",
         precio: "",
@@ -573,7 +575,7 @@ export function ModalOfertaProveedor({
             {productoId && (
               <label className="flex items-center gap-2 cursor-pointer font-semibold text-carbon/80">
                 <input type="checkbox" checked={porCapacidad} onChange={(e) => setPorCapacidad(e.target.checked)} />
-                Se cobra por capacidad en litros (tinacos, aljibes, cisternas)
+                Se cobra por escalones: litros (tinacos, aljibes) o tubos (calentadores solares)
               </label>
             )}
 
@@ -603,9 +605,12 @@ export function ModalOfertaProveedor({
               <div className="rounded-lg border border-carbon/10 bg-white p-3 space-y-2">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <span className="font-semibold text-carbon/80">📏 Costo por capacidad (litros)</span>
+                    <span className="font-semibold text-carbon/80">
+                      📏 Costo por {infoMedida.etiqueta.toLowerCase()} ({infoMedida.ejemplos})
+                    </span>
                     <p className="text-[10.5px] text-carbon/50 mt-0.5">
-                      Se aplica el primer escalón que cubre los litros del cliente. El <b>costo</b> es de este proveedor;
+                      Se aplica el primer escalón que cubre los {infoMedida.etiqueta.toLowerCase()} del cliente. La medida
+                      (litros o tubos) se define en el producto. El <b>costo</b> es de este proveedor;
                       el <b>precio de venta</b> es del producto: aplica con cualquier proveedor y es el que cotiza Sofía.
                     </p>
                   </div>
@@ -620,7 +625,7 @@ export function ModalOfertaProveedor({
                 {tarifasCapacidad.length > 0 && (
                   <div className="space-y-1.5">
                     <div className={`${gridCapacidad} text-[10px] font-bold uppercase tracking-wide text-carbon/50`}>
-                      <span>Capacidad (L)</span>
+                      <span>Hasta ({infoMedida.etiqueta.toLowerCase()})</span>
                       <span>Costo proveedor</span>
                       <span>Precio venta</span>
                       <span className="text-right">Margen</span>
@@ -640,7 +645,7 @@ export function ModalOfertaProveedor({
                             value={t.hastaLitros}
                             onChange={(e) => cambiar("hastaLitros", e.target.value)}
                             className={inputTablaCls}
-                            placeholder="Litros"
+                            placeholder={infoMedida.etiqueta}
                           />
                           <input
                             type="number"
@@ -685,7 +690,7 @@ export function ModalOfertaProveedor({
                       onClick={() => setTarifasCapacidad((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
                       className="text-sauce font-semibold hover:underline"
                     >
-                      + Agregar capacidad
+                      + Agregar escalón
                     </button>
                   </div>
                 )}

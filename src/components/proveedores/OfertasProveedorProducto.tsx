@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { formatoPesos } from "@/lib/formato";
+import { formatoEscalon, MEDIDAS_TARIFA } from "@/lib/tarifas-capacidad";
 import type { HistorialOfertaProveedor, OfertaProveedorProducto } from "@/lib/types";
 import {
   eliminarOfertaProveedor,
@@ -214,7 +215,7 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                           <div className="text-[10px] text-carbon/60">
                             {o.tarifasCapacidad
                               .slice(0, 3)
-                              .map((t) => `${t.hastaLitros.toLocaleString("es-MX")} L ${formatoPesos(t.costo)}`)
+                              .map((t) => `${formatoEscalon(t.hastaLitros, o.productoTarifaMedida)} ${formatoPesos(t.costo)}`)
                               .join(" · ")}
                             {o.tarifasCapacidad.length > 3 ? " …" : ""}
                           </div>
@@ -308,7 +309,9 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                               <Detalle titulo="Notas" texto={o.notas} />
                               {o.tarifasCapacidad.length > 0 && (
                                 <div>
-                                  <div className="text-[10px] uppercase font-bold text-carbon/50">Costo por capacidad</div>
+                                  <div className="text-[10px] uppercase font-bold text-carbon/50">
+                                    Costo por {MEDIDAS_TARIFA[o.productoTarifaMedida].etiqueta.toLowerCase()}
+                                  </div>
                                   <table className="mt-1 text-[11px]">
                                     <thead>
                                       <tr className="text-carbon/50">
@@ -325,7 +328,7 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                                         const m = venta !== null ? venta - t.costo : null;
                                         return (
                                           <tr key={t.hastaLitros} className="font-mono">
-                                            <td className="pr-4">{t.hastaLitros.toLocaleString("es-MX")} L</td>
+                                            <td className="pr-4">{formatoEscalon(t.hastaLitros, o.productoTarifaMedida)}</td>
                                             <td className="pr-4 text-right">{formatoPesos(t.costo)}</td>
                                             <td className="pr-4 text-right">{venta !== null ? formatoPesos(venta) : "—"}</td>
                                             <td

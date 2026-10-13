@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { formatoPesos } from "@/lib/formato";
-import { CAPACIDADES_COMUNES_LITROS } from "@/lib/tarifas-capacidad";
+import { MEDIDAS_TARIFA, formatoEscalon, medidaSugeridaPorNombre } from "@/lib/tarifas-capacidad";
 import {
   guardarOfertaPortal,
   prepararSubidaFotoPortal,
@@ -80,9 +80,11 @@ function TarjetaOferta({
   onGuardada: (o: OfertaPortalProveedor) => void;
 }) {
   const unidad = oferta.productoUnidad;
+  const medida = oferta.productoTarifaMedida;
+  const infoMedida = MEDIDAS_TARIFA[medida];
   const [costoUnitario, setCostoUnitario] = useState(oferta.costoUnitario ? String(oferta.costoUnitario) : "");
   const [porCapacidad, setPorCapacidad] = useState(
-    oferta.tarifasCapacidad.length > 0 || /tinaco|aljib|cisterna/i.test(oferta.productoNombre)
+    oferta.tarifasCapacidad.length > 0 || medidaSugeridaPorNombre(oferta.productoNombre) !== null
   );
   const [capacidades, setCapacidades] = useState<{ hastaLitros: string; costo: string }[]>(
     oferta.tarifasCapacidad.map((t) => ({ hastaLitros: String(t.hastaLitros), costo: String(t.costo) }))
@@ -113,7 +115,7 @@ function TarjetaOferta({
       ? capacidades
           .filter((c) => c.costo !== "")
           .slice(0, 2)
-          .map((c) => `${Number(c.hastaLitros).toLocaleString("es-MX")} L ${formatoPesos(Number(c.costo))}`)
+          .map((c) => `${formatoEscalon(Number(c.hastaLitros), medida)} ${formatoPesos(Number(c.costo))}`)
           .join(" · ")
       : costoUnitario
       ? `${formatoPesos(Number(costoUnitario))}/${unidad}`
@@ -149,7 +151,7 @@ function TarjetaOferta({
       const existentes = new Set(prev.map((c) => Number(c.hastaLitros)));
       return [
         ...prev,
-        ...CAPACIDADES_COMUNES_LITROS.filter((l) => !existentes.has(l)).map((l) => ({ hastaLitros: String(l), costo: "" })),
+        ...infoMedida.comunes.filter((l) => !existentes.has(l)).map((l) => ({ hastaLitros: String(l), costo: "" })),
       ].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
     });
   }
@@ -220,13 +222,13 @@ function TarjetaOferta({
             <h3 className="text-sm font-bold text-verde-profundo">💲 Tu costo para SAUCEDA</h3>
             <label className="flex items-center gap-2 text-sm text-carbon/80">
               <input type="checkbox" checked={porCapacidad} onChange={(e) => setPorCapacidad(e.target.checked)} />
-              Cobro según la capacidad en litros (tinacos, aljibes, cisternas)
+              Cobro por escalones de {infoMedida.etiqueta.toLowerCase()} ({infoMedida.ejemplos})
             </label>
 
             {porCapacidad ? (
               <div className="space-y-2">
                 <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[11px] font-bold uppercase text-carbon/50">
-                  <span>Capacidad (litros)</span>
+                  <span>Hasta ({infoMedida.etiqueta.toLowerCase()})</span>
                   <span>Tu costo ($)</span>
                   <span className="w-6" />
                 </div>
@@ -241,7 +243,7 @@ function TarjetaOferta({
                         setCapacidades((prev) => prev.map((x, j) => (j === i ? { ...x, hastaLitros: e.target.value } : x)))
                       }
                       className={inputCls}
-                      placeholder="Litros"
+                      placeholder={infoMedida.etiqueta}
                     />
                     <input
                       type="number"
@@ -271,10 +273,10 @@ function TarjetaOferta({
                     onClick={() => setCapacidades((prev) => [...prev, { hastaLitros: "", costo: "" }])}
                     className="font-semibold text-sauce"
                   >
-                    + Agregar capacidad
+                    + Agregar escalón
                   </button>
                   <button type="button" onClick={cargarCapacidadesComunes} className="font-semibold text-sauce">
-                    + Capacidades comunes
+                    + Medidas comunes
                   </button>
                 </div>
               </div>

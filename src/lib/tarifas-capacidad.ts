@@ -1,5 +1,7 @@
-// Costo del proveedor por capacidad en litros (proveedor_productos.tarifas_capacidad),
-// para servicios que se cobran por tamaño: tinacos, aljibes/cisternas.
+// Tarifas por escalón para servicios que se cobran por tamaño. La medida del escalón
+// la define el producto (productos_servicios.tarifa_medida): litros (tinacos,
+// aljibes/cisternas) o tubos (calentadores solares). La llave JSON sigue siendo
+// `hasta_litros` / `hastaLitros` por compatibilidad: su valor está en esa medida.
 
 import type { TarifaCapacidad } from "@/lib/types";
 
@@ -8,8 +10,41 @@ export interface CostoCapacidad {
   costo: number;
 }
 
-/** Capacidades más comunes en el mercado: tinacos (450–2,500 L) y aljibes/cisternas (2,800–10,000 L). */
-export const CAPACIDADES_COMUNES_LITROS = [450, 750, 1100, 1500, 2500, 2800, 5000, 10000];
+export type MedidaTarifa = "litros" | "tubos";
+
+export const MEDIDAS_TARIFA: Record<
+  MedidaTarifa,
+  { etiqueta: string; abrev: string; ejemplos: string; comunes: number[] }
+> = {
+  // Tinacos (450–2,500 L) y aljibes/cisternas (2,800–10,000 L).
+  litros: {
+    etiqueta: "Litros",
+    abrev: "L",
+    ejemplos: "tinacos, aljibes, cisternas",
+    comunes: [450, 750, 1100, 1500, 2500, 2800, 5000, 10000],
+  },
+  // Calentadores solares de tubos al vacío.
+  tubos: { etiqueta: "Tubos", abrev: "tubos", ejemplos: "calentadores solares", comunes: [8, 10, 12, 15, 18, 20, 24, 30] },
+};
+
+/** Compatibilidad: capacidades comunes en litros. */
+export const CAPACIDADES_COMUNES_LITROS = MEDIDAS_TARIFA.litros.comunes;
+
+export function medidaTarifa(valor: unknown): MedidaTarifa {
+  return valor === "tubos" ? "tubos" : "litros";
+}
+
+/** Medida sugerida por el nombre del producto; null si no parece cobrarse por escalones. */
+export function medidaSugeridaPorNombre(nombre: string): MedidaTarifa | null {
+  if (/calentador|solar/i.test(nombre)) return "tubos";
+  if (/tinaco|aljib|cisterna/i.test(nombre)) return "litros";
+  return null;
+}
+
+/** "1,100 L" / "12 tubos" */
+export function formatoEscalon(valor: number, medida: MedidaTarifa): string {
+  return `${valor.toLocaleString("es-MX")} ${MEDIDAS_TARIFA[medida].abrev}`;
+}
 
 /** Normaliza el JSON (acepta snake_case de BD o camelCase), orden ascendente, sin escalones inválidos. */
 export function normalizarCostosCapacidad(raw: unknown): CostoCapacidad[] {

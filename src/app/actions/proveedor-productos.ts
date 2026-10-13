@@ -4,7 +4,13 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
 import { generarTokenCarga } from "@/lib/asesoria/aliados";
 import { normalizarCostosVolumen } from "@/lib/costos-volumen";
-import { combinarCostosEnTarifas, costosCapacidadAJson, normalizarCostosCapacidad } from "@/lib/tarifas-capacidad";
+import {
+  combinarCostosEnTarifas,
+  costosCapacidadAJson,
+  medidaTarifa,
+  normalizarCostosCapacidad,
+  type MedidaTarifa,
+} from "@/lib/tarifas-capacidad";
 import type {
   DatosOfertaProveedorProducto,
   FotoOfertaProveedor,
@@ -17,7 +23,7 @@ import type {
 // El proveedor `preferido` de cada producto define su costo en productos_servicios.
 
 const SELECT_OFERTA =
-  "*, proveedores:proveedor_id ( nombre, activo ), productos_servicios:producto_id ( nombre, unidad, precio_unitario, categoria, tarifas_capacidad )";
+  "*, proveedores:proveedor_id ( nombre, activo ), productos_servicios:producto_id ( nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida )";
 
 function normalizarFotos(raw: unknown): FotoOfertaProveedor[] {
   if (!Array.isArray(raw)) return [];
@@ -38,6 +44,7 @@ function aOferta(fila: any): OfertaProveedorProducto {
     productoPrecioUnitario: Number(fila.productos_servicios?.precio_unitario || 0),
     productoCategoria: fila.productos_servicios?.categoria || "General",
     productoTarifasCapacidad: tarifasProducto(fila.productos_servicios?.tarifas_capacidad),
+    productoTarifaMedida: medidaTarifa(fila.productos_servicios?.tarifa_medida),
     costoUnitario: Number(fila.costo_unitario || 0),
     costosVolumen: normalizarCostosVolumen(fila.costos_volumen),
     tarifasCapacidad: normalizarCostosCapacidad(fila.tarifas_capacidad),
@@ -131,7 +138,7 @@ function resumenCambioCapacidad(antes: unknown, despues: unknown): string {
   const litros = Array.from(new Set(Array.from(previo.keys()).concat(Array.from(nuevo.keys())))).sort((a, b) => a - b);
   return litros
     .filter((l) => previo.get(l) !== nuevo.get(l))
-    .map((l) => `${l.toLocaleString("es-MX")} L: ${previo.has(l) ? `$${previo.get(l)}` : "—"} → ${nuevo.has(l) ? `$${nuevo.get(l)}` : "—"}`)
+    .map((l) => `hasta ${l.toLocaleString("es-MX")}: ${previo.has(l) ? `$${previo.get(l)}` : "—"} → ${nuevo.has(l) ? `$${nuevo.get(l)}` : "—"}`)
     .join(", ");
 }
 
@@ -177,13 +184,14 @@ export async function listarProductosParaOferta(): Promise<
     precioUnitario: number;
     categoria: string;
     tarifasCapacidad: TarifaCapacidad[];
+    tarifaMedida: MedidaTarifa;
   }>
 > {
   await requireAdmin();
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("productos_servicios")
-    .select("id, nombre, unidad, precio_unitario, categoria, tarifas_capacidad")
+    .select("id, nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida")
     .eq("activo", true)
     .order("nombre", { ascending: true });
   if (error || !data) return [];
@@ -194,6 +202,7 @@ export async function listarProductosParaOferta(): Promise<
     precioUnitario: Number(p.precio_unitario || 0),
     categoria: p.categoria || "General",
     tarifasCapacidad: tarifasProducto(p.tarifas_capacidad),
+    tarifaMedida: medidaTarifa(p.tarifa_medida),
   }));
 }
 

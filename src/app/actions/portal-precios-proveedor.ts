@@ -13,7 +13,7 @@
 import { supabaseServidor } from "@/lib/supabase/server";
 import { esTokenCargaValido } from "@/lib/asesoria/aliados";
 import { normalizarCostosVolumen } from "@/lib/costos-volumen";
-import { costosCapacidadAJson, normalizarCostosCapacidad } from "@/lib/tarifas-capacidad";
+import { costosCapacidadAJson, medidaTarifa, normalizarCostosCapacidad, type MedidaTarifa } from "@/lib/tarifas-capacidad";
 import type { FotoOfertaProveedor } from "@/lib/types";
 
 type Sb = ReturnType<typeof supabaseServidor>;
@@ -30,6 +30,8 @@ export interface OfertaPortalProveedor {
   productoUnidad: string;
   productoCategoria: string;
   productoDescripcion: string;
+  /** Medida de los escalones: litros (tinacos, aljibes) o tubos (calentadores solares). */
+  productoTarifaMedida: MedidaTarifa;
   costoUnitario: number;
   costosVolumen: { hasta: number; costo: number }[];
   tarifasCapacidad: { hastaLitros: number; costo: number }[];
@@ -49,7 +51,13 @@ export interface OfertaPortalProveedor {
 
 export type DatosOfertaPortal = Omit<
   OfertaPortalProveedor,
-  "id" | "productoNombre" | "productoUnidad" | "productoCategoria" | "productoDescripcion" | "actualizadoPorProveedorAt"
+  | "id"
+  | "productoNombre"
+  | "productoUnidad"
+  | "productoCategoria"
+  | "productoDescripcion"
+  | "productoTarifaMedida"
+  | "actualizadoPorProveedorAt"
 >;
 
 async function proveedorPorToken(sb: Sb, token: string): Promise<{ id: string; nombre: string } | null> {
@@ -72,6 +80,7 @@ function aOfertaPortal(f: any): OfertaPortalProveedor {
     productoUnidad: f.productos_servicios?.unidad || "m2",
     productoCategoria: f.productos_servicios?.categoria || "General",
     productoDescripcion: f.productos_servicios?.descripcion || "",
+    productoTarifaMedida: medidaTarifa(f.productos_servicios?.tarifa_medida),
     costoUnitario: Number(f.costo_unitario || 0),
     costosVolumen: normalizarCostosVolumen(f.costos_volumen),
     tarifasCapacidad: normalizarCostosCapacidad(f.tarifas_capacidad),
@@ -93,7 +102,7 @@ function aOfertaPortal(f: any): OfertaPortalProveedor {
 }
 
 const SELECT_PORTAL =
-  "id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo, descripcion_proceso, garantia_anios, garantia_condiciones, tiempo_ejecucion, anticipo_pct, condiciones_pago, zonas_cobertura, fotos, vigencia_precio, actualizado_por_proveedor_at, productos_servicios:producto_id ( nombre, unidad, categoria, descripcion )";
+  "id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo, descripcion_proceso, garantia_anios, garantia_condiciones, tiempo_ejecucion, anticipo_pct, condiciones_pago, zonas_cobertura, fotos, vigencia_precio, actualizado_por_proveedor_at, productos_servicios:producto_id ( nombre, unidad, categoria, descripcion, tarifa_medida )";
 
 /** Datos que ve el proveedor al abrir su link. */
 export async function obtenerPortalPrecios(
