@@ -37,6 +37,7 @@ import { ModalPrevisualizarCotizacion } from "./ModalPrevisualizarCotizacion";
 import { ModalEditorCotizacionModular } from "./ModalEditorCotizacionModular";
 import { EditorPresupuestoApu } from "./construccion/EditorPresupuestoApu";
 import { PanelProveedoresCotizacion } from "./PanelProveedoresCotizacion";
+import { PanelSolicitudesProveedor } from "./proveedores/PanelSolicitudesProveedor";
 import { PanelAutorizacionCostosTelegram } from "./PanelAutorizacionCostosTelegram";
 import { ModuloOrdenesTrabajo } from "./ModuloOrdenesTrabajo";
 import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacionCotizacion";
@@ -3130,12 +3131,15 @@ export function DetalleCotizacionAdmin({
 
         {/* --- PESTAÑA PROVEEDORES --- */}
         {pestaña === "proveedores" && (
-          <PanelProveedoresCotizacion
-            cotizacionId={cotizacion.id}
-            expedienteId={cotizacion.expedienteId}
-            precioFinal={cotizacion.precioFinal}
-            costoEstimado={cotizacion.costoEstimado}
-          />
+          <div className="space-y-6">
+            <PanelSolicitudesProveedor cotizacionId={cotizacion.id} />
+            <PanelProveedoresCotizacion
+              cotizacionId={cotizacion.id}
+              expedienteId={cotizacion.expedienteId}
+              precioFinal={cotizacion.precioFinal}
+              costoEstimado={cotizacion.costoEstimado}
+            />
+          </div>
         )}
 
       </div>

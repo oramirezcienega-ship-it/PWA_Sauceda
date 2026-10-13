@@ -8,13 +8,16 @@ import {
   guardarOfertaPortal,
   prepararSubidaFotoPortal,
   type OfertaPortalProveedor,
+  type SolicitudPortal,
 } from "@/app/actions/portal-precios-proveedor";
+import { SolicitudesPortalProveedor } from "./SolicitudesPortalProveedor";
 import type { FotoOfertaProveedor } from "@/lib/types";
 
 interface Props {
   token: string;
   proveedorNombre: string;
   ofertasIniciales: OfertaPortalProveedor[];
+  solicitudesIniciales?: SolicitudPortal[];
 }
 
 const inputCls =
@@ -25,7 +28,7 @@ function formatoFecha(iso: string): string {
   return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIniciales }: Props) {
+export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIniciales, solicitudesIniciales = [] }: Props) {
   const [ofertas, setOfertas] = useState(ofertasIniciales);
   const [abierta, setAbierta] = useState<string | null>(ofertasIniciales.length === 1 ? ofertasIniciales[0].id : null);
 
@@ -39,6 +42,12 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
           terminar; nosotros revisamos los cambios antes de usarlos.
         </p>
       </header>
+
+      <SolicitudesPortalProveedor token={token} iniciales={solicitudesIniciales} />
+
+      {ofertas.length > 0 && (
+        <h2 className="mt-6 font-titular text-lg font-bold text-verde-profundo">🏷️ Tus precios y condiciones</h2>
+      )}
 
       {ofertas.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-carbon/20 bg-white p-8 text-center text-sm text-carbon/60">

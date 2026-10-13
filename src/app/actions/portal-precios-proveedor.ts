@@ -250,3 +250,195 @@ async function notificarActualizacion(
     console.warn("[portal-precios] No se pudo notificar por Telegram:", err);
   }
 }
+
+// ============================================================================
+// Solicitudes de servicio (migración 0151): el proveedor ve y responde las que
+// le enviamos. Sin datos del cliente: producto, descripción, cantidad, zona,
+// fotos, fechas posibles y su costo de referencia.
+// ============================================================================
+
+export interface SolicitudPortal {
+  envioId: string;
+  folio: string;
+  productoNombre: string;
+  descripcion: string;
+  cantidad: number | null;
+  unidad: string;
+  zona: string;
+  fotos: { url: string; titulo: string }[];
+  fechasSugeridas: string;
+  urgente: boolean;
+  costoReferencia: number | null;
+  fechaLimite: string | null;
+  estado: "enviada" | "vista" | "aceptada" | "rechazada" | "requiere_visita" | "vencida" | "cancelada";
+  fechasPropuestas: string[];
+  comentario: string;
+  /** Tras aceptar: la fecha que eligió el cliente (cuando SAUCEDA la confirma). */
+  fechaAcordada: string | null;
+}
+
+const SELECT_SOLICITUD_PORTAL =
+  "id, estado, costo_referencia, fecha_limite, fechas_propuestas, comentario, solicitudes_proveedor:solicitud_id ( id, folio, estado, descripcion, cantidad, unidad, zona, fotos, fechas_sugeridas, modo, fecha_acordada, productos_servicios:producto_id ( nombre ) )";
+
+function aSolicitudPortal(e: any): SolicitudPortal {
+  const s = e.solicitudes_proveedor || {};
+  return {
+    envioId: e.id,
+    folio: s.folio || "",
+    productoNombre: s.productos_servicios?.nombre || "Servicio",
+    descripcion: s.descripcion || "",
+    cantidad: s.cantidad === null || s.cantidad === undefined ? null : Number(s.cantidad),
+    unidad: s.unidad || "",
+    zona: s.zona || "",
+    fotos: Array.isArray(s.fotos) ? s.fotos.filter((f: any) => f?.url).map((f: any) => ({ url: f.url, titulo: f.titulo || "" })) : [],
+    fechasSugeridas: s.fechas_sugeridas || "",
+    urgente: s.modo === "urgente",
+    costoReferencia: e.costo_referencia === null ? null : Number(e.costo_referencia),
+    fechaLimite: e.fecha_limite || null,
+    estado: e.estado,
+    fechasPropuestas: Array.isArray(e.fechas_propuestas) ? e.fechas_propuestas.map(String) : [],
+    comentario: e.comentario || "",
+    fechaAcordada: s.estado === "confirmada" ? s.fecha_acordada || null : null,
+  };
+}
+
+/** Solicitudes del proveedor: las pendientes de responder y las de los últimos 30 días. Marca como vistas las nuevas. */
+export async function obtenerSolicitudesPortal(token: string): Promise<{ ok: boolean; solicitudes?: SolicitudPortal[] }> {
+  const sb = supabaseServidor();
+  const proveedor = await proveedorPorToken(sb, token);
+  if (!proveedor) return { ok: false };
+
+  // Pone al día sus solicitudes abiertas (vencimientos) antes de mostrarlas.
+  const { avanzarSolicitud } = await import("@/lib/solicitudes-proveedor");
+  const { data: activas } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select("solicitud_id")
+    .eq("proveedor_id", proveedor.id)
+    .in("estado", ["enviada", "vista"]);
+  for (const a of activas || []) await avanzarSolicitud(sb, a.solicitud_id);
+
+  const hace30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+  const { data } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select(SELECT_SOLICITUD_PORTAL)
+    .eq("proveedor_id", proveedor.id)
+    .neq("estado", "en_espera")
+    .gte("updated_at", hace30)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  const nuevas = (data || []).filter((e: any) => e.estado === "enviada").map((e: any) => e.id as string);
+  if (nuevas.length) {
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: "vista", vista_at: new Date().toISOString() })
+      .in("id", nuevas)
+      .eq("estado", "enviada");
+  }
+  return {
+    ok: true,
+    solicitudes: (data || []).map((e: any) => aSolicitudPortal(nuevas.includes(e.id) ? { ...e, estado: "vista" } : e)),
+  };
+}
+
+/**
+ * Respuesta del proveedor: aceptada (con 1–3 fechas), rechazada o requiere_visita.
+ * La primera aceptación gana: la solicitud queda asignada y se retira a los demás.
+ */
+export async function responderSolicitudPortal(
+  token: string,
+  envioId: string,
+  respuesta: { tipo: "aceptada" | "rechazada" | "requiere_visita"; fechas?: string[]; comentario?: string }
+): Promise<{ ok: boolean; solicitud?: SolicitudPortal; mensaje?: string }> {
+  const sb = supabaseServidor();
+  const proveedor = await proveedorPorToken(sb, token);
+  if (!proveedor) return { ok: false, mensaje: "Link no válido." };
+  if (!/^[0-9a-f-]{36}$/i.test(envioId)) return { ok: false, mensaje: "Solicitud no válida." };
+
+  const { avanzarSolicitud, avisarGrupoSolicitudes, sinMarkdownSolicitudes } = await import("@/lib/solicitudes-proveedor");
+
+  const { data: envio } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select("id, solicitud_id, estado, costo_referencia")
+    .eq("id", envioId)
+    .eq("proveedor_id", proveedor.id)
+    .maybeSingle();
+  if (!envio) return { ok: false, mensaje: "Esta solicitud no es tuya o ya no existe." };
+
+  await avanzarSolicitud(sb, envio.solicitud_id);
+  const { data: actual } = await sb.from("solicitudes_proveedor_envios").select("estado").eq("id", envioId).maybeSingle();
+  if (!actual || !["enviada", "vista"].includes(actual.estado)) {
+    const motivo =
+      actual?.estado === "vencida"
+        ? "El plazo para responder ya pasó y la solicitud se pasó a otro proveedor."
+        : actual?.estado === "cancelada"
+        ? "Esta solicitud ya la tomó otro proveedor o se canceló."
+        : "Esta solicitud ya fue respondida.";
+    return { ok: false, mensaje: motivo };
+  }
+
+  const comentario = texto(respuesta.comentario).slice(0, 1000);
+  const fechas = (respuesta.fechas || []).map((f) => texto(f).slice(0, 120)).filter(Boolean).slice(0, 3);
+  const ahora = new Date().toISOString();
+
+  const { data: sol } = await sb
+    .from("solicitudes_proveedor")
+    .select("id, folio, productos_servicios:producto_id ( nombre )")
+    .eq("id", envio.solicitud_id)
+    .maybeSingle();
+  const folio = sol?.folio || "";
+  const producto = (sol as any)?.productos_servicios?.nombre || "servicio";
+
+  if (respuesta.tipo === "aceptada") {
+    if (fechas.length === 0) return { ok: false, mensaje: "Propón al menos una fecha y horario en que puedes hacerlo." };
+    // La primera aceptación gana (evita que dos proveedores la tomen al mismo tiempo).
+    const { data: tomada } = await sb
+      .from("solicitudes_proveedor")
+      .update({
+        estado: "asignada",
+        proveedor_asignado_id: proveedor.id,
+        costo_acordado: envio.costo_referencia,
+        updated_at: ahora,
+      })
+      .eq("id", envio.solicitud_id)
+      .eq("estado", "abierta")
+      .select("id")
+      .maybeSingle();
+    if (!tomada) return { ok: false, mensaje: "Otro proveedor tomó esta solicitud un momento antes. Gracias por responder." };
+
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: "aceptada", respondida_at: ahora, fechas_propuestas: fechas, comentario, updated_at: ahora })
+      .eq("id", envioId);
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: "cancelada", updated_at: ahora })
+      .eq("solicitud_id", envio.solicitud_id)
+      .neq("id", envioId)
+      .in("estado", ["en_espera", "enviada", "vista"]);
+
+    await avisarGrupoSolicitudes(
+      sb,
+      `✅ *${sinMarkdownSolicitudes(proveedor.nombre)}* aceptó la solicitud *${sinMarkdownSolicitudes(folio)}* (${sinMarkdownSolicitudes(producto)}).\nFechas que propone: ${sinMarkdownSolicitudes(fechas.join(" · "))}${comentario ? `\nComentario: ${sinMarkdownSolicitudes(comentario)}` : ""}\nConfirma con el cliente y registra la fecha en el CRM.`
+    );
+  } else {
+    if (respuesta.tipo === "requiere_visita" && !comentario) {
+      return { ok: false, mensaje: "Cuéntanos qué necesitas revisar en sitio." };
+    }
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: respuesta.tipo, respondida_at: ahora, fechas_propuestas: fechas, comentario, updated_at: ahora })
+      .eq("id", envioId);
+    if (respuesta.tipo === "requiere_visita") {
+      await avisarGrupoSolicitudes(
+        sb,
+        `🔎 *${sinMarkdownSolicitudes(proveedor.nombre)}* necesita revisar en sitio la solicitud *${sinMarkdownSolicitudes(folio)}* (${sinMarkdownSolicitudes(producto)}): ${sinMarkdownSolicitudes(comentario)}. Valora ofrecer la visita técnica al cliente.`
+      );
+    }
+    // En cascada pasa al siguiente proveedor.
+    await avanzarSolicitud(sb, envio.solicitud_id);
+  }
+
+  const { data: final } = await sb.from("solicitudes_proveedor_envios").select(SELECT_SOLICITUD_PORTAL).eq("id", envioId).maybeSingle();
+  return { ok: true, solicitud: final ? aSolicitudPortal(final) : undefined };
+}
