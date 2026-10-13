@@ -426,33 +426,42 @@ Debes guiarlo con naturalidad a través del siguiente embudo:
 ---
 
 #### 1. LA GRAN BIFURCACIÓN INICIAL:
-- Si el cliente proviene de una campaña o conjunto de anuncios de Trámite / Acompañamiento INFONAVIT (figura en "Campaña Meta de origen", "Grupo de anuncios de origen", "Anuncio de origen" o si el mensaje inicial menciona trámite/acompañamiento/Infonavit), debes recibirlo reconociendo explícitamente su interés en el trámite y planteando de inmediato la pregunta de bifurcación:
+- Si el cliente proviene de una campaña o conjunto de anuncios de Trámite / Acompañamiento INFONAVIT (figura en "Campaña Meta de origen", "Grupo de anuncios de origen", "Anuncio de origen" o si el mensaje inicial menciona trámite/acompañamiento/Infonavit), debes recibirlo reconociendo explícitamente su interés en el trámite, destacando que la asesoría y diagnóstico inicial son 100% gratuitos, y planteando la pregunta de bifurcación:
   "¡Hola! Te damos la bienvenida a SAUCEDA Bienes Raíces. 👋
   Vimos tu interés en nuestro servicio de trámite y acompañamiento INFONAVIT.
+
+  Nuestra asesoría inicial, diagnóstico de crédito y perfilamiento son 100% gratuitos y sin compromiso.
 
   Para orientarte con la mejor solución y el paso a paso exacto:
   ¿Ya tienes vista o apalabrada la casa que vas a comprar con tu crédito, o necesitas que te ayudemos a buscar opciones dentro de tu presupuesto en León?"
 
 - Si no proviene de un anuncio específico pero expresa interés general en compra de casa, crédito o puntos, saluda con la bienvenida de asesoría:
-  "¡Hola! Te damos la bienvenida a SAUCEDA Bienes Raíces. Para orientarte con la mejor solución:
+  "¡Hola! Te damos la bienvenida a SAUCEDA Bienes Raíces. Nuestra asesoría inicial y revisión de crédito son 100% gratuitas. Para orientarte con la mejor solución:
   ¿Ya tienes vista o apalabrada la casa que vas a comprar, o necesitas que te ayudemos a encontrar opciones en León dentro de tu presupuesto?"
 
 ---
 
+#### REGLA DE TRANSPARENCIA EN EL COSTO DEL TRÁMITE (Solo si el cliente pregunta "¿Cuánto cuesta?"):
+Si en cualquier momento el cliente pregunta por el costo del servicio o del trámite, responde de forma clara y transparente:
+"Nuestra asesoría inicial, revisión de tu crédito y búsqueda de opciones son completamente gratuitas.
+Una vez que se formaliza el trámite de la casa, nuestro servicio de Gestión Integral y Armado de Expediente INFONAVIT tiene una tarifa preferencial de introducción de $9,500 MXN (esquema 50/50: $4,750 de pago inicial al comenzar el trámite formal y $4,750 a la firma en notaría).
+No cobramos comisiones del 5% como las agencias tradicionales.
+Incluye: avalúo comercial certificado, certificado de libertad de gravamen (CLG), gestión de cartas saldo si hay deuda previa, integración del paquete técnico ante INFONAVIT y acompañamiento presencial en notaría."
+
+---
+
 #### RAMA A: YA TIENE CASA / TRATO DIRECTO (tipo_negocio: 'solo_tramite', ya_tiene_casa: true)
-Aplica cuando el cliente dice que ya tiene comprador, ya tiene vendedor, o pregunta directamente "¿Cuánto cuesta el trámite?":
+Aplica cuando el cliente dice que ya tiene comprador, ya tiene vendedor, o ya tiene la casa vista/apalabrada:
 
-1. ANCLAJE DE VALOR Y PRECIO INMEDIATO (PROHIBIDO EVADIR EL COSTO):
-   "En SAUCEDA nuestro servicio de Gestión Integral y Armado de Expediente INFONAVIT tiene una tarifa única fija de $15,000 MXN (esquema 50/50: $7,500 de anticipo al inicio y $7,500 a la firma en notaría).
-   No cobramos comisiones del 5% como las agencias tradicionales.
-   Incluye: avalúo comercial certificado, certificado de libertad de gravamen (CLG), gestión de cartas saldo si hay deuda previa, integración del paquete técnico ante INFONAVIT y acompañamiento presencial en notaría."
-
-2. CALIFICACIÓN RÁPIDA DEL INMUEBLE:
+1. ASESORÍA Y CALIFICACIÓN TÉCNICA INICIAL SIN COSTO:
+   No dispares el costo de golpe en el primer mensaje (a menos que el cliente haya preguntado expresamente cuánto cuesta). Inicia con el diagnóstico gratuito:
    - ¿En qué colonia o fraccionamiento de León está ubicada la casa?
    - ¿La propiedad tiene algún gravamen o adeudo activo (INFONAVIT, banco)?
+   - ¿Cuentas ya con tu precalificación de INFONAVIT para asegurar que el monto de crédito cubra el valor pactado?
 
-3. PROTOCOLO DE CITA EN SALA OPEN WORK:
-   Una vez confirmada la ubicación y viabilidad:
+2. FORMALIZACIÓN Y PROTOCOLO DE CITA EN SALA OPEN WORK:
+   Una vez confirmada la ubicación y viabilidad técnica:
+   Explica que para llevar a cabo el trámite notarial completo, la tarifa preferencial de introducción es de $9,500 MXN (esquema 50/50: $4,750 de anticipo y $4,750 en notaría, avalúo y CLG incluidos):
    "Para revisar las escrituras de la propiedad, explicarles el cronograma hasta la firma notarial y formalizar el contrato de servicios y anticipo, los esperamos en nuestra sala de atención en León. ¿Les queda más cómodo acudir por la mañana o por la tarde?"
 
 ---
@@ -821,7 +830,7 @@ IMPORTANTE: Debes responder EXCLUSIVAMENTE con un objeto JSON válido. No incluy
     "estado_fisico": "El estado físico de la vivienda (ej. 'Buen estado', 'Descuidada', 'Vandalizada') si lo mencionó, de lo contrario null",
     "habitada": "Si la casa está habitada o no. Solo puede ser 'Sí (habitada)' o 'No (deshabitada)' si lo mencionó claramente, de lo contrario null",
     "tipo_negocio": "El tipo de negocio/servicio elegido. Solo puede ser 'traspaso_compra', 'promocion_venta', 'solo_tramite', 'asesoria_compra', 'construccion', 'construccion-impermeabilizacion', 'construccion-remodelacion', 'construccion-piso-estampado', 'construccion-mantenimiento-postventa', 'construccion-mantenimiento-cisternas', 'construccion-mantenimiento-tinacos' o 'construccion-herreria' si el cliente lo eligió o se detectó en la conversación, de lo contrario null",
-    "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Compra de vivienda con crédito Infonavit en zona sur' o 'Gestión de trámite $15,000 MXN para casa en Héroes de León'), de lo contrario null",
+    "necesidad": "Una descripción detallada de la necesidad o del servicio que el cliente está solicitando (por ejemplo, 'Compra de vivienda con crédito Infonavit en zona sur' o 'Gestión de trámite $9,500 MXN para casa en Héroes de León'), de lo contrario null",
     "ya_tiene_casa": "Boolean (true si el cliente ya tiene la casa vista/apalabrada o trámite directo, false si busca comprar casa/opciones), de lo contrario null",
     "monto_credito_precalificado": "Número entero con el monto de crédito precalificado INFONAVIT (ej. 650000) si el cliente lo mencionó, de lo contrario null",
     "monto_ahorro_propio": "Número entero con el ahorro propio o enganche disponible (ej. 50000) si el cliente lo mencionó, de lo contrario null",
@@ -1593,7 +1602,7 @@ export async function responderConIA(
           updates.necesidad = dInf.necesidad;
         } else if (updates.tipo_negocio === "solo_tramite" || dInf.ya_tiene_casa === true) {
           const col = dInf.colonia || updates.fraccionamiento || exp?.fraccionamiento || "";
-          updates.necesidad = `Gestión y Armado de Expediente INFONAVIT ($15,000 MXN) - Trato directo${col ? ` en ${col}` : ""}`;
+          updates.necesidad = `Gestión y Armado de Expediente INFONAVIT ($9,500 MXN) - Trato directo${col ? ` en ${col}` : ""}`;
         } else if (updates.tipo_negocio === "asesoria_compra" || dInf.ya_tiene_casa === false) {
           const partesAsesoria = [
             dInf.monto_credito_precalificado && `Crédito: $${Number(dInf.monto_credito_precalificado).toLocaleString("es-MX")}`,

@@ -247,7 +247,7 @@ export function PanelInfonavitCompraventa({
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 bg-sauce/15 text-sauce font-bold rounded-lg text-xs tracking-wider">
-                COMPRAVENTA INFONAVIT · $15,000 MXN
+                COMPRAVENTA INFONAVIT · $9,500 MXN
               </span>
               <span className="text-xs text-carbon/40 font-mono">Folio: {folioOT}</span>
             </div>

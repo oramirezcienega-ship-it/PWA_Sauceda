@@ -124,12 +124,12 @@ export function generarPdfCotizacionInfonavit(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("$15,000.00 MXN", margin + 6, y + 14);
+  doc.text("$9,500.00 MXN", margin + 6, y + 14);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(SAUCE[0], SAUCE[1], SAUCE[2]);
-  doc.text("Tarifa única fija · Sin comisiones ocultas", margin + 6, y + 20);
+  doc.text("Tarifa preferencial de introducción · Sin comisiones ocultas", margin + 6, y + 20);
 
   // Divisor vertical
   doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]);
@@ -150,7 +150,7 @@ export function generarPdfCotizacionInfonavit(
   doc.text("Anticipo al Aceptar (50%):", margin + 89, y + 12.5);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("$7,500.00 MXN", margin + 140, y + 12.5);
+  doc.text("$4,750.00 MXN", margin + 140, y + 12.5);
 
   // Hito 2
   doc.setFillColor(DORADO[0], DORADO[1], DORADO[2]);
@@ -161,7 +161,7 @@ export function generarPdfCotizacionInfonavit(
   doc.text("Liquidación a la Firma (50%):", margin + 89, y + 20);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("$7,500.00 MXN", margin + 140, y + 20);
+  doc.text("$4,750.00 MXN", margin + 140, y + 20);
 
   y += tarjetaPrecioHeight + 6;
 
