@@ -17,8 +17,11 @@ interface OfertasProveedorProductoProps {
   modo: "proveedor" | "producto";
   /** Id del proveedor o del producto, según el modo. */
   id: string;
-  /** Se llama cuando cambia el proveedor preferido de un producto (para refrescar el costo mostrado). */
-  onPreferidoCambiado?: (oferta: OfertaProveedorProducto) => void;
+  /**
+   * Se llama tras guardar una oferta o marcar preferido: el producto pudo cambiar de precio
+   * de venta (capturado en la oferta) o de costo (si la oferta es la preferida).
+   */
+  onProductoActualizado?: (oferta: OfertaProveedorProducto) => void;
 }
 
 function vencida(fecha: string | null): boolean {
@@ -34,7 +37,7 @@ function formatoFecha(fecha: string): string {
   });
 }
 
-export function OfertasProveedorProducto({ modo, id, onPreferidoCambiado }: OfertasProveedorProductoProps) {
+export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: OfertasProveedorProductoProps) {
   const [ofertas, setOfertas] = useState<OfertaProveedorProducto[] | null>(null);
   const [modal, setModal] = useState<{ oferta: OfertaProveedorProducto | null } | null>(null);
   const [expandida, setExpandida] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export function OfertasProveedorProducto({ modo, id, onPreferidoCambiado }: Ofer
   async function handlePreferido(o: OfertaProveedorProducto) {
     const res = await marcarOfertaPreferida(o.id);
     if (!res.ok || !res.oferta) return alert(res.error || "No se pudo marcar como preferido.");
-    onPreferidoCambiado?.(res.oferta);
+    onProductoActualizado?.(res.oferta);
     await cargar();
   }
 
@@ -77,7 +80,7 @@ export function OfertasProveedorProducto({ modo, id, onPreferidoCambiado }: Ofer
 
   async function handleGuardada(o: OfertaProveedorProducto) {
     setModal(null);
-    if (o.preferido) onPreferidoCambiado?.(o);
+    onProductoActualizado?.(o);
     setHistorial((prev) => {
       const { [o.id]: _, ...resto } = prev;
       return resto;

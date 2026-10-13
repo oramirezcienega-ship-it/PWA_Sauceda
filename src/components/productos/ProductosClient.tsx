@@ -2129,33 +2129,42 @@ export function ProductosClient({
                 <OfertasProveedorProducto
                   modo="producto"
                   id={prodEditando.id}
-                  onPreferidoCambiado={(o) => {
-                    // El preferido ya actualizó el catálogo; reflejarlo en el formulario para no pisarlo al guardar.
-                    if (o.costoUnitario > 0 || o.tarifasCapacidad.length === 0) setFormCostoUnitario(String(o.costoUnitario));
-                    setFormCantidadMinima(o.cantidadMinima ? String(o.cantidadMinima) : "");
-                    setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+                  onProductoActualizado={(o) => {
+                    // La oferta ya actualizó el catálogo (precio de venta siempre; costo si es la preferida).
+                    // Reflejarlo en el formulario para no pisarlo al guardar el producto.
+                    setFormPrecioUnitario(String(o.productoPrecioUnitario));
+                    if (o.preferido) {
+                      if (o.costoUnitario > 0 || o.tarifasCapacidad.length === 0) setFormCostoUnitario(String(o.costoUnitario));
+                      setFormCantidadMinima(o.cantidadMinima ? String(o.cantidadMinima) : "");
+                      setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+                    }
                     const tarifas =
-                      o.tarifasCapacidad.length > 0
+                      o.preferido && o.tarifasCapacidad.length > 0
                         ? combinarCostosEnTarifas(o.productoTarifasCapacidad, o.tarifasCapacidad)
                         : o.productoTarifasCapacidad;
-                    if (o.tarifasCapacidad.length > 0) {
-                      setFormTarifas(
-                        tarifas.map((t) => ({
-                          hastaLitros: String(t.hastaLitros),
-                          costo: t.costo === null ? "" : String(t.costo),
-                          precio: t.precio === null ? "" : String(t.precio),
-                        }))
-                      );
-                    }
+                    setFormTarifas(
+                      tarifas.map((t) => ({
+                        hastaLitros: String(t.hastaLitros),
+                        costo: t.costo === null ? "" : String(t.costo),
+                        precio: t.precio === null ? "" : String(t.precio),
+                      }))
+                    );
                     setProductos((prev) =>
                       prev.map((p) =>
                         p.id === o.productoId
                           ? {
                               ...p,
-                              costoUnitario: o.costoUnitario,
-                              cantidadMinima: o.cantidadMinima,
-                              costosVolumen: o.costosVolumen,
+                              precioUnitario: o.productoPrecioUnitario,
                               tarifasCapacidad: tarifas,
+                              ...(o.preferido
+                                ? {
+                                    ...(o.costoUnitario > 0 || o.tarifasCapacidad.length === 0
+                                      ? { costoUnitario: o.costoUnitario }
+                                      : {}),
+                                    cantidadMinima: o.cantidadMinima,
+                                    costosVolumen: o.costosVolumen,
+                                  }
+                                : {}),
                             }
                           : p
                       )

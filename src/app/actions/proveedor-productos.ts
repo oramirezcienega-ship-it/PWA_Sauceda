@@ -193,13 +193,55 @@ export async function listarProductosParaOferta(): Promise<
 }
 
 /**
+ * Actualiza los precios de venta del producto capturados desde la oferta: precio base y/o
+ * precio por escalón de capacidad (se conserva el costo de cada escalón; los que no existen
+ * se agregan sin costo).
+ */
+async function actualizarPreciosProducto(
+  sb: ReturnType<typeof supabaseServidor>,
+  productoId: string,
+  precios: PreciosVentaProducto
+) {
+  const cambios: Record<string, unknown> = {};
+  if (precios.precioUnitario !== undefined && Number.isFinite(precios.precioUnitario) && precios.precioUnitario >= 0) {
+    cambios.precio_unitario = precios.precioUnitario;
+  }
+  const nuevos = (precios.tarifas || []).filter(
+    (t) => Number.isFinite(t.hastaLitros) && t.hastaLitros > 0 && Number.isFinite(t.precio) && t.precio >= 0
+  );
+  if (nuevos.length > 0) {
+    const { data } = await sb.from("productos_servicios").select("tarifas_capacidad").eq("id", productoId).maybeSingle();
+    const porLitros = new Map(tarifasProducto(data?.tarifas_capacidad).map((t) => [t.hastaLitros, t]));
+    for (const n of nuevos) {
+      const actual = porLitros.get(n.hastaLitros);
+      porLitros.set(n.hastaLitros, { hastaLitros: n.hastaLitros, precio: n.precio, costo: actual ? actual.costo : null });
+    }
+    cambios.tarifas_capacidad = Array.from(porLitros.values())
+      .sort((a, b) => a.hastaLitros - b.hastaLitros)
+      .map((t) => ({ hasta_litros: t.hastaLitros, precio: t.precio, costo: t.costo }));
+  }
+  if (Object.keys(cambios).length === 0) return;
+  const { error } = await sb.from("productos_servicios").update(cambios).eq("id", productoId);
+  if (error) throw new Error(`No se pudo actualizar el precio de venta del producto: ${error.message}`);
+}
+
+export interface PreciosVentaProducto {
+  /** Nuevo precio de venta base del producto (undefined = sin cambio). */
+  precioUnitario?: number;
+  /** Precios de venta por capacidad a guardar en el producto. */
+  tarifas?: { hastaLitros: number; precio: number }[];
+}
+
+/**
  * Crea (id null) o actualiza una oferta. Registra historial si cambia el costo y,
- * si queda como preferida, actualiza el costo del producto en el catálogo.
+ * si queda como preferida, actualiza el costo del producto en el catálogo. Si se
+ * capturaron precios de venta, se guardan en el producto (aplican con cualquier proveedor).
  */
 export async function guardarOfertaProveedor(
   id: string | null,
   datos: DatosOfertaProveedorProducto,
-  motivoCambio?: string
+  motivoCambio?: string,
+  preciosProducto?: PreciosVentaProducto
 ): Promise<{ ok: boolean; oferta?: OfertaProveedorProducto; error?: string }> {
   await requireAdmin();
   if (!datos.proveedorId || !datos.productoId) return { ok: false, error: "Selecciona proveedor y producto." };
@@ -207,6 +249,7 @@ export async function guardarOfertaProveedor(
   const fila = aFilaOferta(datos);
 
   try {
+    if (preciosProducto) await actualizarPreciosProducto(sb, fila.producto_id, preciosProducto);
     if (fila.preferido) await quitarOtrosPreferidos(sb, fila.producto_id, id || undefined);
 
     let guardada: any;

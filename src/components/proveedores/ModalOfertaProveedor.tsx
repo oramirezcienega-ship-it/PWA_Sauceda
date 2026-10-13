@@ -41,6 +41,33 @@ type ProductoOpcion = {
 /** Servicios que normalmente se cobran por tamaño del depósito. */
 const RE_POR_CAPACIDAD = /tinaco|aljib|cisterna/i;
 
+type FilaCapacidad = { hastaLitros: string; costo: string; precio: string };
+
+/** Une los escalones del proveedor (costo) con los del producto (precio de venta). */
+function filasCapacidad(
+  costos: { hastaLitros: number; costo: number }[],
+  ventas: TarifaCapacidad[]
+): FilaCapacidad[] {
+  const litros = Array.from(new Set(costos.map((c) => c.hastaLitros).concat(ventas.map((v) => v.hastaLitros)))).sort(
+    (a, b) => a - b
+  );
+  return litros.map((l) => {
+    const c = costos.find((x) => x.hastaLitros === l);
+    const v = ventas.find((x) => x.hastaLitros === l);
+    return {
+      hastaLitros: String(l),
+      costo: c ? String(c.costo) : "",
+      precio: v?.precio !== null && v?.precio !== undefined ? String(v.precio) : "",
+    };
+  });
+}
+
+/** Input compacto (sin w-full) para tablas. */
+const gridCapacidad = "grid grid-cols-[1fr_1fr_1fr_1.2fr_auto] items-center gap-2";
+
+const inputTablaCls =
+  "w-full min-w-0 rounded-lg border border-carbon/20 px-2.5 py-1.5 text-xs text-carbon outline-none focus:border-sauce bg-white";
+
 const inputCls =
   "w-full rounded-lg border border-carbon/20 px-3 py-2 text-xs text-carbon outline-none focus:border-sauce bg-white";
 const labelCls = "block font-semibold text-carbon/80 mb-1 text-xs";
@@ -64,9 +91,10 @@ export function ModalOfertaProveedor({
   const [costosVolumen, setCostosVolumen] = useState<{ hasta: string; costo: string }[]>(
     (oferta?.costosVolumen || []).map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) }))
   );
-  const [tarifasCapacidad, setTarifasCapacidad] = useState<{ hastaLitros: string; costo: string }[]>(
-    (oferta?.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), costo: String(t.costo) }))
+  const [tarifasCapacidad, setTarifasCapacidad] = useState<FilaCapacidad[]>(() =>
+    oferta ? filasCapacidad(oferta.tarifasCapacidad, oferta.productoTarifasCapacidad) : []
   );
+  const [precioVentaBase, setPrecioVentaBase] = useState(oferta ? String(oferta.productoPrecioUnitario) : "");
   const [porCapacidad, setPorCapacidad] = useState(
     !!oferta &&
       (oferta.tarifasCapacidad.length > 0 ||
@@ -173,11 +201,8 @@ export function ModalOfertaProveedor({
     if (oferta || !producto) return;
     const aplica = producto.tarifasCapacidad.length > 0 || RE_POR_CAPACIDAD.test(producto.nombre);
     setPorCapacidad(aplica);
-    setTarifasCapacidad(
-      aplica && producto.tarifasCapacidad.length > 0
-        ? producto.tarifasCapacidad.map((t) => ({ hastaLitros: String(t.hastaLitros), costo: "" }))
-        : []
-    );
+    setPrecioVentaBase(String(producto.precioUnitario));
+    setTarifasCapacidad(aplica ? filasCapacidad([], producto.tarifasCapacidad) : []);
   }, [oferta, producto]);
 
   function cargarCapacidadesComunes() {
@@ -186,12 +211,14 @@ export function ModalOfertaProveedor({
       const nuevas = CAPACIDADES_COMUNES_LITROS.filter((l) => !existentes.has(l)).map((l) => ({
         hastaLitros: String(l),
         costo: "",
+        precio: "",
       }));
       return [...prev, ...nuevas].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
     });
   }
   const unidad = producto?.unidad || oferta?.productoUnidad || "unidad";
-  const precioVenta = producto?.precioUnitario ?? oferta?.productoPrecioUnitario ?? 0;
+  const precioVentaActual = producto?.precioUnitario ?? oferta?.productoPrecioUnitario ?? 0;
+  const precioVenta = precioVentaBase === "" ? precioVentaActual : Number(precioVentaBase);
   const costoNum = Number(costoUnitario || 0);
   const margen = precioVenta - costoNum;
   const margenPct = precioVenta > 0 ? (margen / precioVenta) * 100 : 0;
@@ -289,9 +316,20 @@ export function ModalOfertaProveedor({
       notas,
     };
 
+    const precio = Number(precioVentaBase || 0);
     setGuardando(true);
     try {
-      const res = await guardarOfertaProveedor(oferta?.id || null, datos, motivoCambio);
+      const tarifasPrecio = porCapacidad
+        ? tarifasCapacidad
+            .filter((t) => t.hastaLitros !== "" && t.precio !== "")
+            .map((t) => ({ hastaLitros: Number(t.hastaLitros), precio: Number(t.precio) }))
+            .filter((t) => tarifasVenta.find((v) => v.hastaLitros === t.hastaLitros)?.precio !== t.precio)
+        : [];
+      const preciosProducto = {
+        precioUnitario: precioVentaBase !== "" && precio !== precioVentaActual ? precio : undefined,
+        tarifas: tarifasPrecio,
+      };
+      const res = await guardarOfertaProveedor(oferta?.id || null, datos, motivoCambio, preciosProducto);
       if (!res.ok || !res.oferta) {
         setError(res.error || "No se pudo guardar.");
         return;
@@ -540,10 +578,18 @@ export function ModalOfertaProveedor({
             )}
 
             {productoId && !porCapacidad && (
-              <div className="flex flex-wrap gap-4 text-[11px] text-carbon/70">
-                <span>
-                  Precio de venta: <b className="font-mono text-carbon">{formatoPesos(precioVenta)}</b>/{unidad}
-                </span>
+              <div className="flex flex-wrap items-center gap-4 text-[11px] text-carbon/70">
+                <label className="flex items-center gap-2">
+                  Precio de venta al cliente ($/{unidad}):
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={precioVentaBase}
+                    onChange={(e) => setPrecioVentaBase(e.target.value)}
+                    className={`${inputTablaCls} !w-28`}
+                  />
+                </label>
                 <span>
                   Margen:{" "}
                   <b className={`font-mono ${margen >= 0 ? "text-emerald-700" : "text-rojo"}`}>
@@ -559,8 +605,8 @@ export function ModalOfertaProveedor({
                   <div>
                     <span className="font-semibold text-carbon/80">📏 Costo por capacidad (litros)</span>
                     <p className="text-[10.5px] text-carbon/50 mt-0.5">
-                      Se aplica el primer escalón que cubre los litros del cliente. El precio de venta de cada escalón se
-                      captura en el producto (pestaña Argumentos de Venta y Sofía).
+                      Se aplica el primer escalón que cubre los litros del cliente. El <b>costo</b> es de este proveedor;
+                      el <b>precio de venta</b> es del producto: aplica con cualquier proveedor y es el que cotiza Sofía.
                     </p>
                   </div>
                   <button
@@ -573,28 +619,27 @@ export function ModalOfertaProveedor({
                 </div>
                 {tarifasCapacidad.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
-                      <span className="w-28">Capacidad (L)</span>
-                      <span className="w-28">Costo proveedor</span>
-                      <span className="w-24 text-right">Precio venta</span>
-                      <span className="w-28 text-right">Margen</span>
+                    <div className={`${gridCapacidad} text-[10px] font-bold uppercase tracking-wide text-carbon/50`}>
+                      <span>Capacidad (L)</span>
+                      <span>Costo proveedor</span>
+                      <span>Precio venta</span>
+                      <span className="text-right">Margen</span>
+                      <span />
                     </div>
                     {tarifasCapacidad.map((t, i) => {
-                      const venta = tarifasVenta.find((v) => v.hastaLitros === Number(t.hastaLitros))?.precio ?? null;
+                      const venta = t.precio === "" ? null : Number(t.precio);
                       const costo = t.costo === "" ? null : Number(t.costo);
                       const margenEsc = venta !== null && costo !== null ? venta - costo : null;
+                      const cambiar = (campo: keyof FilaCapacidad, valor: string) =>
+                        setTarifasCapacidad((prev) => prev.map((x, j) => (j === i ? { ...x, [campo]: valor } : x)));
                       return (
-                        <div key={i} className="flex items-center gap-2">
+                        <div key={i} className={gridCapacidad}>
                           <input
                             type="number"
                             min="0"
                             value={t.hastaLitros}
-                            onChange={(e) =>
-                              setTarifasCapacidad((prev) =>
-                                prev.map((x, j) => (j === i ? { ...x, hastaLitros: e.target.value } : x))
-                              )
-                            }
-                            className={`${inputCls} w-28`}
+                            onChange={(e) => cambiar("hastaLitros", e.target.value)}
+                            className={inputTablaCls}
                             placeholder="Litros"
                           />
                           <input
@@ -602,17 +647,21 @@ export function ModalOfertaProveedor({
                             step="0.01"
                             min="0"
                             value={t.costo}
-                            onChange={(e) =>
-                              setTarifasCapacidad((prev) => prev.map((x, j) => (j === i ? { ...x, costo: e.target.value } : x)))
-                            }
-                            className={`${inputCls} w-28`}
+                            onChange={(e) => cambiar("costo", e.target.value)}
+                            className={inputTablaCls}
                             placeholder="$ costo"
                           />
-                          <span className="w-24 text-right font-mono text-carbon/70">
-                            {venta !== null ? formatoPesos(venta) : "—"}
-                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={t.precio}
+                            onChange={(e) => cambiar("precio", e.target.value)}
+                            className={inputTablaCls}
+                            placeholder="$ venta"
+                          />
                           <span
-                            className={`w-28 text-right font-mono ${
+                            className={`text-right font-mono ${
                               margenEsc === null ? "text-carbon/40" : margenEsc >= 0 ? "text-emerald-700" : "text-rojo"
                             }`}
                           >
@@ -623,7 +672,8 @@ export function ModalOfertaProveedor({
                           <button
                             type="button"
                             onClick={() => setTarifasCapacidad((prev) => prev.filter((_, j) => j !== i))}
-                            className="text-rojo px-2"
+                            className="text-rojo px-1"
+                            title="Quitar escalón de este proveedor"
                           >
                             ✕
                           </button>
@@ -632,7 +682,7 @@ export function ModalOfertaProveedor({
                     })}
                     <button
                       type="button"
-                      onClick={() => setTarifasCapacidad((prev) => [...prev, { hastaLitros: "", costo: "" }])}
+                      onClick={() => setTarifasCapacidad((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
                       className="text-sauce font-semibold hover:underline"
                     >
                       + Agregar capacidad
@@ -667,7 +717,7 @@ export function ModalOfertaProveedor({
                     onChange={(e) =>
                       setCostosVolumen((prev) => prev.map((x, j) => (j === i ? { ...x, hasta: e.target.value } : x)))
                     }
-                    className={`${inputCls} w-28`}
+                    className={`${inputTablaCls} !w-28`}
                     placeholder={unidad}
                   />
                   <span className="text-carbon/60">{unidad} →</span>
@@ -679,7 +729,7 @@ export function ModalOfertaProveedor({
                     onChange={(e) =>
                       setCostosVolumen((prev) => prev.map((x, j) => (j === i ? { ...x, costo: e.target.value } : x)))
                     }
-                    className={`${inputCls} w-28`}
+                    className={`${inputTablaCls} !w-28`}
                     placeholder="$ costo"
                   />
                   <button
