@@ -7,7 +7,12 @@ import type { DatosOfertaProveedorProducto, FotoOfertaProveedor, OfertaProveedor
 import { CAPACIDADES_COMUNES_LITROS } from "@/lib/tarifas-capacidad";
 import { guardarOfertaProveedor, listarProductosParaOferta } from "@/app/actions/proveedor-productos";
 import { listarProveedoresMin } from "@/app/actions/proveedores";
-import { subirFichaTecnicaProducto, subirImagenProducto } from "@/app/actions/productos";
+import {
+  crearProductoServicio,
+  obtenerCentrosCosto,
+  subirFichaTecnicaProducto,
+  subirImagenProducto,
+} from "@/app/actions/productos";
 
 interface ModalOfertaProveedorProps {
   /** Oferta a editar; null para dar de alta una nueva. */
@@ -86,6 +91,17 @@ export function ModalOfertaProveedor({
   const [notas, setNotas] = useState(oferta?.notas || "");
   const [motivoCambio, setMotivoCambio] = useState("");
 
+  // Alta rápida de un producto que aún no existe en el catálogo
+  const [creandoProducto, setCreandoProducto] = useState(false);
+  const [centrosCosto, setCentrosCosto] = useState<{ id: string; nombre: string }[]>([]);
+  const [npNombre, setNpNombre] = useState("");
+  const [npTipo, setNpTipo] = useState<"servicio" | "producto">("servicio");
+  const [npCategoria, setNpCategoria] = useState("");
+  const [npUnidad, setNpUnidad] = useState("");
+  const [npPrecio, setNpPrecio] = useState("");
+  const [npCentroCostoId, setNpCentroCostoId] = useState("");
+  const [guardandoProducto, setGuardandoProducto] = useState(false);
+
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -97,6 +113,59 @@ export function ModalOfertaProveedor({
   }, [proveedorIdFijo]);
 
   const producto = productos.find((p) => p.id === productoId);
+  const categoriasExistentes = useMemo(
+    () => Array.from(new Set(productos.map((p) => p.categoria).filter(Boolean))).sort(),
+    [productos]
+  );
+
+  function abrirAltaProducto() {
+    setCreandoProducto(true);
+    if (centrosCosto.length === 0) obtenerCentrosCosto().then(setCentrosCosto).catch(() => setCentrosCosto([]));
+  }
+
+  async function handleCrearProducto() {
+    setError("");
+    if (!npNombre.trim()) return setError("Escribe el nombre del producto nuevo.");
+    if (!npUnidad.trim()) return setError("Indica la unidad del producto nuevo (m2, pza, servicio…).");
+    setGuardandoProducto(true);
+    try {
+      // Se crea sin costo (lo pone el proveedor preferido) y oculto para Sofía hasta completarlo en Productos.
+      const nuevo = await crearProductoServicio({
+        nombre: npNombre.trim(),
+        tipo: npTipo,
+        categoria: npCategoria.trim() || "General",
+        unidad: npUnidad.trim(),
+        precioUnitario: Number(npPrecio || 0),
+        costoUnitario: 0,
+        centroCostoId: npCentroCostoId || null,
+        aptoParaIa: false,
+      });
+      setProductos((prev) =>
+        [
+          ...prev,
+          {
+            id: nuevo.id,
+            nombre: nuevo.nombre,
+            unidad: nuevo.unidad,
+            precioUnitario: nuevo.precioUnitario,
+            categoria: nuevo.categoria || "General",
+            tarifasCapacidad: [],
+          },
+        ].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+      );
+      setProductoId(nuevo.id);
+      setCreandoProducto(false);
+      setNpNombre("");
+      setNpCategoria("");
+      setNpUnidad("");
+      setNpPrecio("");
+      setNpCentroCostoId("");
+    } catch (err: any) {
+      setError("No se pudo crear el producto: " + (err?.message || "falla desconocida"));
+    } finally {
+      setGuardandoProducto(false);
+    }
+  }
   const tarifasVenta = producto?.tarifasCapacidad ?? oferta?.productoTarifasCapacidad ?? [];
 
   // Al elegir un producto nuevo, activa el costo por capacidad si aplica y precarga sus escalones.
@@ -293,9 +362,124 @@ export function ModalOfertaProveedor({
                     </option>
                   ))}
                 </select>
+                {!oferta && !creandoProducto && (
+                  <button
+                    type="button"
+                    onClick={abrirAltaProducto}
+                    className="mt-1.5 text-sauce font-semibold hover:underline"
+                  >
+                    + ¿No está en el catálogo? Crear producto nuevo
+                  </button>
+                )}
               </div>
             )}
           </div>
+
+          {creandoProducto && (
+            <div className="rounded-xl border border-sauce/40 bg-sauce/5 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-bold text-verde-profundo">🆕 Producto nuevo en el catálogo</div>
+                  <p className="text-[10.5px] text-carbon/60 mt-0.5">
+                    Se crea con lo básico y queda <b>oculto para Sofía</b>. Completa fotos, argumentos de venta y tarifas
+                    en Productos y ahí actívalo para Sofía.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreandoProducto(false)}
+                  className="text-carbon/40 hover:text-carbon text-sm leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>Nombre *</label>
+                  <input
+                    value={npNombre}
+                    onChange={(e) => setNpNombre(e.target.value)}
+                    className={inputCls}
+                    placeholder="Ej. Impermeabilizante prefabricado 3.5 mm"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Tipo</label>
+                  <select value={npTipo} onChange={(e) => setNpTipo(e.target.value as any)} className={inputCls}>
+                    <option value="servicio">Servicio</option>
+                    <option value="producto">Producto</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Categoría</label>
+                  <input
+                    value={npCategoria}
+                    onChange={(e) => setNpCategoria(e.target.value)}
+                    list="oferta-categorias"
+                    className={inputCls}
+                    placeholder="General"
+                  />
+                  <datalist id="oferta-categorias">
+                    {categoriasExistentes.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className={labelCls}>Unidad *</label>
+                  <input
+                    value={npUnidad}
+                    onChange={(e) => setNpUnidad(e.target.value)}
+                    list="oferta-unidades"
+                    className={inputCls}
+                    placeholder="m2, ml, pza, servicio, lote"
+                  />
+                  <datalist id="oferta-unidades">
+                    {["m2", "ml", "pza", "servicio", "lote", "salida"].map((u) => (
+                      <option key={u} value={u} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className={labelCls}>Precio de venta al cliente ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={npPrecio}
+                    onChange={(e) => setNpPrecio(e.target.value)}
+                    className={inputCls}
+                    placeholder="Puedes dejarlo en 0 y definirlo después"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>Centro de costo</label>
+                  <select
+                    value={npCentroCostoId}
+                    onChange={(e) => setNpCentroCostoId(e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">Sin asignar</option>
+                    {centrosCosto.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleCrearProducto}
+                  disabled={guardandoProducto}
+                  className="rounded-lg bg-sauce px-4 py-2 text-xs font-semibold text-white hover:bg-verde-profundo disabled:opacity-50"
+                >
+                  {guardandoProducto ? "Creando…" : "Crear y seleccionar"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Costo y margen */}
           <div className="rounded-xl border border-carbon/10 bg-slate-50/60 p-4 space-y-3">
@@ -713,7 +897,7 @@ export function ModalOfertaProveedor({
           <button
             type="button"
             onClick={handleGuardar}
-            disabled={guardando || subiendo}
+            disabled={guardando || subiendo || creandoProducto}
             className="rounded-lg bg-sauce px-4 py-2 text-xs font-semibold text-white hover:bg-verde-profundo disabled:opacity-50"
           >
             {guardando ? "Guardando…" : "Guardar oferta"}
