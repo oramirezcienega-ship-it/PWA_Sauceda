@@ -7,13 +7,14 @@ import { formatoPesos } from "@/lib/formato";
 import type { DocumentoProveedor, MetricaProductoProveedor, Proveedor } from "@/lib/types";
 import { actualizarProveedor, eliminarDocumentoProveedor } from "@/app/actions/proveedores";
 import { ModalRegistrarDocumentoProveedor } from "./ModalRegistrarDocumentoProveedor";
+import { OfertasProveedorProducto } from "./proveedores/OfertasProveedorProducto";
 
 interface DetalleProveedorProps {
   proveedorInicial: Proveedor;
   documentosIniciales: DocumentoProveedor[];
 }
 
-type TabProveedor = "documentos" | "catalogo_precios" | "evolucion_costos";
+type TabProveedor = "oferta" | "documentos" | "catalogo_precios" | "evolucion_costos";
 
 export function DetalleProveedor({ proveedorInicial, documentosIniciales }: DetalleProveedorProps) {
   const router = useRouter();
@@ -22,7 +23,9 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
   const [modalAbierto, setModalAbierto] = useState(false);
   const [documentoEnEdicion, setDocumentoEnEdicion] = useState<DocumentoProveedor | null>(null);
   const [actualizando, setActualizando] = useState(false);
-  const [tabActual, setTabActual] = useState<TabProveedor>("documentos");
+  const [tabActual, setTabActual] = useState<TabProveedor>(
+    documentosIniciales.length > 0 ? "documentos" : "oferta"
+  );
 
   // Filtros de tabla
   const [busqueda, setBusqueda] = useState("");
@@ -391,6 +394,18 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
         <div className="flex border-b border-carbon/10 bg-slate-50/70 px-4 pt-3 gap-2 overflow-x-auto">
           <button
             type="button"
+            onClick={() => setTabActual("oferta")}
+            className={`pb-3 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
+              tabActual === "oferta"
+                ? "border-sauce text-verde-profundo bg-white rounded-t-lg shadow-2xs"
+                : "border-transparent text-carbon/60 hover:text-carbon"
+            }`}
+          >
+            <span>🛒</span> Productos que Ofrece
+          </button>
+
+          <button
+            type="button"
             onClick={() => setTabActual("documentos")}
             className={`pb-3 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 whitespace-nowrap ${
               tabActual === "documentos"
@@ -433,6 +448,9 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
         </div>
 
         <div className="p-6">
+          {/* TAB 0: OFERTA DE PRODUCTOS DEL PROVEEDOR */}
+          {tabActual === "oferta" && <OfertasProveedorProducto modo="proveedor" id={proveedor.id} />}
+
           {/* TAB 1: FACTURAS Y REMISIONES */}
           {tabActual === "documentos" && (
             <div className="space-y-4">

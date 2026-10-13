@@ -27,6 +27,7 @@ import {
 } from "@/app/actions/productos";
 import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
 
 /** Duración en segundos de un video local (null si el navegador no la puede leer). */
 function leerDuracionVideo(file: File): Promise<number | null> {
@@ -77,7 +78,7 @@ export function ProductosClient({
   const [filtroCentroCosto, setFiltroCentroCosto] = useState("todos");
   const [modoVistaProd, setModoVistaProd] = useState<"tabla" | "cuadricula">("tabla");
   const [modalProdAbierto, setModalProdAbierto] = useState(false);
-  const [tabModalProd, setTabModalProd] = useState<"general" | "fotos" | "sofia" | "apu">("general");
+  const [tabModalProd, setTabModalProd] = useState<"general" | "fotos" | "sofia" | "apu" | "proveedores">("general");
   const [prodEditando, setProdEditando] = useState<ProductoServicio | null>(null);
 
   // Form Producto
@@ -1427,6 +1428,19 @@ export function ProductosClient({
               >
                 ✨ Argumentos de Venta & Sofía
               </button>
+              {prodEditando && (
+                <button
+                  type="button"
+                  onClick={() => setTabModalProd("proveedores")}
+                  className={`py-3 px-4 border-b-2 transition ${
+                    tabModalProd === "proveedores"
+                      ? "border-sauce text-sauce font-bold"
+                      : "border-transparent text-carbon/60 hover:text-carbon"
+                  }`}
+                >
+                  🚚 Proveedores
+                </button>
+              )}
               {formTipo === "concepto_obra" && (
                 <button
                   onClick={() => setTabModalProd("apu")}
@@ -2107,6 +2121,27 @@ export function ProductosClient({
                     {subiendoFicha && <p className="text-xs text-sauce animate-pulse">Subiendo PDF al servidor...</p>}
                   </div>
                 </div>
+              )}
+
+              {/* TAB PROVEEDORES (comparativa de ofertas) */}
+              {tabModalProd === "proveedores" && prodEditando && (
+                <OfertasProveedorProducto
+                  modo="producto"
+                  id={prodEditando.id}
+                  onPreferidoCambiado={(o) => {
+                    // El preferido ya actualizó el catálogo; reflejarlo en el formulario para no pisarlo al guardar.
+                    setFormCostoUnitario(String(o.costoUnitario));
+                    setFormCantidadMinima(o.cantidadMinima ? String(o.cantidadMinima) : "");
+                    setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+                    setProductos((prev) =>
+                      prev.map((p) =>
+                        p.id === o.productoId
+                          ? { ...p, costoUnitario: o.costoUnitario, cantidadMinima: o.cantidadMinima, costosVolumen: o.costosVolumen }
+                          : p
+                      )
+                    );
+                  }}
+                />
               )}
 
               {/* TAB RECETA APU */}

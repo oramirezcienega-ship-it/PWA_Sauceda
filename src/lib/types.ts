@@ -1283,6 +1283,68 @@ export type DatosProveedor = Omit<
   "id" | "createdAt" | "updatedAt" | "totalDocumentos" | "montoTotal"
 >;
 
+/** Foto de un trabajo del proveedor para un producto que ofrece. */
+export interface FotoOfertaProveedor {
+  url: string;
+  titulo: string;
+}
+
+/**
+ * Oferta de un proveedor para un producto del catálogo (tabla proveedor_productos):
+ * su costo, mínimos, garantía y proceso. El precio de venta al cliente vive en el producto.
+ */
+export interface OfertaProveedorProducto {
+  id: string;
+  proveedorId: string;
+  proveedorNombre: string;
+  proveedorActivo: boolean;
+  productoId: string;
+  productoNombre: string;
+  productoUnidad: string;
+  /** Precio de venta del producto al cliente (solo lectura, vía join). */
+  productoPrecioUnitario: number;
+  productoCategoria: string;
+  costoUnitario: number;
+  costosVolumen: { hasta: number; costo: number }[];
+  cantidadMinima: number;
+  montoMinimo: number;
+  descripcionProceso: string;
+  garantiaAnios: number;
+  garantiaCondiciones: string;
+  tiempoEjecucion: string;
+  anticipoPct: number;
+  condicionesPago: string;
+  zonasCobertura: string;
+  fotos: FotoOfertaProveedor[];
+  fichaTecnicaUrl: string | null;
+  fichaTecnicaNombre: string | null;
+  vigenciaPrecio: string | null;
+  preferido: boolean;
+  activo: boolean;
+  notas: string;
+  updatedAt: string;
+}
+
+export type DatosOfertaProveedorProducto = Omit<
+  OfertaProveedorProducto,
+  | "id"
+  | "proveedorNombre"
+  | "proveedorActivo"
+  | "productoNombre"
+  | "productoUnidad"
+  | "productoPrecioUnitario"
+  | "productoCategoria"
+  | "updatedAt"
+>;
+
+export interface HistorialOfertaProveedor {
+  id: string;
+  costoAnterior: number;
+  costoNuevo: number;
+  fecha: string;
+  motivo: string | null;
+}
+
 export type TipoDocumentoProveedor = "remision" | "factura";
 
 /** Origen del documento: capturado a mano, o generado en automático al concluir una orden de trabajo. */
