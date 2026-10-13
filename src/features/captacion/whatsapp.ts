@@ -426,9 +426,17 @@ export const REGLAS_FALLBACK_SERVICIOS: ReglaServicioFallback[] = [
     adsetDefault: "Piso Estampado",
   },
   {
+    id: "tramite_infonavit",
+    nombre: "Trámite y Acompañamiento Infonavit",
+    patron: /(?:tramite|trámite|acompañamiento|acompanamiento|asesoria|asesoría|precalificaci|puntos\s*infonavit|credito\s*infonavit|crédito\s*infonavit)/i,
+    terminosBusqueda: ["tramite", "trámite", "asesoria", "infonavit"],
+    campanaDefault: "SAUCEDA Compra Tramite - Sep 2026",
+    adsetDefault: "Tramite y Asesoria",
+  },
+  {
     id: "inmobiliaria_traspasos",
     nombre: "Traspasos e Inmobiliaria",
-    patron: /(?:traspaso|infonavit|compramos\s*tu\s*casa|vender\s*casa|comprar\s*casa|credito\s*hipotecario)/i,
+    patron: /(?:traspaso|compramos\s*tu\s*casa|vender\s*casa|deuda\s*de\s*casa)/i,
     terminosBusqueda: ["leads", "traspaso", "compramos"],
     campanaDefault: "Sauceda Campaña leads 05.2026",
     adsetDefault: "Sauceda Leads",

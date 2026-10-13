@@ -197,37 +197,65 @@ export function detectarTipoNegocio(
     texto.includes("amplia") ||
     texto.includes("ampliación") ||
     texto.includes("albañil") ||
-    texto.includes("obra")
+    /\bobra[s]?\b/i.test(texto)
   ) {
     return "construccion";
   }
 
-  // 4. Traspaso / Compra Directa de Casa (requiere palabras clave explícitas)
+  // 5. Trámite, Acompañamiento y Asesoría INFONAVIT / Compra
+  // (Debe evaluarse ANTES de traspaso_compra para que las campañas y consultas de crédito/trámite no caigan en traspaso)
   if (
-    texto.includes("traspaso") ||
-    texto.includes("infonavit") ||
-    texto.includes("fovissste") ||
-    texto.includes("comprar casa") ||
-    texto.includes("vender casa") ||
-    texto.includes("compra de casa") ||
-    texto.includes("traspaso de casa") ||
-    texto.includes("deuda de casa")
-  ) {
-    return "traspaso_compra";
-  }
-
-  // 5. Solo Trámite
-  if (
+    campLower.includes("tramite") ||
+    campLower.includes("trámite") ||
+    campLower.includes("acompañamiento") ||
+    campLower.includes("acompanamiento") ||
+    campLower.includes("asesoria") ||
+    campLower.includes("asesoría") ||
     texto.includes("tramite") ||
     texto.includes("trámite") ||
+    texto.includes("tramitar") ||
+    texto.includes("acompañamiento") ||
+    texto.includes("acompanamiento") ||
+    texto.includes("asesoria") ||
+    texto.includes("asesoría") ||
     texto.includes("gesti") ||
     texto.includes("armado") ||
-    texto.includes("expediente")
+    texto.includes("expediente") ||
+    texto.includes("precalificaci") ||
+    texto.includes("puntos infonavit") ||
+    texto.includes("mis puntos") ||
+    texto.includes("credito infonavit") ||
+    texto.includes("crédito infonavit") ||
+    texto.includes("mi credito") ||
+    texto.includes("mi crédito") ||
+    texto.includes("subcuenta") ||
+    texto.includes("comprar casa") ||
+    texto.includes("compra de casa")
   ) {
     return "solo_tramite";
   }
 
-  // 6. Promoción de Venta
+  // 6. Traspaso / Compra Directa de Casa con Deuda
+  if (
+    campLower.includes("traspaso") ||
+    texto.includes("traspaso") ||
+    texto.includes("traspasar") ||
+    texto.includes("compramos tu casa") ||
+    texto.includes("compran casa") ||
+    texto.includes("vender casa") ||
+    texto.includes("vender mi casa") ||
+    texto.includes("deuda de casa") ||
+    texto.includes("debo mi casa") ||
+    texto.includes("liquidar deuda") ||
+    texto.includes("adeudo") ||
+    (texto.includes("deuda") && texto.includes("casa")) ||
+    texto.includes("infonavit") ||
+    texto.includes("fovissste")
+  ) {
+    return "traspaso_compra";
+  }
+
+  // 7. Promoción de Venta
   if (
     texto.includes("promocion") ||
     texto.includes("promoción") ||
