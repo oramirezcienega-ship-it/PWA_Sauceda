@@ -50,6 +50,7 @@ import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
 import { CostosInspeccionPanel } from "@/components/productos/CostosInspeccionPanel";
 import { PanelProveedorEnFicha } from "@/components/productos/PanelProveedorEnFicha";
+import { AlertasCatalogoPanel } from "@/components/productos/AlertasCatalogoPanel";
 import {
   MEDIDAS_TARIFA,
   combinarCostosEnTarifas,
@@ -813,6 +814,12 @@ export function ProductosClient({
       {tabActiva === "productos" && (
         <div className="space-y-4">
           <CostosInspeccionPanel />
+          <AlertasCatalogoPanel
+            onAbrirProducto={(id) => {
+              const p = productos.find((x) => x.id === id);
+              if (p) handleOpenEditarProd(p);
+            }}
+          />
 
           {/* Barra de Filtros y Selector de Modo de Vista */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-carbon/10 shadow-xs">
