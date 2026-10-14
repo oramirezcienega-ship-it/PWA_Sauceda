@@ -17,6 +17,7 @@ import { normalizarCostosVolumen } from "@/lib/costos-volumen";
 import { costosCapacidadAJson, medidaTarifa, normalizarCostosCapacidad, type MedidaTarifa } from "@/lib/tarifas-capacidad";
 import type { EstandarServicio, FotoOfertaProveedor } from "@/lib/types";
 import { estandarDeServicio } from "@/lib/estandar-servicio";
+import { capacidadesDeProducto, filtrarCostosACapacidades, sincronizarVariantes } from "@/lib/variantes-servicio";
 
 type Sb = ReturnType<typeof supabaseServidor>;
 
@@ -51,6 +52,8 @@ export interface OfertaPortalProveedor {
   actualizadoPorProveedorAt: string | null;
   /** Estándar Sauceda del servicio; null si aún no lo definimos. */
   estandar: EstandarServicio | null;
+  /** Capacidades que maneja Sauceda en el servicio (12 tubos, 1,100 L…); el proveedor solo les pone costo. */
+  capacidades: number[];
   cumpleEstandar: boolean;
   excepcionesEstandar: string;
 }
@@ -65,6 +68,7 @@ export type DatosOfertaPortal = Omit<
   | "productoTarifaMedida"
   | "actualizadoPorProveedorAt"
   | "estandar"
+  | "capacidades"
 >;
 
 async function proveedorPorToken(sb: Sb, token: string): Promise<{ id: string; nombre: string } | null> {
@@ -106,13 +110,17 @@ function aOfertaPortal(f: any): OfertaPortalProveedor {
     vigenciaPrecio: f.vigencia_precio || null,
     actualizadoPorProveedorAt: f.actualizado_por_proveedor_at || null,
     estandar: estandarDeServicio(f.productos_servicios),
+    capacidades: (Array.isArray(f.productos_servicios?.producto_variantes) ? f.productos_servicios.producto_variantes : [])
+      .map((v: any) => Number(v.hasta))
+      .filter((h: number) => Number.isFinite(h) && h > 0)
+      .sort((a: number, b: number) => a - b),
     cumpleEstandar: f.cumple_estandar === true,
     excepcionesEstandar: f.excepciones_estandar || "",
   };
 }
 
 const SELECT_PORTAL =
-  "id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo, descripcion_proceso, garantia_anios, garantia_condiciones, tiempo_ejecucion, anticipo_pct, condiciones_pago, zonas_cobertura, fotos, vigencia_precio, actualizado_por_proveedor_at, cumple_estandar, excepciones_estandar, productos_servicios:producto_id ( nombre, unidad, categoria, descripcion, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo )";
+  "id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo, descripcion_proceso, garantia_anios, garantia_condiciones, tiempo_ejecucion, anticipo_pct, condiciones_pago, zonas_cobertura, fotos, vigencia_precio, actualizado_por_proveedor_at, cumple_estandar, excepciones_estandar, productos_servicios:producto_id ( nombre, unidad, categoria, descripcion, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo, producto_variantes ( hasta ) )";
 
 /** Datos que ve el proveedor al abrir su link. */
 export async function obtenerPortalPrecios(
@@ -182,7 +190,7 @@ export async function guardarOfertaPortal(
 
   const { data: actual } = await sb
     .from("proveedor_productos")
-    .select("id, costo_unitario, costos_volumen, tarifas_capacidad, fotos, cumple_estandar, productos_servicios:producto_id ( nombre )")
+    .select("id, producto_id, costo_unitario, costos_volumen, tarifas_capacidad, fotos, cumple_estandar, productos_servicios:producto_id ( nombre )")
     .eq("id", ofertaId)
     .eq("proveedor_id", proveedor.id)
     .eq("activo", true)
@@ -205,8 +213,11 @@ export async function guardarOfertaPortal(
   const fila = {
     costo_unitario: monto(datos.costoUnitario),
     costos_volumen: normalizarCostosVolumen(datos.costosVolumen).map((r) => ({ hasta: monto(r.hasta), costo: monto(r.costo) })),
+    // Solo capacidades que define el catálogo: el proveedor no puede inventar escalones.
     tarifas_capacidad: costosCapacidadAJson(
-      normalizarCostosCapacidad(datos.tarifasCapacidad).map((t) => ({ hastaLitros: t.hastaLitros, costo: monto(t.costo) }))
+      filtrarCostosACapacidades(datos.tarifasCapacidad, await capacidadesDeProducto(sb, (actual as any).producto_id)).map(
+        (t) => ({ hastaLitros: t.hastaLitros, costo: monto(t.costo) })
+      )
     ),
     cantidad_minima: monto(datos.cantidadMinima),
     monto_minimo: monto(datos.montoMinimo),
@@ -236,6 +247,12 @@ export async function guardarOfertaPortal(
     .select(SELECT_PORTAL)
     .single();
   if (error || !data) return { ok: false, mensaje: "No se pudo guardar. Intenta de nuevo." };
+
+  try {
+    await sincronizarVariantes(sb, (actual as any).producto_id);
+  } catch (err) {
+    console.warn("[portal-precios] No se pudieron sincronizar las variantes:", err);
+  }
 
   const productoNombre = (actual as any).productos_servicios?.nombre || "producto";
   const costoCambio =

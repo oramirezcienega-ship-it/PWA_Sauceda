@@ -1838,6 +1838,8 @@ export function ProductosClient({
                           Para servicios cuyo precio depende del tamaño: litros (tinacos, cisternas) o número de tubos (calentadores
                           solares). Se cotiza el primer escalón que cubra la medida del cliente. El costo del proveedor es interno:
                           Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
+                          Estas capacidades son las únicas que los proveedores pueden cotizar; quitar una borra los
+                          costos que los proveedores le hayan puesto.
                         </p>
                         <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-carbon/80">
                           Se mide en:

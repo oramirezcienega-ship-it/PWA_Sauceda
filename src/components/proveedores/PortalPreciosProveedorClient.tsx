@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { formatoPesos } from "@/lib/formato";
-import { MEDIDAS_TARIFA, formatoEscalon, medidaSugeridaPorNombre } from "@/lib/tarifas-capacidad";
+import { MEDIDAS_TARIFA, formatoEscalon } from "@/lib/tarifas-capacidad";
 import {
   guardarOfertaPortal,
   prepararSubidaFotoPortal,
@@ -356,11 +356,13 @@ function FormularioOferta({
   const medida = oferta.productoTarifaMedida;
   const infoMedida = MEDIDAS_TARIFA[medida];
   const [costoUnitario, setCostoUnitario] = useState(oferta.costoUnitario ? String(oferta.costoUnitario) : "");
-  const [porCapacidad, setPorCapacidad] = useState(
-    oferta.tarifasCapacidad.length > 0 || medidaSugeridaPorNombre(oferta.productoNombre) !== null
-  );
-  const [capacidades, setCapacidades] = useState<{ hastaLitros: string; costo: string }[]>(
-    oferta.tarifasCapacidad.map((t) => ({ hastaLitros: String(t.hastaLitros), costo: String(t.costo) }))
+  // Las capacidades las define SAUCEDA en el catálogo; el proveedor solo pone su costo a cada una.
+  const porCapacidad = oferta.capacidades.length > 0;
+  const [capacidades, setCapacidades] = useState<{ hastaLitros: string; costo: string }[]>(() =>
+    oferta.capacidades.map((h) => {
+      const previo = oferta.tarifasCapacidad.find((t) => t.hastaLitros === h);
+      return { hastaLitros: String(h), costo: previo ? String(previo.costo) : "" };
+    })
   );
   const [rangos, setRangos] = useState<{ hasta: string; costo: string }[]>(
     oferta.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) }))
@@ -407,16 +409,6 @@ function FormularioOferta({
     }
     setFotos((prev) => [...prev, ...nuevas]);
     if (inputFotos.current) inputFotos.current.value = "";
-  }
-
-  function cargarCapacidadesComunes() {
-    setCapacidades((prev) => {
-      const existentes = new Set(prev.map((c) => Number(c.hastaLitros)));
-      return [
-        ...prev,
-        ...infoMedida.comunes.filter((l) => !existentes.has(l)).map((l) => ({ hastaLitros: String(l), costo: "" })),
-      ].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
-    });
   }
 
   async function guardar() {
@@ -468,31 +460,23 @@ function FormularioOferta({
           {/* Costo */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-verde-profundo">💲 Tu costo para SAUCEDA</h3>
-            <label className="flex items-center gap-2 text-sm text-carbon/80">
-              <input type="checkbox" checked={porCapacidad} onChange={(e) => setPorCapacidad(e.target.checked)} />
-              Cobro por escalones de {infoMedida.etiqueta.toLowerCase()} ({infoMedida.ejemplos})
-            </label>
+            {porCapacidad && (
+              <p className="text-xs text-carbon/60">
+                Pon tu costo para cada capacidad que maneja SAUCEDA. Deja vacías las que no hagas.
+              </p>
+            )}
 
             {porCapacidad ? (
               <div className="space-y-2">
-                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[11px] font-bold uppercase text-carbon/50">
-                  <span>Hasta ({infoMedida.etiqueta.toLowerCase()})</span>
+                <div className="grid grid-cols-[1fr_1fr] gap-2 text-[11px] font-bold uppercase text-carbon/50">
+                  <span>Capacidad ({infoMedida.etiqueta.toLowerCase()})</span>
                   <span>Tu costo ($)</span>
-                  <span className="w-6" />
                 </div>
                 {capacidades.map((c, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      value={c.hastaLitros}
-                      onChange={(e) =>
-                        setCapacidades((prev) => prev.map((x, j) => (j === i ? { ...x, hastaLitros: e.target.value } : x)))
-                      }
-                      className={inputCls}
-                      placeholder={infoMedida.etiqueta}
-                    />
+                  <div key={c.hastaLitros} className="grid grid-cols-[1fr_1fr] items-center gap-2">
+                    <span className="rounded-lg bg-slate-50 px-3 py-2.5 text-sm font-semibold text-carbon">
+                      Hasta {formatoEscalon(Number(c.hastaLitros), medida)}
+                    </span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -503,30 +487,13 @@ function FormularioOferta({
                         setCapacidades((prev) => prev.map((x, j) => (j === i ? { ...x, costo: e.target.value } : x)))
                       }
                       className={inputCls}
-                      placeholder="$"
+                      placeholder="Sin costo = no lo hago"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setCapacidades((prev) => prev.filter((_, j) => j !== i))}
-                      className="w-6 text-rojo"
-                      aria-label="Quitar capacidad"
-                    >
-                      ✕
-                    </button>
                   </div>
                 ))}
-                <div className="flex flex-wrap gap-3 text-sm">
-                  <button
-                    type="button"
-                    onClick={() => setCapacidades((prev) => [...prev, { hastaLitros: "", costo: "" }])}
-                    className="font-semibold text-sauce"
-                  >
-                    + Agregar escalón
-                  </button>
-                  <button type="button" onClick={cargarCapacidadesComunes} className="font-semibold text-sauce">
-                    + Medidas comunes
-                  </button>
-                </div>
+                <p className="text-[11px] text-carbon/50">
+                  ¿Manejas otra capacidad? Anótala en “excepciones o mejoras” y la agregamos al catálogo.
+                </p>
               </div>
             ) : (
               <div className="space-y-3">

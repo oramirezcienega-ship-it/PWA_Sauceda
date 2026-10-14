@@ -10,6 +10,7 @@ import {
 } from "@/lib/costo-inspeccion";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { normalizarCostosVolumen, type CostoVolumen } from "@/lib/costos-volumen";
+import { sincronizarVariantes } from "@/lib/variantes-servicio";
 import type { 
   ProductoServicio, 
   Insumo, 
@@ -321,6 +322,7 @@ export async function crearProductoServicio(datos: {
     .single();
 
   if (error) throw new Error(error.message);
+  await sincronizarVariantes(sb, id);
   return aProductoServicio(data);
 }
 
@@ -421,6 +423,7 @@ export async function editarProductoServicio(
     .single();
 
   if (error) throw new Error(error.message);
+  if (datos.tarifasCapacidad !== undefined) await sincronizarVariantes(sb, id);
   return aProductoServicio(data);
 }
 

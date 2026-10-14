@@ -398,8 +398,15 @@ function TablaCostos({ o, resaltar }: { o: OfertaProveedorProducto; resaltar: bo
   const pct = (venta: number, costo: number) => (venta > 0 ? `${(((venta - costo) / venta) * 100).toFixed(0)}%` : "");
   const colorMargen = (m: number) => (m >= 0 ? "text-emerald-700" : "text-rojo");
 
-  if (o.tarifasCapacidad.length > 0) {
+  // Todas las capacidades del catálogo, aunque el proveedor no las haya cotizado.
+  const capacidades =
+    o.productoTarifasCapacidad.length > 0
+      ? o.productoTarifasCapacidad.map((v) => v.hastaLitros)
+      : o.tarifasCapacidad.map((t) => t.hastaLitros);
+  if (capacidades.length > 0) {
+    const sinCotizar = capacidades.filter((h) => !o.tarifasCapacidad.some((t) => t.hastaLitros === h)).length;
     return (
+      <>
       <table className="w-full font-mono text-[11px]">
         <thead>
           <tr className="text-left font-cuerpo text-[10px] text-carbon/45">
@@ -410,24 +417,31 @@ function TablaCostos({ o, resaltar }: { o: OfertaProveedorProducto; resaltar: bo
           </tr>
         </thead>
         <tbody>
-          {o.tarifasCapacidad.map((t) => {
-            const venta = o.productoTarifasCapacidad.find((v) => v.hastaLitros === t.hastaLitros)?.precio ?? null;
-            const m = venta !== null ? venta - t.costo : null;
+          {capacidades.map((h) => {
+            const costo = o.tarifasCapacidad.find((t) => t.hastaLitros === h)?.costo ?? null;
+            const venta = o.productoTarifasCapacidad.find((v) => v.hastaLitros === h)?.precio ?? null;
+            const m = venta !== null && costo !== null ? venta - costo : null;
             return (
-              <tr key={t.hastaLitros}>
-                <td className="py-0.5 pr-2 text-carbon/70">{formatoEscalon(t.hastaLitros, o.productoTarifaMedida)}</td>
-                <td className={`py-0.5 pr-2 text-right ${resaltar ? "font-bold text-emerald-700" : "text-carbon"}`}>
-                  {formatoPesos(t.costo)}
+              <tr key={h} className={costo === null ? "text-carbon/35" : ""}>
+                <td className="py-0.5 pr-2 text-carbon/70">{formatoEscalon(h, o.productoTarifaMedida)}</td>
+                <td className={`py-0.5 pr-2 text-right ${costo === null ? "" : resaltar ? "font-bold text-emerald-700" : "text-carbon"}`}>
+                  {costo === null ? "sin cotizar" : formatoPesos(costo)}
                 </td>
                 <td className="py-0.5 pr-2 text-right text-carbon/70">{venta !== null ? formatoPesos(venta) : "—"}</td>
                 <td className={`py-0.5 text-right ${m === null ? "text-carbon/35" : colorMargen(m)}`}>
-                  {m === null || venta === null ? "sin precio" : `${formatoPesos(m)} · ${pct(venta, t.costo)}`}
+                  {costo === null ? "—" : m === null || venta === null ? "sin precio venta" : `${formatoPesos(m)} · ${pct(venta, costo)}`}
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      {sinCotizar > 0 && (
+        <div className="mt-1 font-cuerpo text-[10.5px] text-amber-700">
+          {sinCotizar} de {capacidades.length} capacidades sin cotizar
+        </div>
+      )}
+      </>
     );
   }
 

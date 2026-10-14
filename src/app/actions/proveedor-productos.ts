@@ -1,6 +1,7 @@
 "use server";
 
 import { estandarDeServicio } from "@/lib/estandar-servicio";
+import { capacidadesDeProducto, filtrarCostosACapacidades, sincronizarVariantes } from "@/lib/variantes-servicio";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
 import { generarTokenCarga } from "@/lib/asesoria/aliados";
@@ -268,6 +269,32 @@ export async function guardarOfertaProveedor(
 
   try {
     if (preciosProducto) await actualizarPreciosProducto(sb, fila.producto_id, preciosProducto);
+    // Las capacidades nuevas que capture SAUCEDA desde aquí entran al catálogo (sin precio de venta
+    // si no lo capturó); el costo solo se guarda para capacidades que existen en el catálogo.
+    const capOferta = normalizarCostosCapacidad(fila.tarifas_capacidad).map((c) => c.hastaLitros);
+    if (capOferta.length > 0) {
+      const { data: prodTarifas } = await sb
+        .from("productos_servicios")
+        .select("tarifas_capacidad")
+        .eq("id", fila.producto_id)
+        .maybeSingle();
+      const actuales = tarifasProducto(prodTarifas?.tarifas_capacidad);
+      const faltan = capOferta.filter((h) => !actuales.some((t) => t.hastaLitros === h));
+      if (faltan.length > 0) {
+        await sb
+          .from("productos_servicios")
+          .update({
+            tarifas_capacidad: [...actuales, ...faltan.map((h) => ({ hastaLitros: h, precio: null, costo: null }))]
+              .sort((x, y) => x.hastaLitros - y.hastaLitros)
+              .map((t) => ({ hasta_litros: t.hastaLitros, precio: t.precio, costo: t.costo })),
+          })
+          .eq("id", fila.producto_id);
+      }
+    }
+    await sincronizarVariantes(sb, fila.producto_id);
+    fila.tarifas_capacidad = costosCapacidadAJson(
+      filtrarCostosACapacidades(fila.tarifas_capacidad, await capacidadesDeProducto(sb, fila.producto_id))
+    );
     if (fila.preferido) await quitarOtrosPreferidos(sb, fila.producto_id, id || undefined);
 
     let guardada: any;
@@ -312,6 +339,7 @@ export async function guardarOfertaProveedor(
 
     const oferta = aOferta(guardada);
     if (oferta.preferido) await sincronizarCostoProducto(sb, oferta);
+    await sincronizarVariantes(sb, oferta.productoId);
     return { ok: true, oferta };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo guardar la oferta." };
