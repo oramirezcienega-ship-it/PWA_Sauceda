@@ -1171,24 +1171,18 @@ export function DetalleOrdenTrabajo({
       />
 
       <ModalAsignarProveedorOT
-        abierto={modalProveedor}
-        alCerrar={() => setModalProveedor(false)}
-        alAsignar={(p) => {
+        orden={modalProveedor ? orden : null}
+        onCerrar={() => setModalProveedor(false)}
+        onAsignado={(_ordenId, p) => {
           setOrden((prev) => ({
             ...prev,
             proveedorId: p.proveedorId,
             proveedorNombre: p.proveedorNombre,
             costoProveedor: p.costoProveedor,
-            proveedorConcepto: p.concepto,
           }));
           setModalProveedor(false);
           recargarDetalle();
         }}
-        ordenId={orden.id}
-        ordenFolio={orden.folio}
-        proveedorIdActual={orden.proveedorId}
-        costoProveedorActual={orden.costoProveedor}
-        conceptoActual={orden.proveedorConcepto}
       />
     </div>
   );

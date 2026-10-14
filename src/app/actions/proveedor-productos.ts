@@ -1,6 +1,7 @@
 "use server";
 
 import { estandarDeServicio } from "@/lib/estandar-servicio";
+import { costoReferenciaOferta } from "@/lib/solicitudes-proveedor";
 import { capacidadesDeProducto, filtrarCostosACapacidades, sincronizarVariantes } from "@/lib/variantes-servicio";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
@@ -190,13 +191,14 @@ export async function listarProductosParaOferta(): Promise<
     categoria: string;
     tarifasCapacidad: TarifaCapacidad[];
     tarifaMedida: MedidaTarifa;
+    tipoNegocio: string | null;
   }>
 > {
   await requireAdmin();
   const sb = supabaseServidor();
   const { data, error } = await sb
     .from("productos_servicios")
-    .select("id, nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida")
+    .select("id, nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida, tipo_negocio")
     .eq("activo", true)
     .order("nombre", { ascending: true });
   if (error || !data) return [];
@@ -208,7 +210,84 @@ export async function listarProductosParaOferta(): Promise<
     categoria: p.categoria || "General",
     tarifasCapacidad: tarifasProducto(p.tarifas_capacidad),
     tarifaMedida: medidaTarifa(p.tarifa_medida),
+    tipoNegocio: p.tipo_negocio || null,
   }));
+}
+
+/** Un proveedor que ofrece el servicio, con su costo para la cantidad/capacidad pedida. */
+export interface OpcionProveedorServicio {
+  ofertaId: string;
+  proveedorId: string;
+  proveedorNombre: string;
+  proveedorActivo: boolean;
+  /** Costo para SAUCEDA con esa cantidad o capacidad (null = no lo cotizó). */
+  costo: number | null;
+  preferido: boolean;
+  tieneEstandar: boolean;
+  cumpleEstandar: boolean;
+  zonas: string;
+  vigenciaVencida: boolean;
+  pendienteRevision: boolean;
+}
+
+/**
+ * Comparativa para asignar un trabajo: el precio de venta de SAUCEDA y el costo de cada
+ * proveedor activo para ese servicio y cantidad/capacidad (por variante, volumen o unitario).
+ */
+export async function compararProveedoresServicio(
+  productoId: string,
+  cantidad: number | null
+): Promise<{ precioVenta: number | null; opciones: OpcionProveedorServicio[] }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const cant = Number(cantidad || 0);
+
+  const { data: prod } = await sb
+    .from("productos_servicios")
+    .select("precio_unitario, cantidad_minima, tarifas_capacidad")
+    .eq("id", productoId)
+    .maybeSingle();
+  let precioVenta: number | null = null;
+  if (prod) {
+    const tarifas = tarifasProducto(prod.tarifas_capacidad).filter((t) => t.precio !== null);
+    if (tarifas.length > 0) {
+      if (cant > 0) precioVenta = (tarifas.find((t) => cant <= t.hastaLitros) ?? tarifas[tarifas.length - 1]).precio;
+    } else if (Number(prod.precio_unitario) > 0) {
+      const cobrada = cant > 0 ? Math.max(cant, Number(prod.cantidad_minima || 0)) : 1;
+      precioVenta = Math.round(Number(prod.precio_unitario) * cobrada * 100) / 100;
+    }
+  }
+
+  const { data } = await sb
+    .from("proveedor_productos")
+    .select(SELECT_OFERTA)
+    .eq("producto_id", productoId)
+    .eq("activo", true);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const opciones = (data || []).map((f: any): OpcionProveedorServicio => {
+    const o = aOferta(f);
+    return {
+      ofertaId: o.id,
+      proveedorId: o.proveedorId,
+      proveedorNombre: o.proveedorNombre,
+      proveedorActivo: o.proveedorActivo,
+      costo: costoReferenciaOferta(f, cant),
+      preferido: o.preferido,
+      tieneEstandar: o.productoEstandar !== null,
+      cumpleEstandar: o.cumpleEstandar,
+      zonas: o.zonasCobertura,
+      vigenciaVencida: !!o.vigenciaPrecio && o.vigenciaPrecio < hoy,
+      pendienteRevision: o.pendienteRevision,
+    };
+  });
+  // Primero los que cotizan, del más barato al más caro; el preferido gana en empate.
+  opciones.sort(
+    (a, b) =>
+      Number(a.costo === null) - Number(b.costo === null) ||
+      (a.costo ?? 0) - (b.costo ?? 0) ||
+      Number(b.preferido) - Number(a.preferido)
+  );
+  return { precioVenta, opciones };
 }
 
 /**

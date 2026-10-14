@@ -60,6 +60,9 @@ export interface OrdenTrabajo {
   proveedorNombre?: string | null;
   costoProveedor: number | null;
   proveedorConcepto: string | null;
+  /** Servicio del catálogo y cantidad/capacidad del trabajo (migración 0157). */
+  productoId?: string | null;
+  cantidadServicio?: number | null;
   // Enriquecidos
   token: string;
   notificadoClienteAt?: string | null;
@@ -348,7 +351,13 @@ export async function crearOrdenTrabajo(datos: {
 /** Asigna (o cambia) el proveedor y el costo pactado con él para esta orden de trabajo. */
 export async function asignarProveedorOrdenTrabajo(
   ordenId: string,
-  datos: { proveedorId: string | null; costoProveedor: number | null; proveedorConcepto?: string | null }
+  datos: {
+    proveedorId: string | null;
+    costoProveedor: number | null;
+    proveedorConcepto?: string | null;
+    productoId?: string | null;
+    cantidadServicio?: number | null;
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin();
@@ -360,6 +369,10 @@ export async function asignarProveedorOrdenTrabajo(
         proveedor_id: datos.proveedorId || null,
         costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
         proveedor_concepto: datos.proveedorConcepto?.trim() || null,
+        ...(datos.productoId !== undefined ? { producto_id: datos.productoId || null } : {}),
+        ...(datos.cantidadServicio !== undefined
+          ? { cantidad_servicio: datos.cantidadServicio && datos.cantidadServicio > 0 ? datos.cantidadServicio : null }
+          : {}),
         updated_at: new Date().toISOString(),
       })
       .eq("id", ordenId);
@@ -508,6 +521,8 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         proveedorNombre: d.proveedores?.nombre || null,
         costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
         proveedorConcepto: d.proveedor_concepto,
+        productoId: d.producto_id ?? null,
+        cantidadServicio: d.cantidad_servicio !== null && d.cantidad_servicio !== undefined ? Number(d.cantidad_servicio) : null,
         asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
         asesorResponsableNombre: d.asesor_responsable?.nombre || "",
         clienteNombre: d.prospectos?.nombre || "Cliente General",
@@ -717,6 +732,8 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       proveedorNombre: d.proveedores?.nombre || null,
       costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
       proveedorConcepto: d.proveedor_concepto,
+        productoId: d.producto_id ?? null,
+        cantidadServicio: d.cantidad_servicio !== null && d.cantidad_servicio !== undefined ? Number(d.cantidad_servicio) : null,
       asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
       clienteNombre: d.prospectos?.nombre || "Cliente General",
