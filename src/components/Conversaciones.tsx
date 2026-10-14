@@ -60,6 +60,7 @@ import {
   clasificarPlantilla,
 } from "@/lib/plantillas-whatsapp";
 import { CotizacionesEspecialesConversacion } from "@/components/conversaciones/CotizacionesEspecialesConversacion";
+import { CoordinacionInstalacionConversacion } from "@/components/conversaciones/CoordinacionInstalacionConversacion";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
@@ -2394,6 +2395,16 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     📞 Contactar por Llamada
                   </a>
                 </div>
+              )}
+
+              {/* Coordinar instalación de cotizaciones aceptadas con el proveedor (Telegram) */}
+              {!detalle.telefono.startsWith("messenger:") && (
+                <CoordinacionInstalacionConversacion
+                  telefono={detalle.telefono}
+                  prospectoId={detalle.prospectoId}
+                  expedienteId={detalle.expedienteId}
+                  onEnviada={() => refrescar(detalle.telefono)}
+                />
               )}
 
               {/* Cotizaciones especiales (fuera de catálogo) con proveedores por Telegram */}

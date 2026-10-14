@@ -409,7 +409,7 @@ export async function responderSolicitudPortal(
   if (!proveedor) return { ok: false, mensaje: "Link no válido." };
   if (!/^[0-9a-f-]{36}$/i.test(envioId)) return { ok: false, mensaje: "Solicitud no válida." };
 
-  const { avanzarSolicitud, avisarGrupoSolicitudes, sinMarkdownSolicitudes } = await import("@/lib/solicitudes-proveedor");
+  const { registrarRespuestaSolicitud } = await import("@/lib/solicitudes-proveedor");
 
   const { data: envio } = await sb
     .from("solicitudes_proveedor_envios")
@@ -419,79 +419,12 @@ export async function responderSolicitudPortal(
     .maybeSingle();
   if (!envio) return { ok: false, mensaje: "Esta solicitud no es tuya o ya no existe." };
 
-  await avanzarSolicitud(sb, envio.solicitud_id);
-  const { data: actual } = await sb.from("solicitudes_proveedor_envios").select("estado").eq("id", envioId).maybeSingle();
-  if (!actual || !["enviada", "vista"].includes(actual.estado)) {
-    const motivo =
-      actual?.estado === "vencida"
-        ? "El plazo para responder ya pasó y la solicitud se pasó a otro proveedor."
-        : actual?.estado === "cancelada"
-        ? "Esta solicitud ya la tomó otro proveedor o se canceló."
-        : "Esta solicitud ya fue respondida.";
-    return { ok: false, mensaje: motivo };
-  }
-
-  const comentario = texto(respuesta.comentario).slice(0, 1000);
-  const fechas = (respuesta.fechas || []).map((f) => texto(f).slice(0, 120)).filter(Boolean).slice(0, 3);
-  const ahora = new Date().toISOString();
-
-  const { data: sol } = await sb
-    .from("solicitudes_proveedor")
-    .select("id, folio, productos_servicios:producto_id ( nombre )")
-    .eq("id", envio.solicitud_id)
-    .maybeSingle();
-  const folio = sol?.folio || "";
-  const producto = (sol as any)?.productos_servicios?.nombre || "servicio";
-
-  if (respuesta.tipo === "aceptada") {
-    if (fechas.length === 0) return { ok: false, mensaje: "Propón al menos una fecha y horario en que puedes hacerlo." };
-    // La primera aceptación gana (evita que dos proveedores la tomen al mismo tiempo).
-    const { data: tomada } = await sb
-      .from("solicitudes_proveedor")
-      .update({
-        estado: "asignada",
-        proveedor_asignado_id: proveedor.id,
-        costo_acordado: envio.costo_referencia,
-        updated_at: ahora,
-      })
-      .eq("id", envio.solicitud_id)
-      .eq("estado", "abierta")
-      .select("id")
-      .maybeSingle();
-    if (!tomada) return { ok: false, mensaje: "Otro proveedor tomó esta solicitud un momento antes. Gracias por responder." };
-
-    await sb
-      .from("solicitudes_proveedor_envios")
-      .update({ estado: "aceptada", respondida_at: ahora, fechas_propuestas: fechas, comentario, updated_at: ahora })
-      .eq("id", envioId);
-    await sb
-      .from("solicitudes_proveedor_envios")
-      .update({ estado: "cancelada", updated_at: ahora })
-      .eq("solicitud_id", envio.solicitud_id)
-      .neq("id", envioId)
-      .in("estado", ["en_espera", "enviada", "vista"]);
-
-    await avisarGrupoSolicitudes(
-      sb,
-      `✅ *${sinMarkdownSolicitudes(proveedor.nombre)}* aceptó la solicitud *${sinMarkdownSolicitudes(folio)}* (${sinMarkdownSolicitudes(producto)}).\nFechas que propone: ${sinMarkdownSolicitudes(fechas.join(" · "))}${comentario ? `\nComentario: ${sinMarkdownSolicitudes(comentario)}` : ""}\nConfirma con el cliente y registra la fecha en el CRM.`
-    );
-  } else {
-    if (respuesta.tipo === "requiere_visita" && !comentario) {
-      return { ok: false, mensaje: "Cuéntanos qué necesitas revisar en sitio." };
-    }
-    await sb
-      .from("solicitudes_proveedor_envios")
-      .update({ estado: respuesta.tipo, respondida_at: ahora, fechas_propuestas: fechas, comentario, updated_at: ahora })
-      .eq("id", envioId);
-    if (respuesta.tipo === "requiere_visita") {
-      await avisarGrupoSolicitudes(
-        sb,
-        `🔎 *${sinMarkdownSolicitudes(proveedor.nombre)}* necesita revisar en sitio la solicitud *${sinMarkdownSolicitudes(folio)}* (${sinMarkdownSolicitudes(producto)}): ${sinMarkdownSolicitudes(comentario)}. Valora ofrecer la visita técnica al cliente.`
-      );
-    }
-    // En cascada pasa al siguiente proveedor.
-    await avanzarSolicitud(sb, envio.solicitud_id);
-  }
+  const r = await registrarRespuestaSolicitud(sb, envioId, proveedor, {
+    tipo: respuesta.tipo,
+    fechas: (respuesta.fechas || []).slice(0, 3),
+    comentario: respuesta.comentario,
+  });
+  if (!r.ok) return { ok: false, mensaje: r.mensaje };
 
   const { data: final } = await sb.from("solicitudes_proveedor_envios").select(SELECT_SOLICITUD_PORTAL).eq("id", envioId).maybeSingle();
   return { ok: true, solicitud: final ? aSolicitudPortal(final) : undefined };

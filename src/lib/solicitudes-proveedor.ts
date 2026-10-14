@@ -95,7 +95,7 @@ async function notificarProveedor(sb: SupabaseClient, envioId: string) {
   const { data: envio, error: errEnvio } = await sb
     .from("solicitudes_proveedor_envios")
     .select(
-      "id, fecha_limite, costo_referencia, proveedores:proveedor_id ( id, nombre, whatsapp, telefono ), solicitudes_proveedor:solicitud_id ( folio, descripcion, cantidad, unidad, zona, modo, productos_servicios:producto_id ( nombre ) )"
+      "id, fecha_limite, costo_referencia, proveedores:proveedor_id ( id, nombre, whatsapp, telefono, telegram_chat_id ), solicitudes_proveedor:solicitud_id ( folio, descripcion, cantidad, unidad, zona, modo, fotos, fechas_sugeridas, productos_servicios:producto_id ( nombre ) )"
     )
     .eq("id", envioId)
     .maybeSingle();
@@ -104,6 +104,30 @@ async function notificarProveedor(sb: SupabaseClient, envioId: string) {
   const prov: any = (envio as any).proveedores;
   const sol: any = (envio as any).solicitudes_proveedor;
   const prod: any = sol?.productos_servicios;
+
+  // Proveedor con Telegram ligado: solicitud con botones (Lo tomo → días → mañana/tarde).
+  if (prov?.telegram_chat_id) {
+    const { notificarSolicitudTelegram } = await import("@/lib/solicitudes-telegram");
+    const enviadoTg = await notificarSolicitudTelegram(sb, {
+      envioId,
+      chatId: prov.telegram_chat_id,
+      folio: sol?.folio || "",
+      producto: prod?.nombre || "Servicio",
+      cantidad: sol?.cantidad ? Number(sol.cantidad) : null,
+      unidad: sol?.unidad || "",
+      zona: sol?.zona || "",
+      descripcion: sol?.descripcion || "",
+      fechasSugeridas: sol?.fechas_sugeridas || "",
+      urgente: sol?.modo === "urgente",
+      costo: envio.costo_referencia !== null ? Number(envio.costo_referencia) : null,
+      fechaLimite: fechaLimiteTexto(envio.fecha_limite),
+      fotos: (Array.isArray(sol?.fotos) ? sol.fotos : []).map((f: any) => f?.url).filter(Boolean),
+    });
+    if (enviadoTg) {
+      await sb.from("solicitudes_proveedor_envios").update({ notificado: true }).eq("id", envioId);
+      return;
+    }
+  }
   const token = await tokenProveedor(sb, prov.id);
   if (!token) return;
   const link = linkPortalProveedor(token);
@@ -229,3 +253,119 @@ export async function avanzarSolicitudesAbiertas(sb: SupabaseClient): Promise<nu
 }
 
 export { avisarGrupo as avisarGrupoSolicitudes, sinMarkdown as sinMarkdownSolicitudes };
+
+export interface RespuestaSolicitud {
+  tipo: "aceptada" | "rechazada" | "requiere_visita";
+  /** Opciones de fecha legibles ("Jue 23 oct · tarde (14–18 h)"). */
+  fechas?: string[];
+  /** Códigos de las opciones (YYYYMMDD + M|T), en el mismo orden que `fechas` (solo Telegram). */
+  opciones?: string[];
+  comentario?: string;
+}
+
+/**
+ * Registra la respuesta del proveedor a un envío (portal o Telegram).
+ * La primera aceptación gana: la solicitud queda asignada y se retira a los demás; en cascada,
+ * un rechazo pasa al siguiente proveedor.
+ */
+export async function registrarRespuestaSolicitud(
+  sb: SupabaseClient,
+  envioId: string,
+  proveedor: { id: string; nombre: string },
+  respuesta: RespuestaSolicitud
+): Promise<{ ok: boolean; mensaje?: string; folio?: string }> {
+  const { data: envio } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select("id, solicitud_id, estado, costo_referencia")
+    .eq("id", envioId)
+    .eq("proveedor_id", proveedor.id)
+    .maybeSingle();
+  if (!envio) return { ok: false, mensaje: "Esta solicitud no es tuya o ya no existe." };
+
+  await avanzarSolicitud(sb, envio.solicitud_id);
+  const { data: actual } = await sb.from("solicitudes_proveedor_envios").select("estado").eq("id", envioId).maybeSingle();
+  if (!actual || !["enviada", "vista"].includes(actual.estado)) {
+    const motivo =
+      actual?.estado === "vencida"
+        ? "El plazo para responder ya pasó y la solicitud se pasó a otro proveedor."
+        : actual?.estado === "cancelada"
+        ? "Esta solicitud ya la tomó otro proveedor o se canceló."
+        : "Esta solicitud ya fue respondida.";
+    return { ok: false, mensaje: motivo };
+  }
+
+  const limpiar = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const comentario = limpiar(respuesta.comentario).slice(0, 1000);
+  const fechas = (respuesta.fechas || []).map((f) => limpiar(f).slice(0, 120)).filter(Boolean).slice(0, 8);
+  const opciones = (respuesta.opciones || []).map((o) => limpiar(o).slice(0, 20)).slice(0, fechas.length);
+  const ahora = new Date().toISOString();
+
+  const { data: sol } = await sb
+    .from("solicitudes_proveedor")
+    .select("id, folio, productos_servicios:producto_id ( nombre )")
+    .eq("id", envio.solicitud_id)
+    .maybeSingle();
+  const folio = sol?.folio || "";
+  const producto = (sol as any)?.productos_servicios?.nombre || "servicio";
+
+  if (respuesta.tipo === "aceptada") {
+    if (fechas.length === 0) return { ok: false, mensaje: "Propón al menos una fecha y horario en que puedes hacerlo." };
+    // La primera aceptación gana (evita que dos proveedores la tomen al mismo tiempo).
+    const { data: tomada } = await sb
+      .from("solicitudes_proveedor")
+      .update({
+        estado: "asignada",
+        proveedor_asignado_id: proveedor.id,
+        costo_acordado: envio.costo_referencia,
+        updated_at: ahora,
+      })
+      .eq("id", envio.solicitud_id)
+      .eq("estado", "abierta")
+      .select("id")
+      .maybeSingle();
+    if (!tomada) return { ok: false, mensaje: "Otro proveedor tomó esta solicitud un momento antes. Gracias por responder." };
+
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({
+        estado: "aceptada",
+        respondida_at: ahora,
+        fechas_propuestas: fechas,
+        tg_opciones: opciones,
+        tg_paso: null,
+        comentario,
+        updated_at: ahora,
+      })
+      .eq("id", envioId);
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: "cancelada", tg_paso: null, updated_at: ahora })
+      .eq("solicitud_id", envio.solicitud_id)
+      .neq("id", envioId)
+      .in("estado", ["en_espera", "enviada", "vista"]);
+
+    await avisarGrupo(
+      sb,
+      `✅ *${sinMarkdown(proveedor.nombre)}* aceptó la solicitud *${sinMarkdown(folio)}* (${sinMarkdown(producto)}).
+Opciones que propone: ${sinMarkdown(fechas.join(" · "))}${comentario ? `\nComentario: ${sinMarkdown(comentario)}` : ""}
+Ofrécelas al cliente desde su conversación y confirma la que elija.`
+    );
+  } else {
+    if (respuesta.tipo === "requiere_visita" && !comentario) {
+      return { ok: false, mensaje: "Cuéntanos qué necesitas revisar en sitio." };
+    }
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ estado: respuesta.tipo, respondida_at: ahora, fechas_propuestas: fechas, tg_paso: null, comentario, updated_at: ahora })
+      .eq("id", envioId);
+    if (respuesta.tipo === "requiere_visita") {
+      await avisarGrupo(
+        sb,
+        `🔎 *${sinMarkdown(proveedor.nombre)}* necesita revisar en sitio la solicitud *${sinMarkdown(folio)}* (${sinMarkdown(producto)}): ${sinMarkdown(comentario)}. Valora ofrecer la visita técnica al cliente.`
+      );
+    }
+    // En cascada pasa al siguiente proveedor.
+    await avanzarSolicitud(sb, envio.solicitud_id);
+  }
+  return { ok: true, folio };
+}

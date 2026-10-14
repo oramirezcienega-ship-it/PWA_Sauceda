@@ -14,6 +14,7 @@ import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
 import { registrarActividad } from "@/lib/actividades";
 import { manejarCallbackCotizacionEspecial, manejarTextoCotizacionEspecial } from "@/lib/cotizaciones-especiales";
+import { manejarCallbackSolicitud, manejarTextoSolicitud } from "@/lib/solicitudes-telegram";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
 import { registrarRespuestaLead, urlPortalParaTelegram } from "@/lib/lead-telegram";
 import {
@@ -95,7 +96,9 @@ export async function POST(req: NextRequest) {
 
       // Proveedor respondiendo una cotización especial (precio → tiempo → qué incluye)
       if (text && !text.startsWith("/") && botToken) {
-        const atendido = await manejarTextoCotizacionEspecial(sb, botToken, chatId, text);
+        const atendido =
+          (await manejarTextoCotizacionEspecial(sb, botToken, chatId, text)) ||
+          (await manejarTextoSolicitud(sb, botToken, chatId, text));
         if (atendido) return NextResponse.json({ ok: true });
       }
 
@@ -131,6 +134,11 @@ export async function POST(req: NextRequest) {
       // Cotizaciones especiales: ce:{c|v|n|ok|ed|s}:{respuesta}
       if (data.startsWith("ce:") && botToken) {
         await manejarCallbackCotizacionEspecial(sb, botToken, cb);
+        return NextResponse.json({ ok: true });
+      }
+      // Solicitudes a proveedor (coordinar fecha): sp:{a|d|dl|f|fl|ok|v|n}:{envio}
+      if (data.startsWith("sp:") && botToken) {
+        await manejarCallbackSolicitud(sb, botToken, cb);
         return NextResponse.json({ ok: true });
       }
 

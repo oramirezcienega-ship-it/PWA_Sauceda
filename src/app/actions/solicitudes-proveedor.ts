@@ -53,6 +53,8 @@ export interface EnvioSolicitud {
   fechasPropuestas: string[];
   comentario: string;
   notificado: boolean;
+  /** Respondió por Telegram (opciones día + franja). */
+  porTelegram: boolean;
 }
 
 export interface SolicitudProveedor {
@@ -75,12 +77,15 @@ export interface SolicitudProveedor {
   proveedorAsignadoNombre: string | null;
   costoAcordado: number | null;
   fechaAcordada: string | null;
+  /** Cuándo se le ofrecieron al cliente las opciones del proveedor. */
+  opcionesOfrecidasAt: string | null;
+  ordenTrabajoFolio: string | null;
   createdAt: string;
   envios: EnvioSolicitud[];
 }
 
 const SELECT_SOLICITUD =
-  "*, productos_servicios:producto_id ( nombre ), proveedor:proveedor_asignado_id ( nombre ), solicitudes_proveedor_envios ( *, proveedores:proveedor_id ( nombre ) )";
+  "*, productos_servicios:producto_id ( nombre ), proveedor:proveedor_asignado_id ( nombre ), ordenes_trabajo:orden_trabajo_id ( folio ), solicitudes_proveedor_envios ( *, proveedores:proveedor_id ( nombre ) )";
 
 function aSolicitud(f: any): SolicitudProveedor {
   return {
@@ -103,6 +108,8 @@ function aSolicitud(f: any): SolicitudProveedor {
     proveedorAsignadoNombre: f.proveedor?.nombre || null,
     costoAcordado: f.costo_acordado === null ? null : Number(f.costo_acordado),
     fechaAcordada: f.fecha_acordada || null,
+    opcionesOfrecidasAt: f.opciones_ofrecidas_at || null,
+    ordenTrabajoFolio: f.ordenes_trabajo?.folio || null,
     createdAt: f.created_at,
     envios: (f.solicitudes_proveedor_envios || [])
       .map((e: any) => ({
@@ -118,6 +125,7 @@ function aSolicitud(f: any): SolicitudProveedor {
         fechasPropuestas: Array.isArray(e.fechas_propuestas) ? e.fechas_propuestas.map(String) : [],
         comentario: e.comentario || "",
         notificado: e.notificado === true,
+        porTelegram: Array.isArray(e.tg_opciones) && e.tg_opciones.length > 0,
       }))
       .sort((a: EnvioSolicitud, b: EnvioSolicitud) => a.orden - b.orden),
   };
@@ -322,8 +330,9 @@ export async function listarSolicitudesCotizacion(cotizacionId: string): Promise
 }
 
 /**
- * El cliente eligió fecha: la solicitud queda confirmada y, si hay orden de trabajo
- * abierta ligada, se le asigna el proveedor con su costo acordado.
+ * El cliente eligió fecha: la solicitud queda confirmada, se avisa al proveedor por Telegram y
+ * la orden de trabajo queda lista con proveedor, costo, servicio, cantidad y fecha. Si la
+ * cotización aún no tiene orden de trabajo, se crea.
  */
 export async function confirmarSolicitudProveedor(
   solicitudId: string,
@@ -335,39 +344,164 @@ export async function confirmarSolicitudProveedor(
     const sb = supabaseServidor();
     const { data: sol } = await sb
       .from("solicitudes_proveedor")
-      .select("id, folio, estado, orden_trabajo_id, proveedor_asignado_id, costo_acordado, productos_servicios:producto_id ( nombre )")
+      .select(
+        "id, folio, estado, cotizacion_id, orden_trabajo_id, proveedor_asignado_id, costo_acordado, producto_id, cantidad, productos_servicios:producto_id ( nombre )"
+      )
       .eq("id", solicitudId)
       .maybeSingle();
     if (!sol) return { ok: false, error: "Solicitud no encontrada." };
     if (sol.estado !== "asignada") return { ok: false, error: "Solo se confirma una solicitud que un proveedor ya aceptó." };
 
+    const fecha = fechaAcordada.trim();
+    const producto = (sol as any).productos_servicios?.nombre || "Servicio";
     const { error } = await sb
       .from("solicitudes_proveedor")
-      .update({ estado: "confirmada", fecha_acordada: fechaAcordada.trim(), updated_at: new Date().toISOString() })
+      .update({ estado: "confirmada", fecha_acordada: fecha, updated_at: new Date().toISOString() })
       .eq("id", solicitudId);
     if (error) return { ok: false, error: error.message };
 
+    // Fecha programada exacta si la opción vino de Telegram (código día + franja).
+    const { data: aceptado } = await sb
+      .from("solicitudes_proveedor_envios")
+      .select("fechas_propuestas, tg_opciones")
+      .eq("solicitud_id", solicitudId)
+      .eq("estado", "aceptada")
+      .maybeSingle();
+    const { fechaProgramadaDeOpcion, avisarConfirmacionProveedor } = await import("@/lib/solicitudes-telegram");
+    const idx = Array.isArray(aceptado?.fechas_propuestas) ? aceptado!.fechas_propuestas.map(String).indexOf(fecha) : -1;
+    const codigo = idx >= 0 && Array.isArray(aceptado?.tg_opciones) ? String(aceptado!.tg_opciones[idx] || "") : "";
+    const fechaProgramada = fechaProgramadaDeOpcion(codigo);
+
+    const datosOT = {
+      proveedor_id: sol.proveedor_asignado_id,
+      costo_proveedor: sol.costo_acordado,
+      proveedor_concepto: `${producto} · ${sol.folio} · ${fecha}`,
+      producto_id: sol.producto_id,
+      cantidad_servicio: sol.cantidad,
+      ...(fechaProgramada ? { fecha_programada: fechaProgramada } : {}),
+      updated_at: new Date().toISOString(),
+    };
+
     let mensaje = "Solicitud confirmada.";
-    if (sol.orden_trabajo_id && sol.proveedor_asignado_id) {
-      const cerrada = (await ordenesCerradas(sb, [sol.orden_trabajo_id])).get(sol.orden_trabajo_id);
+    let ordenFolio: string | null = null;
+    let ordenId = sol.orden_trabajo_id as string | null;
+    if (ordenId) {
+      const cerrada = (await ordenesCerradas(sb, [ordenId])).get(ordenId);
       if (!cerrada) {
-        await sb
-          .from("ordenes_trabajo")
-          .update({
-            proveedor_id: sol.proveedor_asignado_id,
-            costo_proveedor: sol.costo_acordado,
-            proveedor_concepto: `${(sol as any).productos_servicios?.nombre || "Servicio"} · ${sol.folio} · ${fechaAcordada.trim()}`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", sol.orden_trabajo_id);
-        mensaje = "Solicitud confirmada y proveedor asignado a la orden de trabajo con su costo.";
+        await sb.from("ordenes_trabajo").update(datosOT).eq("id", ordenId);
+        mensaje = "Solicitud confirmada y orden de trabajo actualizada con el proveedor, su costo y la fecha.";
       }
+    } else if (sol.cotizacion_id) {
+      const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
+      const ot = await crearOrdenTrabajo({
+        cotizacionId: sol.cotizacion_id,
+        titulo: `${producto} — ${fecha}`,
+        fechaProgramada: fechaProgramada || undefined,
+        proveedorId: sol.proveedor_asignado_id,
+        costoProveedor: sol.costo_acordado === null ? null : Number(sol.costo_acordado),
+        proveedorConcepto: datosOT.proveedor_concepto,
+      });
+      if (ot.ok && ot.id) {
+        ordenId = ot.id;
+        await sb.from("ordenes_trabajo").update({ producto_id: sol.producto_id, cantidad_servicio: sol.cantidad }).eq("id", ot.id);
+        await sb.from("solicitudes_proveedor").update({ orden_trabajo_id: ot.id }).eq("id", solicitudId);
+        mensaje = `Solicitud confirmada y orden de trabajo ${ot.folio} creada con el proveedor, su costo y la fecha.`;
+      } else {
+        mensaje = `Solicitud confirmada, pero no se pudo crear la orden de trabajo: ${ot.error || "error desconocido"}.`;
+      }
+    }
+    if (ordenId) {
+      const { data: otFolio } = await sb.from("ordenes_trabajo").select("folio").eq("id", ordenId).maybeSingle();
+      ordenFolio = otFolio?.folio || null;
+    }
+
+    if (sol.proveedor_asignado_id) {
+      await avisarConfirmacionProveedor(sb, {
+        proveedorId: sol.proveedor_asignado_id,
+        folio: sol.folio,
+        producto,
+        fecha,
+        ordenFolio,
+      });
     }
     revalidatePath("/ordenes-trabajo");
     return { ok: true, mensaje };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo confirmar." };
   }
+}
+
+/** Manda al cliente, por su conversación, las opciones de fecha que propuso el proveedor. */
+export async function ofrecerOpcionesSolicitudCliente(
+  solicitudId: string,
+  telefono: string
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data: sol } = await sb
+    .from("solicitudes_proveedor")
+    .select("id, estado, productos_servicios:producto_id ( nombre )")
+    .eq("id", solicitudId)
+    .maybeSingle();
+  if (!sol || sol.estado !== "asignada") return { ok: false, error: "La solicitud aún no tiene un proveedor que la haya aceptado." };
+  const { data: aceptado } = await sb
+    .from("solicitudes_proveedor_envios")
+    .select("fechas_propuestas")
+    .eq("solicitud_id", solicitudId)
+    .eq("estado", "aceptada")
+    .maybeSingle();
+  const opciones: string[] = Array.isArray(aceptado?.fechas_propuestas) ? aceptado!.fechas_propuestas.map(String) : [];
+  if (opciones.length === 0) return { ok: false, error: "El proveedor no propuso fechas." };
+
+  const producto = (sol as any).productos_servicios?.nombre || "tu servicio";
+  const texto =
+    `¡Listo! Ya tenemos disponibilidad para *${producto}*. Estas son las opciones:\n\n` +
+    opciones.map((o, i) => `${i + 1}. ${o}`).join("\n") +
+    `\n\n¿Cuál te acomoda? Responde con el número.`;
+  const { responderConversacion } = await import("@/app/actions/conversaciones");
+  const r = await responderConversacion(telefono, texto);
+  if (!r.ok) return { ok: false, error: r.error || "No se pudo enviar al cliente." };
+  await sb
+    .from("solicitudes_proveedor")
+    .update({ opciones_ofrecidas_at: new Date().toISOString() })
+    .eq("id", solicitudId);
+  return { ok: true };
+}
+
+/** Cotizaciones aceptadas de la conversación (para coordinar su instalación) y sus solicitudes. */
+export async function coordinacionConversacion(
+  prospectoId: string | null,
+  expedienteId: string | null
+): Promise<{ cotizaciones: { id: string; titulo: string; estatus: string }[]; solicitudes: SolicitudProveedor[] }> {
+  await requireAdmin();
+  if (!prospectoId && !expedienteId) return { cotizaciones: [], solicitudes: [] };
+  const sb = supabaseServidor();
+  let q = sb.from("cotizaciones").select("id, servicio_tipo, estatus, precio_final, created_at").in("estatus", ["aceptada", "instalacion"]);
+  q = prospectoId && expedienteId
+    ? q.or(`prospecto_id.eq.${prospectoId},expediente_id.eq.${expedienteId}`)
+    : prospectoId
+    ? q.eq("prospecto_id", prospectoId)
+    : q.eq("expediente_id", expedienteId!);
+  const { data: cots } = await q.order("created_at", { ascending: false }).limit(5);
+  const ids = (cots || []).map((c: any) => c.id);
+  if (ids.length === 0) return { cotizaciones: [], solicitudes: [] };
+
+  const { data: abiertas } = await sb.from("solicitudes_proveedor").select("id").in("cotizacion_id", ids).eq("estado", "abierta");
+  for (const a of abiertas || []) await avanzarSolicitud(sb, a.id);
+  const { data } = await sb
+    .from("solicitudes_proveedor")
+    .select(SELECT_SOLICITUD)
+    .in("cotizacion_id", ids)
+    .neq("estado", "cancelada")
+    .order("created_at", { ascending: false });
+  return {
+    cotizaciones: (cots || []).map((c: any) => ({
+      id: c.id,
+      titulo: `${c.id} · ${Number(c.precio_final || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`,
+      estatus: c.estatus,
+    })),
+    solicitudes: (data || []).map(aSolicitud),
+  };
 }
 
 /** Cancela la solicitud y retira los envíos pendientes. */

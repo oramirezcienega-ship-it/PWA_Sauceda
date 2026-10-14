@@ -121,17 +121,20 @@ export function PanelSolicitudesProveedor({ cotizacionId }: { cotizacionId: stri
   );
 }
 
-function TarjetaSolicitud({
+export function TarjetaSolicitud({
   s,
   onConfirmar,
   onCancelar,
+  onOfrecer,
 }: {
   s: SolicitudProveedor;
   onConfirmar: (s: SolicitudProveedor, fecha: string) => void;
   onCancelar: (s: SolicitudProveedor) => void;
+  /** Si se da, aparece "Ofrecer al cliente" (manda las opciones por su conversación). */
+  onOfrecer?: (s: SolicitudProveedor) => void;
 }) {
   const aceptado = s.envios.find((e) => e.estado === "aceptada");
-  const [fecha, setFecha] = useState(aceptado?.fechasPropuestas[0] || "");
+  const [confirmando, setConfirmando] = useState<string | null>(null);
   const etiqueta = ETIQUETA_ESTADO[s.estado];
 
   return (
@@ -159,7 +162,7 @@ function TarjetaSolicitud({
             title={[
               e.enviadaAt ? `Enviada ${fechaHora(e.enviadaAt)}` : "",
               e.fechaLimite && (e.estado === "enviada" || e.estado === "vista") ? `Responde antes de ${fechaHora(e.fechaLimite)}` : "",
-              e.notificado ? "Avisado por WhatsApp" : "",
+              e.notificado ? "Avisado (Telegram o WhatsApp)" : "",
               e.comentario,
             ]
               .filter(Boolean)
@@ -174,44 +177,65 @@ function TarjetaSolicitud({
 
       {s.estado === "asignada" && aceptado && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-          <div>
-            <b>{aceptado.proveedorNombre}</b> lo toma
-            {s.costoAcordado !== null && <> por {formatoPesos(s.costoAcordado)}</>}. Fechas que propone:
-            <ul className="ml-4 list-disc">
-              {aceptado.fechasPropuestas.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-            {aceptado.comentario && <p className="text-carbon/60">Comentario: {aceptado.comentario}</p>}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <b>{aceptado.proveedorNombre}</b> lo toma
+              {s.costoAcordado !== null && <> por {formatoPesos(s.costoAcordado)}</>}
+              {aceptado.porTelegram && <span className="text-carbon/50"> · respondió por Telegram</span>}. Opciones:
+            </div>
+            {onOfrecer && (
+              <button
+                type="button"
+                onClick={() => onOfrecer(s)}
+                className="rounded-lg border border-sauce/40 bg-white px-2.5 py-1 font-semibold text-sauce hover:bg-sauce hover:text-white"
+                title="Manda estas opciones al cliente por WhatsApp para que elija"
+              >
+                {s.opcionesOfrecidasAt ? "📲 Reenviar al cliente" : "📲 Ofrecer al cliente"}
+              </button>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">El cliente eligió:</span>
-            <select
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="rounded-lg border border-carbon/20 bg-white px-2 py-1"
-            >
-              {aceptado.fechasPropuestas.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => onConfirmar(s, fecha)}
-              className="rounded-lg bg-emerald-600 px-3 py-1 font-semibold text-white hover:bg-emerald-700"
-            >
-              Confirmar fecha
-            </button>
+          {s.opcionesOfrecidasAt && (
+            <p className="text-[11px] text-carbon/55">Ofrecidas al cliente el {fechaHora(s.opcionesOfrecidasAt)}. Cuando elija, confírmala:</p>
+          )}
+          <div className="space-y-1">
+            {aceptado.fechasPropuestas.map((f, idx) => (
+              <div key={f} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white px-2.5 py-1.5">
+                <span>
+                  <b className="text-carbon/50">{idx + 1}.</b> {f}
+                </span>
+                <button
+                  type="button"
+                  disabled={confirmando !== null}
+                  onClick={async () => {
+                    if (!confirm(`¿Confirmar "${f}"? Se avisa al proveedor y queda la orden de trabajo.`)) return;
+                    setConfirmando(f);
+                    try {
+                      await onConfirmar(s, f);
+                    } finally {
+                      setConfirmando(null);
+                    }
+                  }}
+                  className="rounded-md bg-emerald-600 px-2.5 py-1 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {confirmando === f ? "Confirmando…" : "✓ El cliente eligió esta"}
+                </button>
+              </div>
+            ))}
           </div>
+          {aceptado.comentario && <p className="text-carbon/60">Comentario: {aceptado.comentario}</p>}
         </div>
       )}
 
       {s.estado === "confirmada" && (
         <p className="text-emerald-800">
           Confirmada con <b>{s.proveedorAsignadoNombre}</b> para <b>{s.fechaAcordada}</b>
-          {s.costoAcordado !== null && <> · costo {formatoPesos(s.costoAcordado)}</>}.
+          {s.costoAcordado !== null && <> · costo {formatoPesos(s.costoAcordado)}</>}
+          {s.ordenTrabajoFolio && (
+            <>
+              {" "}· orden de trabajo <b className="font-mono">{s.ordenTrabajoFolio}</b>
+            </>
+          )}
+          .
         </p>
       )}
 
@@ -226,7 +250,7 @@ function TarjetaSolicitud({
   );
 }
 
-function ModalNuevaSolicitud({
+export function ModalNuevaSolicitud({
   cotizacionId,
   onCerrar,
   onCreada,
