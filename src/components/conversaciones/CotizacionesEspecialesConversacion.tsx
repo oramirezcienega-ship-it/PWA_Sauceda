@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatoPesos } from "@/lib/formato";
 import { labelTipoNegocio, type MensajeChat, type TipoNegocioId } from "@/lib/types";
 import {
   cancelarCotizacionEspecial,
   crearCotizacionEspecial,
   enviarEstimacionEspecial,
+  estructurarCotizacionEspecial,
   listarCotizacionesEspecialesConversacion,
   proveedoresParaEspecial,
   recalcularEstimacionEspecial,
@@ -354,6 +355,42 @@ function ModalNuevaCotizacionEspecial({
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<string | null>(null);
+  const [ordenando, setOrdenando] = useState(false);
+  const [ordenadoIA, setOrdenadoIA] = useState(false);
+  // Si el usuario ya escribió, la respuesta automática de la IA no le pisa los cambios
+  const editado = useRef(false);
+  const setEditado = (v: boolean) => {
+    editado.current = v;
+  };
+
+  // La IA convierte el chat en título + viñetas técnicas + colonia, sin saludos ni datos personales.
+  const ordenarConIA = useCallback(
+    async (forzar: boolean) => {
+      setOrdenando(true);
+      try {
+        const r = await estructurarCotizacionEspecial(
+          mensajes.map((m) => ({ direccion: m.direccion === "in" ? "in" : "out", texto: m.texto || "" })),
+          linea || tipoNegocio
+        );
+        if (!r || (editado.current && !forzar)) return;
+        if (r.titulo) setTitulo(r.titulo);
+        if (r.descripcion) setDescripcion(r.descripcion);
+        if (r.zona) setZona(r.zona);
+        setOrdenadoIA(true);
+        setEditado(false);
+      } finally {
+        setOrdenando(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mensajes, linea, tipoNegocio]
+  );
+
+  useEffect(() => {
+    ordenarConIA(false);
+    // Solo al abrir el modal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setProveedores(null);
@@ -420,7 +457,10 @@ function ModalNuevaCotizacionEspecial({
               <label className="mb-1 block font-semibold text-carbon/80">¿Qué necesita el cliente? (título) *</label>
               <input
                 value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
+                onChange={(e) => {
+                  setTitulo(e.target.value);
+                  setEditado(true);
+                }}
                 className={inputCls}
                 placeholder="Ej. Mantenimiento calentador 40 tubos con hidrobomba"
               />
@@ -439,21 +479,46 @@ function ModalNuevaCotizacionEspecial({
           </div>
 
           <div>
-            <label className="mb-1 block font-semibold text-carbon/80">En qué consiste y características</label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <label className="block font-semibold text-carbon/80">En qué consiste y características</label>
+              <button
+                type="button"
+                onClick={() => ordenarConIA(true)}
+                disabled={ordenando}
+                className="text-[11px] font-semibold text-sauce hover:underline disabled:opacity-50"
+              >
+                {ordenando ? "✨ Ordenando…" : "✨ Ordenar con IA"}
+              </button>
+            </div>
             <textarea
-              rows={5}
+              rows={6}
               value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
+              onChange={(e) => {
+                setDescripcion(e.target.value);
+                setEditado(true);
+              }}
               className={inputCls}
               placeholder="Medidas, cantidades, materiales, estado actual, acceso (azotea, altura)…"
             />
-            <p className="mt-0.5 text-[10.5px] text-carbon/45">Se prellenó con lo último que escribió el cliente: revísalo y quita datos personales.</p>
+            <p className="mt-0.5 text-[10.5px] text-carbon/45">
+              {ordenando
+                ? "La IA está ordenando lo que pidió el cliente…"
+                : ordenadoIA
+                  ? "La IA lo redactó a partir del chat: revisa que esté completo y correcto antes de enviar."
+                  : "Se prellenó con lo último que escribió el cliente: revísalo y quita datos personales."}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1fr]">
             <div>
               <label className="mb-1 block font-semibold text-carbon/80">Ubicación (colonia / municipio)</label>
-              <input value={zona} onChange={(e) => setZona(e.target.value)} className={inputCls} placeholder="Ej. Jardines del Moral, León" />
+              <input
+                value={zona}
+                onChange={(e) => {
+                  setZona(e.target.value);
+                  setEditado(true);
+                }}
+                className={inputCls} placeholder="Ej. Jardines del Moral, León" />
             </div>
             <div>
               <label className="mb-1 block font-semibold text-carbon/80">Plazo para responder (horas)</label>
