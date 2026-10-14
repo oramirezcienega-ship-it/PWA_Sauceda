@@ -57,13 +57,18 @@ export async function cargarServiciosMantenimiento(
 ): Promise<Partial<Record<ServicioMant, ProductoMant>>> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad")
-    .or("nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%,nombre.ilike.%calentador%");
+    .select("id, nombre, tipo_negocio, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad")
+    .or(
+      "tipo_negocio.in.(construccion-mantenimiento-tinacos,construccion-mantenimiento-cisternas,construccion-mantenimiento-calentadores)," +
+        "nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%,nombre.ilike.%calentador%"
+    );
 
   const out: Partial<Record<ServicioMant, ProductoMant>> = {};
-  for (const f of data || []) {
+  // Primero los que tienen modelo de negocio asignado; el nombre sólo es respaldo.
+  const filas = [...(data || [])].sort((x: any, y: any) => Number(!x.tipo_negocio) - Number(!y.tipo_negocio));
+  for (const f of filas) {
     if (f.activo === false) continue;
-    const servicio = servicioDeNombre(f.nombre);
+    const servicio = f.tipo_negocio ? servicioDeTipoNegocio(f.tipo_negocio) : servicioDeNombre(f.nombre);
     if (!servicio || out[servicio]) continue;
     out[servicio] = {
       id: f.id,
