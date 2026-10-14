@@ -659,24 +659,29 @@ export async function actualizarTipoNegocioConversacion(
     const sb = supabaseServidor();
     const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
 
+    // Antes los errores se ignoraban: si la BD rechazaba el valor (check de tipo_negocio)
+    // el asesor veía "ok" pero la clasificación no cambiaba.
     if (prospectoId) {
-      await sb
+      const { error } = await sb
         .from("prospectos")
         .update({ tipo_negocio: tipoNegocio })
         .eq("id", prospectoId);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo del prospecto: ${error.message}` };
     }
     if (expedienteId) {
-      await sb
+      const { error } = await sb
         .from("expedientes")
         .update({ tipo_negocio: tipoNegocio })
         .eq("id", expedienteId);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo del expediente: ${error.message}` };
     }
     if (!prospectoId && !expedienteId) {
       const v = variantesId(telefono);
-      await sb
+      const { error } = await sb
         .from("prospectos")
         .update({ tipo_negocio: tipoNegocio })
         .in("telefono", v);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo: ${error.message}` };
     }
     return { ok: true };
   } catch (err: any) {
