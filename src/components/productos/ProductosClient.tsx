@@ -123,6 +123,8 @@ export function ProductosClient({
   const [formEstGarantiaAnios, setFormEstGarantiaAnios] = useState("");
   const [formEstGarantia, setFormEstGarantia] = useState("");
   const [formEstTiempo, setFormEstTiempo] = useState("");
+  const [formEsEspecial, setFormEsEspecial] = useState(false);
+  const [formMargenObjetivo, setFormMargenObjetivo] = useState("");
   const [subcuentasMkt, setSubcuentasMkt] = useState<
     Array<{ codigo: string; nombre: string; businessUnitId: string | null }>
   >([]);
@@ -215,6 +217,8 @@ export function ProductosClient({
     setFormEstGarantiaAnios("");
     setFormEstGarantia("");
     setFormEstTiempo("");
+    setFormEsEspecial(false);
+    setFormMargenObjetivo("");
     setFormCategoria("General");
     setFormUnidad("m2");
     setFormCostoUnitario("");
@@ -291,6 +295,8 @@ export function ProductosClient({
     setFormEstGarantiaAnios(p.estandarGarantiaAnios ? String(p.estandarGarantiaAnios) : "");
     setFormEstGarantia(p.estandarGarantia || "");
     setFormEstTiempo(p.estandarTiempo || "");
+    setFormEsEspecial(p.esServicioEspecial === true);
+    setFormMargenObjetivo(p.margenObjetivoPct !== null && p.margenObjetivoPct !== undefined ? String(p.margenObjetivoPct) : "");
     setFormCategoria(p.categoria || "General");
     setFormUnidad(p.unidad);
     setFormCostoUnitario(String(p.costoUnitario));
@@ -359,6 +365,8 @@ export function ProductosClient({
         estandarGarantiaAnios: Number(formEstGarantiaAnios || 0),
         estandarGarantia: formEstGarantia,
         estandarTiempo: formEstTiempo,
+        esServicioEspecial: formEsEspecial,
+        margenObjetivoPct: formEsEspecial && formMargenObjetivo !== "" ? Number(formMargenObjetivo) : null,
         categoria: formCategoria.trim(),
         unidad: formUnidad.trim(),
         costoUnitario: Number(formCostoUnitario || 0),
@@ -2064,6 +2072,45 @@ export function ProductosClient({
                     </button>
                   </div>
                   )}
+
+                  <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formEsEspecial}
+                        onChange={(e) => setFormEsEspecial(e.target.checked)}
+                        className="mt-0.5 h-4 w-4"
+                      />
+                      <span>
+                        <span className="font-semibold text-carbon block">💡 Es un "Servicio especial" (peticiones fuera de catálogo)</span>
+                        <span className="text-[11px] text-carbon/60">
+                          Su margen objetivo se usa para preparar las estimaciones de las cotizaciones especiales de su
+                          modelo de negocio (si no tiene modelo, aplica a todas).
+                        </span>
+                      </span>
+                    </label>
+                    {formEsEspecial && (
+                      <label className="flex items-center gap-2 pl-6 font-semibold text-carbon">
+                        Margen objetivo
+                        <input
+                          type="number"
+                          min={0}
+                          max={90}
+                          step="0.5"
+                          value={formMargenObjetivo}
+                          onChange={(e) => setFormMargenObjetivo(e.target.value)}
+                          className="w-20 rounded-lg border border-carbon/20 bg-white px-2 py-1 font-mono"
+                          placeholder="35"
+                        />
+                        %
+                        {Number(formMargenObjetivo) > 0 && Number(formMargenObjetivo) < 95 && (
+                          <span className="text-[11px] font-normal text-carbon/60">
+                            → un costo de $10,000 se estima en ${Math.round(10000 / (1 - Number(formMargenObjetivo) / 100) / 100) * 100}
+                          </span>
+                        )}
+                      </label>
+                    )}
+                  </div>
 
                   <div className="space-y-3 rounded-xl border border-sauce/30 bg-sauce/5 p-4">
                     <div>

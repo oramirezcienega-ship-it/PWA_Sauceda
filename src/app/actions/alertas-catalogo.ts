@@ -46,7 +46,8 @@ export async function obtenerAlertasCatalogo(): Promise<{ alertas: AlertaCatalog
       .select(
         "id, nombre, activo, tipo, tipo_negocio, precio_unitario, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo"
       )
-      .eq("activo", true),
+      .eq("activo", true)
+      .eq("es_servicio_especial", false),
     sb.from("producto_variantes").select("id, producto_id, hasta, precio_venta"),
     sb
       .from("proveedor_productos")

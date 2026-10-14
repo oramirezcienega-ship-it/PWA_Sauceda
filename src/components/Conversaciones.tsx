@@ -59,6 +59,7 @@ import {
   agruparPlantillasParaChat,
   clasificarPlantilla,
 } from "@/lib/plantillas-whatsapp";
+import { CotizacionesEspecialesConversacion } from "@/components/conversaciones/CotizacionesEspecialesConversacion";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
@@ -2393,6 +2394,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     📞 Contactar por Llamada
                   </a>
                 </div>
+              )}
+
+              {/* Cotizaciones especiales (fuera de catálogo) con proveedores por Telegram */}
+              {!detalle.telefono.startsWith("messenger:") && (
+                <CotizacionesEspecialesConversacion
+                  telefono={detalle.telefono}
+                  tipoNegocio={detalle.tipoNegocio}
+                  prospectoId={detalle.prospectoId}
+                  expedienteId={detalle.expedienteId}
+                  mensajes={detalle.mensajes}
+                  onEnviada={() => refrescar(detalle.telefono)}
+                />
               )}
 
               {/* Mensajes */}

@@ -1215,6 +1215,10 @@ export interface ProductoServicio {
   estandarGarantiaAnios?: number;
   estandarGarantia?: string;
   estandarTiempo?: string;
+  /** "Servicio especial" de una línea: plantilla para peticiones fuera de catálogo (migración 0158). */
+  esServicioEspecial?: boolean;
+  /** Margen objetivo (%) para preparar estimaciones de servicios especiales. */
+  margenObjetivoPct?: number | null;
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }

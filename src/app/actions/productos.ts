@@ -60,6 +60,9 @@ function aProductoServicio(fila: any): ProductoServicio {
     estandarGarantiaAnios: Number(fila.estandar_garantia_anios || 0),
     estandarGarantia: fila.estandar_garantia || "",
     estandarTiempo: fila.estandar_tiempo || "",
+    esServicioEspecial: fila.es_servicio_especial === true,
+    margenObjetivoPct:
+      fila.margen_objetivo_pct === null || fila.margen_objetivo_pct === undefined ? null : Number(fila.margen_objetivo_pct),
     createdAt: fila.created_at,
   };
 }
@@ -109,6 +112,12 @@ function videosAJson(v?: VideoProducto[]) {
 
 function tarifasAJson(t?: TarifaCapacidad[]) {
   return normalizarTarifasCapacidad(t).map((x) => ({ hasta_litros: x.hastaLitros, precio: x.precio, costo: x.costo }));
+}
+
+/** Margen objetivo válido (0–95 %) o null. */
+function margenValido(v: unknown): number | null {
+  const n = Number(v);
+  return v === null || v === undefined || v === "" || !Number.isFinite(n) || n < 0 || n >= 95 ? null : Math.round(n * 100) / 100;
 }
 
 /** Columnas del estándar Sauceda del servicio (migración 0155). */
@@ -274,6 +283,8 @@ export async function crearProductoServicio(datos: {
   estandarGarantiaAnios?: number;
   estandarGarantia?: string;
   estandarTiempo?: string;
+  esServicioEspecial?: boolean;
+  margenObjetivoPct?: number | null;
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -317,6 +328,8 @@ export async function crearProductoServicio(datos: {
       cantidad_minima: Math.max(0, Number(datos.cantidadMinima || 0)),
       costos_volumen: normalizarCostosVolumen(datos.costosVolumen),
       ...estandarAFila(datos),
+      es_servicio_especial: datos.esServicioEspecial === true,
+      margen_objetivo_pct: margenValido(datos.margenObjetivoPct),
     })
     .select("*, business_units ( id, nombre )")
     .single();
@@ -360,6 +373,8 @@ export async function editarProductoServicio(
     estandarGarantiaAnios?: number;
     estandarGarantia?: string;
     estandarTiempo?: string;
+    esServicioEspecial?: boolean;
+    margenObjetivoPct?: number | null;
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -408,6 +423,10 @@ export async function editarProductoServicio(
   // El estándar sólo se toca si viene en la petición (otros flujos de edición no lo envían)
   if (datos.estandarProceso !== undefined) {
     Object.assign(updatePayload, estandarAFila(datos));
+  }
+  if (datos.esServicioEspecial !== undefined) {
+    updatePayload.es_servicio_especial = datos.esServicioEspecial === true;
+    updatePayload.margen_objetivo_pct = margenValido(datos.margenObjetivoPct);
   }
   // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
   if (datos.fichaTecnicaUrl !== undefined) {

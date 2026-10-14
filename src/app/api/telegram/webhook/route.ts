@@ -13,6 +13,7 @@ import {
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { registrarRespuestaAutorizacion } from "@/lib/cotizacion-telegram";
 import { registrarActividad } from "@/lib/actividades";
+import { manejarCallbackCotizacionEspecial, manejarTextoCotizacionEspecial } from "@/lib/cotizaciones-especiales";
 import { marcarCitaEnteradaTelegram } from "@/lib/inspeccion-telegram";
 import { registrarRespuestaLead, urlPortalParaTelegram } from "@/lib/lead-telegram";
 import {
@@ -92,6 +93,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // Proveedor respondiendo una cotización especial (precio → tiempo → qué incluye)
+      if (text && !text.startsWith("/") && botToken) {
+        const atendido = await manejarTextoCotizacionEspecial(sb, botToken, chatId, text);
+        if (atendido) return NextResponse.json({ ok: true });
+      }
+
       if (text.startsWith("/start") || text.startsWith("/id")) {
         const respuesta = `👋 *¡Hola ${from?.first_name || ""}!*\n\nSoy el asistente operativo de *SAUCEDA*.\n\n📱 *Tu Telegram Chat ID es:* \`${chatId}\`\n👤 *Usuario:* @${from?.username || "sin_usuario"}\n\nCopia y proporciona este Chat ID a tu administrador para vincular tus alertas de inspecciones técnicas en sitio.`;
 
@@ -120,6 +127,12 @@ export async function POST(req: NextRequest) {
       const from = cb.from;
       const fromId = String(from.id);
       const username = from.username || "";
+
+      // Cotizaciones especiales: ce:{c|v|n|ok|ed|s}:{respuesta}
+      if (data.startsWith("ce:") && botToken) {
+        await manejarCallbackCotizacionEspecial(sb, botToken, cb);
+        return NextResponse.json({ ok: true });
+      }
 
       // Negociación por etapas cuando las opciones no acomodan: día → franja → hora
       //   n:{coord} (ninguna me acomoda)  d:{coord}:{YYYYMMDD}  dl|dn:{coord}

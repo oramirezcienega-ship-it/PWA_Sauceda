@@ -2,6 +2,7 @@
 
 import { estandarDeServicio } from "@/lib/estandar-servicio";
 import { costoReferenciaOferta } from "@/lib/solicitudes-proveedor";
+import { usuarioBotTelegram } from "@/lib/cotizaciones-especiales";
 import { capacidadesDeProducto, filtrarCostosACapacidades, sincronizarVariantes } from "@/lib/variantes-servicio";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
@@ -200,6 +201,7 @@ export async function listarProductosParaOferta(): Promise<
     .from("productos_servicios")
     .select("id, nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida, tipo_negocio")
     .eq("activo", true)
+    .eq("es_servicio_especial", false)
     .order("nombre", { ascending: true });
   if (error || !data) return [];
   return data.map((p: any) => ({
@@ -505,14 +507,14 @@ const linkPrecios = (token: string) => `${SITE_URL()}/precios-proveedor/${token}
 export async function obtenerLinkPreciosProveedor(
   proveedorId: string,
   regenerar = false
-): Promise<{ ok: boolean; link?: string; telefono?: string; error?: string }> {
+): Promise<{ ok: boolean; link?: string; telefono?: string; telegramLigado?: boolean; enlaceTelegram?: string | null; error?: string }> {
   try {
     if (regenerar) await requireAdministrador();
     else await requireAdmin();
     const sb = supabaseServidor();
     const { data: p } = await sb
       .from("proveedores")
-      .select("token_precios, telefono")
+      .select("token_precios, telefono, telegram_chat_id")
       .eq("id", proveedorId)
       .maybeSingle();
     if (!p) return { ok: false, error: "El proveedor no existe." };
@@ -522,7 +524,14 @@ export async function obtenerLinkPreciosProveedor(
       const { error } = await sb.from("proveedores").update({ token_precios: token }).eq("id", proveedorId);
       if (error) return { ok: false, error: error.message };
     }
-    return { ok: true, link: linkPrecios(token), telefono: p.telefono || "" };
+    const bot = p.telegram_chat_id ? null : await usuarioBotTelegram(sb);
+    return {
+      ok: true,
+      link: linkPrecios(token),
+      telefono: p.telefono || "",
+      telegramLigado: !!p.telegram_chat_id,
+      enlaceTelegram: bot ? `https://t.me/${bot}?start=prov_${proveedorId}` : null,
+    };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo obtener el link." };
   }

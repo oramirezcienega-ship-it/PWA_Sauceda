@@ -507,6 +507,7 @@ function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
   const [abierto, setAbierto] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [telefono, setTelefono] = useState("");
+  const [telegram, setTelegram] = useState<{ ligado: boolean; enlace: string | null }>({ ligado: false, enlace: null });
   const [copiado, setCopiado] = useState(false);
   const [cargando, setCargando] = useState(false);
 
@@ -518,6 +519,7 @@ function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
     if (!res.ok || !res.link) return alert(res.error || "No se pudo obtener el link.");
     setLink(res.link);
     setTelefono(res.telefono || "");
+    setTelegram({ ligado: res.telegramLigado === true, enlace: res.enlaceTelegram || null });
     setAbierto(true);
   }
 
@@ -573,6 +575,27 @@ function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
             onFocus={(e) => e.target.select()}
             className="w-full rounded border border-carbon/20 px-2 py-1 font-mono text-[10.5px]"
           />
+          <div className="rounded-lg bg-sky-50 px-2.5 py-2 text-[11px] text-sky-900">
+            {telegram.ligado ? (
+              <>📲 <b>Telegram ligado</b>: recibe las cotizaciones especiales y responde con botones.</>
+            ) : telegram.enlace ? (
+              <>
+                📲 <b>Sin Telegram.</b> Para recibir cotizaciones especiales debe abrir este link y tocar “Iniciar”:{" "}
+                <a
+                  href={`https://wa.me/${telWa}?text=${encodeURIComponent(
+                    `Hola, para recibir las solicitudes de cotización de SAUCEDA por Telegram abre este link desde tu celular y toca "Iniciar": ${telegram.enlace}`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold underline"
+                >
+                  mandárselo por WhatsApp
+                </a>
+              </>
+            ) : (
+              <>📲 Sin Telegram (el bot no está configurado).</>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
