@@ -26,7 +26,8 @@ import type {
   FotoProducto, 
   VideoProducto,
   ConceptoApuComposicion,
-  InsumoHistorialPrecio 
+  InsumoHistorialPrecio,
+  OfertaProveedorProducto,
 } from "@/lib/types";
 import {
   crearProductoServicio,
@@ -48,6 +49,7 @@ import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/conve
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
 import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
 import { CostosInspeccionPanel } from "@/components/productos/CostosInspeccionPanel";
+import { PanelProveedorEnFicha } from "@/components/productos/PanelProveedorEnFicha";
 import {
   MEDIDAS_TARIFA,
   combinarCostosEnTarifas,
@@ -223,6 +225,60 @@ export function ProductosClient({
     setTabModalProd("general");
     setErrorMsg("");
     setModalProdAbierto(true);
+  };
+
+  // Copia a la ficha lo que capturó el proveedor (no se guarda hasta "Guardar Producto").
+  const usarDatosProveedor = (o: OfertaProveedorProducto) => {
+    if (o.tarifasCapacidad.length > 0) {
+      setFormTarifaMedida(o.productoTarifaMedida);
+      setFormTarifas((prev) => {
+        const actuales = prev
+          .filter((t) => Number(t.hastaLitros) > 0)
+          .map((t) => ({
+            hastaLitros: Math.round(Number(t.hastaLitros)),
+            precio: t.precio.trim() === "" ? null : Number(t.precio),
+            costo: t.costo.trim() === "" ? null : Number(t.costo),
+          }));
+        return combinarCostosEnTarifas(actuales, o.tarifasCapacidad).map((t) => ({
+          hastaLitros: String(t.hastaLitros),
+          costo: t.costo === null ? "" : String(t.costo),
+          precio: t.precio === null ? "" : String(t.precio),
+        }));
+      });
+    }
+    if (o.costoUnitario > 0) setFormCostoUnitario(String(o.costoUnitario));
+    if (o.cantidadMinima > 0) setFormCantidadMinima(String(o.cantidadMinima));
+    if (o.costosVolumen.length > 0) {
+      setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+    }
+    const proceso = o.descripcionProceso.trim();
+    if (proceso) setFormDescripcion((d) => (d.trim() ? d : proceso));
+    // Garantía, tiempo y zonas como datos para Sofía; sólo se agregan los que falten.
+    const garantia = [
+      o.garantiaAnios > 0 ? `${o.garantiaAnios} ${o.garantiaAnios === 1 ? "año" : "años"}` : "",
+      o.garantiaCondiciones.trim(),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const facts = [
+      garantia ? `Garantía: ${garantia}` : "",
+      o.tiempoEjecucion.trim() ? `Tiempo de ejecución: ${o.tiempoEjecucion.trim()}` : "",
+      o.zonasCobertura.trim() ? `Zonas de servicio: ${o.zonasCobertura.trim()}` : "",
+    ].filter(Boolean);
+    if (facts.length) {
+      setFormEspecificaciones((prev) => {
+        const nuevos = facts.filter((f) => !prev.toLowerCase().includes(f.split(":")[0].toLowerCase()));
+        return nuevos.length ? [prev.trim(), ...nuevos].filter(Boolean).join("\n") : prev;
+      });
+    }
+    if (o.fotos.length) {
+      setFormFotos((prev) => [
+        ...prev,
+        ...o.fotos
+          .filter((f) => !prev.some((x) => x.url === f.url))
+          .map((f) => ({ url: f.url, tipo: "aplicacion" as const, titulo: f.titulo || "" })),
+      ]);
+    }
   };
 
   const handleOpenEditarProd = async (p: ProductoServicio) => {
@@ -1574,6 +1630,13 @@ export function ProductosClient({
               {/* TAB GENERAL */}
               {tabModalProd === "general" && (
                 <div className="space-y-4">
+                  {prodEditando && (
+                    <PanelProveedorEnFicha
+                      productoId={prodEditando.id}
+                      onUsar={usarDatosProveedor}
+                      onVerProveedores={() => setTabModalProd("proveedores")}
+                    />
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
                       <label className="block font-semibold text-carbon mb-1">
@@ -1761,6 +1824,114 @@ export function ProductosClient({
                     </div>
                   </div>
 
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="font-semibold text-carbon block">📏 Precios por escalón (costo proveedor y venta)</span>
+                        <p className="text-[11px] text-carbon/60 mt-0.5">
+                          Para servicios cuyo precio depende del tamaño: litros (tinacos, cisternas) o número de tubos (calentadores
+                          solares). Se cotiza el primer escalón que cubra la medida del cliente. El costo del proveedor es interno:
+                          Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
+                        </p>
+                        <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-carbon/80">
+                          Se mide en:
+                          <select
+                            value={formTarifaMedida}
+                            onChange={(e) => setFormTarifaMedida(e.target.value as MedidaTarifa)}
+                            className="rounded-lg border border-carbon/20 bg-white px-2 py-1"
+                          >
+                            {(Object.keys(MEDIDAS_TARIFA) as MedidaTarifa[]).map((m) => (
+                              <option key={m} value={m}>
+                                {MEDIDAS_TARIFA[m].etiqueta} ({MEDIDAS_TARIFA[m].ejemplos})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormTarifas((prev) => {
+                            const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
+                            const comunes = MEDIDAS_TARIFA[formTarifaMedida].comunes.filter((l) => !existentes.has(l));
+                            return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
+                          })
+                        }
+                        className="shrink-0 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
+                      >
+                        Cargar medidas comunes
+                      </button>
+                    </div>
+                    {formTarifas.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
+                          <span className="w-14" />
+                          <span className="w-28">{MEDIDAS_TARIFA[formTarifaMedida].etiqueta}</span>
+                          <span className="w-[4.5rem]" />
+                          <span className="w-32">Precio proveedor</span>
+                          <span className="w-32">Precio de venta</span>
+                          <span className="w-16">Margen</span>
+                        </div>
+                        {formTarifas.map((t, idx) => {
+                          const costo = Number(t.costo);
+                          const venta = Number(t.precio);
+                          const margen = t.costo.trim() !== "" && t.precio.trim() !== "" && venta > 0 ? ((venta - costo) / venta) * 100 : null;
+                          return (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-[11px] text-carbon/60 w-14">Hasta</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={t.hastaLitros}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
+                                className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">
+                                {MEDIDAS_TARIFA[formTarifaMedida].etiqueta.toLowerCase()} → $
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="Costo"
+                                value={t.costo}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, costo: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="Venta"
+                                value={t.precio}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <span
+                                className={`w-16 text-[11px] font-bold ${margen === null ? "text-carbon/30" : margen < 0 ? "text-rojo" : "text-verde-profundo"}`}
+                                title="Margen = (venta − costo) / venta"
+                              >
+                                {margen === null ? "—" : `${margen.toFixed(0)}%`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFormTarifas((prev) => prev.filter((_, i) => i !== idx))}
+                                className="text-[11px] font-bold text-rojo hover:underline"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setFormTarifas((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
+                      className="text-[11px] font-bold text-sauce hover:underline"
+                    >
+                      + Agregar escalón
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-4 items-start p-4 rounded-xl bg-amber-50/60 border border-amber-200">
                     <div>
                       <label className="block font-semibold text-carbon mb-1">
@@ -1791,6 +1962,7 @@ export function ProductosClient({
                     </p>
                   </div>
 
+                  {formTarifas.length === 0 && (
                   <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1876,13 +2048,14 @@ export function ProductosClient({
                       + Agregar rango
                     </button>
                   </div>
+                  )}
 
                   <div>
                     <label className="block font-semibold text-carbon mb-1">
-                      Descripción Operativa
+                      Descripción Operativa / Proceso
                     </label>
                     <textarea
-                      rows={2}
+                      rows={5}
                       placeholder="Detalles sobre alcance, preparación de superficie o condiciones de instalación..."
                       value={formDescripcion}
                       onChange={(e) => setFormDescripcion(e.target.value)}
@@ -2116,114 +2289,6 @@ export function ProductosClient({
                       onChange={(e) => setFormEspecificaciones(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none"
                     />
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <span className="font-semibold text-carbon block">📏 Tarifas por escalón</span>
-                        <p className="text-[11px] text-carbon/60 mt-0.5">
-                          Para servicios cuyo precio depende del tamaño: litros (tinacos, cisternas) o número de tubos (calentadores
-                          solares). Se cotiza el primer escalón que cubra la medida del cliente. El costo del proveedor es interno:
-                          Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
-                        </p>
-                        <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-carbon/80">
-                          Se mide en:
-                          <select
-                            value={formTarifaMedida}
-                            onChange={(e) => setFormTarifaMedida(e.target.value as MedidaTarifa)}
-                            className="rounded-lg border border-carbon/20 bg-white px-2 py-1"
-                          >
-                            {(Object.keys(MEDIDAS_TARIFA) as MedidaTarifa[]).map((m) => (
-                              <option key={m} value={m}>
-                                {MEDIDAS_TARIFA[m].etiqueta} ({MEDIDAS_TARIFA[m].ejemplos})
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormTarifas((prev) => {
-                            const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
-                            const comunes = MEDIDAS_TARIFA[formTarifaMedida].comunes.filter((l) => !existentes.has(l));
-                            return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
-                          })
-                        }
-                        className="shrink-0 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
-                      >
-                        Cargar medidas comunes
-                      </button>
-                    </div>
-                    {formTarifas.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
-                          <span className="w-14" />
-                          <span className="w-28">{MEDIDAS_TARIFA[formTarifaMedida].etiqueta}</span>
-                          <span className="w-[4.5rem]" />
-                          <span className="w-32">Precio proveedor</span>
-                          <span className="w-32">Precio de venta</span>
-                          <span className="w-16">Margen</span>
-                        </div>
-                        {formTarifas.map((t, idx) => {
-                          const costo = Number(t.costo);
-                          const venta = Number(t.precio);
-                          const margen = t.costo.trim() !== "" && t.precio.trim() !== "" && venta > 0 ? ((venta - costo) / venta) * 100 : null;
-                          return (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="text-[11px] text-carbon/60 w-14">Hasta</span>
-                              <input
-                                type="number"
-                                min={1}
-                                value={t.hastaLitros}
-                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
-                                className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                              />
-                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">
-                                {MEDIDAS_TARIFA[formTarifaMedida].etiqueta.toLowerCase()} → $
-                              </span>
-                              <input
-                                type="number"
-                                min={0}
-                                placeholder="Costo"
-                                value={t.costo}
-                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, costo: e.target.value } : x)))}
-                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                              />
-                              <input
-                                type="number"
-                                min={0}
-                                placeholder="Venta"
-                                value={t.precio}
-                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
-                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                              />
-                              <span
-                                className={`w-16 text-[11px] font-bold ${margen === null ? "text-carbon/30" : margen < 0 ? "text-rojo" : "text-verde-profundo"}`}
-                                title="Margen = (venta − costo) / venta"
-                              >
-                                {margen === null ? "—" : `${margen.toFixed(0)}%`}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setFormTarifas((prev) => prev.filter((_, i) => i !== idx))}
-                                className="text-[11px] font-bold text-rojo hover:underline"
-                              >
-                                Quitar
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setFormTarifas((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
-                      className="text-[11px] font-bold text-sauce hover:underline"
-                    >
-                      + Agregar escalón
-                    </button>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
