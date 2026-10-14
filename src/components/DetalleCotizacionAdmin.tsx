@@ -44,6 +44,53 @@ import { ModalProgramarInstalacionCotizacion } from "./ModalProgramarInstalacion
 import type { Cotizacion, VisitaReporte, CotizacionConcepto, ServicioConstruccionTipo, RemisionFactura, GarantiaDocumento } from "@/lib/types";
 import { normalizarTelefono } from "@/lib/telefono";
 
+function extraerFechaLocal(fechaStr?: string | null): string {
+  if (!fechaStr) return new Date().toISOString().split("T")[0];
+  if (fechaStr.includes("T")) {
+    const [f] = fechaStr.split("T");
+    if (f && f.length === 10) return f;
+  }
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return new Date().toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function extraerHoraLocal(fechaStr?: string | null): string {
+  if (!fechaStr) return "10:00";
+  if (fechaStr.includes("T")) {
+    const timePart = fechaStr.split("T")[1];
+    if (timePart && timePart.length >= 5) {
+      return timePart.slice(0, 5);
+    }
+  }
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return "10:00";
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${min}`;
+}
+
+function extraerDatetimeLocal(fechaStr?: string | null): string {
+  if (!fechaStr) return "";
+  if (fechaStr.includes("T")) {
+    const [f, t] = fechaStr.split("T");
+    if (f && t && t.length >= 5) {
+      return `${f}T${t.slice(0, 5)}`;
+    }
+  }
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${h}:${min}`;
+}
+
 interface DetalleCotizacionAdminProps {
   cotizacionInicial: Cotizacion;
   conceptosIniciales: CotizacionConcepto[];
@@ -143,16 +190,15 @@ export function DetalleCotizacionAdmin({
   const [mensajeInspeccion, setMensajeInspeccion] = useState({ tipo: "", texto: "" });
 
   const [tecnicoNombre, setTecnicoNombre] = useState(
-    reporteVisitaInicial?.medidas?.tecnicoNombre || cotizacionInicial.inspectorNombre || ""
+    reporteVisitaInicial?.medidas?.tecnicoNombre || reporteVisitaInicial?.inspectorNombre || cotizacionInicial.inspectorNombre || ""
   );
   const [fechaVisitaRealizada, setFechaVisitaRealizada] = useState(
-    reporteVisitaInicial?.medidas?.fechaVisita || 
-    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().split("T")[0] : new Date().toISOString().split("T")[0])
+    reporteVisitaInicial?.medidas?.fechaVisita || extraerFechaLocal(cotizacionInicial.fechaVisita)
   );
   const [horaVisitaRealizada, setHoraVisitaRealizada] = useState(
-    reporteVisitaInicial?.medidas?.horaVisita || 
-    (cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toTimeString().split(" ")[0].slice(0, 5) : new Date().toTimeString().split(" ")[0].slice(0, 5))
+    reporteVisitaInicial?.medidas?.horaVisita || extraerHoraLocal(cotizacionInicial.fechaVisita)
   );
+  const [marcandoInspeccion, setMarcandoInspeccion] = useState(false);
   const [subiendoFotos, setSubiendoFotos] = useState(false);
   const [dictandoObs, setDictandoObs] = useState(false);
   const [dictandoCond, setDictandoCond] = useState(false);
@@ -329,7 +375,7 @@ export function DetalleCotizacionAdmin({
   // --- State para Cambio de Requerimiento de Visita ---
   const [requiereVisita, setRequiereVisita] = useState(cotizacionInicial.requiereVisita);
   const [fechaVisitaPlan, setFechaVisitaPlan] = useState(
-    cotizacionInicial.fechaVisita ? new Date(cotizacionInicial.fechaVisita).toISOString().slice(0, 16) : ""
+    extraerDatetimeLocal(cotizacionInicial.fechaVisita)
   );
   const [inspectorIdPlan, setInspectorIdPlan] = useState(cotizacionInicial.inspectorId || "");
   const [guardandoRequerimiento, setGuardandoRequerimiento] = useState(false);
@@ -621,6 +667,44 @@ export function DetalleCotizacionAdmin({
       setMensajeInspeccion({ tipo: "error", texto: err instanceof Error ? err.message : "Error al guardar" });
     } finally {
       setGuardandoInspeccion(false);
+    }
+  };
+
+  const handleMarcarInspeccionDirecta = async () => {
+    try {
+      setMarcandoInspeccion(true);
+      setMensajeInspeccion({ tipo: "", texto: "" });
+      const timeStr = horaVisitaRealizada || "10:00";
+      const fechaStr = fechaVisitaRealizada || extraerFechaLocal(cotizacion.fechaVisita);
+      const customFechaInspeccion = new Date(`${fechaStr}T${timeStr}:00`).toISOString();
+
+      const rep = await guardarReporteVisita(cotizacion.id, {
+        observacionesTecnicas: obsTecnicas || "Inspección técnica física confirmada y realizada en domicilio.",
+        condicionesSitio: condSitio || "Inspección física realizada según agenda.",
+        medidas: {
+          largo: Number(largo) || 0,
+          ancho: Number(ancho) || 0,
+          areaCalculada: (Number(largo) || 0) * (Number(ancho) || 0),
+          tecnicoNombre: (tecnicoNombre || cotizacion.inspectorNombre || "").trim(),
+          fechaVisita: fechaStr,
+          horaVisita: timeStr,
+          inspeccionRealizada: true,
+          rotaciones,
+        },
+        fotos,
+        fechaInspeccion: customFechaInspeccion,
+      });
+
+      setReporteVisita(rep);
+      setCotizacion((prev) => ({
+        ...prev,
+        estatus: prev.estatus === "esperando_visita" ? "calculando_costo" : prev.estatus,
+      }));
+      setMensajeInspeccion({ tipo: "ok", texto: "¡Inspección técnica confirmada como realizada y vinculada con éxito!" });
+    } catch (err: any) {
+      setMensajeInspeccion({ tipo: "error", texto: err instanceof Error ? err.message : "Error al confirmar inspección." });
+    } finally {
+      setMarcandoInspeccion(false);
     }
   };
 
@@ -1515,6 +1599,53 @@ export function DetalleCotizacionAdmin({
               </form>
             </div>
 
+            {/* Banner de Estado de la Inspección */}
+            {reporteVisita ? (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-emerald-900 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <h5 className="font-bold text-sm">Inspección Técnica Realizada y Confirmada</h5>
+                    <p className="text-xs text-emerald-700">
+                      El reporte técnico de levantamiento físico está generado y vinculado a esta cotización.
+                      {reporteVisita.inspectorNombre ? ` Atendido por ${reporteVisita.inspectorNombre}.` : ""}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={`/reporte-visita/${cotizacion.token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg transition shrink-0"
+                >
+                  <span>📄 Ver Reporte de Cliente</span>
+                  <span>↗</span>
+                </a>
+              </div>
+            ) : cotizacion.requiereVisita ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <h5 className="font-bold text-sm">Inspección Técnica Pendiente de Confirmar</h5>
+                    <p className="text-xs text-amber-700">
+                      Esta cotización requiere inspección física en domicilio. Si la visita ya se llevó a cabo o fue confirmada en agenda, puedes vincular y generar el reporte técnico con un clic.
+                    </p>
+                  </div>
+                </div>
+                {puedeInspeccionar && (
+                  <button
+                    type="button"
+                    onClick={handleMarcarInspeccionDirecta}
+                    disabled={marcandoInspeccion}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sauce hover:bg-verde-profundo text-white text-xs font-bold rounded-lg transition shadow-xs disabled:opacity-50 shrink-0"
+                  >
+                    {marcandoInspeccion ? "Confirmando..." : "✓ Confirmar Inspección como Realizada"}
+                  </button>
+                )}
+              </div>
+            ) : null}
+
             {/* Ficha de Levantamiento Técnico */}
             <div className="flex items-center justify-between border-b pb-2 pt-4">
               <div className="flex items-center gap-4">
@@ -2277,6 +2408,19 @@ export function DetalleCotizacionAdmin({
             {cotizacion.requiereVisita && !reporteVisita && (
               <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-medium">
                 ⚠️ Esta cotización tiene visita técnica física programada, pero aún no se ha registrado el reporte (no bloquea aprobación).
+              </div>
+            )}
+            {cotizacion.requiereVisita && reporteVisita && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center justify-between">
+                <span>✅ Inspección técnica física completada y reporte técnico vinculado con éxito.</span>
+                <a
+                  href={`/reporte-visita/${cotizacion.token}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline text-emerald-900 font-semibold text-[11px]"
+                >
+                  Ver Reporte ↗
+                </a>
               </div>
             )}
             {conceptos.length === 0 && (

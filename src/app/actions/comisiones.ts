@@ -2539,8 +2539,27 @@ export async function marcarInspeccionEjecutada(datos: {
       return { ok: false, error: resCom.error };
     }
 
+    // 5. Vincular y sincronizar con las cotizaciones del cliente
+    try {
+      const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+      await sincronizarInspeccionConCotizaciones(sb, {
+        citaId: datos.citaId,
+        prospectoId: citaActual.prospecto_id,
+        expedienteId: citaActual.expediente_id,
+        perfilId: citaActual.perfil_id,
+        fecha: citaActual.fecha,
+        horaInicio: citaActual.hora_inicio,
+        notas: datos.notas !== undefined ? datos.notas : citaActual.notas,
+        soloProgramar: false,
+      });
+    } catch (errSyncCot) {
+      console.warn("Aviso al sincronizar cotizaciones con inspección ejecutada:", errSyncCot);
+    }
+
     revalidatePath("/agenda");
     revalidatePath("/comisiones");
+    revalidatePath("/construccion");
+    revalidatePath("/cotizaciones");
     if (citaActual.expediente_id) {
       revalidatePath(`/expediente/${citaActual.expediente_id}`);
     }

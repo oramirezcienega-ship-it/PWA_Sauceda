@@ -1054,6 +1054,24 @@ export async function programarCitaManual(data: {
       });
     }
 
+    // 4b. Sincronizar fecha e inspector con cotizaciones si es inspección
+    if (data.tipoCita === "inspeccion") {
+      try {
+        const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+        await sincronizarInspeccionConCotizaciones(sb, {
+          citaId,
+          prospectoId: data.prospectoId,
+          expedienteId: data.expedienteId,
+          perfilId: data.perfilId,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          soloProgramar: true,
+        });
+      } catch (errSync) {
+        console.warn("Aviso al sincronizar cotizaciones al agendar inspección:", errSync);
+      }
+    }
+
     let waMessageId: string | null = null;
     let estadoWhatsApp: string | null = null;
     let emailEnviado = false;
@@ -1418,6 +1436,25 @@ export async function editarCita(data: {
           ultimo_movimiento: new Date().toISOString().slice(0, 10),
         })
         .eq("id", citaActual.expediente_id);
+    }
+
+    // 4b. Sincronizar con cotizaciones si es inspección
+    if (data.tipoCita === "inspeccion") {
+      try {
+        const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+        await sincronizarInspeccionConCotizaciones(sb, {
+          citaId: idCita,
+          prospectoId: citaActual.prospecto_id,
+          expedienteId: citaActual.expediente_id,
+          perfilId: data.perfilId,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          notas: data.notas,
+          soloProgramar: citaActual.estado !== "completada",
+        });
+      } catch (errSync) {
+        console.warn("Aviso al sincronizar cotizaciones al actualizar cita de inspección:", errSync);
+      }
     }
 
     // 5. Registrar en la bitácora

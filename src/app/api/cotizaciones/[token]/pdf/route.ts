@@ -88,6 +88,25 @@ export async function GET(
       .eq("cotizacion_id", cotizacion.id)
       .maybeSingle();
 
+    let tieneReporte = Boolean(repFilaVisita);
+    if (!tieneReporte) {
+      try {
+        const { asegurarReporteVisitaParaCotizacion } = await import("@/lib/inspeccion-cotizacion");
+        const autoRep = await asegurarReporteVisitaParaCotizacion(sb, {
+          id: cotizacion.id,
+          prospectoId: cotizacion.prospectoId,
+          expedienteId: cotizacion.expedienteId,
+          fechaVisita: cotizacion.fechaVisita,
+          inspectorId: cotizacion.inspectorId,
+          inspectorNombre: cotizacion.inspectorNombre,
+          estatus: cotizacion.estatus,
+        });
+        if (autoRep) tieneReporte = true;
+      } catch (errRepPdf) {
+        console.warn("Aviso al verificar reporte de visita para PDF:", errRepPdf);
+      }
+    }
+
     const { data: concFilas } = await sb
       .from("cotizacion_conceptos")
       .select("*")
@@ -96,7 +115,7 @@ export async function GET(
 
     const conceptos: CotizacionConcepto[] = (concFilas || []).map(aCotizacionConcepto);
 
-    const doc = generarPdfCotizacion(cotizacion, conceptos, siteUrl, Boolean(repFilaVisita));
+    const doc = generarPdfCotizacion(cotizacion, conceptos, siteUrl, tieneReporte);
     const pdfArrayBuffer = doc.output("arraybuffer");
     const pdfBuffer = Buffer.from(pdfArrayBuffer);
 

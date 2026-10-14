@@ -1608,6 +1608,22 @@ export async function confirmarCitaFinalCoordinacion(
       })
       .eq("id", coordinacionId);
 
+    // 5b. Sincronizar fecha e inspector con cotizaciones del prospecto o expediente
+    try {
+      const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+      await sincronizarInspeccionConCotizaciones(sb, {
+        citaId,
+        prospectoId: coord.prospecto_id,
+        expedienteId: coord.expediente_id,
+        perfilId: primerAsesorId,
+        fecha: opcionSeleccionada.fecha,
+        horaInicio: opcionSeleccionada.horaInicio,
+        soloProgramar: true,
+      });
+    } catch (errSyncCot) {
+      console.warn("[Coordinación] Aviso al sincronizar cotizaciones tras confirmar cita:", errSyncCot);
+    }
+
     // 6. Registrar en bitácora
     await registrarActividad(sb, {
       prospectoId: coord.prospecto_id,
