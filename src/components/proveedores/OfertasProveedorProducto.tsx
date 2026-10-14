@@ -178,8 +178,12 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                   unir(o.garantiaAnios > 0 ? `${o.garantiaAnios} ${o.garantiaAnios === 1 ? "año" : "años"}` : "", o.garantiaCondiciones),
                 ],
                 ["⏱️ Tiempo", o.tiempoEjecucion],
-                ["💳 Pago", unir(o.anticipoPct > 0 ? `${o.anticipoPct}% anticipo` : "", o.condicionesPago)],
-                ["📍 Zonas", o.zonasCobertura],
+                ...(modo === "producto"
+                  ? ([
+                      ["💳 Pago", unir(o.anticipoPct > 0 ? `${o.anticipoPct}% anticipo` : "", o.condicionesPago)],
+                      ["📍 Zonas", o.zonasCobertura],
+                    ] as [string, string][])
+                  : []),
                 [
                   "↧ Mínimo",
                   unir(o.cantidadMinima > 0 ? `${o.cantidadMinima} ${o.productoUnidad}` : "", o.montoMinimo > 0 ? formatoPesos(o.montoMinimo) : ""),
@@ -216,7 +220,7 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                         {modo === "producto" && !o.proveedorActivo && (
                           <span className="rounded-full bg-rojo/10 px-2 py-0.5 text-[10px] text-rojo">Proveedor inactivo</span>
                         )}
-                        {o.vigenciaPrecio && (
+                        {modo === "producto" && o.vigenciaPrecio && (
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] ${
                               vencida(o.vigenciaPrecio) ? "bg-rojo/10 font-bold text-rojo" : "bg-slate-100 text-carbon/60"
@@ -530,7 +534,7 @@ function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
       const res = await obtenerFichaProveedorAdmin(proveedorId);
       if (!res.ok) return alert(res.mensaje || "No se pudo generar el PDF.");
       const { descargarFichaProveedorPdf } = await import("@/lib/fichaProveedorPdf");
-      descargarFichaProveedorPdf(res.proveedorNombre || "Proveedor", res.ofertas || []);
+      descargarFichaProveedorPdf(res.proveedorNombre || "Proveedor", res.ofertas || [], res.condiciones);
     } finally {
       setGenerandoPdf(false);
     }

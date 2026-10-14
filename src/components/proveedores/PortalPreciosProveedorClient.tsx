@@ -13,12 +13,22 @@ import {
 import { SolicitudesPortalProveedor } from "./SolicitudesPortalProveedor";
 import type { FotoOfertaProveedor } from "@/lib/types";
 import { textoGarantiaEstandar } from "@/lib/estandar-servicio";
+import {
+  CONDICIONES_VACIAS,
+  faltantesCondiciones,
+  textoPago,
+  zonasDeTexto,
+  type CondicionesProveedor,
+} from "@/lib/condiciones-proveedor";
+import { guardarCondicionesPortal } from "@/app/actions/portal-precios-proveedor";
 
 interface Props {
   token: string;
   proveedorNombre: string;
   ofertasIniciales: OfertaPortalProveedor[];
   solicitudesIniciales?: SolicitudPortal[];
+  /** Anticipo, pago, zonas y vigencia: del proveedor, aplican a todos sus servicios. */
+  condicionesIniciales?: CondicionesProveedor;
 }
 
 const inputCls =
@@ -45,12 +55,18 @@ function faltantesOferta(o: OfertaPortalProveedor): string[] {
     if (!o.descripcionProceso.trim()) f.push("proceso");
   }
   if (!o.tiempoEjecucion.trim()) f.push("tiempo");
-  if (!o.zonasCobertura.trim()) f.push("zonas");
   if (o.fotos.length === 0) f.push("fotos");
   return f;
 }
 
-export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIniciales, solicitudesIniciales = [] }: Props) {
+export function PortalPreciosProveedorClient({
+  token,
+  proveedorNombre,
+  ofertasIniciales,
+  solicitudesIniciales = [],
+  condicionesIniciales,
+}: Props) {
+  const [condiciones, setCondiciones] = useState<CondicionesProveedor>(condicionesIniciales || CONDICIONES_VACIAS);
   const [ofertas, setOfertas] = useState(ofertasIniciales);
   const [editando, setEditando] = useState<string | null>(
     ofertasIniciales.length === 1 && faltantesOferta(ofertasIniciales[0]).includes("costo") ? ofertasIniciales[0].id : null
@@ -83,6 +99,8 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
           </div>
         )}
       </header>
+
+      <CondicionesGenerales token={token} condiciones={condiciones} onGuardadas={setCondiciones} />
 
       <SolicitudesPortalProveedor token={token} iniciales={solicitudesIniciales} />
 
@@ -128,7 +146,7 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
             type="button"
             onClick={async () => {
               const { descargarFichaProveedorPdf } = await import("@/lib/fichaProveedorPdf");
-              descargarFichaProveedorPdf(proveedorNombre, ofertas);
+              descargarFichaProveedorPdf(proveedorNombre, ofertas, condiciones);
             }}
             className="rounded-lg border border-sauce/40 bg-white px-4 py-2 text-sm font-bold text-sauce shadow-sm hover:bg-sauce hover:text-white"
           >
@@ -178,11 +196,13 @@ function TarjetaOferta({
     },
     { icono: "⏱️", etiqueta: "Tiempo", valor: oferta.tiempoEjecucion.trim() },
     {
-      icono: "💳",
-      etiqueta: "Pago",
-      valor: unir(oferta.anticipoPct > 0 ? `${oferta.anticipoPct}% de anticipo` : "", oferta.condicionesPago),
+      icono: "↧",
+      etiqueta: "Mínimo",
+      valor: unir(
+        oferta.cantidadMinima > 0 ? `${oferta.cantidadMinima} ${oferta.productoUnidad}` : "",
+        oferta.montoMinimo > 0 ? formatoPesos(oferta.montoMinimo) : ""
+      ),
     },
-    { icono: "📍", etiqueta: "Zonas", valor: oferta.zonasCobertura.trim() },
   ];
 
   return (
@@ -579,10 +599,6 @@ function FormularioOferta({
                 />
               </div>
             </div>
-            <div>
-              <label className={labelCls}>Respetas este precio hasta</label>
-              <input type="date" value={vigenciaPrecio} onChange={(e) => setVigenciaPrecio(e.target.value)} className={inputCls} />
-            </div>
           </div>
 
           {/* Estándar SAUCEDA (o garantía y proceso propios si el servicio aún no lo define) */}
@@ -683,48 +699,16 @@ function FormularioOferta({
             </>
           )}
 
-          {/* Logística y pago */}
+          {/* Tiempo (anticipo, pago, zonas y vigencia van en "Tus condiciones", arriba) */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-verde-profundo">🚚 Tiempos, pago y zonas</h3>
+            <h3 className="text-sm font-bold text-verde-profundo">⏱️ Tiempo de ejecución</h3>
             <div>
-              <label className={labelCls}>Tiempo de ejecución</label>
+              <label className={labelCls}>¿Cuánto te toma este servicio?</label>
               <input
                 value={tiempoEjecucion}
                 onChange={(e) => setTiempoEjecucion(e.target.value)}
                 className={inputCls}
                 placeholder="Ej. 1 día por tinaco, 2 días por cada 100 m²"
-              />
-            </div>
-            <div className="grid grid-cols-[7rem_1fr] gap-3">
-              <div>
-                <label className={labelCls}>Anticipo (%)</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  max="100"
-                  value={anticipoPct}
-                  onChange={(e) => setAnticipoPct(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Condiciones de pago</label>
-                <input
-                  value={condicionesPago}
-                  onChange={(e) => setCondicionesPago(e.target.value)}
-                  className={inputCls}
-                  placeholder="Ej. 50% al iniciar, 50% al terminar"
-                />
-              </div>
-            </div>
-            <div>
-              <label className={labelCls}>Zonas donde trabajas</label>
-              <input
-                value={zonasCobertura}
-                onChange={(e) => setZonasCobertura(e.target.value)}
-                className={inputCls}
-                placeholder="Ej. León, Silao, Purísima"
               />
             </div>
           </div>
@@ -806,5 +790,145 @@ function FormularioOferta({
             </button>
           </div>
         </div>
+  );
+}
+
+/** Anticipo, pago, zonas y vigencia de precios: se capturan una vez y aplican a todos sus servicios. */
+function CondicionesGenerales({
+  token,
+  condiciones,
+  onGuardadas,
+}: {
+  token: string;
+  condiciones: CondicionesProveedor;
+  onGuardadas: (c: CondicionesProveedor) => void;
+}) {
+  const faltan = faltantesCondiciones(condiciones);
+  const [editando, setEditando] = useState(faltan.length === 2 && condiciones.zonas.length === 0 && !condiciones.vigenciaPrecios);
+  const [anticipo, setAnticipo] = useState(condiciones.anticipoPct ? String(condiciones.anticipoPct) : "");
+  const [pago, setPago] = useState(condiciones.condicionesPago);
+  const [zonas, setZonas] = useState(condiciones.zonas.join(", "));
+  const [vigencia, setVigencia] = useState(condiciones.vigenciaPrecios || "");
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const vencida = !!condiciones.vigenciaPrecios && condiciones.vigenciaPrecios < new Date().toISOString().slice(0, 10);
+
+  async function guardar() {
+    setGuardando(true);
+    setMensaje(null);
+    try {
+      const r = await guardarCondicionesPortal(token, {
+        anticipoPct: Number(anticipo || 0),
+        condicionesPago: pago,
+        zonas: zonasDeTexto(zonas),
+        vigenciaPrecios: vigencia || null,
+      });
+      if (!r.ok || !r.condiciones) {
+        setMensaje(r.mensaje || "No se pudo guardar.");
+        return;
+      }
+      onGuardadas(r.condiciones);
+      setEditando(false);
+      setMensaje("✓ Guardado. Aplica a todos tus servicios.");
+    } catch {
+      setMensaje("No se pudo guardar. Revisa tu conexión.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const datos: { icono: string; etiqueta: string; valor: string; alerta?: boolean }[] = [
+    { icono: "💳", etiqueta: "Anticipo y pago", valor: textoPago(condiciones) },
+    { icono: "📍", etiqueta: "Zonas donde trabajas", valor: condiciones.zonas.join(", ") },
+    {
+      icono: "🗓",
+      etiqueta: "Respetas tus precios hasta",
+      valor: condiciones.vigenciaPrecios
+        ? `${vencida ? "Vencido · " : ""}${formatoFecha(`${condiciones.vigenciaPrecios}T12:00:00`)}`
+        : "",
+      alerta: vencida,
+    },
+  ];
+
+  return (
+    <section className="mt-5 rounded-2xl border border-carbon/10 bg-white p-4 shadow-sm lg:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-titular text-lg font-bold text-verde-profundo">🤝 Tus condiciones con SAUCEDA</h2>
+          <p className="text-xs text-carbon/55">Aplican a todos tus servicios: las capturas una sola vez.</p>
+        </div>
+        {!editando && (
+          <button
+            type="button"
+            onClick={() => setEditando(true)}
+            className="rounded-lg bg-sauce px-3.5 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-verde-profundo"
+          >
+            ✎ Editar
+          </button>
+        )}
+      </div>
+
+      {!editando ? (
+        <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {datos.map((d) => (
+            <div key={d.etiqueta} className={`rounded-xl px-3 py-2 ${d.valor ? "bg-slate-50" : "border border-dashed border-amber-300 bg-amber-50/40"}`}>
+              <dt className="text-[11px] text-carbon/50">
+                {d.icono} {d.etiqueta}
+              </dt>
+              <dd className={`text-sm font-semibold ${d.alerta ? "text-rojo" : d.valor ? "text-carbon" : "text-amber-700"}`}>
+                {d.valor || "Sin capturar"}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
+            <div>
+              <label className={labelCls}>Anticipo (%)</label>
+              <input type="number" inputMode="decimal" min="0" max="100" value={anticipo} onChange={(e) => setAnticipo(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Condiciones de pago</label>
+              <input
+                value={pago}
+                onChange={(e) => setPago(e.target.value)}
+                className={inputCls}
+                placeholder="Ej. 50% al iniciar, 50% al terminar; transferencia"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_12rem]">
+            <div>
+              <label className={labelCls}>Zonas donde trabajas (separadas por coma)</label>
+              <input value={zonas} onChange={(e) => setZonas(e.target.value)} className={inputCls} placeholder="Ej. León, Silao, Purísima" />
+            </div>
+            <div>
+              <label className={labelCls}>Respetas tus precios hasta</label>
+              <input type="date" value={vigencia} onChange={(e) => setVigencia(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditando(false)}
+              disabled={guardando}
+              className="rounded-xl border border-carbon/20 px-4 py-2 text-sm font-semibold text-carbon/70 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={guardar}
+              disabled={guardando}
+              className="rounded-xl bg-sauce px-5 py-2 text-sm font-bold text-white hover:bg-verde-profundo disabled:opacity-50"
+            >
+              {guardando ? "Guardando…" : "Guardar condiciones"}
+            </button>
+          </div>
+        </div>
+      )}
+      {mensaje && <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{mensaje}</div>}
+    </section>
   );
 }

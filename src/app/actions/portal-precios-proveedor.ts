@@ -17,6 +17,7 @@ import { normalizarCostosVolumen } from "@/lib/costos-volumen";
 import { costosCapacidadAJson, medidaTarifa, normalizarCostosCapacidad, type MedidaTarifa } from "@/lib/tarifas-capacidad";
 import type { EstandarServicio, FotoOfertaProveedor } from "@/lib/types";
 import { estandarDeServicio } from "@/lib/estandar-servicio";
+import { condicionesDeFila, filaCondiciones, type CondicionesProveedor } from "@/lib/condiciones-proveedor";
 import { capacidadesDeProducto, filtrarCostosACapacidades, sincronizarVariantes } from "@/lib/variantes-servicio";
 
 type Sb = ReturnType<typeof supabaseServidor>;
@@ -125,7 +126,13 @@ const SELECT_PORTAL =
 /** Datos que ve el proveedor al abrir su link. */
 export async function obtenerPortalPrecios(
   token: string
-): Promise<{ ok: boolean; mensaje?: string; proveedorNombre?: string; ofertas?: OfertaPortalProveedor[] }> {
+): Promise<{
+  ok: boolean;
+  mensaje?: string;
+  proveedorNombre?: string;
+  ofertas?: OfertaPortalProveedor[];
+  condiciones?: CondicionesProveedor;
+}> {
   const sb = supabaseServidor();
   const proveedor = await proveedorPorToken(sb, token);
   if (!proveedor) return { ok: false, mensaje: "Este link no es válido o fue desactivado. Pide uno nuevo a SAUCEDA." };
@@ -136,13 +143,45 @@ export async function obtenerPortalPrecios(
     .eq("activo", true);
   if (error) return { ok: false, mensaje: "No se pudo cargar la información. Intenta de nuevo." };
   const ofertas = (data || []).map(aOfertaPortal).sort((a, b) => a.productoNombre.localeCompare(b.productoNombre, "es"));
-  return { ok: true, proveedorNombre: proveedor.nombre, ofertas };
+  return { ok: true, proveedorNombre: proveedor.nombre, ofertas, condiciones: await condicionesProveedor(sb, proveedor.id) };
+}
+
+async function condicionesProveedor(sb: Sb, proveedorId: string): Promise<CondicionesProveedor> {
+  const { data } = await sb
+    .from("proveedores")
+    .select("anticipo_pct, condiciones_pago, zonas_cobertura, vigencia_precios")
+    .eq("id", proveedorId)
+    .maybeSingle();
+  return condicionesDeFila(data);
+}
+
+/** El proveedor actualiza sus condiciones generales (aplican a todos sus servicios). */
+export async function guardarCondicionesPortal(
+  token: string,
+  datos: CondicionesProveedor
+): Promise<{ ok: boolean; condiciones?: CondicionesProveedor; mensaje?: string }> {
+  const sb = supabaseServidor();
+  const proveedor = await proveedorPorToken(sb, token);
+  if (!proveedor) return { ok: false, mensaje: "Link no válido." };
+  const { error } = await sb
+    .from("proveedores")
+    .update({ ...filaCondiciones(datos), updated_at: new Date().toISOString() })
+    .eq("id", proveedor.id);
+  if (error) return { ok: false, mensaje: "No se pudo guardar. Intenta de nuevo." };
+  await notificarActualizacion(sb, proveedor, "sus condiciones generales (pago, zonas, vigencia)", false);
+  return { ok: true, condiciones: await condicionesProveedor(sb, proveedor.id) };
 }
 
 /** Lo mismo que ve el proveedor en su link, para descargar su ficha en PDF desde el CRM. */
 export async function obtenerFichaProveedorAdmin(
   proveedorId: string
-): Promise<{ ok: boolean; mensaje?: string; proveedorNombre?: string; ofertas?: OfertaPortalProveedor[] }> {
+): Promise<{
+  ok: boolean;
+  mensaje?: string;
+  proveedorNombre?: string;
+  ofertas?: OfertaPortalProveedor[];
+  condiciones?: CondicionesProveedor;
+}> {
   try {
     await requireAdmin();
   } catch {
@@ -158,7 +197,7 @@ export async function obtenerFichaProveedorAdmin(
     .eq("activo", true);
   if (error) return { ok: false, mensaje: "No se pudo cargar la información." };
   const ofertas = (data || []).map(aOfertaPortal).sort((a, b) => a.productoNombre.localeCompare(b.productoNombre, "es"));
-  return { ok: true, proveedorNombre: p.nombre, ofertas };
+  return { ok: true, proveedorNombre: p.nombre, ofertas, condiciones: await condicionesProveedor(sb, proveedorId) };
 }
 
 /** URL firmada para que el proveedor suba una foto a su carpeta del catálogo. */

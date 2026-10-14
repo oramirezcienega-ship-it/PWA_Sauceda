@@ -8,6 +8,7 @@ import type { DocumentoProveedor, MetricaProductoProveedor, Proveedor } from "@/
 import { actualizarProveedor, eliminarDocumentoProveedor } from "@/app/actions/proveedores";
 import { ModalRegistrarDocumentoProveedor } from "./ModalRegistrarDocumentoProveedor";
 import { OfertasProveedorProducto } from "./proveedores/OfertasProveedorProducto";
+import { CondicionesComercialesProveedor } from "./proveedores/CondicionesComercialesProveedor";
 
 interface DetalleProveedorProps {
   proveedorInicial: Proveedor;
@@ -387,6 +388,8 @@ export function DetalleProveedor({ proveedorInicial, documentosIniciales }: Deta
           {proveedor.notas}
         </div>
       )}
+
+      <CondicionesComercialesProveedor proveedor={proveedor} onGuardado={setProveedor} />
 
       {/* PANELES Y PESTAÑAS DEL EXPEDIENTE */}
       <div className="bg-white rounded-2xl border border-carbon/10 shadow-sm overflow-hidden">

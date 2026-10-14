@@ -52,7 +52,7 @@ export async function obtenerAlertasCatalogo(): Promise<{ alertas: AlertaCatalog
     sb
       .from("proveedor_productos")
       .select(
-        "id, producto_id, costo_unitario, vigencia_precio, pendiente_revision, cumple_estandar, activo, proveedores:proveedor_id ( nombre, activo )"
+        "id, producto_id, proveedor_id, costo_unitario, vigencia_precio, pendiente_revision, cumple_estandar, activo, proveedores:proveedor_id ( nombre, activo, vigencia_precios )"
       )
       .eq("activo", true),
     sb.from("oferta_variante_costos").select("oferta_id, variante_id, costo"),
@@ -132,15 +132,22 @@ export async function obtenerAlertasCatalogo(): Promise<{ alertas: AlertaCatalog
   }
 
   // ---------- Por proveedor ----------
+  const vigenciaRevisada = new Set<string>();
   for (const o of ofertasActivas as any[]) {
     const p: any = prodPorId.get(o.producto_id);
     const proveedorNombre = o.proveedores?.nombre || "Proveedor";
     const base = { productoId: p.id, productoNombre: p.nombre, proveedorNombre };
 
-    if (o.vigencia_precio && o.vigencia_precio < hoyIso) {
-      alertas.push({ ...base, clave: `vencido-${o.id}`, severidad: "alta", tipo: "Precio vencido", detalle: `Su precio venció el ${o.vigencia_precio}.` });
-    } else if (o.vigencia_precio && o.vigencia_precio <= limiteIso) {
-      alertas.push({ ...base, clave: `porvencer-${o.id}`, severidad: "media", tipo: "Precio por vencer", detalle: `Su precio vence el ${o.vigencia_precio}.` });
+    // La vigencia es del proveedor: una alerta por proveedor, no por cada servicio.
+    const vigencia = o.proveedores?.vigencia_precios || null;
+    if (vigencia && !vigenciaRevisada.has(o.proveedor_id)) {
+      vigenciaRevisada.add(o.proveedor_id);
+      const general = { ...base, productoNombre: "Todos sus servicios" };
+      if (vigencia < hoyIso) {
+        alertas.push({ ...general, clave: `vencido-${o.proveedor_id}`, severidad: "alta", tipo: "Precios vencidos", detalle: `Sus precios vencieron el ${vigencia}.` });
+      } else if (vigencia <= limiteIso) {
+        alertas.push({ ...general, clave: `porvencer-${o.proveedor_id}`, severidad: "media", tipo: "Precios por vencer", detalle: `Sus precios vencen el ${vigencia}.` });
+      }
     }
     if (o.pendiente_revision) {
       alertas.push({

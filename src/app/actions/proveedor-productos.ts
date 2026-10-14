@@ -27,7 +27,7 @@ import type {
 // El proveedor `preferido` de cada producto define su costo en productos_servicios.
 
 const SELECT_OFERTA =
-  "*, proveedores:proveedor_id ( nombre, activo ), productos_servicios:producto_id ( nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo )";
+  "*, proveedores:proveedor_id ( nombre, activo, anticipo_pct, condiciones_pago, zonas_cobertura, vigencia_precios ), productos_servicios:producto_id ( nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo )";
 
 function normalizarFotos(raw: unknown): FotoOfertaProveedor[] {
   if (!Array.isArray(raw)) return [];
@@ -37,6 +37,9 @@ function normalizarFotos(raw: unknown): FotoOfertaProveedor[] {
 }
 
 function aOferta(fila: any): OfertaProveedorProducto {
+  // Anticipo, pago, zonas y vigencia son del proveedor (migración 0160); la oferta es respaldo.
+  const prov = fila.proveedores || {};
+  const zonasProv: string[] = Array.isArray(prov.zonas_cobertura) ? prov.zonas_cobertura.filter(Boolean) : [];
   return {
     id: fila.id,
     proveedorId: fila.proveedor_id,
@@ -58,13 +61,13 @@ function aOferta(fila: any): OfertaProveedorProducto {
     garantiaAnios: Number(fila.garantia_anios || 0),
     garantiaCondiciones: fila.garantia_condiciones || "",
     tiempoEjecucion: fila.tiempo_ejecucion || "",
-    anticipoPct: Number(fila.anticipo_pct || 0),
-    condicionesPago: fila.condiciones_pago || "",
-    zonasCobertura: fila.zonas_cobertura || "",
+    anticipoPct: Number(prov.anticipo_pct || fila.anticipo_pct || 0),
+    condicionesPago: prov.condiciones_pago || fila.condiciones_pago || "",
+    zonasCobertura: zonasProv.length ? zonasProv.join(", ") : fila.zonas_cobertura || "",
     fotos: normalizarFotos(fila.fotos),
     fichaTecnicaUrl: fila.ficha_tecnica_url || null,
     fichaTecnicaNombre: fila.ficha_tecnica_nombre || null,
-    vigenciaPrecio: fila.vigencia_precio || null,
+    vigenciaPrecio: prov.vigencia_precios || fila.vigencia_precio || null,
     preferido: fila.preferido === true,
     activo: fila.activo !== false,
     notas: fila.notas || "",

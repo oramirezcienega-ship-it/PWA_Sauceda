@@ -1326,6 +1326,11 @@ export interface Proveedor {
   activo: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Condiciones comerciales: aplican a todos sus servicios (migración 0160). */
+  anticipoPct?: number;
+  condicionesPago?: string;
+  zonasCobertura?: string[];
+  vigenciaPrecios?: string | null;
   /** Total acumulado de documentos (facturas/remisiones) registrados. Solo lectura, vía join. */
   totalDocumentos?: number;
   /** Suma de montos de todos los documentos registrados. Solo lectura, vía join. */

@@ -561,15 +561,6 @@ export function ModalOfertaProveedor({
                   placeholder="0 = sin mínimo"
                 />
               </div>
-              <div>
-                <label className={labelCls}>Precio vigente hasta</label>
-                <input
-                  type="date"
-                  value={vigenciaPrecio}
-                  onChange={(e) => setVigenciaPrecio(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
             </div>
 
             {productoId && (
@@ -797,7 +788,7 @@ export function ModalOfertaProveedor({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-4 items-end">
             <div>
               <label className={labelCls}>Tiempo de ejecución</label>
               <input
@@ -807,36 +798,10 @@ export function ModalOfertaProveedor({
                 placeholder="Ej. 2 días por cada 100 m²"
               />
             </div>
-            <div>
-              <label className={labelCls}>Anticipo que pide (%)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={anticipoPct}
-                onChange={(e) => setAnticipoPct(e.target.value)}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Condiciones de pago</label>
-              <input
-                value={condicionesPago}
-                onChange={(e) => setCondicionesPago(e.target.value)}
-                className={inputCls}
-                placeholder="Ej. 50% anticipo, 50% al terminar"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className={labelCls}>Zonas que cubre</label>
-            <input
-              value={zonasCobertura}
-              onChange={(e) => setZonasCobertura(e.target.value)}
-              className={inputCls}
-              placeholder="Ej. León, Silao, San Francisco del Rincón"
-            />
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-carbon/60">
+              Anticipo, condiciones de pago, zonas y vigencia de precios son del proveedor (aplican a todos sus
+              servicios): se editan en su expediente, en “Condiciones comerciales”.
+            </p>
           </div>
 
           {/* Fotos y ficha técnica */}

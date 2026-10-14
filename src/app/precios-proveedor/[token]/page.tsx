@@ -35,6 +35,7 @@ export default async function PaginaPreciosProveedor({ params }: { params: { tok
         token={params.token}
         proveedorNombre={contexto.proveedorNombre || ""}
         ofertasIniciales={contexto.ofertas || []}
+        condicionesIniciales={contexto.condiciones}
         solicitudesIniciales={solicitudes?.ok ? solicitudes.solicitudes || [] : []}
       />
     </main>
