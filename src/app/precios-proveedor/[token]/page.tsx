@@ -30,7 +30,7 @@ export default async function PaginaPreciosProveedor({ params }: { params: { tok
   }
 
   return (
-    <main className="min-h-screen bg-crema pb-10">
+    <main className="min-h-screen bg-slate-50 pb-10">
       <PortalPreciosProveedorClient
         token={params.token}
         proveedorNombre={contexto.proveedorNombre || ""}
