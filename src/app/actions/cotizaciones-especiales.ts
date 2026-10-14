@@ -11,6 +11,7 @@ import {
   usuarioBotTelegram,
 } from "@/lib/cotizaciones-especiales";
 import { responderConversacion } from "@/app/actions/conversaciones";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 export type EstadoCotizacionEspecial = "enviada" | "estimacion_lista" | "enviada_cliente" | "cerrada" | "cancelada";
 export type EstadoRespuestaEspecial =
@@ -270,4 +271,87 @@ export async function previsualizarEstimacionEspecial(p: {
   await requireAdmin();
   const est = calcularEstimacion(p.costo, p.margenPct);
   return { ...est, texto: textoEstimacion({ ...p, min: est.min, max: est.max }) };
+}
+
+export interface BorradorCotizacionEspecial {
+  titulo: string;
+  descripcion: string;
+  zona: string;
+}
+
+const ESQUEMA_BORRADOR = {
+  type: "object",
+  properties: {
+    titulo: { type: "string" },
+    descripcion: { type: "string" },
+    zona: { type: "string" },
+  },
+  required: ["titulo", "descripcion", "zona"],
+  additionalProperties: false,
+};
+
+/**
+ * Convierte la conversación con el cliente en una solicitud clara para proveedores:
+ * título corto, descripción técnica en viñetas y colonia/municipio, sin saludos ni
+ * datos personales. Devuelve null si la IA no está disponible (el modal usa el texto crudo).
+ */
+export async function estructurarCotizacionEspecial(
+  mensajes: { direccion: "in" | "out"; texto: string }[],
+  tipoNegocio: string | null
+): Promise<BorradorCotizacionEspecial | null> {
+  await requireAdmin();
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const chat = mensajes
+    .filter((m) => m.texto && !m.texto.startsWith("[") && m.texto.trim().length > 1)
+    .slice(-20)
+    .map((m) => `${m.direccion === "in" ? "Cliente" : "Nosotros"}: ${m.texto.trim()}`)
+    .join("\n");
+  if (!apiKey || !chat) return null;
+
+  const prompt = `Eres coordinador de una empresa de construcción y mantenimiento en León, Guanajuato. Vas a pedir cotización a proveedores externos por algo que el cliente pidió en este chat de WhatsApp.
+
+Línea de negocio: ${tipoNegocio || "sin definir"}
+
+<chat>
+${chat}
+</chat>
+
+Redacta la solicitud para los proveedores:
+- titulo: qué trabajo se necesita, en 4 a 10 palabras (ej. "Limpieza de 2 tinacos y reparación de fuga").
+- descripcion: viñetas cortas que empiecen con "• ", una por renglón, solo con datos útiles para cotizar: trabajo a realizar, cantidades, medidas o capacidades, materiales, estado actual o fallas, accesos y tipo de inmueble. Si falta un dato importante para cotizar (p. ej. capacidad en litros), agrega una viñeta "• Por confirmar: …". Escribe en tercera persona ("El cliente…" o impersonal), sin saludos, agradecimientos ni preferencias de contacto, y sin inventar datos.
+- zona: colonia, fraccionamiento o municipio si el cliente lo mencionó; si no, cadena vacía.
+Nunca incluyas nombre, teléfono, correo ni dirección exacta (calle y número) del cliente.`;
+
+  try {
+    const model = modeloClaude();
+    const base = opcionesClaude(model, { maxTokens: 800, temperature: 0.2 });
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        ...base,
+        output_config: {
+          ...((base.output_config as Record<string, unknown>) || {}),
+          format: { type: "json_schema", schema: ESQUEMA_BORRADOR },
+        },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      console.error("[Cotización especial] Error de Claude:", res.status, await res.text());
+      return null;
+    }
+    const data = await res.json();
+    if (data?.stop_reason === "refusal") return null;
+    const r = JSON.parse(textoDeRespuesta(data)) as BorradorCotizacionEspecial;
+    return {
+      titulo: String(r.titulo || "").trim(),
+      descripcion: String(r.descripcion || "").trim(),
+      zona: String(r.zona || "").trim(),
+    };
+  } catch (err) {
+    console.error("[Cotización especial] No se pudo estructurar el borrador:", err);
+    return null;
+  }
 }
