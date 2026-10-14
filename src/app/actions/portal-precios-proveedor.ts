@@ -15,7 +15,8 @@ import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { esTokenCargaValido } from "@/lib/asesoria/aliados";
 import { normalizarCostosVolumen } from "@/lib/costos-volumen";
 import { costosCapacidadAJson, medidaTarifa, normalizarCostosCapacidad, type MedidaTarifa } from "@/lib/tarifas-capacidad";
-import type { FotoOfertaProveedor } from "@/lib/types";
+import type { EstandarServicio, FotoOfertaProveedor } from "@/lib/types";
+import { estandarDeServicio } from "@/lib/estandar-servicio";
 
 type Sb = ReturnType<typeof supabaseServidor>;
 
@@ -48,6 +49,10 @@ export interface OfertaPortalProveedor {
   fotos: FotoOfertaProveedor[];
   vigenciaPrecio: string | null;
   actualizadoPorProveedorAt: string | null;
+  /** Estándar Sauceda del servicio; null si aún no lo definimos. */
+  estandar: EstandarServicio | null;
+  cumpleEstandar: boolean;
+  excepcionesEstandar: string;
 }
 
 export type DatosOfertaPortal = Omit<
@@ -59,6 +64,7 @@ export type DatosOfertaPortal = Omit<
   | "productoDescripcion"
   | "productoTarifaMedida"
   | "actualizadoPorProveedorAt"
+  | "estandar"
 >;
 
 async function proveedorPorToken(sb: Sb, token: string): Promise<{ id: string; nombre: string } | null> {
@@ -99,11 +105,14 @@ function aOfertaPortal(f: any): OfertaPortalProveedor {
       : [],
     vigenciaPrecio: f.vigencia_precio || null,
     actualizadoPorProveedorAt: f.actualizado_por_proveedor_at || null,
+    estandar: estandarDeServicio(f.productos_servicios),
+    cumpleEstandar: f.cumple_estandar === true,
+    excepcionesEstandar: f.excepciones_estandar || "",
   };
 }
 
 const SELECT_PORTAL =
-  "id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo, descripcion_proceso, garantia_anios, garantia_condiciones, tiempo_ejecucion, anticipo_pct, condiciones_pago, zonas_cobertura, fotos, vigencia_precio, actualizado_por_proveedor_at, productos_servicios:producto_id ( nombre, unidad, categoria, descripcion, tarifa_medida )";
+  "id, costo_unitario, costos_volumen, tarifas_capacidad, cantidad_minima, monto_minimo, descripcion_proceso, garantia_anios, garantia_condiciones, tiempo_ejecucion, anticipo_pct, condiciones_pago, zonas_cobertura, fotos, vigencia_precio, actualizado_por_proveedor_at, cumple_estandar, excepciones_estandar, productos_servicios:producto_id ( nombre, unidad, categoria, descripcion, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo )";
 
 /** Datos que ve el proveedor al abrir su link. */
 export async function obtenerPortalPrecios(
@@ -173,7 +182,7 @@ export async function guardarOfertaPortal(
 
   const { data: actual } = await sb
     .from("proveedor_productos")
-    .select("id, costo_unitario, costos_volumen, tarifas_capacidad, fotos, productos_servicios:producto_id ( nombre )")
+    .select("id, costo_unitario, costos_volumen, tarifas_capacidad, fotos, cumple_estandar, productos_servicios:producto_id ( nombre )")
     .eq("id", ofertaId)
     .eq("proveedor_id", proveedor.id)
     .eq("activo", true)
@@ -210,6 +219,11 @@ export async function guardarOfertaPortal(
     zonas_cobertura: texto(datos.zonasCobertura),
     fotos,
     vigencia_precio: vigencia,
+    cumple_estandar: datos.cumpleEstandar === true,
+    excepciones_estandar: texto(datos.excepcionesEstandar),
+    ...(datos.cumpleEstandar === true && !(actual as any).cumple_estandar
+      ? { cumple_estandar_at: new Date().toISOString() }
+      : {}),
     pendiente_revision: true,
     actualizado_por_proveedor_at: new Date().toISOString(),
   };

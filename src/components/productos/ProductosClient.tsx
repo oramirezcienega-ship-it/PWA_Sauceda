@@ -117,6 +117,11 @@ export function ProductosClient({
   // Subcuenta de marketing / especialidad (une ventas y publicidad en Finanzas)
   const [formCodigoSubcuenta, setFormCodigoSubcuenta] = useState("");
   const [formTipoNegocio, setFormTipoNegocio] = useState("");
+  const [formEstProceso, setFormEstProceso] = useState("");
+  const [formEstIncluye, setFormEstIncluye] = useState("");
+  const [formEstGarantiaAnios, setFormEstGarantiaAnios] = useState("");
+  const [formEstGarantia, setFormEstGarantia] = useState("");
+  const [formEstTiempo, setFormEstTiempo] = useState("");
   const [subcuentasMkt, setSubcuentasMkt] = useState<
     Array<{ codigo: string; nombre: string; businessUnitId: string | null }>
   >([]);
@@ -204,6 +209,11 @@ export function ProductosClient({
     setFormCentroCostoId(centrosCosto[0]?.id || "");
     setFormCodigoSubcuenta("");
     setFormTipoNegocio("");
+    setFormEstProceso("");
+    setFormEstIncluye("");
+    setFormEstGarantiaAnios("");
+    setFormEstGarantia("");
+    setFormEstTiempo("");
     setFormCategoria("General");
     setFormUnidad("m2");
     setFormCostoUnitario("");
@@ -251,26 +261,12 @@ export function ProductosClient({
     if (o.costosVolumen.length > 0) {
       setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
     }
-    const proceso = o.descripcionProceso.trim();
-    if (proceso) setFormDescripcion((d) => (d.trim() ? d : proceso));
-    // Garantía, tiempo y zonas como datos para Sofía; sólo se agregan los que falten.
-    const garantia = [
-      o.garantiaAnios > 0 ? `${o.garantiaAnios} ${o.garantiaAnios === 1 ? "año" : "años"}` : "",
-      o.garantiaCondiciones.trim(),
-    ]
-      .filter(Boolean)
-      .join(", ");
-    const facts = [
-      garantia ? `Garantía: ${garantia}` : "",
-      o.tiempoEjecucion.trim() ? `Tiempo de ejecución: ${o.tiempoEjecucion.trim()}` : "",
-      o.zonasCobertura.trim() ? `Zonas de servicio: ${o.zonasCobertura.trim()}` : "",
-    ].filter(Boolean);
-    if (facts.length) {
-      setFormEspecificaciones((prev) => {
-        const nuevos = facts.filter((f) => !prev.toLowerCase().includes(f.split(":")[0].toLowerCase()));
-        return nuevos.length ? [prev.trim(), ...nuevos].filter(Boolean).join("\n") : prev;
-      });
-    }
+    // Proceso, garantía y tiempo del proveedor sirven de base para el estándar SAUCEDA (sólo si está vacío).
+    const siVacio = (valor: string) => (actual: string) => (actual.trim() ? actual : valor);
+    if (o.descripcionProceso.trim()) setFormEstProceso(siVacio(o.descripcionProceso.trim()));
+    if (o.garantiaAnios > 0) setFormEstGarantiaAnios(siVacio(String(o.garantiaAnios)));
+    if (o.garantiaCondiciones.trim()) setFormEstGarantia(siVacio(o.garantiaCondiciones.trim()));
+    if (o.tiempoEjecucion.trim()) setFormEstTiempo(siVacio(o.tiempoEjecucion.trim()));
     if (o.fotos.length) {
       setFormFotos((prev) => [
         ...prev,
@@ -289,6 +285,11 @@ export function ProductosClient({
     setFormCentroCostoId(p.centroCostoId || "");
     setFormCodigoSubcuenta(p.codigoSubcuenta || "");
     setFormTipoNegocio(p.tipoNegocio || "");
+    setFormEstProceso(p.estandarProceso || "");
+    setFormEstIncluye(p.estandarIncluye || "");
+    setFormEstGarantiaAnios(p.estandarGarantiaAnios ? String(p.estandarGarantiaAnios) : "");
+    setFormEstGarantia(p.estandarGarantia || "");
+    setFormEstTiempo(p.estandarTiempo || "");
     setFormCategoria(p.categoria || "General");
     setFormUnidad(p.unidad);
     setFormCostoUnitario(String(p.costoUnitario));
@@ -352,6 +353,11 @@ export function ProductosClient({
         codigoSubcuenta: formCodigoSubcuenta || null,
         // Sin modelo y sin uno previo no se manda (no toca la columna).
         tipoNegocio: formTipoNegocio || (prodEditando?.tipoNegocio ? null : undefined),
+        estandarProceso: formEstProceso,
+        estandarIncluye: formEstIncluye,
+        estandarGarantiaAnios: Number(formEstGarantiaAnios || 0),
+        estandarGarantia: formEstGarantia,
+        estandarTiempo: formEstTiempo,
         categoria: formCategoria.trim(),
         unidad: formUnidad.trim(),
         costoUnitario: Number(formCostoUnitario || 0),
@@ -2050,12 +2056,75 @@ export function ProductosClient({
                   </div>
                   )}
 
+                  <div className="space-y-3 rounded-xl border border-sauce/30 bg-sauce/5 p-4">
+                    <div>
+                      <span className="font-semibold text-verde-profundo block">✅ Estándar SAUCEDA del servicio</span>
+                      <p className="text-[11px] text-carbon/60 mt-0.5">
+                        Lo que ofrecemos al cliente sin importar qué proveedor lo haga. Los proveedores lo ven en su link y
+                        confirman que lo cumplen; Sofía usa la garantía y el proceso de aquí.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">Proceso de trabajo</label>
+                      <textarea
+                        rows={5}
+                        placeholder="Paso a paso como lo hacemos: preparación, materiales, ejecución, limpieza, entrega…"
+                        value={formEstProceso}
+                        onChange={(e) => setFormEstProceso(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">Qué incluye / qué no incluye</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Ej. Incluye lavado, cambio de empaques y prueba de presión. No incluye refacciones."
+                        value={formEstIncluye}
+                        onChange={(e) => setFormEstIncluye(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] gap-3">
+                      <div>
+                        <label className="block font-semibold text-carbon mb-1">Garantía (años)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={formEstGarantiaAnios}
+                          onChange={(e) => setFormEstGarantiaAnios(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-carbon mb-1">Qué cubre la garantía</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Mano de obra; no cubre daños por granizo"
+                          value={formEstGarantia}
+                          onChange={(e) => setFormEstGarantia(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-carbon mb-1">Tiempo objetivo</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. 1 día"
+                          value={formEstTiempo}
+                          onChange={(e) => setFormEstTiempo(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block font-semibold text-carbon mb-1">
-                      Descripción Operativa / Proceso
+                      Descripción Operativa
                     </label>
                     <textarea
-                      rows={5}
+                      rows={3}
                       placeholder="Detalles sobre alcance, preparación de superficie o condiciones de instalación..."
                       value={formDescripcion}
                       onChange={(e) => setFormDescripcion(e.target.value)}

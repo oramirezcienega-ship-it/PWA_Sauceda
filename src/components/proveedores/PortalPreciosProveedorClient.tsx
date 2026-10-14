@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/portal-precios-proveedor";
 import { SolicitudesPortalProveedor } from "./SolicitudesPortalProveedor";
 import type { FotoOfertaProveedor } from "@/lib/types";
+import { textoGarantiaEstandar } from "@/lib/estandar-servicio";
 
 interface Props {
   token: string;
@@ -36,9 +37,14 @@ const COLUMNAS_FILA =
 function faltantesOferta(o: OfertaPortalProveedor): string[] {
   const f: string[] = [];
   if (!(o.costoUnitario > 0) && o.tarifasCapacidad.length === 0) f.push("costo");
-  if (!(o.garantiaAnios > 0) && !o.garantiaCondiciones.trim()) f.push("garantía");
+  // Con estándar Sauceda, el proceso y la garantía son los nuestros: basta con que lo confirme.
+  if (o.estandar) {
+    if (!o.cumpleEstandar) f.push("confirmar estándar");
+  } else {
+    if (!(o.garantiaAnios > 0) && !o.garantiaCondiciones.trim()) f.push("garantía");
+    if (!o.descripcionProceso.trim()) f.push("proceso");
+  }
   if (!o.tiempoEjecucion.trim()) f.push("tiempo");
-  if (!o.descripcionProceso.trim()) f.push("proceso");
   if (!o.zonasCobertura.trim()) f.push("zonas");
   if (o.fotos.length === 0) f.push("fotos");
   return f;
@@ -163,10 +169,12 @@ function TarjetaOferta({
     {
       icono: "🛡️",
       etiqueta: "Garantía",
-      valor: unir(
-        oferta.garantiaAnios > 0 ? `${oferta.garantiaAnios} ${oferta.garantiaAnios === 1 ? "año" : "años"}` : "",
-        oferta.garantiaCondiciones
-      ),
+      valor: oferta.estandar
+        ? textoGarantiaEstandar(oferta.estandar)
+        : unir(
+            oferta.garantiaAnios > 0 ? `${oferta.garantiaAnios} ${oferta.garantiaAnios === 1 ? "año" : "años"}` : "",
+            oferta.garantiaCondiciones
+          ),
     },
     { icono: "⏱️", etiqueta: "Tiempo", valor: oferta.tiempoEjecucion.trim() },
     {
@@ -247,7 +255,32 @@ function TarjetaOferta({
         {/* Proceso completo */}
         <div className="min-w-0">
           <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-carbon/45 lg:hidden">🛠️ Proceso de trabajo</div>
-          {oferta.descripcionProceso.trim() ? (
+          {oferta.estandar ? (
+            <div className="space-y-2">
+              <span
+                className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  oferta.cumpleEstandar ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {oferta.cumpleEstandar ? "✓ Trabajas con el estándar SAUCEDA" : "⚠️ Confirma que trabajas con el estándar SAUCEDA"}
+              </span>
+              {oferta.estandar.proceso && (
+                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-carbon/80">{oferta.estandar.proceso}</p>
+              )}
+              {oferta.estandar.incluye && (
+                <p className="whitespace-pre-line break-words text-xs text-carbon/65">
+                  <b className="text-carbon/80">Incluye: </b>
+                  {oferta.estandar.incluye}
+                </p>
+              )}
+              {oferta.excepcionesEstandar.trim() && (
+                <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+                  <b>Tus notas: </b>
+                  {oferta.excepcionesEstandar.trim()}
+                </p>
+              )}
+            </div>
+          ) : oferta.descripcionProceso.trim() ? (
             <p className="whitespace-pre-line break-words text-sm leading-relaxed text-carbon/80">{oferta.descripcionProceso.trim()}</p>
           ) : (
             <p className="text-sm text-carbon/35">Sin describir</p>
@@ -343,6 +376,8 @@ function FormularioOferta({
   const [zonasCobertura, setZonasCobertura] = useState(oferta.zonasCobertura);
   const [vigenciaPrecio, setVigenciaPrecio] = useState(oferta.vigenciaPrecio || "");
   const [fotos, setFotos] = useState<FotoOfertaProveedor[]>(oferta.fotos);
+  const [cumpleEstandar, setCumpleEstandar] = useState(oferta.cumpleEstandar);
+  const [excepcionesEstandar, setExcepcionesEstandar] = useState(oferta.excepcionesEstandar);
 
   const [subiendo, setSubiendo] = useState(0);
   const [guardando, setGuardando] = useState(false);
@@ -409,6 +444,8 @@ function FormularioOferta({
         zonasCobertura,
         fotos,
         vigenciaPrecio: vigenciaPrecio || null,
+        cumpleEstandar,
+        excepcionesEstandar,
       });
       if (!res.ok || !res.oferta) {
         setMensaje({ tipo: "error", texto: res.mensaje || "No se pudo guardar." });
@@ -581,6 +618,63 @@ function FormularioOferta({
             </div>
           </div>
 
+          {/* Estándar SAUCEDA (o garantía y proceso propios si el servicio aún no lo define) */}
+          {oferta.estandar ? (
+            <div className="space-y-3 rounded-xl border border-sauce/30 bg-sauce/5 p-4">
+              <div>
+                <h3 className="text-sm font-bold text-verde-profundo">✅ Estándar SAUCEDA para este servicio</h3>
+                <p className="mt-0.5 text-xs text-carbon/60">
+                  Así lo ofrecemos a nuestros clientes, sin importar qué proveedor lo realice.
+                </p>
+              </div>
+              {oferta.estandar.proceso && (
+                <div>
+                  <div className={labelCls}>Proceso</div>
+                  <p className="whitespace-pre-line text-sm text-carbon/85">{oferta.estandar.proceso}</p>
+                </div>
+              )}
+              {oferta.estandar.incluye && (
+                <div>
+                  <div className={labelCls}>Incluye</div>
+                  <p className="whitespace-pre-line text-sm text-carbon/85">{oferta.estandar.incluye}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {textoGarantiaEstandar(oferta.estandar) && (
+                  <div>
+                    <div className={labelCls}>Garantía al cliente</div>
+                    <p className="text-sm font-semibold text-carbon">{textoGarantiaEstandar(oferta.estandar)}</p>
+                  </div>
+                )}
+                {oferta.estandar.tiempo && (
+                  <div>
+                    <div className={labelCls}>Tiempo objetivo</div>
+                    <p className="text-sm font-semibold text-carbon">{oferta.estandar.tiempo}</p>
+                  </div>
+                )}
+              </div>
+              <label className="flex items-start gap-2 rounded-lg bg-white p-3 text-sm font-semibold text-carbon ring-1 ring-carbon/10">
+                <input
+                  type="checkbox"
+                  checked={cumpleEstandar}
+                  onChange={(e) => setCumpleEstandar(e.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                Confirmo que trabajo con este proceso y respaldo esta garantía.
+              </label>
+              <div>
+                <label className={labelCls}>¿Alguna excepción o mejora? (opcional)</label>
+                <textarea
+                  rows={2}
+                  value={excepcionesEstandar}
+                  onChange={(e) => setExcepcionesEstandar(e.target.value)}
+                  className={inputCls}
+                  placeholder="Ej. no incluye cambio de empaques; doy 1 año extra de garantía en mano de obra…"
+                />
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Garantía y proceso */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-verde-profundo">🛡️ Garantía y proceso</h3>
@@ -618,6 +712,9 @@ function FormularioOferta({
               />
             </div>
           </div>
+
+            </>
+          )}
 
           {/* Logística y pago */}
           <div className="space-y-3">

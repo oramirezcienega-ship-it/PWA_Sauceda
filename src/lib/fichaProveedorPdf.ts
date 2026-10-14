@@ -3,6 +3,7 @@ import { dibujarLogoPdf } from "@/lib/marca-pdf";
 import { formatoPesos } from "@/lib/formato";
 import { formatoEscalon } from "@/lib/tarifas-capacidad";
 import type { OfertaPortalProveedor } from "@/app/actions/portal-precios-proveedor";
+import { textoGarantiaEstandar } from "@/lib/estandar-servicio";
 
 /**
  * PDF con el resumen de servicios de un proveedor (lo mismo que ve en su link):
@@ -36,6 +37,7 @@ function textoCosto(o: OfertaPortalProveedor): string {
 }
 
 function textoGarantia(o: OfertaPortalProveedor): string {
+  if (o.estandar) return textoGarantiaEstandar(o.estandar);
   return o.garantiaAnios > 0 ? `${o.garantiaAnios} ${o.garantiaAnios === 1 ? "año" : "años"}` : o.garantiaCondiciones.trim();
 }
 
@@ -167,15 +169,27 @@ export function generarFichaProveedorPdf(proveedorNombre: string, ofertas: Ofert
   y += 6;
 
   for (const o of ofertas) {
-    const filas: [string, string][] = [
-      ["Proceso de trabajo", o.descripcionProceso.trim()],
-      ["Qué cubre la garantía", o.garantiaCondiciones.trim()],
+    const filas: [string, string][] = o.estandar
+      ? [
+          ["Proceso (estándar SAUCEDA)", o.estandar.proceso],
+          ["Incluye", o.estandar.incluye],
+          ["Garantía al cliente", textoGarantiaEstandar(o.estandar)],
+          ["Tiempo objetivo", o.estandar.tiempo],
+          ["¿Cumples el estándar?", o.cumpleEstandar ? "Sí, confirmado" : ""],
+          ["Tus excepciones o mejoras", o.excepcionesEstandar.trim() || (o.cumpleEstandar ? "Ninguna" : "")],
+        ]
+      : [
+          ["Proceso de trabajo", o.descripcionProceso.trim()],
+          ["Qué cubre la garantía", o.garantiaCondiciones.trim()],
+        ];
+    filas.push(
+      ["Tu tiempo de ejecución", o.tiempoEjecucion.trim()],
       ["Condiciones de pago", o.condicionesPago.trim()],
       ["Mínimo", [o.cantidadMinima > 0 ? `${o.cantidadMinima} ${o.productoUnidad}` : "", o.montoMinimo > 0 ? formatoPesos(o.montoMinimo) : ""].filter(Boolean).join(" · ")],
       ["Precio vigente hasta", o.vigenciaPrecio ? fecha(`${o.vigenciaPrecio}T12:00:00`) : ""],
       ["Fotos de trabajos", o.fotos.length ? `${o.fotos.length} en tu link` : ""],
-      ["Última actualización", o.actualizadoPorProveedorAt ? fecha(o.actualizadoPorProveedorAt) : ""],
-    ];
+      ["Última actualización", o.actualizadoPorProveedorAt ? fecha(o.actualizadoPorProveedorAt) : ""]
+    );
     doc.setFontSize(8.5);
     const anchoValor = util - 50;
     const bloques = filas.map(([k, v]) => ({

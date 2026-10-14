@@ -1209,6 +1209,12 @@ export interface ProductoServicio {
   cantidadMinima?: number;
   /** Costo del proveedor por rango de cantidad (interno). */
   costosVolumen?: CostoVolumen[];
+  /** Estándar Sauceda del servicio: lo cumplen todos los proveedores (migración 0155). */
+  estandarProceso?: string;
+  estandarIncluye?: string;
+  estandarGarantiaAnios?: number;
+  estandarGarantia?: string;
+  estandarTiempo?: string;
   composicionApu?: ConceptoApuComposicion[];
   createdAt: string;
 }
@@ -1376,6 +1382,21 @@ export interface OfertaProveedorProducto {
   pendienteRevision: boolean;
   actualizadoPorProveedorAt: string | null;
   updatedAt: string;
+  /** El proveedor confirmó que trabaja con el estándar Sauceda del servicio. */
+  cumpleEstandar: boolean;
+  /** Excepciones o mejoras que anotó el proveedor sobre el estándar. */
+  excepcionesEstandar: string;
+  /** Estándar Sauceda del servicio (solo lectura, vía join); null si el servicio aún no lo define. */
+  productoEstandar: EstandarServicio | null;
+}
+
+/** Proceso, alcance, garantía y tiempo que Sauceda exige en un servicio, sin importar el proveedor. */
+export interface EstandarServicio {
+  proceso: string;
+  incluye: string;
+  garantiaAnios: number;
+  garantia: string;
+  tiempo: string;
 }
 
 export type DatosOfertaProveedorProducto = Omit<
@@ -1392,6 +1413,9 @@ export type DatosOfertaProveedorProducto = Omit<
   | "pendienteRevision"
   | "actualizadoPorProveedorAt"
   | "updatedAt"
+  | "cumpleEstandar"
+  | "excepcionesEstandar"
+  | "productoEstandar"
 >;
 
 export interface HistorialOfertaProveedor {

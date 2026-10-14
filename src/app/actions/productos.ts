@@ -54,6 +54,11 @@ function aProductoServicio(fila: any): ProductoServicio {
     tarifaMedida: fila.tarifa_medida === "tubos" ? "tubos" : "litros",
     cantidadMinima: Number(fila.cantidad_minima || 0),
     costosVolumen: normalizarCostosVolumen(fila.costos_volumen),
+    estandarProceso: fila.estandar_proceso || "",
+    estandarIncluye: fila.estandar_incluye || "",
+    estandarGarantiaAnios: Number(fila.estandar_garantia_anios || 0),
+    estandarGarantia: fila.estandar_garantia || "",
+    estandarTiempo: fila.estandar_tiempo || "",
     createdAt: fila.created_at,
   };
 }
@@ -103,6 +108,25 @@ function videosAJson(v?: VideoProducto[]) {
 
 function tarifasAJson(t?: TarifaCapacidad[]) {
   return normalizarTarifasCapacidad(t).map((x) => ({ hasta_litros: x.hastaLitros, precio: x.precio, costo: x.costo }));
+}
+
+/** Columnas del estándar Sauceda del servicio (migración 0155). */
+function estandarAFila(d: {
+  estandarProceso?: string;
+  estandarIncluye?: string;
+  estandarGarantiaAnios?: number;
+  estandarGarantia?: string;
+  estandarTiempo?: string;
+}) {
+  const t = (v?: string) => (v || "").trim() || null;
+  const anios = Number(d.estandarGarantiaAnios || 0);
+  return {
+    estandar_proceso: t(d.estandarProceso),
+    estandar_incluye: t(d.estandarIncluye),
+    estandar_garantia_anios: Number.isFinite(anios) && anios > 0 ? Math.min(anios, 100) : null,
+    estandar_garantia: t(d.estandarGarantia),
+    estandar_tiempo: t(d.estandarTiempo),
+  };
 }
 
 // Mapeador de Insumo
@@ -244,6 +268,11 @@ export async function crearProductoServicio(datos: {
   tarifaMedida?: "litros" | "tubos";
   cantidadMinima?: number;
   costosVolumen?: CostoVolumen[];
+  estandarProceso?: string;
+  estandarIncluye?: string;
+  estandarGarantiaAnios?: number;
+  estandarGarantia?: string;
+  estandarTiempo?: string;
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -286,6 +315,7 @@ export async function crearProductoServicio(datos: {
       tarifa_medida: datos.tarifaMedida === "tubos" ? "tubos" : "litros",
       cantidad_minima: Math.max(0, Number(datos.cantidadMinima || 0)),
       costos_volumen: normalizarCostosVolumen(datos.costosVolumen),
+      ...estandarAFila(datos),
     })
     .select("*, business_units ( id, nombre )")
     .single();
@@ -323,6 +353,11 @@ export async function editarProductoServicio(
     tarifaMedida?: "litros" | "tubos";
     cantidadMinima?: number;
     costosVolumen?: CostoVolumen[];
+    estandarProceso?: string;
+    estandarIncluye?: string;
+    estandarGarantiaAnios?: number;
+    estandarGarantia?: string;
+    estandarTiempo?: string;
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -367,6 +402,10 @@ export async function editarProductoServicio(
   }
   if (datos.tipoNegocio !== undefined) {
     updatePayload.tipo_negocio = datos.tipoNegocio || null;
+  }
+  // El estándar sólo se toca si viene en la petición (otros flujos de edición no lo envían)
+  if (datos.estandarProceso !== undefined) {
+    Object.assign(updatePayload, estandarAFila(datos));
   }
   // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
   if (datos.fichaTecnicaUrl !== undefined) {

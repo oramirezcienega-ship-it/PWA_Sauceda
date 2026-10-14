@@ -237,6 +237,23 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
                     {/* Proceso */}
                     <div className="min-w-0">
                       <div className="mb-1 text-[10px] font-bold uppercase text-carbon/45 lg:hidden">Proceso</div>
+                      {o.productoEstandar && (
+                        <div className="mb-1.5 space-y-1">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              o.cumpleEstandar ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {o.cumpleEstandar ? "✓ Cumple estándar SAUCEDA" : "⚠ No ha confirmado el estándar"}
+                          </span>
+                          {o.excepcionesEstandar.trim() && (
+                            <p className="rounded-md bg-amber-50 px-2 py-1 text-amber-900">
+                              <b>Excepciones: </b>
+                              {o.excepcionesEstandar.trim()}
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {o.descripcionProceso.trim() ? (
                         <p className="whitespace-pre-line break-words leading-relaxed text-carbon/80">{o.descripcionProceso.trim()}</p>
                       ) : (

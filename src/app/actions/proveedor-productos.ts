@@ -1,5 +1,6 @@
 "use server";
 
+import { estandarDeServicio } from "@/lib/estandar-servicio";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
 import { generarTokenCarga } from "@/lib/asesoria/aliados";
@@ -23,7 +24,7 @@ import type {
 // El proveedor `preferido` de cada producto define su costo en productos_servicios.
 
 const SELECT_OFERTA =
-  "*, proveedores:proveedor_id ( nombre, activo ), productos_servicios:producto_id ( nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida )";
+  "*, proveedores:proveedor_id ( nombre, activo ), productos_servicios:producto_id ( nombre, unidad, precio_unitario, categoria, tarifas_capacidad, tarifa_medida, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo )";
 
 function normalizarFotos(raw: unknown): FotoOfertaProveedor[] {
   if (!Array.isArray(raw)) return [];
@@ -67,6 +68,9 @@ function aOferta(fila: any): OfertaProveedorProducto {
     pendienteRevision: fila.pendiente_revision === true,
     actualizadoPorProveedorAt: fila.actualizado_por_proveedor_at || null,
     updatedAt: fila.updated_at,
+    cumpleEstandar: fila.cumple_estandar === true,
+    excepcionesEstandar: fila.excepciones_estandar || "",
+    productoEstandar: estandarDeServicio(fila.productos_servicios),
   };
 }
 

@@ -57,7 +57,7 @@ export async function cargarServiciosMantenimiento(
 ): Promise<Partial<Record<ServicioMant, ProductoMant>>> {
   const { data } = await sb
     .from("productos_servicios")
-    .select("id, nombre, tipo_negocio, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad")
+    .select("id, nombre, tipo_negocio, precio_unitario, descripcion, descripcion_valor, especificaciones, plantilla_garantia, fotos, apto_para_ia, activo, tarifas_capacidad, estandar_proceso, estandar_incluye, estandar_garantia_anios, estandar_garantia, estandar_tiempo")
     .or(
       "tipo_negocio.in.(construccion-mantenimiento-tinacos,construccion-mantenimiento-cisternas,construccion-mantenimiento-calentadores)," +
         "nombre.ilike.%tinaco%,nombre.ilike.%cisterna%,nombre.ilike.%aljibe%,nombre.ilike.%calentador%"
@@ -75,10 +75,26 @@ export async function cargarServiciosMantenimiento(
       servicio,
       nombre: f.nombre,
       precio: Number(f.precio_unitario || 0),
-      descripcion: f.descripcion || "",
       descripcionValor: f.descripcion_valor || "",
-      especificaciones: f.especificaciones || "",
-      garantia: f.plantilla_garantia || "",
+      // El estándar SAUCEDA (migración 0155) manda sobre los textos sueltos del producto.
+      descripcion: [f.estandar_incluye, f.descripcion].map((x: any) => (x || "").trim()).filter(Boolean).join("\n"),
+      especificaciones: [
+        f.especificaciones || "",
+        (f.estandar_proceso || "").trim() ? `Proceso: ${(f.estandar_proceso || "").trim()}` : "",
+        (f.estandar_tiempo || "").trim() ? `Tiempo de ejecución: ${(f.estandar_tiempo || "").trim()}` : "",
+      ]
+        .map((x: string) => x.trim())
+        .filter(Boolean)
+        .join("\n"),
+      garantia:
+        [
+          Number(f.estandar_garantia_anios) > 0
+            ? `${Number(f.estandar_garantia_anios)} ${Number(f.estandar_garantia_anios) === 1 ? "año" : "años"}`
+            : "",
+          (f.estandar_garantia || "").trim(),
+        ]
+          .filter(Boolean)
+          .join(" · ") || f.plantilla_garantia || "",
       fotos: (Array.isArray(f.fotos) ? f.fotos : []).filter((x: any) => x && /^https?:\/\//i.test(x.url || "")),
       tarifas: (Array.isArray(f.tarifas_capacidad) ? f.tarifas_capacidad : [])
         .map((t: any) => ({ hastaLitros: Math.round(Number(t?.hasta_litros)), precio: Number(t?.precio) }))

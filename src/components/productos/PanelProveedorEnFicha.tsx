@@ -69,6 +69,15 @@ export function PanelProveedorEnFicha({
             {o.pendienteRevision && (
               <span className="ml-1.5 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">🔔 cambios sin aprobar</span>
             )}
+            {o.productoEstandar && (
+              <span
+                className={`ml-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  o.cumpleEstandar ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {o.cumpleEstandar ? "✓ cumple estándar" : "⚠ no ha confirmado el estándar"}
+              </span>
+            )}
           </div>
           {activas.length > 1 && (
             <div className="text-[10.5px] text-carbon/50">+{activas.length - 1} proveedor(es) más en la pestaña Proveedores</div>
@@ -127,6 +136,12 @@ export function PanelProveedorEnFicha({
             <p className="whitespace-pre-line text-[11.5px] leading-relaxed text-carbon/80">{o.descripcionProceso.trim()}</p>
           ) : (
             <p className="text-[11px] text-carbon/35">Sin describir</p>
+          )}
+          {o.excepcionesEstandar.trim() && (
+            <p className="mt-1.5 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+              <b>Excepciones al estándar: </b>
+              {o.excepcionesEstandar.trim()}
+            </p>
           )}
         </div>
         <dl className="space-y-1 text-[11.5px]">
