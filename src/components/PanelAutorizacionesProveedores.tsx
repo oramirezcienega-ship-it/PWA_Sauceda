@@ -20,6 +20,8 @@ const ETIQUETA_ESTADO: Record<AutorizacionProveedor["estado"], { texto: string; 
   esperando: { texto: "⏳ Esperando", clase: "bg-amber-100 text-amber-800" },
   autorizado: { texto: "✅ Autorizó", clase: "bg-green-100 text-green-800" },
   rechazado: { texto: "❌ Rechazó", clase: "bg-rose-100 text-rose-800" },
+  cotizado: { texto: "💲 Cotizó", clase: "bg-green-100 text-green-800" },
+  visita: { texto: "🔎 Pide visita", clase: "bg-sky-100 text-sky-800" },
   error: { texto: "—", clase: "text-carbon/40" },
 };
 
@@ -35,6 +37,8 @@ function duracion(ms: number): string {
   const d = Math.floor(h / 24);
   return h % 24 ? `${d} d ${h % 24} h` : `${d} d`;
 }
+
+const respondida = (a: AutorizacionProveedor) => a.estado !== "esperando" && a.estado !== "error";
 
 const vencida = (a: AutorizacionProveedor, ahora: number) =>
   a.estado === "esperando" && new Date(a.slaVenceAt).getTime() < ahora;
@@ -60,7 +64,7 @@ export function PanelAutorizacionesProveedores({
       : f === "vencidas"
         ? vencida(a, ahora)
         : f === "respondidas"
-          ? a.estado === "autorizado" || a.estado === "rechazado"
+          ? respondida(a)
           : a.estado === f;
 
   const conteo = useMemo(
@@ -117,10 +121,10 @@ export function PanelAutorizacionesProveedores({
         <div>
           <h2 className="font-titular text-lg font-bold text-verde-profundo">✈️ Cotizaciones enviadas a proveedores</h2>
           <p className="text-xs text-carbon/60">
-            Solicitudes de autorización de costo enviadas por Telegram: entrega, si la abrió, respuesta y SLA.
+            Autorizaciones de costo y cotizaciones especiales enviadas por Telegram: entrega, si la abrió, respuesta y SLA.
           </p>
           <div className="mt-1 flex items-center gap-2 text-xs">
-            <span className="text-carbon/60">SLA de respuesta:</span>
+            <span className="text-carbon/60">SLA de autorizaciones de costo:</span>
             {editandoSla ? (
               <>
                 <input
@@ -142,6 +146,7 @@ export function PanelAutorizacionesProveedores({
             ) : (
               <>
                 <span className="font-bold text-carbon">{slaHoras} horas</span>
+                <span className="text-carbon/40">· las especiales usan el plazo que se fijó al enviarlas</span>
                 <button type="button" onClick={() => setEditandoSla(true)} className="font-semibold text-sauce hover:underline">
                   Cambiar
                 </button>
@@ -175,9 +180,11 @@ export function PanelAutorizacionesProveedores({
             <thead className="sticky top-0 bg-white text-left text-[10px] uppercase text-carbon/50">
               <tr>
                 <th className="py-2 pr-3">Cotización</th>
-                <th className="py-2 pr-3">Cliente / Servicio</th>
+                <th className="py-2 pr-3">Cliente / Trabajo</th>
                 <th className="py-2 pr-3">Proveedor</th>
-                <th className="py-2 pr-3 text-right">Precio</th>
+                <th className="py-2 pr-3 text-right" title="Autorizaciones: precio al cliente. Especiales: precio que cotizó el proveedor.">
+                  Precio
+                </th>
                 <th className="py-2 pr-3">Enviada</th>
                 <th className="py-2 pr-3">Entrega</th>
                 <th className="py-2 pr-3" title="Abrió el botón 'Ver cotización' o respondió. Telegram no informa lecturas a los bots.">
@@ -193,9 +200,10 @@ export function PanelAutorizacionesProveedores({
                 return (
                   <tr key={`${a.cotizacionId}-${a.proveedor}-${a.enviadoAt}`} className="border-t border-carbon/5 align-top">
                     <td className="py-2 pr-3">
-                      <Link href={`/construccion/${a.cotizacionId}`} className="font-mono font-semibold text-sauce hover:underline">
-                        {a.cotizacionId}
+                      <Link href={a.href} className="font-mono font-semibold text-sauce hover:underline">
+                        {a.folio}
                       </Link>
+                      <div className="text-[10px] text-carbon/50">{a.tipo === "especial" ? "💡 Especial" : "Autorización de costo"}</div>
                     </td>
                     <td className="py-2 pr-3">
                       <div className="font-semibold text-carbon/80">{a.cliente}</div>
@@ -229,6 +237,7 @@ export function PanelAutorizacionesProveedores({
                     <td className="py-2 pr-3">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${etiqueta.clase}`}>{etiqueta.texto}</span>
                       {a.respondidoAt && <div className="mt-1 text-carbon/50">{fechaCorta(a.respondidoAt)}</div>}
+                      {a.detalleRespuesta && <div className="text-carbon/50">{a.detalleRespuesta}</div>}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{celdaSla(a)}</td>
                   </tr>
