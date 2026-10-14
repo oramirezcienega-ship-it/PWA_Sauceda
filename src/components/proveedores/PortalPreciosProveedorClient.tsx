@@ -28,25 +28,57 @@ function formatoFecha(iso: string): string {
   return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** Datos que le faltan a una oferta para que podamos cotizar con ella. */
+function faltantesOferta(o: OfertaPortalProveedor): string[] {
+  const f: string[] = [];
+  if (!(o.costoUnitario > 0) && o.tarifasCapacidad.length === 0) f.push("costo");
+  if (!(o.garantiaAnios > 0) && !o.garantiaCondiciones.trim()) f.push("garantía");
+  if (!o.tiempoEjecucion.trim()) f.push("tiempo");
+  if (!o.descripcionProceso.trim()) f.push("proceso");
+  if (!o.zonasCobertura.trim()) f.push("zonas");
+  if (o.fotos.length === 0) f.push("fotos");
+  return f;
+}
+
 export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIniciales, solicitudesIniciales = [] }: Props) {
   const [ofertas, setOfertas] = useState(ofertasIniciales);
-  const [abierta, setAbierta] = useState<string | null>(ofertasIniciales.length === 1 ? ofertasIniciales[0].id : null);
+  const [editando, setEditando] = useState<string | null>(
+    ofertasIniciales.length === 1 && faltantesOferta(ofertasIniciales[0]).includes("costo") ? ofertasIniciales[0].id : null
+  );
+  const completas = ofertas.filter((o) => faltantesOferta(o).length === 0).length;
+  const pct = ofertas.length ? Math.round((completas / ofertas.length) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pt-6 font-cuerpo">
+    <div className="mx-auto max-w-3xl px-4 pt-6 font-cuerpo">
       <header className="rounded-2xl bg-gradient-to-r from-verde-profundo to-sauce p-5 text-white shadow-md">
         <div className="text-[11px] font-bold uppercase tracking-wider text-crema/80">SAUCEDA · Proveedores</div>
-        <h1 className="mt-1 font-titular text-xl font-bold text-crema">{proveedorNombre}</h1>
-        <p className="mt-2 text-sm text-crema/90">
-          Actualiza aquí tus costos, garantía, proceso y fotos de los servicios que nos ofreces. Guarda cada producto al
-          terminar; nosotros revisamos los cambios antes de usarlos.
+        <h1 className="mt-1 font-titular text-2xl font-bold text-crema">{proveedorNombre}</h1>
+        <p className="mt-1 text-sm text-crema/85">
+          Tu ficha de servicios: costos, garantía, tiempos y fotos. Toca <b>Editar</b> en un servicio para actualizarlo;
+          revisamos los cambios antes de usarlos.
         </p>
+        {ofertas.length > 0 && (
+          <div className="mt-4">
+            <div className="flex items-baseline justify-between text-xs text-crema/90">
+              <span>
+                <b className="text-base text-white">{completas}</b> de {ofertas.length} servicios con ficha completa
+              </span>
+              <span>{pct}%</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/20">
+              <div className="h-full rounded-full bg-dorado transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        )}
       </header>
 
       <SolicitudesPortalProveedor token={token} iniciales={solicitudesIniciales} />
 
       {ofertas.length > 0 && (
-        <h2 className="mt-6 font-titular text-lg font-bold text-verde-profundo">🏷️ Tus precios y condiciones</h2>
+        <div className="mt-7 flex items-end justify-between gap-3">
+          <h2 className="font-titular text-lg font-bold text-verde-profundo">🏷️ Tus servicios</h2>
+          <span className="text-xs text-carbon/50">{ofertas.length} en total</span>
+        </div>
       )}
 
       {ofertas.length === 0 ? (
@@ -54,14 +86,14 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
           Aún no tienes productos asignados. Pide a SAUCEDA que los registre.
         </div>
       ) : (
-        <div className="mt-5 space-y-3">
+        <div className="mt-3 space-y-4">
           {ofertas.map((o) => (
             <TarjetaOferta
               key={o.id}
               token={token}
               oferta={o}
-              abierta={abierta === o.id}
-              onAlternar={() => setAbierta((x) => (x === o.id ? null : o.id))}
+              editando={editando === o.id}
+              onEditar={(v) => setEditando(v ? o.id : null)}
               onGuardada={(nueva) => setOfertas((prev) => prev.map((x) => (x.id === nueva.id ? nueva : x)))}
             />
           ))}
@@ -75,17 +107,201 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
   );
 }
 
+/** Tarjeta de un servicio: ficha de solo lectura con lo importante; el formulario se abre con "Editar". */
 function TarjetaOferta({
   token,
   oferta,
-  abierta,
-  onAlternar,
+  editando,
+  onEditar,
   onGuardada,
 }: {
   token: string;
   oferta: OfertaPortalProveedor;
-  abierta: boolean;
-  onAlternar: () => void;
+  editando: boolean;
+  onEditar: (v: boolean) => void;
+  onGuardada: (o: OfertaPortalProveedor) => void;
+}) {
+  const [aviso, setAviso] = useState<string | null>(null);
+  const faltan = faltantesOferta(oferta);
+  const medida = oferta.productoTarifaMedida;
+  const sinCosto = faltan.includes("costo");
+  const vencido = oferta.vigenciaPrecio ? new Date(`${oferta.vigenciaPrecio}T23:59:59`) < new Date() : false;
+
+  const hitos: { icono: string; etiqueta: string; valor: string }[] = [
+    {
+      icono: "🛡️",
+      etiqueta: "Garantía",
+      valor:
+        oferta.garantiaAnios > 0
+          ? `${oferta.garantiaAnios} ${oferta.garantiaAnios === 1 ? "año" : "años"}`
+          : oferta.garantiaCondiciones.trim(),
+    },
+    { icono: "⏱️", etiqueta: "Tiempo", valor: oferta.tiempoEjecucion.trim() },
+    {
+      icono: "💳",
+      etiqueta: "Anticipo",
+      valor: oferta.anticipoPct > 0 ? `${oferta.anticipoPct}%` : oferta.condicionesPago.trim(),
+    },
+    { icono: "📍", etiqueta: "Zonas", valor: oferta.zonasCobertura.trim() },
+  ];
+
+  return (
+    <section
+      className={`rounded-2xl border bg-white shadow-sm transition ${
+        editando ? "border-sauce ring-2 ring-sauce/20" : "border-carbon/10"
+      }`}
+    >
+      {/* Encabezado */}
+      <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-carbon/45">{oferta.productoCategoria}</div>
+          <h3 className="font-titular text-lg font-bold leading-snug text-verde-profundo">{oferta.productoNombre}</h3>
+        </div>
+        {faltan.length === 0 ? (
+          <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+            ✓ Completa
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+            {faltan.length === 1 ? "Falta 1 dato" : `Faltan ${faltan.length} datos`}
+          </span>
+        )}
+      </div>
+
+      {editando ? (
+        <FormularioOferta
+          token={token}
+          oferta={oferta}
+          onCancelar={() => onEditar(false)}
+          onGuardada={(nueva) => {
+            onGuardada(nueva);
+            onEditar(false);
+            setAviso("✓ Guardado. Gracias, revisaremos tus cambios.");
+          }}
+        />
+      ) : (
+        <div className="space-y-4 px-4 pb-4 pt-3 sm:px-5">
+          {/* Precios */}
+          <div>
+            <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-carbon/45">Tu costo para SAUCEDA</div>
+            {sinCosto ? (
+              <button
+                type="button"
+                onClick={() => onEditar(true)}
+                className="w-full rounded-xl border border-dashed border-amber-300 bg-amber-50/60 px-3 py-3 text-left text-sm font-semibold text-amber-800 hover:bg-amber-50"
+              >
+                Aún no capturas tu costo · <span className="underline">Agregarlo</span>
+              </button>
+            ) : oferta.tarifasCapacidad.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {oferta.tarifasCapacidad.map((t) => (
+                  <div key={t.hastaLitros} className="rounded-xl border border-sauce/20 bg-sauce/5 px-3 py-1.5">
+                    <div className="text-[11px] text-carbon/55">Hasta {formatoEscalon(t.hastaLitros, medida)}</div>
+                    <div className="font-titular text-base font-bold text-verde-profundo">{formatoPesos(t.costo)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-titular text-2xl font-bold text-verde-profundo">
+                  {formatoPesos(oferta.costoUnitario)}
+                  <span className="text-sm font-semibold text-carbon/50"> / {oferta.productoUnidad}</span>
+                </span>
+                {oferta.costosVolumen.length > 0 && (
+                  <span className="text-xs text-carbon/60">
+                    + {oferta.costosVolumen.length} {oferta.costosVolumen.length === 1 ? "precio" : "precios"} por volumen
+                  </span>
+                )}
+              </div>
+            )}
+            {(oferta.montoMinimo > 0 || oferta.vigenciaPrecio) && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-carbon/60">
+                {oferta.montoMinimo > 0 && <span>Mínimo {formatoPesos(oferta.montoMinimo)}</span>}
+                {oferta.vigenciaPrecio && (
+                  <span className={vencido ? "font-semibold text-rojo" : ""}>
+                    {vencido ? "⚠️ Precio vencido el " : "Vigente hasta "}
+                    {formatoFecha(`${oferta.vigenciaPrecio}T12:00:00`)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Hitos */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {hitos.map((h) => (
+              <div
+                key={h.etiqueta}
+                className={`min-w-0 rounded-xl px-3 py-2 ${h.valor ? "bg-slate-50" : "border border-dashed border-carbon/15"}`}
+              >
+                <div className="text-[11px] text-carbon/50">
+                  {h.icono} {h.etiqueta}
+                </div>
+                <div className={`truncate text-sm font-semibold ${h.valor ? "text-carbon" : "text-carbon/35"}`} title={h.valor}>
+                  {h.valor || "Sin capturar"}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Fotos */}
+          {oferta.fotos.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto">
+              {oferta.fotos.slice(0, 6).map((f, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={f.url}
+                  src={f.url}
+                  alt={f.titulo || `Foto ${i + 1}`}
+                  className="h-16 w-16 shrink-0 rounded-lg border border-carbon/10 object-cover"
+                />
+              ))}
+              {oferta.fotos.length > 6 && (
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-carbon/60">
+                  +{oferta.fotos.length - 6}
+                </div>
+              )}
+            </div>
+          )}
+
+          {faltan.length > 0 && <p className="text-xs text-amber-700">Te falta: {faltan.join(", ")}.</p>}
+          {aviso && <div className="rounded-lg bg-emerald-50 p-2.5 text-sm text-emerald-800">{aviso}</div>}
+
+          {/* Pie */}
+          <div className="flex items-center justify-between gap-3 border-t border-carbon/10 pt-3">
+            <span className="text-[11px] text-carbon/45">
+              {oferta.actualizadoPorProveedorAt
+                ? `Actualizado ${formatoFecha(oferta.actualizadoPorProveedorAt)}`
+                : "Nunca actualizado"}
+              {oferta.fotos.length > 0 && ` · ${oferta.fotos.length} ${oferta.fotos.length === 1 ? "foto" : "fotos"}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAviso(null);
+                onEditar(true);
+              }}
+              className="shrink-0 rounded-lg bg-sauce px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-verde-profundo"
+            >
+              ✎ Editar
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Formulario de edición; se monta solo al editar, así "Cancelar" descarta los cambios. */
+function FormularioOferta({
+  token,
+  oferta,
+  onCancelar,
+  onGuardada,
+}: {
+  token: string;
+  oferta: OfertaPortalProveedor;
+  onCancelar: () => void;
   onGuardada: (o: OfertaPortalProveedor) => void;
 }) {
   const unidad = oferta.productoUnidad;
@@ -117,18 +333,6 @@ function TarjetaOferta({
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const inputFotos = useRef<HTMLInputElement>(null);
-
-  // Resumen visible con la tarjeta cerrada
-  const resumenCosto =
-    porCapacidad && capacidades.some((c) => c.costo !== "")
-      ? capacidades
-          .filter((c) => c.costo !== "")
-          .slice(0, 2)
-          .map((c) => `${formatoEscalon(Number(c.hastaLitros), medida)} ${formatoPesos(Number(c.costo))}`)
-          .join(" · ")
-      : costoUnitario
-      ? `${formatoPesos(Number(costoUnitario))}/${unidad}`
-      : "Sin costo capturado";
 
   async function subirFotos(archivos: FileList | null) {
     if (!archivos || archivos.length === 0) return;
@@ -196,7 +400,6 @@ function TarjetaOferta({
         return;
       }
       onGuardada(res.oferta);
-      setMensaje({ tipo: "ok", texto: "✓ Guardado. Gracias, revisaremos tus cambios." });
     } catch {
       setMensaje({ tipo: "error", texto: "No se pudo guardar. Revisa tu conexión e intenta de nuevo." });
     } finally {
@@ -205,23 +408,7 @@ function TarjetaOferta({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-carbon/10 bg-white shadow-sm">
-      <button type="button" onClick={onAlternar} className="flex w-full items-start justify-between gap-3 p-4 text-left">
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-carbon/50">{oferta.productoCategoria}</div>
-          <div className="font-titular text-base font-bold text-verde-profundo">{oferta.productoNombre}</div>
-          <div className="mt-0.5 text-sm text-carbon/70">{resumenCosto}</div>
-          {oferta.actualizadoPorProveedorAt && (
-            <div className="mt-0.5 text-[11px] text-carbon/40">
-              Última actualización: {formatoFecha(oferta.actualizadoPorProveedorAt)}
-            </div>
-          )}
-        </div>
-        <span className="shrink-0 text-carbon/40">{abierta ? "▲" : "▼"}</span>
-      </button>
-
-      {abierta && (
-        <div className="space-y-5 border-t border-carbon/10 p-4">
+        <div className="mt-3 space-y-5 border-t border-carbon/10 p-4 sm:p-5">
           {oferta.productoDescripcion && (
             <p className="rounded-lg bg-slate-50 p-3 text-xs text-carbon/70">{oferta.productoDescripcion}</p>
           )}
@@ -521,16 +708,24 @@ function TarjetaOferta({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={guardar}
-            disabled={guardando || subiendo > 0}
-            className="w-full rounded-xl bg-sauce py-3 text-sm font-bold text-white shadow-sm hover:bg-verde-profundo disabled:opacity-50"
-          >
-            {guardando ? "Guardando…" : "Guardar cambios"}
-          </button>
+          <div className="sticky bottom-0 -mx-4 flex gap-2 rounded-b-2xl border-t border-carbon/10 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5">
+            <button
+              type="button"
+              onClick={onCancelar}
+              disabled={guardando}
+              className="rounded-xl border border-carbon/20 px-4 py-3 text-sm font-semibold text-carbon/70 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={guardar}
+              disabled={guardando || subiendo > 0}
+              className="flex-1 rounded-xl bg-sauce py-3 text-sm font-bold text-white shadow-sm hover:bg-verde-profundo disabled:opacity-50"
+            >
+              {guardando ? "Guardando…" : "Guardar cambios"}
+            </button>
+          </div>
         </div>
-      )}
-    </section>
   );
 }
