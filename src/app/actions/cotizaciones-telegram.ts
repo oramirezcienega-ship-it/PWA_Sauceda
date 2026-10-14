@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
@@ -8,7 +9,10 @@ import { enviarDocumentoTelegram } from "@/lib/telegram-envios";
 import { registrarActividad } from "@/lib/actividades";
 import {
   SERVICIOS,
+  SLA_AUTORIZACION_CLAVE,
   armarPaqueteAutorizacion,
+  enlaceVistoAutorizacion,
+  obtenerSlaAutorizacionHoras,
   listarDestinatariosAutorizacion,
   type DestinatarioAutorizacion,
   type RegistroAutorizacionCosto,
@@ -97,20 +101,25 @@ export async function enviarAutorizacionCostosAction(
         enviados.push({ nombre: d.nombre, ok: false, error: "Sin Telegram vinculado" });
         continue;
       }
+      const vistoToken = randomUUID();
       const r = await enviarDocumentoTelegram({
         botToken,
         chatId: d.telegramChatId,
         contenido: paquete.pdf,
         nombreArchivo: paquete.nombreArchivo,
         caption: paquete.caption,
-        inlineKeyboard: [[
-          { text: "✅ Autorizar costo", callback_data: `k:${cotizacionId}:1` },
-          { text: "❌ Rechazar", callback_data: `k:${cotizacionId}:0` },
-        ]],
+        inlineKeyboard: [
+          [{ text: "📄 Ver cotización", url: enlaceVistoAutorizacion(cotizacionId, vistoToken) }],
+          [
+            { text: "✅ Autorizar costo", callback_data: `k:${cotizacionId}:1` },
+            { text: "❌ Rechazar", callback_data: `k:${cotizacionId}:0` },
+          ],
+        ],
       });
       registros[d.clave] = {
         nombre: d.nombre, tipo: d.tipo, ok: r.ok, enviadoAt: ahora, messageId: r.messageId,
         error: r.ok ? undefined : r.error, respuesta: null, respondidoAt: null,
+        vistoToken, vistoAt: null,
       };
       enviados.push({ nombre: d.nombre, ok: r.ok, error: r.error });
     }
@@ -147,20 +156,28 @@ export interface AutorizacionProveedor {
   estatusCotizacion: string;
   precioFinal: number;
   proveedor: string;
+  /** Entregado = Telegram aceptó el mensaje; no_entregado = falló el envío (sin Telegram, bot bloqueado, etc.). */
+  entrega: "entregado" | "no_entregado";
   estado: "esperando" | "autorizado" | "rechazado" | "error";
   enviadoAt: string;
+  vistoAt: string | null;
   respondidoAt: string | null;
+  /** Fecha límite para responder según el SLA vigente. */
+  slaVenceAt: string;
   error?: string;
 }
 
 /** Todas las solicitudes de autorización de costo enviadas a proveedores, de todas las cotizaciones. */
-export async function listarAutorizacionesProveedoresAction(): Promise<AutorizacionProveedor[]> {
+export async function listarAutorizacionesProveedoresAction(): Promise<{ filas: AutorizacionProveedor[]; slaHoras: number }> {
   await requireAdmin();
   const sb = supabaseServidor();
-  const { data, error } = await sb
-    .from("cotizaciones")
-    .select("id, servicio_tipo, estatus, precio_final, cliente_nombre_personalizado, autorizacion_costos, prospectos:prospecto_id(nombre, primer_apellido, segundo_apellido)")
-    .not("autorizacion_costos", "is", null);
+  const [{ data, error }, slaHoras] = await Promise.all([
+    sb
+      .from("cotizaciones")
+      .select("id, servicio_tipo, estatus, precio_final, cliente_nombre_personalizado, autorizacion_costos, prospectos:prospecto_id(nombre, primer_apellido, segundo_apellido)")
+      .not("autorizacion_costos", "is", null),
+    obtenerSlaAutorizacionHoras(sb),
+  ]);
   if (error) throw new Error(error.message);
 
   const filas: AutorizacionProveedor[] = [];
@@ -180,12 +197,35 @@ export async function listarAutorizacionesProveedoresAction(): Promise<Autorizac
         estatusCotizacion: c.estatus,
         precioFinal: Number(c.precio_final || 0),
         proveedor: reg.nombre,
+        entrega: reg.ok ? "entregado" : "no_entregado",
         estado: !reg.ok ? "error" : reg.respuesta === "autorizado" ? "autorizado" : reg.respuesta === "rechazado" ? "rechazado" : "esperando",
         enviadoAt: reg.enviadoAt,
+        vistoAt: reg.vistoAt || null,
         respondidoAt: reg.respondidoAt || null,
+        slaVenceAt: new Date(new Date(reg.enviadoAt).getTime() + slaHoras * 3_600_000).toISOString(),
         error: reg.error,
       });
     }
   }
-  return filas.sort((a, b) => a.enviadoAt.localeCompare(b.enviadoAt));
+  filas.sort((a, b) => a.enviadoAt.localeCompare(b.enviadoAt));
+  return { filas, slaHoras };
+}
+
+/** Cambia las horas de SLA para que los proveedores respondan (aplica a todo el equipo). */
+export async function guardarSlaAutorizacionAction(horas: number): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdmin();
+    if (!Number.isFinite(horas) || horas <= 0 || horas > 720) {
+      return { ok: false, error: "Indica un número de horas entre 1 y 720." };
+    }
+    const sb = supabaseServidor();
+    const { error } = await sb
+      .from("configuracion_agente")
+      .upsert({ clave: SLA_AUTORIZACION_CLAVE, valor: String(horas) }, { onConflict: "clave" });
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/proveedores");
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "No se pudo guardar el SLA." };
+  }
 }

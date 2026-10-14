@@ -18,6 +18,7 @@ export default async function PaginaProveedores() {
 
   let proveedores: Proveedor[] = [];
   let autorizaciones: AutorizacionProveedor[] = [];
+  let slaHoras = 24;
 
   try {
     proveedores = await listarProveedores();
@@ -29,7 +30,7 @@ export default async function PaginaProveedores() {
   }
 
   try {
-    autorizaciones = await listarAutorizacionesProveedoresAction();
+    ({ filas: autorizaciones, slaHoras } = await listarAutorizacionesProveedoresAction());
   } catch (err) {
     console.error("Error al cargar autorizaciones de proveedores:", err);
   }
@@ -79,7 +80,7 @@ export default async function PaginaProveedores() {
           </div>
         </div>
 
-        <PanelAutorizacionesProveedores autorizaciones={autorizaciones} />
+        <PanelAutorizacionesProveedores autorizaciones={autorizaciones} slaHoras={slaHoras} />
 
         <TablaProveedores proveedoresIniciales={proveedores} categoriasDisponibles={categoriasDisponibles} />
       </div>

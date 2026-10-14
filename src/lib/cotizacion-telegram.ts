@@ -17,6 +17,44 @@ export interface RegistroAutorizacionCosto {
   error?: string;
   respuesta?: "autorizado" | "rechazado" | null;
   respondidoAt?: string | null;
+  /** Token del botón "Ver cotización"; al abrirlo se marca vistoAt. */
+  vistoToken?: string;
+  /** Primera vez que abrió el enlace o respondió (Telegram no da confirmación de lectura a bots). */
+  vistoAt?: string | null;
+}
+
+export const SLA_AUTORIZACION_CLAVE = "sla_autorizacion_proveedor_horas";
+export const SLA_AUTORIZACION_DEFAULT_HORAS = 24;
+
+/** Horas que tiene un proveedor para responder la autorización de costo. */
+export async function obtenerSlaAutorizacionHoras(sb: SupabaseClient): Promise<number> {
+  const { data } = await sb.from("configuracion_agente").select("valor").eq("clave", SLA_AUTORIZACION_CLAVE).maybeSingle();
+  const horas = Number(data?.valor);
+  return Number.isFinite(horas) && horas > 0 ? horas : SLA_AUTORIZACION_DEFAULT_HORAS;
+}
+
+/** Enlace del botón "Ver cotización" que registra que el destinatario abrió la cotización. */
+export function enlaceVistoAutorizacion(cotizacionId: string, vistoToken: string): string {
+  const siteUrl = process.env.SITE_URL || "https://crm.saucedamx.com";
+  return `${siteUrl}/api/telegram/visto/${encodeURIComponent(cotizacionId)}/${vistoToken}`;
+}
+
+/** Marca como visto el registro cuyo vistoToken coincide. Devuelve el token público de la cotización. */
+export async function registrarVistoAutorizacion(
+  sb: SupabaseClient,
+  cotizacionId: string,
+  vistoToken: string
+): Promise<{ ok: boolean; tokenCotizacion?: string }> {
+  const { data: cot } = await sb.from("cotizaciones").select("token, autorizacion_costos").eq("id", cotizacionId).maybeSingle();
+  if (!cot) return { ok: false };
+  const actual = (cot.autorizacion_costos as Record<string, RegistroAutorizacionCosto>) || {};
+  const clave = Object.keys(actual).find((k) => actual[k]?.vistoToken === vistoToken);
+  if (!clave) return { ok: false, tokenCotizacion: cot.token };
+  if (!actual[clave].vistoAt) {
+    actual[clave] = { ...actual[clave], vistoAt: new Date().toISOString() };
+    await sb.from("cotizaciones").update({ autorizacion_costos: actual }).eq("id", cotizacionId);
+  }
+  return { ok: true, tokenCotizacion: cot.token };
 }
 
 export type DestinatarioAutorizacion = {
@@ -135,7 +173,8 @@ export async function registrarRespuestaAutorizacion(
   const actual = (cot?.autorizacion_costos as Record<string, RegistroAutorizacionCosto>) || {};
   const reg = actual[clave];
   if (!reg) return { ok: false };
-  actual[clave] = { ...reg, respuesta, respondidoAt: new Date().toISOString() };
+  const ahora = new Date().toISOString();
+  actual[clave] = { ...reg, respuesta, respondidoAt: ahora, vistoAt: reg.vistoAt || ahora };
   await sb.from("cotizaciones").update({ autorizacion_costos: actual }).eq("id", cotizacionId);
   return { ok: true, registro: actual[clave] };
 }
