@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
 import { labelTipoNegocio, type TipoNegocioId } from "@/lib/types";
 import { visualNegocio } from "@/lib/negocios-visual";
 
@@ -648,6 +648,27 @@ export function ProductosClient({
     return matchBusqueda && matchTipo && matchCC;
   });
 
+  // Agrupado por modelo de negocio, en el orden del selector; los que no tienen modelo al final.
+  const gruposProd = [...TIPOS_NEGOCIO_PRODUCTO, "" as const]
+    .map((clave) => {
+      const items = productosFiltrados.filter((p) => (p.tipoNegocio || "") === clave);
+      const conPrecio = items.filter((p) => p.precioUnitario > 0 && p.costoUnitario > 0);
+      const margenProm = conPrecio.length
+        ? Math.round(
+            conPrecio.reduce((acc, p) => acc + ((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100, 0) /
+              conPrecio.length
+          )
+        : null;
+      return {
+        clave,
+        nombre: clave ? labelTipoNegocio(clave) : "Sin modelo de negocio",
+        icono: clave ? visualNegocio(clave).icono : "🏷️",
+        items,
+        margenProm,
+      };
+    })
+    .filter((g) => g.items.length > 0);
+
   // Filtros Insumos
   const insumosFiltrados = insumos.filter((i) => {
     const matchBusqueda =
@@ -832,7 +853,31 @@ export function ProductosClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-carbon/5 font-cuerpo text-carbon">
-                    {productosFiltrados.map((p) => {
+                    {gruposProd.map((g) => (
+                    <Fragment key={g.clave || "sin-modelo"}>
+                      <tr className={g.clave ? "bg-slate-50" : "bg-amber-50/70"}>
+                        <td colSpan={11} className="px-3.5 py-2">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="font-titular text-sm font-bold text-verde-profundo">
+                              {g.icono} {g.nombre}
+                            </span>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-carbon/60 ring-1 ring-carbon/10">
+                              {g.items.length} {g.items.length === 1 ? "concepto" : "conceptos"}
+                            </span>
+                            {g.margenProm !== null && (
+                              <span className="text-[11px] text-carbon/55">
+                                Margen prom. <b className="text-emerald-700">{g.margenProm}%</b>
+                              </span>
+                            )}
+                            {!g.clave && (
+                              <span className="text-[11px] text-amber-800">
+                                Asígnales un modelo de negocio en su ficha para ligarlos a los leads y a Sofía.
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    {g.items.map((p) => {
                       const fotoPrincipal = p.fotos?.[0]?.url;
                       const margen = p.precioUnitario > 0 
                         ? Math.round(((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100) 
@@ -984,6 +1029,8 @@ export function ProductosClient({
                         </tr>
                       );
                     })}
+                    </Fragment>
+                    ))}
                   </tbody>
                   {/* Resumen al pie de la tabla tipo Excel */}
                   <tfoot className="bg-slate-50/90 border-t border-carbon/10 font-mono text-xs text-carbon/70">
@@ -1025,8 +1072,24 @@ export function ProductosClient({
               </div>
             </div>
           ) : (
+            <div className="space-y-6">
+            {gruposProd.map((g) => (
+            <section key={g.clave || "sin-modelo"} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-carbon/10 pb-2">
+                <h3 className="font-titular text-base font-bold text-verde-profundo">
+                  {g.icono} {g.nombre}
+                </h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-carbon/60">
+                  {g.items.length} {g.items.length === 1 ? "concepto" : "conceptos"}
+                </span>
+                {g.margenProm !== null && (
+                  <span className="text-[11px] text-carbon/55">
+                    Margen prom. <b className="text-emerald-700">{g.margenProm}%</b>
+                  </span>
+                )}
+              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {productosFiltrados.map((p) => {
+              {g.items.map((p) => {
                 const fotoPrincipal = p.fotos?.[0]?.url;
                 const margen = p.precioUnitario > 0 
                   ? Math.round(((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100) 
@@ -1157,6 +1220,9 @@ export function ProductosClient({
                   </div>
                 );
               })}
+            </div>
+            </section>
+            ))}
             </div>
           )}
         </div>
