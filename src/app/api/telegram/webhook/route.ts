@@ -49,11 +49,18 @@ export async function POST(req: NextRequest) {
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload)) {
         const { data: perfil } = await sb
           .from("perfiles")
-          .select("id, nombre")
+          .select("id, nombre, telegram_chat_id")
           .eq("id", payload)
           .maybeSingle();
 
-        if (perfil) {
+        if (perfil?.telegram_chat_id && String(perfil.telegram_chat_id) !== chatId) {
+          // El enlace pudo reenviarse: no se le quitan los mensajes a la cuenta ya vinculada.
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: "Este enlace ya está vinculado con otra cuenta de Telegram. Si cambiaste de teléfono o cuenta, pide al administrador que la desvincule y te mande el enlace de nuevo.",
+          });
+        } else if (perfil) {
           await sb
             .from("perfiles")
             .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })
@@ -77,8 +84,15 @@ export async function POST(req: NextRequest) {
       // Vinculación de un proveedor: https://t.me/<bot>?start=prov_<id del proveedor>
       const mProv = payload.match(/^prov_([0-9a-f-]{36})$/i);
       if (mProv) {
-        const { data: prov } = await sb.from("proveedores").select("id, nombre").eq("id", mProv[1]).maybeSingle();
-        if (prov) {
+        const { data: prov } = await sb.from("proveedores").select("id, nombre, telegram_chat_id").eq("id", mProv[1]).maybeSingle();
+        if (prov?.telegram_chat_id && String(prov.telegram_chat_id) !== chatId) {
+          // El enlace pudo reenviarse: no se le quitan las cotizaciones a la cuenta ya vinculada.
+          await enviarMensajeTelegram({
+            botToken,
+            chatId,
+            texto: "Este enlace ya está vinculado con otra cuenta de Telegram. Si cambiaste de teléfono o cuenta, pide a SAUCEDA que la desvincule y te mande el enlace de nuevo.",
+          });
+        } else if (prov) {
           await sb
             .from("proveedores")
             .update({ telegram_chat_id: chatId, telegram_username: from?.username || null })

@@ -6,6 +6,7 @@ import { labelTipoNegocio, type MensajeChat, type TipoNegocioId } from "@/lib/ty
 import {
   cancelarCotizacionEspecial,
   crearCotizacionEspecial,
+  desvincularTelegramProveedor,
   enviarEstimacionEspecial,
   estructurarCotizacionEspecial,
   listarCotizacionesEspecialesConversacion,
@@ -392,6 +393,18 @@ function ModalNuevaCotizacionEspecial({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function desvincular(p: ProveedorParaEspecial) {
+    const cuenta = p.telegramUsuario ? ` (@${p.telegramUsuario})` : "";
+    if (!confirm(`¿Desvincular el Telegram${cuenta} de ${p.nombre}? Dejará de recibir cotizaciones hasta que abra su link de nuevo.`)) return;
+    const r = await desvincularTelegramProveedor(p.id);
+    if (!r.ok) {
+      alert(r.error);
+      return;
+    }
+    setElegidos((prev) => prev.filter((x) => x !== p.id));
+    setProveedores((prev) => prev && prev.map((x) => (x.id === p.id ? { ...x, tieneTelegram: false, telegramUsuario: null } : x)));
+  }
+
   useEffect(() => {
     setProveedores(null);
     proveedoresParaEspecial(linea || null)
@@ -571,7 +584,14 @@ function ModalNuevaCotizacionEspecial({
                         {p.enLinea && <span className="text-[10px] text-sauce">· trabaja esta línea</span>}
                       </label>
                       {p.tieneTelegram ? (
-                        <span className="text-[10.5px] font-semibold text-emerald-700">✓ Telegram</span>
+                        <span className="flex items-center gap-2 text-[10.5px]">
+                          <span className="font-semibold text-emerald-700" title="Cuenta de Telegram que recibe las cotizaciones">
+                            ✓ Telegram{p.telegramUsuario ? ` @${p.telegramUsuario}` : ""}
+                          </span>
+                          <button type="button" onClick={() => desvincular(p)} className="text-carbon/50 hover:text-rojo hover:underline">
+                            Desvincular
+                          </button>
+                        </span>
                       ) : p.enlaceTelegram ? (
                         <button
                           type="button"

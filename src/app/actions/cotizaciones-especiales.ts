@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, requireAdministrador, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { supabaseServidor } from "@/lib/supabase/server";
 import {
   calcularEstimacion,
@@ -61,6 +61,8 @@ export interface ProveedorParaEspecial {
   /** Tiene ofertas en servicios de esa línea de negocio. */
   enLinea: boolean;
   tieneTelegram: boolean;
+  /** @usuario de la cuenta vinculada, para confirmar que es la del proveedor. */
+  telegramUsuario: string | null;
   enlaceTelegram: string | null;
 }
 
@@ -100,8 +102,10 @@ function aCotizacion(f: any): CotizacionEspecial {
   };
 }
 
+// Hay dos relaciones entre las tablas (respuesta -> cotización y respuesta_elegida): se indica cuál usar,
+// si no PostgREST responde "más de una relación" y la lista sale vacía.
 const SELECT_CE =
-  "*, cotizaciones_especiales_respuestas ( id, proveedor_id, estado, precio, tiempo, incluye, fecha_limite, respondida_at, proveedores:proveedor_id ( nombre ) )";
+  "*, cotizaciones_especiales_respuestas!cotizaciones_especiales_respuestas_cotizacion_especial_id_fkey ( id, proveedor_id, estado, precio, tiempo, incluye, fecha_limite, respondida_at, proveedores:proveedor_id ( nombre ) )";
 
 /** Cotizaciones especiales de una conversación, la más reciente primero. */
 export async function listarCotizacionesEspecialesConversacion(telefono: string): Promise<CotizacionEspecial[]> {
@@ -114,7 +118,10 @@ export async function listarCotizacionesEspecialesConversacion(telefono: string)
     .neq("estado", "cancelada")
     .order("created_at", { ascending: false })
     .limit(10);
-  if (error) return [];
+  if (error) {
+    console.error("[Cotizaciones especiales] Error al listar:", error.message);
+    return [];
+  }
   return (data || []).map(aCotizacion);
 }
 
@@ -123,7 +130,7 @@ export async function proveedoresParaEspecial(tipoNegocio: string | null): Promi
   await requireAdmin();
   const sb = supabaseServidor();
   const [{ data: provs }, { data: ofertas }, bot] = await Promise.all([
-    sb.from("proveedores").select("id, nombre, telegram_chat_id").eq("activo", true).order("nombre"),
+    sb.from("proveedores").select("id, nombre, telegram_chat_id, telegram_username").eq("activo", true).order("nombre"),
     sb
       .from("proveedor_productos")
       .select("proveedor_id, productos_servicios:producto_id ( tipo_negocio )")
@@ -141,9 +148,24 @@ export async function proveedoresParaEspecial(tipoNegocio: string | null): Promi
       nombre: p.nombre,
       enLinea: enLinea.has(p.id),
       tieneTelegram: !!p.telegram_chat_id,
+      telegramUsuario: p.telegram_username || null,
       enlaceTelegram: bot ? `https://t.me/${bot}?start=prov_${p.id}` : null,
     }))
     .sort((a, b) => Number(b.enLinea) - Number(a.enLinea) || a.nombre.localeCompare(b.nombre, "es"));
+}
+
+/** Quita el Telegram vinculado a un proveedor (cuenta equivocada o cambio de teléfono). */
+export async function desvincularTelegramProveedor(proveedorId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdministrador();
+    const { error } = await supabaseServidor()
+      .from("proveedores")
+      .update({ telegram_chat_id: null, telegram_username: null })
+      .eq("id", proveedorId);
+    return error ? { ok: false, error: error.message } : { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "No se pudo desvincular." };
+  }
 }
 
 /** Crea la cotización especial y la manda por Telegram a los proveedores elegidos. */
