@@ -11,6 +11,7 @@
  */
 
 import { supabaseServidor } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { esTokenCargaValido } from "@/lib/asesoria/aliados";
 import { normalizarCostosVolumen } from "@/lib/costos-volumen";
 import { costosCapacidadAJson, medidaTarifa, normalizarCostosCapacidad, type MedidaTarifa } from "@/lib/tarifas-capacidad";
@@ -119,6 +120,28 @@ export async function obtenerPortalPrecios(
   if (error) return { ok: false, mensaje: "No se pudo cargar la información. Intenta de nuevo." };
   const ofertas = (data || []).map(aOfertaPortal).sort((a, b) => a.productoNombre.localeCompare(b.productoNombre, "es"));
   return { ok: true, proveedorNombre: proveedor.nombre, ofertas };
+}
+
+/** Lo mismo que ve el proveedor en su link, para descargar su ficha en PDF desde el CRM. */
+export async function obtenerFichaProveedorAdmin(
+  proveedorId: string
+): Promise<{ ok: boolean; mensaje?: string; proveedorNombre?: string; ofertas?: OfertaPortalProveedor[] }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { ok: false, mensaje: "No autorizado." };
+  }
+  const sb = supabaseServidor();
+  const { data: p } = await sb.from("proveedores").select("nombre").eq("id", proveedorId).maybeSingle();
+  if (!p) return { ok: false, mensaje: "El proveedor no existe." };
+  const { data, error } = await sb
+    .from("proveedor_productos")
+    .select(SELECT_PORTAL)
+    .eq("proveedor_id", proveedorId)
+    .eq("activo", true);
+  if (error) return { ok: false, mensaje: "No se pudo cargar la información." };
+  const ofertas = (data || []).map(aOfertaPortal).sort((a, b) => a.productoNombre.localeCompare(b.productoNombre, "es"));
+  return { ok: true, proveedorNombre: p.nombre, ofertas };
 }
 
 /** URL firmada para que el proveedor suba una foto a su carpeta del catálogo. */

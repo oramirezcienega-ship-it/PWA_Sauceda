@@ -13,6 +13,7 @@ import {
   obtenerHistorialOferta,
   obtenerLinkPreciosProveedor,
 } from "@/app/actions/proveedor-productos";
+import { obtenerFichaProveedorAdmin } from "@/app/actions/portal-precios-proveedor";
 import { ModalOfertaProveedor } from "./ModalOfertaProveedor";
 
 interface OfertasProveedorProductoProps {
@@ -455,6 +456,19 @@ function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
     setAbierto(true);
   }
 
+  const [generandoPdf, setGenerandoPdf] = useState(false);
+  async function descargarPdf() {
+    setGenerandoPdf(true);
+    try {
+      const res = await obtenerFichaProveedorAdmin(proveedorId);
+      if (!res.ok) return alert(res.mensaje || "No se pudo generar el PDF.");
+      const { descargarFichaProveedorPdf } = await import("@/lib/fichaProveedorPdf");
+      descargarFichaProveedorPdf(res.proveedorNombre || "Proveedor", res.ofertas || []);
+    } finally {
+      setGenerandoPdf(false);
+    }
+  }
+
   async function copiar() {
     if (!link) return;
     try {
@@ -518,6 +532,14 @@ function LinkPreciosProveedor({ proveedorId }: { proveedorId: string }) {
             >
               Ver como proveedor
             </a>
+            <button
+              type="button"
+              onClick={descargarPdf}
+              disabled={generandoPdf}
+              className="rounded-md border border-sauce/40 px-2.5 py-1 text-[11px] font-semibold text-sauce disabled:opacity-50"
+            >
+              {generandoPdf ? "Generando…" : "📄 PDF"}
+            </button>
             <button
               type="button"
               onClick={() => obtener(true)}

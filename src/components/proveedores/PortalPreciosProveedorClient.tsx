@@ -28,9 +28,9 @@ function formatoFecha(iso: string): string {
   return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-/** Columnas de la tabla de servicios en escritorio: servicio, costo, garantía, tiempo, anticipo, zonas, acción. */
+/** Columnas de la tabla de servicios en escritorio: servicio, costo, proceso, condiciones, acción. */
 const COLUMNAS_FILA =
-  "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1fr)_7.5rem]";
+  "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,2.4fr)_minmax(0,1.7fr)_6.5rem]";
 
 /** Datos que le faltan a una oferta para que podamos cotizar con ella. */
 function faltantesOferta(o: OfertaPortalProveedor): string[] {
@@ -53,7 +53,7 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
   const pct = ofertas.length ? Math.round((completas / ofertas.length) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-6 font-cuerpo">
+    <div className="mx-auto max-w-[1600px] px-4 pt-6 font-cuerpo lg:px-8">
       <header className="flex flex-col gap-4 rounded-2xl bg-gradient-to-r from-verde-profundo to-sauce p-5 text-white shadow-md lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-wider text-crema/80">SAUCEDA · Proveedores</div>
@@ -98,10 +98,8 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
           >
             <span>Servicio</span>
             <span>Tu costo</span>
-            <span>🛡️ Garantía</span>
-            <span>⏱️ Tiempo</span>
-            <span>💳 Anticipo</span>
-            <span>📍 Zonas</span>
+            <span>🛠️ Proceso de trabajo</span>
+            <span>Condiciones</span>
             <span />
           </div>
           {ofertas.map((o) => (
@@ -114,6 +112,22 @@ export function PortalPreciosProveedorClient({ token, proveedorNombre, ofertasIn
               onGuardada={(nueva) => setOfertas((prev) => prev.map((x) => (x.id === nueva.id ? nueva : x)))}
             />
           ))}
+        </div>
+      )}
+
+      {ofertas.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+          <span className="text-xs text-carbon/50">¿Prefieres revisarlo en papel o compartirlo?</span>
+          <button
+            type="button"
+            onClick={async () => {
+              const { descargarFichaProveedorPdf } = await import("@/lib/fichaProveedorPdf");
+              descargarFichaProveedorPdf(proveedorNombre, ofertas);
+            }}
+            className="rounded-lg border border-sauce/40 bg-white px-4 py-2 text-sm font-bold text-sauce shadow-sm hover:bg-sauce hover:text-white"
+          >
+            📄 Descargar resumen en PDF
+          </button>
         </div>
       )}
 
@@ -139,26 +153,26 @@ function TarjetaOferta({
   onGuardada: (o: OfertaPortalProveedor) => void;
 }) {
   const [aviso, setAviso] = useState<string | null>(null);
-  const [verProceso, setVerProceso] = useState(false);
   const faltan = faltantesOferta(oferta);
   const medida = oferta.productoTarifaMedida;
   const sinCosto = faltan.includes("costo");
   const vencido = oferta.vigenciaPrecio ? new Date(`${oferta.vigenciaPrecio}T23:59:59`) < new Date() : false;
 
+  const unir = (...partes: string[]) => partes.map((x) => x.trim()).filter(Boolean).join(" · ");
   const hitos: { icono: string; etiqueta: string; valor: string }[] = [
     {
       icono: "🛡️",
       etiqueta: "Garantía",
-      valor:
-        oferta.garantiaAnios > 0
-          ? `${oferta.garantiaAnios} ${oferta.garantiaAnios === 1 ? "año" : "años"}`
-          : oferta.garantiaCondiciones.trim(),
+      valor: unir(
+        oferta.garantiaAnios > 0 ? `${oferta.garantiaAnios} ${oferta.garantiaAnios === 1 ? "año" : "años"}` : "",
+        oferta.garantiaCondiciones
+      ),
     },
     { icono: "⏱️", etiqueta: "Tiempo", valor: oferta.tiempoEjecucion.trim() },
     {
       icono: "💳",
-      etiqueta: "Anticipo",
-      valor: oferta.anticipoPct > 0 ? `${oferta.anticipoPct}%` : oferta.condicionesPago.trim(),
+      etiqueta: "Pago",
+      valor: unir(oferta.anticipoPct > 0 ? `${oferta.anticipoPct}% de anticipo` : "", oferta.condicionesPago),
     },
     { icono: "📍", etiqueta: "Zonas", valor: oferta.zonasCobertura.trim() },
   ];
@@ -166,7 +180,7 @@ function TarjetaOferta({
   return (
     <div className={editando ? "bg-sauce/[0.03] ring-2 ring-inset ring-sauce/30" : ""}>
       <div
-        className={`grid gap-3 p-4 lg:items-center lg:gap-4 lg:px-5 lg:py-3.5 ${COLUMNAS_FILA} ${
+        className={`grid gap-4 p-4 lg:items-start lg:gap-6 lg:px-6 lg:py-5 ${COLUMNAS_FILA} ${
           editando ? "" : "hover:bg-slate-50/70"
         }`}
       >
@@ -230,22 +244,27 @@ function TarjetaOferta({
           )}
         </div>
 
-        {/* Hitos: en celular como cuadrícula con etiqueta; en escritorio como columnas de la tabla */}
-        <div className="grid grid-cols-2 gap-2 lg:contents">
+        {/* Proceso completo */}
+        <div className="min-w-0">
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-carbon/45 lg:hidden">🛠️ Proceso de trabajo</div>
+          {oferta.descripcionProceso.trim() ? (
+            <p className="whitespace-pre-line break-words text-sm leading-relaxed text-carbon/80">{oferta.descripcionProceso.trim()}</p>
+          ) : (
+            <p className="text-sm text-carbon/35">Sin describir</p>
+          )}
+        </div>
+
+        {/* Condiciones completas */}
+        <dl className="min-w-0 space-y-2 rounded-xl bg-slate-50 p-3 text-sm">
           {hitos.map((h) => (
-            <div key={h.etiqueta} className="min-w-0 rounded-lg bg-slate-50 px-3 py-2 lg:bg-transparent lg:p-0">
-              <div className="text-[11px] text-carbon/50 lg:hidden">
+            <div key={h.etiqueta} className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
+              <dt className="text-xs text-carbon/50">
                 {h.icono} {h.etiqueta}
-              </div>
-              <div
-                className={`truncate text-sm ${h.valor ? "font-semibold text-carbon" : "text-carbon/30"}`}
-                title={h.valor || undefined}
-              >
-                {h.valor || "—"}
-              </div>
+              </dt>
+              <dd className={`break-words ${h.valor ? "font-semibold text-carbon" : "text-carbon/30"}`}>{h.valor || "—"}</dd>
             </div>
           ))}
-        </div>
+        </dl>
 
         {/* Acción */}
         <div className="flex items-center justify-between gap-3 border-t border-carbon/10 pt-3 lg:flex-col lg:items-end lg:gap-1 lg:border-0 lg:pt-0">
@@ -267,25 +286,6 @@ function TarjetaOferta({
           )}
         </div>
       </div>
-
-      {!editando && (
-        <div className="-mt-1 px-4 pb-3 lg:px-5">
-          {oferta.descripcionProceso.trim() ? (
-            <button
-              type="button"
-              onClick={() => setVerProceso((v) => !v)}
-              className="flex w-full items-baseline gap-1 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs text-carbon/75 hover:bg-slate-100"
-            >
-              <span className="shrink-0 font-bold text-verde-profundo">🛠️ Proceso:</span>
-              <span className={`min-w-0 ${verProceso ? "whitespace-pre-line" : "line-clamp-1"}`}>{oferta.descripcionProceso}</span>
-            </button>
-          ) : (
-            <div className="rounded-lg border border-dashed border-carbon/15 px-3 py-2 text-xs text-carbon/40">
-              🛠️ Proceso: sin describir
-            </div>
-          )}
-        </div>
-      )}
 
       {aviso && !editando && (
         <div className="mx-4 mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 lg:mx-5">{aviso}</div>
