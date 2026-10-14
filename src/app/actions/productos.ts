@@ -39,6 +39,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     centroCostoId: fila.centro_costo_id || null,
     centroCostoNombre: fila.business_units?.nombre || fila.centro_costo_nombre || null,
     codigoSubcuenta: fila.codigo_subcuenta || null,
+    tipoNegocio: fila.tipo_negocio || null,
     categoria: fila.categoria || "General",
     fotos: Array.isArray(fila.fotos) ? fila.fotos : [],
     videos: normalizarVideos(fila.videos),
@@ -228,6 +229,7 @@ export async function crearProductoServicio(datos: {
   tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
   centroCostoId?: string | null;
   codigoSubcuenta?: string | null;
+  tipoNegocio?: string | null;
   categoria?: string;
   fotos?: FotoProducto[];
   videos?: VideoProducto[];
@@ -268,6 +270,8 @@ export async function crearProductoServicio(datos: {
       tipo: datos.tipo || "servicio",
       centro_costo_id: datos.centroCostoId || null,
       codigo_subcuenta: datos.codigoSubcuenta || null,
+      // Sólo si viene: así crear sigue funcionando aunque la columna aún no exista (migración 0154).
+      ...(datos.tipoNegocio ? { tipo_negocio: datos.tipoNegocio } : {}),
       categoria: datos.categoria?.trim() || "General",
       fotos: Array.isArray(datos.fotos) ? datos.fotos : [],
       videos: videosAJson(datos.videos),
@@ -304,6 +308,7 @@ export async function editarProductoServicio(
     tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
     centroCostoId?: string | null;
     codigoSubcuenta?: string | null;
+    tipoNegocio?: string | null;
     categoria?: string;
     fotos?: FotoProducto[];
     videos?: VideoProducto[];
@@ -359,6 +364,9 @@ export async function editarProductoServicio(
   }
   if (datos.codigoSubcuenta !== undefined) {
     updatePayload.codigo_subcuenta = datos.codigoSubcuenta || null;
+  }
+  if (datos.tipoNegocio !== undefined) {
+    updatePayload.tipo_negocio = datos.tipoNegocio || null;
   }
   // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
   if (datos.fichaTecnicaUrl !== undefined) {

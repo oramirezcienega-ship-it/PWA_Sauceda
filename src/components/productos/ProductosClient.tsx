@@ -1,6 +1,25 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { labelTipoNegocio, type TipoNegocioId } from "@/lib/types";
+import { visualNegocio } from "@/lib/negocios-visual";
+
+const TIPOS_NEGOCIO_PRODUCTO: TipoNegocioId[] = [
+  "construccion-impermeabilizacion",
+  "construccion-mantenimiento-calentadores",
+  "construccion-mantenimiento-tinacos",
+  "construccion-mantenimiento-cisternas",
+  "construccion-mantenimiento-postventa",
+  "construccion-piso-estampado",
+  "construccion-herreria",
+  "construccion-remodelacion",
+  "construccion",
+  "traspaso_compra",
+  "promocion_venta",
+  "solo_tramite",
+  "asesoria_compra",
+  "otro",
+];
 import type { 
   ProductoServicio, 
   Insumo, 
@@ -95,6 +114,7 @@ export function ProductosClient({
   const [formCentroCostoId, setFormCentroCostoId] = useState("");
   // Subcuenta de marketing / especialidad (une ventas y publicidad en Finanzas)
   const [formCodigoSubcuenta, setFormCodigoSubcuenta] = useState("");
+  const [formTipoNegocio, setFormTipoNegocio] = useState("");
   const [subcuentasMkt, setSubcuentasMkt] = useState<
     Array<{ codigo: string; nombre: string; businessUnitId: string | null }>
   >([]);
@@ -181,6 +201,7 @@ export function ProductosClient({
     setFormTipo("servicio");
     setFormCentroCostoId(centrosCosto[0]?.id || "");
     setFormCodigoSubcuenta("");
+    setFormTipoNegocio("");
     setFormCategoria("General");
     setFormUnidad("m2");
     setFormCostoUnitario("");
@@ -211,6 +232,7 @@ export function ProductosClient({
     setFormTipo(p.tipo || "servicio");
     setFormCentroCostoId(p.centroCostoId || "");
     setFormCodigoSubcuenta(p.codigoSubcuenta || "");
+    setFormTipoNegocio(p.tipoNegocio || "");
     setFormCategoria(p.categoria || "General");
     setFormUnidad(p.unidad);
     setFormCostoUnitario(String(p.costoUnitario));
@@ -272,6 +294,8 @@ export function ProductosClient({
         tipo: formTipo,
         centroCostoId: formCentroCostoId || null,
         codigoSubcuenta: formCodigoSubcuenta || null,
+        // Sin modelo y sin uno previo no se manda (no toca la columna).
+        tipoNegocio: formTipoNegocio || (prodEditando?.tipoNegocio ? null : undefined),
         categoria: formCategoria.trim(),
         unidad: formUnidad.trim(),
         costoUnitario: Number(formCostoUnitario || 0),
@@ -1581,6 +1605,29 @@ export function ProductosClient({
                         onChange={(e) => setFormUnidad(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">
+                        Modelo de Negocio
+                      </label>
+                      <select
+                        value={formTipoNegocio}
+                        onChange={(e) => setFormTipoNegocio(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg border focus:border-sauce focus:outline-none bg-white ${
+                          formTipoNegocio ? "border-carbon/20" : "border-amber-300"
+                        }`}
+                      >
+                        <option value="">Sin modelo de negocio</option>
+                        {TIPOS_NEGOCIO_PRODUCTO.map((t) => (
+                          <option key={t} value={t}>
+                            {visualNegocio(t).icono} {labelTipoNegocio(t)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-carbon/50">
+                        Liga el producto con los leads de ese negocio y con lo que Sofía cotiza.
+                      </p>
                     </div>
                   </div>
 

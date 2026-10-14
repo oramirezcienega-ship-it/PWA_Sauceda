@@ -1187,6 +1187,8 @@ export interface ProductoServicio {
   centroCostoNombre?: string | null;
   /** Subcuenta de marketing / especialidad (ej. 601-01-001 Pub. Impermeabilización). */
   codigoSubcuenta?: string | null;
+  /** Modelo de negocio al que pertenece (liga el producto con los leads y el guion de Sofía). */
+  tipoNegocio?: TipoNegocioId | null;
   categoria?: string;
   fotos?: FotoProducto[];
   /** Videos de trabajos realizados (Sofía los envía cuando el cliente pide videos). */
