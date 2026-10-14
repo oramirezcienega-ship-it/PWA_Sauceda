@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { ESTATUS_OT_CERRADA, mensajeOtCerrada, ordenesCerradas } from "@/lib/cierre-ot";
 import { requireAdmin, usuarioActual, rolDe } from "@/lib/supabase/cliente-sesion";
 import { estadoContratoDeOrden } from "@/app/actions/contratos";
 import { armarGarantiaDesdeCotizacion } from "@/lib/garantia-producto";
@@ -59,6 +60,9 @@ export interface OrdenTrabajo {
   proveedorNombre?: string | null;
   costoProveedor: number | null;
   proveedorConcepto: string | null;
+  /** Servicio del catálogo y cantidad/capacidad del trabajo (migración 0157). */
+  productoId?: string | null;
+  cantidadServicio?: number | null;
   // Enriquecidos
   token: string;
   notificadoClienteAt?: string | null;
@@ -179,6 +183,8 @@ export async function crearOrdenTrabajo(datos: {
   proveedorId?: string | null;
   costoProveedor?: number | null;
   proveedorConcepto?: string | null;
+  /** Solo OT de asesoría de compra: el cliente ya tiene casa. */
+  yaTieneCasa?: boolean;
 }): Promise<{ ok: boolean; id?: string; folio?: string; error?: string }> {
   try {
     await requireAdmin();
@@ -234,7 +240,9 @@ export async function crearOrdenTrabajo(datos: {
       }
     }
 
-    // Si viene con expedienteId y no prospectoId, resolver prospecto
+    // Si viene con expedienteId y no prospectoId, resolver prospecto. El tipo del
+    // expediente solo se usa si no se eligió uno: un cliente puede tener OT de
+    // distintos tipos (p. ej. asesoría de compra y después impermeabilización).
     if (expedienteId && !prospectoId) {
       const { data: exp } = await sb
         .from("expedientes")
@@ -243,8 +251,13 @@ export async function crearOrdenTrabajo(datos: {
         .maybeSingle();
       if (exp) {
         prospectoId = exp.prospecto_id;
-        if (exp.tipo_negocio) tipoNegocio = exp.tipo_negocio;
+        if (!datos.tipoNegocio && exp.tipo_negocio) tipoNegocio = exp.tipo_negocio;
       }
+    }
+
+    // La asesoría de compra vive en la OT pero cuelga del expediente del comprador.
+    if (tipoNegocio === "asesoria_compra" && !expedienteId) {
+      return { ok: false, error: "La orden de asesoría de compra se inicia desde el expediente del cliente." };
     }
 
     const folio = await generarFolioOT(sb);
@@ -281,10 +294,27 @@ export async function crearOrdenTrabajo(datos: {
       return { ok: false, error: error.message };
     }
 
+    // Asesoría de compra: ficha, primera etapa y flujo BPM propios de la OT
+    // (no lleva póliza de garantía ni documentos de obra).
+    if (tipoNegocio === "asesoria_compra") {
+      const { inicializarOrdenAsesoria } = await import("@/app/actions/asesoria-compra");
+      const ini = await inicializarOrdenAsesoria(nuevaOT.id, { yaTieneCasa: datos.yaTieneCasa });
+      if (!ini.ok) console.error("Aviso: no se pudo inicializar la OT de asesoría:", ini.mensaje);
+      if (expedienteId) {
+        const { registrarActividad } = await import("@/lib/actividades");
+        await registrarActividad(sb, {
+          expedienteId,
+          tipo: "sistema",
+          titulo: `🔑 Orden de asesoría de compra ${nuevaOT.folio} iniciada`,
+          detalle: datos.yaTieneCasa ? "El cliente ya tiene casa: va directo al trámite." : "Inicia con la precalificación del comprador.",
+        });
+      }
+    }
+
     // Documentos base en automático (recibo si aplica, póliza de garantía,
     // remisión de venta si hay cotización con precio). Best-effort: si algo
     // falla aquí no debe impedir que la OT quede creada.
-    try {
+    if (tipoNegocio !== "asesoria_compra") try {
       let clienteNombre = "Cliente Sauceda";
       let direccionClienteOT: string | null = null;
       if (prospectoId) {
@@ -321,7 +351,13 @@ export async function crearOrdenTrabajo(datos: {
 /** Asigna (o cambia) el proveedor y el costo pactado con él para esta orden de trabajo. */
 export async function asignarProveedorOrdenTrabajo(
   ordenId: string,
-  datos: { proveedorId: string | null; costoProveedor: number | null; proveedorConcepto?: string | null }
+  datos: {
+    proveedorId: string | null;
+    costoProveedor: number | null;
+    proveedorConcepto?: string | null;
+    productoId?: string | null;
+    cantidadServicio?: number | null;
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin();
@@ -333,6 +369,10 @@ export async function asignarProveedorOrdenTrabajo(
         proveedor_id: datos.proveedorId || null,
         costo_proveedor: datos.costoProveedor && datos.costoProveedor > 0 ? datos.costoProveedor : null,
         proveedor_concepto: datos.proveedorConcepto?.trim() || null,
+        ...(datos.productoId !== undefined ? { producto_id: datos.productoId || null } : {}),
+        ...(datos.cantidadServicio !== undefined
+          ? { cantidad_servicio: datos.cantidadServicio && datos.cantidadServicio > 0 ? datos.cantidadServicio : null }
+          : {}),
         updated_at: new Date().toISOString(),
       })
       .eq("id", ordenId);
@@ -481,6 +521,8 @@ export async function obtenerOrdenesTrabajo(filtros?: {
         proveedorNombre: d.proveedores?.nombre || null,
         costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
         proveedorConcepto: d.proveedor_concepto,
+        productoId: d.producto_id ?? null,
+        cantidadServicio: d.cantidad_servicio !== null && d.cantidad_servicio !== undefined ? Number(d.cantidad_servicio) : null,
         asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
         asesorResponsableNombre: d.asesor_responsable?.nombre || "",
         clienteNombre: d.prospectos?.nombre || "Cliente General",
@@ -690,6 +732,8 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       proveedorNombre: d.proveedores?.nombre || null,
       costoProveedor: d.costo_proveedor !== null && d.costo_proveedor !== undefined ? Number(d.costo_proveedor) : null,
       proveedorConcepto: d.proveedor_concepto,
+        productoId: d.producto_id ?? null,
+        cantidadServicio: d.cantidad_servicio !== null && d.cantidad_servicio !== undefined ? Number(d.cantidad_servicio) : null,
       asesorEjecutorNombre: d.asesor_ejecutor?.nombre || "Sin asignar",
       asesorResponsableNombre: d.asesor_responsable?.nombre || "",
       clienteNombre: d.prospectos?.nombre || "Cliente General",
@@ -729,6 +773,21 @@ export async function actualizarEstatusOrdenTrabajo(
   try {
     await requireAdmin();
     const sb = supabaseServidor();
+
+    // Reabrir una OT completada vuelve editables sus recibos y comisiones: solo un administrador.
+    if (nuevoEstatus !== ESTATUS_OT_CERRADA) {
+      const { data: otActual } = await sb.from("ordenes_trabajo").select("estatus, folio").eq("id", ordenId).maybeSingle();
+      if (otActual?.estatus === ESTATUS_OT_CERRADA) {
+        const usuarioReabre = await usuarioActual();
+        const esAdminReabre = usuarioReabre ? (await rolDe(usuarioReabre.id)).rol === "admin" : false;
+        if (!esAdminReabre) {
+          return {
+            ok: false,
+            error: `La orden ${otActual.folio || ""} ya está completada; solo un administrador puede reabrirla.`,
+          };
+        }
+      }
+    }
 
     // La OT no pasa a "En proceso" sin contrato firmado (si nace de una
     // cotización). Un administrador puede forzarlo; queda en la bitácora.
@@ -1080,6 +1139,8 @@ export async function crearReciboPago(datos: {
   notas?: string;
   /** Persona (perfil) que recibe el dinero. Si no se indica, el usuario en sesión. */
   recibidoPorId?: string | null;
+  /** A nombre de quién sale el recibo (puede ser distinto del contacto). Vacío = nombre del contacto. */
+  clienteNombre?: string | null;
 }): Promise<{ ok: boolean; recibo?: ReciboPago; error?: string }> {
   try {
     await requireAdmin();
@@ -1151,7 +1212,7 @@ export async function crearReciboPago(datos: {
         orden_trabajo_id: datos.ordenTrabajoId,
         expediente_id: ot.expediente_id,
         cotizacion_id: ot.cotizacion_id,
-        cliente_nombre: prospecto?.nombre || "Cliente Sauceda",
+        cliente_nombre: datos.clienteNombre?.trim() || prospecto?.nombre || "Cliente Sauceda",
         cliente_telefono: prospecto?.telefono || null,
         cliente_direccion: null,
         monto,
@@ -1244,6 +1305,7 @@ async function repartirEnRecibos(datos: {
   conceptoBase?: string;
   referenciaPago?: string;
   notas?: string;
+  clienteNombre?: string | null;
 }): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
   const n = Math.min(12, Math.max(1, Math.floor(Number(datos.numRecibos) || 1)));
   const total = Math.round(Number(datos.montoTotal) * 100) / 100;
@@ -1271,6 +1333,7 @@ async function repartirEnRecibos(datos: {
       fechaPago: datos.fechaPago,
       notas: datos.notas,
       recibidoPorId: datos.recibidoPorId,
+      clienteNombre: datos.clienteNombre,
     });
     if (!res.ok || !res.recibo) {
       return {
@@ -1295,6 +1358,7 @@ export async function emitirRecibosEnPartes(datos: {
   concepto?: string;
   referenciaPago?: string;
   notas?: string;
+  clienteNombre?: string | null;
 }): Promise<{ ok: boolean; recibos: ReciboPago[]; error?: string }> {
   try {
     await requireAdmin();
@@ -1317,6 +1381,7 @@ export async function emitirRecibosEnPartes(datos: {
       conceptoBase: datos.concepto,
       referenciaPago: datos.referenciaPago,
       notas: datos.notas,
+      clienteNombre: datos.clienteNombre,
     });
   } catch (err: any) {
     return { ok: false, recibos: [], error: err?.message || "Error al emitir los recibos." };
@@ -1386,6 +1451,8 @@ export async function actualizarReciboPago(
     fechaPago?: string;
     notas?: string;
     recibidoPorId?: string | null;
+    /** A nombre de quién sale el recibo. */
+    clienteNombre?: string;
   }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -1398,6 +1465,10 @@ export async function actualizarReciboPago(
       .eq("id", reciboId)
       .maybeSingle();
     if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    // Con la orden de trabajo completada, sus recibos quedan cerrados.
+    const otCerrada = (await ordenesCerradas(sb, [actual.orden_trabajo_id])).get(actual.orden_trabajo_id);
+    if (otCerrada) return { ok: false, error: mensajeOtCerrada(otCerrada, "recibos") };
 
     const cambios: Record<string, any> = { updated_at: new Date().toISOString() };
 
@@ -1415,6 +1486,10 @@ export async function actualizarReciboPago(
     }
     if (datos.fechaPago) cambios.fecha_pago = datos.fechaPago;
     if (datos.notas !== undefined) cambios.notas = datos.notas.trim() || null;
+    if (datos.clienteNombre !== undefined) {
+      if (!datos.clienteNombre.trim()) return { ok: false, error: "Indica a nombre de quién sale el recibo." };
+      cambios.cliente_nombre = datos.clienteNombre.trim();
+    }
 
     if (datos.recibidoPorId) {
       const { data: perf } = await sb
@@ -1453,6 +1528,10 @@ export async function eliminarReciboPago(reciboId: string): Promise<{ ok: boolea
       .eq("id", reciboId)
       .maybeSingle();
     if (!actual) return { ok: false, error: "Recibo no encontrado." };
+
+    // Con la orden de trabajo completada, sus recibos quedan cerrados.
+    const otCerrada = (await ordenesCerradas(sb, [actual.orden_trabajo_id])).get(actual.orden_trabajo_id);
+    if (otCerrada) return { ok: false, error: mensajeOtCerrada(otCerrada, "recibos") };
 
     // No se elimina si una comisión ligada a este recibo ya tiene pagos aplicados
     const { data: coms } = await sb
@@ -1749,12 +1828,108 @@ export async function obtenerGarantiaOTPorToken(
 }
 
 /** 11. Generar Remisión de Entrega o Factura directamente desde la Orden de Trabajo */
+function aRemisionFacturaBasica(rem: any): RemisionFactura {
+  return {
+    id: rem.id,
+    cotizacionId: rem.cotizacion_id,
+    ordenTrabajoId: rem.orden_trabajo_id,
+    expedienteId: rem.expediente_id,
+    tipo: rem.tipo,
+    folio: rem.folio,
+    fecha: rem.fecha,
+    tipoCambio: Number(rem.tipo_cambio || 1.0),
+    datosDocumento: rem.datos_documento || {},
+    serviciosExtra: Number(rem.servicios_extra || 0),
+    costoFinanciero: Number(rem.costo_financiero || 0),
+    otrosGastos: Number(rem.otros_gastos || 0),
+    montoSubtotal: Number(rem.monto_subtotal || 0),
+    montoTotal: Number(rem.monto_total || 0),
+    createdAt: rem.created_at,
+    updatedAt: rem.updated_at,
+  };
+}
+
+/**
+ * Edita los datos del documento de una remisión o factura ya emitida: a nombre de
+ * quién sale, quién recibe, dirección y datos fiscales. No toca montos ni costos.
+ * Con la orden de trabajo completada queda cerrada (un administrador la reabre).
+ */
+export async function actualizarDatosDocumentoRemision(
+  remisionId: string,
+  datos: {
+    nombreCliente?: string;
+    personaRecibe?: string;
+    direccionEntrega?: string;
+    rfc?: string;
+    razonSocial?: string;
+    regimenFiscal?: string;
+    usoCfdi?: string;
+  }
+): Promise<{ ok: boolean; remision?: RemisionFactura; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: rem } = await sb
+      .from("remisiones_facturas")
+      .select("id, tipo, orden_trabajo_id, datos_documento")
+      .eq("id", remisionId)
+      .maybeSingle();
+    if (!rem) return { ok: false, error: "Remisión no encontrada." };
+
+    if (rem.orden_trabajo_id) {
+      const otCerrada = (await ordenesCerradas(sb, [rem.orden_trabajo_id])).get(rem.orden_trabajo_id);
+      if (otCerrada) {
+        return {
+          ok: false,
+          error: `La orden ${otCerrada} ya está completada: su ${rem.tipo === "factura" ? "factura" : "remisión"} quedó cerrada. Un administrador debe reabrir la orden para corregirla.`,
+        };
+      }
+    }
+
+    const doc: Record<string, any> = { ...(rem.datos_documento || {}) };
+    const limpiar = (v: string | undefined) => (v === undefined ? undefined : v.trim());
+    const campos: Array<[keyof typeof datos, string]> = [
+      ["nombreCliente", "nombreCliente"],
+      ["personaRecibe", "personaRecibe"],
+      ["direccionEntrega", "direccionEntrega"],
+      ["razonSocial", "razonSocial"],
+      ["regimenFiscal", "regimenFiscal"],
+      ["usoCfdi", "usoCfdi"],
+    ];
+    for (const [entrada, llave] of campos) {
+      const v = limpiar(datos[entrada]);
+      if (v !== undefined) doc[llave] = v;
+    }
+    if (datos.rfc !== undefined) doc.rfc = datos.rfc.trim().toUpperCase();
+
+    if (rem.tipo === "factura" && !String(doc.razonSocial || "").trim()) {
+      return { ok: false, error: "La factura necesita razón social." };
+    }
+
+    const { data: actualizada, error } = await sb
+      .from("remisiones_facturas")
+      .update({ datos_documento: doc, updated_at: new Date().toISOString() })
+      .eq("id", remisionId)
+      .select("*")
+      .single();
+    if (error || !actualizada) return { ok: false, error: error?.message || "No se pudo guardar." };
+
+    revalidatePath("/ordenes-trabajo");
+    revalidatePath("/remisiones");
+    return { ok: true, remision: aRemisionFacturaBasica(actualizada) };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al actualizar la remisión." };
+  }
+}
+
 export async function generarRemisionDesdeOrdenTrabajo(datos: {
   ordenTrabajoId: string;
   tipo: "remision" | "factura";
   fecha?: string;
   direccionEntrega?: string;
   personaRecibe?: string;
+  /** Remisión: a nombre de quién sale (puede ser distinto del contacto). */
+  nombreCliente?: string;
   rfc?: string;
   razonSocial?: string;
   regimenFiscal?: string;
@@ -1836,6 +2011,7 @@ export async function generarRemisionDesdeOrdenTrabajo(datos: {
         : {
             direccionEntrega:
               datos.direccionEntrega?.trim() || ot.prospectos?.direccion || "León, Guanajuato",
+            nombreCliente: datos.nombreCliente?.trim() || (ot.prospectos as any)?.nombre || "",
             personaRecibe: datos.personaRecibe?.trim() || ot.prospectos?.nombre || "",
             fechaInstalacion:
               datos.fecha ||
@@ -2577,8 +2753,7 @@ export async function enviarNotificacionEntregaCliente(params: {
         <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#FDFCFA;border-radius:16px;overflow:hidden;border:1px solid #E6E1D8;box-shadow:0 4px 16px rgba(0,0,0,0.05);">
           <!-- Header Corporativo -->
           <div style="background:#2D4A2B;padding:26px 20px;text-align:center;">
-            <img src="${SITE_URL}/logo.svg" width="48" height="48" alt="SAUCEDA" style="display:block;margin:0 auto 8px;" />
-            <div style="color:#F5F1E8;font-size:22px;font-weight:bold;letter-spacing:1px;">SAUCEDA</div>
+            <img src="${SITE_URL}/brand/horizontal-negativo-800.png" width="200" height="54" alt="SAUCEDA" style="display:block;margin:0 auto 8px;border:0;" />
             <div style="color:#C9A961;font-size:11px;letter-spacing:3px;">CONSTRUCCIÓN & BIENES RAÍCES</div>
           </div>
 

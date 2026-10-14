@@ -5,6 +5,8 @@ import { enviarWhatsAppTexto, enviarWhatsAppPlantilla } from "@/lib/whatsapp";
 import {
   despacharPropuestaInspeccionTelegram,
   notificarConfirmacionFinalTelegram,
+  enviarMensajeTelegram,
+  obtenerConfiguracionTelegram,
 } from "@/lib/telegram";
 
 /**
@@ -15,9 +17,19 @@ import {
  *    Remodelación, etc. Cualquier servicio que requiera inspección presencial.
  * 2. Disponibilidad cruzada: Calcula la intersección de horarios libres de múltiples
  *    asesores (los dos que deben asistir juntos).
- * 3. SLA estricto (15 min por defecto): Monitoreo de tiempo en caliente para no perder leads.
+ * 3. SLA estricto (15 min por defecto, 30 min para Remodelación): Monitoreo de tiempo en caliente para no perder leads.
  * 4. Despacho modular: Inicia con Meta WhatsApp y queda 100% listo para Telegram Bot.
  */
+
+export interface SlotVespertinoRemodelacion {
+  id: string;          // "1", "2", "3", "4"
+  codigo: string;      // "A", "B", "C", "D"
+  fecha: string;       // "YYYY-MM-DD"
+  horaInicio: string;  // "17:30:00"
+  horaFin: string;     // "18:30:00"
+  label: string;       // "Mañana Martes a las 5:30 PM"
+  textoCompleto: string; // "Mañana Martes 13 de Octubre a las 5:30 PM"
+}
 
 export interface SlotHorarioDisponible {
   fecha: string;        // "YYYY-MM-DD"
@@ -115,6 +127,266 @@ function formatearHoraAmPm(horaStr: string): string {
   const ampm = hrs >= 12 ? "PM" : "AM";
   const h12 = hrs % 12 || 12;
   return `${h12}:${mins.toString().padStart(2, "0")} ${ampm}`;
+}
+
+/**
+ * Calcula 3 a 4 opciones vespertinas (a partir de las 5:00 PM / 17:30 hrs)
+ * para los próximos días hábiles (saltando domingos) para Sauceda Construye Remodelación.
+ */
+export function calcularSlotsVespertinosRemodelacion(fechaReferencia: Date = new Date()): SlotVespertinoRemodelacion[] {
+  const tz = "America/Mexico_City";
+  const diaSemanaFormatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, weekday: "long" });
+  const fechaCompletaFormatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "long" });
+
+  const dias: Date[] = [];
+  const d = new Date(fechaReferencia);
+
+  // Buscar los próximos 2 días hábiles (saltando domingos) a partir de mañana
+  while (dias.length < 2) {
+    d.setDate(d.getDate() + 1);
+    const diaNum = new Date(d.toLocaleString("en-US", { timeZone: tz })).getDay();
+    if (diaNum !== 0) {
+      dias.push(new Date(d));
+    }
+  }
+
+  const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const slots: SlotVespertinoRemodelacion[] = [];
+
+  const manana = new Date(fechaReferencia);
+  manana.setDate(manana.getDate() + 1);
+  const esManana = (date: Date) => date.getDate() === manana.getDate();
+
+  // Día 1
+  const dia1 = dias[0];
+  const dia1Nombre = capitalizar(diaSemanaFormatter.format(dia1));
+  const dia1Prefijo = esManana(dia1) ? `Mañana ${dia1Nombre}` : dia1Nombre;
+  const dia1FechaISO = dia1.toISOString().slice(0, 10);
+  const dia1FechaCompleta = fechaCompletaFormatter.format(dia1);
+
+  slots.push({
+    id: "1",
+    codigo: "A",
+    fecha: dia1FechaISO,
+    horaInicio: "17:30:00",
+    horaFin: "18:30:00",
+    label: `${dia1Prefijo} a las 5:30 PM`,
+    textoCompleto: `${dia1Prefijo} ${dia1FechaCompleta} a las 5:30 PM`,
+  });
+
+  slots.push({
+    id: "2",
+    codigo: "B",
+    fecha: dia1FechaISO,
+    horaInicio: "18:30:00",
+    horaFin: "19:30:00",
+    label: `${dia1Prefijo} a las 6:30 PM`,
+    textoCompleto: `${dia1Prefijo} ${dia1FechaCompleta} a las 6:30 PM`,
+  });
+
+  // Día 2
+  const dia2 = dias[1];
+  const dia2Nombre = capitalizar(diaSemanaFormatter.format(dia2));
+  const dia2FechaISO = dia2.toISOString().slice(0, 10);
+  const dia2FechaCompleta = fechaCompletaFormatter.format(dia2);
+
+  slots.push({
+    id: "3",
+    codigo: "C",
+    fecha: dia2FechaISO,
+    horaInicio: "17:30:00",
+    horaFin: "18:30:00",
+    label: `${dia2Nombre} a las 5:30 PM`,
+    textoCompleto: `${dia2Nombre} ${dia2FechaCompleta} a las 5:30 PM`,
+  });
+
+  slots.push({
+    id: "4",
+    codigo: "D",
+    fecha: dia2FechaISO,
+    horaInicio: "18:30:00",
+    horaFin: "19:30:00",
+    label: `${dia2Nombre} a las 6:30 PM`,
+    textoCompleto: `${dia2Nombre} ${dia2FechaCompleta} a las 6:30 PM`,
+  });
+
+  return slots;
+}
+
+export type SlotHorarioVertical = SlotVespertinoRemodelacion;
+
+/**
+ * MATRIZ UNIVERSAL DE HORARIOS POR VERTICAL DE NEGOCIO
+ * Calcula 4 opciones de horario según la línea de servicio:
+ * - Remodelación: Vespertinas prioritarias (17:30 y 18:30 hrs)
+ * - Impermeabilización: Matutinas y Vespertinas (10:30 y 16:30 hrs)
+ * - Herrería: Matutinas y Vespertinas (11:00 y 17:00 hrs)
+ * - Piso Estampado: Matutinas y Vespertinas (10:00 y 16:00 hrs)
+ * - Cisternas / Tinacos: Matutinas prioritarias (10:00 y 12:30 hrs)
+ * - Bienes Raíces / Traspasos: Horario de oficina (11:00 y 16:30 hrs)
+ */
+export function calcularSlotsPorVertical(
+  tipoNegocio?: string,
+  fechaReferencia: Date = new Date()
+): SlotHorarioVertical[] {
+  const tipo = (tipoNegocio || "").toLowerCase();
+
+  // Si es remodelación, aplicar vespertinas de obra
+  if (tipo === "construccion-remodelacion" || !tipo) {
+    return calcularSlotsVespertinosRemodelacion(fechaReferencia);
+  }
+
+  const tz = "America/Mexico_City";
+  const diaSemanaFormatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, weekday: "long" });
+  const fechaCompletaFormatter = new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "long" });
+
+  const dias: Date[] = [];
+  const d = new Date(fechaReferencia);
+
+  // Buscar los próximos 2 días hábiles (saltando domingos) a partir de mañana
+  while (dias.length < 2) {
+    d.setDate(d.getDate() + 1);
+    const diaNum = new Date(d.toLocaleString("en-US", { timeZone: tz })).getDay();
+    if (diaNum !== 0) {
+      dias.push(new Date(d));
+    }
+  }
+
+  const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const slots: SlotHorarioVertical[] = [];
+
+  const manana = new Date(fechaReferencia);
+  manana.setDate(manana.getDate() + 1);
+  const esManana = (date: Date) => date.getDate() === manana.getDate();
+
+  // Configuración de franjas por vertical
+  let h1Inicio = "10:30:00";
+  let h1Fin = "11:30:00";
+  let h1LabelHora = "10:30 AM";
+
+  let h2Inicio = "16:30:00";
+  let h2Fin = "17:30:00";
+  let h2LabelHora = "4:30 PM";
+
+  if (tipo === "construccion-mantenimiento-cisternas" || tipo === "construccion-mantenimiento-tinacos" || tipo === "construccion-mantenimiento-calentadores") {
+    // Matutinas prioritarias
+    h1Inicio = "10:00:00";
+    h1Fin = "11:30:00";
+    h1LabelHora = "10:00 AM";
+
+    h2Inicio = "12:30:00";
+    h2Fin = "14:00:00";
+    h2LabelHora = "12:30 PM";
+  } else if (tipo === "construccion-herreria") {
+    h1Inicio = "11:00:00";
+    h1Fin = "12:00:00";
+    h1LabelHora = "11:00 AM";
+
+    h2Inicio = "17:00:00";
+    h2Fin = "18:00:00";
+    h2LabelHora = "5:00 PM";
+  } else if (tipo === "construccion-piso-estampado") {
+    h1Inicio = "10:00:00";
+    h1Fin = "11:00:00";
+    h1LabelHora = "10:00 AM";
+
+    h2Inicio = "16:00:00";
+    h2Fin = "17:00:00";
+    h2LabelHora = "4:00 PM";
+  } else if (tipo === "traspaso_compra" || tipo === "solo_tramite" || tipo === "bienes_raices") {
+    h1Inicio = "11:00:00";
+    h1Fin = "12:00:00";
+    h1LabelHora = "11:00 AM";
+
+    h2Inicio = "16:30:00";
+    h2Fin = "17:30:00";
+    h2LabelHora = "4:30 PM";
+  }
+
+  // Día 1
+  const dia1 = dias[0];
+  const dia1Nombre = capitalizar(diaSemanaFormatter.format(dia1));
+  const dia1Prefijo = esManana(dia1) ? `Mañana ${dia1Nombre}` : dia1Nombre;
+  const dia1FechaISO = dia1.toISOString().slice(0, 10);
+  const dia1FechaCompleta = fechaCompletaFormatter.format(dia1);
+
+  slots.push({
+    id: "1",
+    codigo: "A",
+    fecha: dia1FechaISO,
+    horaInicio: h1Inicio,
+    horaFin: h1Fin,
+    label: `${dia1Prefijo} a las ${h1LabelHora}`,
+    textoCompleto: `${dia1Prefijo} ${dia1FechaCompleta} a las ${h1LabelHora}`,
+  });
+
+  slots.push({
+    id: "2",
+    codigo: "B",
+    fecha: dia1FechaISO,
+    horaInicio: h2Inicio,
+    horaFin: h2Fin,
+    label: `${dia1Prefijo} a las ${h2LabelHora}`,
+    textoCompleto: `${dia1Prefijo} ${dia1FechaCompleta} a las ${h2LabelHora}`,
+  });
+
+  // Día 2
+  const dia2 = dias[1];
+  const dia2Nombre = capitalizar(diaSemanaFormatter.format(dia2));
+  const dia2FechaISO = dia2.toISOString().slice(0, 10);
+  const dia2FechaCompleta = fechaCompletaFormatter.format(dia2);
+
+  slots.push({
+    id: "3",
+    codigo: "C",
+    fecha: dia2FechaISO,
+    horaInicio: h1Inicio,
+    horaFin: h1Fin,
+    label: `${dia2Nombre} a las ${h1LabelHora}`,
+    textoCompleto: `${dia2Nombre} ${dia2FechaCompleta} a las ${h1LabelHora}`,
+  });
+
+  slots.push({
+    id: "4",
+    codigo: "D",
+    fecha: dia2FechaISO,
+    horaInicio: h2Inicio,
+    horaFin: h2Fin,
+    label: `${dia2Nombre} a las ${h2LabelHora}`,
+    textoCompleto: `${dia2Nombre} ${dia2FechaCompleta} a las ${h2LabelHora}`,
+  });
+
+  return slots;
+}
+
+/**
+ * Resuelve el rol y título oficial del especialista requerido según la vertical
+ */
+export function obtenerRolEspecialistaPorVertical(tipoNegocio?: string): {
+  rol: string;
+  tituloEspecialista: string;
+} {
+  switch ((tipoNegocio || "").toLowerCase()) {
+    case "construccion-remodelacion":
+      return { rol: "operaciones", tituloEspecialista: "Contratista / Arquitecto de Obra" };
+    case "construccion-impermeabilizacion":
+      return { rol: "operaciones", tituloEspecialista: "Técnico de Azoteas / Cuadrilla" };
+    case "construccion-herreria":
+      return { rol: "operaciones", tituloEspecialista: "Maestro Herrero / Estructuras" };
+    case "construccion-piso-estampado":
+      return { rol: "operaciones", tituloEspecialista: "Técnico de Pavimentos" };
+    case "construccion-mantenimiento-cisternas":
+    case "construccion-mantenimiento-tinacos":
+      return { rol: "operaciones", tituloEspecialista: "Técnico de Fontanería / Lavado" };
+    case "construccion-mantenimiento-calentadores":
+      return { rol: "operaciones", tituloEspecialista: "Técnico en Calentadores Solares" };
+    case "traspaso_compra":
+    case "solo_tramite":
+    case "bienes_raices":
+      return { rol: "asesor", tituloEspecialista: "Asesor Inmobiliario / Notarial" };
+    default:
+      return { rol: "operaciones", tituloEspecialista: "Especialista Técnico en Obra" };
+  }
 }
 
 const DIAS_CLAVE = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
@@ -538,7 +810,7 @@ export async function verificarYActualizarSLAInspecciones(
   const ahora = new Date();
   const ahoraISO = ahora.toISOString();
 
-  // Buscar citas de inspección pendientes con SLA activo
+  // 1. Monitoreo de citas en agenda_citas
   const { data: citasPendientes = [] } = await sb
     .from("agenda_citas")
     .select("*")
@@ -559,7 +831,7 @@ export async function verificarYActualizarSLAInspecciones(
     const confirmaciones = (cita.confirmaciones_equipo as Record<string, any>) || {};
 
     if (difMs <= 0) {
-      // VENCIDO (Superó los 15 minutos)
+      // VENCIDO (Superó el tiempo de espera)
       vencidasCount++;
 
       // ESTRATEGIA: Auto-confirmación preventiva para no perder al cliente
@@ -578,11 +850,11 @@ export async function verificarYActualizarSLAInspecciones(
         expedienteId: cita.expediente_id,
         tipo: "sla_auto_confirmacion",
         titulo: `⚡ Cita auto-confirmada por vencimiento de SLA`,
-        detalle: `Se amarró la cita con el cliente para proteger el lead tras cumplirse el límite de 15 min. Asignados: ${asignados.length} asesores.`,
+        detalle: `Se amarró la cita con el cliente para proteger el lead tras cumplirse el límite de SLA. Asignados: ${asignados.length} asesores.`,
       });
 
       // Alerta prioritaria a Oscar (Gerencia)
-      const msgGerencia = `🚨 *ALERTA SLA VENCIDO · AUTO-CONFIRMADA*\n\nLa inspección para *${cita.cliente_nombre}* (${cita.cliente_telefono}) superó los 15 minutos de espera. Se auto-confirmó para no perder el lead.\n\n🗓️ Fecha: ${cita.fecha} ${cita.hora_inicio}\n📍 Ubicación: ${cita.fraccionamiento}\n👥 Asesores asignados: ${asignados.join(", ")}`;
+      const msgGerencia = `🚨 *ALERTA SLA VENCIDO · AUTO-CONFIRMADA*\n\nLa inspección para *${cita.cliente_nombre}* (${cita.cliente_telefono}) superó el límite de espera. Se auto-confirmó para no perder el lead.\n\n🗓️ Fecha: ${cita.fecha} ${cita.hora_inicio}\n📍 Ubicación: ${cita.fraccionamiento}\n👥 Asesores asignados: ${asignados.join(", ")}`;
       await enviarWhatsAppTexto("4778110444", msgGerencia).catch(() => {});
     } else if (minutosRestantes <= 5 && cita.sla_estado !== "en_riesgo") {
       // EN RIESGO (Quedan 5 minutos o menos)
@@ -606,8 +878,77 @@ export async function verificarYActualizarSLAInspecciones(
     }
   }
 
+  // 2. Monitoreo de propuestas en coordinaciones_inspeccion (Remodelación SLA 30 min y General 15 min)
+  const { data: coordsPendientes = [] } = await sb
+    .from("coordinaciones_inspeccion")
+    .select("*")
+    .in("estado", ["propuesta_enviada", "evaluando"])
+    .not("sla_limite_at", "is", null);
+
+  for (const coord of coordsPendientes || []) {
+    const limiteMs = new Date(coord.sla_limite_at).getTime();
+    const difMs = limiteMs - ahora.getTime();
+
+    if (difMs <= 0) {
+      vencidasCount++;
+      const respuestas = (coord.respuestas_asesores as Record<string, any>) || {};
+
+      // Si no se ha alertado a Oscar aún sobre este vencimiento
+      if (!respuestas._alerta_sla_oscar_at) {
+        respuestas._alerta_sla_oscar_at = ahoraISO;
+        await sb
+          .from("coordinaciones_inspeccion")
+          .update({
+            estado: "sla_vencido",
+            sla_estado: "vencido",
+            respuestas_asesores: respuestas,
+            updated_at: ahoraISO,
+          })
+          .eq("id", coord.id);
+
+        const opciones = (coord.opciones_horarios as any[]) || [];
+        const opcAText = opciones[0]?.label || "Opción 1";
+        const opcBText = opciones[1]?.label || "Opción 2";
+
+        const msgOscar = `⚠️ *SLA VENCIDO (30 MIN): COORDINACIÓN SIN RESPUESTA*\n\n` +
+          `*Servicio:* ${coord.servicio_nombre || "Coordinación Técnica"}\n` +
+          `*Cliente:* ${coord.cliente_nombre} (\`${coord.cliente_telefono}\`)\n` +
+          `*Zona:* ${coord.ubicacion || coord.fraccionamiento || "León"}\n` +
+          `*Opciones:*\n` +
+          `🅰️ ${opcAText}\n` +
+          `🅱️ ${opcBText}\n\n` +
+          `👉 *Por favor confirma con el técnico asignado o directamente en el CRM.*`;
+
+        // Alerta WhatsApp a Oscar
+        await enviarWhatsAppTexto("4778110444", msgOscar).catch(() => {});
+
+        // Alerta Telegram
+        try {
+          const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
+          if (botToken && chatIdGrupo) {
+            await enviarMensajeTelegram({
+              botToken,
+              chatId: chatIdGrupo,
+              texto: msgOscar,
+            });
+          }
+        } catch (errTg) {
+          console.warn("[SLA] Error al enviar alerta de Telegram a Oscar:", errTg);
+        }
+
+        await registrarActividad(sb, {
+          prospectoId: coord.prospecto_id,
+          expedienteId: coord.expediente_id,
+          tipo: "sla_vencido",
+          titulo: `⚠️ SLA Vencido en Coordinación de ${coord.servicio_nombre}`,
+          detalle: `El técnico no confirmó en ${coord.sla_minutos || 30} min. Alerta enviada a Oscar (Gerencia).`,
+        });
+      }
+    }
+  }
+
   return {
-    evaluadas: (citasPendientes || []).length,
+    evaluadas: (citasPendientes || []).length + (coordsPendientes || []).length,
     enRiesgo: enRiesgoCount,
     vencidas: vencidasCount,
     autoConfirmadas: autoConfirmadasCount,
@@ -1267,6 +1608,22 @@ export async function confirmarCitaFinalCoordinacion(
       })
       .eq("id", coordinacionId);
 
+    // 5b. Sincronizar fecha e inspector con cotizaciones del prospecto o expediente
+    try {
+      const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+      await sincronizarInspeccionConCotizaciones(sb, {
+        citaId,
+        prospectoId: coord.prospecto_id,
+        expedienteId: coord.expediente_id,
+        perfilId: primerAsesorId,
+        fecha: opcionSeleccionada.fecha,
+        horaInicio: opcionSeleccionada.horaInicio,
+        soloProgramar: true,
+      });
+    } catch (errSyncCot) {
+      console.warn("[Coordinación] Aviso al sincronizar cotizaciones tras confirmar cita:", errSyncCot);
+    }
+
     // 6. Registrar en bitácora
     await registrarActividad(sb, {
       prospectoId: coord.prospecto_id,
@@ -1351,3 +1708,385 @@ export async function cancelarCoordinacionAction(
     .eq("id", coordinacionId);
   return { ok: true };
 }
+
+export interface PropuestaRemodelacionIAInput {
+  prospectoId?: string | null;
+  expedienteId?: string | null;
+  clienteNombre: string;
+  clienteTelefono: string;
+  colonia?: string | null;
+  ubicacion?: string | null;
+  detallesProyecto?: string | null;
+  opcionesSeleccionadas: Array<{
+    id: string;
+    fecha: string;
+    horaInicio: string;
+    horaFin?: string;
+    label: string;
+  }>;
+  tecnicoId?: string | null;
+}
+
+/**
+ * 7. REGISTRO Y DISPARO AUTOMÁTICO DE COORDINACIÓN DESDE SOFÍA (REMODELACIÓN)
+ * Dispara la alerta al proveedor técnico asignado con las 2 opciones vespertinas
+ * seleccionadas por el cliente, iniciando el temporizador de SLA de 30 minutos.
+ */
+export async function registrarPropuestaRemodelacionDesdeIA(
+  sb: SupabaseClient,
+  input: PropuestaRemodelacionIAInput
+): Promise<{ ok: boolean; coordinacionId?: string; error?: string }> {
+  try {
+    const telNormalizado = normalizarTelefono(input.clienteTelefono);
+    const ubicacionFinal = input.ubicacion || input.colonia || "León, Gto.";
+
+    // 1. Evitar duplicar coordinación si ya existe una activa para este prospecto/expediente
+    if (input.prospectoId) {
+      const { data: coordExistente } = await sb
+        .from("coordinaciones_inspeccion")
+        .select("id, estado")
+        .eq("prospecto_id", input.prospectoId)
+        .in("estado", ["propuesta_enviada", "evaluando"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (coordExistente) {
+        return { ok: true, coordinacionId: coordExistente.id };
+      }
+    }
+
+    // 2. Determinar técnico asignado (si no viene, buscar operaciones Alejandro u Oscar)
+    let tecnicoId = input.tecnicoId;
+    if (!tecnicoId) {
+      const { data: perfAlex } = await sb
+        .from("perfiles")
+        .select("id")
+        .or("nombre.ilike.%Alejandro%,nombre.ilike.%Alex%")
+        .eq("activo", true)
+        .maybeSingle();
+      if (perfAlex) {
+        tecnicoId = perfAlex.id;
+      } else {
+        const { data: perfAdmin } = await sb
+          .from("perfiles")
+          .select("id")
+          .eq("rol", "admin")
+          .eq("activo", true)
+          .limit(1)
+          .maybeSingle();
+        tecnicoId = perfAdmin?.id || null;
+      }
+    }
+
+    const asesoresIds = tecnicoId ? [tecnicoId] : [];
+
+    // 3. Obtener perfil del técnico
+    const { data: perfiles = [] } = await sb
+      .from("perfiles")
+      .select("id, nombre, telefono, telefono_whatsapp, telegram_chat_id")
+      .in("id", asesoresIds);
+
+    const tecnicoPerfil = (perfiles || [])[0];
+    const tecnicoNombre = tecnicoPerfil?.nombre || "Especialista Técnico en Obra";
+    const tecnicoTel = tecnicoPerfil?.telefono_whatsapp || tecnicoPerfil?.telefono || "";
+
+    const respuestasIniciales: Record<string, any> = {};
+    if (tecnicoId) {
+      respuestasIniciales[tecnicoId] = {
+        nombre: tecnicoNombre,
+        telefono: tecnicoTel,
+        votos: {},
+        respondidoAt: null,
+      };
+    }
+
+    const slaMinutos = 30;
+    const slaLimiteAt = new Date(Date.now() + slaMinutos * 60 * 1000).toISOString();
+
+    // 4. Insertar coordinación en base de datos
+    const { data: nuevaCoord, error: errInsert } = await sb
+      .from("coordinaciones_inspeccion")
+      .insert({
+        prospecto_id: input.prospectoId || null,
+        expediente_id: input.expedienteId || null,
+        cliente_nombre: input.clienteNombre,
+        cliente_telefono: telNormalizado,
+        servicio_tipo: "construccion-remodelacion",
+        servicio_nombre: "Sauceda Construye Remodelación",
+        ubicacion: ubicacionFinal,
+        fraccionamiento: input.colonia || ubicacionFinal,
+        detalles_tecnicos: input.detallesProyecto || "Remodelación en sitio",
+        asesores_ids: asesoresIds,
+        opciones_horarios: input.opcionesSeleccionadas,
+        respuestas_asesores: respuestasIniciales,
+        opciones_validadas: [],
+        estado: "propuesta_enviada",
+        sla_minutos: slaMinutos,
+        sla_limite_at: slaLimiteAt,
+        sla_estado: "en_tiempo",
+        canal_notificacion: "telegram",
+      })
+      .select("id")
+      .single();
+
+    if (errInsert || !nuevaCoord) {
+      console.error("[Coordinación Remodelación] Error al insertar:", errInsert);
+      return { ok: false, error: errInsert?.message || "Error al crear coordinación." };
+    }
+
+    const coordinacionId = nuevaCoord.id;
+
+    // 5. Registrar en bitácora de actividades
+    await registrarActividad(sb, {
+      prospectoId: input.prospectoId || undefined,
+      expedienteId: input.expedienteId || undefined,
+      tipo: "coordinacion_propuesta_iniciada",
+      titulo: `⚡ Solicitud de Inspección Vespertina iniciada por Sofía IA`,
+      detalle: `Remodelación en ${ubicacionFinal}. Opciones: ${input.opcionesSeleccionadas.map((o) => o.label).join(" | ")}. SLA: 30 min.`,
+    });
+
+    // 6. Despacho a Telegram con botones directos Aceptar A / Aceptar B / No puedo
+    try {
+      const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
+      if (botToken) {
+        const opcA = input.opcionesSeleccionadas[0];
+        const opcB = input.opcionesSeleccionadas[1] || input.opcionesSeleccionadas[0];
+
+        const textoTg = `🛠️ *SOLICITUD DE INSPECCIÓN: REMODELACIÓN*\n\n` +
+          `👤 *Cliente:* ${input.clienteNombre} (${telNormalizado})\n` +
+          `📍 *Zona:* ${input.colonia || ubicacionFinal}\n` +
+          `🔨 *Proyecto:* ${input.detallesProyecto || "Remodelación en sitio"}\n\n` +
+          `*Opciones seleccionadas por el cliente:*\n` +
+          `🅰️ ${opcA?.label || "Opción A"}\n` +
+          `🅱️ ${opcB?.label || "Opción B"}\n\n` +
+          `⏱️ *SLA:* Tienes *30 minutos* para confirmar tu disponibilidad:\n` +
+          `*Responde o presiona:*`;
+
+        const inlineKeyboard = [
+          [
+            { text: `✅ Aceptar Opción A`, callback_data: `conf_prov:${coordinacionId}:${opcA?.id || "A"}` },
+            { text: `✅ Aceptar Opción B`, callback_data: `conf_prov:${coordinacionId}:${opcB?.id || "B"}` },
+          ],
+          [
+            { text: `❌ No puedo en estas opciones`, callback_data: `rej_prov:${coordinacionId}` },
+          ],
+          [
+            { text: `👀 Enterado (ya lo leí)`, callback_data: `e:${coordinacionId}` },
+          ],
+        ];
+
+        // Enviar al grupo operativo
+        if (chatIdGrupo) {
+          await enviarMensajeTelegram({
+            botToken,
+            chatId: chatIdGrupo,
+            texto: textoTg,
+            inlineKeyboard,
+          });
+        }
+
+        // Enviar al chat personal del técnico si tiene telegram_chat_id
+        if (tecnicoPerfil?.telegram_chat_id && tecnicoPerfil.telegram_chat_id !== chatIdGrupo) {
+          await enviarMensajeTelegram({
+            botToken,
+            chatId: tecnicoPerfil.telegram_chat_id,
+            texto: textoTg,
+            inlineKeyboard,
+          });
+        }
+      }
+    } catch (errTg) {
+      console.warn("[Coordinación Remodelación] Error al enviar Telegram:", errTg);
+    }
+
+    // 7. Notificación WhatsApp al técnico si tiene teléfono
+    if (tecnicoTel) {
+      const opcA = input.opcionesSeleccionadas[0];
+      const opcB = input.opcionesSeleccionadas[1] || input.opcionesSeleccionadas[0];
+      const msgWspTecnico = `🛠️ *SOLICITUD DE INSPECCIÓN: REMODELACIÓN*\n\n` +
+        `Hola ${tecnicoNombre.split(" ")[0]}, el cliente *${input.clienteNombre}* solicita visita técnica para remodelación en *${input.colonia || ubicacionFinal}*.\n\n` +
+        `Opciones seleccionadas por el cliente:\n` +
+        `🅰️ ${opcA?.label}\n` +
+        `🅱️ ${opcB?.label}\n\n` +
+        `⏱️ SLA: 30 minutos. Por favor confirma en Telegram o en el CRM cuál opción cubres.`;
+
+      await enviarWhatsAppTexto(normalizarTelefono(tecnicoTel), msgWspTecnico).catch(() => {});
+    }
+
+    return { ok: true, coordinacionId };
+  } catch (err: any) {
+    console.error("[Coordinación Remodelación] Error en registrarPropuestaRemodelacionDesdeIA:", err);
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * 8. CONFIRMAR OPCIÓN SELECCIONADA POR PROVEEDOR O ADMIN (REMODELACIÓN)
+ * Crea la cita en agenda_citas, actualiza el expediente a etapa 'visita' y
+ * situación 'inspeccion_programada', y envía la confirmación automática definitiva
+ * al cliente por WhatsApp con el nombre del técnico.
+ */
+export async function confirmarOpcionProveedor(
+  sb: SupabaseClient,
+  coordinacionId: string,
+  slotSeleccionadoId: string,
+  proveedorId?: string
+): Promise<{ ok: boolean; citaId?: string; error?: string }> {
+  try {
+    const { data: coord, error: errCoord } = await sb
+      .from("coordinaciones_inspeccion")
+      .select("*")
+      .eq("id", coordinacionId)
+      .single();
+
+    if (errCoord || !coord) {
+      return { ok: false, error: "Coordinación no encontrada." };
+    }
+
+    if (coord.estado === "confirmada" && coord.cita_id) {
+      return { ok: true, citaId: coord.cita_id };
+    }
+
+    const opciones: OpcionHorarioPropuesta[] = (coord.opciones_horarios as any[]) || [];
+    const opcionSeleccionada = opciones.find((o) => o.id === slotSeleccionadoId) || opciones[0];
+    if (!opcionSeleccionada) {
+      return { ok: false, error: `Opción ${slotSeleccionadoId} no encontrada en la propuesta.` };
+    }
+
+    // 1. Identificar al técnico o proveedor asignado
+    let tecnicoId = proveedorId || coord.asesores_ids?.[0] || null;
+    let tecnicoNombre = "Especialista Técnico en Obra";
+    let tecnicoTelefono = "";
+
+    if (tecnicoId) {
+      const { data: perfil } = await sb
+        .from("perfiles")
+        .select("id, nombre, telefono, telefono_whatsapp")
+        .eq("id", tecnicoId)
+        .maybeSingle();
+      if (perfil) {
+        tecnicoNombre = perfil.nombre;
+        tecnicoTelefono = perfil.telefono_whatsapp || perfil.telefono || "";
+      }
+    }
+
+    // 2. Crear la cita en agenda_citas
+    const { data: nuevaCita, error: errCita } = await sb
+      .from("agenda_citas")
+      .insert({
+        perfil_id: tecnicoId,
+        asignados_ids: tecnicoId ? [tecnicoId] : coord.asesores_ids,
+        prospecto_id: coord.prospecto_id,
+        expediente_id: coord.expediente_id,
+        cliente_nombre: coord.cliente_nombre,
+        cliente_telefono: coord.cliente_telefono,
+        tipo_cita: "inspeccion",
+        fecha: opcionSeleccionada.fecha,
+        hora_inicio: opcionSeleccionada.horaInicio,
+        hora_fin: opcionSeleccionada.horaFin || minutosAHora(horaAMinutos(opcionSeleccionada.horaInicio) + 60),
+        notas: `Inspección de Remodelación. ${coord.detalles_tecnicos || ""}. Asignado a ${tecnicoNombre}`,
+        estado: "confirmada",
+        fraccionamiento: coord.fraccionamiento || coord.ubicacion,
+        servicio_tipo: coord.servicio_tipo || "construccion-remodelacion",
+        sla_estado: "cumplido",
+      })
+      .select("id")
+      .single();
+
+    if (errCita || !nuevaCita) {
+      console.error("[Coordinación] Error al crear cita final:", errCita);
+      return { ok: false, error: errCita?.message || "No se pudo agendar la cita definitiva." };
+    }
+
+    const citaId = nuevaCita.id;
+
+    // 3. Actualizar coordinaciones_inspeccion
+    await sb
+      .from("coordinaciones_inspeccion")
+      .update({
+        estado: "confirmada",
+        cita_id: citaId,
+        opcion_seleccionada_id: slotSeleccionadoId,
+        sla_estado: "cumplido",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", coordinacionId);
+
+    // 4. Actualizar expediente: etapa 'visita' y situación 'inspeccion_programada'
+    if (coord.expediente_id) {
+      await sb
+        .from("expedientes")
+        .update({
+          etapa: "visita",
+          situacion: "inspeccion_programada",
+          ...(tecnicoId ? { asesor_id: tecnicoId } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", coord.expediente_id);
+    }
+
+    // 5. Mensaje de WhatsApp saliente al cliente (según especificación)
+    const primerNombre = coord.cliente_nombre.split(" ")[0] || coord.cliente_nombre;
+    const detalleProyecto = coord.detalles_tecnicos ? `tu ${coord.detalles_tecnicos}` : "tu remodelación";
+    const msgCliente = `¡Confirmado, ${primerNombre}! Tu visita técnica para la remodelación de ${detalleProyecto} quedó agendada para el *${opcionSeleccionada.label}*.\n\nTe visitará nuestro especialista técnico *${tecnicoNombre}* debidamente identificado por SAUCEDA Construye.\n\nCualquier duda o cambio de horario, puedes escribirnos por este mismo chat. ¡Nos vemos en tu domicilio! 🏡`;
+
+    try {
+      await enviarWhatsAppTexto(coord.cliente_telefono, msgCliente);
+      // Registrar mensaje en mensajes_whatsapp para el historial del chat
+      await sb.from("mensajes_whatsapp").insert({
+        telefono: normalizarTelefono(coord.cliente_telefono),
+        texto: msgCliente,
+        direccion: "out",
+        estado: "enviado",
+        agente: "Coordinación Remodelación",
+        expediente_id: coord.expediente_id || null,
+        prospecto_id: coord.prospecto_id || null,
+      });
+    } catch (errWsp) {
+      console.warn("[Coordinación] Error enviando WhatsApp al cliente:", errWsp);
+    }
+
+    // 6. Notificar al técnico por WhatsApp si tiene teléfono
+    if (tecnicoTelefono) {
+      const msgTecnico = `✅ *INSPECCIÓN DE REMODELACIÓN CONFIRMADA*\n\nHola ${tecnicoNombre.split(" ")[0]}, quedó confirmada la visita con el cliente *${coord.cliente_nombre}*:\n\n🗓️ *Horario:* ${opcionSeleccionada.label}\n📍 *Ubicación:* ${coord.ubicacion}\n👤 *Cliente:* ${coord.cliente_nombre} (${coord.cliente_telefono})\n📝 *Proyecto:* ${coord.detalles_tecnicos || "Remodelación"}\n\nFavor de presentarte puntual con cinta métrica y equipo de levantamiento.`;
+      try {
+        await enviarWhatsAppTexto(normalizarTelefono(tecnicoTelefono), msgTecnico);
+      } catch (e) {
+        console.warn("[Coordinación] Error notificando WhatsApp al técnico:", e);
+      }
+    }
+
+    // 7. Notificar a Telegram (Grupo Operativo y Asesores)
+    try {
+      await notificarConfirmacionFinalTelegram(sb, {
+        coordinacionId,
+        servicioNombre: coord.servicio_nombre,
+        ubicacion: coord.ubicacion,
+        clienteNombre: coord.cliente_nombre,
+        clienteTelefono: coord.cliente_telefono,
+        detallesTecnicos: coord.detalles_tecnicos,
+        asesoresNombres: tecnicoNombre,
+        horarioConfirmado: opcionSeleccionada.label,
+        asesoresIds: tecnicoId ? [tecnicoId] : coord.asesores_ids,
+      });
+    } catch (e) {
+      console.warn("[Coordinación] Error notificando retorno a Telegram:", e);
+    }
+
+    // 8. Bitácora de actividades
+    await registrarActividad(sb, {
+      prospectoId: coord.prospecto_id,
+      expedienteId: coord.expediente_id,
+      tipo: "coordinacion_inspeccion_confirmada",
+      titulo: `✅ Inspección de Remodelación confirmada (${opcionSeleccionada.label})`,
+      detalle: `Técnico: ${tecnicoNombre}. Cliente: ${coord.cliente_nombre} notificado por WhatsApp.`,
+    });
+
+    return { ok: true, citaId };
+  } catch (err: any) {
+    console.error("[Coordinación] Error en confirmarOpcionProveedor:", err);
+    return { ok: false, error: err.message };
+  }
+}
+

@@ -197,6 +197,21 @@ export async function actualizarProveedor(id: string, datos: Partial<DatosProvee
   }
 }
 
+/** Condiciones comerciales del proveedor (anticipo, pago, zonas, vigencia de precios). */
+export async function guardarCondicionesProveedor(
+  id: string,
+  datos: { anticipoPct: number; condicionesPago: string; zonas: string[]; vigenciaPrecios: string | null }
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const { filaCondiciones } = await import("@/lib/condiciones-proveedor");
+  const sb = supabaseServidor();
+  const { error } = await sb
+    .from("proveedores")
+    .update({ ...filaCondiciones(datos), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
 /** Elimina un proveedor y (por cascada) sus documentos asociados. */
 export async function eliminarProveedor(id: string): Promise<void> {
   await requireAdmin();

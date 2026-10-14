@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { Cotizacion, CotizacionConcepto, VisitaReporte, ServicioConstruccionTipo } from "@/lib/types";
 
+import { dibujarLogoPdf } from "@/lib/marca-pdf";
 // Paleta de colores oficial Sauceda
 const VERDE_PROFUNDO = [45, 74, 43]; // #2D4A2B
 const SAUCE = [92, 122, 82]; // #5C7A52
@@ -98,21 +99,7 @@ export function generarPdfCotizacion(
   doc.text(nombreCliente, margin + 41, y);
 
   // LOGO DERECHO (SAUCEDA Construye)
-  const logoX = pageWidth - margin - 22;
-  doc.setFillColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.circle(logoX + 11, y - 6.5, 6, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("S", logoX + 11, y - 4.2, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("SAUCEDA", logoX + 11, y + 2.5, { align: "center" });
-  doc.setFontSize(5.5);
-  doc.setTextColor(DORADO[0], DORADO[1], DORADO[2]);
-  doc.text("CONSTRUYE", logoX + 11, y + 5.2, { align: "center" });
+  dibujarLogoPdf(doc, pageWidth - margin, y - 11, 10, "color", "derecha");
 
   y += 7.5;
 
@@ -548,21 +535,7 @@ export function generarPdfReporteVisita(
   doc.text(`${servicioLabel}  ·  Cliente: ${nombreCliente}`, margin + 14, y);
 
   // Logo a la derecha
-  const logoX = pageWidth - margin - 22;
-  doc.setFillColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.circle(logoX + 11, y - 6.5, 6, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("S", logoX + 11, y - 4.2, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("SAUCEDA", logoX + 11, y + 2.5, { align: "center" });
-  doc.setFontSize(5.5);
-  doc.setTextColor(DORADO[0], DORADO[1], DORADO[2]);
-  doc.text("CONSTRUYE", logoX + 11, y + 5.2, { align: "center" });
+  dibujarLogoPdf(doc, pageWidth - margin, y - 11, 10, "color", "derecha");
 
   y += 7.5;
   doc.setDrawColor(BORDE_CARD[0], BORDE_CARD[1], BORDE_CARD[2]);

@@ -23,6 +23,7 @@ const TABLA: Record<string, Omit<VisualNegocio, "nombre">> = {
   "traspaso_compra": { icono: "🏠", linea: RAICES, clases: "bg-sky-50 text-sky-900 border-sky-300", acento: "border-l-sky-500" },
   "promocion_venta": { icono: "📣", linea: RAICES, clases: "bg-indigo-50 text-indigo-900 border-indigo-300", acento: "border-l-indigo-500" },
   "solo_tramite": { icono: "📄", linea: RAICES, clases: "bg-slate-100 text-slate-800 border-slate-300", acento: "border-l-slate-400" },
+  "asesoria_compra": { icono: "🔑", linea: RAICES, clases: "bg-violet-50 text-violet-900 border-violet-300", acento: "border-l-violet-500" },
   "construccion": { icono: "🏗️", linea: CONSTRUYE, clases: "bg-amber-50 text-amber-900 border-amber-300", acento: "border-l-amber-500" },
   "construccion-impermeabilizacion": { icono: "☔", linea: CONSTRUYE, clases: "bg-blue-50 text-blue-900 border-blue-300", acento: "border-l-blue-500" },
   "construccion-remodelacion": { icono: "🔨", linea: CONSTRUYE, clases: "bg-orange-50 text-orange-900 border-orange-300", acento: "border-l-orange-500" },
@@ -30,6 +31,7 @@ const TABLA: Record<string, Omit<VisualNegocio, "nombre">> = {
   "construccion-mantenimiento-postventa": { icono: "🔧", linea: CONSTRUYE, clases: "bg-emerald-50 text-emerald-900 border-emerald-300", acento: "border-l-emerald-500" },
   "construccion-mantenimiento-cisternas": { icono: "💧", linea: CONSTRUYE, clases: "bg-cyan-50 text-cyan-900 border-cyan-300", acento: "border-l-cyan-500" },
   "construccion-mantenimiento-tinacos": { icono: "🚰", linea: CONSTRUYE, clases: "bg-teal-50 text-teal-900 border-teal-300", acento: "border-l-teal-500" },
+  "construccion-mantenimiento-calentadores": { icono: "☀️", linea: CONSTRUYE, clases: "bg-amber-50 text-amber-900 border-amber-300", acento: "border-l-amber-500" },
   "construccion-herreria": { icono: "⚙️", linea: CONSTRUYE, clases: "bg-zinc-100 text-zinc-800 border-zinc-300", acento: "border-l-zinc-500" },
   "otro": { icono: "❔", linea: "Otro", clases: "bg-slate-100 text-slate-700 border-slate-300", acento: "border-l-slate-400" },
 };

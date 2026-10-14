@@ -27,6 +27,7 @@ import { ModalAsignarProveedorOT } from "./ModalAsignarProveedorOT";
 import { SeccionContratoOT } from "./SeccionContratoOT";
 import { TarjetaCotizacionOrigenOT } from "./TarjetaCotizacionOrigenOT";
 import { PanelInfonavitCompraventa } from "./PanelInfonavitCompraventa";
+import { FlujoAsesoriaOT, PanelAsesoriaCompraOT } from "./asesoria-compra/PanelAsesoriaCompraOT";
 import type { RemisionFactura, DocumentoProveedor } from "@/lib/types";
 
 interface DetalleOrdenTrabajoProps {
@@ -628,8 +629,13 @@ export function DetalleOrdenTrabajo({
         />
       )}
 
-      {/* 3c. Contrato de Prestación de Servicios */}
-      <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
+      {/* 3b'. Asesoría de compra: etapas, ficha, tareas, aliados y opciones de casas */}
+      {orden.tipoNegocio === "asesoria_compra" && <PanelAsesoriaCompraOT ordenTrabajoId={orden.id} soloLectura={soloLectura} flujoAparte />}
+
+      {/* 3c. Contrato de Prestación de Servicios (obra; la asesoría de compra no lo usa) */}
+      {orden.tipoNegocio !== "asesoria_compra" && (
+        <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
+      )}
 
       {/* 4. Grid de Módulos: Recibos Oficiales & Póliza de Garantía */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -685,7 +691,15 @@ export function DetalleOrdenTrabajo({
                     >
                       PDF
                     </a>
-                    {!soloLectura && (
+                    {!soloLectura && orden.estatus === "completada" && (
+                      <span
+                        className="px-1 text-[11px]"
+                        title="Orden completada: el recibo quedó cerrado. Un administrador puede reabrir la orden para corregirlo."
+                      >
+                        🔒
+                      </span>
+                    )}
+                    {!soloLectura && orden.estatus !== "completada" && (
                       <>
                         <button
                           type="button"
@@ -977,6 +991,9 @@ export function DetalleOrdenTrabajo({
         )}
       </div>
 
+      {/* Asesoría de compra: el flujo operativo va al final y contraído */}
+      {orden.tipoNegocio === "asesoria_compra" && <FlujoAsesoriaOT ordenTrabajoId={orden.id} expedienteId={orden.expedienteId ?? null} />}
+
       {/* Modal Foto Ampliada */}
       {fotoAmpliada && (
         <div
@@ -1154,24 +1171,18 @@ export function DetalleOrdenTrabajo({
       />
 
       <ModalAsignarProveedorOT
-        abierto={modalProveedor}
-        alCerrar={() => setModalProveedor(false)}
-        alAsignar={(p) => {
+        orden={modalProveedor ? orden : null}
+        onCerrar={() => setModalProveedor(false)}
+        onAsignado={(_ordenId, p) => {
           setOrden((prev) => ({
             ...prev,
             proveedorId: p.proveedorId,
             proveedorNombre: p.proveedorNombre,
             costoProveedor: p.costoProveedor,
-            proveedorConcepto: p.concepto,
           }));
           setModalProveedor(false);
           recargarDetalle();
         }}
-        ordenId={orden.id}
-        ordenFolio={orden.folio}
-        proveedorIdActual={orden.proveedorId}
-        costoProveedorActual={orden.costoProveedor}
-        conceptoActual={orden.proveedorConcepto}
       />
     </div>
   );

@@ -351,6 +351,10 @@ export interface FilaProveedor {
   activo: boolean;
   created_at: string;
   updated_at: string;
+  anticipo_pct?: number | null;
+  condiciones_pago?: string | null;
+  zonas_cobertura?: string[] | null;
+  vigencia_precios?: string | null;
 }
 
 export function aProveedor(
@@ -371,6 +375,10 @@ export function aProveedor(
     activo: fila.activo ?? true,
     createdAt: fila.created_at ?? "",
     updatedAt: fila.updated_at ?? "",
+    anticipoPct: Number(fila.anticipo_pct || 0),
+    condicionesPago: fila.condiciones_pago ?? "",
+    zonasCobertura: Array.isArray(fila.zonas_cobertura) ? fila.zonas_cobertura : [],
+    vigenciaPrecios: fila.vigencia_precios ?? null,
     totalDocumentos: metricas?.totalDocumentos ?? 0,
     montoTotal: metricas?.montoTotal ?? 0,
   };

@@ -1,15 +1,23 @@
 "use server";
 
 import { preciosImpermeabilizacionDeCatalogo, type PreciosImpermeabilizacion } from "@/lib/ia/precios-imper";
-import { requireAdmin } from "@/lib/supabase/cliente-sesion";
+import { requireAdmin, requireAdministrador } from "@/lib/supabase/cliente-sesion";
+import {
+  CLAVE_COSTOS_INSPECCION,
+  cargarCostosInspeccion,
+  normalizarCostosInspeccion,
+  type CostosInspeccion,
+} from "@/lib/costo-inspeccion";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { normalizarCostosVolumen, type CostoVolumen } from "@/lib/costos-volumen";
+import { sincronizarVariantes } from "@/lib/variantes-servicio";
 import type { 
   ProductoServicio, 
   Insumo, 
   ConceptoApuComposicion, 
   InsumoHistorialPrecio,
   FotoProducto,
+  VideoProducto,
   TarifaCapacidad
 } from "@/lib/types";
 
@@ -32,8 +40,10 @@ function aProductoServicio(fila: any): ProductoServicio {
     centroCostoId: fila.centro_costo_id || null,
     centroCostoNombre: fila.business_units?.nombre || fila.centro_costo_nombre || null,
     codigoSubcuenta: fila.codigo_subcuenta || null,
+    tipoNegocio: fila.tipo_negocio || null,
     categoria: fila.categoria || "General",
     fotos: Array.isArray(fila.fotos) ? fila.fotos : [],
+    videos: normalizarVideos(fila.videos),
     descripcionValor: fila.descripcion_valor || "",
     especificaciones: fila.especificaciones || "",
     gama: fila.gama || "estandar",
@@ -42,8 +52,17 @@ function aProductoServicio(fila: any): ProductoServicio {
     fichaTecnicaUrl: fila.ficha_tecnica_url || null,
     fichaTecnicaNombre: fila.ficha_tecnica_nombre || null,
     tarifasCapacidad: normalizarTarifasCapacidad(fila.tarifas_capacidad),
+    tarifaMedida: fila.tarifa_medida === "tubos" ? "tubos" : "litros",
     cantidadMinima: Number(fila.cantidad_minima || 0),
     costosVolumen: normalizarCostosVolumen(fila.costos_volumen),
+    estandarProceso: fila.estandar_proceso || "",
+    estandarIncluye: fila.estandar_incluye || "",
+    estandarGarantiaAnios: Number(fila.estandar_garantia_anios || 0),
+    estandarGarantia: fila.estandar_garantia || "",
+    estandarTiempo: fila.estandar_tiempo || "",
+    esServicioEspecial: fila.es_servicio_especial === true,
+    margenObjetivoPct:
+      fila.margen_objetivo_pct === null || fila.margen_objetivo_pct === undefined ? null : Number(fila.margen_objetivo_pct),
     createdAt: fila.created_at,
   };
 }
@@ -67,8 +86,57 @@ function normalizarTarifasCapacidad(raw: any): TarifaCapacidad[] {
     .sort((a, b) => a.hastaLitros - b.hastaLitros);
 }
 
+/** Lee el JSON de videos (snake_case en BD) descartando entradas sin URL válida. */
+function normalizarVideos(raw: any): VideoProducto[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v: any) => v && /^https?:\/\//i.test(v.url || ""))
+    .map((v: any) => ({
+      url: v.url,
+      titulo: v.titulo || "",
+      descripcion: v.descripcion || "",
+      duracionSeg: v.duracion_seg ?? v.duracionSeg ?? null,
+      pesoBytes: v.peso_bytes ?? v.pesoBytes ?? null,
+    }));
+}
+
+function videosAJson(v?: VideoProducto[]) {
+  return normalizarVideos(v).map((x) => ({
+    url: x.url,
+    titulo: x.titulo?.trim() || "",
+    descripcion: x.descripcion?.trim() || "",
+    duracion_seg: x.duracionSeg ?? null,
+    peso_bytes: x.pesoBytes ?? null,
+  }));
+}
+
 function tarifasAJson(t?: TarifaCapacidad[]) {
   return normalizarTarifasCapacidad(t).map((x) => ({ hasta_litros: x.hastaLitros, precio: x.precio, costo: x.costo }));
+}
+
+/** Margen objetivo válido (0–95 %) o null. */
+function margenValido(v: unknown): number | null {
+  const n = Number(v);
+  return v === null || v === undefined || v === "" || !Number.isFinite(n) || n < 0 || n >= 95 ? null : Math.round(n * 100) / 100;
+}
+
+/** Columnas del estándar Sauceda del servicio (migración 0155). */
+function estandarAFila(d: {
+  estandarProceso?: string;
+  estandarIncluye?: string;
+  estandarGarantiaAnios?: number;
+  estandarGarantia?: string;
+  estandarTiempo?: string;
+}) {
+  const t = (v?: string) => (v || "").trim() || null;
+  const anios = Number(d.estandarGarantiaAnios || 0);
+  return {
+    estandar_proceso: t(d.estandarProceso),
+    estandar_incluye: t(d.estandarIncluye),
+    estandar_garantia_anios: Number.isFinite(anios) && anios > 0 ? Math.min(anios, 100) : null,
+    estandar_garantia: t(d.estandarGarantia),
+    estandar_tiempo: t(d.estandarTiempo),
+  };
 }
 
 // Mapeador de Insumo
@@ -195,8 +263,10 @@ export async function crearProductoServicio(datos: {
   tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
   centroCostoId?: string | null;
   codigoSubcuenta?: string | null;
+  tipoNegocio?: string | null;
   categoria?: string;
   fotos?: FotoProducto[];
+  videos?: VideoProducto[];
   descripcionValor?: string;
   especificaciones?: string;
   gama?: 'economica' | 'media' | 'premium' | 'estandar';
@@ -205,8 +275,16 @@ export async function crearProductoServicio(datos: {
   fichaTecnicaUrl?: string | null;
   fichaTecnicaNombre?: string | null;
   tarifasCapacidad?: TarifaCapacidad[];
+  tarifaMedida?: "litros" | "tubos";
   cantidadMinima?: number;
   costosVolumen?: CostoVolumen[];
+  estandarProceso?: string;
+  estandarIncluye?: string;
+  estandarGarantiaAnios?: number;
+  estandarGarantia?: string;
+  estandarTiempo?: string;
+  esServicioEspecial?: boolean;
+  margenObjetivoPct?: number | null;
 }): Promise<ProductoServicio> {
   await requireAdmin();
   const sb = supabaseServidor();
@@ -233,8 +311,11 @@ export async function crearProductoServicio(datos: {
       tipo: datos.tipo || "servicio",
       centro_costo_id: datos.centroCostoId || null,
       codigo_subcuenta: datos.codigoSubcuenta || null,
+      // Sólo si viene: así crear sigue funcionando aunque la columna aún no exista (migración 0154).
+      ...(datos.tipoNegocio ? { tipo_negocio: datos.tipoNegocio } : {}),
       categoria: datos.categoria?.trim() || "General",
       fotos: Array.isArray(datos.fotos) ? datos.fotos : [],
+      videos: videosAJson(datos.videos),
       descripcion_valor: datos.descripcionValor?.trim() || "",
       especificaciones: datos.especificaciones?.trim() || "",
       gama: datos.gama || "estandar",
@@ -243,13 +324,18 @@ export async function crearProductoServicio(datos: {
       ficha_tecnica_url: datos.fichaTecnicaUrl || null,
       ficha_tecnica_nombre: datos.fichaTecnicaUrl ? datos.fichaTecnicaNombre || null : null,
       tarifas_capacidad: tarifasAJson(datos.tarifasCapacidad),
+      tarifa_medida: datos.tarifaMedida === "tubos" ? "tubos" : "litros",
       cantidad_minima: Math.max(0, Number(datos.cantidadMinima || 0)),
       costos_volumen: normalizarCostosVolumen(datos.costosVolumen),
+      ...estandarAFila(datos),
+      es_servicio_especial: datos.esServicioEspecial === true,
+      margen_objetivo_pct: margenValido(datos.margenObjetivoPct),
     })
     .select("*, business_units ( id, nombre )")
     .single();
 
   if (error) throw new Error(error.message);
+  await sincronizarVariantes(sb, id);
   return aProductoServicio(data);
 }
 
@@ -267,8 +353,10 @@ export async function editarProductoServicio(
     tipo?: 'servicio' | 'producto' | 'concepto_obra' | 'insumo';
     centroCostoId?: string | null;
     codigoSubcuenta?: string | null;
+    tipoNegocio?: string | null;
     categoria?: string;
     fotos?: FotoProducto[];
+    videos?: VideoProducto[];
     descripcionValor?: string;
     especificaciones?: string;
     gama?: 'economica' | 'media' | 'premium' | 'estandar';
@@ -277,8 +365,16 @@ export async function editarProductoServicio(
     fichaTecnicaUrl?: string | null;
     fichaTecnicaNombre?: string | null;
     tarifasCapacidad?: TarifaCapacidad[];
+    tarifaMedida?: "litros" | "tubos";
     cantidadMinima?: number;
     costosVolumen?: CostoVolumen[];
+    estandarProceso?: string;
+    estandarIncluye?: string;
+    estandarGarantiaAnios?: number;
+    estandarGarantia?: string;
+    estandarTiempo?: string;
+    esServicioEspecial?: boolean;
+    margenObjetivoPct?: number | null;
   }
 ): Promise<ProductoServicio> {
   await requireAdmin();
@@ -302,6 +398,10 @@ export async function editarProductoServicio(
     activo: datos.activo !== false,
     apto_para_ia: datos.aptoParaIa !== false,
   };
+  // Los videos sólo se tocan si vienen en la petición (otros flujos de edición no los envían)
+  if (datos.videos !== undefined) {
+    updatePayload.videos = videosAJson(datos.videos);
+  }
   if (datos.costosVolumen !== undefined) {
     updatePayload.costos_volumen = normalizarCostosVolumen(datos.costosVolumen);
   }
@@ -311,8 +411,22 @@ export async function editarProductoServicio(
   if (datos.tarifasCapacidad !== undefined) {
     updatePayload.tarifas_capacidad = tarifasAJson(datos.tarifasCapacidad);
   }
+  if (datos.tarifaMedida !== undefined) {
+    updatePayload.tarifa_medida = datos.tarifaMedida === "tubos" ? "tubos" : "litros";
+  }
   if (datos.codigoSubcuenta !== undefined) {
     updatePayload.codigo_subcuenta = datos.codigoSubcuenta || null;
+  }
+  if (datos.tipoNegocio !== undefined) {
+    updatePayload.tipo_negocio = datos.tipoNegocio || null;
+  }
+  // El estándar sólo se toca si viene en la petición (otros flujos de edición no lo envían)
+  if (datos.estandarProceso !== undefined) {
+    Object.assign(updatePayload, estandarAFila(datos));
+  }
+  if (datos.esServicioEspecial !== undefined) {
+    updatePayload.es_servicio_especial = datos.esServicioEspecial === true;
+    updatePayload.margen_objetivo_pct = margenValido(datos.margenObjetivoPct);
   }
   // La ficha sólo se toca si viene en la petición (otros flujos de edición no la envían)
   if (datos.fichaTecnicaUrl !== undefined) {
@@ -328,6 +442,7 @@ export async function editarProductoServicio(
     .single();
 
   if (error) throw new Error(error.message);
+  if (datos.tarifasCapacidad !== undefined) await sincronizarVariantes(sb, id);
   return aProductoServicio(data);
 }
 
@@ -837,4 +952,50 @@ export async function subirFichaTecnicaProducto(
 
   const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(data.path);
   return { ok: true, url: urlData.publicUrl, nombre: archivo.name };
+}
+
+/**
+ * Prepara la subida de un video de producto: devuelve una URL firmada para que el
+ * navegador lo suba directo a Storage (las funciones de Netlify cortan a ~6 MB).
+ * El navegador ya lo convirtió a MP4 H.264 ≤16 MB, listo para enviarse por WhatsApp.
+ */
+export async function prepararSubidaVideoProducto(
+  nombre: string
+): Promise<{ ok: boolean; ruta?: string; token?: string; url?: string; error?: string }> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const limpio = (nombre || "video.mp4").normalize("NFD").replace(/[^\w.-]+/g, "_").replace(/\.[^.]+$/, "").slice(-60);
+  const ruta = `catalogo/videos/${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${limpio}.mp4`;
+  const { data, error } = await sb.storage.from("expedientes-fotos").createSignedUploadUrl(ruta);
+  if (error || !data) return { ok: false, error: error?.message || "No se pudo preparar la subida del video." };
+  const { data: urlData } = sb.storage.from("expedientes-fotos").getPublicUrl(data.path);
+  return { ok: true, ruta: data.path, token: data.token, url: urlData.publicUrl };
+}
+
+// ============================================================
+// COSTO DE LA VISITA TÉCNICA / INSPECCIÓN POR LÍNEA DE NEGOCIO
+// ============================================================
+
+/** Costos de la visita técnica por línea (los usa Sofía). */
+export async function obtenerCostosInspeccion(): Promise<CostosInspeccion> {
+  await requireAdmin();
+  return cargarCostosInspeccion(supabaseServidor());
+}
+
+/** Guarda los costos de la visita técnica por línea. Solo administradores. */
+export async function guardarCostosInspeccion(costos: CostosInspeccion): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireAdministrador();
+    const limpios = normalizarCostosInspeccion(costos);
+    const { error } = await supabaseServidor()
+      .from("configuracion_agente")
+      .upsert(
+        { clave: CLAVE_COSTOS_INSPECCION, valor: JSON.stringify(limpios), updated_at: new Date().toISOString() },
+        { onConflict: "clave" }
+      );
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "No se pudieron guardar los costos." };
+  }
 }

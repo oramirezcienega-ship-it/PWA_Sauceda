@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Logo } from "@/components/marca/Logo";
 import { iniciarSesion } from "@/app/actions/auth";
 import { obtenerDesafioLogin, verificarFirmaYIniciarSesion } from "@/app/actions/biometricos";
 import { esBiometriaSoportada, hexToBuffer, base64urlToBuffer, bufferToBase64 } from "@/lib/biometrics-client";
@@ -120,15 +121,8 @@ export default function PaginaLogin() {
       <div className="w-full max-w-sm">
         {/* Marca */}
         <div className="mb-8 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="SAUCEDA" className="mx-auto mb-3 h-16 w-16" />
-          <p className="font-display text-3xl font-semibold tracking-tight text-verde-profundo">
-            SAUCEDA
-          </p>
-          <p className="font-cuerpo text-[11px] uppercase tracking-[0.2em] text-dorado">
-            Bienes Raíces
-          </p>
-          <p className="mt-2 font-titular text-sm italic text-carbon/60">
+          <Logo variante="vertical" className="mx-auto h-36 w-auto" />
+          <p className="mt-3 font-titular text-sm italic text-carbon/60">
             Tradición con tecnología.
           </p>
         </div>

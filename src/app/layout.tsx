@@ -37,10 +37,21 @@ export const metadata: Metadata = {
   title: "SAUCEDA · Soluciones Inmobiliarias y Construcción",
   description: "Tradición con tecnología. León, Gto.",
   manifest: "/manifest.json",
+  metadataBase: new URL(process.env.SITE_URL || "https://crm.saucedamx.com"),
   icons: {
-    icon: "/icons/icon.svg",
-    shortcut: "/icons/icon.svg",
-    apple: "/icons/icon.svg",
+    icon: [
+      { url: "/brand/favicon.ico", sizes: "any" },
+      { url: "/brand/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/brand/favicon.ico",
+    apple: "/brand/apple-touch-icon.png",
+  },
+  openGraph: {
+    title: "SAUCEDA · Construcción · Mantenimiento · Bienes Raíces",
+    description: "Tradición con tecnología. León, Gto.",
+    images: [{ url: "/brand/og-image.png", width: 1200, height: 630, alt: "SAUCEDA" }],
+    locale: "es_MX",
+    type: "website",
   },
   appleWebApp: {
     capable: true,

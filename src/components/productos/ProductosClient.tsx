@@ -1,12 +1,33 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
+import { labelTipoNegocio, type TipoNegocioId } from "@/lib/types";
+import { visualNegocio } from "@/lib/negocios-visual";
+
+const TIPOS_NEGOCIO_PRODUCTO: TipoNegocioId[] = [
+  "construccion-impermeabilizacion",
+  "construccion-mantenimiento-calentadores",
+  "construccion-mantenimiento-tinacos",
+  "construccion-mantenimiento-cisternas",
+  "construccion-mantenimiento-postventa",
+  "construccion-piso-estampado",
+  "construccion-herreria",
+  "construccion-remodelacion",
+  "construccion",
+  "traspaso_compra",
+  "promocion_venta",
+  "solo_tramite",
+  "asesoria_compra",
+  "otro",
+];
 import type { 
   ProductoServicio, 
   Insumo, 
   FotoProducto, 
+  VideoProducto,
   ConceptoApuComposicion,
-  InsumoHistorialPrecio 
+  InsumoHistorialPrecio,
+  OfertaProveedorProducto,
 } from "@/lib/types";
 import {
   crearProductoServicio,
@@ -20,9 +41,40 @@ import {
   obtenerHistorialPreciosInsumo,
   subirImagenProducto,
   subirFichaTecnicaProducto,
+  prepararSubidaVideoProducto,
   obtenerSubcuentasMarketing,
   type MetricaVentaProducto,
 } from "@/app/actions/productos";
+import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
+import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
+import { CostosInspeccionPanel } from "@/components/productos/CostosInspeccionPanel";
+import { PanelProveedorEnFicha } from "@/components/productos/PanelProveedorEnFicha";
+import { AlertasCatalogoPanel } from "@/components/productos/AlertasCatalogoPanel";
+import {
+  MEDIDAS_TARIFA,
+  combinarCostosEnTarifas,
+  medidaSugeridaPorNombre,
+  type MedidaTarifa,
+} from "@/lib/tarifas-capacidad";
+
+/** Duración en segundos de un video local (null si el navegador no la puede leer). */
+function leerDuracionVideo(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    const fin = (d: number | null) => { URL.revokeObjectURL(url); resolve(d); };
+    v.onloadedmetadata = () => fin(Number.isFinite(v.duration) ? Math.round(v.duration) : null);
+    v.onerror = () => fin(null);
+    v.src = url;
+  });
+}
+
+function formatoDuracion(seg?: number | null): string {
+  if (!seg) return "";
+  return `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, "0")}`;
+}
 
 interface Props {
   productosIniciales: ProductoServicio[];
@@ -55,7 +107,7 @@ export function ProductosClient({
   const [filtroCentroCosto, setFiltroCentroCosto] = useState("todos");
   const [modoVistaProd, setModoVistaProd] = useState<"tabla" | "cuadricula">("tabla");
   const [modalProdAbierto, setModalProdAbierto] = useState(false);
-  const [tabModalProd, setTabModalProd] = useState<"general" | "fotos" | "sofia" | "apu">("general");
+  const [tabModalProd, setTabModalProd] = useState<"general" | "fotos" | "sofia" | "apu" | "proveedores">("general");
   const [prodEditando, setProdEditando] = useState<ProductoServicio | null>(null);
 
   // Form Producto
@@ -65,6 +117,14 @@ export function ProductosClient({
   const [formCentroCostoId, setFormCentroCostoId] = useState("");
   // Subcuenta de marketing / especialidad (une ventas y publicidad en Finanzas)
   const [formCodigoSubcuenta, setFormCodigoSubcuenta] = useState("");
+  const [formTipoNegocio, setFormTipoNegocio] = useState("");
+  const [formEstProceso, setFormEstProceso] = useState("");
+  const [formEstIncluye, setFormEstIncluye] = useState("");
+  const [formEstGarantiaAnios, setFormEstGarantiaAnios] = useState("");
+  const [formEstGarantia, setFormEstGarantia] = useState("");
+  const [formEstTiempo, setFormEstTiempo] = useState("");
+  const [formEsEspecial, setFormEsEspecial] = useState(false);
+  const [formMargenObjetivo, setFormMargenObjetivo] = useState("");
   const [subcuentasMkt, setSubcuentasMkt] = useState<
     Array<{ codigo: string; nombre: string; businessUnitId: string | null }>
   >([]);
@@ -83,7 +143,9 @@ export function ProductosClient({
   const [formEspecificaciones, setFormEspecificaciones] = useState("");
   const [formAptoParaIa, setFormAptoParaIa] = useState(true);
   const [formFotos, setFormFotos] = useState<FotoProducto[]>([]);
+  const [formVideos, setFormVideos] = useState<VideoProducto[]>([]);
   const [formTarifas, setFormTarifas] = useState<{ hastaLitros: string; costo: string; precio: string }[]>([]);
+  const [formTarifaMedida, setFormTarifaMedida] = useState<MedidaTarifa>("litros");
   const [formFichaUrl, setFormFichaUrl] = useState("");
   const [formFichaNombre, setFormFichaNombre] = useState("");
   const [subiendoFicha, setSubiendoFicha] = useState(false);
@@ -103,6 +165,10 @@ export function ProductosClient({
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [tipoFotoNueva, setTipoFotoNueva] = useState<"producto" | "aplicacion">("aplicacion");
   const [tituloFotoNueva, setTituloFotoNueva] = useState("");
+
+  // Subida de video (se optimiza para WhatsApp en el navegador antes de subir)
+  const [tituloVideoNuevo, setTituloVideoNuevo] = useState("");
+  const [estadoVideo, setEstadoVideo] = useState<string | null>(null);
 
   // Estado Catálogo Insumos
   const [insumos, setInsumos] = useState<Insumo[]>(insumosIniciales);
@@ -145,6 +211,14 @@ export function ProductosClient({
     setFormTipo("servicio");
     setFormCentroCostoId(centrosCosto[0]?.id || "");
     setFormCodigoSubcuenta("");
+    setFormTipoNegocio("");
+    setFormEstProceso("");
+    setFormEstIncluye("");
+    setFormEstGarantiaAnios("");
+    setFormEstGarantia("");
+    setFormEstTiempo("");
+    setFormEsEspecial(false);
+    setFormMargenObjetivo("");
     setFormCategoria("General");
     setFormUnidad("m2");
     setFormCostoUnitario("");
@@ -155,15 +229,57 @@ export function ProductosClient({
     setFormEspecificaciones("");
     setFormAptoParaIa(true);
     setFormFotos([]);
+    setFormVideos([]);
     setFormFichaUrl("");
     setFormFichaNombre("");
     setFormTarifas([]);
+    setFormTarifaMedida("litros");
     setFormCantidadMinima("");
     setFormCostosVolumen([]);
     setFormComposicionApu([]);
     setTabModalProd("general");
     setErrorMsg("");
     setModalProdAbierto(true);
+  };
+
+  // Copia a la ficha lo que capturó el proveedor (no se guarda hasta "Guardar Producto").
+  const usarDatosProveedor = (o: OfertaProveedorProducto) => {
+    if (o.tarifasCapacidad.length > 0) {
+      setFormTarifaMedida(o.productoTarifaMedida);
+      setFormTarifas((prev) => {
+        const actuales = prev
+          .filter((t) => Number(t.hastaLitros) > 0)
+          .map((t) => ({
+            hastaLitros: Math.round(Number(t.hastaLitros)),
+            precio: t.precio.trim() === "" ? null : Number(t.precio),
+            costo: t.costo.trim() === "" ? null : Number(t.costo),
+          }));
+        return combinarCostosEnTarifas(actuales, o.tarifasCapacidad).map((t) => ({
+          hastaLitros: String(t.hastaLitros),
+          costo: t.costo === null ? "" : String(t.costo),
+          precio: t.precio === null ? "" : String(t.precio),
+        }));
+      });
+    }
+    if (o.costoUnitario > 0) setFormCostoUnitario(String(o.costoUnitario));
+    if (o.cantidadMinima > 0) setFormCantidadMinima(String(o.cantidadMinima));
+    if (o.costosVolumen.length > 0) {
+      setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+    }
+    // Proceso, garantía y tiempo del proveedor sirven de base para el estándar SAUCEDA (sólo si está vacío).
+    const siVacio = (valor: string) => (actual: string) => (actual.trim() ? actual : valor);
+    if (o.descripcionProceso.trim()) setFormEstProceso(siVacio(o.descripcionProceso.trim()));
+    if (o.garantiaAnios > 0) setFormEstGarantiaAnios(siVacio(String(o.garantiaAnios)));
+    if (o.garantiaCondiciones.trim()) setFormEstGarantia(siVacio(o.garantiaCondiciones.trim()));
+    if (o.tiempoEjecucion.trim()) setFormEstTiempo(siVacio(o.tiempoEjecucion.trim()));
+    if (o.fotos.length) {
+      setFormFotos((prev) => [
+        ...prev,
+        ...o.fotos
+          .filter((f) => !prev.some((x) => x.url === f.url))
+          .map((f) => ({ url: f.url, tipo: "aplicacion" as const, titulo: f.titulo || "" })),
+      ]);
+    }
   };
 
   const handleOpenEditarProd = async (p: ProductoServicio) => {
@@ -173,6 +289,14 @@ export function ProductosClient({
     setFormTipo(p.tipo || "servicio");
     setFormCentroCostoId(p.centroCostoId || "");
     setFormCodigoSubcuenta(p.codigoSubcuenta || "");
+    setFormTipoNegocio(p.tipoNegocio || "");
+    setFormEstProceso(p.estandarProceso || "");
+    setFormEstIncluye(p.estandarIncluye || "");
+    setFormEstGarantiaAnios(p.estandarGarantiaAnios ? String(p.estandarGarantiaAnios) : "");
+    setFormEstGarantia(p.estandarGarantia || "");
+    setFormEstTiempo(p.estandarTiempo || "");
+    setFormEsEspecial(p.esServicioEspecial === true);
+    setFormMargenObjetivo(p.margenObjetivoPct !== null && p.margenObjetivoPct !== undefined ? String(p.margenObjetivoPct) : "");
     setFormCategoria(p.categoria || "General");
     setFormUnidad(p.unidad);
     setFormCostoUnitario(String(p.costoUnitario));
@@ -185,7 +309,9 @@ export function ProductosClient({
     setFormEspecificaciones(p.especificaciones || "");
     setFormAptoParaIa(p.aptoParaIa !== false);
     setFormFotos(p.fotos || []);
+    setFormVideos(p.videos || []);
     setFormFichaUrl(p.fichaTecnicaUrl || "");
+    setFormTarifaMedida(p.tarifaMedida || medidaSugeridaPorNombre(p.nombre) || "litros");
     setFormTarifas((p.tarifasCapacidad || []).map((t) => ({ hastaLitros: String(t.hastaLitros), costo: t.costo === null || t.costo === undefined ? "" : String(t.costo), precio: t.precio === null ? "" : String(t.precio) })));
     setFormFichaNombre(p.fichaTecnicaNombre || "");
     setTabModalProd("general");
@@ -232,6 +358,15 @@ export function ProductosClient({
         tipo: formTipo,
         centroCostoId: formCentroCostoId || null,
         codigoSubcuenta: formCodigoSubcuenta || null,
+        // Sin modelo y sin uno previo no se manda (no toca la columna).
+        tipoNegocio: formTipoNegocio || (prodEditando?.tipoNegocio ? null : undefined),
+        estandarProceso: formEstProceso,
+        estandarIncluye: formEstIncluye,
+        estandarGarantiaAnios: Number(formEstGarantiaAnios || 0),
+        estandarGarantia: formEstGarantia,
+        estandarTiempo: formEstTiempo,
+        esServicioEspecial: formEsEspecial,
+        margenObjetivoPct: formEsEspecial && formMargenObjetivo !== "" ? Number(formMargenObjetivo) : null,
         categoria: formCategoria.trim(),
         unidad: formUnidad.trim(),
         costoUnitario: Number(formCostoUnitario || 0),
@@ -246,6 +381,7 @@ export function ProductosClient({
         especificaciones: formEspecificaciones.trim(),
         aptoParaIa: formAptoParaIa,
         fotos: formFotos,
+        videos: formVideos,
         tarifasCapacidad: formTarifas
           .filter((t) => Number(t.hastaLitros) > 0)
           .map((t) => ({
@@ -253,6 +389,7 @@ export function ProductosClient({
             costo: t.costo.trim() === "" ? null : Number(t.costo),
             precio: t.precio.trim() === "" ? null : Number(t.precio),
           })),
+        tarifaMedida: formTarifaMedida,
         fichaTecnicaUrl: formFichaUrl || null,
         fichaTecnicaNombre: formFichaNombre || null,
       };
@@ -369,6 +506,52 @@ export function ProductosClient({
 
   const handleEliminarFoto = (idx: number) => {
     setFormFotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubirVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      // WhatsApp sólo acepta MP4 H.264 de hasta 16 MB: se convierte aquí para que Sofía lo mande al instante.
+      if (videoRequiereConversion(file)) {
+        setEstadoVideo("Optimizando video para WhatsApp… 0%");
+        file = await convertirVideoParaWhatsApp(file, (p) => setEstadoVideo(`Optimizando video para WhatsApp… ${p}%`));
+      }
+      if (file.size > 16 * 1024 * 1024) throw new Error("El video supera los 16 MB que permite WhatsApp. Recórtalo e inténtalo de nuevo.");
+
+      const duracionSeg = await leerDuracionVideo(file);
+      setEstadoVideo("Subiendo video…");
+      const prep = await prepararSubidaVideoProducto(file.name);
+      if (!prep.ok || !prep.ruta || !prep.token || !prep.url) throw new Error(prep.error || "No se pudo preparar la subida.");
+      const { error } = await supabaseNavegador()
+        .storage.from("expedientes-fotos")
+        .uploadToSignedUrl(prep.ruta, prep.token, file, { contentType: "video/mp4" });
+      if (error) throw new Error(error.message);
+
+      const nuevo: VideoProducto = {
+        url: prep.url,
+        titulo: tituloVideoNuevo.trim() || "Trabajo realizado",
+        descripcion: "",
+        duracionSeg,
+        pesoBytes: file.size,
+      };
+      setFormVideos((prev) => [...prev, nuevo]);
+      setTituloVideoNuevo("");
+    } catch (err: any) {
+      alert("Error al subir el video: " + (err?.message || "Falla desconocida"));
+    } finally {
+      setEstadoVideo(null);
+    }
+  };
+
+  const handleEditarVideo = (idx: number, cambios: Partial<VideoProducto>) => {
+    setFormVideos((prev) => prev.map((v, i) => (i === idx ? { ...v, ...cambios } : v)));
+  };
+
+  const handleEliminarVideo = (idx: number) => {
+    if (!window.confirm("¿Quitar este video del producto?")) return;
+    setFormVideos((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // APU Receta Helpers
@@ -536,6 +719,27 @@ export function ProductosClient({
     return matchBusqueda && matchTipo && matchCC;
   });
 
+  // Agrupado por modelo de negocio, en el orden del selector; los que no tienen modelo al final.
+  const gruposProd = [...TIPOS_NEGOCIO_PRODUCTO, "" as const]
+    .map((clave) => {
+      const items = productosFiltrados.filter((p) => (p.tipoNegocio || "") === clave);
+      const conPrecio = items.filter((p) => p.precioUnitario > 0 && p.costoUnitario > 0);
+      const margenProm = conPrecio.length
+        ? Math.round(
+            conPrecio.reduce((acc, p) => acc + ((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100, 0) /
+              conPrecio.length
+          )
+        : null;
+      return {
+        clave,
+        nombre: clave ? labelTipoNegocio(clave) : "Sin modelo de negocio",
+        icono: clave ? visualNegocio(clave).icono : "🏷️",
+        items,
+        margenProm,
+      };
+    })
+    .filter((g) => g.items.length > 0);
+
   // Filtros Insumos
   const insumosFiltrados = insumos.filter((i) => {
     const matchBusqueda =
@@ -617,6 +821,14 @@ export function ProductosClient({
       {/* ============================================================ */}
       {tabActiva === "productos" && (
         <div className="space-y-4">
+          <CostosInspeccionPanel />
+          <AlertasCatalogoPanel
+            onAbrirProducto={(id) => {
+              const p = productos.find((x) => x.id === id);
+              if (p) handleOpenEditarProd(p);
+            }}
+          />
+
           {/* Barra de Filtros y Selector de Modo de Vista */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-carbon/10 shadow-xs">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
@@ -718,7 +930,31 @@ export function ProductosClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-carbon/5 font-cuerpo text-carbon">
-                    {productosFiltrados.map((p) => {
+                    {gruposProd.map((g) => (
+                    <Fragment key={g.clave || "sin-modelo"}>
+                      <tr className={g.clave ? "bg-slate-50" : "bg-amber-50/70"}>
+                        <td colSpan={11} className="px-3.5 py-2">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="font-titular text-sm font-bold text-verde-profundo">
+                              {g.icono} {g.nombre}
+                            </span>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-carbon/60 ring-1 ring-carbon/10">
+                              {g.items.length} {g.items.length === 1 ? "concepto" : "conceptos"}
+                            </span>
+                            {g.margenProm !== null && (
+                              <span className="text-[11px] text-carbon/55">
+                                Margen prom. <b className="text-emerald-700">{g.margenProm}%</b>
+                              </span>
+                            )}
+                            {!g.clave && (
+                              <span className="text-[11px] text-amber-800">
+                                Asígnales un modelo de negocio en su ficha para ligarlos a los leads y a Sofía.
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    {g.items.map((p) => {
                       const fotoPrincipal = p.fotos?.[0]?.url;
                       const margen = p.precioUnitario > 0 
                         ? Math.round(((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100) 
@@ -870,6 +1106,8 @@ export function ProductosClient({
                         </tr>
                       );
                     })}
+                    </Fragment>
+                    ))}
                   </tbody>
                   {/* Resumen al pie de la tabla tipo Excel */}
                   <tfoot className="bg-slate-50/90 border-t border-carbon/10 font-mono text-xs text-carbon/70">
@@ -911,8 +1149,24 @@ export function ProductosClient({
               </div>
             </div>
           ) : (
+            <div className="space-y-6">
+            {gruposProd.map((g) => (
+            <section key={g.clave || "sin-modelo"} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-carbon/10 pb-2">
+                <h3 className="font-titular text-base font-bold text-verde-profundo">
+                  {g.icono} {g.nombre}
+                </h3>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-carbon/60">
+                  {g.items.length} {g.items.length === 1 ? "concepto" : "conceptos"}
+                </span>
+                {g.margenProm !== null && (
+                  <span className="text-[11px] text-carbon/55">
+                    Margen prom. <b className="text-emerald-700">{g.margenProm}%</b>
+                  </span>
+                )}
+              </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {productosFiltrados.map((p) => {
+              {g.items.map((p) => {
                 const fotoPrincipal = p.fotos?.[0]?.url;
                 const margen = p.precioUnitario > 0 
                   ? Math.round(((p.precioUnitario - p.costoUnitario) / p.precioUnitario) * 100) 
@@ -1043,6 +1297,9 @@ export function ProductosClient({
                   </div>
                 );
               })}
+            </div>
+            </section>
+            ))}
             </div>
           )}
         </div>
@@ -1334,10 +1591,10 @@ export function ProductosClient({
                     : "border-transparent text-carbon/60 hover:text-carbon"
                 }`}
               >
-                🖼️ Fotos y Ejemplos de Obra
-                {formFotos.length > 0 && (
+                🖼️ Fotos, Videos y Obra
+                {formFotos.length + formVideos.length > 0 && (
                   <span className="rounded-full bg-sauce/15 px-1.5 py-0.2 text-[10px] text-sauce">
-                    {formFotos.length}
+                    {formFotos.length + formVideos.length}
                   </span>
                 )}
               </button>
@@ -1351,6 +1608,19 @@ export function ProductosClient({
               >
                 ✨ Argumentos de Venta & Sofía
               </button>
+              {prodEditando && (
+                <button
+                  type="button"
+                  onClick={() => setTabModalProd("proveedores")}
+                  className={`py-3 px-4 border-b-2 transition ${
+                    tabModalProd === "proveedores"
+                      ? "border-sauce text-sauce font-bold"
+                      : "border-transparent text-carbon/60 hover:text-carbon"
+                  }`}
+                >
+                  🚚 Proveedores
+                </button>
+              )}
               {formTipo === "concepto_obra" && (
                 <button
                   onClick={() => setTabModalProd("apu")}
@@ -1381,6 +1651,13 @@ export function ProductosClient({
               {/* TAB GENERAL */}
               {tabModalProd === "general" && (
                 <div className="space-y-4">
+                  {prodEditando && (
+                    <PanelProveedorEnFicha
+                      productoId={prodEditando.id}
+                      onUsar={usarDatosProveedor}
+                      onVerProveedores={() => setTabModalProd("proveedores")}
+                    />
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
                       <label className="block font-semibold text-carbon mb-1">
@@ -1479,6 +1756,29 @@ export function ProductosClient({
                         className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none"
                       />
                     </div>
+
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">
+                        Modelo de Negocio
+                      </label>
+                      <select
+                        value={formTipoNegocio}
+                        onChange={(e) => setFormTipoNegocio(e.target.value)}
+                        className={`w-full px-3 py-2 rounded-lg border focus:border-sauce focus:outline-none bg-white ${
+                          formTipoNegocio ? "border-carbon/20" : "border-amber-300"
+                        }`}
+                      >
+                        <option value="">Sin modelo de negocio</option>
+                        {TIPOS_NEGOCIO_PRODUCTO.map((t) => (
+                          <option key={t} value={t}>
+                            {visualNegocio(t).icono} {labelTipoNegocio(t)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-carbon/50">
+                        Liga el producto con los leads de ese negocio y con lo que Sofía cotiza.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 border border-carbon/10">
@@ -1545,6 +1845,116 @@ export function ProductosClient({
                     </div>
                   </div>
 
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="font-semibold text-carbon block">📏 Precios por escalón (costo proveedor y venta)</span>
+                        <p className="text-[11px] text-carbon/60 mt-0.5">
+                          Para servicios cuyo precio depende del tamaño: litros (tinacos, cisternas) o número de tubos (calentadores
+                          solares). Se cotiza el primer escalón que cubra la medida del cliente. El costo del proveedor es interno:
+                          Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
+                          Estas capacidades son las únicas que los proveedores pueden cotizar; quitar una borra los
+                          costos que los proveedores le hayan puesto.
+                        </p>
+                        <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-carbon/80">
+                          Se mide en:
+                          <select
+                            value={formTarifaMedida}
+                            onChange={(e) => setFormTarifaMedida(e.target.value as MedidaTarifa)}
+                            className="rounded-lg border border-carbon/20 bg-white px-2 py-1"
+                          >
+                            {(Object.keys(MEDIDAS_TARIFA) as MedidaTarifa[]).map((m) => (
+                              <option key={m} value={m}>
+                                {MEDIDAS_TARIFA[m].etiqueta} ({MEDIDAS_TARIFA[m].ejemplos})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormTarifas((prev) => {
+                            const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
+                            const comunes = MEDIDAS_TARIFA[formTarifaMedida].comunes.filter((l) => !existentes.has(l));
+                            return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
+                          })
+                        }
+                        className="shrink-0 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
+                      >
+                        Cargar medidas comunes
+                      </button>
+                    </div>
+                    {formTarifas.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
+                          <span className="w-14" />
+                          <span className="w-28">{MEDIDAS_TARIFA[formTarifaMedida].etiqueta}</span>
+                          <span className="w-[4.5rem]" />
+                          <span className="w-32">Precio proveedor</span>
+                          <span className="w-32">Precio de venta</span>
+                          <span className="w-16">Margen</span>
+                        </div>
+                        {formTarifas.map((t, idx) => {
+                          const costo = Number(t.costo);
+                          const venta = Number(t.precio);
+                          const margen = t.costo.trim() !== "" && t.precio.trim() !== "" && venta > 0 ? ((venta - costo) / venta) * 100 : null;
+                          return (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-[11px] text-carbon/60 w-14">Hasta</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={t.hastaLitros}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
+                                className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">
+                                {MEDIDAS_TARIFA[formTarifaMedida].etiqueta.toLowerCase()} → $
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="Costo"
+                                value={t.costo}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, costo: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="Venta"
+                                value={t.precio}
+                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
+                              />
+                              <span
+                                className={`w-16 text-[11px] font-bold ${margen === null ? "text-carbon/30" : margen < 0 ? "text-rojo" : "text-verde-profundo"}`}
+                                title="Margen = (venta − costo) / venta"
+                              >
+                                {margen === null ? "—" : `${margen.toFixed(0)}%`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFormTarifas((prev) => prev.filter((_, i) => i !== idx))}
+                                className="text-[11px] font-bold text-rojo hover:underline"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setFormTarifas((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
+                      className="text-[11px] font-bold text-sauce hover:underline"
+                    >
+                      + Agregar escalón
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-4 items-start p-4 rounded-xl bg-amber-50/60 border border-amber-200">
                     <div>
                       <label className="block font-semibold text-carbon mb-1">
@@ -1575,6 +1985,7 @@ export function ProductosClient({
                     </p>
                   </div>
 
+                  {formTarifas.length === 0 && (
                   <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1660,13 +2071,116 @@ export function ProductosClient({
                       + Agregar rango
                     </button>
                   </div>
+                  )}
+
+                  <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formEsEspecial}
+                        onChange={(e) => setFormEsEspecial(e.target.checked)}
+                        className="mt-0.5 h-4 w-4"
+                      />
+                      <span>
+                        <span className="font-semibold text-carbon block">💡 Es un "Servicio especial" (peticiones fuera de catálogo)</span>
+                        <span className="text-[11px] text-carbon/60">
+                          Su margen objetivo se usa para preparar las estimaciones de las cotizaciones especiales de su
+                          modelo de negocio (si no tiene modelo, aplica a todas).
+                        </span>
+                      </span>
+                    </label>
+                    {formEsEspecial && (
+                      <label className="flex items-center gap-2 pl-6 font-semibold text-carbon">
+                        Margen objetivo
+                        <input
+                          type="number"
+                          min={0}
+                          max={90}
+                          step="0.5"
+                          value={formMargenObjetivo}
+                          onChange={(e) => setFormMargenObjetivo(e.target.value)}
+                          className="w-20 rounded-lg border border-carbon/20 bg-white px-2 py-1 font-mono"
+                          placeholder="35"
+                        />
+                        %
+                        {Number(formMargenObjetivo) > 0 && Number(formMargenObjetivo) < 95 && (
+                          <span className="text-[11px] font-normal text-carbon/60">
+                            → un costo de $10,000 se estima en ${Math.round(10000 / (1 - Number(formMargenObjetivo) / 100) / 100) * 100}
+                          </span>
+                        )}
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-sauce/30 bg-sauce/5 p-4">
+                    <div>
+                      <span className="font-semibold text-verde-profundo block">✅ Estándar SAUCEDA del servicio</span>
+                      <p className="text-[11px] text-carbon/60 mt-0.5">
+                        Lo que ofrecemos al cliente sin importar qué proveedor lo haga. Los proveedores lo ven en su link y
+                        confirman que lo cumplen; Sofía usa la garantía y el proceso de aquí.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">Proceso de trabajo</label>
+                      <textarea
+                        rows={5}
+                        placeholder="Paso a paso como lo hacemos: preparación, materiales, ejecución, limpieza, entrega…"
+                        value={formEstProceso}
+                        onChange={(e) => setFormEstProceso(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-carbon mb-1">Qué incluye / qué no incluye</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Ej. Incluye lavado, cambio de empaques y prueba de presión. No incluye refacciones."
+                        value={formEstIncluye}
+                        onChange={(e) => setFormEstIncluye(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] gap-3">
+                      <div>
+                        <label className="block font-semibold text-carbon mb-1">Garantía (años)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={formEstGarantiaAnios}
+                          onChange={(e) => setFormEstGarantiaAnios(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-carbon mb-1">Qué cubre la garantía</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Mano de obra; no cubre daños por granizo"
+                          value={formEstGarantia}
+                          onChange={(e) => setFormEstGarantia(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-carbon mb-1">Tiempo objetivo</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. 1 día"
+                          value={formEstTiempo}
+                          onChange={(e) => setFormEstTiempo(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-carbon/20 focus:border-sauce focus:outline-none bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                   <div>
                     <label className="block font-semibold text-carbon mb-1">
                       Descripción Operativa
                     </label>
                     <textarea
-                      rows={2}
+                      rows={3}
                       placeholder="Detalles sobre alcance, preparación de superficie o condiciones de instalación..."
                       value={formDescripcion}
                       onChange={(e) => setFormDescripcion(e.target.value)}
@@ -1782,6 +2296,77 @@ export function ProductosClient({
                       </div>
                     )}
                   </div>
+
+                  {/* Videos de trabajos realizados */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10 space-y-3">
+                    <div>
+                      <h4 className="font-semibold text-carbon">Videos de trabajos realizados ({formVideos.length})</h4>
+                      <p className="text-[11px] text-carbon/50 mt-0.5">
+                        Se optimizan automáticamente para WhatsApp (MP4, máx. 16 MB). Cuando un cliente le pida videos a Sofía, ella los envía en automático.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-carbon/60 text-[11px] mb-1">Título del video</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Impermeabilización azotea 120 m², Col. Jardines"
+                          value={tituloVideoNuevo}
+                          onChange={(e) => setTituloVideoNuevo(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-carbon/20"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-carbon/60 text-[11px] mb-1">Seleccionar video</label>
+                        <input
+                          type="file"
+                          accept="video/*,.mov,.mp4,.m4v"
+                          disabled={estadoVideo !== null}
+                          onChange={handleSubirVideo}
+                          className="w-full text-xs text-carbon/60 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-sauce file:text-white hover:file:bg-verde-profundo cursor-pointer disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                    {estadoVideo && <p className="text-xs text-sauce animate-pulse">{estadoVideo}</p>}
+
+                    {formVideos.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {formVideos.map((v, idx) => (
+                          <div key={v.url} className="rounded-lg overflow-hidden border border-carbon/15 bg-white">
+                            <video src={v.url} controls preload="metadata" className="h-40 w-full bg-black object-contain" />
+                            <div className="p-2.5 space-y-1.5 text-[11px]">
+                              <input
+                                type="text"
+                                value={v.titulo || ""}
+                                placeholder="Título del video"
+                                onChange={(e) => handleEditarVideo(idx, { titulo: e.target.value })}
+                                className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none"
+                              />
+                              <textarea
+                                rows={2}
+                                value={v.descripcion || ""}
+                                placeholder="Descripción (Sofía la envía con el video)"
+                                onChange={(e) => handleEditarVideo(idx, { descripcion: e.target.value })}
+                                className="w-full px-2 py-1.5 rounded-md border border-carbon/20 focus:border-sauce focus:outline-none resize-none"
+                              />
+                              <div className="flex items-center justify-between text-[10px] text-carbon/45">
+                                <span>
+                                  {[formatoDuracion(v.duracionSeg), v.pesoBytes ? `${(v.pesoBytes / (1024 * 1024)).toFixed(1)} MB` : ""].filter(Boolean).join(" · ")}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminarVideo(idx)}
+                                  className="rounded px-2 py-1 font-semibold text-rojo/70 hover:bg-rojo/5 hover:text-rojo transition"
+                                >
+                                  Quitar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1832,97 +2417,6 @@ export function ProductosClient({
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <span className="font-semibold text-carbon block">📏 Tarifas por capacidad (litros)</span>
-                        <p className="text-[11px] text-carbon/60 mt-0.5">
-                          Para servicios cuyo precio depende del tamaño (tinacos, cisternas). Sofía cotiza el primer escalón cuya capacidad
-                          cubra los litros del cliente. El costo del proveedor es interno: Sofía nunca lo ve. Escalones sin precio de venta se ignoran; si no hay tarifas usa el precio base.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormTarifas((prev) => {
-                            const existentes = new Set(prev.map((t) => Number(t.hastaLitros)));
-                            const comunes = [450, 750, 1100, 1500, 2500, 5000].filter((l) => !existentes.has(l));
-                            return [...prev, ...comunes.map((l) => ({ hastaLitros: String(l), costo: "", precio: "" }))].sort((a, b) => Number(a.hastaLitros) - Number(b.hastaLitros));
-                          })
-                        }
-                        className="shrink-0 rounded-lg border border-carbon/20 bg-white px-2.5 py-1 text-[11px] font-bold text-carbon/70 hover:text-sauce"
-                      >
-                        Cargar capacidades comunes
-                      </button>
-                    </div>
-                    {formTarifas.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
-                          <span className="w-14" />
-                          <span className="w-28">Capacidad (L)</span>
-                          <span className="w-[4.5rem]" />
-                          <span className="w-32">Precio proveedor</span>
-                          <span className="w-32">Precio de venta</span>
-                          <span className="w-16">Margen</span>
-                        </div>
-                        {formTarifas.map((t, idx) => {
-                          const costo = Number(t.costo);
-                          const venta = Number(t.precio);
-                          const margen = t.costo.trim() !== "" && t.precio.trim() !== "" && venta > 0 ? ((venta - costo) / venta) * 100 : null;
-                          return (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="text-[11px] text-carbon/60 w-14">Hasta</span>
-                              <input
-                                type="number"
-                                min={1}
-                                value={t.hastaLitros}
-                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, hastaLitros: e.target.value } : x)))}
-                                className="w-28 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                              />
-                              <span className="text-[11px] text-carbon/60 w-[4.5rem]">litros → $</span>
-                              <input
-                                type="number"
-                                min={0}
-                                placeholder="Costo"
-                                value={t.costo}
-                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, costo: e.target.value } : x)))}
-                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                              />
-                              <input
-                                type="number"
-                                min={0}
-                                placeholder="Venta"
-                                value={t.precio}
-                                onChange={(e) => setFormTarifas((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
-                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white"
-                              />
-                              <span
-                                className={`w-16 text-[11px] font-bold ${margen === null ? "text-carbon/30" : margen < 0 ? "text-rojo" : "text-verde-profundo"}`}
-                                title="Margen = (venta − costo) / venta"
-                              >
-                                {margen === null ? "—" : `${margen.toFixed(0)}%`}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setFormTarifas((prev) => prev.filter((_, i) => i !== idx))}
-                                className="text-[11px] font-bold text-rojo hover:underline"
-                              >
-                                Quitar
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setFormTarifas((prev) => [...prev, { hastaLitros: "", costo: "", precio: "" }])}
-                      className="text-[11px] font-bold text-sauce hover:underline"
-                    >
-                      + Agregar escalón
-                    </button>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">
                     <div>
                       <span className="font-semibold text-carbon block">📄 Ficha técnica en PDF</span>
                       <p className="text-[11px] text-carbon/60 mt-0.5">
@@ -1960,6 +2454,55 @@ export function ProductosClient({
                     {subiendoFicha && <p className="text-xs text-sauce animate-pulse">Subiendo PDF al servidor...</p>}
                   </div>
                 </div>
+              )}
+
+              {/* TAB PROVEEDORES (comparativa de ofertas) */}
+              {tabModalProd === "proveedores" && prodEditando && (
+                <OfertasProveedorProducto
+                  modo="producto"
+                  id={prodEditando.id}
+                  onProductoActualizado={(o) => {
+                    // La oferta ya actualizó el catálogo (precio de venta siempre; costo si es la preferida).
+                    // Reflejarlo en el formulario para no pisarlo al guardar el producto.
+                    setFormPrecioUnitario(String(o.productoPrecioUnitario));
+                    if (o.preferido) {
+                      if (o.costoUnitario > 0 || o.tarifasCapacidad.length === 0) setFormCostoUnitario(String(o.costoUnitario));
+                      setFormCantidadMinima(o.cantidadMinima ? String(o.cantidadMinima) : "");
+                      setFormCostosVolumen(o.costosVolumen.map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+                    }
+                    const tarifas =
+                      o.preferido && o.tarifasCapacidad.length > 0
+                        ? combinarCostosEnTarifas(o.productoTarifasCapacidad, o.tarifasCapacidad)
+                        : o.productoTarifasCapacidad;
+                    setFormTarifas(
+                      tarifas.map((t) => ({
+                        hastaLitros: String(t.hastaLitros),
+                        costo: t.costo === null ? "" : String(t.costo),
+                        precio: t.precio === null ? "" : String(t.precio),
+                      }))
+                    );
+                    setProductos((prev) =>
+                      prev.map((p) =>
+                        p.id === o.productoId
+                          ? {
+                              ...p,
+                              precioUnitario: o.productoPrecioUnitario,
+                              tarifasCapacidad: tarifas,
+                              ...(o.preferido
+                                ? {
+                                    ...(o.costoUnitario > 0 || o.tarifasCapacidad.length === 0
+                                      ? { costoUnitario: o.costoUnitario }
+                                      : {}),
+                                    cantidadMinima: o.cantidadMinima,
+                                    costosVolumen: o.costosVolumen,
+                                  }
+                                : {}),
+                            }
+                          : p
+                      )
+                    );
+                  }}
+                />
               )}
 
               {/* TAB RECETA APU */}

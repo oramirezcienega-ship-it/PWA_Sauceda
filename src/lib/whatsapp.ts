@@ -174,6 +174,8 @@ export async function enviarWhatsAppDocumento(
   if (!token || !phoneId) return { ok: false, error: "WhatsApp no configurado (faltan credenciales)." };
 
   const esImagen = tipoMime?.startsWith("image/") ?? /\.(jpe?g|png|webp|gif)$/i.test(nombreArchivo);
+  // Los videos van como "video" para que se reproduzcan en el chat (como documento llegan como archivo).
+  const esVideo = tipoMime === "video/mp4" || tipoMime === "video/3gpp";
 
   try {
     const esUrl = /^https?:\/\//i.test(documentoUrlOrId);
@@ -185,6 +187,13 @@ export async function enviarWhatsAppDocumento(
           to: tel,
           type: "image",
           image: { ...mediaObj, ...(caption ? { caption } : {}) },
+        }
+      : esVideo
+      ? {
+          messaging_product: "whatsapp",
+          to: tel,
+          type: "video",
+          video: { ...mediaObj, ...(caption ? { caption } : {}) },
         }
       : {
           messaging_product: "whatsapp",

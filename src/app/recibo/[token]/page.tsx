@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { obtenerReciboPorToken } from "@/app/actions/ordenes-trabajo";
 import { BotonImprimirGarantia } from "@/components/BotonImprimirGarantia";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -54,17 +55,7 @@ export default async function PaginaReciboPublico({ params }: ReciboPageProps) {
       <div className="w-full max-w-3xl bg-white border border-carbon/10 p-10 sm:p-14 rounded-2xl shadow-xl print:shadow-none print:border-none print:p-0 print:max-w-none text-carbon font-cuerpo">
         {/* Encabezado */}
         <div className="border-b-2 border-sauce pb-6 mb-8 flex justify-between items-end">
-          <div>
-            <h1 className="font-titular text-2xl font-bold tracking-tight text-verde-profundo uppercase">
-              SAUCEDA
-            </h1>
-            <p className="font-titular text-xs font-semibold tracking-wider text-sauce uppercase mt-0.5">
-              Soluciones Inmobiliarias & Construcción
-            </p>
-            <p className="text-[10px] text-carbon/50 mt-1">
-              Tradición con tecnología · León, Guanajuato
-            </p>
-          </div>
+          <MembreteMarca />
           <div className="text-right">
             <h2 className="font-titular text-lg font-bold text-verde-profundo uppercase tracking-wider">
               RECIBO DE PAGO

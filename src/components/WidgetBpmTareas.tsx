@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { 
   obtenerTareasExpediente, 
+  obtenerTareasOrden,
   actualizarEstadoTarea, 
-  instanciarFlujoEnExpediente 
+  instanciarFlujoEnExpediente,
+  instanciarFlujoEnOrden
 } from "@/app/actions/bpm";
 import { crearActividadManual } from "@/app/actions/actividades";
 import { formatoFecha } from "@/lib/formato";
@@ -13,12 +15,15 @@ interface WidgetBpmTareasProps {
   expedienteId: string;
   tipoNegocio?: string | null;
   inicialContraido?: boolean;
+  /** Si viene, muestra las tareas del flujo de esa orden de trabajo (no las del expediente). */
+  ordenTrabajoId?: string | null;
 }
 
 export function WidgetBpmTareas({ 
   expedienteId, 
   tipoNegocio, 
-  inicialContraido = true 
+  inicialContraido = true,
+  ordenTrabajoId = null
 }: WidgetBpmTareasProps) {
   const [tareas, setTareas] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -36,7 +41,7 @@ export function WidgetBpmTareas({
   async function cargarTareas() {
     setCargando(true);
     try {
-      const res = await obtenerTareasExpediente(expedienteId);
+      const res = ordenTrabajoId ? await obtenerTareasOrden(ordenTrabajoId) : await obtenerTareasExpediente(expedienteId);
       setTareas(res);
     } catch (err) {
       console.error("Error al cargar tareas BPM:", err);
@@ -49,7 +54,7 @@ export function WidgetBpmTareas({
     if (expedienteId) {
       cargarTareas();
     }
-  }, [expedienteId]);
+  }, [expedienteId, ordenTrabajoId]);
 
   function handleAbrirModalCompletar(tarea: any) {
     setTareaSelModal(tarea);
@@ -106,7 +111,8 @@ export function WidgetBpmTareas({
   async function handleInicializar() {
     setCargando(true);
     try {
-      await instanciarFlujoEnExpediente(expedienteId, tipoNegocio || "");
+      if (ordenTrabajoId) await instanciarFlujoEnOrden(ordenTrabajoId);
+      else await instanciarFlujoEnExpediente(expedienteId, tipoNegocio || "");
       await cargarTareas();
     } catch (err) {
       console.error("Error al inicializar el flujo:", err);

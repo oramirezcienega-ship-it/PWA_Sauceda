@@ -78,7 +78,7 @@ export async function retroCoordinacionPortal(
     const sb = supabaseServidor();
     const { data: coord } = await sb
       .from("coordinaciones_inspeccion")
-      .select("asesores_ids")
+      .select("asesores_ids, cita_id, prospecto_id, expediente_id")
       .eq("id", coordinacionId)
       .maybeSingle();
     if (!coord || !(coord.asesores_ids || []).includes(asesor.id)) {
@@ -92,6 +92,31 @@ export async function retroCoordinacionPortal(
       clientePresente: datos.clientePresente,
       comentario: datos.comentario,
     });
+
+    // Si el asesor reporta que la inspección "Se realizó" (realizada), sincronizar cita y cotización
+    if (datos.estado === "realizada") {
+      try {
+        if (coord.cita_id) {
+          const { marcarInspeccionEjecutada } = await import("@/app/actions/comisiones");
+          await marcarInspeccionEjecutada({
+            citaId: coord.cita_id,
+            notas: datos.comentario || "Inspección realizada confirmada desde el portal del asesor.",
+          });
+        } else {
+          const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+          await sincronizarInspeccionConCotizaciones(sb, {
+            prospectoId: coord.prospecto_id,
+            expedienteId: coord.expediente_id,
+            perfilId: asesor.id,
+            notas: datos.comentario,
+            soloProgramar: false,
+          });
+        }
+      } catch (errSync) {
+        console.warn("Aviso al sincronizar inspección realizada desde el portal:", errSync);
+      }
+    }
+
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err.message || "No se pudo guardar." };

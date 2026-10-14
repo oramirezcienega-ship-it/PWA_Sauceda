@@ -1054,6 +1054,24 @@ export async function programarCitaManual(data: {
       });
     }
 
+    // 4b. Sincronizar fecha e inspector con cotizaciones si es inspección
+    if (data.tipoCita === "inspeccion") {
+      try {
+        const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+        await sincronizarInspeccionConCotizaciones(sb, {
+          citaId,
+          prospectoId: data.prospectoId,
+          expedienteId: data.expedienteId,
+          perfilId: data.perfilId,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          soloProgramar: true,
+        });
+      } catch (errSync) {
+        console.warn("Aviso al sincronizar cotizaciones al agendar inspección:", errSync);
+      }
+    }
+
     let waMessageId: string | null = null;
     let estadoWhatsApp: string | null = null;
     let emailEnviado = false;
@@ -1171,7 +1189,7 @@ export async function programarCitaManual(data: {
           return d;
         };
 
-        await sb.from("mensajes_whatsapp").insert({
+        const filaMensaje = {
           telefono: normalizar(data.clienteTelefono),
           texto: msg,
           direccion: "out",
@@ -1180,9 +1198,19 @@ export async function programarCitaManual(data: {
           estado: resWsp.ok ? "enviado" : "error",
           agente: agenteTag,
           wa_message_id: waMessageId,
+        };
+        // Supabase no lanza excepción: hay que revisar el error. Si falla por columnas de
+        // diagnóstico, se reintenta sin ellas para no perder el mensaje del historial.
+        const { error: errMsg } = await sb.from("mensajes_whatsapp").insert({
+          ...filaMensaje,
           error_detalle: resWsp.errorDetail || resWsp.error || null,
           error_codigo: resWsp.errorCode || null,
         });
+        if (errMsg) {
+          console.error("[Agenda] No se pudo guardar la confirmación en mensajes_whatsapp:", errMsg.message);
+          const { error: errBasico } = await sb.from("mensajes_whatsapp").insert(filaMensaje);
+          if (errBasico) console.error("[Agenda] Reintento básico también falló:", errBasico.message);
+        }
       } catch (e) {
         console.warn("No se pudo insertar en mensajes_whatsapp:", e);
       }
@@ -1408,6 +1436,25 @@ export async function editarCita(data: {
           ultimo_movimiento: new Date().toISOString().slice(0, 10),
         })
         .eq("id", citaActual.expediente_id);
+    }
+
+    // 4b. Sincronizar con cotizaciones si es inspección
+    if (data.tipoCita === "inspeccion") {
+      try {
+        const { sincronizarInspeccionConCotizaciones } = await import("@/lib/inspeccion-cotizacion");
+        await sincronizarInspeccionConCotizaciones(sb, {
+          citaId: idCita,
+          prospectoId: citaActual.prospecto_id,
+          expedienteId: citaActual.expediente_id,
+          perfilId: data.perfilId,
+          fecha: data.fecha,
+          horaInicio: data.horaInicio,
+          notas: data.notas,
+          soloProgramar: citaActual.estado !== "completada",
+        });
+      } catch (errSync) {
+        console.warn("Aviso al sincronizar cotizaciones al actualizar cita de inspección:", errSync);
+      }
     }
 
     // 5. Registrar en la bitácora
@@ -1740,7 +1787,7 @@ export async function reenviarNotificacionInspeccion(datos: {
         return d;
       };
 
-      await sb.from("mensajes_whatsapp").insert({
+      const filaMensaje = {
         telefono: normalizar(datos.clienteTelefono),
         texto: datos.mensajeTexto,
         direccion: "out",
@@ -1749,9 +1796,17 @@ export async function reenviarNotificacionInspeccion(datos: {
         estado: resWsp.ok ? "enviado" : "error",
         agente: agenteTag,
         wa_message_id: waMessageId,
+      };
+      const { error: errMsg } = await sb.from("mensajes_whatsapp").insert({
+        ...filaMensaje,
         error_detalle: resWsp.errorDetail || resWsp.error || null,
         error_codigo: resWsp.errorCode || null,
       });
+      if (errMsg) {
+        console.error("[Agenda] No se pudo guardar el mensaje en mensajes_whatsapp:", errMsg.message);
+        const { error: errBasico } = await sb.from("mensajes_whatsapp").insert(filaMensaje);
+        if (errBasico) console.error("[Agenda] Reintento básico también falló:", errBasico.message);
+      }
 
       try {
         await sb
@@ -2005,7 +2060,7 @@ export async function reagendarCitaCompleta(datos: {
 
         // Registrar en mensajes_whatsapp para bitácora y sincronización con el chat
         const { normalizarTelefono } = await import("@/lib/telefono");
-        await sb.from("mensajes_whatsapp").insert({
+        const { error: errMsgReag } = await sb.from("mensajes_whatsapp").insert({
           telefono: normalizarTelefono(citaPrev.cliente_telefono),
           texto: msg,
           direccion: "out",
@@ -2015,6 +2070,7 @@ export async function reagendarCitaCompleta(datos: {
           agente: nombreAsesor,
           wa_message_id: waMessageId,
         });
+        if (errMsgReag) console.error("[Agenda] No se pudo guardar el aviso de reagenda en mensajes_whatsapp:", errMsgReag.message);
 
         if (nuevaCita?.id) {
           await sb

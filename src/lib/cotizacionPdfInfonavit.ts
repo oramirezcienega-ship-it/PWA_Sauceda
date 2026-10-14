@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { Cotizacion } from "@/lib/types";
 
+import { dibujarLogoPdf } from "@/lib/marca-pdf";
 // Paleta oficial de marca SAUCEDA
 const VERDE_PROFUNDO = [45, 74, 43]; // #2D4A2B
 const SAUCE = [92, 122, 82]; // #5C7A52
@@ -70,20 +71,7 @@ export function generarPdfCotizacionInfonavit(
   doc.text(cotizacion.id, margin + 74, y);
 
   // Logo derecha
-  const logoX = pageWidth - margin - 22;
-  doc.setFillColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.circle(logoX + 11, y - 5, 6, "F");
-  doc.setTextColor(BLANCO[0], BLANCO[1], BLANCO[2]);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.text("S", logoX + 11, y - 2.8, { align: "center" });
-
-  doc.setFontSize(8);
-  doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("SAUCEDA", logoX + 11, y + 4, { align: "center" });
-  doc.setFontSize(5);
-  doc.setTextColor(DORADO[0], DORADO[1], DORADO[2]);
-  doc.text("BIENES RAÍCES", logoX + 11, y + 6.5, { align: "center" });
+  dibujarLogoPdf(doc, pageWidth - margin, y - 9, 10, "color", "derecha");
 
   y += 6;
   // Título Principal
@@ -124,12 +112,12 @@ export function generarPdfCotizacionInfonavit(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("$15,000.00 MXN", margin + 6, y + 14);
+  doc.text("$9,500.00 MXN", margin + 6, y + 14);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(SAUCE[0], SAUCE[1], SAUCE[2]);
-  doc.text("Tarifa única fija · Sin comisiones ocultas", margin + 6, y + 20);
+  doc.text("Tarifa preferencial de introducción · Sin comisiones ocultas", margin + 6, y + 20);
 
   // Divisor vertical
   doc.setDrawColor(BORDE[0], BORDE[1], BORDE[2]);
@@ -150,7 +138,7 @@ export function generarPdfCotizacionInfonavit(
   doc.text("Anticipo al Aceptar (50%):", margin + 89, y + 12.5);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("$7,500.00 MXN", margin + 140, y + 12.5);
+  doc.text("$4,750.00 MXN", margin + 140, y + 12.5);
 
   // Hito 2
   doc.setFillColor(DORADO[0], DORADO[1], DORADO[2]);
@@ -161,7 +149,7 @@ export function generarPdfCotizacionInfonavit(
   doc.text("Liquidación a la Firma (50%):", margin + 89, y + 20);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(VERDE_PROFUNDO[0], VERDE_PROFUNDO[1], VERDE_PROFUNDO[2]);
-  doc.text("$7,500.00 MXN", margin + 140, y + 20);
+  doc.text("$4,750.00 MXN", margin + 140, y + 20);
 
   y += tarjetaPrecioHeight + 6;
 

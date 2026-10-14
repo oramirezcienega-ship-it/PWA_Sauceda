@@ -38,6 +38,7 @@ const SERVICIO_POR_NEGOCIO: Record<string, string> = {
   "construccion-piso-estampado": "piso estampado",
   "construccion-mantenimiento-cisternas": "mantenimiento de cisterna",
   "construccion-mantenimiento-tinacos": "mantenimiento de tinacos",
+  "construccion-mantenimiento-calentadores": "mantenimiento de calentadores solares",
   "construccion-mantenimiento-postventa": "mantenimiento",
   construccion: "construcción",
   traspaso_compra: "venta de tu casa",

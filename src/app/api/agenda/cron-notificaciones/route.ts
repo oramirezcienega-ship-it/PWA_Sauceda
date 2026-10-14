@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { procesarAlertasYResumenesAgenda } from "@/lib/agenda-notificaciones";
 import { procesarRecordatoriosLeadsTelegram } from "@/lib/lead-telegram";
 import { supabaseServidor } from "@/lib/supabase/server";
+import { avanzarSolicitudesAbiertas } from "@/lib/solicitudes-proveedor";
 
 export const dynamic = "force-dynamic";
 
@@ -50,11 +51,18 @@ async function manejarCron(request: NextRequest) {
       return { recordados: 0 };
     });
 
+    // Solicitudes a proveedores: vence las que no respondieron y, en cascada, pasa al siguiente
+    const solicitudesProveedor = await avanzarSolicitudesAbiertas(supabaseServidor()).catch((e) => {
+      console.error("[Cron agenda] Error al avanzar solicitudes a proveedores:", e);
+      return 0;
+    });
+
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       ...resultado,
       leadsTelegram,
+      solicitudesProveedor,
     });
   } catch (err: any) {
     console.error("Error en la ruta cron de notificaciones de agenda:", err);

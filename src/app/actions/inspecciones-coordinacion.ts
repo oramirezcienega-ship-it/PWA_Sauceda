@@ -21,6 +21,7 @@ import {
   enviarOpcionesAClienteCoordinacion,
   previsualizarOpcionesClienteCoordinacion,
   confirmarCitaFinalCoordinacion,
+  confirmarOpcionProveedor,
   obtenerCoordinacionActivaProspecto,
   cancelarCoordinacionAction as cancelarCoordLib,
   type SolicitudInspeccionInput,
@@ -386,3 +387,28 @@ export async function enviarReporteCoordinacionesTelegramAction(
     return { ok: false, enviados: 0, sinEntrega: [], error: err.message || "Error al enviar el reporte." };
   }
 }
+
+/**
+ * Confirma directamente una de las opciones acordadas con el proveedor o cliente (Remodelación/General)
+ */
+export async function confirmarOpcionProveedorAction(
+  coordinacionId: string,
+  slotSeleccionadoId: string,
+  prospectoId?: string,
+  proveedorId?: string
+): Promise<{ ok: boolean; citaId?: string; error?: string }> {
+  try {
+    const sb = supabaseServidor();
+    const res = await confirmarOpcionProveedor(sb, coordinacionId, slotSeleccionadoId, proveedorId);
+    if (res.ok) {
+      if (prospectoId) revalidatePath(`/prospectos/${prospectoId}`);
+      revalidatePath("/coordinaciones");
+      revalidatePath("/agenda");
+    }
+    return res;
+  } catch (err: any) {
+    console.error("[Action] Error en confirmarOpcionProveedorAction:", err);
+    return { ok: false, error: err.message || "Error al confirmar opción." };
+  }
+}
+

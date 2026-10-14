@@ -15,6 +15,7 @@ import type {
   ConversacionResumen,
   MensajeChat,
 } from "@/lib/types";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 /** Devuelve true si el identificador es un canal de red social (no es teléfono). */
 function esCanalSocial(telefono: string): boolean {
@@ -658,24 +659,29 @@ export async function actualizarTipoNegocioConversacion(
     const sb = supabaseServidor();
     const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
 
+    // Antes los errores se ignoraban: si la BD rechazaba el valor (check de tipo_negocio)
+    // el asesor veía "ok" pero la clasificación no cambiaba.
     if (prospectoId) {
-      await sb
+      const { error } = await sb
         .from("prospectos")
         .update({ tipo_negocio: tipoNegocio })
         .eq("id", prospectoId);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo del prospecto: ${error.message}` };
     }
     if (expedienteId) {
-      await sb
+      const { error } = await sb
         .from("expedientes")
         .update({ tipo_negocio: tipoNegocio })
         .eq("id", expedienteId);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo del expediente: ${error.message}` };
     }
     if (!prospectoId && !expedienteId) {
       const v = variantesId(telefono);
-      await sb
+      const { error } = await sb
         .from("prospectos")
         .update({ tipo_negocio: tipoNegocio })
         .in("telefono", v);
+      if (error) return { ok: false, error: `No se pudo cambiar el tipo: ${error.message}` };
     }
     return { ok: true };
   } catch (err: any) {
@@ -1547,7 +1553,7 @@ REGLAS ESTRICTAS:
       textoFinal = (json.choices?.[0]?.message?.content || "").trim();
     } else if (process.env.ANTHROPIC_API_KEY) {
       const apiKey = process.env.ANTHROPIC_API_KEY;
-      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+      const model = modeloClaude();
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -1558,8 +1564,7 @@ REGLAS ESTRICTAS:
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1000,
-          temperature: 0.1,
+          ...opcionesClaude(model, { maxTokens: 1000, temperature: 0.1 }),
           messages: [
             {
               role: "user",
@@ -1575,7 +1580,7 @@ REGLAS ESTRICTAS:
       }
 
       const json = await res.json();
-      textoFinal = (json.content?.[0]?.text || "").trim();
+      textoFinal = textoDeRespuesta(json).trim();
     } else {
       return {
         ok: false,

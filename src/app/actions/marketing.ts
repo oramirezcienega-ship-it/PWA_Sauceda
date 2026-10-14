@@ -29,6 +29,7 @@ import {
   generarPromptFluxParametrizado,
   type CategoriaMarketingParametrizada,
 } from "@/lib/marketing-prompts";
+import { modeloClaude, opcionesClaude } from "@/lib/ia/claude";
 
 export interface SelloBanner {
   texto_top: string;
@@ -1164,7 +1165,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
       if (!apiKey) {
         throw new Error("Falta la API Key de Anthropic (ANTHROPIC_API_KEY) en las variables de entorno.");
       }
-      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+      const model = modeloClaude();
 
       console.log(`Llamando a Claude (${model}) para generar ${cantidadFinal} publicaciones...`);
 
@@ -1177,7 +1178,7 @@ Adapta este mismo tema a las diferentes plataformas y formatos de forma intelige
         },
         body: JSON.stringify({
           model: model,
-          max_tokens: 8192,
+          ...opcionesClaude(model, { maxTokens: 8192 }),
           messages: [{
             role: "user",
             content: prompt
@@ -1420,7 +1421,7 @@ Formato esperado para cada objeto:
     } else {
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en variables de entorno.");
-      const model = process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+      const model = modeloClaude();
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -1431,7 +1432,7 @@ Formato esperado para cada objeto:
         },
         body: JSON.stringify({
           model,
-          max_tokens: 8192,
+          ...opcionesClaude(model, { maxTokens: 8192 }),
           messages: [{ role: "user", content: promptUser }],
           system: systemPrompt,
         }),

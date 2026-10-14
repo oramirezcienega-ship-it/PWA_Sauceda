@@ -5,6 +5,7 @@ import {
   listarDocumentos,
   subirDocumento,
   eliminarDocumento,
+  editarDocumento,
   type DocumentoVenta,
 } from "@/app/actions/documentos";
 
@@ -44,6 +45,12 @@ export function DocumentosVentas({ modoSelector = false, onSeleccionar }: Props)
   const [archivo, setArchivo] = useState<File | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
   const inputFileRef = useRef<HTMLInputElement>(null);
+
+  // Edición en línea
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editDescripcion, setEditDescripcion] = useState("");
+  const [guardando, setGuardando] = useState(false);
 
   async function cargar() {
     setCargando(true);
@@ -100,7 +107,33 @@ export function DocumentosVentas({ modoSelector = false, onSeleccionar }: Props)
     if (!window.confirm(`¿Eliminar "${nombreDoc}"? No se podrá deshacer.`)) return;
     const r = await eliminarDocumento(id);
     if (!r.ok) { setError(r.error ?? "No se pudo eliminar."); return; }
+    if (editandoId === id) setEditandoId(null);
     void cargar();
+  }
+
+  function iniciarEdicion(doc: DocumentoVenta) {
+    setEditandoId(doc.id);
+    setEditNombre(doc.nombre);
+    setEditDescripcion(doc.descripcion ?? "");
+    setError(null);
+  }
+
+  async function handleGuardarEdicion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editandoId) return;
+    if (!editNombre.trim()) { setError("El nombre no puede quedar vacío."); return; }
+    setGuardando(true);
+    const r = await editarDocumento(editandoId, editNombre, editDescripcion);
+    setGuardando(false);
+    if (!r.ok) { setError(r.error ?? "No se pudo guardar."); return; }
+    setDocumentos((prev) =>
+      prev.map((d) =>
+        d.id === editandoId
+          ? { ...d, nombre: editNombre.trim(), descripcion: editDescripcion.trim() || null }
+          : d,
+      ),
+    );
+    setEditandoId(null);
   }
 
   const INPUT = "w-full rounded-md border border-carbon/15 bg-white px-3 py-2 text-sm text-carbon outline-none transition focus:border-sauce focus:ring-2 focus:ring-sauce/30";
@@ -239,60 +272,108 @@ export function DocumentosVentas({ modoSelector = false, onSeleccionar }: Props)
         </div>
       ) : (
         <div className="space-y-2">
-          {documentos.map((doc) => (
-            <div
-              key={doc.id}
-              className={`flex items-center gap-3 rounded-xl border bg-white p-3 transition ${
-                modoSelector
-                  ? "border-carbon/10 hover:border-sauce/40 hover:bg-sauce/5 cursor-pointer"
-                  : "border-carbon/10"
-              }`}
-              onClick={modoSelector && onSeleccionar ? () => onSeleccionar(doc) : undefined}
-            >
-              <span className="text-2xl shrink-0">{iconoMime(doc.tipo_mime)}</span>
-
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-carbon truncate">{doc.nombre}</p>
-                {doc.descripcion && (
-                  <p className="text-[11px] text-carbon/50 truncate">{doc.descripcion}</p>
-                )}
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-[10px] text-carbon/35 font-mono">{doc.nombre_archivo}</span>
-                  {doc.tamano_bytes && (
-                    <span className="text-[10px] text-carbon/35">{formatBytes(doc.tamano_bytes)}</span>
-                  )}
-                  {doc.subido_por && (
-                    <span className="text-[10px] text-carbon/35">· {doc.subido_por}</span>
-                  )}
+          {documentos.map((doc) =>
+            editandoId === doc.id ? (
+              <form
+                key={doc.id}
+                onSubmit={handleGuardarEdicion}
+                className="rounded-xl border border-sauce/40 bg-sauce/5 p-3 space-y-2"
+              >
+                <div className="flex items-center gap-2 text-[11px] text-carbon/50">
+                  <span className="text-base">{iconoMime(doc.tipo_mime)}</span>
+                  <span className="truncate font-mono" title={doc.nombre_archivo}>{doc.nombre_archivo}</span>
                 </div>
-              </div>
+                <input
+                  type="text"
+                  value={editNombre}
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  placeholder="Nombre del documento *"
+                  className={INPUT}
+                  autoFocus
+                  required
+                />
+                <input
+                  type="text"
+                  value={editDescripcion}
+                  onChange={(e) => setEditDescripcion(e.target.value)}
+                  placeholder="Descripción (opcional)"
+                  className={INPUT}
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditandoId(null)}
+                    className="rounded-md border border-carbon/20 px-3 py-1.5 text-xs text-carbon/60 hover:bg-carbon/5 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guardando}
+                    className="rounded-md bg-sauce px-3 py-1.5 text-xs font-semibold text-crema hover:bg-verde-profundo disabled:opacity-50 transition"
+                  >
+                    {guardando ? "Guardando…" : "Guardar"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div
+                key={doc.id}
+                className="rounded-xl border border-carbon/10 bg-white transition hover:border-sauce/30"
+              >
+                <div className="flex items-start gap-2.5 p-3 pb-2">
+                  <span className="text-xl leading-none shrink-0 mt-0.5">{iconoMime(doc.tipo_mime)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-carbon leading-snug line-clamp-2 break-words" title={doc.nombre}>
+                      {doc.nombre}
+                    </p>
+                    {doc.descripcion && (
+                      <p className="mt-0.5 text-[11px] text-carbon/55 line-clamp-2">{doc.descripcion}</p>
+                    )}
+                    <p className="mt-1 text-[10px] text-carbon/40 truncate" title={doc.nombre_archivo}>
+                      {[formatBytes(doc.tamano_bytes), doc.subido_por].filter(Boolean).join(" · ")}
+                      {!modoSelector && <span className="font-mono"> · {doc.nombre_archivo}</span>}
+                    </p>
+                  </div>
+                </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href={doc.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="rounded border border-carbon/15 bg-carbon/5 px-2 py-1 text-[10px] font-semibold text-carbon/60 hover:text-verde-profundo transition"
-                  title="Abrir documento"
-                >
-                  Ver
-                </a>
-                {!modoSelector && (
+                <div className="flex items-center gap-1 border-t border-carbon/5 px-2 py-1.5">
+                  <a
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded px-2 py-1 text-[11px] font-semibold text-carbon/55 hover:bg-carbon/5 hover:text-verde-profundo transition"
+                    title="Abrir documento"
+                  >
+                    Ver
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => iniciarEdicion(doc)}
+                    className="rounded px-2 py-1 text-[11px] font-semibold text-carbon/55 hover:bg-carbon/5 hover:text-verde-profundo transition"
+                  >
+                    Editar
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleEliminar(doc.id, doc.nombre)}
-                    className="rounded border border-rojo/20 bg-rojo/5 px-2 py-1 text-[10px] font-semibold text-rojo hover:bg-rojo/10 transition"
+                    className="rounded px-2 py-1 text-[11px] font-semibold text-rojo/70 hover:bg-rojo/5 hover:text-rojo transition"
                   >
                     Eliminar
                   </button>
-                )}
-                {modoSelector && (
-                  <span className="text-[10px] font-bold text-sauce">Enviar →</span>
-                )}
+                  {modoSelector && onSeleccionar && (
+                    <button
+                      type="button"
+                      onClick={() => onSeleccionar(doc)}
+                      className="ml-auto rounded-md bg-sauce px-3 py-1 text-[11px] font-bold text-crema hover:bg-verde-profundo transition"
+                    >
+                      Enviar →
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ),
+          )}
         </div>
       )}
     </div>

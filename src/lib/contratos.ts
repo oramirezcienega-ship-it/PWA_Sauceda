@@ -124,7 +124,8 @@ export function mapearTipoServicio(...textos: Array<string | null | undefined>):
   return "general";
 }
 
-export function etiquetaTipoServicio(tipo: TipoServicioContrato): string {
+export function etiquetaTipoServicio(tipo: TipoServicioContrato | string): string {
+  if (tipo === "convenio_aliado") return "Convenio de comisión compartida (aliados)";
   return TIPOS_SERVICIO_CONTRATO.find((t) => t.valor === tipo)?.etiqueta || "Servicios generales";
 }
 

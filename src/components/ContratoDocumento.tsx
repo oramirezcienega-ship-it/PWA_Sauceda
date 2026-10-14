@@ -6,6 +6,7 @@ import { numeroALetras } from "@/lib/numero-a-letras";
 import { MARCA } from "@/lib/marca";
 import { dinero, etiquetaTipoServicio, fechaLarga, type DatosContrato } from "@/lib/contratos";
 
+import { MembreteMarca } from "@/components/marca/Logo";
 interface Props {
   datos: DatosContrato;
   estado: string;
@@ -96,14 +97,7 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
       >
         {/* Encabezado */}
         <div className="flex items-center justify-between border-b-2 border-verde-profundo pb-3 mb-4">
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.svg" alt="SAUCEDA" className="h-11 w-11" />
-            <div>
-              <div className={`${claseTitulos} text-2xl font-bold text-verde-profundo leading-none tracking-wide`}>SAUCEDA</div>
-              <div className="text-[8pt] uppercase tracking-[0.2em] text-dorado font-semibold mt-1">Construye · Bienes Raíces</div>
-            </div>
-          </div>
+          <MembreteMarca alto="h-11" />
           <div className="text-right text-[9pt]">
             <div className="font-bold text-verde-profundo">Folio {d.folio}</div>
             <div>Orden de Trabajo: {d.ordenFolio}</div>

@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { dibujarLogoPdf } from "@/lib/marca-pdf";
 import type {
   EstadoResultadosReporte,
   BalanceGeneralReporte,
@@ -37,15 +38,7 @@ function agregarEncabezado(
   doc.rect(0, 28, pageWidth, 2, "F");
 
   // Marca SAUCEDA
-  doc.setTextColor(...CREMA);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("SAUCEDA", 14, 12);
-
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...DORADO);
-  doc.text("BIENES RAÍCES & CONSTRUCCIÓN", 14, 17);
+  dibujarLogoPdf(doc, 14, 7, 12, "negativo");
 
   // Título del reporte a la derecha
   doc.setFont("helvetica", "bold");

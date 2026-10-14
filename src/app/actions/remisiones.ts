@@ -4,6 +4,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { revalidatePath } from "next/cache";
 
+import { nombreTitularRemision } from "@/lib/remision-titular";
 export interface RemisionFacturaEnriquecida {
   id: string;
   cotizacionId: string | null;
@@ -239,6 +240,9 @@ export async function listarRemisionesFacturas(
       let nombreCliente = "Cliente General";
       if (r.tipo === "factura" && r.datos_documento?.razonSocial) {
         nombreCliente = r.datos_documento.razonSocial;
+      } else if (r.tipo !== "factura" && r.datos_documento?.nombreCliente) {
+        // Remisión a nombre de un titular distinto del contacto
+        nombreCliente = r.datos_documento.nombreCliente;
       } else if (r.datos_documento?.personaRecibe) {
         nombreCliente = r.datos_documento.personaRecibe;
       } else if (ot?.cliente_nombre) {
@@ -435,7 +439,7 @@ export async function obtenerRemisionFacturaPorId(
         metodosPagoRecibos: [],
         tienePasarela: costoFinanciero > 0,
         baseGravableComision: Math.max(0, montoTotal - costoFinanciero - costoProveedor),
-        clienteNombre: rem.datos_documento?.razonSocial || rem.datos_documento?.personaRecibe || "Cliente General",
+        clienteNombre: nombreTitularRemision(rem.tipo, rem.datos_documento, rem.datos_documento?.personaRecibe || "Cliente General"),
         totalCobrado: 0,
         saldoRestante: montoTotal,
       },

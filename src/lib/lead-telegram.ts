@@ -4,6 +4,7 @@ import { variantesTelefono, normalizarTelefono, formatearTelefonoLegible } from 
 import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/telegram";
 import { obtenerOCrearTokenPortal, urlPortalAsesor } from "@/lib/portal-asesor";
 import type { DatosLeadTelegram } from "@/lib/lead-telegram-formato";
+import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude";
 
 /**
  * Pasar un lead a un asesor por Telegram (desde Conversaciones): ficha del
@@ -256,16 +257,15 @@ No inventes datos que no estén en la conversación. Texto plano, una idea por l
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5",
-          max_tokens: 500,
-          temperature: 0.2,
+          model: modeloClaude("claude-haiku-5-5"),
+          ...opcionesClaude(modeloClaude("claude-haiku-5-5"), { maxTokens: 500, temperature: 0.2 }),
           system,
           messages: [{ role: "user", content: user }],
         }),
       });
       if (!res.ok) return "";
       const json = await res.json();
-      return String(json.content?.[0]?.text || "").trim();
+      return textoDeRespuesta(json).trim();
     }
   } catch (err) {
     console.warn("[Lead Telegram] No se pudo generar el resumen:", err);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { generarRemisionDesdeOrdenTrabajo } from "@/app/actions/ordenes-trabajo";
+import { actualizarDatosDocumentoRemision, generarRemisionDesdeOrdenTrabajo } from "@/app/actions/ordenes-trabajo";
 import {
   previsualizarCostosRemisionOT,
   type PrevisualizacionCostosRemision,
@@ -17,7 +17,11 @@ interface ModalGenerarRemisionOTProps {
   clienteNombre: string;
   clienteTelefono?: string;
   clienteDireccion?: string;
-  totalCotizado: number;
+  totalCotizado?: number;
+  cotizacionId?: string | null;
+  cotizacionToken?: string;
+  /** Si viene, el modal edita los datos del documento de esa remisión/factura (nombre, entrega, fiscales). */
+  remisionExistente?: RemisionFactura | null;
 }
 
 export function ModalGenerarRemisionOT({
@@ -28,22 +32,28 @@ export function ModalGenerarRemisionOT({
   ordenFolio,
   clienteNombre,
   clienteDireccion = "",
-  totalCotizado,
+  totalCotizado = 0,
+  remisionExistente = null,
 }: ModalGenerarRemisionOTProps) {
-  const [tipo, setTipo] = useState<"remision" | "factura">("remision");
-  const [fecha, setFecha] = useState(new Date().toISOString().split("T")[0]);
-
-  // Datos Remisión
-  const [direccionEntrega, setDireccionEntrega] = useState(
-    clienteDireccion || "León, Guanajuato"
+  const editando = !!remisionExistente;
+  const dd = (remisionExistente?.datosDocumento || {}) as Record<string, any>;
+  const [tipo, setTipo] = useState<"remision" | "factura">(remisionExistente?.tipo === "factura" ? "factura" : "remision");
+  const [fecha, setFecha] = useState(
+    (remisionExistente?.fecha || new Date().toISOString()).split("T")[0]
   );
-  const [personaRecibe, setPersonaRecibe] = useState(clienteNombre || "");
+
+  // Datos Remisión. "A nombre de" puede ser distinto del contacto que compró.
+  const [nombreCliente, setNombreCliente] = useState<string>(dd.nombreCliente || clienteNombre || "");
+  const [direccionEntrega, setDireccionEntrega] = useState<string>(
+    dd.direccionEntrega || clienteDireccion || "León, Guanajuato"
+  );
+  const [personaRecibe, setPersonaRecibe] = useState<string>(dd.personaRecibe || clienteNombre || "");
 
   // Datos Factura
-  const [rfc, setRfc] = useState("");
-  const [razonSocial, setRazonSocial] = useState(clienteNombre || "");
-  const [regimenFiscal, setRegimenFiscal] = useState("601");
-  const [usoCfdi, setUsoCfdi] = useState("G03");
+  const [rfc, setRfc] = useState<string>(dd.rfc || "");
+  const [razonSocial, setRazonSocial] = useState<string>(dd.razonSocial || clienteNombre || "");
+  const [regimenFiscal, setRegimenFiscal] = useState<string>(dd.regimenFiscal || "601");
+  const [usoCfdi, setUsoCfdi] = useState<string>(dd.usoCfdi || "G03");
 
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -54,7 +64,7 @@ export function ModalGenerarRemisionOT({
   const [costoFinancieroInput, setCostoFinancieroInput] = useState("");
 
   useEffect(() => {
-    if (!abierto || !ordenId) return;
+    if (!abierto || !ordenId || editando) return;
     let cancelado = false;
     previsualizarCostosRemisionOT(ordenId).then((res) => {
       if (cancelado || !res.ok || !res.datos) return;
@@ -65,7 +75,7 @@ export function ModalGenerarRemisionOT({
     return () => {
       cancelado = true;
     };
-  }, [abierto, ordenId]);
+  }, [abierto, ordenId, editando]);
 
   if (!abierto) return null;
 
@@ -89,12 +99,29 @@ export function ModalGenerarRemisionOT({
       setCargando(true);
       setError("");
 
+      if (remisionExistente) {
+        const resEd = await actualizarDatosDocumentoRemision(
+          remisionExistente.id,
+          tipo === "factura"
+            ? { rfc, razonSocial, regimenFiscal, usoCfdi }
+            : { nombreCliente, direccionEntrega, personaRecibe }
+        );
+        if (resEd.ok && resEd.remision) {
+          alGenerar(resEd.remision);
+          alCerrar();
+        } else {
+          setError(resEd.error || "No se pudo guardar el documento.");
+        }
+        return;
+      }
+
       const res = await generarRemisionDesdeOrdenTrabajo({
         ordenTrabajoId: ordenId,
         tipo,
         fecha,
         direccionEntrega,
         personaRecibe,
+        nombreCliente,
         rfc,
         razonSocial,
         regimenFiscal,
@@ -126,7 +153,9 @@ export function ModalGenerarRemisionOT({
             </span>
             <div>
               <h3 className="font-titular text-lg font-bold text-verde-profundo">
-                Generar Remisión / Factura
+                {editando
+                  ? `Editar ${remisionExistente?.tipo === "factura" ? "Factura" : "Remisión"} ${remisionExistente?.folio}`
+                  : "Generar Remisión / Factura"}
               </h3>
               <p className="text-xs text-carbon/60 font-cuerpo">
                 Orden: <span className="font-mono font-bold text-sauce">{ordenFolio}</span> · Cliente: {clienteNombre}
@@ -149,6 +178,14 @@ export function ModalGenerarRemisionOT({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-cuerpo">
+          {editando && (
+            <div className="rounded-xl bg-slate-50 border border-carbon/10 p-3 text-[11px] text-carbon/70">
+              Solo se editan los datos del documento (a nombre de quién sale, entrega y datos fiscales). Los montos y
+              costos no cambian.
+            </div>
+          )}
+
+          {!editando && (<>
           {/* Monto de la venta */}
           <div className="rounded-xl bg-slate-50 border border-carbon/10 p-3 flex justify-between items-center">
             <div>
@@ -245,6 +282,7 @@ export function ModalGenerarRemisionOT({
               </>
             )}
           </div>
+          </>)}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -253,6 +291,7 @@ export function ModalGenerarRemisionOT({
               </label>
               <select
                 value={tipo}
+                disabled={editando}
                 onChange={(e) => setTipo(e.target.value as "remision" | "factura")}
                 className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce outline-none bg-white font-bold"
               >
@@ -268,6 +307,7 @@ export function ModalGenerarRemisionOT({
               <input
                 type="date"
                 value={fecha}
+                disabled={editando}
                 onChange={(e) => setFecha(e.target.value)}
                 className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce outline-none"
               />
@@ -279,6 +319,25 @@ export function ModalGenerarRemisionOT({
               <span className="font-titular text-[11px] font-bold text-blue-900 uppercase tracking-wide block">
                 Datos de Entrega en Sitio
               </span>
+              <div>
+                <label className="block font-semibold text-carbon/80 mb-1">
+                  Remisión a nombre de *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={nombreCliente}
+                  onChange={(e) => setNombreCliente(e.target.value)}
+                  placeholder="Titular o quien paga (puede ser distinto del contacto)"
+                  className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon focus:border-sauce outline-none bg-white"
+                />
+                {nombreCliente.trim() && nombreCliente.trim() !== clienteNombre && (
+                  <span className="mt-1 block text-[10.5px] text-amber-700">
+                    Distinto del contacto ({clienteNombre}).
+                  </span>
+                )}
+              </div>
+
               <div>
                 <label className="block font-semibold text-carbon/80 mb-1">
                   Dirección de Entrega
@@ -386,7 +445,7 @@ export function ModalGenerarRemisionOT({
               disabled={cargando}
               className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 text-xs font-bold transition shadow-md flex items-center gap-1.5 disabled:opacity-50"
             >
-              {cargando ? "Generando Folio..." : "✓ Generar Documento Oficial"}
+              {cargando ? (editando ? "Guardando..." : "Generando Folio...") : editando ? "✓ Guardar Cambios" : "✓ Generar Documento Oficial"}
             </button>
           </div>
         </form>
