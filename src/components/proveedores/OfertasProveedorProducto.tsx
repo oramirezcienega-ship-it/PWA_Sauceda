@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatoPesos } from "@/lib/formato";
 import { formatoEscalon, MEDIDAS_TARIFA } from "@/lib/tarifas-capacidad";
 import type { HistorialOfertaProveedor, OfertaProveedorProducto } from "@/lib/types";
@@ -27,6 +27,10 @@ interface OfertasProveedorProductoProps {
    */
   onProductoActualizado?: (oferta: OfertaProveedorProducto) => void;
 }
+
+/** Columnas en escritorio: producto, costo/venta/margen, proceso, condiciones, acciones. */
+const COLUMNAS_OFERTA =
+  "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.7fr)_minmax(0,1.5fr)_9.5rem]";
 
 function vencida(fecha: string | null): boolean {
   if (!fecha) return false;
@@ -137,7 +141,8 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
       {ofertas && ofertas.some((o) => o.pendienteRevision) && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           🔔 El proveedor actualizó {ofertas.filter((o) => o.pendienteRevision).length} producto(s) desde su link.
-          Revisa los cambios y da clic en <b>Revisado</b>; hasta entonces su costo no se usa en el catálogo.
+          Revisa los cambios (renglones en amarillo) y da clic en <b>Aprobar cambios</b>; hasta entonces su costo no
+          se usa en el catálogo.
         </div>
       )}
 
@@ -153,262 +158,203 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-carbon/10 shadow-2xs">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-carbon/10 bg-slate-50 text-carbon/70 uppercase tracking-wider font-semibold">
-                <th className="py-3 px-3 min-w-[200px]">{modo === "proveedor" ? "Producto" : "Proveedor"}</th>
-                <th className="py-3 px-3 text-right whitespace-nowrap">Costo</th>
-                <th className="py-3 px-3 text-right whitespace-nowrap">Precio venta</th>
-                <th className="py-3 px-3 text-right whitespace-nowrap">Margen</th>
-                <th className="py-3 px-3 whitespace-nowrap">Mínimo</th>
-                <th className="py-3 px-3 whitespace-nowrap">Garantía</th>
-                <th className="py-3 px-3 whitespace-nowrap">Tiempo</th>
-                <th className="py-3 px-3 whitespace-nowrap">Vigencia</th>
-                <th className="py-3 px-3 text-right whitespace-nowrap">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-carbon/10">
-              {ofertas.map((o) => {
-                const margen = o.productoPrecioUnitario - o.costoUnitario;
-                const margenPct = o.productoPrecioUnitario > 0 ? (margen / o.productoPrecioUnitario) * 100 : 0;
-                const esMasBarato = costoMinimo !== null && o.activo && o.costoUnitario === costoMinimo;
-                return (
-                  <Fragment key={o.id}>
-                    <tr className={`hover:bg-slate-50/60 ${!o.activo ? "opacity-50" : ""}`}>
-                      <td className="py-2.5 px-3">
-                        <button type="button" onClick={() => handleExpandir(o)} className="text-left">
-                          <div className="font-semibold text-carbon flex items-center gap-1.5 flex-wrap">
-                            {o.preferido && <span title="Proveedor preferido">⭐</span>}
-                            {modo === "proveedor" ? o.productoNombre : o.proveedorNombre}
-                            {!o.activo && <span className="text-[9px] rounded bg-carbon/10 px-1">inactiva</span>}
-                            {o.pendienteRevision && (
-                              <span
-                                className="text-[9px] rounded bg-amber-100 text-amber-800 px-1 font-bold"
-                                title={
-                                  o.actualizadoPorProveedorAt
-                                    ? `Actualizado por el proveedor el ${formatoFecha(o.actualizadoPorProveedorAt)}`
-                                    : undefined
-                                }
-                              >
-                                🔔 actualizado por proveedor
-                              </span>
-                            )}
-                            {modo === "producto" && !o.proveedorActivo && (
-                              <span className="text-[9px] rounded bg-rojo/10 text-rojo px-1">proveedor inactivo</span>
-                            )}
-                          </div>
-                          <div className="text-[10.5px] text-carbon/50">
-                            {modo === "proveedor" ? o.productoCategoria : o.zonasCobertura || "—"} ·{" "}
-                            {expandida === o.id ? "ocultar detalle ▲" : "ver detalle ▼"}
-                          </div>
-                        </button>
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                        <span className={esMasBarato ? "font-bold text-emerald-700" : ""}>
-                          {formatoPesos(o.costoUnitario)}
-                        </span>
-                        <span className="text-carbon/50">/{o.productoUnidad}</span>
-                        {o.costosVolumen.length > 0 && (
-                          <div className="text-[10px] text-carbon/50">{o.costosVolumen.length} rango(s) por volumen</div>
+        <div className="rounded-xl border border-carbon/10 bg-white shadow-2xs">
+          <div
+            className={`hidden gap-5 rounded-t-xl border-b border-carbon/10 bg-slate-50 px-4 py-2.5 text-[10.5px] font-bold uppercase tracking-wider text-carbon/55 lg:grid ${COLUMNAS_OFERTA}`}
+          >
+            <span>{modo === "proveedor" ? "Producto" : "Proveedor"}</span>
+            <span>Costo · venta · margen</span>
+            <span>Proceso</span>
+            <span>Condiciones</span>
+            <span className="text-right">Acciones</span>
+          </div>
+          <div className="divide-y divide-carbon/10">
+            {ofertas.map((o) => {
+              const esMasBarato = costoMinimo !== null && o.activo && o.costoUnitario === costoMinimo;
+              const unir = (...p: string[]) => p.map((x) => (x || "").trim()).filter(Boolean).join(" · ");
+              const condiciones: [string, string][] = [
+                [
+                  "🛡️ Garantía",
+                  unir(o.garantiaAnios > 0 ? `${o.garantiaAnios} ${o.garantiaAnios === 1 ? "año" : "años"}` : "", o.garantiaCondiciones),
+                ],
+                ["⏱️ Tiempo", o.tiempoEjecucion],
+                ["💳 Pago", unir(o.anticipoPct > 0 ? `${o.anticipoPct}% anticipo` : "", o.condicionesPago)],
+                ["📍 Zonas", o.zonasCobertura],
+                [
+                  "↧ Mínimo",
+                  unir(o.cantidadMinima > 0 ? `${o.cantidadMinima} ${o.productoUnidad}` : "", o.montoMinimo > 0 ? formatoPesos(o.montoMinimo) : ""),
+                ],
+              ];
+              const abierta = expandida === o.id;
+              return (
+                <div
+                  key={o.id}
+                  className={`border-l-4 ${o.pendienteRevision ? "border-l-amber-400 bg-amber-50/30" : o.preferido ? "border-l-dorado" : "border-l-transparent"} ${
+                    !o.activo ? "opacity-50" : ""
+                  }`}
+                >
+                  <div className={`grid gap-4 px-4 py-4 lg:items-start lg:gap-5 ${COLUMNAS_OFERTA}`}>
+                    {/* Producto / proveedor */}
+                    <div className="min-w-0 space-y-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-carbon/45">
+                        {modo === "proveedor" ? o.productoCategoria : o.zonasCobertura || "Sin zonas"}
+                      </div>
+                      <div className="font-titular text-sm font-bold leading-snug text-verde-profundo">
+                        {modo === "proveedor" ? o.productoNombre : o.proveedorNombre}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {o.preferido && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">⭐ Preferido</span>
                         )}
-                        {o.tarifasCapacidad.length > 0 && (
-                          <div className="text-[10px] text-carbon/60">
-                            {o.tarifasCapacidad
-                              .slice(0, 3)
-                              .map((t) => `${formatoEscalon(t.hastaLitros, o.productoTarifaMedida)} ${formatoPesos(t.costo)}`)
-                              .join(" · ")}
-                            {o.tarifasCapacidad.length > 3 ? " …" : ""}
-                          </div>
+                        {o.pendienteRevision && (
+                          <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                            🔔 Cambios del proveedor
+                            {o.actualizadoPorProveedorAt ? ` · ${formatoFecha(o.actualizadoPorProveedorAt)}` : ""}
+                          </span>
                         )}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                        {formatoPesos(o.productoPrecioUnitario)}
-                      </td>
-                      <td
-                        className={`py-2.5 px-3 text-right font-mono whitespace-nowrap ${
-                          margen >= 0 ? "text-emerald-700" : "text-rojo"
-                        }`}
-                      >
-                        {formatoPesos(margen)}
-                        <div className="text-[10px]">{margenPct.toFixed(1)}%</div>
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        {o.cantidadMinima > 0 && (
-                          <div>
-                            {o.cantidadMinima} {o.productoUnidad}
-                          </div>
+                        {!o.activo && <span className="rounded-full bg-carbon/10 px-2 py-0.5 text-[10px]">Inactiva</span>}
+                        {modo === "producto" && !o.proveedorActivo && (
+                          <span className="rounded-full bg-rojo/10 px-2 py-0.5 text-[10px] text-rojo">Proveedor inactivo</span>
                         )}
-                        {o.montoMinimo > 0 && <div>{formatoPesos(o.montoMinimo)}</div>}
-                        {!o.cantidadMinima && !o.montoMinimo && <span className="text-carbon/40">—</span>}
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        {o.garantiaAnios > 0 ? `${o.garantiaAnios} año(s)` : <span className="text-carbon/40">—</span>}
-                      </td>
-                      <td className="py-2.5 px-3">{o.tiempoEjecucion || <span className="text-carbon/40">—</span>}</td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        {o.vigenciaPrecio ? (
-                          <span className={vencida(o.vigenciaPrecio) ? "text-rojo font-semibold" : ""}>
-                            {vencida(o.vigenciaPrecio) ? "Vencido " : ""}
+                        {o.vigenciaPrecio && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] ${
+                              vencida(o.vigenciaPrecio) ? "bg-rojo/10 font-bold text-rojo" : "bg-slate-100 text-carbon/60"
+                            }`}
+                          >
+                            {vencida(o.vigenciaPrecio) ? "Precio vencido " : "Vigente hasta "}
                             {formatoFecha(o.vigenciaPrecio)}
                           </span>
-                        ) : (
-                          <span className="text-carbon/40">—</span>
                         )}
-                      </td>
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap space-x-1">
-                        {o.pendienteRevision && (
-                          <button
-                            type="button"
-                            onClick={() => handleRevisada(o)}
-                            title="Aceptar lo que capturó el proveedor"
-                            className="rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600"
-                          >
-                            ✓ Revisado
-                          </button>
-                        )}
-                        {!o.preferido && (
-                          <button
-                            type="button"
-                            onClick={() => handlePreferido(o)}
-                            title="Usar su costo en el catálogo"
-                            className="rounded-md bg-white border border-carbon/20 px-2 py-1 text-[11px] font-semibold text-carbon/70 hover:border-dorado hover:text-amber-700"
-                          >
-                            ⭐
-                          </button>
-                        )}
+                      </div>
+                    </div>
+
+                    {/* Costo vs venta */}
+                    <div className="min-w-0">
+                      <TablaCostos o={o} resaltar={esMasBarato} />
+                    </div>
+
+                    {/* Proceso */}
+                    <div className="min-w-0">
+                      <div className="mb-1 text-[10px] font-bold uppercase text-carbon/45 lg:hidden">Proceso</div>
+                      {o.descripcionProceso.trim() ? (
+                        <p className="whitespace-pre-line break-words leading-relaxed text-carbon/80">{o.descripcionProceso.trim()}</p>
+                      ) : (
+                        <p className="text-carbon/35">Sin describir</p>
+                      )}
+                    </div>
+
+                    {/* Condiciones */}
+                    <dl className="min-w-0 space-y-1.5 rounded-lg bg-slate-50 p-2.5">
+                      {condiciones.map(([k, v]) => (
+                        <div key={k} className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-2">
+                          <dt className="text-carbon/50">{k}</dt>
+                          <dd className={`break-words ${v ? "font-semibold text-carbon" : "text-carbon/30"}`}>{v || "—"}</dd>
+                        </div>
+                      ))}
+                    </dl>
+
+                    {/* Acciones */}
+                    <div className="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
+                      {o.pendienteRevision && (
                         <button
                           type="button"
-                          onClick={() => setModal({ oferta: o })}
-                          className="rounded-md bg-white border border-carbon/20 px-2.5 py-1 text-[11px] font-semibold text-carbon/70 hover:border-sauce hover:text-sauce"
+                          onClick={() => handleRevisada(o)}
+                          title="Aceptar lo que capturó el proveedor"
+                          className="rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-600"
                         >
-                          Editar
+                          ✓ Aprobar cambios
                         </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setModal({ oferta: o })}
+                        className="rounded-md border border-carbon/20 bg-white px-3 py-1.5 text-[11px] font-semibold text-carbon/75 hover:border-sauce hover:text-sauce"
+                      >
+                        ✎ Editar
+                      </button>
+                      {!o.preferido && (
                         <button
                           type="button"
-                          onClick={() => handleEliminar(o)}
-                          className="rounded-md bg-white border border-rojo/30 px-2 py-1 text-[11px] font-semibold text-rojo hover:bg-rojo/5"
+                          onClick={() => handlePreferido(o)}
+                          title="Usar su costo en el catálogo"
+                          className="rounded-md border border-carbon/20 bg-white px-3 py-1.5 text-[11px] font-semibold text-carbon/70 hover:border-dorado hover:text-amber-700"
                         >
-                          ✕
+                          ⭐ Preferir
                         </button>
-                      </td>
-                    </tr>
-                    {expandida === o.id && (
-                      <tr className="bg-slate-50/50">
-                        <td colSpan={9} className="px-4 py-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Detalle titulo="Proceso" texto={o.descripcionProceso} multilinea />
-                              <Detalle titulo="Condiciones de garantía" texto={o.garantiaCondiciones} />
-                              <Detalle
-                                titulo="Pago"
-                                texto={[o.anticipoPct > 0 ? `Anticipo ${o.anticipoPct}%` : "", o.condicionesPago]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              />
-                              <Detalle titulo="Zonas" texto={o.zonasCobertura} />
-                              <Detalle titulo="Notas" texto={o.notas} />
-                              {o.tarifasCapacidad.length > 0 && (
-                                <div>
-                                  <div className="text-[10px] uppercase font-bold text-carbon/50">
-                                    Costo por {MEDIDAS_TARIFA[o.productoTarifaMedida].etiqueta.toLowerCase()}
-                                  </div>
-                                  <table className="mt-1 text-[11px]">
-                                    <thead>
-                                      <tr className="text-carbon/50">
-                                        <th className="pr-4 text-left font-semibold">Capacidad</th>
-                                        <th className="pr-4 text-right font-semibold">Costo</th>
-                                        <th className="pr-4 text-right font-semibold">Venta</th>
-                                        <th className="text-right font-semibold">Margen</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {o.tarifasCapacidad.map((t) => {
-                                        const venta =
-                                          o.productoTarifasCapacidad.find((v) => v.hastaLitros === t.hastaLitros)?.precio ?? null;
-                                        const m = venta !== null ? venta - t.costo : null;
-                                        return (
-                                          <tr key={t.hastaLitros} className="font-mono">
-                                            <td className="pr-4">{formatoEscalon(t.hastaLitros, o.productoTarifaMedida)}</td>
-                                            <td className="pr-4 text-right">{formatoPesos(t.costo)}</td>
-                                            <td className="pr-4 text-right">{venta !== null ? formatoPesos(venta) : "—"}</td>
-                                            <td
-                                              className={`text-right ${
-                                                m === null ? "text-carbon/40" : m >= 0 ? "text-emerald-700" : "text-rojo"
-                                              }`}
-                                            >
-                                              {m === null ? "—" : formatoPesos(m)}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                              {o.costosVolumen.length > 0 && (
-                                <div>
-                                  <div className="text-[10px] uppercase font-bold text-carbon/50">Costo por volumen</div>
-                                  {o.costosVolumen.map((r) => (
-                                    <div key={r.hasta} className="font-mono">
-                                      hasta {r.hasta} {o.productoUnidad}: {formatoPesos(r.costo)}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {o.fichaTecnicaUrl && (
-                                <a
-                                  href={o.fichaTecnicaUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-block text-sauce font-semibold hover:underline"
-                                >
-                                  📄 {o.fichaTecnicaNombre || "Ficha técnica"}
-                                </a>
-                              )}
-                            </div>
-                            <div className="space-y-3">
-                              {o.fotos.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2">
-                                  {o.fotos.map((f) => (
-                                    <a key={f.url} href={f.url} target="_blank" rel="noreferrer" title={f.titulo}>
-                                      <img
-                                        src={f.url}
-                                        alt={f.titulo || "Foto del trabajo"}
-                                        className="h-20 w-full object-cover rounded-lg border"
-                                      />
-                                    </a>
-                                  ))}
-                                </div>
-                              )}
-                              <div>
-                                <div className="text-[10px] uppercase font-bold text-carbon/50">Historial de costo</div>
-                                {!historial[o.id] ? (
-                                  <div className="text-carbon/40">Cargando…</div>
-                                ) : historial[o.id].length === 0 ? (
-                                  <div className="text-carbon/40">Sin cambios desde el alta.</div>
-                                ) : (
-                                  historial[o.id].map((h) => (
-                                    <div key={h.id} className="flex gap-2">
-                                      <span className="text-carbon/50">{formatoFecha(h.fecha)}</span>
-                                      <span className="font-mono">
-                                        {formatoPesos(h.costoAnterior)} → {formatoPesos(h.costoNuevo)}
-                                      </span>
-                                      {h.motivo && <span className="text-carbon/60">({h.motivo})</span>}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleExpandir(o)}
+                        className="rounded-md px-3 py-1.5 text-[11px] font-semibold text-sauce hover:bg-sauce/10"
+                      >
+                        {abierta ? "Ocultar ▲" : `Fotos (${o.fotos.length}) e historial ▼`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminar(o)}
+                        className="rounded-md px-3 py-1.5 text-[11px] font-semibold text-rojo/70 hover:bg-rojo/5 hover:text-rojo"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+
+                  {abierta && (
+                    <div className="grid grid-cols-1 gap-5 border-t border-carbon/10 bg-slate-50/60 px-4 py-4 md:grid-cols-[2fr_1fr]">
+                      <div className="space-y-3">
+                        {o.fotos.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                            {o.fotos.map((f) => (
+                              <a key={f.url} href={f.url} target="_blank" rel="noreferrer" title={f.titulo}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={f.url}
+                                  alt={f.titulo || "Foto del trabajo"}
+                                  className="h-24 w-full rounded-lg border object-cover"
+                                />
+                              </a>
+                            ))}
                           </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                        ) : (
+                          <div className="text-carbon/40">Sin fotos de trabajos.</div>
+                        )}
+                        <Detalle titulo="Notas internas" texto={o.notas} />
+                        {o.fichaTecnicaUrl && (
+                          <a
+                            href={o.fichaTecnicaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block font-semibold text-sauce hover:underline"
+                          >
+                            📄 {o.fichaTecnicaNombre || "Ficha técnica"}
+                          </a>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold uppercase text-carbon/50">Historial de costo</div>
+                        {!historial[o.id] ? (
+                          <div className="text-carbon/40">Cargando…</div>
+                        ) : historial[o.id].length === 0 ? (
+                          <div className="text-carbon/40">Sin cambios desde el alta.</div>
+                        ) : (
+                          historial[o.id].map((h) => (
+                            <div key={h.id} className="flex flex-wrap gap-2">
+                              <span className="text-carbon/50">{formatoFecha(h.fecha)}</span>
+                              <span className="font-mono">
+                                {formatoPesos(h.costoAnterior)} → {formatoPesos(h.costoNuevo)}
+                              </span>
+                              {h.motivo && <span className="text-carbon/60">({h.motivo})</span>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -422,6 +368,94 @@ export function OfertasProveedorProducto({ modo, id, onProductoActualizado }: Of
           onCerrar={() => setModal(null)}
           onGuardada={handleGuardada}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Costo del proveedor contra nuestro precio de venta, con margen.
+ * Si cobra por escalones (litros/tubos) se compara escalón por escalón; el costo unitario no aplica.
+ */
+function TablaCostos({ o, resaltar }: { o: OfertaProveedorProducto; resaltar: boolean }) {
+  const pct = (venta: number, costo: number) => (venta > 0 ? `${(((venta - costo) / venta) * 100).toFixed(0)}%` : "");
+  const colorMargen = (m: number) => (m >= 0 ? "text-emerald-700" : "text-rojo");
+
+  if (o.tarifasCapacidad.length > 0) {
+    return (
+      <table className="w-full font-mono text-[11px]">
+        <thead>
+          <tr className="text-left font-cuerpo text-[10px] text-carbon/45">
+            <th className="pb-1 font-semibold">{MEDIDAS_TARIFA[o.productoTarifaMedida].etiqueta}</th>
+            <th className="pb-1 text-right font-semibold">Costo</th>
+            <th className="pb-1 text-right font-semibold">Venta</th>
+            <th className="pb-1 text-right font-semibold">Margen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {o.tarifasCapacidad.map((t) => {
+            const venta = o.productoTarifasCapacidad.find((v) => v.hastaLitros === t.hastaLitros)?.precio ?? null;
+            const m = venta !== null ? venta - t.costo : null;
+            return (
+              <tr key={t.hastaLitros}>
+                <td className="py-0.5 pr-2 text-carbon/70">{formatoEscalon(t.hastaLitros, o.productoTarifaMedida)}</td>
+                <td className={`py-0.5 pr-2 text-right ${resaltar ? "font-bold text-emerald-700" : "text-carbon"}`}>
+                  {formatoPesos(t.costo)}
+                </td>
+                <td className="py-0.5 pr-2 text-right text-carbon/70">{venta !== null ? formatoPesos(venta) : "—"}</td>
+                <td className={`py-0.5 text-right ${m === null ? "text-carbon/35" : colorMargen(m)}`}>
+                  {m === null || venta === null ? "sin precio" : `${formatoPesos(m)} · ${pct(venta, t.costo)}`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  }
+
+  if (!(o.costoUnitario > 0)) {
+    return (
+      <div className="space-y-1">
+        <span className="inline-block rounded-md border border-dashed border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
+          Sin costo capturado
+        </span>
+        <div className="font-mono text-[11px] text-carbon/55">
+          Venta {formatoPesos(o.productoPrecioUnitario)}/{o.productoUnidad}
+        </div>
+      </div>
+    );
+  }
+
+  const m = o.productoPrecioUnitario - o.costoUnitario;
+  return (
+    <div className="font-mono text-[11px]">
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <div className="font-cuerpo text-[10px] text-carbon/45">Costo</div>
+          <div className={`text-sm ${resaltar ? "font-bold text-emerald-700" : "font-semibold text-carbon"}`}>
+            {formatoPesos(o.costoUnitario)}
+          </div>
+          <div className="text-carbon/45">/{o.productoUnidad}</div>
+        </div>
+        <div>
+          <div className="font-cuerpo text-[10px] text-carbon/45">Venta</div>
+          <div className="text-sm text-carbon/75">{formatoPesos(o.productoPrecioUnitario)}</div>
+        </div>
+        <div>
+          <div className="font-cuerpo text-[10px] text-carbon/45">Margen</div>
+          <div className={`text-sm font-semibold ${colorMargen(m)}`}>{formatoPesos(m)}</div>
+          <div className={colorMargen(m)}>{pct(o.productoPrecioUnitario, o.costoUnitario)}</div>
+        </div>
+      </div>
+      {o.costosVolumen.length > 0 && (
+        <div className="mt-1.5 space-y-0.5 text-carbon/60">
+          {o.costosVolumen.map((r) => (
+            <div key={r.hasta}>
+              hasta {r.hasta} {o.productoUnidad}: {formatoPesos(r.costo)}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
