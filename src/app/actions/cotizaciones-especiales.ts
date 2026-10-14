@@ -102,8 +102,10 @@ function aCotizacion(f: any): CotizacionEspecial {
   };
 }
 
+// Hay dos relaciones entre las tablas (respuesta -> cotización y respuesta_elegida): se indica cuál usar,
+// si no PostgREST responde "más de una relación" y la lista sale vacía.
 const SELECT_CE =
-  "*, cotizaciones_especiales_respuestas ( id, proveedor_id, estado, precio, tiempo, incluye, fecha_limite, respondida_at, proveedores:proveedor_id ( nombre ) )";
+  "*, cotizaciones_especiales_respuestas!cotizaciones_especiales_respuestas_cotizacion_especial_id_fkey ( id, proveedor_id, estado, precio, tiempo, incluye, fecha_limite, respondida_at, proveedores:proveedor_id ( nombre ) )";
 
 /** Cotizaciones especiales de una conversación, la más reciente primero. */
 export async function listarCotizacionesEspecialesConversacion(telefono: string): Promise<CotizacionEspecial[]> {
@@ -116,7 +118,10 @@ export async function listarCotizacionesEspecialesConversacion(telefono: string)
     .neq("estado", "cancelada")
     .order("created_at", { ascending: false })
     .limit(10);
-  if (error) return [];
+  if (error) {
+    console.error("[Cotizaciones especiales] Error al listar:", error.message);
+    return [];
+  }
   return (data || []).map(aCotizacion);
 }
 
