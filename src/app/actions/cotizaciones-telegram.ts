@@ -7,6 +7,7 @@ import { obtenerConfiguracionTelegram } from "@/lib/telegram";
 import { enviarDocumentoTelegram } from "@/lib/telegram-envios";
 import { registrarActividad } from "@/lib/actividades";
 import {
+  SERVICIOS,
   armarPaqueteAutorizacion,
   listarDestinatariosAutorizacion,
   type DestinatarioAutorizacion,
@@ -137,4 +138,54 @@ export async function enviarAutorizacionCostosAction(
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al enviar por Telegram.", enviados: [] };
   }
+}
+
+export interface AutorizacionProveedor {
+  cotizacionId: string;
+  cliente: string;
+  servicio: string;
+  estatusCotizacion: string;
+  precioFinal: number;
+  proveedor: string;
+  estado: "esperando" | "autorizado" | "rechazado" | "error";
+  enviadoAt: string;
+  respondidoAt: string | null;
+  error?: string;
+}
+
+/** Todas las solicitudes de autorización de costo enviadas a proveedores, de todas las cotizaciones. */
+export async function listarAutorizacionesProveedoresAction(): Promise<AutorizacionProveedor[]> {
+  await requireAdmin();
+  const sb = supabaseServidor();
+  const { data, error } = await sb
+    .from("cotizaciones")
+    .select("id, servicio_tipo, estatus, precio_final, cliente_nombre_personalizado, autorizacion_costos, prospectos:prospecto_id(nombre, primer_apellido, segundo_apellido)")
+    .not("autorizacion_costos", "is", null);
+  if (error) throw new Error(error.message);
+
+  const filas: AutorizacionProveedor[] = [];
+  for (const c of (data || []) as any[]) {
+    const registros = (c.autorizacion_costos || {}) as Record<string, RegistroAutorizacionCosto>;
+    const pros = Array.isArray(c.prospectos) ? c.prospectos[0] : c.prospectos;
+    const cliente =
+      c.cliente_nombre_personalizado?.trim() ||
+      [pros?.nombre, pros?.primer_apellido, pros?.segundo_apellido].filter(Boolean).join(" ") ||
+      "Cliente";
+    for (const reg of Object.values(registros)) {
+      if (reg?.tipo !== "proveedor") continue;
+      filas.push({
+        cotizacionId: c.id,
+        cliente,
+        servicio: SERVICIOS[c.servicio_tipo] || c.servicio_tipo || "—",
+        estatusCotizacion: c.estatus,
+        precioFinal: Number(c.precio_final || 0),
+        proveedor: reg.nombre,
+        estado: !reg.ok ? "error" : reg.respuesta === "autorizado" ? "autorizado" : reg.respuesta === "rechazado" ? "rechazado" : "esperando",
+        enviadoAt: reg.enviadoAt,
+        respondidoAt: reg.respondidoAt || null,
+        error: reg.error,
+      });
+    }
+  }
+  return filas.sort((a, b) => a.enviadoAt.localeCompare(b.enviadoAt));
 }

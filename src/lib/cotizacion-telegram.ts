@@ -29,7 +29,7 @@ export type DestinatarioAutorizacion = {
   telegramChatId: string | null;
 };
 
-const SERVICIOS: Record<string, string> = {
+export const SERVICIOS: Record<string, string> = {
   impermeabilizacion: "Impermeabilización",
   pintura: "Pintura y acabados",
   losa: "Construcción de losa",

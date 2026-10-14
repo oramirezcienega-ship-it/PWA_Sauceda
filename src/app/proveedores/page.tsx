@@ -1,6 +1,8 @@
 import { Encabezado } from "@/components/Encabezado";
 import { TablaProveedores } from "@/components/TablaProveedores";
 import { listarProveedores } from "@/app/actions/proveedores";
+import { listarAutorizacionesProveedoresAction, type AutorizacionProveedor } from "@/app/actions/cotizaciones-telegram";
+import { PanelAutorizacionesProveedores } from "@/components/PanelAutorizacionesProveedores";
 import { CATEGORIAS_PROVEEDOR, type Proveedor } from "@/lib/types";
 import { obtenerUsuarioActual } from "@/app/actions/usuarios";
 import { redirect } from "next/navigation";
@@ -15,6 +17,7 @@ export default async function PaginaProveedores() {
   }
 
   let proveedores: Proveedor[] = [];
+  let autorizaciones: AutorizacionProveedor[] = [];
 
   try {
     proveedores = await listarProveedores();
@@ -23,6 +26,12 @@ export default async function PaginaProveedores() {
       redirect("/login");
     }
     console.error("Error al cargar proveedores:", err);
+  }
+
+  try {
+    autorizaciones = await listarAutorizacionesProveedoresAction();
+  } catch (err) {
+    console.error("Error al cargar autorizaciones de proveedores:", err);
   }
 
   const categoriasSet = new Set<string>(CATEGORIAS_PROVEEDOR);
@@ -69,6 +78,8 @@ export default async function PaginaProveedores() {
             </div>
           </div>
         </div>
+
+        <PanelAutorizacionesProveedores autorizaciones={autorizaciones} />
 
         <TablaProveedores proveedoresIniciales={proveedores} categoriasDisponibles={categoriasDisponibles} />
       </div>
