@@ -189,19 +189,55 @@ def normalizar_telefono_crm(raw_phone: str) -> tuple[str, str]:
     return e164, sufijo_10
 
 
+# Plantillas que no deben enviarse (mismas reglas que src/lib/campanas-whatsapp.ts).
+# Las de impermeabilización ofrecían inspección "gratuita", pero la visita tiene costo.
+# Se puede sobreescribir con PLANTILLAS_PAUSADAS="a,b" en .env (vacío = ninguna).
+PLANTILLAS_PAUSADAS = {
+    p.strip()
+    for p in os.getenv("PLANTILLAS_PAUSADAS", "reactivacion_impermeabilizacio,reactivar_inspeccion_gratuita").split(",")
+    if p.strip()
+}
+
+# Meta no acepta {{1}} vacío: sin nombre válido el saludo queda "Hola 👋,".
+SALUDO_SIN_NOMBRE = "👋"
+
+NO_SON_NOMBRE = {
+    "cliente", "clientes", "sauceda", "hola", "buen", "buena", "buenas", "buenos", "dia", "día", "tardes", "noches",
+    "la", "el", "los", "las", "de", "del", "y", "lead", "prospecto", "contacto", "info", "informacion", "información",
+    "usuario", "user", "test", "prueba", "casa", "familia", "vida", "null", "none", "undefined", "sin", "nombre",
+    "sr", "sra", "srita", "señor", "señora", "senor", "senora", "lic", "ing", "arq", "dr", "dra", "mi", "amor",
+}
+TITULOS_ARTICULOS = {"el", "la", "los", "las", "sr", "sra", "lic", "ing", "arq", "dr", "dra"}
+RE_DOMINIO_CORREO = re.compile(r"(gmail|hotmail|outlook|yahoo|icloud|live|msn|aol|prodigy)(com|mx|es|net)?$", re.I)
+RE_SOLO_LETRAS = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]+$")
+RE_VOCAL = re.compile(r"[aeiouáéíóúü]", re.I)
+
+
+def _es_nombre_valido(token: str) -> bool:
+    t = token.strip()
+    if len(t) < 3 or len(t) > 15:
+        return False
+    if re.search(r"[\d@_.]", t) or not RE_SOLO_LETRAS.match(t):
+        return False
+    if RE_DOMINIO_CORREO.search(t) or not RE_VOCAL.search(t):
+        return False
+    return t.lower() not in NO_SON_NOMBRE
+
+
 def clean_name(raw_name: str) -> str:
+    """Primer nombre para saludar, o "" si lo que trae Mautic no parece un nombre
+    (correos, usuarios, números, "Buen día", "Sauceda", iniciales...)."""
     if not raw_name:
         return ""
-    clean = re.sub(r"[^\w\sÁÉÍÓÚáéíóúÑñÜü]", "", str(raw_name)).strip()
-    if not clean:
+    texto = str(raw_name).strip()
+    if not texto or "@" in texto:
         return ""
-    parts = clean.split()
-    first = parts[0].capitalize()
-    if len(first) < 2 or first.lower() in ["de", "la", "el", "los", "las", "lead", "prospecto"]:
-        if len(parts) > 1:
-            return f"{first} {parts[1].capitalize()}"
-        return ""
-    return first
+    for palabra in texto.split()[:2]:
+        if _es_nombre_valido(palabra):
+            return palabra[:1].upper() + palabra[1:].lower()
+        if palabra.lower() not in TITULOS_ARTICULOS:
+            break
+    return ""
 
 
 DISQUALIFIED_ESTATUS = {"descalificado", "no_viable", "sin_contacto", "perdido"}
@@ -482,12 +518,20 @@ def queue_worker():
 
             phone_raw = job.get("phone") or job.get("telefono") or job.get("mobile") or ""
             raw_name = job.get("first_name") or job.get("firstname") or job.get("nombre") or ""
-            name = clean_name(raw_name) or "cliente"
+            name = clean_name(raw_name) or SALUDO_SIN_NOMBRE
             template_name = job.get("template_name") or job.get("template") or ""
             campaign_name = job.get("campaign_name") or job.get("campaign") or "Campaña Mautic"
             media_id = job.get("media_id")
             dedup_key = job.get("dedup_key") or f"{campaign_name}:{phone_raw}"
             language_code = job.get("language") or ("en_US" if template_name == "hello_world" else "es_MX")
+
+            # Plantilla pausada (p. ej. ya estaba en cola cuando se pausó)
+            if template_name in PLANTILLAS_PAUSADAS:
+                logger.warning(f"⏸️ [PLANTILLA PAUSADA] '{template_name}' ({campaign_name}) para {phone_raw}. Se descarta.")
+                with lock:
+                    queued_keys.discard(dedup_key)
+                job_queue.task_done()
+                continue
 
             phone_e164, sufijo_10 = normalizar_telefono_crm(phone_raw)
             if not phone_e164:
@@ -695,6 +739,11 @@ class WebhookHandler(BaseHTTPRequestHandler):
         if not template_name:
             logger.warning(f"[{campaign_name}] Falta template para {phone_e164}.")
             self._responder_json(422, {"status": "error", "reason": "missing_template"})
+            return
+
+        if template_name in PLANTILLAS_PAUSADAS:
+            logger.info(f"[{campaign_name}] Plantilla '{template_name}' pausada. No se envía a {phone_e164}.")
+            self._responder_json(200, {"status": "skipped", "reason": "template_paused"})
             return
 
         dedup_key = f"{campaign_name}:{phone_e164}"

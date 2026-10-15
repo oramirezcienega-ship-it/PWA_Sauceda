@@ -1,3 +1,4 @@
+import { parametroNombrePlantilla } from "@/lib/campanas-whatsapp";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
 import { enviarCorreo } from "@/lib/email";
@@ -182,7 +183,8 @@ export async function orquestador(): Promise<{
               }
 
               // Mapear tipo de negocio a plantilla de Meta
-              let plantilla = "reactivacion_impermeabilizacio"; // Fallback por defecto
+              // Sin respaldo: un tipo sin plantilla propia no debe recibir la de impermeabilización.
+              let plantilla = "";
               const negocioNormalizado = (tipoNegocio || "").trim();
 
               if (negocioNormalizado === "construccion-impermeabilizacion") {
@@ -240,7 +242,7 @@ export async function orquestador(): Promise<{
               // Si la ventana de 24 horas está cerrada y el mensaje del paso no está configurado explícitamente como plantilla,
               // forzamos el envío inteligente usando la plantilla de marketing de Meta correspondiente
               if (usarPlantillaReactivacion && !mensajeFormateado.startsWith("[plantilla:")) {
-                const primerNombre = (enrollment.nombre || "Cliente").split(" ")[0] || "Cliente";
+                const primerNombre = parametroNombrePlantilla(enrollment.nombre);
                 const { enviarWhatsAppPlantilla } = await import("@/lib/whatsapp");
                 
                 const waRes = await enviarWhatsAppPlantilla(
