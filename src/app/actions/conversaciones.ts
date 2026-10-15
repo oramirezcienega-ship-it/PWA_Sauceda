@@ -661,19 +661,38 @@ export async function actualizarTipoNegocioConversacion(
 
     // Antes los errores se ignoraban: si la BD rechazaba el valor (check de tipo_negocio)
     // el asesor veía "ok" pero la clasificación no cambiaba.
-    if (prospectoId) {
-      const { error } = await sb
-        .from("prospectos")
-        .update({ tipo_negocio: tipoNegocio })
-        .eq("id", prospectoId);
-      if (error) return { ok: false, error: `No se pudo cambiar el tipo del prospecto: ${error.message}` };
-    }
+    // La clasificación vive en `expedientes`; `prospectos.tipo_negocio` sólo existe
+    // a partir de la migración 0161, así que su ausencia no es error si ya se guardó
+    // en algún expediente.
+    const sinColumna = (e: { code?: string; message?: string }) =>
+      e.code === "PGRST204" || /tipo_negocio/.test(e.message ?? "");
+    let guardadoEnExpediente = false;
+
     if (expedienteId) {
       const { error } = await sb
         .from("expedientes")
         .update({ tipo_negocio: tipoNegocio })
         .eq("id", expedienteId);
       if (error) return { ok: false, error: `No se pudo cambiar el tipo del expediente: ${error.message}` };
+      guardadoEnExpediente = true;
+    }
+    if (prospectoId) {
+      // Expedientes del prospecto (p. ej. el chat quedó ligado sólo al prospecto).
+      const { data: exps, error: errExp } = await sb
+        .from("expedientes")
+        .update({ tipo_negocio: tipoNegocio })
+        .eq("prospecto_id", prospectoId)
+        .select("id");
+      if (errExp) return { ok: false, error: `No se pudo cambiar el tipo del expediente: ${errExp.message}` };
+      if (exps && exps.length > 0) guardadoEnExpediente = true;
+
+      const { error } = await sb
+        .from("prospectos")
+        .update({ tipo_negocio: tipoNegocio })
+        .eq("id", prospectoId);
+      if (error && !(guardadoEnExpediente && sinColumna(error))) {
+        return { ok: false, error: `No se pudo cambiar el tipo del prospecto: ${error.message}` };
+      }
     }
     if (!prospectoId && !expedienteId) {
       const v = variantesId(telefono);
