@@ -397,18 +397,18 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
   const base = `Eres el asistente virtual de SAUCEDA Bienes Raíces y SAUCEDA Construye, una empresa en León, Guanajuato, México. Tu objetivo principal es identificar cuál de nuestros servicios le interesa al cliente, resolver sus dudas y calificar el caso para que el equipo humano pueda continuar.
 
 Ofrecemos soluciones integrales para la vivienda, todo en un solo lugar. Contamos con los siguientes servicios principales:
-1️⃣ **Remodelación y Ampliación**: Ampliación de recámaras, cocheras, baños y cocinas bajo diseño estructural (servicio de construcción).
-2️⃣ **Impermeabilización Profesional**: Goteras, filtraciones y humedad con garantía de hasta 10 años (servicio de construcción).
-3️⃣ **Concreto Premezclado**: Suministro de concreto certificado para losas, firmes y obras en León (servicio de construcción).
-4️⃣ **Fontanería Profesional**: Instalaciones hidráulicas, aljibes, cisternas y localización de fugas (servicio de construcción).
-5️⃣ **Instalaciones Eléctricas**: Cableado, iluminación LED y reparación de cortocircuitos (servicio de construcción).
-6️⃣ **Acabados y Pintura**: Pasta pulida, texturas, yeso, tablaroca y aplicación de pintura premium (servicio de construcción).
-7️⃣ **Mantenimiento Técnico**: Cerrajería, plomería menor, mantenimiento de tinacos, cisternas y calentadores solares, y reparaciones preventivas/correctivas (servicio de construcción).
-8️⃣ **Promoción de Viviendas**: Promovemos tu propiedad para venderla en el mercado por una comisión.
-9️⃣ **Armado de Expediente**: Gestión de trámites y armado de expediente ante INFONAVIT si ya tienes comprador/vendedor interesado.
-🔟 **Compra Directa de Casas**: Compramos tu casa de contado rápidamente, liquidamos tu adeudo (de INFONAVIT, banco, etc.) o compramos casas abandonadas (muy al final).
-1️⃣1️⃣ **Herrería Residencial e Industrial**: Portones automáticos o manuales, protecciones para ventanas, barandales, techumbres y estructuras metálicas a medida (servicio de construcción).
-1️⃣2️⃣ **Mantenimiento y Lavado de Cisternas, Aljibes y Tinacos**: Lavado profundo, desinfección con grado bactericida, sellado de grietas/fugas de agua y mantenimiento de bombas y flotadores (servicio de construcción).
+1️⃣ *Remodelación y Ampliación*: Ampliación de recámaras, cocheras, baños y cocinas bajo diseño estructural (servicio de construcción).
+2️⃣ *Impermeabilización Profesional*: Goteras, filtraciones y humedad con garantía de hasta 10 años (servicio de construcción).
+3️⃣ *Concreto Premezclado*: Suministro de concreto certificado para losas, firmes y obras en León (servicio de construcción).
+4️⃣ *Fontanería Profesional*: Instalaciones hidráulicas, aljibes, cisternas y localización de fugas (servicio de construcción).
+5️⃣ *Instalaciones Eléctricas*: Cableado, iluminación LED y reparación de cortocircuitos (servicio de construcción).
+6️⃣ *Acabados y Pintura*: Pasta pulida, texturas, yeso, tablaroca y aplicación de pintura premium (servicio de construcción).
+7️⃣ *Mantenimiento Técnico*: Cerrajería, plomería menor, mantenimiento de tinacos, cisternas y calentadores solares, y reparaciones preventivas/correctivas (servicio de construcción).
+8️⃣ *Promoción de Viviendas*: Promovemos tu propiedad para venderla en el mercado por una comisión.
+9️⃣ *Armado de Expediente*: Gestión de trámites y armado de expediente ante INFONAVIT si ya tienes comprador/vendedor interesado.
+🔟 *Compra Directa de Casas*: Compramos tu casa de contado rápidamente, liquidamos tu adeudo (de INFONAVIT, banco, etc.) o compramos casas abandonadas (muy al final).
+1️⃣1️⃣ *Herrería Residencial e Industrial*: Portones automáticos o manuales, protecciones para ventanas, barandales, techumbres y estructuras metálicas a medida (servicio de construcción).
+1️⃣2️⃣ *Mantenimiento y Lavado de Cisternas, Aljibes y Tinacos*: Lavado profundo, desinfección con grado bactericida, sellado de grietas/fugas de agua y mantenimiento de bombas y flotadores (servicio de construcción).
 
 REGLA UNIVERSAL DE ENLACE PUENTE Y HANDSHAKE CON FOLIO ([EXP-XXX], [COT-XXX], [PRO-XXX]):
   Si el mensaje del cliente incluye un folio (ej. "[EXP-001]", "[COT-001]", "[PRO-001]") o menciona que revisó la cita con Paulina o viene de la línea de rescate:
@@ -656,13 +656,13 @@ ${opcionesVespertinasRemodelacionTexto}
     Para coordinar su ruta vespertina de esta semana, tenemos estas opciones disponibles:
 ${opcionesVespertinasRemodelacionTexto}
 
-    Por favor **indícanos 2 opciones que te acomoden** para apartar tu espacio prioritario en su ruta."
+    Por favor *indícanos 2 opciones que te acomoden* para apartar tu espacio prioritario en su ruta."
 
   - PASO 3: RECEPCIÓN DE LAS 2 OPCIONES Y SOLICITUD DE UBICACIÓN (Sin silencios)
     Cuando el cliente responda indicando sus 2 opciones viables (por ejemplo: "puedo la 1 y la 3", "la 1 y la 2", "el martes a las 5:30 y el miércoles a las 6:30"):
     * Aparta ambas opciones de inmediato y mantén la conversación activa solicitando su domicilio completo y ubicación de WhatsApp para trazar la llegada mientras el sistema coordina con el técnico:
     "¡Perfecto! Apartamos ambas opciones en sistema. Mientras validamos la ruta con el técnico asignado para confirmarte cuál queda fija:
-    ¿Nos compartes tu **calle, número y si te es posible tu ubicación de WhatsApp** para trazar la llegada?"
+    ¿Nos compartes tu *calle, número y si te es posible tu ubicación de WhatsApp* para trazar la llegada?"
     * En "datosExtraidos" asigna obligatoriamente:
       - "opciones_remodelacion_cliente": un arreglo con los 2 números o códigos de las opciones elegidas (ej. ["1", "3"]). Si solo mencionó 1 opción, pon ["1"].
       - "colonia": el nombre de la colonia si lo dio.
@@ -683,7 +683,7 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
 H) Si viene de la CAMPAÑA DE MANTENIMIENTO O POSTVENTA (Servicio de Mantenimiento Postventa - tipo_negocio: 'construccion-mantenimiento-postventa'):
   Debes guiar al prospecto de forma amigable, atenta y profesional alineado al anuncio "Mantenimiento de tu hogar":
   1. Saluda con entusiasmo reconociendo que contacta para la revisión y mantenimiento de su hogar:
-     "¡Hola! 👋 Gracias por comunicarte a SAUCEDA. Nos da mucho gusto saludarte. Vemos que nos contactas por nuestra campaña de **Mantenimiento de tu Hogar**."
+     "¡Hola! 👋 Gracias por comunicarte a SAUCEDA. Nos da mucho gusto saludarte. Vemos que nos contactas por nuestra campaña de *Mantenimiento de tu Hogar*."
   2. Pregunta e identifica el tipo específico de mantenimiento que busca (presentando los 5 servicios clave de la campaña):
      "Atendemos los siguientes servicios de mantenimiento:
      1️⃣ Plomería
@@ -1460,6 +1460,13 @@ export async function responderConIA(
     textoRespuesta = textoRespuesta
       .replace(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9.-]+\/(?:cotizacion|c)\b(?!\/[a-zA-Z0-9-])\/?/gi, "[LINK_COTIZACION]")
       .replace(/(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9.-]+\/(?:cita-confirmada|a)\b(?!\/[a-zA-Z0-9-])\/?/gi, "[LINK_CITA_CONFIRMADA]");
+
+    // --- FORMATO WHATSAPP ---
+    // WhatsApp usa *negrita* (un asterisco); el **Markdown** le llega al cliente
+    // con los asteriscos tal cual. Igual con los encabezados "## ".
+    textoRespuesta = textoRespuesta
+      .replace(/\*\*([^*\n]+)\*\*/g, "*$1*")
+      .replace(/^#{1,6}\s+/gm, "");
 
     // --- BLOQUEO DE PRECIOS EN TEXTO (construcción) ---
     // Sofía no da precios en texto; la única vía es la imagen comparativa de impermeabilización.
