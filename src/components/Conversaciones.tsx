@@ -705,7 +705,16 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
+  const [sel, setSelEstado] = useState<string | null>(null);
+  // Cada cambio de conversación hecho por el usuario sube esta versión. Las
+  // cargas asíncronas (sondeo, refrescos tras enviar, abrir) la capturan al
+  // iniciar y descartan su resultado si el usuario ya cambió de chat; si no,
+  // una respuesta tardía regresaba a la conversación anterior.
+  const versionSelRef = useRef(0);
+  const setSel = useCallback((tel: string | null) => {
+    versionSelRef.current += 1;
+    setSelEstado(tel);
+  }, []);
 
   // En celular el hilo abierto se muestra a pantalla completa: evitar que la
   // página de fondo se desplace mientras se escribe.
@@ -892,15 +901,18 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   }, [telefonoDetalle]);
 
   const refrescar = useCallback(async (telefonoPreseleccionado: string | null) => {
+    const version = versionSelRef.current;
     try {
       const lista = await listarConversaciones();
       setConversaciones(lista);
       setListaCargada(true);
       if (telefonoPreseleccionado) {
+        if (versionSelRef.current !== version) return; // el usuario ya cambió de chat
         const coincidencia = lista.find((c) => coincidenTelefonos(c.telefono, telefonoPreseleccionado));
         const telReal = coincidencia ? coincidencia.telefono : telefonoPreseleccionado;
-        setSel(telReal);
+        setSelEstado(telReal);
         const d = await obtenerConversacion(telReal);
+        if (versionSelRef.current !== version) return;
         setDetalle(d);
       }
     } catch {
@@ -1009,8 +1021,10 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     setTexto("");
     setPlantillaSel("");
     setParams([]);
+    const version = versionSelRef.current;
     try {
       const d = await obtenerConversacion(telefono);
+      if (versionSelRef.current !== version) return; // ya se abrió otro chat
       setDetalle(d);
       marcarComoLeida(telefono, d?.ultimoInboundFecha);
     } catch (err: any) {
