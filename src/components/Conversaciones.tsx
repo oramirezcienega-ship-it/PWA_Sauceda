@@ -719,6 +719,22 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [listaCargada, setListaCargada] = useState(inicial !== undefined);
   const [filtro, setFiltro] = useState<"abiertas" | "terminadas">("abiertas");
   const [subFiltro, setSubFiltro] = useState<"todas" | "mias" | "ia" | "nuevas">("todas");
+  // Filtro por tipo de negocio: "" = todos, "sin_clasificar" = sin tipo. Se guarda
+  // en localStorage para que sobreviva a recargas de la página.
+  const [filtroNegocio, setFiltroNegocioEstado] = useState("");
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem("sauceda_conv_filtro_negocio");
+      if (guardado) setFiltroNegocioEstado(guardado);
+    } catch {}
+  }, []);
+  function setFiltroNegocio(valor: string) {
+    setFiltroNegocioEstado(valor);
+    try {
+      if (valor) localStorage.setItem("sauceda_conv_filtro_negocio", valor);
+      else localStorage.removeItem("sauceda_conv_filtro_negocio");
+    } catch {}
+  }
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; email: string; rol: "admin" | "asesor" | "operaciones" } | null>(null);
   const [sel, setSelEstado] = useState<string | null>(null);
   // Cada cambio de conversación hecho por el usuario sube esta versión. Las
@@ -1289,12 +1305,36 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     }
   }
 
+  const coincideNegocio = (c: ConversacionResumen) =>
+    !filtroNegocio ||
+    (filtroNegocio === "sin_clasificar" ? !c.tipoNegocio : c.tipoNegocio === filtroNegocio);
+  // Conversaciones del tipo de negocio elegido; base de los contadores de las pestañas.
+  const porNegocio = conversaciones.filter(coincideNegocio);
+  // Opciones del filtro: los tipos presentes en la pestaña actual, con su conteo.
+  const conteoNegocios = new Map<string, number>();
+  for (const c of conversaciones) {
+    const enPestana = filtro === "abiertas" ? !c.finalizado && c.ventanaAbierta : c.finalizado || !c.ventanaAbierta;
+    if (!enPestana) continue;
+    const clave = c.tipoNegocio || "sin_clasificar";
+    conteoNegocios.set(clave, (conteoNegocios.get(clave) ?? 0) + 1);
+  }
+  if (filtroNegocio && !conteoNegocios.has(filtroNegocio)) conteoNegocios.set(filtroNegocio, 0);
+  const opcionesNegocio = Array.from(conteoNegocios.entries())
+    .map(([clave, n]) => ({
+      clave,
+      n,
+      vis: visualNegocio(clave === "sin_clasificar" ? null : clave),
+    }))
+    .sort((a, b) => a.vis.nombre.localeCompare(b.vis.nombre, "es"));
+
   const conversacionesFiltradas = conversaciones.filter((c) => {
     if (soloTel) {
       return coincidenTelefonos(c.telefono, soloTel);
     }
 
     if (sel && coincidenTelefonos(c.telefono, sel)) return true;
+
+    if (!coincideNegocio(c)) return false;
 
     if (filtro === "abiertas") {
       if (!c.finalizado && c.ventanaAbierta) {
@@ -1764,7 +1804,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                   : "text-carbon/60 hover:text-carbon"
               }`}
             >
-              Abiertas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta).length})
+              Abiertas ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta).length})
             </button>
             <button
               type="button"
@@ -1777,7 +1817,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
             >
               <span className={filtro === "abiertas" ? "sm:hidden" : "hidden"}>Term.</span>
               <span className={filtro === "abiertas" ? "hidden sm:inline" : ""}>Terminadas</span>
-              {" "}({conversaciones.filter((c) => c.finalizado || !c.ventanaAbierta).length})
+              {" "}({porNegocio.filter((c) => c.finalizado || !c.ventanaAbierta).length})
             </button>
           </div>
 
@@ -1792,7 +1832,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Todas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta).length})
+                Todas ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta).length})
               </button>
               <button
                 type="button"
@@ -1803,7 +1843,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Mías ({conversaciones.filter((c) => {
+                Mías ({porNegocio.filter((c) => {
                   if (c.finalizado || !c.ventanaAbierta) return false;
                   const nomUser = usuario?.nombre?.toLowerCase() || "";
                   const emailUser = usuario?.email?.toLowerCase() || "";
@@ -1820,7 +1860,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                <span className="hidden sm:inline">De la </span>IA ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
+                <span className="hidden sm:inline">De la </span>IA ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta && c.atiende?.toLowerCase() === "ia").length})
               </button>
               <button
                 type="button"
@@ -1831,11 +1871,42 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Nuevas ({conversaciones.filter((c) => !c.finalizado && c.ventanaAbierta && (!c.atiende || c.atiende === "")).length})
+                Nuevas ({porNegocio.filter((c) => !c.finalizado && c.ventanaAbierta && (!c.atiende || c.atiende === "")).length})
               </button>
             </div>
           )}
 
+          </div>
+
+          {/* Filtro por tipo de negocio (persistente entre recargas) */}
+          <div className="flex items-center gap-1 mb-1 sm:mb-2 shrink-0">
+            <select
+              value={filtroNegocio}
+              onChange={(e) => setFiltroNegocio(e.target.value)}
+              className={`flex-1 min-w-0 rounded-lg border px-2 py-1 text-[11px] sm:text-xs font-semibold focus:outline-none focus:border-sauce cursor-pointer ${
+                filtroNegocio
+                  ? visualNegocio(filtroNegocio === "sin_clasificar" ? null : filtroNegocio).clases
+                  : "bg-white border-carbon/15 text-carbon/70"
+              }`}
+              title="Filtrar conversaciones por tipo de negocio"
+            >
+              <option value="">🏷️ Todos los tipos de negocio</option>
+              {opcionesNegocio.map((o) => (
+                <option key={o.clave} value={o.clave}>
+                  {o.vis.icono} {o.vis.nombre} ({o.n})
+                </option>
+              ))}
+            </select>
+            {filtroNegocio && (
+              <button
+                type="button"
+                onClick={() => setFiltroNegocio("")}
+                className="shrink-0 rounded-lg border border-carbon/15 bg-white px-2 py-1 text-[11px] font-bold text-carbon/60 hover:text-carbon"
+                title="Quitar filtro de tipo de negocio"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-1">
