@@ -51,7 +51,7 @@ export async function siguienteFolioSolicitud(sb: SupabaseClient): Promise<strin
 }
 
 /** Token del link del proveedor (lo crea si no existe). */
-async function tokenProveedor(sb: SupabaseClient, proveedorId: string): Promise<string | null> {
+export async function tokenProveedor(sb: SupabaseClient, proveedorId: string): Promise<string | null> {
   const { data } = await sb.from("proveedores").select("token_precios").eq("id", proveedorId).maybeSingle();
   if (data?.token_precios) return data.token_precios;
   const token = generarTokenCarga(crypto.getRandomValues(new Uint8Array(32)));
@@ -95,7 +95,7 @@ async function notificarProveedor(sb: SupabaseClient, envioId: string) {
   const { data: envio, error: errEnvio } = await sb
     .from("solicitudes_proveedor_envios")
     .select(
-      "id, fecha_limite, costo_referencia, proveedores:proveedor_id ( id, nombre, whatsapp, telefono, telegram_chat_id ), solicitudes_proveedor:solicitud_id ( folio, descripcion, cantidad, unidad, zona, modo, fotos, fechas_sugeridas, productos_servicios:producto_id ( nombre ) )"
+      "id, fecha_limite, costo_referencia, proveedores:proveedor_id ( id, nombre, whatsapp, telefono, telegram_chat_id, canal_preferido ), solicitudes_proveedor:solicitud_id ( folio, descripcion, cantidad, unidad, zona, modo, fotos, fechas_sugeridas, productos_servicios:producto_id ( nombre ) )"
     )
     .eq("id", envioId)
     .maybeSingle();
@@ -105,8 +105,8 @@ async function notificarProveedor(sb: SupabaseClient, envioId: string) {
   const sol: any = (envio as any).solicitudes_proveedor;
   const prod: any = sol?.productos_servicios;
 
-  // Proveedor con Telegram ligado: solicitud con botones (Lo tomo → días → mañana/tarde).
-  if (prov?.telegram_chat_id) {
+  // Proveedor que prefiere Telegram (y lo tiene ligado): solicitud con botones. Si no, WhatsApp con link al portal.
+  if (prov?.canal_preferido === "telegram" && prov?.telegram_chat_id) {
     const { notificarSolicitudTelegram } = await import("@/lib/solicitudes-telegram");
     const enviadoTg = await notificarSolicitudTelegram(sb, {
       envioId,

@@ -355,6 +355,8 @@ export interface FilaProveedor {
   condiciones_pago?: string | null;
   zonas_cobertura?: string[] | null;
   vigencia_precios?: string | null;
+  canal_preferido?: string | null;
+  telegram_chat_id?: string | null;
 }
 
 export function aProveedor(
@@ -379,6 +381,8 @@ export function aProveedor(
     condicionesPago: fila.condiciones_pago ?? "",
     zonasCobertura: Array.isArray(fila.zonas_cobertura) ? fila.zonas_cobertura : [],
     vigenciaPrecios: fila.vigencia_precios ?? null,
+    canalPreferido: fila.canal_preferido === "telegram" ? "telegram" : "whatsapp",
+    telegramLigado: !!fila.telegram_chat_id,
     totalDocumentos: metricas?.totalDocumentos ?? 0,
     montoTotal: metricas?.montoTotal ?? 0,
   };

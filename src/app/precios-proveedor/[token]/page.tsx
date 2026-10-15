@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { obtenerPortalPrecios, obtenerSolicitudesPortal } from "@/app/actions/portal-precios-proveedor";
+import {
+  obtenerCotizacionesEspecialesPortal,
+  obtenerPortalPrecios,
+  obtenerSolicitudesPortal,
+} from "@/app/actions/portal-precios-proveedor";
 import { PortalPreciosProveedorClient } from "@/components/proveedores/PortalPreciosProveedorClient";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +20,7 @@ export const metadata: Metadata = {
 export default async function PaginaPreciosProveedor({ params }: { params: { token: string } }) {
   const contexto = await obtenerPortalPrecios(params.token);
   const solicitudes = contexto.ok ? await obtenerSolicitudesPortal(params.token).catch(() => ({ ok: false as const })) : null;
+  const estimaciones = contexto.ok ? await obtenerCotizacionesEspecialesPortal(params.token).catch(() => []) : [];
 
   if (!contexto.ok) {
     return (
@@ -36,6 +41,7 @@ export default async function PaginaPreciosProveedor({ params }: { params: { tok
         proveedorNombre={contexto.proveedorNombre || ""}
         ofertasIniciales={contexto.ofertas || []}
         condicionesIniciales={contexto.condiciones}
+        estimacionesIniciales={estimaciones}
         solicitudesIniciales={solicitudes?.ok ? solicitudes.solicitudes || [] : []}
       />
     </main>

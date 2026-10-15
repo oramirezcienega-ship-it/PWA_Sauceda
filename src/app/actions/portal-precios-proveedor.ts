@@ -200,6 +200,74 @@ export async function obtenerFichaProveedorAdmin(
   return { ok: true, proveedorNombre: p.nombre, ofertas, condiciones: await condicionesProveedor(sb, proveedorId) };
 }
 
+/** Cotización especial tal como la ve el proveedor en su portal (sin datos del cliente). */
+export interface CotizacionEspecialPortal {
+  respuestaId: string;
+  folio: string;
+  titulo: string;
+  descripcion: string;
+  zona: string;
+  fotos: string[];
+  fechaLimite: string | null;
+  estado: "enviada" | "cotizando" | "cotizada" | "requiere_visita" | "rechazada" | "vencida" | "sin_telegram";
+  precio: number | null;
+  tiempo: string;
+  incluye: string;
+  /** La solicitud ya se cerró del lado de SAUCEDA (se envió al cliente, se canceló…). */
+  cerrada: boolean;
+}
+
+/** Cotizaciones especiales del proveedor (las de los últimos 45 días). */
+export async function obtenerCotizacionesEspecialesPortal(token: string): Promise<CotizacionEspecialPortal[]> {
+  const sb = supabaseServidor();
+  const proveedor = await proveedorPorToken(sb, token);
+  if (!proveedor) return [];
+  const desde = new Date(Date.now() - 45 * 86400000).toISOString();
+  const { data } = await sb
+    .from("cotizaciones_especiales_respuestas")
+    .select(
+      "id, estado, precio, tiempo, incluye, fecha_limite, created_at, cotizaciones_especiales:cotizacion_especial_id ( folio, titulo, descripcion, zona, fotos, estado )"
+    )
+    .eq("proveedor_id", proveedor.id)
+    .gte("created_at", desde)
+    .order("created_at", { ascending: false });
+  return (data || [])
+    .filter((r: any) => r.cotizaciones_especiales && r.cotizaciones_especiales.estado !== "cancelada")
+    .map((r: any) => {
+      const ce = r.cotizaciones_especiales;
+      return {
+        respuestaId: r.id,
+        folio: ce.folio,
+        titulo: ce.titulo,
+        descripcion: ce.descripcion || "",
+        zona: ce.zona || "",
+        fotos: (Array.isArray(ce.fotos) ? ce.fotos : []).map((f: any) => f?.url).filter((u: any) => /^https?:\/\//i.test(u || "")),
+        fechaLimite: r.fecha_limite || null,
+        estado: r.estado,
+        precio: r.precio === null ? null : Number(r.precio),
+        tiempo: r.tiempo || "",
+        incluye: r.incluye || "",
+        cerrada: ["enviada_cliente", "cerrada"].includes(ce.estado),
+      };
+    });
+}
+
+/** Respuesta del proveedor desde su portal: cotiza (precio, tiempo, qué incluye), pide visita o no lo hace. */
+export async function responderCotizacionEspecialPortal(
+  token: string,
+  respuestaId: string,
+  datos: { tipo: "cotizada" | "requiere_visita" | "rechazada"; precio?: number | null; tiempo?: string; incluye?: string }
+): Promise<{ ok: boolean; mensaje?: string; cotizaciones?: CotizacionEspecialPortal[] }> {
+  const sb = supabaseServidor();
+  const proveedor = await proveedorPorToken(sb, token);
+  if (!proveedor) return { ok: false, mensaje: "Link no válido." };
+  if (!/^[0-9a-f-]{36}$/i.test(respuestaId)) return { ok: false, mensaje: "Solicitud no válida." };
+  const { registrarRespuestaEspecialPortal } = await import("@/lib/cotizaciones-especiales");
+  const r = await registrarRespuestaEspecialPortal(sb, proveedor, respuestaId, datos);
+  if (!r.ok) return { ok: false, mensaje: r.mensaje };
+  return { ok: true, cotizaciones: await obtenerCotizacionesEspecialesPortal(token) };
+}
+
 /** URL firmada para que el proveedor suba una foto a su carpeta del catálogo. */
 export async function prepararSubidaFotoPortal(
   token: string,

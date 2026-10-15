@@ -200,14 +200,24 @@ export async function actualizarProveedor(id: string, datos: Partial<DatosProvee
 /** Condiciones comerciales del proveedor (anticipo, pago, zonas, vigencia de precios). */
 export async function guardarCondicionesProveedor(
   id: string,
-  datos: { anticipoPct: number; condicionesPago: string; zonas: string[]; vigenciaPrecios: string | null }
+  datos: {
+    anticipoPct: number;
+    condicionesPago: string;
+    zonas: string[];
+    vigenciaPrecios: string | null;
+    canalPreferido?: "whatsapp" | "telegram";
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   const { filaCondiciones } = await import("@/lib/condiciones-proveedor");
   const sb = supabaseServidor();
   const { error } = await sb
     .from("proveedores")
-    .update({ ...filaCondiciones(datos), updated_at: new Date().toISOString() })
+    .update({
+      ...filaCondiciones(datos),
+      ...(datos.canalPreferido ? { canal_preferido: datos.canalPreferido === "telegram" ? "telegram" : "whatsapp" } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id);
   return error ? { ok: false, error: error.message } : { ok: true };
 }

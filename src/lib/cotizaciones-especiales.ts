@@ -76,85 +76,217 @@ function fechaLimiteTexto(iso: string | null): string {
   });
 }
 
-/** Envía el brief a cada proveedor de la cotización especial por Telegram. */
-export async function enviarCotizacionEspecial(sb: SupabaseClient, ceId: string): Promise<{ enviados: number; sinTelegram: string[] }> {
+/**
+ * Sube a almacenamiento público las fotos del cliente (vienen como id de medio de WhatsApp) para
+ * que el proveedor las vea en su portal o en Telegram. Reemplaza las referencias por URLs.
+ */
+export async function publicarFotosCotizacionEspecial(sb: SupabaseClient, ceId: string): Promise<void> {
+  const { data: ce } = await sb.from("cotizaciones_especiales").select("id, fotos").eq("id", ceId).maybeSingle();
+  if (!ce) return;
+  const refs: string[] = (Array.isArray(ce.fotos) ? ce.fotos : []).map((f: any) => f?.url).filter(Boolean).slice(0, 10);
+  const urls: { url: string }[] = [];
+  for (let i = 0; i < refs.length; i++) {
+    if (/^https?:\/\//i.test(refs[i]) && !refs[i].includes("graph.facebook.com")) {
+      urls.push({ url: refs[i] });
+      continue;
+    }
+    const media = await descargarMediaWhatsApp(refs[i]);
+    if (!media) continue;
+    const ext = (media.mimeType.split("/")[1] || "jpg").replace("jpeg", "jpg");
+    const ruta = `cotizaciones-especiales/${ceId}/foto_${i + 1}.${ext}`;
+    const { error } = await sb.storage
+      .from("expedientes-fotos")
+      .upload(ruta, media.contenido, { contentType: media.mimeType, upsert: true });
+    if (error) {
+      console.warn("[cotizaciones-especiales] No se pudo subir la foto:", error.message);
+      continue;
+    }
+    urls.push({ url: sb.storage.from("expedientes-fotos").getPublicUrl(ruta).data.publicUrl });
+  }
+  await sb.from("cotizaciones_especiales").update({ fotos: urls }).eq("id", ceId);
+}
+
+/**
+ * Avisa a cada proveedor de la cotización especial por su canal preferido:
+ * Telegram (botones) o WhatsApp (resumen + link a su portal, donde responde con un formulario).
+ * Si el WhatsApp automático falla, avisa al grupo con un botón para mandarlo a mano.
+ */
+export async function enviarCotizacionEspecial(sb: SupabaseClient, ceId: string): Promise<{ enviados: number; sinAviso: string[] }> {
   const { botToken } = await obtenerConfiguracionTelegram(sb);
   const { data: ce } = await sb
     .from("cotizaciones_especiales")
     .select("id, folio, titulo, descripcion, zona, fotos, horas_respuesta, telefono_cliente")
     .eq("id", ceId)
     .maybeSingle();
-  if (!ce) return { enviados: 0, sinTelegram: [] };
+  if (!ce) return { enviados: 0, sinAviso: [] };
 
   const { data: respuestas } = await sb
     .from("cotizaciones_especiales_respuestas")
-    .select("id, estado, proveedores:proveedor_id ( id, nombre, telegram_chat_id )")
+    .select("id, estado, proveedores:proveedor_id ( id, nombre, telegram_chat_id, canal_preferido, whatsapp, telefono )")
     .eq("cotizacion_especial_id", ceId)
     .eq("estado", "enviada");
 
   const ahora = new Date();
   const limite = new Date(ahora.getTime() + Math.max(1, Number(ce.horas_respuesta) || 24) * 3600 * 1000).toISOString();
-  // Fotos del cliente: id de medio de WhatsApp o URL. Se descargan una vez y se suben a cada proveedor.
-  const refs: string[] = (Array.isArray(ce.fotos) ? ce.fotos : []).map((f: any) => f?.url).filter(Boolean).slice(0, 10);
-  const fotos: { contenido: Buffer; mimeType: string; nombre: string }[] = [];
-  for (let i = 0; i < refs.length; i++) {
-    const media = await descargarMediaWhatsApp(refs[i]);
-    if (media) fotos.push({ ...media, nombre: `foto_${i + 1}.${media.mimeType.split("/")[1] || "jpg"}` });
-  }
-  const sinTelegram: string[] = [];
+  const urlsFotos: string[] = (Array.isArray(ce.fotos) ? ce.fotos : []).map((f: any) => f?.url).filter(Boolean).slice(0, 10);
+  let fotosTelegram: { contenido: Buffer; mimeType: string; nombre: string }[] | null = null;
+  const sinAviso: string[] = [];
+  const manuales: { text: string; url: string }[] = [];
   let enviados = 0;
 
   for (const r of respuestas || []) {
     const prov: any = (r as any).proveedores;
-    if (!botToken || !prov?.telegram_chat_id) {
-      sinTelegram.push(prov?.nombre || "Proveedor");
+    const marcar = (canal: string) =>
+      sb
+        .from("cotizaciones_especiales_respuestas")
+        .update({ canal, enviada_at: ahora.toISOString(), fecha_limite: limite, updated_at: ahora.toISOString() })
+        .eq("id", r.id);
+
+    // ---- Telegram (botones) ----
+    if (prov?.canal_preferido === "telegram" && prov?.telegram_chat_id && botToken) {
+      if (urlsFotos.length > 0) {
+        if (fotosTelegram === null) {
+          fotosTelegram = [];
+          for (let i = 0; i < urlsFotos.length; i++) {
+            const media = await descargarMediaWhatsApp(urlsFotos[i]);
+            if (media) fotosTelegram.push({ ...media, nombre: `foto_${i + 1}.${media.mimeType.split("/")[1] || "jpg"}` });
+          }
+        }
+        if (fotosTelegram.length > 0) {
+          await enviarFotosBufferTelegram({
+            botToken,
+            chatId: prov.telegram_chat_id,
+            fotos: fotosTelegram.map((f, i) => (i === 0 ? { ...f, caption: `${ce.folio} · fotos del cliente` } : f)),
+          });
+        }
+      }
+      const texto =
+        `🔔 *SAUCEDA · Cotización especial ${sinMarkdown(ce.folio)}*\n\n` +
+        `🔧 *${sinMarkdown(ce.titulo)}*\n` +
+        (ce.zona ? `📍 ${sinMarkdown(ce.zona)}\n` : "") +
+        (ce.descripcion ? `📝 ${sinMarkdown(String(ce.descripcion).slice(0, 1500))}\n` : "") +
+        `\nNecesitamos una *estimación* de tu precio para SAUCEDA. Responde antes del ${fechaLimiteTexto(limite)}.`;
+      const res = await enviarMensajeTelegram({
+        botToken,
+        chatId: prov.telegram_chat_id,
+        texto,
+        inlineKeyboard: [
+          [{ text: "💲 Cotizar", callback_data: `ce:c:${r.id}` }],
+          [
+            { text: "🔎 Necesito visita", callback_data: `ce:v:${r.id}` },
+            { text: "✖ No lo hago", callback_data: `ce:n:${r.id}` },
+          ],
+        ],
+      });
+      if (res.ok) {
+        enviados++;
+        await marcar("telegram");
+        continue;
+      }
+      // Si Telegram falla se intenta por WhatsApp
+    }
+
+    // ---- WhatsApp (resumen + link a su portal) ----
+    const { tokenProveedor, linkPortalProveedor } = await import("@/lib/solicitudes-proveedor");
+    const token = prov?.id ? await tokenProveedor(sb, prov.id) : null;
+    const telefono = prov?.whatsapp || prov?.telefono || "";
+    if (!token || !telefono) {
+      sinAviso.push(prov?.nombre || "Proveedor");
       await sb.from("cotizaciones_especiales_respuestas").update({ estado: "sin_telegram", updated_at: ahora.toISOString() }).eq("id", r.id);
       continue;
     }
-    if (fotos.length > 0) {
-      await enviarFotosBufferTelegram({
-        botToken,
-        chatId: prov.telegram_chat_id,
-        fotos: fotos.map((f, i) => (i === 0 ? { ...f, caption: `${ce.folio} · fotos del cliente` } : f)),
-      });
+    const mensaje =
+      `Hola ${prov.nombre} 👋, SAUCEDA te pide una *estimación de precio*:\n\n` +
+      `🔧 ${ce.titulo}\n` +
+      (ce.zona ? `📍 ${ce.zona}\n` : "") +
+      (urlsFotos.length ? `📷 ${urlsFotos.length} foto(s) del cliente\n` : "") +
+      `\nVe los detalles y responde (precio, tiempo y qué incluye) antes del ${fechaLimiteTexto(limite)}:\n` +
+      `${linkPortalProveedor(token)}\n\nFolio: ${ce.folio}`;
+    let ok = false;
+    try {
+      const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
+      ok = (await enviarMensajeTextoEvolution(telefono, mensaje)).ok;
+    } catch {
+      ok = false;
     }
-    const texto =
-      `🔔 *SAUCEDA · Cotización especial ${sinMarkdown(ce.folio)}*\n\n` +
-      `🔧 *${sinMarkdown(ce.titulo)}*\n` +
-      (ce.zona ? `📍 ${sinMarkdown(ce.zona)}\n` : "") +
-      (ce.descripcion ? `📝 ${sinMarkdown(String(ce.descripcion).slice(0, 1500))}\n` : "") +
-      `\nNecesitamos una *estimación* de tu precio para SAUCEDA. Responde antes del ${fechaLimiteTexto(limite)}.`;
-    const res = await enviarMensajeTelegram({
-      botToken,
-      chatId: prov.telegram_chat_id,
-      texto,
-      inlineKeyboard: [
-        [{ text: "💲 Cotizar", callback_data: `ce:c:${r.id}` }],
-        [
-          { text: "🔎 Necesito visita", callback_data: `ce:v:${r.id}` },
-          { text: "✖ No lo hago", callback_data: `ce:n:${r.id}` },
-        ],
-      ],
-    });
-    if (res.ok) {
-      enviados++;
-      await sb
-        .from("cotizaciones_especiales_respuestas")
-        .update({ enviada_at: ahora.toISOString(), fecha_limite: limite, updated_at: ahora.toISOString() })
-        .eq("id", r.id);
-    } else {
-      sinTelegram.push(prov.nombre);
+    await marcar("whatsapp");
+    enviados++;
+    if (!ok) {
+      const digitos = String(telefono).replace(/\D/g, "");
+      const tel = digitos.length === 10 ? `52${digitos}` : digitos;
+      manuales.push({ text: `WhatsApp a ${prov.nombre}`.slice(0, 60), url: `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}` });
     }
   }
 
-  if (sinTelegram.length > 0) {
+  if (sinAviso.length > 0) {
     await avisarGrupo(
       sb,
-      `⚠️ ${sinMarkdown(ce.folio)}: no se pudo mandar por Telegram a *${sinMarkdown(sinTelegram.join(", "))}* (no tienen Telegram ligado).`,
+      `⚠️ ${sinMarkdown(ce.folio)}: no se pudo avisar a *${sinMarkdown(sinAviso.join(", "))}* (sin WhatsApp ni Telegram registrado).`,
       { text: "Abrir conversación", url: linkConversacion(ce.telefono_cliente) }
     );
   }
-  return { enviados, sinTelegram };
+  for (const m of manuales) {
+    await avisarGrupo(sb, `📨 ${sinMarkdown(ce.folio)}: el WhatsApp automático no salió. Mándalo con un toque:`, m);
+  }
+  return { enviados, sinAviso };
+}
+
+/**
+ * Respuesta del proveedor desde su portal (formulario): cotiza con precio, pide visita o no lo hace.
+ * Al cotizar se prepara la estimación igual que si respondiera por Telegram.
+ */
+export async function registrarRespuestaEspecialPortal(
+  sb: SupabaseClient,
+  proveedor: { id: string; nombre: string },
+  respuestaId: string,
+  datos: { tipo: "cotizada" | "requiere_visita" | "rechazada"; precio?: number | null; tiempo?: string; incluye?: string }
+): Promise<{ ok: boolean; mensaje?: string }> {
+  const r = await respuestaConProveedor(sb, respuestaId);
+  if (!r || r.proveedores?.id !== proveedor.id) return { ok: false, mensaje: "Esta solicitud no es tuya o ya no existe." };
+  const ce = r.cotizaciones_especiales;
+  if (!ce || ["enviada_cliente", "cerrada", "cancelada"].includes(ce.estado)) {
+    return { ok: false, mensaje: "Esta solicitud ya se cerró. Gracias." };
+  }
+  const ahora = new Date().toISOString();
+  const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+  if (datos.tipo === "cotizada") {
+    const precio = Number(datos.precio);
+    if (!(precio > 0) || precio > 100_000_000) return { ok: false, mensaje: "Escribe tu precio total para SAUCEDA." };
+    await sb
+      .from("cotizaciones_especiales_respuestas")
+      .update({
+        estado: "cotizada",
+        precio: Math.round(precio * 100) / 100,
+        tiempo: texto(datos.tiempo, 300),
+        incluye: texto(datos.incluye, 1500),
+        tg_paso: null,
+        respondida_at: ahora,
+        updated_at: ahora,
+      })
+      .eq("id", respuestaId);
+    await prepararEstimacion(sb, ce.id);
+    return { ok: true };
+  }
+
+  const visita = datos.tipo === "requiere_visita";
+  await sb
+    .from("cotizaciones_especiales_respuestas")
+    .update({
+      estado: visita ? "requiere_visita" : "rechazada",
+      incluye: visita ? texto(datos.incluye, 1500) : r.incluye || "",
+      tg_paso: null,
+      respondida_at: ahora,
+      updated_at: ahora,
+    })
+    .eq("id", respuestaId);
+  await avisarGrupo(
+    sb,
+    `${visita ? "🔎" : "✖"} *${sinMarkdown(proveedor.nombre)}* ${visita ? "necesita visita para cotizar" : "no hace"} *${sinMarkdown(ce.folio)}* — ${sinMarkdown(ce.titulo)}.` +
+      (visita && datos.incluye ? `\n“${sinMarkdown(texto(datos.incluye, 300))}”` : ""),
+    { text: "Abrir conversación", url: linkConversacion(ce.telefono_cliente) }
+  );
+  return { ok: true };
 }
 
 /** "18000", "$18,000", "18 mil", "18k", "18.5 mil" → 18000 / 18500. */

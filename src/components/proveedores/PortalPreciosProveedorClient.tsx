@@ -11,6 +11,8 @@ import {
   type SolicitudPortal,
 } from "@/app/actions/portal-precios-proveedor";
 import { SolicitudesPortalProveedor } from "./SolicitudesPortalProveedor";
+import { CotizacionesEspecialesPortal } from "./CotizacionesEspecialesPortal";
+import type { CotizacionEspecialPortal } from "@/app/actions/portal-precios-proveedor";
 import type { FotoOfertaProveedor } from "@/lib/types";
 import { textoGarantiaEstandar } from "@/lib/estandar-servicio";
 import {
@@ -27,6 +29,8 @@ interface Props {
   proveedorNombre: string;
   ofertasIniciales: OfertaPortalProveedor[];
   solicitudesIniciales?: SolicitudPortal[];
+  /** Estimaciones que SAUCEDA le pide (cotizaciones especiales); responde aquí si su canal es WhatsApp. */
+  estimacionesIniciales?: CotizacionEspecialPortal[];
   /** Anticipo, pago, zonas y vigencia: del proveedor, aplican a todos sus servicios. */
   condicionesIniciales?: CondicionesProveedor;
 }
@@ -64,6 +68,7 @@ export function PortalPreciosProveedorClient({
   proveedorNombre,
   ofertasIniciales,
   solicitudesIniciales = [],
+  estimacionesIniciales = [],
   condicionesIniciales,
 }: Props) {
   const [condiciones, setCondiciones] = useState<CondicionesProveedor>(condicionesIniciales || CONDICIONES_VACIAS);
@@ -101,6 +106,8 @@ export function PortalPreciosProveedorClient({
       </header>
 
       <CondicionesGenerales token={token} condiciones={condiciones} onGuardadas={setCondiciones} />
+
+      <CotizacionesEspecialesPortal token={token} iniciales={estimacionesIniciales} />
 
       <SolicitudesPortalProveedor token={token} iniciales={solicitudesIniciales} />
 

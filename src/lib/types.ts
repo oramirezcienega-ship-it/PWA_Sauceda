@@ -1331,6 +1331,10 @@ export interface Proveedor {
   condicionesPago?: string;
   zonasCobertura?: string[];
   vigenciaPrecios?: string | null;
+  /** Por dónde recibe cotizaciones especiales y solicitudes de fecha (migración 0162). */
+  canalPreferido?: "whatsapp" | "telegram";
+  /** Tiene Telegram ligado. Solo lectura. */
+  telegramLigado?: boolean;
   /** Total acumulado de documentos (facturas/remisiones) registrados. Solo lectura, vía join. */
   totalDocumentos?: number;
   /** Suma de montos de todos los documentos registrados. Solo lectura, vía join. */

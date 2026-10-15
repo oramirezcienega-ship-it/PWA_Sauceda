@@ -5,6 +5,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import {
   calcularEstimacion,
   enviarCotizacionEspecial,
+  publicarFotosCotizacionEspecial,
   prepararEstimacion,
   siguienteFolioCotizacionEspecial,
   textoEstimacion,
@@ -64,6 +65,9 @@ export interface ProveedorParaEspecial {
   /** @usuario de la cuenta vinculada, para confirmar que es la del proveedor. */
   telegramUsuario: string | null;
   enlaceTelegram: string | null;
+  /** Por dónde se le avisa: su canal preferido (si es Telegram pero no lo tiene ligado, va por WhatsApp). */
+  canal: "whatsapp" | "telegram";
+  tieneWhatsapp: boolean;
 }
 
 const num = (v: any) => (v === null || v === undefined ? null : Number(v));
@@ -130,7 +134,11 @@ export async function proveedoresParaEspecial(tipoNegocio: string | null): Promi
   await requireAdmin();
   const sb = supabaseServidor();
   const [{ data: provs }, { data: ofertas }, bot] = await Promise.all([
-    sb.from("proveedores").select("id, nombre, telegram_chat_id, telegram_username").eq("activo", true).order("nombre"),
+    sb
+      .from("proveedores")
+      .select("id, nombre, telegram_chat_id, telegram_username, canal_preferido, whatsapp, telefono")
+      .eq("activo", true)
+      .order("nombre"),
     sb
       .from("proveedor_productos")
       .select("proveedor_id, productos_servicios:producto_id ( tipo_negocio )")
@@ -150,6 +158,8 @@ export async function proveedoresParaEspecial(tipoNegocio: string | null): Promi
       tieneTelegram: !!p.telegram_chat_id,
       telegramUsuario: p.telegram_username || null,
       enlaceTelegram: bot ? `https://t.me/${bot}?start=prov_${p.id}` : null,
+      canal: (p.canal_preferido === "telegram" && p.telegram_chat_id ? "telegram" : "whatsapp") as "whatsapp" | "telegram",
+      tieneWhatsapp: !!(p.whatsapp || p.telefono),
     }))
     .sort((a, b) => Number(b.enLinea) - Number(a.enLinea) || a.nombre.localeCompare(b.nombre, "es"));
 }
@@ -213,8 +223,10 @@ export async function crearCotizacionEspecial(datos: {
     .insert(datos.proveedoresIds.map((pid) => ({ cotizacion_especial_id: ce.id, proveedor_id: pid })));
   if (errResp) return { ok: false, error: errResp.message };
 
+  // Fotos del cliente a almacenamiento público: el proveedor las ve en su portal (WhatsApp) o en Telegram.
+  await publicarFotosCotizacionEspecial(sb, ce.id);
   const r = await enviarCotizacionEspecial(sb, ce.id);
-  return { ok: true, enviados: r.enviados, sinTelegram: r.sinTelegram };
+  return { ok: true, enviados: r.enviados, sinTelegram: r.sinAviso };
 }
 
 /** Usar otra respuesta de proveedor (o recalcular con otro margen) para la estimación. */

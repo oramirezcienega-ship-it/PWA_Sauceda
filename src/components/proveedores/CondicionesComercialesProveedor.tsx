@@ -29,6 +29,7 @@ export function CondicionesComercialesProveedor({
   const [pago, setPago] = useState(proveedor.condicionesPago || "");
   const [zonas, setZonas] = useState((proveedor.zonasCobertura || []).join(", "));
   const [vigencia, setVigencia] = useState(proveedor.vigenciaPrecios || "");
+  const [canal, setCanal] = useState<"whatsapp" | "telegram">(proveedor.canalPreferido || "whatsapp");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +47,7 @@ export function CondicionesComercialesProveedor({
         condicionesPago: pago.trim(),
         zonas: zonasDeTexto(zonas),
         vigenciaPrecios: vigencia || null,
+        canalPreferido: canal,
       };
       const r = await guardarCondicionesProveedor(proveedor.id, datos);
       if (!r.ok) {
@@ -58,6 +60,7 @@ export function CondicionesComercialesProveedor({
         condicionesPago: datos.condicionesPago,
         zonasCobertura: datos.zonas,
         vigenciaPrecios: datos.vigenciaPrecios,
+        canalPreferido: datos.canalPreferido,
       });
       setEditando(false);
     } finally {
@@ -84,8 +87,17 @@ export function CondicionesComercialesProveedor({
       </div>
 
       {!editando ? (
-        <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {[
+            [
+              "📲 Le avisamos por",
+              proveedor.canalPreferido === "telegram"
+                ? proveedor.telegramLigado
+                  ? "Telegram"
+                  : "Telegram (sin ligar: se usa WhatsApp)"
+                : "WhatsApp (responde en su portal)",
+              proveedor.canalPreferido === "telegram" && !proveedor.telegramLigado,
+            ],
             ["💳 Anticipo y pago", pagoTexto, false],
             ["📍 Zonas donde trabaja", (proveedor.zonasCobertura || []).join(", "), false],
             ["🗓 Respeta sus precios hasta", proveedor.vigenciaPrecios ? `${fecha(proveedor.vigenciaPrecios)}${vencida ? " · vencido" : ""}` : "", vencida],
@@ -98,7 +110,14 @@ export function CondicionesComercialesProveedor({
         </dl>
       ) : (
         <div className="mt-2 space-y-2">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[7rem_1fr_1fr_10rem]">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[9rem_7rem_1fr_1fr_10rem]">
+            <label>
+              <span className="mb-0.5 block font-semibold text-carbon/70">Avisarle por</span>
+              <select value={canal} onChange={(e) => setCanal(e.target.value as "whatsapp" | "telegram")} className={inputCls}>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="telegram">Telegram{proveedor.telegramLigado ? "" : " (sin ligar)"}</option>
+              </select>
+            </label>
             <label>
               <span className="mb-0.5 block font-semibold text-carbon/70">Anticipo (%)</span>
               <input type="number" min={0} max={100} value={anticipo} onChange={(e) => setAnticipo(e.target.value)} className={inputCls} />

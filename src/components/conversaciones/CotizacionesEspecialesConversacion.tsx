@@ -37,7 +37,7 @@ const ESTADO_RESPUESTA: Record<RespuestaEspecial["estado"], { texto: string; cla
   requiere_visita: { texto: "Necesita visita", clase: "bg-amber-50 text-amber-800" },
   rechazada: { texto: "No lo hace", clase: "bg-slate-100 text-carbon/50" },
   vencida: { texto: "No respondió", clase: "bg-slate-100 text-carbon/50" },
-  sin_telegram: { texto: "Sin Telegram", clase: "bg-rojo/10 text-rojo" },
+  sin_telegram: { texto: "No se pudo avisar", clase: "bg-rojo/10 text-rojo" },
 };
 
 const inputCls =
@@ -91,7 +91,7 @@ export function CotizacionesEspecialesConversacion({
     setAbierto(false);
     setCreando(false);
     cargar();
-    // Las respuestas de los proveedores llegan por Telegram: se refresca cada 30 s.
+    // Las respuestas de los proveedores llegan por Telegram o por su portal: se refresca cada 30 s.
     const t = setInterval(cargar, 30000);
     return () => clearInterval(t);
   }, [cargar]);
@@ -411,8 +411,10 @@ function ModalNuevaCotizacionEspecial({
       .then((p) => {
         setProveedores(p);
         // Preselecciona los de la línea con Telegram; si no hay, todos los que tienen Telegram
-        const deLinea = p.filter((x) => x.enLinea && x.tieneTelegram).map((x) => x.id);
-        setElegidos(deLinea.length ? deLinea : p.filter((x) => x.tieneTelegram).map((x) => x.id));
+        // Preselecciona los de la línea a los que se les puede avisar (WhatsApp o Telegram)
+        const avisables = p.filter((x) => x.tieneTelegram || x.tieneWhatsapp);
+        const deLinea = avisables.filter((x) => x.enLinea).map((x) => x.id);
+        setElegidos(deLinea.length ? deLinea : avisables.map((x) => x.id));
       })
       .catch(() => setProveedores([]));
   }, [linea]);
@@ -439,7 +441,7 @@ function ModalNuevaCotizacionEspecial({
       }
       if (r.sinTelegram && r.sinTelegram.length > 0) {
         setResultado(
-          `Enviada a ${r.enviados} proveedor(es). Sin Telegram: ${r.sinTelegram.join(", ")} — mándales su link para ligarlo.`
+          `Enviada a ${r.enviados} proveedor(es). Sin WhatsApp ni Telegram registrado: ${r.sinTelegram.join(", ")}.`
         );
         setTimeout(onCreada, 2500);
       } else onCreada();
@@ -455,7 +457,7 @@ function ModalNuevaCotizacionEspecial({
           <div>
             <h3 className="font-titular text-base font-bold text-verde-profundo">💡 Cotización especial</h3>
             <p className="text-[11px] text-carbon/60">
-              Para algo que no está en el catálogo. Se manda por Telegram a los proveedores elegidos; nunca ven el nombre,
+              Para algo que no está en el catálogo. Se le avisa a cada proveedor por su canal (WhatsApp con link a su portal, o Telegram); nunca ven el nombre,
               teléfono ni dirección exacta del cliente.
             </p>
           </div>
@@ -583,7 +585,15 @@ function ModalNuevaCotizacionEspecial({
                         <span className="font-semibold text-carbon">{p.nombre}</span>
                         {p.enLinea && <span className="text-[10px] text-sauce">· trabaja esta línea</span>}
                       </label>
-                      {p.tieneTelegram ? (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          p.canal === "telegram" ? "bg-sky-100 text-sky-800" : p.tieneWhatsapp ? "bg-emerald-100 text-emerald-800" : "bg-rojo/10 text-rojo"
+                        }`}
+                        title={p.canal === "telegram" ? "Recibe botones en Telegram" : "Recibe un WhatsApp con link a su portal para responder"}
+                      >
+                        {p.canal === "telegram" ? "✈ Telegram" : p.tieneWhatsapp ? "📱 WhatsApp" : "Sin teléfono"}
+                      </span>
+                      {p.canal !== "telegram" ? null : p.tieneTelegram ? (
                         <span className="flex items-center gap-2 text-[10.5px]">
                           <span className="font-semibold text-emerald-700" title="Cuenta de Telegram que recibe las cotizaciones">
                             ✓ Telegram{p.telegramUsuario ? ` @${p.telegramUsuario}` : ""}
@@ -628,7 +638,7 @@ function ModalNuevaCotizacionEspecial({
               onClick={enviar}
               className="rounded-lg bg-sauce px-4 py-2 font-bold text-white hover:bg-verde-profundo disabled:opacity-50"
             >
-              {enviando ? "Enviando…" : `Enviar a ${elegidos.length} proveedor(es) por Telegram`}
+              {enviando ? "Enviando…" : `Enviar a ${elegidos.length} proveedor(es)`}
             </button>
           </div>
         </div>
