@@ -1,5 +1,6 @@
 "use server";
 
+import { parametroNombrePlantilla, plantillaPausada } from "@/lib/campanas-whatsapp";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/supabase/cliente-sesion";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
@@ -502,7 +503,8 @@ export async function enviarPlantillaReactivacionManual(
     const sb = supabaseServidor();
     
     // 1. Mapear tipo de negocio a plantilla de Meta
-    let plantilla = "reactivacion_impermeabilizacio"; // Fallback por defecto
+    // Sin respaldo: un tipo sin plantilla propia no debe recibir la de impermeabilización.
+    let plantilla = "";
     const negocioNormalizado = (tipoNegocio || "").trim();
 
     if (negocioNormalizado === "construccion-impermeabilizacion") {
@@ -516,7 +518,14 @@ export async function enviarPlantillaReactivacionManual(
     }
 
     // Nombre limpio del cliente para el parámetro {{1}} de la plantilla
-    const primerNombre = (nombreCliente || "Cliente").split(" ")[0] || "Cliente";
+    if (!plantilla) {
+      return { ok: false, error: "No hay plantilla de reactivación para este tipo de negocio." };
+    }
+    if (plantillaPausada(plantilla)) {
+      return { ok: false, error: "La plantilla de reactivación de impermeabilización está pausada (ofrecía inspección gratuita)." };
+    }
+
+    const primerNombre = parametroNombrePlantilla(nombreCliente);
 
     // 2. Enviar por WhatsApp
     const resWa = await enviarWhatsAppPlantilla(

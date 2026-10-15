@@ -1,5 +1,6 @@
 "use server";
 
+import { parametroNombrePlantilla } from "@/lib/campanas-whatsapp";
 import { headers } from "next/headers";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdministrador } from "@/lib/supabase/cliente-sesion";
@@ -2408,7 +2409,7 @@ export async function enviarPruebaWhatsAppMarketing(params: {
       // Envío de plantilla oficial aprobada por Meta (Garantiza entrega inmediata fuera de la ventana de 24 horas)
       const nombrePlantilla = params.nombrePlantilla || "reactivacion_impermeabilizacio";
       const idioma = params.idiomaPlantilla || (nombrePlantilla.includes("solo_tramite") || nombrePlantilla.includes("inspeccion_gratuita") || nombrePlantilla.includes("satisfaccion") ? "en" : "es_MX");
-      const param1 = params.nombreDestinatario?.trim() || "Cliente";
+      const param1 = parametroNombrePlantilla(params.nombreDestinatario);
 
       const resPlantilla = await enviarWhatsAppPlantilla(
         telLimpio,
