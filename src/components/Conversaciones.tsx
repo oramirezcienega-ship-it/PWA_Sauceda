@@ -676,7 +676,22 @@ function renderizarContenidoMensaje(
     }
 
   }
-  return <span>{texto}</span>;
+  return <span>{formatoWhatsApp(texto)}</span>;
+}
+
+/**
+ * Muestra las negritas (*texto*) y tachados (~texto~) como los ve el cliente en
+ * WhatsApp. También acepta **texto** de mensajes viejos de la IA.
+ */
+function formatoWhatsApp(texto: string): React.ReactNode {
+  const partes = texto.split(/(\*\*[^*\n]+\*\*|\*[^*\s][^*\n]*\*|~[^~\s][^~\n]*~)/g);
+  if (partes.length === 1) return texto;
+  return partes.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**") && p.length > 4) return <strong key={i}>{p.slice(2, -2)}</strong>;
+    if (p.startsWith("*") && p.endsWith("*") && p.length > 2) return <strong key={i}>{p.slice(1, -1)}</strong>;
+    if (p.startsWith("~") && p.endsWith("~") && p.length > 2) return <s key={i}>{p.slice(1, -1)}</s>;
+    return p;
+  });
 }
 
 function humanizarError(error: any): string {
