@@ -247,15 +247,47 @@ export async function inicializarOrdenAsesoria(
       .maybeSingle();
     if (!ot || ot.tipo_negocio !== TIPO_OT) return { ok: false, mensaje: "La orden no es de asesoría de compra." };
     const { data: exp } = ot.expediente_id
-      ? await sb.from("expedientes").select("tipo_credito").eq("id", ot.expediente_id).maybeSingle()
+      ? await sb
+          .from("expedientes")
+          .select(
+            "tipo_credito, monto_credito_precalificado, monto_ahorro_propio, busqueda_zonas, busqueda_recamaras_min, busqueda_precio_min, busqueda_precio_max, busqueda_requisitos, precalificacion_fecha, precalificacion_fuente, ya_tiene_casa",
+          )
+          .eq("id", ot.expediente_id)
+          .maybeSingle()
       : { data: null };
+
+    const yaTieneCasa =
+      opciones.yaTieneCasa !== undefined
+        ? Boolean(opciones.yaTieneCasa)
+        : Boolean(exp?.ya_tiene_casa);
+
+    const perfilNorm = normalizarPerfil({
+      tipoCredito: exp?.tipo_credito,
+      montoCreditoPrecalificado: exp?.monto_credito_precalificado,
+      montoAhorroPropio: exp?.monto_ahorro_propio,
+      busquedaZonas: exp?.busqueda_zonas,
+      busquedaRecamarasMin: exp?.busqueda_recamaras_min,
+      busquedaPrecioMin: exp?.busqueda_precio_min,
+      busquedaPrecioMax: exp?.busqueda_precio_max,
+      busquedaRequisitos: exp?.busqueda_requisitos,
+      precalificacionFecha: exp?.precalificacion_fecha,
+      precalificacionFuente: exp?.precalificacion_fuente,
+      yaTieneCasa,
+    });
+
+    const datosFicha = perfilNorm.ok
+      ? perfilAFila(perfilNorm.perfil)
+      : {
+          tipo_credito: normalizarCredito(exp?.tipo_credito) ?? null,
+          ya_tiene_casa: yaTieneCasa,
+        };
+
     const { error } = await sb.from("ot_ficha_asesoria_compra").upsert(
       {
         orden_trabajo_id: ot.id,
-        ya_tiene_casa: Boolean(opciones.yaTieneCasa),
-        tipo_credito: normalizarCredito(exp?.tipo_credito) ?? null,
+        ...datosFicha,
       },
-      { onConflict: "orden_trabajo_id", ignoreDuplicates: true },
+      { onConflict: "orden_trabajo_id" },
     );
     if (error) throw new Error(error.message);
     await sb.from("ordenes_trabajo").update({ etapa: "precalificacion", estatus: "en_proceso" }).eq("id", ot.id).is("etapa", null);
@@ -1952,3 +1984,174 @@ export async function invitarAnuncianteComoAliado(
     return { ok: false, mensaje: err instanceof Error ? err.message : "No se pudo dar de alta al aliado." };
   }
 }
+
+// ============================================================================
+// Enlace Expediente ↔ Orden de Trabajo de Asesoría de Compra
+// ============================================================================
+
+export interface ResumenAsesoriaExpediente {
+  tieneOrden: boolean;
+  ordenTrabajoId?: string;
+  folio?: string;
+  etapa?: string;
+  etapaNombre?: string;
+  estatus?: string;
+  dictamen?: Dictamen | null;
+  dictamenEtiqueta?: string | null;
+  poderDeCompra?: number | null;
+  montoCredito?: number | null;
+  montoAhorro?: number | null;
+  zonas?: string[];
+  opcionesPublicadas?: number;
+  visitasAgendadas?: number;
+  pendientes?: { clave: string; texto: string }[];
+  preliminarExpediente?: {
+    montoCredito?: number | null;
+    montoAhorro?: number | null;
+    zonas?: string[];
+    tipoCredito?: string | null;
+  };
+}
+
+/**
+ * Consulta el estado operativo de la asesoría de compra para un expediente:
+ * si ya tiene orden de trabajo, su folio, etapa, dictamen, métricas y pendientes;
+ * o sus datos preliminares en caso de que aún no se haya inicializado la OT.
+ */
+export async function obtenerResumenAsesoriaExpediente(
+  expedienteId: string,
+): Promise<ResumenAsesoriaExpediente> {
+  const sb = supabaseServidor();
+  const { data: ot } = await sb
+    .from("ordenes_trabajo")
+    .select("id, folio, etapa, estatus")
+    .eq("expediente_id", expedienteId)
+    .eq("tipo_negocio", TIPO_OT)
+    .neq("estatus", "cancelada")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!ot) {
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("monto_credito_precalificado, monto_ahorro_propio, busqueda_zonas, tipo_credito")
+      .eq("id", expedienteId)
+      .maybeSingle();
+
+    return {
+      tieneOrden: false,
+      preliminarExpediente: exp
+        ? {
+            montoCredito: exp.monto_credito_precalificado ? Number(exp.monto_credito_precalificado) : null,
+            montoAhorro: exp.monto_ahorro_propio ? Number(exp.monto_ahorro_propio) : null,
+            zonas: Array.isArray(exp.busqueda_zonas) ? exp.busqueda_zonas : [],
+            tipoCredito: exp.tipo_credito || null,
+          }
+        : undefined,
+    };
+  }
+
+  const ctx = await cargarOrden(sb, ot.id);
+  if (!ctx) return { tieneOrden: false };
+
+  const etapaActual = ctx.aplicables.find((e) => e.clave === ot.etapa) ?? ctx.aplicables[0];
+  const dictamen = (ctx.ficha.dictamen as Dictamen | null) ?? null;
+  const dictamenEtiqueta = dictamen ? ETIQUETA_DICTAMEN[dictamen] : null;
+
+  const mCred = ctx.ficha.monto_credito_precalificado ? Number(ctx.ficha.monto_credito_precalificado) : 0;
+  const mAhorro = ctx.ficha.monto_ahorro_propio ? Number(ctx.ficha.monto_ahorro_propio) : 0;
+  const poder = mCred + mAhorro;
+
+  const [{ count: opcionesPublicadas }, { count: visitasAgendadas }, pendientes] = await Promise.all([
+    sb.from("propuestas_inmuebles").select("id", { count: "exact", head: true }).eq("orden_trabajo_id", ot.id).not("publicada_en", "is", null),
+    sb.from("propuestas_inmuebles").select("id", { count: "exact", head: true }).eq("orden_trabajo_id", ot.id).in("estatus", ["visita_agendada", "visitada", "ofertada", "elegida"]),
+    pendientesDeFicha(sb, ctx.ficha),
+  ]);
+
+  return {
+    tieneOrden: true,
+    ordenTrabajoId: ot.id,
+    folio: ot.folio,
+    etapa: ot.etapa || "precalificacion",
+    etapaNombre: etapaActual?.nombre || ot.etapa || "Precalificación",
+    estatus: ot.estatus,
+    dictamen,
+    dictamenEtiqueta,
+    poderDeCompra: poder > 0 ? poder : null,
+    montoCredito: mCred > 0 ? mCred : null,
+    montoAhorro: mAhorro > 0 ? mAhorro : null,
+    zonas: Array.isArray(ctx.ficha.busqueda_zonas) ? ctx.ficha.busqueda_zonas : [],
+    opcionesPublicadas: opcionesPublicadas ?? 0,
+    visitasAgendadas: visitasAgendadas ?? 0,
+    pendientes,
+  };
+}
+
+/**
+ * Inicia la orden de trabajo de asesoría de compra para un expediente que aún no la tiene.
+ * Transfiere automáticamente el perfil, zonas y crédito recopilados hacia la ficha de la OT.
+ */
+export async function iniciarAsesoriaDesdeExpediente(
+  expedienteId: string,
+): Promise<{ ok: boolean; ordenTrabajoId?: string; folio?: string; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { data: exp } = await sb
+      .from("expedientes")
+      .select("id, prospecto_id, cliente, tipo_negocio, ya_tiene_casa, asesor_id")
+      .eq("id", expedienteId)
+      .maybeSingle();
+
+    if (!exp) return { ok: false, mensaje: "El expediente no existe." };
+
+    // Verificar si ya existe una orden activa de asesoría para este expediente
+    const { data: otExistente } = await sb
+      .from("ordenes_trabajo")
+      .select("id, folio, estatus")
+      .eq("expediente_id", expedienteId)
+      .eq("tipo_negocio", TIPO_OT)
+      .neq("estatus", "cancelada")
+      .maybeSingle();
+
+    if (otExistente) {
+      return {
+        ok: true,
+        ordenTrabajoId: otExistente.id,
+        folio: otExistente.folio,
+        mensaje: `Ya existe la orden ${otExistente.folio} para este expediente.`,
+      };
+    }
+
+    const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
+    const nombreCliente = String(exp.cliente || "Cliente").trim();
+    const res = await crearOrdenTrabajo({
+      expedienteId: exp.id,
+      prospectoId: exp.prospecto_id,
+      tipoNegocio: TIPO_OT,
+      yaTieneCasa: Boolean(exp.ya_tiene_casa),
+      titulo: `Asesoría de compra · ${nombreCliente}`,
+      descripcion: `Acompañamiento y búsqueda de vivienda para ${nombreCliente}.`,
+      asesorEjecutorId: exp.asesor_id || null,
+    });
+
+    if (!res.ok) {
+      return { ok: false, mensaje: res.error || "No se pudo crear la orden de asesoría." };
+    }
+
+    revalidatePath(`/expediente/${expedienteId}`);
+    return {
+      ok: true,
+      ordenTrabajoId: res.id,
+      folio: res.folio,
+    };
+  } catch (err) {
+    console.error("[iniciarAsesoriaDesdeExpediente]", err);
+    return {
+      ok: false,
+      mensaje: err instanceof Error ? err.message : "Error al iniciar la orden de asesoría.",
+    };
+  }
+}
+

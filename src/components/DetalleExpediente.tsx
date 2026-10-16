@@ -33,6 +33,7 @@ import { WidgetColapsable } from "./WidgetColapsable";
 import { WidgetCampanasMautic } from "./WidgetCampanasMautic";
 import { normalizarTelefono } from "@/lib/telefono";
 import { BotonPublicarInventario } from "./asesoria-compra/BotonPublicarInventario";
+import { TarjetaAsesoriaCompraExpediente } from "./asesoria-compra/TarjetaAsesoriaCompraExpediente";
 import { ModalRescateMovil } from "./ModalRescateMovil";
 
 /**
@@ -587,6 +588,15 @@ export function DetalleExpediente({ id }: { id: string }) {
             </div>
           </div>
         </div>
+
+        {/* Tarjeta y Estado Operativo de Asesoría de Compra */}
+        {expediente.tipoNegocio === "asesoria_compra" && (
+          <TarjetaAsesoriaCompraExpediente
+            expedienteId={expediente.id}
+            clienteNombre={expediente.cliente}
+            onActualizado={recargar}
+          />
+        )}
 
         {/* Avance por etapas (Solo visible para Traspaso / Compra de casa) */}
         {(!expediente.tipoNegocio || expediente.tipoNegocio === "traspaso_compra" || (expediente.tipoNegocio as string) === "compra" || (expediente.tipoNegocio as string) === "traspaso") && (
