@@ -40,6 +40,7 @@ import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
 import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
 import { ModalRescateMovil } from "./ModalRescateMovil";
+import { ModalBorradorSofia } from "./conversaciones/ModalBorradorSofia";
 import {
   obtenerEnvioLeadTelegramAction,
   marcarLeadRevisadoManualAction,
@@ -826,6 +827,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [asignando, setAsignando] = useState(false);
   const [alternandoIA, setAlternandoIA] = useState(false);
   const [invocandoSofia, setInvocandoSofia] = useState(false);
+  const [borradorSofiaTel, setBorradorSofiaTel] = useState<string | null>(null);
   const [esAdmin, setEsAdmin] = useState(false);
   const [mostrarAtajos, setMostrarAtajos] = useState(false);
   const [filtroAtajos, setFiltroAtajos] = useState("");
@@ -951,13 +953,14 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     }
   }, []);
 
-  /** Botón "Que responda Sofía": la vuelve a invocar leyendo todo el hilo. */
-  const pedirRespuestaSofia = async (telefono: string) => {
-    const indicacion = window.prompt(
-      "Sofía leerá la conversación y responderá al cliente.\n\nIndicación opcional para Sofía (deja vacío si no hay):",
-      "",
-    );
-    if (indicacion === null) return; // canceló
+  /** Botón "Que responda Sofía": abre la propuesta para revisarla antes de enviar. */
+  const pedirRespuestaSofia = (telefono: string) => {
+    setAviso(null);
+    setBorradorSofiaTel(telefono);
+  };
+
+  /** Sofía responde y envía ella misma (con links y fotos) y queda encendida. */
+  const sofiaRespondeSola = async (telefono: string, indicacion: string) => {
     setInvocandoSofia(true);
     setAviso(null);
     try {
@@ -1064,17 +1067,20 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     }
   }
 
-  async function enviarTexto() {
-    if (!sel || !texto.trim() || enviando) return;
+  async function enviarTexto(textoDirecto?: string): Promise<boolean> {
+    const contenido = (textoDirecto ?? texto).trim();
+    if (!sel || !contenido || enviando) return false;
     setEnviando(true);
     setAviso(null);
+    let ok = false;
     try {
       const firma = agenteFirma?.trim() || usuario?.nombre || undefined;
-      const r = await responderConversacion(sel, texto.trim(), firma);
+      const r = await responderConversacion(sel, contenido, firma);
       if (!r.ok) {
         setAviso(humanizarError(r.error ?? "No se pudo enviar el mensaje."));
       } else {
-        setTexto("");
+        ok = true;
+        if (textoDirecto === undefined) setTexto("");
         marcarComoLeida(sel, new Date().toISOString());
       }
       await refrescar(sel);
@@ -1084,6 +1090,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     } finally {
       setEnviando(false);
     }
+    return ok;
   }
 
   async function borrarConversacion() {
@@ -2412,9 +2419,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     {/* Volver a invocar a Sofía */}
                     <button
                       type="button"
-                      onClick={() => void pedirRespuestaSofia(detalle.telefono)}
+                      onClick={() => pedirRespuestaSofia(detalle.telefono)}
                       disabled={invocandoSofia || alternandoIA || enviando}
-                      title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
+                      title="Sofía lee la conversación y te propone una respuesta; tú decides si la mandas."
                       className="text-[8px] font-bold px-2 py-0.5 rounded shadow-xs transition disabled:opacity-50 flex items-center gap-1 shrink-0 border cursor-pointer bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400"
                     >
                       {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
@@ -2994,9 +3001,9 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       {/* Volver a invocar a Sofía */}
                       <button
                         type="button"
-                        onClick={() => void pedirRespuestaSofia(detalle.telefono)}
+                        onClick={() => pedirRespuestaSofia(detalle.telefono)}
                         disabled={invocandoSofia || alternandoIA || enviando}
-                        title="Sofía lee la conversación y le responde al cliente ahora (y queda encendida)."
+                        title="Sofía lee la conversación y te propone una respuesta; tú decides si la mandas."
                         className={`${ventanaCerradaWA ? "hidden" : "flex"} items-center gap-1 rounded border px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer disabled:opacity-50 bg-violet-100 hover:bg-violet-200 text-violet-900 border-violet-400`}
                       >
                         {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
@@ -3295,7 +3302,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                     </div>
                     <button
                       type="button"
-                      onClick={enviarTexto}
+                      onClick={() => void enviarTexto()}
                       disabled={enviando || !texto.trim() || (!detalle.ventanaAbierta && canalDe(detalle.telefono) === "whatsapp")}
                       className="shrink-0 rounded-md bg-sauce px-4 py-2.5 text-sm font-medium text-crema transition hover:bg-verde-profundo disabled:opacity-50"
                     >
@@ -3371,6 +3378,23 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           tipoNegocio={detalle.tipoNegocio}
           proyecto={detalle.tipoNegocio ? labelTipoNegocio(detalle.tipoNegocio as any) : "Remodelación"}
           onEnviado={() => refrescar(detalle.telefono)}
+        />
+      )}
+
+      {borradorSofiaTel && (
+        <ModalBorradorSofia
+          telefono={borradorSofiaTel}
+          onEnviar={(t) => enviarTexto(t)}
+          onUsarEnCaja={(t) => {
+            setTexto(t);
+            setBorradorSofiaTel(null);
+          }}
+          onSofiaSola={(ind) => {
+            const tel = borradorSofiaTel;
+            setBorradorSofiaTel(null);
+            void sofiaRespondeSola(tel, ind);
+          }}
+          onCerrar={() => setBorradorSofiaTel(null)}
         />
       )}
 

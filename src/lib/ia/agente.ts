@@ -1220,8 +1220,13 @@ export async function responderConIA(
     forzar?: boolean;
     /** Indicación opcional del asesor solo para esta respuesta. */
     indicacion?: string | null;
+    /**
+     * Solo genera el texto y lo devuelve: no envía nada ni toca el expediente.
+     * Lo usa el asesor para revisar la propuesta de Sofía antes de mandarla.
+     */
+    soloBorrador?: boolean;
   },
-): Promise<void> {
+): Promise<string | void> {
   try {
     if (!iaAgenteActivo()) return;
     const forzar = ctx.forzar === true;
@@ -1325,7 +1330,7 @@ export async function responderConIA(
       }
 
       // Si el prospecto tiene estatus 'nuevo', lo movemos a 'en_conversacion' y complementamos datos de campaña
-      if (exp?.prospecto_id) {
+      if (exp?.prospecto_id && !ctx.soloBorrador) {
         const { data: prInfo } = await sb
           .from("prospectos")
           .select("estatus, campaign_name, adset_name, ad_name, origen")
@@ -1364,6 +1369,9 @@ export async function responderConIA(
     }
 
     const textoAI = await generarRespuesta(system, mensajes, sb);
+    if (!textoAI && ctx.soloBorrador) {
+      throw new Error(ultimoErrorIA || "La IA no generó respuesta.");
+    }
     if (!textoAI) {
       // Deja constancia en el expediente para que el asesor vea por qué Sofía no contestó.
       if (ctx.expedienteId) {
@@ -1487,6 +1495,9 @@ export async function responderConIA(
         textoRespuesta = textoRespuesta.replace(reMonto, "(monto que te confirma el asesor)");
       }
     }
+
+    // Borrador para el asesor: se detiene antes de guardar datos o enviar.
+    if (ctx.soloBorrador) return textoRespuesta;
 
     // --- PROCESAMIENTO DE DATOS EXTRAÍDOS ---
     const updates: Record<string, any> = {};
@@ -2367,6 +2378,7 @@ export async function responderConIA(
       });
     }
   } catch (err) {
+    if (ctx.soloBorrador) throw err;
     console.error("IA: no se pudo responder:", err);
   }
 }

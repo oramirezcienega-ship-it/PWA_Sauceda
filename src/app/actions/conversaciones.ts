@@ -1115,6 +1115,36 @@ export async function invocarSofia(
   }
 }
 
+/**
+ * Sofía propone una respuesta sin enviarla: el asesor la revisa, la edita y
+ * decide si la manda. No cambia la pausa ni el expediente.
+ */
+export async function borradorSofia(
+  telefono: string,
+  indicacion?: string | null,
+): Promise<{ ok: boolean; texto?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { expedienteId } = await idsDeTelefono(sb, telefono);
+    const { responderConIA } = await import("@/lib/ia/agente");
+    const texto = await responderConIA(sb, {
+      telefono,
+      expedienteId,
+      forzar: true,
+      indicacion,
+      soloBorrador: true,
+    });
+    if (!texto) {
+      return { ok: false, error: "Sofía no generó propuesta (¿IA desactivada o conversación vacía?)." };
+    }
+    return { ok: true, texto };
+  } catch (err: any) {
+    console.error("Error al generar borrador de Sofía:", err);
+    return { ok: false, error: err?.message || "No se pudo generar la propuesta de Sofía." };
+  }
+}
+
 /** Lista todos los asesores activos para reasignar conversaciones. */
 export async function listarAsesoresActivos(): Promise<{ id: string; nombre: string }[]> {
   await requireAdmin();
