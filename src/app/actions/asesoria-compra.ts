@@ -75,6 +75,7 @@ import {
 import { obtenerEtapasPorId, obtenerEtapasPorNegocio } from "@/lib/etapas";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { enviarWhatsAppTexto } from "@/lib/whatsapp";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import {
   ESTATUS_RESPONDIBLES,
   ESTATUS_VISIBLES_CLIENTE,
@@ -2333,8 +2334,38 @@ export async function enviarListaDemandasWhatsApp(
   try {
     await requireAdmin();
     if (!texto.trim()) return { ok: false, mensaje: "La lista está vacía." };
-    const wa = await enviarWhatsAppTexto(telefono, texto);
+    const sb = supabaseServidor();
+    const tel = normalizarTelefono(telefono);
+
+    // Meta acepta el envío pero lo descarta después (131047) si la ventana está cerrada:
+    // se valida antes para no reportar un éxito falso.
+    const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: entrantes } = await sb
+      .from("mensajes_whatsapp")
+      .select("id")
+      .in("telefono", variantesTelefono(tel))
+      .eq("direccion", "in")
+      .gte("created_at", hace24h)
+      .limit(1);
+    if (!entrantes || entrantes.length === 0) {
+      return {
+        ok: false,
+        mensaje:
+          "Ventana de 24 h cerrada: ese número no ha escrito a la línea API en las últimas 24 h, así que Meta no entregaría el mensaje. Pide que manden un \"Hola\" a la línea oficial y vuelve a enviar, o usa la Línea principal.",
+      };
+    }
+
+    const wa = await enviarWhatsAppTexto(tel, texto);
     if (!wa.ok) return { ok: false, mensaje: wa.errorDetail || wa.error || "No se pudo enviar el WhatsApp." };
+
+    // Registrar con wa_message_id para que el webhook actualice entrega/lectura en Conversaciones
+    await sb.from("mensajes_whatsapp").insert({
+      telefono: tel,
+      texto,
+      direccion: "out",
+      estado: "enviado",
+      wa_message_id: wa.messageId || null,
+    });
     return { ok: true };
   } catch (err: any) {
     console.error("[enviarListaDemandasWhatsApp]", err);
