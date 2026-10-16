@@ -2321,4 +2321,25 @@ export async function obtenerDemandasActivasInventario(): Promise<DemandaComprad
   }
 }
 
+/**
+ * Envía la lista de demandas activas (texto ya armado en el widget) por la
+ * línea API de WhatsApp (Meta Cloud API) a un teléfono. El texto libre solo
+ * llega si el destinatario escribió a la línea en las últimas 24 h.
+ */
+export async function enviarListaDemandasWhatsApp(
+  telefono: string,
+  texto: string,
+): Promise<{ ok: boolean; mensaje?: string }> {
+  try {
+    await requireAdmin();
+    if (!texto.trim()) return { ok: false, mensaje: "La lista está vacía." };
+    const wa = await enviarWhatsAppTexto(telefono, texto);
+    if (!wa.ok) return { ok: false, mensaje: wa.errorDetail || wa.error || "No se pudo enviar el WhatsApp." };
+    return { ok: true };
+  } catch (err: any) {
+    console.error("[enviarListaDemandasWhatsApp]", err);
+    return { ok: false, mensaje: err?.message || "Error al enviar la lista." };
+  }
+}
+
 

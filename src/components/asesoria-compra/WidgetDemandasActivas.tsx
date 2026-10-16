@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { formatoPesos } from "@/lib/formato";
-import type { DemandaCompradorInventario } from "@/app/actions/asesoria-compra";
+import {
+  enviarListaDemandasWhatsApp,
+  type DemandaCompradorInventario,
+} from "@/app/actions/asesoria-compra";
 import { PanelBusquedaAliados } from "@/components/aliados/PanelBusquedaAliados";
 
 interface Props {
@@ -21,6 +24,49 @@ const ETIQUETAS_PLAZO: Record<string, string> = {
   mas_6_meses: "+6 meses",
 };
 
+/** Texto para WhatsApp: solo datos de búsqueda, sin nombre ni teléfono del cliente. */
+function armarTextoDemandas(demandas: DemandaCompradorInventario[]): string {
+  const bloques = demandas.map((d) => {
+    const lineas = [`*${d.folio}*`];
+    lineas.push(`💰 Presupuesto: ${d.presupuestoTotal > 0 ? formatoPesos(d.presupuestoTotal) : "Por definir"}`);
+    if (d.tipoCredito) lineas.push(`🏦 Crédito: ${d.tipoCredito.toUpperCase()}`);
+    lineas.push(`📍 Zonas: ${d.zonas.length > 0 ? d.zonas.join(", ") : "Abierto"}`);
+    if (d.recamarasMin) lineas.push(`🛏️ Recámaras: ${d.recamarasMin}+`);
+    if (d.plazoMudanza) lineas.push(`⏱️ Plazo: ${ETIQUETAS_PLAZO[d.plazoMudanza] || d.plazoMudanza}`);
+    return lineas.join("\n");
+  });
+  return [
+    `🏠 *Compradores buscando casa — Sauceda* (${demandas.length})`,
+    "Si tienes una opción que encaje, respóndenos con el folio.",
+    ...bloques,
+  ].join("\n\n");
+}
+
+function celdaCsv(valor: string): string {
+  return /[",\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor;
+}
+
+function descargarCsvDemandas(demandas: DemandaCompradorInventario[]) {
+  const encabezado = ["Folio", "Presupuesto", "Tipo de crédito", "Zonas de interés", "Recámaras", "Plazo"];
+  const filas = demandas.map((d) => [
+    d.folio,
+    d.presupuestoTotal > 0 ? String(d.presupuestoTotal) : "",
+    d.tipoCredito || "",
+    d.zonas.join(", "),
+    d.recamarasMin ? `${d.recamarasMin}+` : "",
+    d.plazoMudanza ? ETIQUETAS_PLAZO[d.plazoMudanza] || d.plazoMudanza : "",
+  ]);
+  const csv = [encabezado, ...filas].map((f) => f.map(celdaCsv).join(",")).join("\r\n");
+  // BOM para que Excel respete acentos
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `demandas-compradores-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function WidgetDemandasActivas({
   demandas,
   cargando,
@@ -31,6 +77,11 @@ export function WidgetDemandasActivas({
   const [colapsado, setColapsado] = useState(false);
   const [busquedaTexto, setBusquedaTexto] = useState("");
   const [demandaParaAliados, setDemandaParaAliados] = useState<DemandaCompradorInventario | null>(null);
+  const [compartirAbierto, setCompartirAbierto] = useState(false);
+  const [textoCompartir, setTextoCompartir] = useState("");
+  const [telefonoApi, setTelefonoApi] = useState("");
+  const [avisoCompartir, setAvisoCompartir] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [enviandoApi, startEnvioApi] = useTransition();
 
   const demandasFiltradas = useMemo(() => {
     if (!busquedaTexto.trim()) return demandas;
@@ -83,6 +134,20 @@ export function WidgetDemandasActivas({
               ✕ Limpiar filtro
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setTextoCompartir(armarTextoDemandas(demandasFiltradas));
+              setAvisoCompartir(null);
+              setCompartirAbierto(true);
+            }}
+            disabled={cargando || demandasFiltradas.length === 0}
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+            title="Compartir o exportar la lista (respeta el filtro de búsqueda)"
+          >
+            📤 Compartir
+          </button>
 
           <button
             type="button"
@@ -354,6 +419,116 @@ export function WidgetDemandasActivas({
             </div>
 
             <PanelBusquedaAliados ordenTrabajoId={demandaParaAliados.ordenTrabajoId} />
+          </div>
+        </div>
+      )}
+
+      {/* Modal de compartir / exportar la lista */}
+      {compartirAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-start justify-between border-b border-carbon/10 pb-3">
+              <div>
+                <h3 className="font-titular text-lg font-bold text-carbon">
+                  Compartir {demandasFiltradas.length} demanda{demandasFiltradas.length === 1 ? "" : "s"}
+                </h3>
+                <p className="text-xs text-carbon/60">
+                  Folio, presupuesto, crédito, zonas, recámaras y plazo. No incluye nombre ni teléfono del cliente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompartirAbierto(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-carbon/20 bg-white text-base font-bold text-carbon/70 hover:bg-carbon/5"
+              >
+                ✕
+              </button>
+            </div>
+
+            <textarea
+              value={textoCompartir}
+              onChange={(e) => setTextoCompartir(e.target.value)}
+              rows={12}
+              className="w-full rounded-lg border border-carbon/20 bg-carbon/[0.02] p-2 font-mono text-[11px] text-carbon focus:border-sauce focus:outline-none"
+            />
+
+            {/* Línea principal: abre WhatsApp del usuario para elegir contacto o grupo */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(textoCompartir)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                title="Abre tu WhatsApp para elegir contacto o grupo"
+              >
+                📱 WhatsApp · Línea principal
+              </a>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(textoCompartir);
+                    setAvisoCompartir({ ok: true, texto: "Texto copiado al portapapeles." });
+                  } catch {
+                    setAvisoCompartir({ ok: false, texto: "No se pudo copiar; selecciona el texto manualmente." });
+                  }
+                }}
+                className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-semibold text-carbon/80 hover:bg-carbon/5"
+              >
+                📋 Copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => descargarCsvDemandas(demandasFiltradas)}
+                className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-semibold text-carbon/80 hover:bg-carbon/5"
+              >
+                📊 Exportar CSV (Excel)
+              </button>
+            </div>
+
+            {/* Línea API: envío directo desde el número de Meta */}
+            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+              <div className="text-xs font-bold text-sky-900">🤖 Enviar por Línea API (Meta)</div>
+              <p className="mb-2 text-[10px] text-sky-900/70">
+                Meta solo entrega texto libre si el destinatario escribió a la línea en las últimas 24 h.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  placeholder="Teléfono a 10 dígitos"
+                  value={telefonoApi}
+                  onChange={(e) => setTelefonoApi(e.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-carbon/20 bg-white px-3 py-1 text-xs text-carbon focus:border-sauce focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={enviandoApi || telefonoApi.replace(/\D/g, "").length < 10}
+                  onClick={() =>
+                    startEnvioApi(async () => {
+                      const res = await enviarListaDemandasWhatsApp(telefonoApi, textoCompartir);
+                      setAvisoCompartir(
+                        res.ok
+                          ? { ok: true, texto: "Lista enviada por la línea API." }
+                          : { ok: false, texto: res.mensaje || "No se pudo enviar." },
+                      );
+                    })
+                  }
+                  className="whitespace-nowrap rounded-lg bg-sky-600 px-3 py-1 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {enviandoApi ? "Enviando..." : "Enviar"}
+                </button>
+              </div>
+            </div>
+
+            {avisoCompartir && (
+              <div
+                className={`mt-3 rounded-lg px-3 py-2 text-xs ${
+                  avisoCompartir.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"
+                }`}
+              >
+                {avisoCompartir.texto}
+              </div>
+            )}
           </div>
         </div>
       )}
