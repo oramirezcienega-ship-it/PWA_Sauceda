@@ -110,7 +110,7 @@ import {
 const TIPOS_ASESORIA_O_TRAMITE = ["asesoria_compra", "solo_tramite"] as const;
 const TIPO_OT = "asesoria_compra";
 
-export function esTipoAsesoriaOT(tipo?: string | null): boolean {
+function esTipoAsesoriaOT(tipo?: string | null): boolean {
   return tipo === "asesoria_compra" || tipo === "solo_tramite";
 }
 
