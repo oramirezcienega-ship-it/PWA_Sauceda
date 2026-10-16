@@ -35,7 +35,7 @@ export async function obtenerSeguimientoAsesores(): Promise<{
   const sb = supabaseServidor();
   const [coordinaciones, leads] = await Promise.all([
     listarCoordinacionesConRetro(sb, { incluirCanceladas: true, dias: 90 }),
-    listarLeadsConRetro(sb, { dias: 90 }),
+    listarLeadsConRetro(sb, { dias: 90, conDetalle: true }),
   ]);
   return { coordinaciones, leads };
 }

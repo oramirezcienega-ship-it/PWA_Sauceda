@@ -29,6 +29,45 @@ const textoRetro = (r: Retroalimentacion | undefined) =>
         .join(" · ")
     : "";
 
+const fechaHora = (iso: string) =>
+  new Date(iso).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+const pesos = (n: number) =>
+  n ? n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }) : "";
+
+const soloDigitos = (t: string) => (t || "").replace(/\D/g, "");
+const telWa = (t: string) => {
+  const d = soloDigitos(t);
+  return d.length === 10 ? `52${d}` : d;
+};
+
+const origenApp = () => (typeof window !== "undefined" ? window.location.origin : "");
+
+/** Ficha del cliente compartido para reenviarla al asesor por WhatsApp o Telegram. */
+function mensajeLead(l: LeadCompartidoPortal): string {
+  const d = l.detalle;
+  const app = origenApp();
+  const ubicacion = Array.from(new Set([d?.direccion, d?.fraccionamiento].filter(Boolean))).join(", ");
+  const lineas = [
+    `👤 *Cliente: ${l.clienteNombre}*`,
+    soloDigitos(l.telefono).length >= 10 ? `📞 ${l.telefono} · https://wa.me/${telWa(l.telefono)}` : l.telefono ? `📞 ${l.telefono}` : "",
+    d?.correo ? `✉️ ${d.correo}` : "",
+    d?.tipoNegocio ? `💼 Negocio: ${d.tipoNegocio}${d.etapa ? ` (${d.etapa})` : ""}` : "",
+    ubicacion ? `📍 ${ubicacion}` : "",
+    d?.tipoCredito ? `🏦 Crédito: ${d.tipoCredito}` : "",
+    d?.valorEstimado ? `💰 Valor estimado: ${pesos(d.valorEstimado)}` : "",
+    d?.montoCotizado ? `🧾 Cotizado: ${pesos(d.montoCotizado)} (${d.cotizaciones} cotización${d.cotizaciones === 1 ? "" : "es"})` : "",
+    d?.necesidad ? `📝 Necesidad: ${d.necesidad}` : "",
+    l.nota ? `📌 Nota: ${l.nota}` : "",
+    l.resumen ? `\n*Resumen:*\n${l.resumen}` : "",
+    l.retro[0] ? `\n🔁 Última retro: ${textoRetro(l.retro[0])}` : "",
+    d?.expedienteId && app ? `\n🔗 Expediente: ${app}/expediente/${d.expedienteId}` : "",
+    d?.ultimaCotizacion?.token && app ? `🔗 Cotización: ${app}/cotizacion/${d.ultimaCotizacion.token}` : "",
+    `\nCompartido el ${fechaHora(l.createdAt)}${l.enviadoPor ? ` por ${l.enviadoPor}` : ""}`,
+  ];
+  return lineas.filter(Boolean).join("\n").slice(0, 3800);
+}
+
 const TONO_ESTADO: Record<string, string> = {
   confirmada: "bg-emerald-100 text-emerald-800",
   cancelada: "bg-red-100 text-red-700",
@@ -89,7 +128,9 @@ export default function PaginaCoordinaciones() {
     (l) =>
       (!filtroAsesor || l.asesorId === filtroAsesor) &&
       (!filtroEstado || (filtroEstado === "sin_respuesta" ? l.retro.length === 0 : l.retro[0]?.estado === filtroEstado)) &&
-      coincide(`${l.clienteNombre} ${l.telefono} ${l.nota}`)
+      coincide(
+        `${l.clienteNombre} ${l.telefono} ${l.nota} ${l.detalle?.tipoNegocio || ""} ${l.detalle?.fraccionamiento || ""} ${l.detalle?.expedienteId || ""}`
+      )
   );
 
   const exportar = () => {
@@ -117,11 +158,19 @@ export default function PaginaCoordinaciones() {
     } else {
       exportarAExcelCSV(
         `Clientes_Compartidos_${hoy}`,
-        ["Compartido", "Cliente", "Teléfono", "Asesor", "Compartido por", "Nota", "Última retroalimentación", "Fecha respuesta", "Respuestas"],
+        ["Compartido", "Cliente", "Teléfono", "Correo", "Expediente", "Prospecto", "Tipo de negocio", "Etapa", "Fraccionamiento", "Valor estimado", "Cotizado", "Asesor", "Compartido por", "Nota", "Última retroalimentación", "Fecha respuesta", "Respuestas"],
         leadsFiltrados.map((l) => [
-          fechaCorta(l.createdAt),
+          fechaHora(l.createdAt),
           l.clienteNombre,
           l.telefono,
+          l.detalle?.correo || "",
+          l.detalle?.expedienteId || "",
+          l.detalle?.prospectoId || "",
+          l.detalle?.tipoNegocio || "",
+          l.detalle?.etapa || "",
+          l.detalle?.fraccionamiento || "",
+          l.detalle?.valorEstimado || "",
+          l.detalle?.montoCotizado || "",
           l.asesorNombre,
           l.enviadoPor,
           l.nota,
@@ -323,37 +372,154 @@ export default function PaginaCoordinaciones() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
                     <th className="py-3 px-4">Cliente</th>
+                    <th className="py-3 px-3">Negocio</th>
+                    <th className="py-3 px-3">Valor</th>
                     <th className="py-3 px-3">Asesor</th>
                     <th className="py-3 px-3">Nota al compartir</th>
-                    <th className="py-3 px-3 min-w-[280px]">Retroalimentación</th>
+                    <th className="py-3 px-3 min-w-[240px]">Retroalimentación</th>
                     <th className="py-3 px-3">Compartido</th>
+                    <th className="py-3 px-3">Enviar al asesor</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {leadsFiltrados.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-10 text-center text-slate-400">
+                      <td colSpan={8} className="py-10 text-center text-slate-400">
                         Sin clientes compartidos con estos filtros.
                       </td>
                     </tr>
                   )}
-                  {leadsFiltrados.map((l) => (
-                    <tr key={l.id} className="hover:bg-slate-50/60 align-top">
-                      <td className="py-2.5 px-4">
-                        <div className="font-bold text-slate-800">{l.clienteNombre}</div>
-                        <div className="text-[11px] text-slate-500">{l.telefono}</div>
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <div className="text-slate-700">{l.asesorNombre}</div>
-                        <div className="text-[10px] text-slate-400">por {l.enviadoPor || "—"}</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 max-w-[260px]">{l.nota || "—"}</td>
-                      <td className="py-2.5 px-3">
-                        <CeldaRetro retro={l.retro} />
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">{fechaCorta(l.createdAt)}</td>
-                    </tr>
-                  ))}
+                  {leadsFiltrados.map((l) => {
+                    const d = l.detalle;
+                    const msg = mensajeLead(l);
+                    const app = origenApp();
+                    return (
+                      <tr key={l.id} className="hover:bg-slate-50/60 align-top">
+                        <td className="py-2.5 px-4">
+                          <div className="font-bold text-slate-800">{l.clienteNombre}</div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                            {l.telefono}
+                            {soloDigitos(l.telefono).length >= 10 && (
+                              <a
+                                href={`https://wa.me/${telWa(l.telefono)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir chat con el cliente"
+                                className="text-emerald-600 hover:underline"
+                              >
+                                chat
+                              </a>
+                            )}
+                          </div>
+                          {d?.correo && <div className="text-[10px] text-slate-400">{d.correo}</div>}
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {d?.expedienteId && (
+                              <Link
+                                href={`/expediente/${d.expedienteId}`}
+                                className="rounded bg-[#2D4A2B]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#2D4A2B] hover:bg-[#2D4A2B]/20"
+                              >
+                                Negocio {d.expedienteId} →
+                              </Link>
+                            )}
+                            {d?.prospectoId && (
+                              <Link
+                                href={`/prospectos/${d.prospectoId}`}
+                                className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-200"
+                              >
+                                Prospecto →
+                              </Link>
+                            )}
+                            {l.telefono && (
+                              <Link
+                                href={`/conversaciones?tel=${encodeURIComponent(l.telefono)}`}
+                                className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-200"
+                              >
+                                Conversación →
+                              </Link>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 max-w-[220px]">
+                          {d?.tipoNegocio ? (
+                            <>
+                              <div className="font-semibold text-slate-700">{d.tipoNegocio}</div>
+                              {d.etapa && (
+                                <span className="inline-block mt-0.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
+                                  {d.etapa}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-slate-300">Sin negocio</span>
+                          )}
+                          {(d?.fraccionamiento || d?.direccion) && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">📍 {d.fraccionamiento || d.direccion}</div>
+                          )}
+                          {d?.necesidad && (
+                            <div className="text-[10px] text-slate-400 line-clamp-2" title={d.necesidad}>
+                              {d.necesidad}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {d?.valorEstimado ? <div className="font-bold text-slate-800">{pesos(d.valorEstimado)}</div> : null}
+                          {d?.montoCotizado ? (
+                            <div className="text-[10px] text-emerald-700 font-semibold">Cotizado {pesos(d.montoCotizado)}</div>
+                          ) : null}
+                          {d?.ultimaCotizacion && (
+                            <a
+                              href={`/cotizacion/${d.ultimaCotizacion.token}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block text-[10px] text-blue-700 hover:underline"
+                            >
+                              {d.ultimaCotizacion.id} · {d.ultimaCotizacion.estatus.replace(/_/g, " ")}
+                            </a>
+                          )}
+                          {!d?.valorEstimado && !d?.cotizaciones && <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <div className="text-slate-700">{l.asesorNombre}</div>
+                          <div className="text-[10px] text-slate-400">por {l.enviadoPor || "—"}</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 max-w-[220px]">{l.nota || "—"}</td>
+                        <td className="py-2.5 px-3">
+                          <CeldaRetro retro={l.retro} />
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">{fechaHora(l.createdAt)}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex flex-wrap gap-1 min-w-[150px]">
+                            <a
+                              href={`https://wa.me/${d?.asesorTelefono ? telWa(d.asesorTelefono) : ""}?text=${encodeURIComponent(msg)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={d?.asesorTelefono ? `Enviar a ${l.asesorNombre}` : "El asesor no tiene teléfono: elige el chat en WhatsApp"}
+                              className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-700"
+                            >
+                              WhatsApp
+                            </a>
+                            <a
+                              href={`https://t.me/share/url?url=${encodeURIComponent(
+                                d?.expedienteId && app ? `${app}/expediente/${d.expedienteId}` : `https://wa.me/${telWa(l.telefono)}`
+                              )}&text=${encodeURIComponent(msg)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg bg-sky-50 hover:bg-sky-100 px-2 py-1 text-[11px] font-bold text-sky-700"
+                            >
+                              Telegram
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copiar(msg, `lead-${l.id}`)}
+                              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-2 py-1 text-[11px] font-bold text-slate-700"
+                            >
+                              {copiado === `lead-${l.id}` ? "¡Copiado!" : "Copiar"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

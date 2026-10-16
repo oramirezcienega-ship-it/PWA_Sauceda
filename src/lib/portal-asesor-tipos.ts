@@ -79,6 +79,27 @@ export interface LeadCompartidoPortal {
   estadoEnvio: string;
   createdAt: string;
   retro: Retroalimentacion[];
+  /** Datos del negocio/prospecto ligados (solo en la vista del CRM). */
+  detalle?: DetalleLeadCompartido;
+}
+
+export interface DetalleLeadCompartido {
+  expedienteId: string | null;
+  prospectoId: string | null;
+  tipoNegocio: string;
+  etapa: string;
+  valorEstimado: number;
+  saldoDeuda: number;
+  tipoCredito: string;
+  fraccionamiento: string;
+  direccion: string;
+  necesidad: string;
+  correo: string;
+  origen: string;
+  cotizaciones: number;
+  montoCotizado: number;
+  ultimaCotizacion: { id: string; estatus: string; precio: number; token: string } | null;
+  asesorTelefono: string;
 }
 
 export interface AsesorPortal {

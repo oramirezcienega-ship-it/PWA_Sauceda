@@ -6,10 +6,13 @@ import {
   ETIQUETA_ESTADO_COORDINACION,
   type AsesorPortal,
   type CoordinacionPortal,
+  type DetalleLeadCompartido,
   type LeadCompartidoPortal,
   type OpcionHorario,
   type Retroalimentacion,
 } from "@/lib/portal-asesor-tipos";
+import { labelTipoNegocio } from "@/lib/types";
+import { TODAS_LAS_ETAPAS_POR_ID } from "@/lib/etapas";
 
 export * from "@/lib/portal-asesor-tipos";
 
@@ -164,15 +167,17 @@ export async function listarCoordinacionesConRetro(
   });
 }
 
-/** Clientes compartidos por Telegram. Con `asesorId`, solo los suyos. */
+/** Clientes compartidos por Telegram. Con `asesorId`, solo los suyos; `conDetalle` agrega negocio/prospecto (CRM). */
 export async function listarLeadsConRetro(
   sb: SupabaseClient,
-  opciones: { asesorId?: string; dias?: number } = {}
+  opciones: { asesorId?: string; dias?: number; conDetalle?: boolean } = {}
 ): Promise<LeadCompartidoPortal[]> {
   const desde = new Date(Date.now() - (opciones.dias ?? DIAS_LEADS) * 86400000).toISOString();
   let q = sb
     .from("leads_envios_telegram")
-    .select("id, cliente_nombre, telefono, nota, resumen, asesor_id, asesor_nombre, enviado_por_nombre, estado, created_at")
+    .select(
+      "id, cliente_nombre, telefono, nota, resumen, asesor_id, asesor_nombre, enviado_por_nombre, estado, created_at, prospecto_id, expediente_id"
+    )
     .gte("created_at", desde)
     .order("created_at", { ascending: false });
   if (opciones.asesorId) q = q.eq("asesor_id", opciones.asesorId);
@@ -180,7 +185,10 @@ export async function listarLeadsConRetro(
   if (error) throw new Error(error.message);
 
   const filas = data || [];
-  const retros = await retroPorReferencia(sb, "envio_lead_id", filas.map((f: any) => f.id));
+  const [retros, detalles] = await Promise.all([
+    retroPorReferencia(sb, "envio_lead_id", filas.map((f: any) => f.id)),
+    opciones.conDetalle ? detallesLeads(sb, filas) : Promise.resolve(new Map<string, DetalleLeadCompartido>()),
+  ]);
   return filas.map((f: any) => ({
     id: f.id,
     clienteNombre: f.cliente_nombre || "Cliente",
@@ -193,7 +201,81 @@ export async function listarLeadsConRetro(
     estadoEnvio: f.estado,
     createdAt: f.created_at,
     retro: retros.get(f.id) || [],
+    detalle: detalles.get(f.id),
   }));
+}
+
+/** Expediente, prospecto, cotizaciones y teléfono del asesor de cada envío. */
+async function detallesLeads(sb: SupabaseClient, filas: any[]): Promise<Map<string, DetalleLeadCompartido>> {
+  const unicos = (xs: any[]) => Array.from(new Set(xs.filter(Boolean))) as string[];
+  const prosIds = unicos(filas.map((f) => f.prospecto_id));
+  const expIdsDirectos = unicos(filas.map((f) => f.expediente_id));
+
+  const [{ data: pros }, { data: exps }, { data: cots }, { data: asesores }] = await Promise.all([
+    prosIds.length
+      ? sb.from("prospectos").select("id, correo, origen, notas, direccion").in("id", prosIds)
+      : Promise.resolve({ data: [] as any[] }),
+    expIdsDirectos.length || prosIds.length
+      ? sb
+          .from("expedientes")
+          .select(
+            "id, prospecto_id, etapa, tipo_negocio, valor_estimado, saldo_deuda, tipo_credito, fraccionamiento, direccion_propiedad, necesidad, created_at"
+          )
+          .or(
+            [
+              expIdsDirectos.length ? `id.in.(${expIdsDirectos.join(",")})` : "",
+              prosIds.length ? `prospecto_id.in.(${prosIds.join(",")})` : "",
+            ]
+              .filter(Boolean)
+              .join(",")
+          )
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as any[] }),
+    prosIds.length
+      ? sb
+          .from("cotizaciones")
+          .select("id, prospecto_id, estatus, precio_final, token, created_at")
+          .in("prospecto_id", prosIds)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as any[] }),
+    sb.from("perfiles").select("id, telefono").in("id", unicos(filas.map((f) => f.asesor_id))),
+  ]);
+
+  const prosPorId = new Map((pros || []).map((p: any) => [p.id, p]));
+  const expPorId = new Map((exps || []).map((e: any) => [e.id, e]));
+  const expPorPros = new Map<string, any>();
+  (exps || []).forEach((e: any) => e.prospecto_id && !expPorPros.has(e.prospecto_id) && expPorPros.set(e.prospecto_id, e));
+  const cotsPorPros = new Map<string, any[]>();
+  (cots || []).forEach((c: any) => cotsPorPros.set(c.prospecto_id, [...(cotsPorPros.get(c.prospecto_id) || []), c]));
+  const telAsesor = new Map((asesores || []).map((a: any) => [a.id, a.telefono || ""]));
+
+  const mapa = new Map<string, DetalleLeadCompartido>();
+  filas.forEach((f) => {
+    const p: any = f.prospecto_id ? prosPorId.get(f.prospecto_id) : null;
+    const e: any = (f.expediente_id && expPorId.get(f.expediente_id)) || (f.prospecto_id && expPorPros.get(f.prospecto_id)) || null;
+    const lista = (f.prospecto_id && cotsPorPros.get(f.prospecto_id)) || [];
+    const vivas = lista.filter((c: any) => !["rechazada", "archivada"].includes(c.estatus));
+    const ult = lista[0];
+    mapa.set(f.id, {
+      expedienteId: e?.id ?? f.expediente_id ?? null,
+      prospectoId: f.prospecto_id ?? null,
+      tipoNegocio: e?.tipo_negocio ? labelTipoNegocio(e.tipo_negocio) : "",
+      etapa: e?.etapa ? TODAS_LAS_ETAPAS_POR_ID[e.etapa]?.nombre || e.etapa : "",
+      valorEstimado: Number(e?.valor_estimado) || 0,
+      saldoDeuda: Number(e?.saldo_deuda) || 0,
+      tipoCredito: e?.tipo_credito || "",
+      fraccionamiento: e?.fraccionamiento || "",
+      direccion: e?.direccion_propiedad || p?.direccion || "",
+      necesidad: String(e?.necesidad || p?.notas || "").trim(),
+      correo: p?.correo || "",
+      origen: p?.origen || "",
+      cotizaciones: lista.length,
+      montoCotizado: vivas.reduce((s: number, c: any) => s + (Number(c.precio_final) || 0), 0),
+      ultimaCotizacion: ult ? { id: ult.id, estatus: ult.estatus, precio: Number(ult.precio_final) || 0, token: ult.token } : null,
+      asesorTelefono: telAsesor.get(f.asesor_id) || "",
+    });
+  });
+  return mapa;
 }
 
 export async function guardarRetroalimentacion(
