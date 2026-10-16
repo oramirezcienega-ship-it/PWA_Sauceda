@@ -7,7 +7,9 @@ import {
   crearInmueblePortal,
   prepararSubidaFotoInmueble,
   sincronizarInventarioPropio,
+  obtenerDemandasActivasInventario,
   type FiltrosInventario,
+  type DemandaCompradorInventario,
 } from "@/app/actions/asesoria-compra";
 import { formatoPesos, formatoFecha } from "@/lib/formato";
 import {
@@ -20,13 +22,17 @@ import {
 import type { OrigenInmueble } from "@/lib/asesoria/match";
 import { TarjetaInmueble } from "./TarjetaInmueble";
 import { FormularioInmuebleRapido } from "./FormularioInmuebleRapido";
+import { WidgetDemandasActivas } from "./WidgetDemandasActivas";
 
 const SELECT = "rounded-md border border-carbon/20 bg-white px-2 py-1.5 text-xs focus:border-sauce focus:outline-none";
 
-/** Menú Inventario: tabla / tarjetas con filtros, bandeja por validar y alta desde portal. */
+/** Menú Inventario: tabla / tarjetas con filtros, visualizador de demandas de compradores, bandeja por validar y alta desde portal. */
 export function InventarioClient() {
   const [inmuebles, setInmuebles] = useState<Inmueble[]>([]);
   const [porValidar, setPorValidar] = useState<Inmueble[]>([]);
+  const [demandas, setDemandas] = useState<DemandaCompradorInventario[]>([]);
+  const [demandaSeleccionada, setDemandaSeleccionada] = useState<DemandaCompradorInventario | null>(null);
+  const [cargandoDemandas, setCargandoDemandas] = useState(true);
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState<"tarjetas" | "tabla">("tarjetas");
   const [filtros, setFiltros] = useState<FiltrosInventario>({ estatus: "disponible" });
@@ -35,6 +41,22 @@ export function InventarioClient() {
   const [mostrarPortal, setMostrarPortal] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
+
+  const cargarDemandas = useCallback(async () => {
+    setCargandoDemandas(true);
+    try {
+      const lista = await obtenerDemandasActivasInventario();
+      setDemandas(lista);
+    } catch (e: any) {
+      console.error("[cargarDemandas]", e);
+    } finally {
+      setCargandoDemandas(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void cargarDemandas();
+  }, [cargarDemandas]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -65,7 +87,7 @@ export function InventarioClient() {
   async function cambiar(id: string, estatus: EstatusInmueble) {
     const r = await cambiarEstatusInmueble(id, estatus);
     if (!r.ok) setAviso(r.mensaje || "No se pudo actualizar.");
-    await cargar();
+    await Promise.all([cargar(), cargarDemandas()]);
   }
 
   async function sincronizar() {
@@ -77,7 +99,7 @@ export function InventarioClient() {
         ? `Inventario propio: ${r.creados} nuevos (por validar), ${r.actualizados} actualizados${r.omitidos.length ? `, ${r.omitidos.length} omitidos (sin ficha o sin precio)` : ""}.`
         : r.mensaje || "No se pudo sincronizar.",
     );
-    await cargar();
+    await Promise.all([cargar(), cargarDemandas()]);
   }
 
   const aplicarRango = () => {
@@ -85,8 +107,43 @@ export function InventarioClient() {
     setFiltros((f) => ({ ...f, precioMin: n(textoMin), precioMax: n(textoMax) }));
   };
 
+  const handleSeleccionarDemanda = (demanda: DemandaCompradorInventario | null) => {
+    setDemandaSeleccionada(demanda);
+    if (!demanda) {
+      setTextoMax("");
+      setTextoMin("");
+      setFiltros((f) => ({ ...f, precioMax: null, precioMin: null, zona: "" }));
+      return;
+    }
+
+    const max = demanda.presupuestoTotal > 0 ? demanda.presupuestoTotal : null;
+    setTextoMax(max ? formatoPesos(max) : "");
+    setTextoMin("");
+
+    // Tomamos la primera zona o la cadena completa si hay una sola
+    const zonaFiltro = demanda.zonas.length > 0 ? demanda.zonas[0] : "";
+    setFiltros((f) => ({
+      ...f,
+      precioMax: max,
+      precioMin: null,
+      zona: zonaFiltro,
+      estatus: "disponible",
+    }));
+  };
+
   return (
     <div className="space-y-5">
+      {/* Widget de Visualización de Demandas de Compradores */}
+      <WidgetDemandasActivas
+        demandas={demandas}
+        cargando={cargandoDemandas}
+        demandaSeleccionada={demandaSeleccionada}
+        onSeleccionarDemanda={handleSeleccionarDemanda}
+        onRecargar={async () => {
+          await Promise.all([cargarDemandas(), cargar()]);
+        }}
+      />
+
       {aviso && (
         <div className="flex items-start justify-between gap-3 rounded-lg border border-sauce/30 bg-sauce/10 px-3 py-2 text-sm text-verde-profundo">
           <span>{aviso}</span>
@@ -158,6 +215,33 @@ export function InventarioClient() {
         )}
       </section>
 
+      {/* Banner de Comprador Seleccionado */}
+      {demandaSeleccionada && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sauce/30 bg-sauce/10 px-4 py-3 text-xs text-verde-profundo shadow-sm animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sauce font-bold text-crema text-xs">
+              🎯
+            </span>
+            <span>
+              <strong>Filtrando inventario para:</strong> {demandaSeleccionada.clienteNombre} ({demandaSeleccionada.folio})
+              {demandaSeleccionada.presupuestoTotal > 0 && (
+                <> · Presupuesto máx: <strong>{formatoPesos(demandaSeleccionada.presupuestoTotal)}</strong></>
+              )}
+              {demandaSeleccionada.zonas.length > 0 && (
+                <> · Zonas: <strong>{demandaSeleccionada.zonas.join(", ")}</strong></>
+              )}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleSeleccionarDemanda(null)}
+            className="rounded-lg border border-verde-profundo/20 bg-white px-3 py-1 font-semibold text-verde-profundo hover:bg-verde-profundo hover:text-crema transition-colors"
+          >
+            ✕ Quitar filtro y ver todo el catálogo
+          </button>
+        </div>
+      )}
+
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-2 rounded-xl border border-carbon/10 bg-white p-3">
         <label className="text-[10px] font-bold uppercase text-carbon/50">
@@ -165,11 +249,8 @@ export function InventarioClient() {
           <input
             className={`${SELECT} ml-0 block w-44`}
             placeholder="Fraccionamiento, colonia…"
-            defaultValue={filtros.zona}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setFiltros((f) => ({ ...f, zona: (e.target as HTMLInputElement).value }));
-            }}
-            onBlur={(e) => setFiltros((f) => ({ ...f, zona: e.target.value }))}
+            value={filtros.zona ?? ""}
+            onChange={(e) => setFiltros((f) => ({ ...f, zona: e.target.value }))}
           />
         </label>
         <label className="text-[10px] font-bold uppercase text-carbon/50">

@@ -2167,3 +2167,158 @@ export async function iniciarAsesoriaDesdeExpediente(
   }
 }
 
+// ============================================================================
+// Visualizador de Búsquedas Activas / Demandas de Clientes en Inventario
+// ============================================================================
+
+export interface DemandaCompradorInventario {
+  ordenTrabajoId: string;
+  folio: string;
+  expedienteId: string | null;
+  prospectoId: string | null;
+  clienteNombre: string;
+  clienteTelefono: string | null;
+  tipoNegocio: string;
+  estatusOT: string;
+  etapaActual: string | null;
+  // Presupuesto y Capacidad de compra
+  montoCredito: number | null;
+  montoAhorro: number | null;
+  presupuestoTotal: number;
+  tipoCredito: string | null;
+  // Criterios de búsqueda
+  zonas: string[];
+  recamarasMin: number | null;
+  tipoInmueble: string | null;
+  plazoMudanza: string | null;
+  // Cruce y Aliados
+  coincidenciasInventario: number;
+  solicitudesAliados: number;
+  respuestasAliados: number;
+  fechaCreacion: string;
+}
+
+/**
+ * Consulta todas las demandas activas de compradores de vivienda para el
+ * widget visualizador de búsquedas en el catálogo de Inventario.
+ * Permite filtrar el catálogo en 1 clic y solicitar búsquedas a la red de aliados.
+ */
+export async function obtenerDemandasActivasInventario(): Promise<DemandaCompradorInventario[]> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+
+    // 1. Obtener órdenes activas
+    const { data: ots, error: errOT } = await sb
+      .from("ordenes_trabajo")
+      .select(`
+        id, folio, estatus, tipo_negocio, expediente_id, prospecto_id, created_at,
+        expedientes (id, cliente, telefono, tipo_negocio),
+        prospectos (id, nombre, telefono)
+      `)
+      .neq("estatus", "cancelada")
+      .neq("estatus", "completada")
+      .order("created_at", { ascending: false });
+
+    if (errOT || !ots || ots.length === 0) return [];
+
+    const otIds = ots.map((o) => o.id);
+
+    // 2. Traer fichas, búsquedas a aliados e inmuebles disponibles en paralelo
+    const [{ data: fichas }, { data: busquedasAliados }, { data: disponibles }] = await Promise.all([
+      sb.from("ot_ficha_asesoria_compra").select("*").in("orden_trabajo_id", otIds),
+      sb.from("busquedas_aliados").select("orden_trabajo_id, estado").in("orden_trabajo_id", otIds),
+      sb.from("inmuebles").select("id, precio, zona, fraccionamiento, colonia").eq("estatus", "disponible"),
+    ]);
+
+    const fichasMap = new Map((fichas || []).map((f: any) => [f.orden_trabajo_id, f]));
+    const aliadosMap = new Map<string, { total: number; respondidas: number }>();
+
+    for (const b of (busquedasAliados || []) as any[]) {
+      const prev = aliadosMap.get(b.orden_trabajo_id) || { total: 0, respondidas: 0 };
+      prev.total++;
+      if (b.estado === "respondida") prev.respondidas++;
+      aliadosMap.set(b.orden_trabajo_id, prev);
+    }
+
+    const demandas: DemandaCompradorInventario[] = [];
+
+    for (const ot of ots as any[]) {
+      const ficha = fichasMap.get(ot.id);
+      // Es comprador si su ficha dice ya_tiene_casa = false o si la OT es de asesoria_compra
+      const esComprador = ficha ? !ficha.ya_tiene_casa : ot.tipo_negocio === "asesoria_compra";
+      if (!esComprador) continue;
+
+      const clienteNombre = ot.expedientes?.cliente || ot.prospectos?.nombre || "Comprador";
+      const clienteTelefono = ot.expedientes?.telefono || ot.prospectos?.telefono || null;
+      const montoCredito = ficha?.monto_credito_precalificado ? Number(ficha.monto_credito_precalificado) : null;
+      const montoAhorro = ficha?.monto_ahorro_propio ? Number(ficha.monto_ahorro_propio) : null;
+      const precioMax = ficha?.busqueda_precio_max ? Number(ficha.busqueda_precio_max) : null;
+      const presupuestoTotal =
+        precioMax ||
+        (montoCredito ?? 0) + (montoAhorro ?? 0) ||
+        (ficha?.busqueda_precio_min ? Number(ficha.busqueda_precio_min) : 0);
+
+      const rawZonas = ficha?.busqueda_zonas;
+      const zonas: string[] = Array.isArray(rawZonas)
+        ? rawZonas.filter(Boolean)
+        : typeof rawZonas === "string"
+        ? rawZonas.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+
+      const al = aliadosMap.get(ot.id) || { total: 0, respondidas: 0 };
+
+      // Calcular coincidencias con inmuebles disponibles en inventario
+      let coincidencias = 0;
+      for (const inm of (disponibles || []) as any[]) {
+        const precioNum = Number(inm.precio) || 0;
+        const precioOk = presupuestoTotal > 0 ? precioNum <= presupuestoTotal * 1.05 : true;
+        let zonaOk = zonas.length === 0;
+        if (!zonaOk) {
+          const txtInm = `${inm.zona || ""} ${inm.fraccionamiento || ""} ${inm.colonia || ""}`.toLowerCase();
+          zonaOk = zonas.some((z) => txtInm.includes(z.toLowerCase()) || z.toLowerCase().includes(txtInm));
+        }
+        if (precioOk && zonaOk) coincidencias++;
+      }
+
+      // Etapa descriptiva
+      let etapaActual = "Precalificación";
+      if (ficha?.dictamen) {
+        etapaActual = `Dictamen: ${ficha.dictamen === "apto" ? "Apto" : ficha.dictamen === "apto_condiciones" ? "Condicionado" : "No apto"}`;
+      } else if (ot.tipo_negocio === "asesoria_compra") {
+        etapaActual = "Búsqueda activa";
+      }
+
+      demandas.push({
+        ordenTrabajoId: ot.id,
+        folio: ot.folio,
+        expedienteId: ot.expediente_id,
+        prospectoId: ot.prospecto_id,
+        clienteNombre,
+        clienteTelefono,
+        tipoNegocio: ot.tipo_negocio,
+        estatusOT: ot.estatus,
+        etapaActual,
+        montoCredito,
+        montoAhorro,
+        presupuestoTotal,
+        tipoCredito: ficha?.tipo_credito || null,
+        zonas,
+        recamarasMin: ficha?.busqueda_recamaras_min ? Number(ficha.busqueda_recamaras_min) : null,
+        tipoInmueble: ficha?.tipo_inmueble || null,
+        plazoMudanza: ficha?.plazo_mudanza || null,
+        coincidenciasInventario: coincidencias,
+        solicitudesAliados: al.total,
+        respuestasAliados: al.respondidas,
+        fechaCreacion: ot.created_at,
+      });
+    }
+
+    return demandas;
+  } catch (err) {
+    console.error("[obtenerDemandasActivasInventario]", err);
+    return [];
+  }
+}
+
+
