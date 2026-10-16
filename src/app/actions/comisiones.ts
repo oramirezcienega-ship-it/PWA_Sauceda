@@ -1638,6 +1638,11 @@ async function asesorGeneraComisiones(
   return !ids || ids.has(asesorId);
 }
 
+/** Indica si el asesor indicado genera comisiones (para editores de remisión). */
+export async function asesorGeneraComisionesPorId(asesorId: string): Promise<boolean> {
+  return asesorGeneraComisiones(supabaseServidor(), asesorId);
+}
+
 /**
  * El responsable del documento no genera comisiones: se quitan las comisiones
  * automáticas de ese documento que aún no tienen pagos ni ajuste manual.

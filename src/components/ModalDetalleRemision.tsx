@@ -10,7 +10,7 @@ import {
   obtenerParametrosComisionRemision,
 } from "@/app/actions/remisiones";
 
-type ModoComision = "automatica" | "porcentaje" | "monto";
+type ModoComision = "automatica" | "porcentaje" | "monto" | "ninguna";
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
@@ -39,6 +39,7 @@ export function ModalDetalleRemision({
   const [tasasPasarela, setTasasPasarela] = useState<TasaPasarela[]>([]);
   const [porcentajeRegla, setPorcentajeRegla] = useState<number | null>(null);
   const [reglaOrigen, setReglaOrigen] = useState("");
+  const [generaComision, setGeneraComision] = useState(true);
   const [pctPasarelaInput, setPctPasarelaInput] = useState<string>("");
   const [costoProveedorDocs, setCostoProveedorDocs] = useState<{ monto: number; documentos: number }>({
     monto: 0,
@@ -59,6 +60,7 @@ export function ModalDetalleRemision({
     }
     setEditandoCostos(false);
     setPorcentajeRegla(null);
+    setGeneraComision(true);
   }, [remision]);
 
   useEffect(() => {
@@ -69,6 +71,7 @@ export function ModalDetalleRemision({
       setTasasPasarela(res.tasasPasarela);
       setPorcentajeRegla(res.porcentajeRegla);
       setReglaOrigen(res.reglaOrigen);
+      setGeneraComision(res.generaComision);
       setCostoProveedorDocs({ monto: res.costoProveedorDocumentos, documentos: res.documentosProveedor });
     });
     return () => {
@@ -105,6 +108,10 @@ export function ModalDetalleRemision({
 
   // % vigente de la comisión: el registrado, o el de la regla si aún no existe
   const porcentajeVigente = remisionLocal.comisionAsesorPorcentaje ?? porcentajeRegla ?? 5;
+  // Sin registro de comisión y sin asesor que comisione: no se tasa nada
+  const sinComision =
+    (remisionLocal.comisionAsesorMonto === undefined && !generaComision) ||
+    remisionLocal.comisionAjusteModo === "ninguna";
 
   const iniciarEdicion = () => {
     setCostoFinancieroInput(String(remisionLocal.costoFinanciero || 0));
@@ -140,6 +147,9 @@ export function ModalDetalleRemision({
     if (modoComision === "porcentaje") {
       pct = Math.max(0, Math.min(100, parseFloat(pctComisionInput) || 0));
       monto = redondear(base * (pct / 100));
+    } else if (modoComision === "ninguna") {
+      pct = 0;
+      monto = 0;
     } else if (modoComision === "monto") {
       monto = Math.max(0, redondear(parseFloat(montoComisionInput) || 0));
       pct = base > 0 ? redondear((monto / base) * 100) : 0;
@@ -176,7 +186,7 @@ export function ModalDetalleRemision({
     const ajustaComision =
       modoComision !== "automatica" || Boolean(remisionLocal.comisionEsAjusteManual);
 
-    if (modoComision !== "automatica" && !motivoAjusteInput.trim()) {
+    if (modoComision !== "automatica" && modoComision !== "ninguna" && !motivoAjusteInput.trim()) {
       setErrorCostos("Indique el motivo del ajuste de comisión para esta remisión.");
       return;
     }
@@ -222,7 +232,11 @@ export function ModalDetalleRemision({
               comisionAsesorMonto: monto,
               comisionEsAjusteManual: modoComision !== "automatica",
               comisionAjusteModo: modoComision === "automatica" ? null : modoComision,
-              comisionMotivoAjuste: modoComision === "automatica" ? undefined : motivoAjusteInput.trim(),
+              comisionMotivoAjuste:
+                modoComision === "automatica"
+                  ? undefined
+                  : motivoAjusteInput.trim() ||
+                    (modoComision === "ninguna" ? "El asesor no intervino en esta venta" : ""),
             }
           : prev
       );
@@ -617,6 +631,7 @@ export function ModalDetalleRemision({
                         ["automatica", "Según regla"],
                         ["porcentaje", "% propio"],
                         ["monto", "Monto fijo"],
+                        ["ninguna", "Sin comisión"],
                       ] as [ModoComision, string][]).map(([valor, etiqueta]) => (
                         <button
                           key={valor}
@@ -636,10 +651,20 @@ export function ModalDetalleRemision({
 
                   {modoComision === "automatica" ? (
                     <p className="text-[10px] text-carbon/60">
-                      {porcentajeRegla !== null
+                      {porcentajeRegla === null
+                        ? "Cargando regla configurada..."
+                        : generaComision
                         ? `${reglaOrigen} (${porcentajeRegla}%). Se recalcula sola al cambiar las deducciones.`
-                        : "Cargando regla configurada..."}
+                        : `${reglaOrigen}.`}
                     </p>
+                  ) : modoComision === "ninguna" ? (
+                    <input
+                      type="text"
+                      value={motivoAjusteInput}
+                      onChange={(e) => setMotivoAjusteInput(e.target.value)}
+                      className="w-full rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs focus:outline-none focus:border-sauce"
+                      placeholder="Motivo (opcional): El asesor no intervino en esta venta"
+                    />
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {modoComision === "porcentaje" ? (
@@ -832,7 +857,9 @@ export function ModalDetalleRemision({
 
                 <div className="border-t border-emerald-200/80 pt-1.5 flex justify-between items-center text-xs">
                   <span className="text-emerald-900 font-sans font-medium flex items-center gap-1">
-                    <span>💼 Comisión Asesor ({porcentajeVigente}%):</span>
+                    <span>
+                      {sinComision ? "💼 Comisión Asesor:" : `💼 Comisión Asesor (${porcentajeVigente}%):`}
+                    </span>
                     {remisionLocal.comisionEsAjusteManual && (
                       <span
                         className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 rounded-full border border-amber-300"
@@ -843,10 +870,12 @@ export function ModalDetalleRemision({
                     )}
                   </span>
                   <span className="font-mono font-bold text-emerald-800">
-                    {formatMoneda(
-                      remisionLocal.comisionAsesorMonto ??
-                        redondear(remisionLocal.baseGravableComision * (porcentajeVigente / 100))
-                    )}
+                    {sinComision
+                      ? "Sin comisión"
+                      : formatMoneda(
+                          remisionLocal.comisionAsesorMonto ??
+                            redondear(remisionLocal.baseGravableComision * (porcentajeVigente / 100))
+                        )}
                   </span>
                 </div>
                 {remisionLocal.comisionEsAjusteManual && remisionLocal.comisionMotivoAjuste && (
