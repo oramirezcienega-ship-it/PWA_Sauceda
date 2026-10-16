@@ -289,7 +289,7 @@ async function contextoOrden(sb: ReturnType<typeof supabaseServidor>, ordenTraba
     .maybeSingle();
   if (!ot?.expediente_id) return null;
   const { data: exp } = await sb.from("expedientes").select("asesor_id, operador_id").eq("id", ot.expediente_id).maybeSingle();
-  const tablaFicha = ot.tipo_negocio === "asesoria_compra" ? "ot_ficha_asesoria_compra" : null;
+  const tablaFicha = (ot.tipo_negocio === "asesoria_compra" || ot.tipo_negocio === "solo_tramite") ? "ot_ficha_asesoria_compra" : null;
   const { data: ficha } = tablaFicha
     ? await sb.from(tablaFicha).select("*").eq("orden_trabajo_id", ordenTrabajoId).maybeSingle()
     : { data: null };
@@ -312,7 +312,10 @@ export async function instanciarFlujoEnOrden(ordenTrabajoId: string): Promise<{ 
     .eq("orden_trabajo_id", ordenTrabajoId);
   if (count && count > 0) return { ok: true, tareas: count };
 
-  const datosFlujo = await obtenerFlujoPorProducto(ctx.ot.tipo_negocio);
+  let datosFlujo = await obtenerFlujoPorProducto(ctx.ot.tipo_negocio);
+  if (!datosFlujo && ctx.ot.tipo_negocio === "solo_tramite") {
+    datosFlujo = await obtenerFlujoPorProducto("asesoria_compra");
+  }
   if (!datosFlujo || datosFlujo.pasos.length === 0) return { ok: true, tareas: 0 };
   if ((datosFlujo.flujo as any).ambito !== "orden_trabajo") return { ok: true, tareas: 0 };
 
@@ -347,7 +350,10 @@ export async function reevaluarCondicionesBpm(ordenTrabajoId: string) {
   if (!ctx) return;
   const expedienteId = ctx.ot.expediente_id as string;
 
-  const datosFlujo = await obtenerFlujoPorProducto(ctx.ot.tipo_negocio);
+  let datosFlujo = await obtenerFlujoPorProducto(ctx.ot.tipo_negocio);
+  if (!datosFlujo && ctx.ot.tipo_negocio === "solo_tramite") {
+    datosFlujo = await obtenerFlujoPorProducto("asesoria_compra");
+  }
   if (!datosFlujo || datosFlujo.pasos.length === 0) return;
   // Solo aplica a flujos que usan condiciones por campo.
   if (!datosFlujo.pasos.some((p: any) => p.condicion_campo)) return;

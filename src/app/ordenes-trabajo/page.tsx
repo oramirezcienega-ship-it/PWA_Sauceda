@@ -217,12 +217,23 @@ export default function PaginaOrdenesTrabajo() {
                 className="w-full rounded-xl border border-carbon/20 px-3 py-2 text-xs text-carbon outline-none focus:border-sauce bg-white"
               >
                 <option value="todos">Todas las líneas</option>
-                <option value="impermeabilizacion">Impermeabilización</option>
-                <option value="mantenimiento_cisternas">Cisternas y Aljibes</option>
-                <option value="construccion">Construcción</option>
-                <option value="herreria">Herrería</option>
-                <option value="piso_estampado">Piso Estampado</option>
-                <option value="traspaso_compra">Inmobiliaria</option>
+                <optgroup label="Bienes Raíces">
+                  <option value="asesoria_compra">🔑 Asesoría de Compra</option>
+                  <option value="solo_tramite">📄 Solo Trámite (Gestión Crédito)</option>
+                  <option value="traspaso_compra">🏠 Traspaso / Compra</option>
+                  <option value="promocion_venta">📣 Promoción Venta</option>
+                </optgroup>
+                <optgroup label="Sauceda Construye">
+                  <option value="construccion-impermeabilizacion">☔ Impermeabilización</option>
+                  <option value="construccion-mantenimiento-cisternas">💧 Cisternas y Aljibes</option>
+                  <option value="construccion-remodelacion">🔨 Remodelación</option>
+                  <option value="construccion-piso-estampado">🧱 Piso Estampado</option>
+                  <option value="construccion-mantenimiento-calentadores">☀️ Calentadores Solares</option>
+                  <option value="construccion-herreria">⚙️ Herrería</option>
+                  <option value="construccion-mantenimiento-postventa">🔧 Mantenimiento Postventa</option>
+                  <option value="construccion">🏗️ Construcción General</option>
+                  <option value="otro">📁 Otro</option>
+                </optgroup>
               </select>
             </div>
 

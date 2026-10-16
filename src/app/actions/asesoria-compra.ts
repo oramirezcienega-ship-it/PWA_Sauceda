@@ -107,7 +107,12 @@ import {
 // (el expediente solo guarda la información básica del negocio)
 // ============================================================================
 
+const TIPOS_ASESORIA_O_TRAMITE = ["asesoria_compra", "solo_tramite"] as const;
 const TIPO_OT = "asesoria_compra";
+
+export function esTipoAsesoriaOT(tipo?: string | null): boolean {
+  return tipo === "asesoria_compra" || tipo === "solo_tramite";
+}
 
 interface ContextoOrden {
   ot: Record<string, any>;
@@ -117,23 +122,23 @@ interface ContextoOrden {
   aplicables: EtapaOT[];
 }
 
-/** Carga la OT de asesoría con su ficha, su expediente y sus etapas aplicables. */
+/** Carga la OT de asesoría o trámite con su ficha, su expediente y sus etapas aplicables. */
 async function cargarOrden(sb: Sb, ordenTrabajoId: string): Promise<ContextoOrden | null> {
   const { data: ot } = await sb
     .from("ordenes_trabajo")
     .select("id, folio, expediente_id, prospecto_id, tipo_negocio, etapa, estatus, token, asesor_responsable_id, asesor_ejecutor_id")
     .eq("id", ordenTrabajoId)
     .maybeSingle();
-  if (!ot || ot.tipo_negocio !== TIPO_OT) return null;
+  if (!ot || !esTipoAsesoriaOT(ot.tipo_negocio)) return null;
   const [{ data: ficha }, { data: exp }, { data: filasEtapas }] = await Promise.all([
     sb.from("ot_ficha_asesoria_compra").select("*").eq("orden_trabajo_id", ot.id).maybeSingle(),
     ot.expediente_id
       ? sb.from("expedientes").select("id, cliente, telefono, token, asesor_id, operador_id, tipo_credito").eq("id", ot.expediente_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    sb.from("ot_etapas").select("*").eq("tipo_negocio", TIPO_OT),
+    sb.from("ot_etapas").select("*").in("tipo_negocio", ["asesoria_compra", ot.tipo_negocio]),
   ]);
   const etapas = (filasEtapas ?? []).length ? (filasEtapas ?? []).map(filaAEtapaOT) : ETAPAS_ASESORIA_COMPRA_OT;
-  const f = (ficha as Record<string, any>) || { orden_trabajo_id: ot.id, ya_tiene_casa: false };
+  const f = (ficha as Record<string, any>) || { orden_trabajo_id: ot.id, ya_tiene_casa: ot.tipo_negocio === "solo_tramite" };
   return { ot, ficha: f, exp: exp as any, etapas, aplicables: etapasAplicables(etapas, f) };
 }
 
@@ -245,7 +250,7 @@ export async function inicializarOrdenAsesoria(
       .select("id, expediente_id, tipo_negocio")
       .eq("id", ordenTrabajoId)
       .maybeSingle();
-    if (!ot || ot.tipo_negocio !== TIPO_OT) return { ok: false, mensaje: "La orden no es de asesoría de compra." };
+    if (!ot || !esTipoAsesoriaOT(ot.tipo_negocio)) return { ok: false, mensaje: "La orden no es de asesoría o trámite de compra." };
     const { data: exp } = ot.expediente_id
       ? await sb
           .from("expedientes")
@@ -2026,7 +2031,7 @@ export async function obtenerResumenAsesoriaExpediente(
     .from("ordenes_trabajo")
     .select("id, folio, etapa, estatus")
     .eq("expediente_id", expedienteId)
-    .eq("tipo_negocio", TIPO_OT)
+    .in("tipo_negocio", TIPOS_ASESORIA_O_TRAMITE)
     .neq("estatus", "cancelada")
     .order("created_at", { ascending: false })
     .limit(1)
@@ -2106,12 +2111,12 @@ export async function iniciarAsesoriaDesdeExpediente(
 
     if (!exp) return { ok: false, mensaje: "El expediente no existe." };
 
-    // Verificar si ya existe una orden activa de asesoría para este expediente
+    // Verificar si ya existe una orden activa de asesoría o trámite para este expediente
     const { data: otExistente } = await sb
       .from("ordenes_trabajo")
       .select("id, folio, estatus")
       .eq("expediente_id", expedienteId)
-      .eq("tipo_negocio", TIPO_OT)
+      .in("tipo_negocio", TIPOS_ASESORIA_O_TRAMITE)
       .neq("estatus", "cancelada")
       .maybeSingle();
 
@@ -2126,13 +2131,20 @@ export async function iniciarAsesoriaDesdeExpediente(
 
     const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
     const nombreCliente = String(exp.cliente || "Cliente").trim();
+    const esSoloTramite = exp.tipo_negocio === "solo_tramite";
+    const tipoNegocioFinal = esSoloTramite ? "solo_tramite" : "asesoria_compra";
+    const tituloFinal = esSoloTramite ? `Trámite de compraventa · ${nombreCliente}` : `Asesoría de compra · ${nombreCliente}`;
+    const descFinal = esSoloTramite
+      ? `Acompañamiento y gestión de trámite para ${nombreCliente}.`
+      : `Acompañamiento y búsqueda de vivienda para ${nombreCliente}.`;
+
     const res = await crearOrdenTrabajo({
       expedienteId: exp.id,
       prospectoId: exp.prospecto_id,
-      tipoNegocio: TIPO_OT,
-      yaTieneCasa: Boolean(exp.ya_tiene_casa),
-      titulo: `Asesoría de compra · ${nombreCliente}`,
-      descripcion: `Acompañamiento y búsqueda de vivienda para ${nombreCliente}.`,
+      tipoNegocio: tipoNegocioFinal,
+      yaTieneCasa: esSoloTramite ? true : Boolean(exp.ya_tiene_casa),
+      titulo: tituloFinal,
+      descripcion: descFinal,
       asesorEjecutorId: exp.asesor_id || null,
     });
 

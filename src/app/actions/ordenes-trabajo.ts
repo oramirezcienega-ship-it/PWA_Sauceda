@@ -425,7 +425,20 @@ export async function obtenerOrdenesTrabajo(filtros?: {
       query = query.eq("estatus", filtros.estatus);
     }
     if (filtros?.tipoNegocio && filtros.tipoNegocio !== "todos") {
-      query = query.eq("tipo_negocio", filtros.tipoNegocio);
+      const tipo = filtros.tipoNegocio;
+      if (tipo === "impermeabilizacion" || tipo === "construccion-impermeabilizacion") {
+        query = query.in("tipo_negocio", ["impermeabilizacion", "construccion-impermeabilizacion"]);
+      } else if (tipo === "mantenimiento_cisternas" || tipo === "construccion-mantenimiento-cisternas") {
+        query = query.in("tipo_negocio", ["mantenimiento_cisternas", "construccion-mantenimiento-cisternas"]);
+      } else if (tipo === "piso_estampado" || tipo === "construccion-piso-estampado") {
+        query = query.in("tipo_negocio", ["piso_estampado", "construccion-piso-estampado"]);
+      } else if (tipo === "herreria" || tipo === "construccion-herreria") {
+        query = query.in("tipo_negocio", ["herreria", "construccion-herreria"]);
+      } else if (tipo === "remodelacion" || tipo === "construccion-remodelacion") {
+        query = query.in("tipo_negocio", ["remodelacion", "construccion-remodelacion"]);
+      } else {
+        query = query.eq("tipo_negocio", tipo);
+      }
     }
     if (filtros?.asesorEjecutorId) {
       query = query.eq("asesor_ejecutor_id", filtros.asesorEjecutorId);

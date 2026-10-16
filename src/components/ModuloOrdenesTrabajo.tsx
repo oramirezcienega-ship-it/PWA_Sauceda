@@ -708,7 +708,7 @@ export function ModuloOrdenesTrabajo({
                         </button>
                       )}
 
-                      {!soloLectura && ot.tipoNegocio !== "asesoria_compra" && (
+                      {!soloLectura && ot.tipoNegocio !== "asesoria_compra" && ot.tipoNegocio !== "solo_tramite" && (
                         <button
                           type="button"
                           onClick={() =>
@@ -796,15 +796,15 @@ export function ModuloOrdenesTrabajo({
                           </div>
                         )}
 
-                        {/* Asesoría de compra: etapas, ficha, tareas, aliados y opciones de casas */}
-                        {ot.tipoNegocio === "asesoria_compra" && (
+                        {/* Asesoría de compra y trámite: etapas, ficha, tareas, aliados y opciones */}
+                        {(ot.tipoNegocio === "asesoria_compra" || ot.tipoNegocio === "solo_tramite") && (
                           <div className="mb-6">
                             <PanelAsesoriaCompraOT ordenTrabajoId={ot.id} soloLectura={soloLectura} />
                           </div>
                         )}
 
-                        {/* Contrato de Prestación de Servicios (obra; la asesoría no lo usa) */}
-                        {ot.tipoNegocio !== "asesoria_compra" && (
+                        {/* Contrato de Prestación de Servicios (obra; la asesoría y trámite no lo usan) */}
+                        {ot.tipoNegocio !== "asesoria_compra" && ot.tipoNegocio !== "solo_tramite" && (
                           <SeccionContratoOT ordenId={ot.id} tieneCotizacion={Boolean(ot.cotizacionId)} />
                         )}
 
@@ -938,8 +938,8 @@ export function ModuloOrdenesTrabajo({
                           )}
                         </div>
 
-                        {/* 2. Póliza de Garantía (obra; la asesoría de compra no la usa) */}
-                        {ot.tipoNegocio !== "asesoria_compra" && (
+                        {/* 2. Póliza de Garantía (obra; la asesoría de compra y trámite no la usan) */}
+                        {ot.tipoNegocio !== "asesoria_compra" && ot.tipoNegocio !== "solo_tramite" && (
                         <div className="border-t border-carbon/10 pt-4">
                           <div className="flex items-center justify-between mb-2">
                             <h4 className="font-titular text-xs font-bold uppercase tracking-wider text-verde-profundo flex items-center gap-1.5">

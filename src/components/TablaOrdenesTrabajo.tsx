@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { OrdenTrabajo } from "@/app/actions/ordenes-trabajo";
+import { visualNegocio } from "@/lib/negocios-visual";
 
 interface TablaOrdenesTrabajoProps {
   ordenes: OrdenTrabajo[];
@@ -80,27 +81,11 @@ export function TablaOrdenesTrabajo({
   };
 
   const getTipoBadge = (tipo?: string | null) => {
-    const tiposMap: Record<string, { label: string; color: string }> = {
-      impermeabilizacion: { label: "Impermeabilización", color: "bg-cyan-50 text-cyan-800 border-cyan-200/60" },
-      mantenimiento_cisternas: { label: "Cisternas & Aljibes", color: "bg-sky-50 text-sky-800 border-sky-200/60" },
-      construccion: { label: "Construcción", color: "bg-emerald-50 text-emerald-800 border-emerald-200/60" },
-      herreria: { label: "Herrería", color: "bg-stone-100 text-stone-800 border-stone-200" },
-      piso_estampado: { label: "Piso Estampado", color: "bg-orange-50 text-orange-800 border-orange-200/60" },
-      traspaso_compra: { label: "Inmobiliaria", color: "bg-purple-50 text-purple-800 border-purple-200/60" },
-      pintura: { label: "Pintura", color: "bg-amber-50 text-amber-800 border-amber-200/60" },
-      remodelacion: { label: "Remodelación", color: "bg-indigo-50 text-indigo-800 border-indigo-200/60" },
-      losa: { label: "Construcción de Losa", color: "bg-emerald-50 text-emerald-800 border-emerald-200/60" },
-    };
-
-    const tipoSeguro = (tipo || "general").toLowerCase();
-    const config = tiposMap[tipoSeguro] || {
-      label: (tipo || "General").replace(/_/g, " "),
-      color: "bg-slate-100 text-slate-700 border-slate-200",
-    };
-
+    const visual = visualNegocio(tipo);
     return (
-      <span className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-medium capitalize ${config.color}`}>
-        {config.label}
+      <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${visual.clases}`}>
+        <span>{visual.icono}</span>
+        <span>{visual.nombre}</span>
       </span>
     );
   };

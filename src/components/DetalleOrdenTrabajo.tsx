@@ -629,11 +629,13 @@ export function DetalleOrdenTrabajo({
         />
       )}
 
-      {/* 3b'. Asesoría de compra: etapas, ficha, tareas, aliados y opciones de casas */}
-      {orden.tipoNegocio === "asesoria_compra" && <PanelAsesoriaCompraOT ordenTrabajoId={orden.id} soloLectura={soloLectura} flujoAparte />}
+      {/* 3b'. Asesoría de compra y trámite: etapas, ficha, tareas, aliados y opciones */}
+      {(orden.tipoNegocio === "asesoria_compra" || orden.tipoNegocio === "solo_tramite") && (
+        <PanelAsesoriaCompraOT ordenTrabajoId={orden.id} soloLectura={soloLectura} flujoAparte />
+      )}
 
-      {/* 3c. Contrato de Prestación de Servicios (obra; la asesoría de compra no lo usa) */}
-      {orden.tipoNegocio !== "asesoria_compra" && (
+      {/* 3c. Contrato de Prestación de Servicios (obra; la asesoría de compra y trámite no lo usan) */}
+      {orden.tipoNegocio !== "asesoria_compra" && orden.tipoNegocio !== "solo_tramite" && (
         <SeccionContratoOT ordenId={orden.id} tieneCotizacion={Boolean(orden.cotizacionId)} soloLectura={soloLectura} />
       )}
 
@@ -991,8 +993,10 @@ export function DetalleOrdenTrabajo({
         )}
       </div>
 
-      {/* Asesoría de compra: el flujo operativo va al final y contraído */}
-      {orden.tipoNegocio === "asesoria_compra" && <FlujoAsesoriaOT ordenTrabajoId={orden.id} expedienteId={orden.expedienteId ?? null} />}
+      {/* Asesoría de compra y trámite: el flujo operativo va al final y contraído */}
+      {(orden.tipoNegocio === "asesoria_compra" || orden.tipoNegocio === "solo_tramite") && (
+        <FlujoAsesoriaOT ordenTrabajoId={orden.id} expedienteId={orden.expedienteId ?? null} />
+      )}
 
       {/* Modal Foto Ampliada */}
       {fotoAmpliada && (
