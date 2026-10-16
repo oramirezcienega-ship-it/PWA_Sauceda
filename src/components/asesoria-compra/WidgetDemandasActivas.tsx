@@ -129,7 +129,7 @@ export function WidgetDemandasActivas({
             </div>
           )}
 
-          {/* Grid / Carrusel de Tarjetas de Compradores */}
+          {/* Tabla de compradores: una fila por demanda, un dato por columna */}
           {cargando ? (
             <div className="flex items-center justify-center py-8 text-xs text-carbon/50">
               <span className="animate-pulse">Cargando demandas de compradores...</span>
@@ -139,164 +139,185 @@ export function WidgetDemandasActivas({
               No se encontraron compradores activos con los criterios buscados.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-              {demandasFiltradas.map((d) => {
-                const esActivo = demandaSeleccionada?.ordenTrabajoId === d.ordenTrabajoId;
-                const primerInicial = (d.clienteNombre || "C").trim().charAt(0).toUpperCase();
+            <div className="max-w-full overflow-x-auto rounded-xl border border-carbon/10 bg-white">
+              <table className="w-full min-w-[1040px] border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-carbon/10 bg-carbon/5 text-[10px] font-bold uppercase tracking-wider text-carbon/50">
+                    <th className="px-3 py-2">Comprador</th>
+                    <th className="px-3 py-2">Estatus</th>
+                    <th className="px-3 py-2">Presupuesto</th>
+                    <th className="px-3 py-2">Zonas de interés</th>
+                    <th className="px-3 py-2 text-center">Recámaras</th>
+                    <th className="px-3 py-2">Plazo</th>
+                    <th className="px-3 py-2 text-center">En catálogo</th>
+                    <th className="px-3 py-2 text-center">Aliados</th>
+                    <th className="px-3 py-2 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demandasFiltradas.map((d) => {
+                    const esActivo = demandaSeleccionada?.ordenTrabajoId === d.ordenTrabajoId;
+                    const primerInicial = (d.clienteNombre || "C").trim().charAt(0).toUpperCase();
 
-                return (
-                  <div
-                    key={d.ordenTrabajoId}
-                    className={`relative flex flex-col justify-between rounded-xl border p-3.5 transition-all duration-200 ${
-                      esActivo
-                        ? "border-sauce bg-sauce/10 shadow-md ring-2 ring-sauce/30"
-                        : "border-carbon/10 bg-white hover:border-sauce/40 hover:shadow-sm"
-                    }`}
-                  >
-                    {/* Indicador de filtro activo en la tarjeta */}
-                    {esActivo && (
-                      <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-sauce text-[10px] font-bold text-crema shadow">
-                        ✓
-                      </span>
-                    )}
-
-                    <div>
-                      {/* Cabecera de la tarjeta: Nombre + Folio */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 font-titular text-xs font-bold text-violet-900">
-                            {primerInicial}
+                    return (
+                      <tr
+                        key={d.ordenTrabajoId}
+                        onClick={() => onSeleccionarDemanda(esActivo ? null : d)}
+                        title="Cruzar presupuesto y zonas contra el inventario"
+                        className={`cursor-pointer border-b border-carbon/10 align-middle transition-colors last:border-b-0 ${
+                          esActivo ? "bg-sauce/10 ring-2 ring-inset ring-sauce/30" : "hover:bg-violet-50/60"
+                        }`}
+                      >
+                        {/* Comprador: avatar + nombre + folio */}
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-titular text-xs font-bold ${
+                                esActivo ? "bg-sauce text-crema" : "bg-violet-100 text-violet-900"
+                              }`}
+                            >
+                              {esActivo ? "✓" : primerInicial}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="max-w-[180px] truncate font-bold text-carbon" title={d.clienteNombre}>
+                                {d.clienteNombre}
+                              </div>
+                              <span className="font-mono text-[10px] text-carbon/50">{d.folio}</span>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <h3 className="truncate text-xs font-bold text-carbon" title={d.clienteNombre}>
-                              {d.clienteNombre}
-                            </h3>
-                            <span className="font-mono text-[10px] text-carbon/50">{d.folio}</span>
+                        </td>
+
+                        {/* Estatus */}
+                        <td className="px-3 py-2">
+                          <span
+                            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              d.etapaActual?.includes("Apto")
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {d.etapaActual || "En curso"}
+                          </span>
+                        </td>
+
+                        {/* Presupuesto y capacidad de compra */}
+                        <td className="px-3 py-2">
+                          <div className="whitespace-nowrap font-titular text-sm font-extrabold text-sauce">
+                            {d.presupuestoTotal > 0 ? formatoPesos(d.presupuestoTotal) : "Por definir"}
                           </div>
-                        </div>
-
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold ${
-                            d.etapaActual?.includes("Apto")
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {d.etapaActual || "En curso"}
-                        </span>
-                      </div>
-
-                      {/* Presupuesto y Capacidad de Compra */}
-                      <div className="mt-2.5 rounded-lg bg-carbon/5 p-2">
-                        <div className="text-[10px] uppercase font-bold tracking-wider text-carbon/50">
-                          Presupuesto Estimado
-                        </div>
-                        <div className="font-titular text-base font-extrabold text-sauce">
-                          {d.presupuestoTotal > 0 ? formatoPesos(d.presupuestoTotal) : "Por definir"}
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-carbon/70">
-                          {d.montoCredito ? (
-                            <span>Crédito: {formatoPesos(d.montoCredito)}</span>
-                          ) : null}
-                          {d.montoAhorro ? (
-                            <span>Ahorro: {formatoPesos(d.montoAhorro)}</span>
-                          ) : null}
-                          {d.tipoCredito && (
-                            <span className="rounded bg-carbon/10 px-1 py-0.2 text-[9px] uppercase font-bold">
-                              {d.tipoCredito}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Zonas deseadas */}
-                      <div className="mt-2">
-                        <div className="text-[10px] font-bold text-carbon/50 uppercase">Zonas de interés</div>
-                        {d.zonas.length > 0 ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {d.zonas.slice(0, 3).map((z, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-block rounded-md bg-violet-100/70 px-1.5 py-0.5 text-[10px] font-medium text-violet-900"
-                              >
-                                📍 {z}
-                              </span>
-                            ))}
-                            {d.zonas.length > 3 && (
-                              <span className="inline-block rounded-md bg-carbon/10 px-1.5 py-0.5 text-[10px] text-carbon/60">
-                                +{d.zonas.length - 3} más
+                          <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-carbon/70">
+                            {d.montoCredito ? (
+                              <span className="whitespace-nowrap">Crédito: {formatoPesos(d.montoCredito)}</span>
+                            ) : null}
+                            {d.montoAhorro ? (
+                              <span className="whitespace-nowrap">Ahorro: {formatoPesos(d.montoAhorro)}</span>
+                            ) : null}
+                            {d.tipoCredito && (
+                              <span className="rounded bg-carbon/10 px-1 text-[9px] font-bold uppercase">
+                                {d.tipoCredito}
                               </span>
                             )}
                           </div>
-                        ) : (
-                          <p className="mt-0.5 text-[10px] italic text-carbon/40">Sin zona específica registrada</p>
-                        )}
-                      </div>
+                        </td>
 
-                      {/* Requisitos adicionales */}
-                      {(d.recamarasMin || d.plazoMudanza) && (
-                        <div className="mt-2 flex items-center gap-2 text-[10px] text-carbon/60">
-                          {d.recamarasMin && <span>🛏️ {d.recamarasMin}+ rec.</span>}
-                          {d.plazoMudanza && <span>⏱️ {ETIQUETAS_PLAZO[d.plazoMudanza] || d.plazoMudanza}</span>}
-                        </div>
-                      )}
+                        {/* Zonas deseadas */}
+                        <td className="px-3 py-2">
+                          {d.zonas.length > 0 ? (
+                            <div className="flex max-w-[260px] flex-wrap gap-1">
+                              {d.zonas.slice(0, 3).map((z, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-block rounded-md bg-violet-100/70 px-1.5 py-0.5 text-[10px] font-medium text-violet-900"
+                                >
+                                  📍 {z}
+                                </span>
+                              ))}
+                              {d.zonas.length > 3 && (
+                                <span
+                                  className="inline-block rounded-md bg-carbon/10 px-1.5 py-0.5 text-[10px] text-carbon/60"
+                                  title={d.zonas.slice(3).join(", ")}
+                                >
+                                  +{d.zonas.length - 3} más
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] italic text-carbon/40">Sin zona registrada</span>
+                          )}
+                        </td>
 
-                      {/* Estado del cruce e inventario */}
-                      <div className="mt-2.5 flex items-center justify-between border-t border-carbon/10 pt-2 text-[10px]">
-                        <span
-                          className={`font-semibold ${
-                            d.coincidenciasInventario > 0 ? "text-emerald-700" : "text-carbon/40"
-                          }`}
-                        >
-                          {d.coincidenciasInventario > 0
-                            ? `🟢 ${d.coincidenciasInventario} en catálogo`
-                            : "⚪ 0 en catálogo"}
-                        </span>
+                        {/* Recámaras */}
+                        <td className="px-3 py-2 text-center whitespace-nowrap text-carbon/70">
+                          {d.recamarasMin ? `${d.recamarasMin}+` : <span className="text-carbon/30">—</span>}
+                        </td>
 
-                        <span className="text-carbon/60">
-                          {d.solicitudesAliados > 0
-                            ? `🤝 ${d.solicitudesAliados} aliado${d.solicitudesAliados === 1 ? "" : "s"}`
-                            : "🤝 Sin aliados"}
-                        </span>
-                      </div>
-                    </div>
+                        {/* Plazo */}
+                        <td className="px-3 py-2 whitespace-nowrap text-carbon/70">
+                          {d.plazoMudanza ? (
+                            ETIQUETAS_PLAZO[d.plazoMudanza] || d.plazoMudanza
+                          ) : (
+                            <span className="text-carbon/30">—</span>
+                          )}
+                        </td>
 
-                    {/* Acciones de la Tarjeta */}
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-carbon/10 pt-2.5">
-                      <button
-                        type="button"
-                        onClick={() => onSeleccionarDemanda(esActivo ? null : d)}
-                        className={`flex-1 rounded-lg px-2 py-1.5 text-center text-xs font-bold transition-colors ${
-                          esActivo
-                            ? "bg-sauce text-crema hover:bg-verde-profundo"
-                            : "border border-sauce/30 bg-sauce/10 text-verde-profundo hover:bg-sauce hover:text-crema"
-                        }`}
-                      >
-                        {esActivo ? "✓ Quitar filtro" : "🔍 Filtrar"}
-                      </button>
+                        {/* Coincidencias en catálogo */}
+                        <td className="px-3 py-2 text-center whitespace-nowrap">
+                          <span
+                            className={`font-semibold ${
+                              d.coincidenciasInventario > 0 ? "text-emerald-700" : "text-carbon/40"
+                            }`}
+                          >
+                            {d.coincidenciasInventario > 0 ? `🟢 ${d.coincidenciasInventario}` : "⚪ 0"}
+                          </span>
+                        </td>
 
-                      <button
-                        type="button"
-                        onClick={() => setDemandaParaAliados(d)}
-                        title="Solicitar opciones a aliados inmobiliarios"
-                        className="rounded-lg border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100"
-                      >
-                        🤝 Aliados
-                      </button>
+                        {/* Solicitudes a aliados */}
+                        <td className="px-3 py-2 text-center whitespace-nowrap text-carbon/60">
+                          {d.solicitudesAliados > 0 ? `🤝 ${d.solicitudesAliados}` : "Sin aliados"}
+                        </td>
 
-                      {d.expedienteId && (
-                        <Link
-                          href={`/expediente/${d.expedienteId}`}
-                          title="Abrir expediente completo"
-                          className="rounded-lg border border-carbon/20 bg-white px-2 py-1.5 text-xs text-carbon/70 hover:bg-carbon/5"
-                        >
-                          📁
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                        {/* Acciones */}
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onSeleccionarDemanda(esActivo ? null : d)}
+                              className={`whitespace-nowrap rounded-lg px-2 py-1 text-xs font-bold transition-colors ${
+                                esActivo
+                                  ? "bg-sauce text-crema hover:bg-verde-profundo"
+                                  : "border border-sauce/30 bg-sauce/10 text-verde-profundo hover:bg-sauce hover:text-crema"
+                              }`}
+                            >
+                              {esActivo ? "✓ Quitar" : "🔍 Filtrar"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDemandaParaAliados(d)}
+                              title="Solicitar opciones a aliados inmobiliarios"
+                              className="whitespace-nowrap rounded-lg border border-orange-300 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800 hover:bg-orange-100"
+                            >
+                              🤝 Aliados
+                            </button>
+
+                            {d.expedienteId ? (
+                              <Link
+                                href={`/expediente/${d.expedienteId}`}
+                                title="Abrir expediente completo"
+                                className="rounded-lg border border-carbon/20 bg-white px-2 py-1 text-xs text-carbon/70 hover:bg-carbon/5"
+                              >
+                                📁
+                              </Link>
+                            ) : (
+                              <span className="w-[30px]" />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
