@@ -1,12 +1,10 @@
 import { notFound, redirect } from "next/navigation";
-import { Cormorant_Garamond } from "next/font/google";
+import { CLASE_TITULOS_CONTRATO, FuenteContrato } from "@/components/FuenteContrato";
 import { ContratoDocumento } from "@/components/ContratoDocumento";
 import { obtenerContrato } from "@/app/actions/contratos";
 import { usuarioActual } from "@/lib/supabase/cliente-sesion";
 
 export const dynamic = "force-dynamic";
-
-const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["500", "600", "700"] });
 
 export default async function PaginaContrato({
   params,
@@ -20,11 +18,14 @@ export default async function PaginaContrato({
   if (!contrato || contrato.registro.ordenTrabajoId !== params.id) notFound();
 
   return (
-    <ContratoDocumento
-      datos={contrato.datos}
-      estado={contrato.registro.estado}
-      claseTitulos={cormorant.className}
-      urlRegreso={`/ordenes-trabajo/${params.id}`}
-    />
+    <>
+      <FuenteContrato />
+      <ContratoDocumento
+        datos={contrato.datos}
+        estado={contrato.registro.estado}
+        claseTitulos={CLASE_TITULOS_CONTRATO}
+        urlRegreso={`/ordenes-trabajo/${params.id}`}
+      />
+    </>
   );
 }
