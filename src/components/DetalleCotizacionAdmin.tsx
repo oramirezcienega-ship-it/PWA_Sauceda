@@ -29,6 +29,7 @@ import {
 import { PLANTILLAS_MODULARES_DISPONIBLES } from "@/lib/plantillasModulares";
 import { listarProductosServicios } from "@/app/actions/productos";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
+import { escalonParaValor, formatoEscalon, medidaTarifa, textoConEscalon, valorEscalonEnTexto } from "@/lib/tarifas-capacidad";
 import { listarPerfilesActivos } from "@/app/actions/usuarios";
 import { listarProspectosMin } from "@/app/actions/prospectos";
 import { listarEmpresasMin } from "@/app/actions/empresas";
@@ -819,20 +820,52 @@ export function DetalleCotizacionAdmin({
   /** Cantidad mínima de cobro del producto del catálogo que corresponde al concepto (0 si no hay). */
   const minimoDeConcepto = (descripcion: string): number => Number(productoDeConcepto(descripcion)?.cantidadMinima) || 0;
 
+  /** Escalones de capacidad del producto con costo o precio capturado. */
+  const escalonesDe = (prod: any): { hastaLitros: number; precio: number | null; costo: number | null }[] =>
+    (prod?.tarifasCapacidad || []).filter((t: any) => t.precio !== null || t.costo !== null);
+
+  /** Capacidad (litros/tubos) del concepto: la mencionada en la descripción. */
+  const capacidadDeConcepto = (descripcion: string, prod: any): number | null =>
+    escalonesDe(prod).length ? valorEscalonEnTexto(descripcion, medidaTarifa(prod.tarifaMedida)) : null;
+
+  /** Aplica a la fila el costo y precio del escalón de capacidad elegido. */
+  const aplicarEscalon = (index: number, hastaLitros: number) => {
+    setConceptosEditables((prev) =>
+      prev.map((c, i) => {
+        if (i !== index) return c;
+        const prod = productoDeConcepto(c.descripcion);
+        const escalon = escalonesDe(prod).find((t) => t.hastaLitros === hastaLitros);
+        if (!prod || !escalon) return c;
+        return {
+          ...c,
+          descripcion: textoConEscalon(c.descripcion, hastaLitros, medidaTarifa(prod.tarifaMedida)),
+          costoUnitario: escalon.costo ?? c.costoUnitario,
+          precioUnitario: escalon.precio ?? c.precioUnitario,
+        };
+      })
+    );
+  };
+
   const handleCargarDesdeCatalogo = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const prodId = e.target.value;
     if (!prodId) return;
     const prod = catalogoProductos.find((p) => p.id === prodId);
     if (!prod) return;
 
+    // Servicios cobrados por capacidad: arranca en el primer escalón con precio
+    // (el asesor elige la capacidad real en la fila) y se cobra por servicio.
+    const escalones = escalonesDe(prod);
+    const escalon = escalones.find((t) => t.precio !== null) ?? escalones[0];
+    const medida = medidaTarifa(prod.tarifaMedida);
+
     setConceptosEditables((prev) => [
       ...prev,
       {
-        descripcion: prod.nombre,
+        descripcion: escalon ? `${prod.nombre} — hasta ${formatoEscalon(escalon.hastaLitros, medida)}` : prod.nombre,
         cantidad: 1,
-        unidad: prod.unidad,
-        costoUnitario: prod.costoUnitario,
-        precioUnitario: prod.precioUnitario,
+        unidad: escalon ? "servicio" : prod.unidad,
+        costoUnitario: escalon?.costo ?? prod.costoUnitario,
+        precioUnitario: escalon?.precio ?? prod.precioUnitario,
         descuento: 0,
       },
     ]);
@@ -1877,11 +1910,20 @@ export function DetalleCotizacionAdmin({
                       className="rounded-lg border border-carbon/20 bg-white px-3 py-1.5 text-xs font-semibold text-carbon/70 outline-none focus:border-sauce"
                     >
                       <option value="">📦 Seleccionar de Catálogo...</option>
-                      {catalogoProductos.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nombre} ({formatMoneda(p.precioUnitario)})
-                        </option>
-                      ))}
+                      {catalogoProductos.map((p) => {
+                        const precios = escalonesDe(p)
+                          .map((t) => t.precio)
+                          .filter((v): v is number => v !== null);
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} (
+                            {precios.length
+                              ? `desde ${formatMoneda(Math.min(...precios))} según capacidad`
+                              : formatMoneda(p.precioUnitario)}
+                            )
+                          </option>
+                        );
+                      })}
                     </select>
                   )}
                   <button
@@ -2163,6 +2205,63 @@ export function DetalleCotizacionAdmin({
                                   placeholder="Ej. Impermeabilización Fester 5 años..."
                                   className="block w-full rounded border border-carbon/15 px-2 py-1 text-base sm:text-xs leading-snug focus:border-sauce focus:outline-none"
                                 />
+                                {(() => {
+                                  const prod = productoDeConcepto(c.descripcion);
+                                  if (!prod) return null;
+                                  const escalones = escalonesDe(prod);
+                                  const medida = medidaTarifa(prod.tarifaMedida);
+                                  const capacidad = capacidadDeConcepto(c.descripcion, prod);
+                                  const escalon = capacidad ? escalonParaValor(escalones, capacidad) : null;
+                                  const verCosto = !esOperaciones || esAdmin;
+                                  const difiere =
+                                    escalon &&
+                                    ((escalon.costo !== null && escalon.costo !== c.costoUnitario) ||
+                                      (escalon.precio !== null && escalon.precio !== c.precioUnitario));
+                                  return (
+                                    <div className="mt-1 space-y-1 text-[10px]">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span
+                                          className="rounded-full bg-sauce/10 px-1.5 py-0.5 font-semibold text-sauce"
+                                          title="Producto del catálogo ligado a este concepto"
+                                        >
+                                          📦 {prod.nombre}
+                                        </span>
+                                        {escalones.length > 0 && (
+                                          <select
+                                            value={escalon?.hastaLitros ?? ""}
+                                            onChange={(e) => e.target.value && aplicarEscalon(idx, Number(e.target.value))}
+                                            className="rounded border border-carbon/15 bg-white px-1 py-0.5 text-[10px] focus:border-sauce focus:outline-none"
+                                            title="Capacidad: cada escalón tiene su costo y precio en el catálogo"
+                                          >
+                                            <option value="">Elegir capacidad...</option>
+                                            {escalones.map((t) => (
+                                              <option key={t.hastaLitros} value={t.hastaLitros}>
+                                                Hasta {formatoEscalon(t.hastaLitros, medida)}
+                                                {t.precio !== null ? ` — ${formatMoneda(t.precio)}` : " — sin precio"}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                      {difiere && escalon && (
+                                        <div className="flex flex-wrap items-center gap-1.5 text-amber-800">
+                                          <span>
+                                            Catálogo (hasta {formatoEscalon(escalon.hastaLitros, medida)}):
+                                            {escalon.costo !== null && verCosto && ` costo ${formatMoneda(escalon.costo)} ·`}
+                                            {escalon.precio !== null && ` precio ${formatMoneda(escalon.precio)}`}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => aplicarEscalon(idx, escalon.hastaLitros)}
+                                            className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 font-semibold hover:bg-amber-100"
+                                          >
+                                            Aplicar
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="py-2.5 text-center">
                                 <input

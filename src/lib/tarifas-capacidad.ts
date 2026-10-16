@@ -75,3 +75,31 @@ export function combinarCostosEnTarifas(tarifas: TarifaCapacidad[], costos: Cost
   }
   return Array.from(porLitros.values()).sort((a, b) => a.hastaLitros - b.hastaLitros);
 }
+
+/** Escalón que cubre la capacidad indicada (el primero con hastaLitros >= valor; si excede, el mayor). */
+export function escalonParaValor(tarifas: TarifaCapacidad[] | undefined, valor: number): TarifaCapacidad | null {
+  if (!tarifas?.length || !(valor > 0)) return null;
+  const orden = [...tarifas].sort((a, b) => a.hastaLitros - b.hastaLitros);
+  return orden.find((t) => t.hastaLitros >= valor) ?? orden[orden.length - 1];
+}
+
+const PATRON_MEDIDA: Record<MedidaTarifa, string> = { litros: "(?:l|lts?|litros)", tubos: "tubos?" };
+
+/** "12,000 L", "1100 lts", "12 tubos": número (con o sin separador de miles) + la medida. */
+const reEscalon = (medida: MedidaTarifa) =>
+  new RegExp(String.raw`(\d{1,3}(?:[,.]\d{3})+|\d+)\s*` + PATRON_MEDIDA[medida] + String.raw`(?![a-z])`, "i");
+
+/** Capacidad mencionada en un texto ("aljibe de 12,000 L" → 12000; "12 tubos" → 12). null si no hay. */
+export function valorEscalonEnTexto(texto: string, medida: MedidaTarifa): number | null {
+  const m = texto.match(reEscalon(medida));
+  if (!m) return null;
+  const n = Number(m[1].replace(/[,.]/g, ""));
+  return n > 0 ? n : null;
+}
+
+/** Reemplaza la capacidad mencionada en el texto por la del escalón; si no menciona ninguna, la agrega al final. */
+export function textoConEscalon(texto: string, valor: number, medida: MedidaTarifa): string {
+  const re = reEscalon(medida);
+  const etiqueta = formatoEscalon(valor, medida);
+  return re.test(texto) ? texto.replace(re, etiqueta) : `${texto.trim()} — hasta ${etiqueta}`;
+}
