@@ -40,6 +40,7 @@ const SERVICIO_POR_NEGOCIO: Record<string, string> = {
   "construccion-mantenimiento-tinacos": "mantenimiento de tinacos",
   "construccion-mantenimiento-calentadores": "mantenimiento de calentadores solares",
   "construccion-mantenimiento-postventa": "mantenimiento",
+  seguridad: "seguridad y videovigilancia",
   construccion: "construcción",
   traspaso_compra: "venta de tu casa",
   promocion_venta: "venta de tu propiedad",

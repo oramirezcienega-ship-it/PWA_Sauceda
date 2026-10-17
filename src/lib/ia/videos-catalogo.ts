@@ -64,6 +64,7 @@ const CLAVE_TIPO_NEGOCIO: Record<string, RegExp> = {
   "construccion-remodelacion": /remodel/i,
   "construccion-piso-estampado": /estampad|piso/i,
   "construccion-herreria": /herrer/i,
+  "seguridad": /seguridad|c[aá]mara|cctv|alarma|malla|cerco/i,
 };
 
 /** Elige los productos a partir de lo que pidió Sofía ("v2", varias claves, o "general"). */

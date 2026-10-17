@@ -44,3 +44,15 @@ test("detectarTipoNegocio: Saludo genérico sin campaña devuelve 'otro'", () =>
   assert.equal(detectarTipoNegocio("Hola buenas tardes"), "otro");
   assert.equal(detectarTipoNegocio("Informes por favor"), "otro");
 });
+
+test("detectarTipoNegocio: Campañas o mensajes de Seguridad y Videovigilancia clasifican como seguridad", () => {
+  assert.equal(detectarTipoNegocio("Hola", "Campaña Seguridad Meta 2026", "Kits Camaras", "Anuncio Camara"), "seguridad");
+  assert.equal(detectarTipoNegocio("Quiero cotizar cámaras de seguridad para mi casa"), "seguridad");
+  assert.equal(detectarTipoNegocio("Instalan alarmas para negocio?"), "seguridad");
+  assert.equal(detectarTipoNegocio("Precio de sistema de videovigilancia y cctv"), "seguridad");
+  assert.equal(detectarTipoNegocio("Cotización de cerco eléctrico y videoportero"), "seguridad");
+  assert.equal(detectarTipoNegocio("Información sobre el kit de seguridad"), "seguridad");
+  // Asegurar que seguridad social no caiga en seguridad
+  assert.equal(detectarTipoNegocio("Quiero consultar mis puntos con mi número de seguridad social"), "solo_tramite");
+});
+

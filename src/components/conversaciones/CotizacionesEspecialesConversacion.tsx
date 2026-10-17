@@ -25,6 +25,7 @@ const LINEAS: TipoNegocioId[] = [
   "construccion-mantenimiento-postventa",
   "construccion-piso-estampado",
   "construccion-herreria",
+  "seguridad",
   "construccion-remodelacion",
   "construccion",
   "otro",

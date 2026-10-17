@@ -1494,6 +1494,7 @@ export async function obtenerExpedientesSeguimiento(): Promise<ExpedienteSeguimi
     "construccion-herreria": "Herrería",
     "construccion_herreria": "Herrería",
     "herreria": "Herrería",
+    "seguridad": "Seguridad",
   };
 
   const etapaLabels: Record<string, string> = {

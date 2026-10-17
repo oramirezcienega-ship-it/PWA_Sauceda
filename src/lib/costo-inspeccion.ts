@@ -21,6 +21,7 @@ export const LINEAS_INSPECCION: { tipo: string; etiqueta: string }[] = [
   { tipo: "construccion-mantenimiento-calentadores", etiqueta: "Mantenimiento de calentadores solares" },
   { tipo: "construccion-mantenimiento-cisternas", etiqueta: "Mantenimiento de cisternas / aljibes" },
   { tipo: "construccion-mantenimiento-postventa", etiqueta: "Mantenimiento postventa" },
+  { tipo: "seguridad", etiqueta: "Seguridad y videovigilancia" },
 ];
 
 export type CostosInspeccion = Record<string, number>;

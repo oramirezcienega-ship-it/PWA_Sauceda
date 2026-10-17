@@ -2306,6 +2306,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                       <option value="construccion-mantenimiento-tinacos">Mantenimiento Tinacos</option>
                       <option value="construccion-mantenimiento-calentadores">Mantenimiento Calentadores Solares</option>
                       <option value="construccion-herreria">Herrería</option>
+                      <option value="seguridad">Seguridad</option>
                       <option value="construccion-remodelacion">Remodelación</option>
                       <option value="construccion">Construcción General</option>
                       <option value="traspaso_compra">Traspaso / Compra</option>

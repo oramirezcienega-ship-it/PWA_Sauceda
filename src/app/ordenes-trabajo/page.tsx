@@ -230,6 +230,7 @@ export default function PaginaOrdenesTrabajo() {
                   <option value="construccion-piso-estampado">🧱 Piso Estampado</option>
                   <option value="construccion-mantenimiento-calentadores">☀️ Calentadores Solares</option>
                   <option value="construccion-herreria">⚙️ Herrería</option>
+                  <option value="seguridad">🛡️ Seguridad</option>
                   <option value="construccion-mantenimiento-postventa">🔧 Mantenimiento Postventa</option>
                   <option value="construccion">🏗️ Construcción General</option>
                   <option value="otro">📁 Otro</option>

@@ -12,6 +12,7 @@ const TIPOS_NEGOCIO_PRODUCTO: TipoNegocioId[] = [
   "construccion-mantenimiento-postventa",
   "construccion-piso-estampado",
   "construccion-herreria",
+  "seguridad",
   "construccion-remodelacion",
   "construccion",
   "traspaso_compra",
