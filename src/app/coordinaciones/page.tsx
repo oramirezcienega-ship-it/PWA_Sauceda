@@ -147,6 +147,42 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
   return [encabezado, "", cuerpo, "", pie].join("\n").trim();
 }
 
+type LeadAgrupado = LeadCompartidoPortal & { veces: number };
+
+/**
+ * Un renglón por cliente y asesor: el mismo cliente compartido varias veces al mismo
+ * asesor (mismo teléfono) se junta en el envío más reciente, con la retro de todos.
+ */
+function agruparLeads(leads: LeadCompartidoPortal[]): LeadAgrupado[] {
+  const grupos = new Map<string, LeadCompartidoPortal[]>();
+  leads.forEach((l) => {
+    const clave = `${l.asesorId}|${soloDigitos(l.telefono).slice(-10) || l.id}`;
+    grupos.set(clave, [...(grupos.get(clave) || []), l]);
+  });
+  return Array.from(grupos.values())
+    .map((envios) => {
+      const [ultimo] = [...envios].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      // La retro dada desde el portal o WhatsApp se guarda en cada envío: se quitan las repetidas
+      const vistas = new Set<string>();
+      const retro = envios
+        .flatMap((e) => e.retro)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .filter((r) => {
+          const clave = `${r.createdAt.slice(0, 16)}|${r.estado}|${r.comentario}`;
+          if (vistas.has(clave)) return false;
+          vistas.add(clave);
+          return true;
+        });
+      return {
+        ...ultimo,
+        nota: ultimo.nota || envios.find((e) => e.nota)?.nota || "",
+        retro,
+        veces: envios.length,
+      };
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 const CLAVE_FILTROS = "coordinaciones:filtros";
 
 /** Inicio y fin (ms, fin exclusivo) del periodo elegido; null = sin límite. */
@@ -186,7 +222,7 @@ const TONO_ESTADO: Record<string, string> = {
 export default function PaginaCoordinaciones() {
   const [pestana, setPestana] = useState<Pestana>("clientes");
   const [coordinaciones, setCoordinaciones] = useState<CoordinacionPortal[]>([]);
-  const [leads, setLeads] = useState<LeadCompartidoPortal[]>([]);
+  const [leads, setLeads] = useState<LeadAgrupado[]>([]);
   const [links, setLinks] = useState<LinkPortalAsesor[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -232,7 +268,7 @@ export default function PaginaCoordinaciones() {
     try {
       const [seg, lnk] = await Promise.all([obtenerSeguimientoAsesores(), listarLinksPortalAsesores()]);
       setCoordinaciones(seg.coordinaciones);
-      setLeads(seg.leads);
+      setLeads(agruparLeads(seg.leads));
       setLinks(lnk);
     } catch (e: any) {
       setError(e.message || "No se pudo cargar.");
@@ -309,7 +345,7 @@ export default function PaginaCoordinaciones() {
     } else {
       exportarAExcelCSV(
         `Clientes_Compartidos_${hoy}`,
-        ["Compartido", "Cliente", "Teléfono", "Correo", "Expediente", "Prospecto", "Tipo de negocio", "Etapa", "Fraccionamiento", "Valor estimado", "Cotizado", "Asesor", "Compartido por", "Nota", "Última retroalimentación", "Fecha respuesta", "Respuestas"],
+        ["Compartido", "Cliente", "Teléfono", "Correo", "Expediente", "Prospecto", "Tipo de negocio", "Etapa", "Fraccionamiento", "Valor estimado", "Cotizado", "Asesor", "Compartido por", "Nota", "Última retroalimentación", "Fecha respuesta", "Respuestas", "Veces compartido"],
         leadsFiltrados.map((l) => [
           fechaHora(l.createdAt),
           l.clienteNombre,
@@ -328,6 +364,7 @@ export default function PaginaCoordinaciones() {
           textoRetro(l.retro[0]) || "Sin respuesta",
           l.retro[0] ? fechaCorta(l.retro[0].createdAt) : "",
           l.retro.length,
+          l.veces,
         ])
       );
     }
@@ -751,7 +788,14 @@ export default function PaginaCoordinaciones() {
                         <td className="py-2.5 px-3">
                           <CeldaRetro retro={l.retro} />
                         </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">{fechaHora(l.createdAt)}</td>
+                        <td className="py-2.5 px-3 whitespace-nowrap text-slate-500">
+                          {fechaHora(l.createdAt)}
+                          {l.veces > 1 && (
+                            <div className="text-[10px] font-bold text-slate-400" title="Se compartió varias veces a este asesor">
+                              Compartido {l.veces} veces
+                            </div>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3">
                           <div className="flex flex-wrap gap-1 min-w-[150px]">
                             <a
