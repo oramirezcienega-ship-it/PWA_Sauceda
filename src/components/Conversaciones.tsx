@@ -36,6 +36,7 @@ import type { EtapaId } from "@/lib/types";
 import { DocumentosVentas } from "./DocumentosVentas";
 import { RespuestasRapidasEditor } from "./RespuestasRapidasEditor";
 import { ModalCalculadoraImpermeabilizacion } from "./ModalCalculadoraImpermeabilizacion";
+import { ModalCotizacionExpress } from "./ModalCotizacionExpress";
 import { ModalCoordinarInspeccion } from "./ModalCoordinarInspeccion";
 import { ModalPasarLeadTelegram } from "./ModalPasarLeadTelegram";
 import { ModalCatalogoPlantillas } from "./ModalCatalogoPlantillas";
@@ -845,6 +846,8 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
+  const [mostrarCotizacionExpress, setMostrarCotizacionExpress] = useState(false);
+  const [menuCotizador, setMenuCotizador] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
   const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
   const [mostrarRescateMovil, setMostrarRescateMovil] = useState(false);
@@ -3010,16 +3013,52 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         {invocandoSofia ? "⏳ Sofía escribiendo…" : "✨ Que responda Sofía"}
                       </button>
 
-                      {/* Botón Calculadora Rápida de Impermeabilización */}
-                      <button
-                        type="button"
-                        onClick={() => setMostrarCalculadora(true)}
-                        title="Calcular costos y generar comparativa de impermeabilización (Acrílico, Estándar, Premium)"
-                        className="flex items-center gap-1 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
-                      >
-                        <span>🧮</span>
-                        <span>Cotizador Impermeabilización</span>
-                      </button>
+                      {/* Cotizador unificado: express (producto del catálogo) o comparativa de impermeabilización */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMenuCotizador((v) => !v)}
+                          title="Generar una cotización rápida en imagen para enviar al chat"
+                          className="flex items-center gap-1 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>🧮</span>
+                          <span>Cotizador</span>
+                          <span className="text-[9px]">▾</span>
+                        </button>
+                        {menuCotizador && (
+                          <>
+                            <div className="fixed inset-0 z-30" onClick={() => setMenuCotizador(false)} />
+                            <div className="absolute bottom-full left-0 mb-1 z-40 w-64 rounded-lg border border-carbon/15 bg-white shadow-lg p-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuCotizador(false);
+                                  setMostrarCotizacionExpress(true);
+                                }}
+                                className="w-full text-left px-2.5 py-2 rounded hover:bg-amber-50 cursor-pointer"
+                              >
+                                <span className="block text-xs font-bold text-carbon">⚡ Cotización Express</span>
+                                <span className="block text-[10px] text-carbon/60">
+                                  Un producto del catálogo con su precio y descripción, en imagen
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuCotizador(false);
+                                  setMostrarCalculadora(true);
+                                }}
+                                className="w-full text-left px-2.5 py-2 rounded hover:bg-amber-50 cursor-pointer"
+                              >
+                                <span className="block text-xs font-bold text-carbon">🏠 Impermeabilización</span>
+                                <span className="block text-[10px] text-carbon/60">
+                                  Comparativa por m²: Acrílico, Estándar y Premium
+                                </span>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                       {/* Botón: Coordinar inspección con 2 asesores (Cabina de Coordinación) */}
                       {detalle?.prospectoId && (
                         <button
@@ -3353,6 +3392,19 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           if (textareaRef.current) {
             textareaRef.current.focus();
           }
+        }}
+      />
+
+      {/* Modal de Cotización Express (producto del catálogo) */}
+      <ModalCotizacionExpress
+        abierto={mostrarCotizacionExpress}
+        onCerrar={() => setMostrarCotizacionExpress(false)}
+        nombreCliente={detalle?.nombre || "Cliente"}
+        tipoNegocio={detalle?.tipoNegocio}
+        onEnviarImagenDirecta={handleEnviarArchivoDirecto}
+        onInsertarTexto={(textoCotizacion) => {
+          setTexto((prev) => (prev.trim() ? `${prev}\n\n${textoCotizacion}` : textoCotizacion));
+          textareaRef.current?.focus();
         }}
       />
 
