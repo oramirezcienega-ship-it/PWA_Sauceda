@@ -6,7 +6,7 @@ import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
 import { procesarRetroAsesorWhatsApp } from "@/lib/retro-whatsapp";
-import { detectarTipoNegocio } from "@/lib/types";
+import { detectarTipoNegocio, OrigenAdquisicion } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
 import { insertarExpedienteSeguro } from "@/lib/expedientes-insert";
@@ -227,10 +227,11 @@ async function obtenerOCrearProspecto(
   campaign_name = "",
   adset_name = "",
   ad_name = "",
+  origen: OrigenAdquisicion = "whatsapp",
 ): Promise<string> {
   const { data: existentes } = await sb
     .from("prospectos")
-    .select("id, campaign_name, adset_name, ad_name")
+    .select("id, campaign_name, adset_name, ad_name, origen")
     .in("telefono", variantesTelefono(lead.telefono))
     .limit(1);
 
@@ -255,6 +256,9 @@ async function obtenerOCrearProspecto(
         updateAttrs.ad_name = ad_name;
       }
     }
+    if (origen && origen !== "whatsapp" && (!pr.origen || pr.origen === "whatsapp")) {
+      updateAttrs.origen = origen;
+    }
 
     if (Object.keys(updateAttrs).length > 0) {
       await sb.from("prospectos").update(updateAttrs).eq("id", pr.id);
@@ -268,7 +272,7 @@ async function obtenerOCrearProspecto(
     id,
     nombre: lead.nombre?.trim() || `Lead WhatsApp ${lead.telefono}`,
     telefono: normalizarTelefono(lead.telefono),
-    origen: "whatsapp",
+    origen,
     campaign_name,
     adset_name,
     ad_name,
@@ -597,6 +601,7 @@ export async function registrarLeadWhatsApp(
   let campaign_name = lead.campaign_name || "";
   let adset_name = lead.adset_name || "";
   let ad_name = lead.ad_name || "";
+  let origenLead: OrigenAdquisicion = "whatsapp";
 
   if (lead.referral) {
     if (lead.referral.headline) {
@@ -622,6 +627,35 @@ export async function registrarLeadWhatsApp(
         console.error("Error al consultar detalles de ad_id en Graph API desde WhatsApp:", adErr);
       }
     }
+  } else {
+    // Detección automática de leads orgánicos provenientes de saucedamx.com (Google SEO León)
+    const textoMensaje = (lead.mensaje || "").toLowerCase();
+    if (
+      textoMensaje.includes("página web") ||
+      textoMensaje.includes("pagina web") ||
+      textoMensaje.includes("saucedamx") ||
+      textoMensaje.includes("sauceda.mx")
+    ) {
+      origenLead = "sitio-web";
+      campaign_name = "Google SEO León";
+      adset_name = "saucedamx.com";
+
+      if (textoMensaje.includes("impermeabili") || textoMensaje.includes("manto") || textoMensaje.includes("azotea") || textoMensaje.includes("gotera")) {
+        ad_name = "Página Impermeabilización";
+      } else if (textoMensaje.includes("concreto") || textoMensaje.includes("estampado") || textoMensaje.includes("cochera")) {
+        ad_name = "Página Concreto Estampado";
+      } else if (textoMensaje.includes("herreria") || textoMensaje.includes("herrería") || textoMensaje.includes("portón") || textoMensaje.includes("porton") || textoMensaje.includes("pérgola") || textoMensaje.includes("pergola")) {
+        ad_name = "Página Herrería";
+      } else if (textoMensaje.includes("infonavit") || textoMensaje.includes("trámite") || textoMensaje.includes("tramite")) {
+        ad_name = "Página Trámite";
+      } else if (textoMensaje.includes("vender") || textoMensaje.includes("vende")) {
+        ad_name = "Página Vende";
+      } else if (textoMensaje.includes("protege") || textoMensaje.includes("alarma") || textoMensaje.includes("cámara") || textoMensaje.includes("camara") || textoMensaje.includes("cerca")) {
+        ad_name = "Página Protege";
+      } else {
+        ad_name = "Página Web General";
+      }
+    }
   }
 
   // Fallback de Atribución (Edge Case de Meta: cuando el cliente borra o edita el texto del anuncio en Click-to-WhatsApp)
@@ -636,7 +670,7 @@ export async function registrarLeadWhatsApp(
   }
 
   // Prospecto (persona): se busca o se crea por teléfono.
-  const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name);
+  const prospectoId = await obtenerOCrearProspecto(sb, lead, campaign_name, adset_name, ad_name, origenLead);
 
   // 1. Detección de token universal (Handshake Enlace Puente wa.me)
   // Formato universal esperado: [EXP-XXX], [COT-XXX], [PRO-XXX], EXP-XXX, COT-XXX o PRO-XXX
