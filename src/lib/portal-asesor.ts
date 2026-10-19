@@ -100,6 +100,7 @@ async function retroPorReferencia(
       siguientePaso: r.siguiente_paso || "",
       siguientePasoFecha: r.siguiente_paso_fecha,
       comentario: r.comentario || "",
+      origen: r.origen === "whatsapp" ? "whatsapp" : "portal",
       createdAt: r.created_at,
     });
     mapa.set(clave, lista);
@@ -289,6 +290,7 @@ export async function guardarRetroalimentacion(
     siguientePaso?: string;
     siguientePasoFecha?: string | null;
     comentario?: string;
+    origen?: "portal" | "whatsapp";
   }
 ): Promise<void> {
   const validos = datos.tipo === "coordinacion" ? ESTADOS_RETRO_COORDINACION : ESTADOS_RETRO_LEAD;
@@ -303,6 +305,7 @@ export async function guardarRetroalimentacion(
     siguiente_paso: (datos.siguientePaso || "").trim().slice(0, 500),
     siguiente_paso_fecha: datos.siguientePasoFecha || null,
     comentario: (datos.comentario || "").trim().slice(0, 2000),
+    origen: datos.origen || "portal",
   });
   if (error) throw new Error(error.message);
 }

@@ -9,7 +9,12 @@ import {
   regenerarLinkPortalAsesor,
   type LinkPortalAsesor,
 } from "@/app/actions/seguimiento-asesores";
-import type { CoordinacionPortal, LeadCompartidoPortal, Retroalimentacion } from "@/lib/portal-asesor-tipos";
+import {
+  WHATSAPP_EMPRESA,
+  type CoordinacionPortal,
+  type LeadCompartidoPortal,
+  type Retroalimentacion,
+} from "@/lib/portal-asesor-tipos";
 import { exportarAExcelCSV } from "@/lib/finanzasExport";
 
 type Pestana = "coordinaciones" | "clientes" | "links";
@@ -68,6 +73,49 @@ function mensajeLead(l: LeadCompartidoPortal): string {
   return lineas.filter(Boolean).join("\n").slice(0, 3800);
 }
 
+/** Lista de clientes compartidos de un asesor, con el link para dar retro por WhatsApp (texto o audio). */
+function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPortal: string | null): string {
+  // El mismo cliente compartido varias veces va una sola vez (el envío más reciente)
+  const vistos = new Set<string>();
+  const unicos = lista.filter((l) => {
+    const clave = soloDigitos(l.telefono).slice(-10) || l.id;
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
+  const renglones = unicos.map((l) => {
+    const d = l.detalle;
+    const valor = d?.montoCotizado
+      ? `Cotizado ${pesos(d.montoCotizado)}${d.ultimaCotizacion ? ` (${d.ultimaCotizacion.id})` : ""}`
+      : d?.valorEstimado
+        ? `Valor ${pesos(d.valorEstimado)}`
+        : "";
+    return [
+      `• *${l.clienteNombre}* · ${l.telefono}`,
+      d?.tipoNegocio ? `   ${d.tipoNegocio}${d.etapa ? ` · ${d.etapa}` : ""}` : "",
+      d?.fraccionamiento || d?.direccion ? `   📍 ${d.fraccionamiento || d.direccion}` : "",
+      valor ? `   💰 ${valor}` : "",
+      `   🔁 ${l.retro[0] ? textoRetro(l.retro[0]) : "Sin respuesta"}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
+  return [
+    `Hola ${nombre.split(" ")[0]} 👋 Estos son los clientes que te compartimos (${unicos.length}) y cómo los tenemos:`,
+    "",
+    renglones.join("\n\n"),
+    "",
+    `🎙️ *Danos tu retro por WhatsApp:* entra aquí, manda *RETRO* y luego un audio o texto diciendo cómo vas con cada cliente (por nombre): https://wa.me/${WHATSAPP_EMPRESA}?text=RETRO`,
+    urlPortal ? `📲 O en tu portal: ${urlPortal}` : "",
+  ]
+    .join("\n")
+    .trim()
+    .slice(0, 3900);
+}
+
+const CLAVE_FILTROS = "coordinaciones:filtros";
+const esReciente = (iso: string) => Date.now() - new Date(iso).getTime() < 86400000;
+
 const TONO_ESTADO: Record<string, string> = {
   confirmada: "bg-emerald-100 text-emerald-800",
   cancelada: "bg-red-100 text-red-700",
@@ -75,7 +123,7 @@ const TONO_ESTADO: Record<string, string> = {
 };
 
 export default function PaginaCoordinaciones() {
-  const [pestana, setPestana] = useState<Pestana>("coordinaciones");
+  const [pestana, setPestana] = useState<Pestana>("clientes");
   const [coordinaciones, setCoordinaciones] = useState<CoordinacionPortal[]>([]);
   const [leads, setLeads] = useState<LeadCompartidoPortal[]>([]);
   const [links, setLinks] = useState<LinkPortalAsesor[]>([]);
@@ -86,6 +134,27 @@ export default function PaginaCoordinaciones() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [copiado, setCopiado] = useState("");
+  const [verEnvioListas, setVerEnvioListas] = useState(false);
+  const [filtrosListos, setFiltrosListos] = useState(false);
+
+  // Filtros y pestaña se guardan en el navegador para que sobrevivan al refrescar
+  useEffect(() => {
+    try {
+      const f = JSON.parse(localStorage.getItem(CLAVE_FILTROS) || "{}");
+      if (["coordinaciones", "clientes", "links"].includes(f.pestana)) setPestana(f.pestana);
+      if (typeof f.filtroAsesor === "string") setFiltroAsesor(f.filtroAsesor);
+      if (typeof f.filtroEstado === "string") setFiltroEstado(f.filtroEstado);
+      if (typeof f.busqueda === "string") setBusqueda(f.busqueda);
+    } catch {}
+    setFiltrosListos(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtrosListos) return;
+    try {
+      localStorage.setItem(CLAVE_FILTROS, JSON.stringify({ pestana, filtroAsesor, filtroEstado, busqueda }));
+    } catch {}
+  }, [filtrosListos, pestana, filtroAsesor, filtroEstado, busqueda]);
 
   const cargar = async () => {
     setCargando(true);
@@ -127,7 +196,12 @@ export default function PaginaCoordinaciones() {
   const leadsFiltrados = leads.filter(
     (l) =>
       (!filtroAsesor || l.asesorId === filtroAsesor) &&
-      (!filtroEstado || (filtroEstado === "sin_respuesta" ? l.retro.length === 0 : l.retro[0]?.estado === filtroEstado)) &&
+      (!filtroEstado ||
+        (filtroEstado === "sin_respuesta"
+          ? l.retro.length === 0
+          : filtroEstado === "retro_nueva"
+            ? Boolean(l.retro[0] && esReciente(l.retro[0].createdAt))
+            : l.retro[0]?.estado === filtroEstado)) &&
       coincide(
         `${l.clienteNombre} ${l.telefono} ${l.nota} ${l.detalle?.tipoNegocio || ""} ${l.detalle?.fraccionamiento || ""} ${l.detalle?.expedienteId || ""}`
       )
@@ -201,6 +275,21 @@ export default function PaginaCoordinaciones() {
     if (!r.ok) return alert(r.error || "No se pudo generar el link.");
     setLinks((prev) => prev.map((x) => (x.asesorId === l.asesorId ? { ...x, url: r.url || null } : x)));
   };
+
+  // Clientes filtrados agrupados por asesor, para mandarle a cada uno su lista
+  const listasPorAsesor = (() => {
+    const m = new Map<string, LeadCompartidoPortal[]>();
+    leadsFiltrados.forEach((l) => m.set(l.asesorId, [...(m.get(l.asesorId) || []), l]));
+    return Array.from(m.entries())
+      .map(([id, lista]) => {
+        const link = links.find((x) => x.asesorId === id);
+        const telefono = link?.telefono || lista.find((l) => l.detalle?.asesorTelefono)?.detalle?.asesorTelefono || "";
+        const nombre = lista[0].asesorNombre || link?.nombre || "Asesor";
+        const clientes = new Set(lista.map((l) => soloDigitos(l.telefono).slice(-10) || l.id)).size;
+        return { id, nombre, telefono, lista, clientes, mensaje: mensajeListaAsesor(nombre, lista, link?.url || null) };
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  })();
 
   const pendientesRespuesta = coordinaciones.filter((c) => ["propuesta_enviada", "evaluando"].includes(c.estado)).length;
   const leadsSinRespuesta = leads.filter((l) => l.retro.length === 0).length;
@@ -294,6 +383,7 @@ export default function PaginaCoordinaciones() {
                 ) : (
                   <>
                     <option value="sin_respuesta">Sin respuesta</option>
+                    <option value="retro_nueva">Retro nueva (24 h)</option>
                     <option value="contactado">Ya lo contactó</option>
                     <option value="no_contesta">No contesta</option>
                     <option value="cotizado">Cotizado</option>
@@ -303,9 +393,57 @@ export default function PaginaCoordinaciones() {
                   </>
                 )}
               </select>
+              {pestana === "clientes" && (
+                <button
+                  type="button"
+                  onClick={() => setVerEnvioListas(!verEnvioListas)}
+                  disabled={listasPorAsesor.length === 0}
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  📤 Enviar lista a asesores
+                </button>
+              )}
             </div>
           )}
         </div>
+
+        {pestana === "clientes" && verEnvioListas && (
+          <div className="bg-white rounded-2xl border border-emerald-200 shadow-2xs divide-y divide-slate-100">
+            <p className="px-4 py-3 text-[11px] text-slate-600 bg-emerald-50/60 rounded-t-2xl">
+              A cada asesor le llega la lista de sus clientes (con los filtros actuales) y un link al WhatsApp de la empresa: manda{" "}
+              <b>RETRO</b> y dicta un audio o escribe cómo va con cada cliente. La IA lo registra aquí como retroalimentación
+              (marcada con 🎙️ WhatsApp).
+            </p>
+            {listasPorAsesor.map((a) => (
+              <div key={a.id} className="px-4 py-2.5 flex flex-wrap items-center gap-3">
+                <div className="min-w-[200px] flex-1">
+                  <div className="text-sm font-bold text-slate-800">{a.nombre}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {a.clientes} clientes · {a.lista.filter((l) => l.retro.length === 0).length} sin respuesta
+                    {!a.telefono && <span className="text-amber-600"> · sin teléfono (elige el chat en WhatsApp)</span>}
+                  </div>
+                </div>
+                <div className="flex gap-1.5">
+                  <a
+                    href={`https://wa.me/${a.telefono ? telWa(a.telefono) : ""}?text=${encodeURIComponent(a.mensaje)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700"
+                  >
+                    WhatsApp
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => copiar(a.mensaje, `lista-${a.id}`)}
+                    className="rounded-lg bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-700"
+                  >
+                    {copiado === `lista-${a.id}` ? "¡Copiado!" : "Copiar"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -608,6 +746,12 @@ function CeldaRetro({ retro }: { retro: Retroalimentacion[] }) {
       {lista.map((r) => (
         <div key={r.id}>
           <span className="font-bold text-slate-800">{r.estadoLabel}</span>
+          {r.origen === "whatsapp" && (
+            <span className="ml-1 rounded bg-emerald-50 px-1 text-[9px] font-bold text-emerald-700">🎙️ WhatsApp</span>
+          )}
+          {esReciente(r.createdAt) && (
+            <span className="ml-1 rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800">Nueva</span>
+          )}
           <span className="text-[10px] text-slate-400">
             {" "}
             · {r.asesorNombre} · {fechaCorta(r.createdAt)}

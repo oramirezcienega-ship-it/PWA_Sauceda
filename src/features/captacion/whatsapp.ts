@@ -5,6 +5,7 @@ import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { iaAgenteActivo } from "@/lib/ia/agente";
 import { notificarNuevoLead } from "@/lib/notificaciones-sistema";
 import { transcribirAudioMeta } from "@/lib/ia/audio";
+import { procesarRetroAsesorWhatsApp } from "@/lib/retro-whatsapp";
 import { detectarTipoNegocio } from "@/lib/types";
 import { obtenerIdAsesorGerardo } from "@/lib/asesores";
 import { interpretarErrorMeta } from "@/lib/whatsapp";
@@ -565,6 +566,18 @@ export async function registrarLeadWhatsApp(
       lead.mensaje = `[audio:${lead.audioId}] (mensaje de tipo audio)`;
       console.error("[WhatsApp Inbound Voice] Error al transcribir audio:", err);
     }
+  }
+
+  // Asesor dando retroalimentación de sus clientes (escribió "RETRO"): no es un lead.
+  try {
+    const consumido = await procesarRetroAsesorWhatsApp(sb, {
+      telefono: lead.telefono,
+      texto: lead.mensaje ?? "",
+      waMessageId: lead.waMessageId,
+    });
+    if (consumido) return;
+  } catch (err) {
+    console.error("[Retro WhatsApp] Error procesando retro del asesor:", err);
   }
 
   // Teléfono normalizado (canónico) y sus variantes para deduplicar.
