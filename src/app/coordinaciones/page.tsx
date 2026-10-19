@@ -100,17 +100,34 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
       .filter(Boolean)
       .join("\n");
   });
-  return [
-    `Hola ${nombre.split(" ")[0]} 👋 Estos son los clientes que te compartimos (${unicos.length}) y cómo los tenemos:`,
+  const linkRetro = `https://wa.me/${WHATSAPP_EMPRESA}?text=RETRO`;
+  const encabezado = [
+    `Hola ${nombre.split(" ")[0]} 👋 Estos son los clientes que te compartimos (${unicos.length}) y cómo los tenemos.`,
     "",
-    renglones.join("\n\n"),
-    "",
-    `🎙️ *Danos tu retro por WhatsApp:* entra aquí, manda *RETRO* y luego un audio o texto diciendo cómo vas con cada cliente (por nombre): https://wa.me/${WHATSAPP_EMPRESA}?text=RETRO`,
+    `🎙️ *Danos tu retro aquí:* ${linkRetro}`,
+    `(manda *RETRO* y luego un audio o texto diciendo cómo vas con cada cliente, por nombre)`,
+  ].join("\n");
+  const pie = [
+    `👉 *Retro por WhatsApp:* ${linkRetro}`,
     urlPortal ? `📲 O en tu portal: ${urlPortal}` : "",
   ]
-    .join("\n")
-    .trim()
-    .slice(0, 3900);
+    .filter(Boolean)
+    .join("\n");
+
+  // Se recorta la lista de clientes, nunca los links: WhatsApp corta los mensajes muy largos
+  const LIMITE = 3500;
+  let cuerpo = "";
+  let incluidos = 0;
+  for (const r of renglones) {
+    const siguiente = cuerpo ? `${cuerpo}\n\n${r}` : r;
+    if (encabezado.length + siguiente.length + pie.length + 80 > LIMITE) break;
+    cuerpo = siguiente;
+    incluidos++;
+  }
+  const faltan = renglones.length - incluidos;
+  if (faltan > 0) cuerpo += `\n\n…y ${faltan} cliente${faltan === 1 ? "" : "s"} más${urlPortal ? " (todos en tu portal)" : ""}.`;
+
+  return [encabezado, "", cuerpo, "", pie].join("\n").trim();
 }
 
 const CLAVE_FILTROS = "coordinaciones:filtros";
