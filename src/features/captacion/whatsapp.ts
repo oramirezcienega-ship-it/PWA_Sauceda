@@ -386,6 +386,15 @@ export interface ReglaServicioFallback {
 }
 
 export const REGLAS_FALLBACK_SERVICIOS: ReglaServicioFallback[] = [
+  // Va primero: "cámara en la azotea" no debe caer en Impermeabilización.
+  {
+    id: "seguridad",
+    nombre: "Seguridad",
+    patron: /(?:c[aá]maras?\b|cctv|videovigilancia|videoportero|interf[oó]n|alarmas?\b|cerco\s*el[eé]ctrico|cerca\s*el[eé]ctrica|seguridad(?!\s*social))/i,
+    terminosBusqueda: ["seguridad", "camara", "cámara", "cctv", "alarma"],
+    campanaDefault: "SAUCEDA Seguridad - Oct 2026",
+    adsetDefault: "Seguridad",
+  },
   {
     id: "impermeabilizacion",
     nombre: "Impermeabilización",
