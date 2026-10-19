@@ -141,7 +141,9 @@ export function detectarTipoNegocio(
   }
 
   // 4. Mantenimiento Postventa (Campaña de Facebook/Meta o palabras clave de Mantenimiento de tu Hogar / Postventa)
+  // "Casa a Punto" es la campaña de Meta de Mantenimiento del Hogar.
   if (
+    /casa\s*a\s*punto/.test(texto) ||
     campLower.includes("mantenimiento") ||
     campLower.includes("postventa") ||
     texto.includes("postventa") ||
