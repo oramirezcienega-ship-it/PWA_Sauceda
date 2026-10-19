@@ -404,7 +404,7 @@ const escHtml = (s: unknown) =>
 
 /**
  * Recordatorio único para los leads sin confirmar tras HORAS_RECORDATORIO_LEAD:
- * se le recuerda al asesor (con los mismos botones) y se avisa a quien lo envió.
+ * se le recuerda al asesor (con los mismos botones).
  */
 export async function procesarRecordatoriosLeadsTelegram(sb: SupabaseClient): Promise<{ recordados: number }> {
   const limite = new Date(Date.now() - HORAS_RECORDATORIO_LEAD * 3600 * 1000).toISOString();
@@ -418,7 +418,7 @@ export async function procesarRecordatoriosLeadsTelegram(sb: SupabaseClient): Pr
     .limit(20);
   if (!pendientes?.length) return { recordados: 0 };
 
-  const { botToken, chatIdGrupo } = await obtenerConfiguracionTelegram(sb);
+  const { botToken } = await obtenerConfiguracionTelegram(sb);
   if (!botToken) return { recordados: 0 };
 
   let recordados = 0;
@@ -447,19 +447,7 @@ export async function procesarRecordatoriosLeadsTelegram(sb: SupabaseClient): Pr
       });
     }
 
-    const chat = await chatDeRemitente(sb, e.enviado_por_id, chatIdGrupo);
-    if (chat) {
-      await enviarMensajeTelegram({
-        botToken,
-        chatId: chat,
-        parseMode: "HTML",
-        texto: `⏰ <b>${escHtml(e.asesor_nombre)}</b> aún no confirma el lead de <b>${escHtml(
-          e.cliente_nombre
-        )}</b> (${escHtml(formatearTelefonoLegible(e.telefono))}), enviado ${horaCortaMx(
-          e.created_at
-        )}. Ya se le envió un recordatorio.`,
-      });
-    }
+    // Ya no se avisa a quien envió el lead: el seguimiento se ve en Coordinaciones > Clientes compartidos.
 
     if (e.actividad_id) {
       const { data: act } = await sb.from("actividades").select("detalle").eq("id", e.actividad_id).maybeSingle();
