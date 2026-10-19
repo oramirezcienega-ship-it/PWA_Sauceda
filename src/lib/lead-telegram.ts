@@ -332,8 +332,9 @@ export function tituloActividadLead(e: {
   estado: string;
   respondido_at?: string | null;
   respondido_via?: string | null;
+  canal?: string | null;
 }): string {
-  const base = `📨 Lead enviado a ${e.asesor_nombre} por Telegram`;
+  const base = `📨 Lead enviado a ${e.asesor_nombre} por ${e.canal === "whatsapp" ? "WhatsApp" : "Telegram"}`;
   if (e.estado === "revisado")
     return `${base} — 🟢 Revisado ${e.respondido_at ? horaCortaMx(e.respondido_at) : ""}${
       e.respondido_via === "manual" ? " (marcado a mano)" : ""
@@ -411,6 +412,7 @@ export async function procesarRecordatoriosLeadsTelegram(sb: SupabaseClient): Pr
     .from("leads_envios_telegram")
     .select("id")
     .eq("estado", "enviado")
+    .eq("canal", "telegram")
     .is("recordatorio_at", null)
     .lte("created_at", limite)
     .limit(20);

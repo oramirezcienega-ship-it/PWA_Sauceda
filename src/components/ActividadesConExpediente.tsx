@@ -58,7 +58,7 @@ const NOMBRES_TIPO: Record<string, string> = {
   correo: "Correo Electrónico",
   mensaje: "Mensaje WhatsApp",
   campana: "Campaña Mautic",
-  telegram_lead: "Lead a asesor (Telegram)",
+  telegram_lead: "Lead a asesor",
 };
 
 export function formatoFechaHoraSegundo(iso: string): string {

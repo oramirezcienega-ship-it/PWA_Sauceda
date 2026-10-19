@@ -17,7 +17,7 @@ import {
   tituloActividadLead,
 } from "@/lib/lead-telegram";
 import { alternarPausaIA, asignarAgente } from "@/app/actions/conversaciones";
-import { variantesTelefono } from "@/lib/telefono";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 
 export interface EnvioLeadTelegram {
   id: string;
@@ -28,6 +28,7 @@ export interface EnvioLeadTelegram {
   respondidoAt: string | null;
   respondidoVia: "telegram" | "manual" | null;
   recordatorioAt: string | null;
+  canal: "telegram" | "whatsapp";
 }
 
 const aEnvio = (e: any): EnvioLeadTelegram => ({
@@ -39,6 +40,7 @@ const aEnvio = (e: any): EnvioLeadTelegram => ({
   respondidoAt: e.respondido_at,
   respondidoVia: e.respondido_via,
   recordatorioAt: e.recordatorio_at,
+  canal: e.canal === "whatsapp" ? "whatsapp" : "telegram",
 });
 
 async function nombreUsuarioActual(sb: ReturnType<typeof supabaseServidor>) {
@@ -60,7 +62,7 @@ export interface PrevisualizacionLeadTelegram {
   fotos?: { ref: string; numero: number; caption: string }[];
   /** Comparativas de precios enviadas al cliente que también se enviarán. */
   comparativas?: { ref: string; numero: number; caption: string }[];
-  asesores?: { id: string; nombre: string; tieneTelegram: boolean }[];
+  asesores?: { id: string; nombre: string; tieneTelegram: boolean; whatsapp: string }[];
 }
 
 /** Arma la vista previa (ficha, resumen de la IA, TXT y fotos) sin enviar nada. */
@@ -74,7 +76,7 @@ export async function previsualizarLeadTelegramAction(telefono: string): Promise
 
     const [resumen, { data: perfiles }] = await Promise.all([
       generarResumenLeadIA(r.info.transcripcion, r.info.datos.clienteNombre),
-      sb.from("perfiles").select("id, nombre, telegram_chat_id").eq("activo", true).order("nombre"),
+      sb.from("perfiles").select("id, nombre, telegram_chat_id, telefono, telefono_whatsapp").eq("activo", true).order("nombre"),
     ]);
 
     return {
@@ -89,6 +91,8 @@ export async function previsualizarLeadTelegramAction(telefono: string): Promise
         id: p.id,
         nombre: p.nombre,
         tieneTelegram: Boolean(p.telegram_chat_id),
+        // Dígitos con lada para wa.me (el de WhatsApp tiene prioridad sobre el de llamadas)
+        whatsapp: normalizarTelefono(p.telefono_whatsapp || p.telefono || ""),
       })),
     };
   } catch (err: any) {
@@ -259,6 +263,96 @@ export async function enviarLeadTelegramAction(input: {
     return { ok: true, avisos, envio: guardado ? aEnvio(guardado) : undefined };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al enviar el lead por Telegram." };
+  }
+}
+
+/**
+ * Pasa el lead al asesor por WhatsApp: el mensaje lo manda quien asigna desde su
+ * propio WhatsApp (wa.me, abierto en el navegador); aquí solo se asigna, se pausa
+ * a Sofía y se registra el envío en la bitácora. No hay acuse automático: el
+ * asesor confirma por WhatsApp y se marca como revisado a mano.
+ */
+export async function registrarLeadWhatsAppAction(input: {
+  telefono: string;
+  asesorId: string;
+  resumen: string;
+  nota: string;
+}): Promise<ResultadoEnvioLead> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const avisos: string[] = [];
+
+    const { data: asesor } = await sb.from("perfiles").select("id, nombre").eq("id", input.asesorId).maybeSingle();
+    if (!asesor) return { ok: false, error: "No se encontró al asesor." };
+
+    const yo = await nombreUsuarioActual(sb);
+    const r = await armarInformacionLead(sb, input.telefono, yo.nombre);
+    if (!r.ok || !r.info) return { ok: false, error: r.error };
+    const info = r.info;
+
+    const fila = {
+      id: crypto.randomUUID(),
+      telefono: info.telefono,
+      prospecto_id: info.datos.prospectoId,
+      expediente_id: info.datos.expedienteId,
+      cliente_nombre: info.datos.clienteNombre,
+      asesor_id: asesor.id,
+      asesor_nombre: asesor.nombre,
+      enviado_por_id: yo.id,
+      enviado_por_nombre: yo.nombre,
+      nota: input.nota.trim(),
+      resumen: input.resumen.trim(),
+      estado: "enviado",
+      canal: "whatsapp",
+    };
+    const { error: errIns } = await sb.from("leads_envios_telegram").insert(fila);
+    if (errIns) avisos.push(`No se pudo registrar el envío: ${errIns.message}`);
+
+    const pausa = await alternarPausaIA(input.telefono, true);
+    if (!pausa.ok) avisos.push(`No se pudo pausar a Sofía: ${pausa.error}`);
+    const asig = await asignarAgente(input.telefono, asesor.nombre);
+    if (!asig.ok) avisos.push(`No se pudo asignar la conversación: ${asig.error}`);
+
+    let actividadId: string | null = null;
+    if (fila.expediente_id || fila.prospecto_id) {
+      const detalle = [
+        `Enviado por ${yo.nombre || "—"} desde su WhatsApp. Se asignó a ${asesor.nombre} y se pausó a Sofía.`,
+        `Incluye: ficha del cliente y resumen (la conversación y las fotos quedan en el CRM).`,
+        fila.nota ? `Nota: ${fila.nota}` : "",
+        fila.resumen ? `Resumen:\n${fila.resumen}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const { data: act } = await sb
+        .from("actividades")
+        .insert({
+          expediente_id: fila.expediente_id,
+          prospecto_id: fila.prospecto_id,
+          tipo: "telegram_lead",
+          titulo: tituloActividadLead(fila),
+          detalle,
+        })
+        .select("id")
+        .maybeSingle();
+      actividadId = act?.id ?? null;
+    }
+
+    const { data: guardado } = errIns
+      ? { data: null }
+      : await sb
+          .from("leads_envios_telegram")
+          .update({ actividad_id: actividadId })
+          .eq("id", fila.id)
+          .select("*")
+          .maybeSingle();
+
+    if (fila.expediente_id) revalidatePath(`/expedientes/${fila.expediente_id}`);
+    if (fila.prospecto_id) revalidatePath(`/prospectos/${fila.prospecto_id}`);
+
+    return { ok: true, avisos, envio: guardado ? aEnvio(guardado) : undefined };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al registrar el lead enviado por WhatsApp." };
   }
 }
 

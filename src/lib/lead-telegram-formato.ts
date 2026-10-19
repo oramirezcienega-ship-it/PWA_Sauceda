@@ -67,3 +67,41 @@ export function armarHtmlLeadTelegram(d: DatosLeadTelegram, resumen: string, not
     .join("\n")
     .replace(/\n{3,}/g, "\n\n");
 }
+
+/**
+ * Mismo mensaje en texto plano con formato de WhatsApp (*negritas*), para
+ * mandarlo desde el WhatsApp de quien asigna. WhatsApp no lleva adjuntos ni
+ * botones: la conversación y las fotos quedan en el CRM.
+ */
+export function armarTextoLeadWhatsApp(d: DatosLeadTelegram, resumen: string, nota: string): string {
+  const folios = [d.expedienteId, d.prospectoId].filter(Boolean).join(" · ");
+  const partes: (string | null)[] = [
+    `📨 *NUEVO LEAD ASIGNADO*`,
+    ``,
+    `👤 *Cliente:* ${d.clienteNombre}`,
+    d.telefonoLegible
+      ? `📞 *Teléfono:* ${d.telefonoLegible}${d.telefonoWa ? `\nhttps://wa.me/${d.telefonoWa}` : ""}`
+      : null,
+    d.tipoNegocio ? `💼 *Servicio:* ${d.tipoNegocio}` : null,
+    folios ? `🗂️ *Folios:* ${folios}` : null,
+    d.direccion ? `🏠 *Dirección:* ${d.direccion}` : null,
+    d.necesidad ? `🎯 *Necesidad:* ${d.necesidad.slice(0, 400)}` : null,
+  ];
+  const r = (resumen || "").trim();
+  if (r) partes.push("", `🧠 *Resumen de la conversación:*`, r.slice(0, 1500));
+  const n = (nota || "").trim();
+  if (n) partes.push("", `🗒️ *Nota de ${d.asignadoPor || "coordinación"}:* ${n.slice(0, 600)}`);
+  partes.push(
+    "",
+    `💬 Conversación completa (${d.totalMensajes} mensajes)${
+      d.fotosCliente > 0 || d.comparativas ? ", fotos y comparativa" : ""
+    } en el CRM: Conversaciones${folios ? ` / ${folios}` : ""}.`,
+    "",
+    `Asignado por: ${d.asignadoPor || "SAUCEDA"}. Sofía quedó en pausa para este cliente.`,
+    `👇 Confírmame por aquí que lo recibiste.`
+  );
+  return partes
+    .filter((p): p is string => p !== null)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}

@@ -3044,11 +3044,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           <span>Rescate Móvil</span>
                         </button>
                       )}
-                      {/* Pasar el lead a un asesor por Telegram (con vista previa y acuse) */}
+                      {/* Pasar el lead a un asesor por WhatsApp o Telegram (con vista previa) */}
                       <button
                         type="button"
                         onClick={() => setMostrarPasarLead(true)}
-                        title="Asignar el lead a un asesor y enviarle por Telegram la ficha, el resumen, la conversación y las fotos"
+                        title="Asignar el lead a un asesor y enviarle la ficha y el resumen por tu WhatsApp o por Telegram"
                         className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
                       >
                         <span>📨</span>
