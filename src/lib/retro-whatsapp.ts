@@ -17,6 +17,8 @@ import {
  * todo lo que mande, texto o audio dictado (ya transcrito por el webhook), se
  * interpreta con IA como retroalimentación de sus clientes compartidos y se
  * guarda en retroalimentacion_asesor con origen "whatsapp". "LISTO" la cierra.
+ * Cada cliente de la lista trae su propio link ("RETRO 4771234567 (Nombre)"): la
+ * sesión queda enfocada en ese cliente y lo que diga se le asigna a él.
  */
 
 const MINUTOS_SESION = 60;
@@ -66,13 +68,21 @@ interface RetroInterpretada {
 }
 
 /** Pide a la IA que convierta el mensaje del asesor en retro por cliente. */
-async function interpretarRetro(texto: string, clientes: ClienteRetro[]): Promise<RetroInterpretada[]> {
+async function interpretarRetro(
+  texto: string,
+  clientes: ClienteRetro[],
+  enfocado: ClienteRetro | null
+): Promise<RetroInterpretada[]> {
   const hoy = new Date().toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" });
   const system = `Eres el coordinador comercial de SAUCEDA. Un asesor de ventas te manda (por texto o audio transcrito) cómo va con sus clientes.
 Convierte su mensaje en retroalimentación por cliente. Solo usa clientes de la lista (por número o por nombre, acepta nombres aproximados o apodos).
 Estados válidos: ${Object.entries(ESTADOS_RETRO_LEAD).map(([k, v]) => `"${k}" (${v})`).join(", ")}.
 Responde SOLO un JSON: [{"n": número del cliente, "estado": estado válido, "comentario": resumen breve y fiel de lo que dijo de ese cliente, "siguiente_paso": "" o lo que sigue, "siguiente_paso_fecha": null o "AAAA-MM-DD"}].
-Hoy es ${hoy} (día/mes/año). Si no menciona a ningún cliente de la lista, responde [].`;
+Hoy es ${hoy} (día/mes/año). ${
+    enfocado
+      ? `El asesor está dando retro del cliente ${enfocado.n} (${enfocado.nombre}): si no nombra a otro cliente, todo se refiere a ese.`
+      : "Si no menciona a ningún cliente de la lista, responde []."
+  }`;
   const user = `Clientes del asesor:\n${clientes
     .map((c) => `${c.n}. ${c.nombre} (${c.telefono.slice(-10)})${c.ultimo.detalle?.tipoNegocio ? ` · ${c.ultimo.detalle.tipoNegocio}` : ""}`)
     .join("\n")}\n\nMensaje del asesor:\n${texto}`;
@@ -137,7 +147,7 @@ export async function procesarRetroAsesorWhatsApp(
 
   const { data: perfiles } = await sb
     .from("perfiles")
-    .select("id, nombre, telefono, telefono_whatsapp, retro_whatsapp_hasta, retro_whatsapp_ultimo_msg")
+    .select("id, nombre, telefono, telefono_whatsapp, retro_whatsapp_hasta, retro_whatsapp_ultimo_msg, retro_whatsapp_cliente")
     .eq("activo", true);
   const asesor = (perfiles || []).find(
     (p: any) => [p.telefono_whatsapp, p.telefono].some((t) => t && normalizarTelefono(t) === tel)
@@ -156,7 +166,7 @@ export async function procesarRetroAsesorWhatsApp(
   const nombre = String(asesor.nombre || "").split(" ")[0];
 
   if (!esComando && COMANDO_SALIR.test(textoOriginal)) {
-    await sb.from("perfiles").update({ retro_whatsapp_hasta: null, retro_whatsapp_ultimo_msg: mensaje.waMessageId || null }).eq("id", asesor.id);
+    await sb.from("perfiles").update({ retro_whatsapp_hasta: null, retro_whatsapp_cliente: null, retro_whatsapp_ultimo_msg: mensaje.waMessageId || null }).eq("id", asesor.id);
     await responder(`¡Gracias, ${nombre}! 🙌 Ya quedó tu retro en el CRM. Cuando quieras dar más, escribe *RETRO*.`);
     return true;
   }
@@ -175,9 +185,43 @@ export async function procesarRetroAsesorWhatsApp(
     return true;
   }
 
-  const texto = textoOriginal.replace(COMANDO_RETRO, "").trim();
+  let texto = textoOriginal.replace(COMANDO_RETRO, "").trim();
   if (/\(mensaje de tipo audio\)/.test(texto)) {
     await responder("No pude escuchar tu audio 😕 ¿Me lo mandas otra vez o me lo escribes?");
+    return true;
+  }
+
+  // Cliente en foco: viene del link "Dar retro" de un cliente ("RETRO 4771234567 (Nombre)")
+  // o de un mensaje anterior de la misma sesión. Un "RETRO" solo lo limpia.
+  let telEnfocado: string | null = esComando ? null : asesor.retro_whatsapp_cliente || null;
+  const conTelefono = esComando ? texto.match(/^(\+?\d[\d\s-]{8,16}\d)\s*(\([^)]*\))?[\s:,.-]*/) : null;
+  if (conTelefono) {
+    const buscado = normalizarTelefono(conTelefono[1]);
+    if (!clientes.some((c) => normalizarTelefono(c.telefono) === buscado)) {
+      await responder(`No encontré ese cliente entre los que te compartimos 🤔 Estos son los tuyos:\n\n${listaParaAsesor(clientes)}`);
+      return true;
+    }
+    telEnfocado = buscado;
+    texto = texto.slice(conTelefono[0].length).trim();
+  }
+  if (esComando) await sb.from("perfiles").update({ retro_whatsapp_cliente: telEnfocado }).eq("id", asesor.id);
+  const enfocado = telEnfocado ? clientes.find((c) => normalizarTelefono(c.telefono) === telEnfocado) || null : null;
+
+  // Link de un cliente sin más texto: se le pregunta cómo va con ese
+  if (!texto && enfocado) {
+    const r = ultimaRetro(enfocado);
+    const d = enfocado.ultimo.detalle;
+    await responder(
+      [
+        `📝 Retro de *${enfocado.nombre}* · ${enfocado.telefono.slice(-10)}`,
+        d?.tipoNegocio ? `💼 ${d.tipoNegocio}${d.etapa ? ` · ${d.etapa}` : ""}` : "",
+        `🔁 Último estatus: ${r ? `${r.estadoLabel}${r.comentario ? ` — ${r.comentario}` : ""}` : "Sin respuesta"}`,
+        "",
+        `🎙️ Mándame un *audio* o *texto* con cómo vas: si ya lo contactaste, si no contesta, si cotizaste, si se cerró o no le interesa, y qué sigue.`,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    );
     return true;
   }
 
@@ -197,7 +241,7 @@ export async function procesarRetroAsesorWhatsApp(
     return true;
   }
 
-  const interpretadas = await interpretarRetro(texto, clientes);
+  const interpretadas = await interpretarRetro(texto, clientes, enfocado);
   if (interpretadas.length === 0) {
     await responder(
       `No identifiqué a qué cliente te refieres 🤔 Dime el nombre o número de la lista y cómo vas con él.\n\n${listaParaAsesor(clientes)}`

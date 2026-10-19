@@ -69,9 +69,16 @@ function mensajeLead(l: LeadCompartidoPortal): string {
     d?.expedienteId && app ? `\n🔗 Expediente: ${app}/expediente/${d.expedienteId}` : "",
     d?.ultimaCotizacion?.token && app ? `🔗 Cotización: ${app}/cotizacion/${d.ultimaCotizacion.token}` : "",
     `\nCompartido el ${fechaHora(l.createdAt)}${l.enviadoPor ? ` por ${l.enviadoPor}` : ""}`,
+    soloDigitos(l.telefono).length >= 10 ? `\n🎙️ Dar retro de este cliente (audio o texto): ${linkRetroCliente(l)}` : "",
   ];
   return lineas.filter(Boolean).join("\n").slice(0, 3800);
 }
+
+/** Link al WhatsApp de la empresa que abre la retro de un cliente en particular (lo entiende lib/retro-whatsapp). */
+const linkRetroCliente = (l: LeadCompartidoPortal) =>
+  `https://wa.me/${WHATSAPP_EMPRESA}?text=${encodeURIComponent(
+    `RETRO ${soloDigitos(l.telefono).slice(-10)} (${l.clienteNombre.replace(/[()]/g, "").trim()})`
+  )}`;
 
 /** Lista de clientes compartidos de un asesor, con el link para dar retro por WhatsApp (texto o audio). */
 function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPortal: string | null): string {
@@ -96,6 +103,7 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
       d?.fraccionamiento || d?.direccion ? `   📍 ${d.fraccionamiento || d.direccion}` : "",
       valor ? `   💰 ${valor}` : "",
       `   🔁 ${l.retro[0] ? textoRetro(l.retro[0]) : "Sin respuesta"}`,
+      soloDigitos(l.telefono).length >= 10 ? `   👉 Dar retro de este cliente: ${linkRetroCliente(l)}` : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -105,7 +113,7 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
     `Hola ${nombre.split(" ")[0]} 👋 Estos son los clientes que te compartimos (${unicos.length}) y cómo los tenemos.`,
     "",
     `🎙️ *Danos tu retro aquí:* ${linkRetro}`,
-    `(manda *RETRO* y luego un audio o texto diciendo cómo vas con cada cliente, por nombre)`,
+    `(o toca *Dar retro* en cada cliente y mándame un audio o texto con cómo vas)`,
   ].join("\n");
   const pie = [
     `👉 *Retro por WhatsApp:* ${linkRetro}`,
@@ -131,6 +139,33 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
 }
 
 const CLAVE_FILTROS = "coordinaciones:filtros";
+
+/** Inicio y fin (ms, fin exclusivo) del periodo elegido; null = sin límite. */
+function rangoPeriodo(periodo: string, desde: string, hasta: string): [number | null, number | null] {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const dia = 86400000;
+  const h = hoy.getTime();
+  switch (periodo) {
+    case "hoy":
+      return [h, null];
+    case "ayer":
+      return [h - dia, h];
+    case "7":
+    case "15":
+    case "30":
+      return [h - (Number(periodo) - 1) * dia, null];
+    case "mes":
+      return [new Date(hoy.getFullYear(), hoy.getMonth(), 1).getTime(), null];
+    case "rango":
+      return [
+        desde ? new Date(`${desde}T00:00:00`).getTime() : null,
+        hasta ? new Date(`${hasta}T00:00:00`).getTime() + dia : null,
+      ];
+    default:
+      return [null, null];
+  }
+}
 const esReciente = (iso: string) => Date.now() - new Date(iso).getTime() < 86400000;
 
 const TONO_ESTADO: Record<string, string> = {
@@ -150,6 +185,9 @@ export default function PaginaCoordinaciones() {
   const [filtroAsesor, setFiltroAsesor] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
   const [copiado, setCopiado] = useState("");
   const [verEnvioListas, setVerEnvioListas] = useState(false);
   const [filtrosListos, setFiltrosListos] = useState(false);
@@ -162,6 +200,9 @@ export default function PaginaCoordinaciones() {
       if (typeof f.filtroAsesor === "string") setFiltroAsesor(f.filtroAsesor);
       if (typeof f.filtroEstado === "string") setFiltroEstado(f.filtroEstado);
       if (typeof f.busqueda === "string") setBusqueda(f.busqueda);
+      if (typeof f.filtroPeriodo === "string") setFiltroPeriodo(f.filtroPeriodo);
+      if (typeof f.fechaDesde === "string") setFechaDesde(f.fechaDesde);
+      if (typeof f.fechaHasta === "string") setFechaHasta(f.fechaHasta);
     } catch {}
     setFiltrosListos(true);
   }, []);
@@ -169,9 +210,12 @@ export default function PaginaCoordinaciones() {
   useEffect(() => {
     if (!filtrosListos) return;
     try {
-      localStorage.setItem(CLAVE_FILTROS, JSON.stringify({ pestana, filtroAsesor, filtroEstado, busqueda }));
+      localStorage.setItem(
+        CLAVE_FILTROS,
+        JSON.stringify({ pestana, filtroAsesor, filtroEstado, busqueda, filtroPeriodo, fechaDesde, fechaHasta })
+      );
     } catch {}
-  }, [filtrosListos, pestana, filtroAsesor, filtroEstado, busqueda]);
+  }, [filtrosListos, pestana, filtroAsesor, filtroEstado, busqueda, filtroPeriodo, fechaDesde, fechaHasta]);
 
   const cargar = async () => {
     setCargando(true);
@@ -201,9 +245,15 @@ export default function PaginaCoordinaciones() {
   }, [coordinaciones, leads]);
 
   const coincide = (texto: string) => !busqueda || texto.toLowerCase().includes(busqueda.toLowerCase());
+  const [inicioPeriodo, finPeriodo] = rangoPeriodo(filtroPeriodo, fechaDesde, fechaHasta);
+  const enPeriodo = (iso: string) => {
+    const t = new Date(iso).getTime();
+    return (!inicioPeriodo || t >= inicioPeriodo) && (!finPeriodo || t < finPeriodo);
+  };
 
   const coordFiltradas = coordinaciones.filter(
     (c) =>
+      enPeriodo(c.createdAt) &&
       (!filtroAsesor || c.asesores.some((a) => a.id === filtroAsesor)) &&
       (!filtroEstado ||
         (filtroEstado === "evaluando" ? ["evaluando", "propuesta_enviada"].includes(c.estado) : c.estado === filtroEstado)) &&
@@ -212,6 +262,7 @@ export default function PaginaCoordinaciones() {
 
   const leadsFiltrados = leads.filter(
     (l) =>
+      enPeriodo(l.createdAt) &&
       (!filtroAsesor || l.asesorId === filtroAsesor) &&
       (!filtroEstado ||
         (filtroEstado === "sin_respuesta"
@@ -372,6 +423,39 @@ export default function PaginaCoordinaciones() {
                 placeholder="Buscar cliente, servicio…"
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs w-52"
               />
+              <select
+                value={filtroPeriodo}
+                onChange={(e) => setFiltroPeriodo(e.target.value)}
+                title={pestana === "clientes" ? "Fecha en que se compartió" : "Fecha en que se creó"}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+              >
+                <option value="">Cualquier fecha</option>
+                <option value="hoy">Hoy</option>
+                <option value="ayer">Ayer</option>
+                <option value="7">Últimos 7 días</option>
+                <option value="15">Últimos 15 días</option>
+                <option value="30">Últimos 30 días</option>
+                <option value="mes">Este mes</option>
+                <option value="rango">Rango de fechas…</option>
+              </select>
+              {filtroPeriodo === "rango" && (
+                <>
+                  <input
+                    type="date"
+                    value={fechaDesde}
+                    onChange={(e) => setFechaDesde(e.target.value)}
+                    title="Desde"
+                    className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    type="date"
+                    value={fechaHasta}
+                    onChange={(e) => setFechaHasta(e.target.value)}
+                    title="Hasta"
+                    className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  />
+                </>
+              )}
               <select
                 value={filtroAsesor}
                 onChange={(e) => setFiltroAsesor(e.target.value)}
