@@ -49,7 +49,7 @@ const telWa = (t: string) => {
 const origenApp = () => (typeof window !== "undefined" ? window.location.origin : "");
 
 /** Ficha del cliente compartido para reenviarla al asesor por WhatsApp o Telegram. */
-function mensajeLead(l: LeadCompartidoPortal): string {
+function mensajeLead(l: LeadCompartidoPortal, urlPortal: string | null): string {
   const d = l.detalle;
   const app = origenApp();
   const ubicacion = Array.from(new Set([d?.direccion, d?.fraccionamiento].filter(Boolean))).join(", ");
@@ -69,16 +69,24 @@ function mensajeLead(l: LeadCompartidoPortal): string {
     d?.expedienteId && app ? `\n🔗 Expediente: ${app}/expediente/${d.expedienteId}` : "",
     d?.ultimaCotizacion?.token && app ? `🔗 Cotización: ${app}/cotizacion/${d.ultimaCotizacion.token}` : "",
     `\nCompartido el ${fechaHora(l.createdAt)}${l.enviadoPor ? ` por ${l.enviadoPor}` : ""}`,
-    soloDigitos(l.telefono).length >= 10 ? `\n🎙️ Dar retro de este cliente (audio o texto): ${linkRetroCliente(l)}` : "",
+    urlPortal || soloDigitos(l.telefono).length >= 10
+      ? `\n✍️ *Dar retro de este cliente:* ${linkRetroCliente(l, urlPortal)}`
+      : "",
   ];
   return lineas.filter(Boolean).join("\n").slice(0, 3800);
 }
 
-/** Link al WhatsApp de la empresa que abre la retro de un cliente en particular (lo entiende lib/retro-whatsapp). */
-const linkRetroCliente = (l: LeadCompartidoPortal) =>
-  `https://wa.me/${WHATSAPP_EMPRESA}?text=${encodeURIComponent(
-    `RETRO ${soloDigitos(l.telefono).slice(-10)} (${l.clienteNombre.replace(/[()]/g, "").trim()})`
-  )}`;
+/**
+ * Link para dar retro de un cliente en particular: la ficha del cliente en el portal del
+ * asesor (sin contraseña). Si el asesor aún no tiene link del portal, el chat de la empresa
+ * con "RETRO <teléfono>" (lo entiende lib/retro-whatsapp).
+ */
+const linkRetroCliente = (l: LeadCompartidoPortal, urlPortal: string | null) =>
+  urlPortal
+    ? `${urlPortal}/cliente/${l.id}`
+    : `https://wa.me/${WHATSAPP_EMPRESA}?text=${encodeURIComponent(
+        `RETRO ${soloDigitos(l.telefono).slice(-10)} (${l.clienteNombre.replace(/[()]/g, "").trim()})`
+      )}`;
 
 /** Lista de clientes compartidos de un asesor, con el link para dar retro por WhatsApp (texto o audio). */
 function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPortal: string | null): string {
@@ -103,7 +111,7 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
       d?.fraccionamiento || d?.direccion ? `   📍 ${d.fraccionamiento || d.direccion}` : "",
       valor ? `   💰 ${valor}` : "",
       `   🔁 ${l.retro[0] ? textoRetro(l.retro[0]) : "Sin respuesta"}`,
-      soloDigitos(l.telefono).length >= 10 ? `   👉 Dar retro de este cliente: ${linkRetroCliente(l)}` : "",
+      urlPortal || soloDigitos(l.telefono).length >= 10 ? `   👉 *Dar retro:* ${linkRetroCliente(l, urlPortal)}` : "",
     ]
       .filter(Boolean)
       .join("\n");
@@ -112,12 +120,13 @@ function mensajeListaAsesor(nombre: string, lista: LeadCompartidoPortal[], urlPo
   const encabezado = [
     `Hola ${nombre.split(" ")[0]} 👋 Estos son los clientes que te compartimos (${unicos.length}) y cómo los tenemos.`,
     "",
-    `🎙️ *Danos tu retro aquí:* ${linkRetro}`,
-    `(o toca *Dar retro* en cada cliente y mándame un audio o texto con cómo vas)`,
+    urlPortal
+      ? `👉 Toca *Dar retro* en cada cliente: se abre su ficha, eliges el estatus y dictas o escribes cómo vas (sin contraseña).`
+      : `🎙️ *Danos tu retro aquí:* ${linkRetro}\n(o toca *Dar retro* en cada cliente y mándame un audio o texto con cómo vas)`,
   ].join("\n");
   const pie = [
-    `👉 *Retro por WhatsApp:* ${linkRetro}`,
-    urlPortal ? `📲 O en tu portal: ${urlPortal}` : "",
+    urlPortal ? `📲 Todos tus clientes: ${urlPortal}` : "",
+    `🎙️ ¿Prefieres mandar un audio? Escríbenos aquí: ${linkRetro}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -522,6 +531,23 @@ export default function PaginaCoordinaciones() {
                   <div className="text-[11px] text-slate-500">
                     {a.clientes} clientes · {a.lista.filter((l) => l.retro.length === 0).length} sin respuesta
                     {!a.telefono && <span className="text-amber-600"> · sin teléfono (elige el chat en WhatsApp)</span>}
+                    {!links.find((x) => x.asesorId === a.id)?.url && (
+                      <span className="text-amber-600">
+                        {" "}
+                        · sin link del portal (la retro irá por chat){" "}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const r = await crearLinkPortalAsesor(a.id);
+                            if (!r.ok) return alert(r.error || "No se pudo crear el link.");
+                            setLinks((prev) => prev.map((x) => (x.asesorId === a.id ? { ...x, url: r.url || null } : x)));
+                          }}
+                          className="font-bold text-blue-700 hover:underline"
+                        >
+                          Crear link
+                        </button>
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-1.5">
@@ -630,7 +656,7 @@ export default function PaginaCoordinaciones() {
                   )}
                   {leadsFiltrados.map((l) => {
                     const d = l.detalle;
-                    const msg = mensajeLead(l);
+                    const msg = mensajeLead(l, links.find((x) => x.asesorId === l.asesorId)?.url || null);
                     const app = origenApp();
                     return (
                       <tr key={l.id} className="hover:bg-slate-50/60 align-top">
