@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { procesarAlertasYResumenesAgenda } from "@/lib/agenda-notificaciones";
-import { procesarRecordatoriosLeadsTelegram } from "@/lib/lead-telegram";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { avanzarSolicitudesAbiertas } from "@/lib/solicitudes-proveedor";
 
@@ -45,12 +44,6 @@ async function manejarCron(request: NextRequest) {
       forzar: forzar || undefined,
     });
 
-    // Leads pasados a asesores por Telegram sin confirmar
-    const leadsTelegram = await procesarRecordatoriosLeadsTelegram(supabaseServidor()).catch((e) => {
-      console.error("[Cron agenda] Error en recordatorios de leads por Telegram:", e);
-      return { recordados: 0 };
-    });
-
     // Solicitudes a proveedores: vence las que no respondieron y, en cascada, pasa al siguiente
     const solicitudesProveedor = await avanzarSolicitudesAbiertas(supabaseServidor()).catch((e) => {
       console.error("[Cron agenda] Error al avanzar solicitudes a proveedores:", e);
@@ -61,7 +54,6 @@ async function manejarCron(request: NextRequest) {
       success: true,
       timestamp: new Date().toISOString(),
       ...resultado,
-      leadsTelegram,
       solicitudesProveedor,
     });
   } catch (err: any) {

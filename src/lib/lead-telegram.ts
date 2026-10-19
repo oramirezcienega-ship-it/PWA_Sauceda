@@ -8,12 +8,10 @@ import { modeloClaude, opcionesClaude, textoDeRespuesta } from "@/lib/ia/claude"
 
 /**
  * Pasar un lead a un asesor por Telegram (desde Conversaciones): ficha del
- * cliente, conversación en TXT, fotos del cliente, confirmación de lectura y
- * recordatorio si no confirma.
+ * cliente, conversación en TXT, fotos del cliente y confirmación de lectura.
+ * (Sin recordatorios: el seguimiento se ve en Coordinaciones > Clientes compartidos.)
  */
 
-/** Horas sin confirmación tras las que se recuerda al asesor y se avisa a quien envió. */
-export const HORAS_RECORDATORIO_LEAD = 2;
 
 const MAX_FOTOS = 10;
 /** Comparativas de precios enviadas al cliente que se reenvían al asesor (las más recientes). */
@@ -402,61 +400,3 @@ export async function registrarRespuestaLead(
 const escHtml = (s: unknown) =>
   String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/**
- * Recordatorio único para los leads sin confirmar tras HORAS_RECORDATORIO_LEAD:
- * se le recuerda al asesor (con los mismos botones).
- */
-export async function procesarRecordatoriosLeadsTelegram(sb: SupabaseClient): Promise<{ recordados: number }> {
-  const limite = new Date(Date.now() - HORAS_RECORDATORIO_LEAD * 3600 * 1000).toISOString();
-  const { data: pendientes } = await sb
-    .from("leads_envios_telegram")
-    .select("id")
-    .eq("estado", "enviado")
-    .eq("canal", "telegram")
-    .is("recordatorio_at", null)
-    .lte("created_at", limite)
-    .limit(20);
-  if (!pendientes?.length) return { recordados: 0 };
-
-  const { botToken } = await obtenerConfiguracionTelegram(sb);
-  if (!botToken) return { recordados: 0 };
-
-  let recordados = 0;
-  for (const { id } of pendientes) {
-    // Se "reclama" el envío para que dos ejecuciones simultáneas no recuerden dos veces
-    const { data: e } = await sb
-      .from("leads_envios_telegram")
-      .update({ recordatorio_at: new Date().toISOString() })
-      .eq("id", id)
-      .is("recordatorio_at", null)
-      .eq("estado", "enviado")
-      .select("*")
-      .maybeSingle();
-    if (!e) continue;
-
-    const { data: asesor } = await sb.from("perfiles").select("telegram_chat_id").eq("id", e.asesor_id).maybeSingle();
-    if (asesor?.telegram_chat_id) {
-      await enviarMensajeTelegram({
-        botToken,
-        chatId: asesor.telegram_chat_id,
-        parseMode: "HTML",
-        texto: `⏰ <b>RECORDATORIO</b>\nTienes pendiente confirmar el lead de <b>${escHtml(e.cliente_nombre)}</b> (${escHtml(
-          formatearTelefonoLegible(e.telefono)
-        )}) que te enviaron hace más de ${HORAS_RECORDATORIO_LEAD} h.\nLa información completa está en el mensaje anterior.`,
-        inlineKeyboard: tecladoLead(e.id, await urlPortalParaTelegram(sb, e.asesor_id)),
-      });
-    }
-
-    // Ya no se avisa a quien envió el lead: el seguimiento se ve en Coordinaciones > Clientes compartidos.
-
-    if (e.actividad_id) {
-      const { data: act } = await sb.from("actividades").select("detalle").eq("id", e.actividad_id).maybeSingle();
-      await sb
-        .from("actividades")
-        .update({ detalle: `${act?.detalle || ""}\n⏰ Recordatorio enviado ${horaCortaMx(new Date().toISOString())} (sin confirmación).`.trim() })
-        .eq("id", e.actividad_id);
-    }
-    recordados++;
-  }
-  return { recordados };
-}

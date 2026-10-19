@@ -11,7 +11,6 @@ import {
   generarResumenLeadIA,
   descargarMediaWhatsApp,
   registrarRespuestaLead,
-  procesarRecordatoriosLeadsTelegram,
   tecladoLead,
   urlPortalParaTelegram,
   tituloActividadLead,
@@ -356,12 +355,11 @@ export async function registrarLeadWhatsAppAction(input: {
   }
 }
 
-/** Último envío del lead de esta conversación (y dispara recordatorios vencidos). */
+/** Último envío del lead de esta conversación. */
 export async function obtenerEnvioLeadTelegramAction(telefono: string): Promise<EnvioLeadTelegram | null> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
-    await procesarRecordatoriosLeadsTelegram(sb).catch(() => undefined);
     const ids = telefono.startsWith("messenger:") || telefono.startsWith("instagram:") ? [telefono] : variantesTelefono(telefono);
     const { data } = await sb
       .from("leads_envios_telegram")
