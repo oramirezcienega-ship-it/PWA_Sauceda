@@ -1038,9 +1038,16 @@ function aMensajes(
   for (const f of historia) {
     if (!f.texto?.trim()) continue;
     const role = f.direccion === "in" ? "user" : "assistant";
+    // Notas de voz: "[audio:<id>] <transcripción>" → texto legible para el modelo.
+    const content = f.texto.replace(
+      /^\[audio:[^\]]+\]\s*([\s\S]*)$/,
+      (_, t: string) => t && t !== "(mensaje de tipo audio)"
+        ? `(nota de voz del cliente, transcrita) ${t}`
+        : "(el cliente envió una nota de voz que no se pudo transcribir; pídele amablemente que lo escriba)",
+    );
     const last = msgs[msgs.length - 1];
-    if (last && last.role === role) last.content += "\n" + f.texto;
-    else msgs.push({ role, content: f.texto });
+    if (last && last.role === role) last.content += "\n" + content;
+    else msgs.push({ role, content });
   }
   // La API exige que el primer mensaje sea del usuario. Si el hilo comenzó con un mensaje saliente
   // (por ejemplo, una plantilla de campaña o notificación enviada por nosotros), agregamos un mensaje

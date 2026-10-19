@@ -91,7 +91,7 @@ interface PayloadWhatsApp {
           image?: { id?: string; caption?: string };
           sticker?: { id?: string };
           video?: { id?: string; caption?: string };
-          document?: { id?: string; filename?: string; caption?: string };
+          document?: { id?: string; filename?: string; caption?: string; mime_type?: string };
           reaction?: { message_id?: string; emoji?: string };
           contacts?: Array<{
             name?: { formatted_name?: string; first_name?: string; last_name?: string };
@@ -153,6 +153,9 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
             texto = emoji ? `[reacción: ${emoji}]` : `[reacción: quitada]`;
           } else if (m.type === "video" && m.video?.id) {
             texto = `[video:${m.video.id}]${m.video.caption ? ' ' + m.video.caption : ''}`;
+          } else if (m.type === "document" && m.document?.id && m.document.mime_type?.startsWith("audio/")) {
+            // Archivo de audio enviado como documento (mp3, m4a...): se trata igual que una nota de voz.
+            texto = `[audio:${m.document.id}] (mensaje de tipo audio)`;
           } else if (m.type === "document" && m.document?.id) {
             texto = `[document:${m.document.id}]${m.document.filename ? ' ' + (m.document.filename || m.document.caption || '') : ''}`;
           } else if (m.type === "audio" && m.audio?.id) {
@@ -181,7 +184,9 @@ export function extraerMensajes(payload: PayloadWhatsApp): MensajeWhatsApp[] {
           nombre: nombrePorWaId[m.from],
           mensaje: texto,
           waMessageId: m.id,
-          audioId: m.type === "audio" ? m.audio?.id : undefined,
+          audioId: m.type === "audio"
+            ? m.audio?.id
+            : m.type === "document" && m.document?.mime_type?.startsWith("audio/") ? m.document.id : undefined,
           referral: m.referral,
         });
       }
@@ -559,13 +564,17 @@ export async function registrarLeadWhatsApp(
 ): Promise<void> {
   const sb = supabaseServidor();
 
-  // Si es un audio, transcribirlo usando Whisper antes de continuar
+  // Si es un audio, transcribirlo antes de continuar. Si se logra, Sofía contesta
+  // con normalidad; si no, se pausa y se avisa al equipo (manejarFlujoAudio).
+  let audioSinTranscribir = false;
   if (lead.audioId) {
+    audioSinTranscribir = true;
     try {
       console.log(`[WhatsApp Inbound Voice] Se detectó audio con id ${lead.audioId} para ${lead.telefono}. Transcribiendo...`);
       const textoTranscrito = await transcribirAudioMeta(lead.audioId);
-      if (textoTranscrito) {
+      if (textoTranscrito && textoTranscrito !== "(audio sin voz entendible)") {
         lead.mensaje = `[audio:${lead.audioId}] ${textoTranscrito}`;
+        audioSinTranscribir = false;
         console.log(`[WhatsApp Inbound Voice] Transcripción exitosa: "${textoTranscrito}"`);
       } else {
         lead.mensaje = `[audio:${lead.audioId}] (mensaje de tipo audio)`;
@@ -794,8 +803,8 @@ export async function registrarLeadWhatsApp(
       waMessageId: lead.waMessageId,
     });
 
-    // Interceptar mensajes de audio
-    if (lead.audioId) {
+    // Audio que no se pudo transcribir: pausa y aviso al equipo.
+    if (audioSinTranscribir) {
       await manejarFlujoAudio(sb, {
         telefono,
         expedienteId: exp.id,
@@ -863,8 +872,8 @@ export async function registrarLeadWhatsApp(
     waMessageId: lead.waMessageId,
   });
 
-  // Interceptar mensajes de audio
-  if (lead.audioId) {
+  // Audio que no se pudo transcribir: pausa y aviso al equipo.
+  if (audioSinTranscribir) {
     await manejarFlujoAudio(sb, {
       telefono,
       expedienteId: id,
@@ -951,7 +960,7 @@ async function manejarFlujoAudio(
 *Cliente:* ${ctx.clienteNombre}
 *Teléfono:* ${ctx.telefono}
 *Negocio:* ${ctx.tipoNegocio}
-El cliente ha enviado un audio. El bot de la IA se ha pausado para esta conversación y no responderá de forma automática. Por favor, atienda a la brevedad en el CRM.`;
+El cliente ha enviado un audio que no se pudo transcribir. El bot de la IA se ha pausado para esta conversación y no responderá de forma automática. Por favor, atienda a la brevedad en el CRM.`;
 
   console.log("[Audio Handler] Enviando notificaciones a Oscar y Paulina...");
   

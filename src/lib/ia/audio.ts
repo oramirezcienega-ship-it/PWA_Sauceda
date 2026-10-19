@@ -3,88 +3,138 @@ import { normalizarTelefono } from "@/lib/telefono";
 /**
  * Módulo de utilidades de voz y audio para Sofía IA.
  * Permite:
- * 1. Transcribir audios de WhatsApp usando OpenAI Whisper.
+ * 1. Transcribir audios de WhatsApp (Gemini, con OpenAI Whisper de respaldo).
  * 2. Sintetizar respuestas escritas a audio usando OpenAI TTS o ElevenLabs.
  * 3. Gestionar archivos multimedia de WhatsApp (descargar, subir y enviar a clientes).
  */
 
-/**
- * Descarga el archivo de audio desde Meta y lo transcribe con OpenAI Whisper.
- */
-export async function transcribirAudioMeta(audioId: string): Promise<string | null> {
-  const token = process.env.WHATSAPP_TOKEN;
-  const openAiKey = process.env.OPENAI_API_KEY;
+/** Llave de Gemini (misma convención que el estimador de visión). */
+function llaveGemini(): string | undefined {
+  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_API_KEY;
+}
 
+/** ¿Hay algún motor de transcripción configurado? */
+export function transcripcionDisponible(): boolean {
+  return !!(llaveGemini() || process.env.OPENAI_API_KEY);
+}
+
+/** Descarga un archivo multimedia de WhatsApp (audio) desde Meta. */
+async function descargarMediaMeta(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const token = process.env.WHATSAPP_TOKEN;
   if (!token) {
     console.error("[Audio STT] Falta WHATSAPP_TOKEN.");
     return null;
   }
+  const infoRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!infoRes.ok) {
+    console.error(`[Audio STT] No se pudo obtener la información del audio de Meta: ${infoRes.status} ${await infoRes.text()}`);
+    return null;
+  }
+  const info = await infoRes.json() as { url?: string; mime_type?: string };
+  if (!info.url) {
+    console.error("[Audio STT] La respuesta de Meta no contiene una URL de descarga.");
+    return null;
+  }
+  const fileRes = await fetch(info.url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!fileRes.ok) {
+    console.error(`[Audio STT] Falló la descarga del archivo multimedia: ${fileRes.status}`);
+    return null;
+  }
+  // "audio/ogg; codecs=opus" → "audio/ogg"
+  const mimeType = (info.mime_type || "audio/ogg").split(";")[0].trim();
+  return { buffer: Buffer.from(await fileRes.arrayBuffer()), mimeType };
+}
 
-  if (!openAiKey) {
-    console.warn("[Audio STT] Falta OPENAI_API_KEY. Saltando transcripción.");
+/** Transcribe con Gemini (acepta audio en línea: ogg/opus, mp3, m4a, wav...). */
+async function transcribirConGemini(buffer: Buffer, mimeType: string, apiKey: string): Promise<string | null> {
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              text: "Transcribe literalmente este audio de WhatsApp (español de México). " +
+                "Devuelve SOLO el texto dicho, sin comillas, etiquetas ni comentarios. " +
+                "Si no se entiende nada o no hay voz, devuelve exactamente: (audio sin voz entendible)",
+            },
+            { inline_data: { mime_type: mimeType, data: buffer.toString("base64") } },
+          ],
+        }],
+        generationConfig: { temperature: 0 },
+      }),
+    }
+  );
+  if (!res.ok) {
+    console.error(`[Audio STT] Gemini falló: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  const texto = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+  return texto || null;
+}
+
+/** Transcribe con OpenAI Whisper. */
+async function transcribirConWhisper(buffer: Buffer, mimeType: string, apiKey: string): Promise<string | null> {
+  const ext = mimeType.includes("mpeg") ? "mp3" : mimeType.includes("mp4") || mimeType.includes("aac") ? "m4a"
+    : mimeType.includes("wav") ? "wav" : "ogg";
+  const formData = new FormData();
+  formData.append("file", new Blob([new Uint8Array(buffer)], { type: mimeType }), `audio.${ext}`);
+  formData.append("model", "whisper-1");
+  formData.append("language", "es");
+  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: formData
+  });
+  if (!res.ok) {
+    console.error(`[Audio STT] Whisper falló: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  const result = await res.json() as { text?: string };
+  return result.text?.trim() || null;
+}
+
+/**
+ * Descarga el audio desde Meta y lo transcribe a texto.
+ * Usa Gemini (GEMINI_API_KEY) y, si no está o falla, OpenAI Whisper (OPENAI_API_KEY).
+ */
+export async function transcribirAudioMeta(audioId: string): Promise<string | null> {
+  const gemini = llaveGemini();
+  const openAiKey = process.env.OPENAI_API_KEY;
+  if (!gemini && !openAiKey) {
+    console.warn("[Audio STT] Falta GEMINI_API_KEY u OPENAI_API_KEY. Saltando transcripción.");
     return null;
   }
 
   try {
-    // 1. Obtener la URL del archivo multimedia en Meta
-    console.log(`[Audio STT] Consultando detalles para audioId: ${audioId}`);
-    const infoRes = await fetch(`https://graph.facebook.com/v21.0/${audioId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const media = await descargarMediaMeta(audioId);
+    if (!media) return null;
 
-    if (!infoRes.ok) {
-      console.error(`[Audio STT] No se pudo obtener la información del audio de Meta: ${infoRes.status} ${await infoRes.text()}`);
-      return null;
+    if (gemini) {
+      try {
+        const texto = await transcribirConGemini(media.buffer, media.mimeType, gemini);
+        if (texto) {
+          console.log(`[Audio STT] Transcripción (Gemini): "${texto}"`);
+          return texto;
+        }
+      } catch (err) {
+        console.error("[Audio STT] Excepción con Gemini:", err);
+      }
     }
-
-    const info = await infoRes.json() as { url?: string; mime_type?: string };
-    if (!info.url) {
-      console.error("[Audio STT] La respuesta de Meta no contiene una URL de descarga.");
-      return null;
+    if (openAiKey) {
+      const texto = await transcribirConWhisper(media.buffer, media.mimeType, openAiKey);
+      if (texto) {
+        console.log(`[Audio STT] Transcripción (Whisper): "${texto}"`);
+        return texto;
+      }
     }
-
-    const mimeType = info.mime_type || "audio/ogg";
-    console.log(`[Audio STT] Descargando audio desde: ${info.url} (${mimeType})`);
-
-    // 2. Descargar el binario del audio
-    const fileRes = await fetch(info.url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!fileRes.ok) {
-      console.error(`[Audio STT] Falló la descarga del archivo multimedia: ${fileRes.status}`);
-      return null;
-    }
-
-    const arrayBuffer = await fileRes.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // 3. Enviar a OpenAI Whisper para transcribir
-    console.log("[Audio STT] Enviando audio a OpenAI Whisper para transcripción...");
-    const formData = new FormData();
-    const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
-    
-    // Whisper requiere extensión de archivo válida, simulamos audio.ogg
-    formData.append("file", blob, "audio.ogg");
-    formData.append("model", "whisper-1");
-    formData.append("language", "es");
-
-    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiKey}`
-      },
-      body: formData
-    });
-
-    if (!whisperRes.ok) {
-      console.error(`[Audio STT] Falló la transcripción de Whisper: ${whisperRes.status} ${await whisperRes.text()}`);
-      return null;
-    }
-
-    const result = await whisperRes.json() as { text?: string };
-    console.log(`[Audio STT] Transcripción completada: "${result.text ?? ""}"`);
-    return result.text || null;
+    return null;
   } catch (err) {
     console.error("[Audio STT] Error durante el proceso de transcripción:", err);
     return null;
