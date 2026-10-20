@@ -721,6 +721,13 @@ export function DetalleCotizacionAdmin({
     }, 0);
   }, [conceptosEditables]);
 
+  const totalPrecioBase = useMemo(() => {
+    return conceptosEditables.reduce((acc, c) => acc + (c.cantidad * c.precioUnitario), 0);
+  }, [conceptosEditables]);
+
+  const montoDescuentoPresupuesto = Math.max(0, totalPrecioBase - totalPrecioVenta);
+  const pctDescuentoPresupuesto = totalPrecioBase > 0 ? (montoDescuentoPresupuesto / totalPrecioBase) * 100 : 0;
+
   const margenTotalPresupuesto = useMemo(() => {
     if (!totalPrecioVenta) return 0;
     return Math.round(((totalPrecioVenta - totalCostoInterno) / totalPrecioVenta) * 100);
@@ -2388,9 +2395,38 @@ export function DetalleCotizacionAdmin({
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t-2 border-carbon/15 font-semibold text-carbon/80 bg-slate-50/80">
+                          {montoDescuentoPresupuesto > 0.005 && (
+                            <>
+                              <tr className="border-t-2 border-carbon/15 text-carbon/70 bg-slate-50/80">
+                                <td className="py-2 px-2 font-semibold" colSpan={3 + (!esOperaciones || esAdmin ? 2 : 0)}>
+                                  Precio base (sin descuento)
+                                </td>
+                                <td className="py-2 px-2 text-right" colSpan={3}>
+                                  <span className="font-mono text-sm font-bold text-carbon/70">
+                                    {formatMoneda(totalPrecioBase)}
+                                  </span>
+                                </td>
+                                <td></td>
+                              </tr>
+                              <tr className="text-rose-700 bg-rose-50/70">
+                                <td className="py-2 px-2 font-semibold" colSpan={3 + (!esOperaciones || esAdmin ? 2 : 0)}>
+                                  Descuento aplicado
+                                  <span className="ml-2 inline-block rounded-full bg-rose-600 text-white px-2 py-0.5 text-[11px] font-bold">
+                                    -{Number(pctDescuentoPresupuesto.toFixed(1))}%
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-right" colSpan={3}>
+                                  <span className="font-mono text-sm font-extrabold text-rose-600">
+                                    -{formatMoneda(montoDescuentoPresupuesto)}
+                                  </span>
+                                </td>
+                                <td></td>
+                              </tr>
+                            </>
+                          )}
+                          <tr className={`${montoDescuentoPresupuesto > 0.005 ? "border-t border-carbon/10" : "border-t-2 border-carbon/15"} font-semibold text-carbon/80 bg-slate-50/80`}>
                             <td className="py-3 px-2 font-bold" colSpan={3}>
-                              Total Presupuesto
+                              {montoDescuentoPresupuesto > 0.005 ? "Total con descuento" : "Total Presupuesto"}
                             </td>
                             {(!esOperaciones || esAdmin) && (
                               <td className="py-3 px-2 text-right font-mono text-xs text-carbon/60">
@@ -2407,7 +2443,7 @@ export function DetalleCotizacionAdmin({
                               </td>
                             )}
                             <td className="py-3 px-2 text-right" colSpan={3}>
-                              <span className="font-mono text-sm text-verde-profundo font-bold">
+                              <span className="font-mono text-base text-verde-profundo font-extrabold">
                                 {formatMoneda(totalPrecioVenta)}
                               </span>
                             </td>
