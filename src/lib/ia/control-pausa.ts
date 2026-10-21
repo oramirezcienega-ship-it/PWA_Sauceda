@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizarTelefono } from "@/lib/telefono";
+import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 
 /**
  * Consulta si las respuestas automáticas de la IA Sofía están pausadas para un teléfono / expediente.
@@ -70,6 +70,9 @@ async function guardarClave(sb: SupabaseClient, clave: string, valor: string): P
 /**
  * Indica si la pausa vigente la puso el sistema porque el asesor escribió
  * (y no el botón de pausa). Solo esas pausas se levantan al salir del chat.
+ * Las pausas anteriores a la marca (sin clave ia_pausa_auto) venían de que el
+ * asesor escribió, así que también cuentan como automáticas; el botón siempre
+ * deja la marca en "false".
  */
 export async function esPausaAutomatica(sb: SupabaseClient, telefono: string): Promise<boolean> {
   const tel10 = (normalizarTelefono(telefono) || telefono).replace(/\D/g, "").slice(-10);
@@ -77,10 +80,11 @@ export async function esPausaAutomatica(sb: SupabaseClient, telefono: string): P
   try {
     const { data } = await sb
       .from("configuracion_agente")
-      .select("valor")
-      .eq("clave", `ia_pausa_auto:${tel10}`)
-      .maybeSingle();
-    return data?.valor === "true";
+      .select("clave, valor")
+      .in("clave", [`ia_pausada:${tel10}`, `ia_pausa_auto:${tel10}`]);
+    const valor = (clave: string) => (data || []).find((f: any) => f.clave === clave)?.valor;
+    if (valor(`ia_pausada:${tel10}`) !== "true") return false;
+    return valor(`ia_pausa_auto:${tel10}`) !== "false";
   } catch {
     return false;
   }
@@ -121,6 +125,22 @@ export async function setConversacionPausada(
         .from("expedientes")
         .update({ ia_pausada: pausada })
         .eq("id", expedienteId);
+    } catch {
+      // Ignorar si la columna aún no está migrada
+    }
+  }
+
+  // Al reactivar, se limpian todos los expedientes/prospectos del teléfono: el webhook
+  // puede consultar un expediente distinto al que se encontró aquí y seguir viéndola pausada.
+  if (!pausada) {
+    const variantes = variantesTelefono(telefono);
+    try {
+      await sb.from("expedientes").update({ ia_pausada: false }).in("telefono", variantes).eq("ia_pausada", true);
+    } catch {
+      // Ignorar si la columna aún no está migrada
+    }
+    try {
+      await sb.from("prospectos").update({ ia_pausada: false }).in("telefono", variantes).eq("ia_pausada", true);
     } catch {
       // Ignorar si la columna aún no está migrada
     }
