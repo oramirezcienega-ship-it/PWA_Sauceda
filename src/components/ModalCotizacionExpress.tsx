@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { listarProductosServicios } from "@/app/actions/productos";
+import { registrarCotizacionExpress } from "@/app/actions/coordinacion-servicio-proveedor";
 import type { ProductoServicio, TarifaCapacidad } from "@/lib/types";
 import { MEDIDAS_TARIFA, formatoEscalon, medidaTarifa } from "@/lib/tarifas-capacidad";
 import { PLAZOS_DISPONIBLES, PLAZOS_DEFAULT, calcularOpcionMeses } from "@/lib/mercadopago-meses";
@@ -18,6 +19,8 @@ export interface ModalCotizacionExpressProps {
   tipoNegocio?: string | null;
   onInsertarTexto?: (texto: string) => void;
   onEnviarImagenDirecta?: (file: File, caption?: string) => Promise<boolean | void>;
+  /** Teléfono de la conversación: al enviar se registra lo cotizado (para el costo del proveedor). */
+  telefono?: string;
 }
 
 function formatearDinero(monto: number) {
@@ -57,6 +60,7 @@ export function ModalCotizacionExpress({
   tipoNegocio,
   onInsertarTexto,
   onEnviarImagenDirecta,
+  telefono,
 }: ModalCotizacionExpressProps) {
   const [productos, setProductos] = useState<ProductoServicio[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -440,7 +444,18 @@ ${meses}${renglones.length ? `\n📋 *¿Qué incluye el servicio?*\n${renglones.
       if (!blob) throw new Error("No se pudo crear la imagen");
       const file = new File([blob], nombreArchivo(), { type: "image/png" });
       const ok = await onEnviarImagenDirecta(file, `Cotización express: ${producto?.nombre} — SAUCEDA Construye`);
-      if (ok !== false) avisar("¡Cotización enviada al chat!", true);
+      if (ok !== false) {
+        avisar("¡Cotización enviada al chat!", true);
+        if (telefono && producto) {
+          void registrarCotizacionExpress(telefono, {
+            productoId: producto.id,
+            productoNombre: producto.nombre,
+            cantidad: escalonSel ? escalonSel.hastaLitros : cantidadCobrada,
+            variacion: escalonSel ? `hasta ${formatoEscalon(escalonSel.hastaLitros, medida)}` : `${cantidadCobrada} ${unidad}`,
+            total,
+          });
+        }
+      }
     } catch (e) {
       console.error("Error al enviar la cotización express:", e);
       alert("Hubo un detalle al enviar la imagen al chat.");

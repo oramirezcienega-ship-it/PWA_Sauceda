@@ -211,6 +211,9 @@ export function ModalProgramarServicio({
               <label className="block">
                 <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Costo acordado con el proveedor</span>
                 <input type="text" inputMode="decimal" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="$" className={campo} />
+                {datos.origenCosto && (
+                  <span className="mt-0.5 block text-[10.5px] text-carbon/50">Del catálogo del proveedor, según {datos.origenCosto}</span>
+                )}
               </label>
               <label className="block">
                 <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Indicaciones (van en la confirmación y en la OT)</span>

@@ -12,6 +12,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
+import { costosProveedoresDe, loCotizadoAlCliente } from "@/lib/costo-servicio";
 import { MARCA_FOLIO_OT, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
 
 export interface DatosProgramacionServicio {
@@ -22,6 +23,8 @@ export interface DatosProgramacionServicio {
   trabajo: string;
   proveedorNombre: string;
   costo: number | null;
+  /** De dónde salió el costo cuando no venía acordado ("" si se acordó al coordinar). */
+  origenCosto: string;
   ordenFolio: string | null;
   /** Sugeridos a partir de la opción elegida (solo si vino con día y franja). */
   fecha: string;
@@ -85,6 +88,18 @@ export async function prepararProgramacionServicio(
       [horaInicio, horaFin] = codigo.endsWith("M") ? ["09:00", "13:00"] : ["14:00", "18:00"];
     }
 
+    // Sin costo acordado: el del proveedor según lo que se le cotizó al cliente.
+    let costo = sol.costo_acordado === null ? null : Number(sol.costo_acordado);
+    let origenCosto = "";
+    if (!costo && sol.proveedor_asignado_id) {
+      const cotizado = await loCotizadoAlCliente(sb, { expedienteId: sol.expediente_id, prospectoId: exp?.prospecto_id || null });
+      const sugerido = cotizado ? (await costosProveedoresDe(sb, cotizado))[sol.proveedor_asignado_id] : undefined;
+      if (sugerido) {
+        costo = sugerido;
+        origenCosto = cotizado!.origen;
+      }
+    }
+
     return {
       ok: true,
       datos: {
@@ -94,7 +109,8 @@ export async function prepararProgramacionServicio(
         linkMaps: exp?.link_google_maps || "",
         trabajo,
         proveedorNombre: sol.proveedores?.nombre || "Proveedor",
-        costo: sol.costo_acordado === null ? null : Number(sol.costo_acordado),
+        costo,
+        origenCosto,
         ordenFolio: sol.ordenes_trabajo?.folio || null,
         fecha,
         horaInicio,

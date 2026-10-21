@@ -3543,6 +3543,7 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
         onCerrar={() => setMostrarCotizacionExpress(false)}
         nombreCliente={detalle?.nombre || "Cliente"}
         tipoNegocio={detalle?.tipoNegocio}
+        telefono={detalle?.telefono}
         onEnviarImagenDirecta={handleEnviarArchivoDirecto}
         onInsertarTexto={(textoCotizacion) => {
           setTexto((prev) => (prev.trim() ? `${prev}\n\n${textoCotizacion}` : textoCotizacion));

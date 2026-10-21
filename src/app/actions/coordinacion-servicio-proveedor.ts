@@ -12,6 +12,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
+import { costosProveedoresDe, loCotizadoAlCliente } from "@/lib/costo-servicio";
 
 export type TipoCoordinacionProveedor = "servicio" | "instalacion";
 
@@ -33,6 +34,10 @@ export interface DatosCoordinacionServicio {
   proveedores: ProveedorCoordinable[];
   /** Proveedor sugerido: el último con el que se coordinó este cliente, o el plomero. */
   proveedorSugeridoId: string | null;
+  /** Costo de cada proveedor según lo que ya se le cotizó al cliente (producto + variación). */
+  costosSugeridos: Record<string, number>;
+  /** De dónde salió el costo sugerido ("" si no hay). */
+  origenCosto: string;
 }
 
 async function idsCliente(sb: ReturnType<typeof supabaseServidor>, telefono: string) {
@@ -86,6 +91,14 @@ export async function prepararCoordinacionServicio(
       proveedores.find((p) => /clemente/i.test(p.nombre))?.id ??
       null;
 
+    const cotizado = await loCotizadoAlCliente(sb, { expedienteId, prospectoId });
+    // Si el producto cotizado lo ofrece un solo proveedor, ese es el sugerido.
+    if (cotizado && !sugerido) {
+      const costos = await costosProveedoresDe(sb, cotizado);
+      const ids = Object.keys(costos);
+      if (ids.length === 1 && proveedores.some((p) => p.id === ids[0])) sugerido = ids[0];
+    }
+
     const nombre = [expediente?.cliente || prospecto?.nombre, expediente?.cliente ? expediente?.primer_apellido : prospecto?.primer_apellido]
       .filter(Boolean)
       .join(" ");
@@ -100,6 +113,8 @@ export async function prepararCoordinacionServicio(
         trabajo: expediente?.necesidad || "",
         proveedores,
         proveedorSugeridoId: sugerido,
+        costosSugeridos: cotizado ? await costosProveedoresDe(sb, cotizado) : {},
+        origenCosto: cotizado?.origen || "",
       },
     };
   } catch (err: any) {
@@ -292,6 +307,31 @@ export async function registrarAceptacionProveedor(input: {
     return { ok: true, solicitudId: r.solicitudId, opcion };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo registrar la aceptación." };
+  }
+}
+
+/**
+ * Deja constancia de la Cotización Express enviada (producto y variación) para tomar de ahí
+ * el costo del proveedor al coordinar y programar el servicio.
+ */
+export async function registrarCotizacionExpress(
+  telefono: string,
+  d: { productoId: string; productoNombre: string; cantidad: number | null; variacion: string; total: number }
+): Promise<void> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    const { prospecto, expediente } = await idsCliente(sb, telefono);
+    if (!expediente && !prospecto) return;
+    await registrarActividad(sb, {
+      expedienteId: expediente?.id ?? null,
+      prospectoId: prospecto?.id ?? null,
+      tipo: "cotizacion_express",
+      titulo: `Cotización Express · ${d.productoNombre}${d.variacion ? ` · ${d.variacion}` : ""} · ${pesos(d.total)}`,
+      detalle: `[producto:${d.productoId}]${d.cantidad ? `[cantidad:${d.cantidad}]` : ""}`,
+    });
+  } catch (err) {
+    console.error("No se pudo registrar la cotización express:", err);
   }
 }
 

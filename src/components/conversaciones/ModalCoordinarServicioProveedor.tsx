@@ -27,6 +27,8 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   const [linkMaps, setLinkMaps] = useState("");
   const [trabajo, setTrabajo] = useState("");
   const [costo, setCosto] = useState("");
+  /** Mientras el asesor no escriba el costo, se toma el de lo cotizado para el proveedor elegido. */
+  const [costoEditado, setCostoEditado] = useState(false);
   const [indicacion, setIndicacion] = useState("");
   const [texto, setTexto] = useState("");
   const [generando, setGenerando] = useState(false);
@@ -54,6 +56,11 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   }, [onCerrar]);
 
   const proveedor = datos?.proveedores.find((p) => p.id === proveedorId) || null;
+  const costoSugerido = datos?.costosSugeridos[proveedorId] ?? null;
+
+  useEffect(() => {
+    if (!costoEditado) setCosto(costoSugerido ? String(costoSugerido) : "");
+  }, [costoSugerido, costoEditado]);
   // Si no hay link capturado, se arma uno de Google Maps con la dirección.
   const linkFinal = linkMaps.trim() || linkMapsDeDireccion(direccion);
   const costoNum = Number(costo.replace(/[^\d.]/g, "")) || null;
@@ -234,11 +241,29 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                     type="text"
                     inputMode="decimal"
                     value={costo}
-                    onChange={(e) => setCosto(e.target.value)}
+                    onChange={(e) => {
+                      setCosto(e.target.value);
+                      setCostoEditado(true);
+                    }}
                     placeholder="Ej. 850 — va en el mensaje y en la orden de trabajo"
                     className={`${campo} pl-5`}
                   />
                 </div>
+                {costoSugerido !== null && datos.origenCosto && (
+                  <span className="mt-0.5 block text-[10.5px] text-carbon/50">
+                    {costoEditado && Number(costo) !== costoSugerido ? (
+                      <button
+                        type="button"
+                        onClick={() => setCostoEditado(false)}
+                        className="text-sky-700 underline cursor-pointer"
+                      >
+                        Usar el del catálogo: ${costoSugerido.toLocaleString("es-MX")}
+                      </button>
+                    ) : (
+                      <>Del catálogo del proveedor, según {datos.origenCosto}</>
+                    )}
+                  </span>
+                )}
               </label>
               <label className="block">
                 <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Trabajo</span>
