@@ -50,15 +50,54 @@ export async function esConversacionPausada(
   return false;
 }
 
+async function guardarClave(sb: SupabaseClient, clave: string, valor: string): Promise<void> {
+  const { data: existente } = await sb
+    .from("configuracion_agente")
+    .select("clave")
+    .eq("clave", clave)
+    .maybeSingle();
+
+  if (existente) {
+    await sb
+      .from("configuracion_agente")
+      .update({ valor, updated_at: new Date().toISOString() })
+      .eq("clave", clave);
+  } else {
+    await sb.from("configuracion_agente").insert({ clave, valor });
+  }
+}
+
+/**
+ * Indica si la pausa vigente la puso el sistema porque el asesor escribió
+ * (y no el botón de pausa). Solo esas pausas se levantan al salir del chat.
+ */
+export async function esPausaAutomatica(sb: SupabaseClient, telefono: string): Promise<boolean> {
+  const tel10 = (normalizarTelefono(telefono) || telefono).replace(/\D/g, "").slice(-10);
+  if (!tel10) return false;
+  try {
+    const { data } = await sb
+      .from("configuracion_agente")
+      .select("valor")
+      .eq("clave", `ia_pausa_auto:${tel10}`)
+      .maybeSingle();
+    return data?.valor === "true";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Actualiza el estado de pausa de Sofía para una conversación.
+ * `automatica` marca que la pausa la provocó un mensaje del asesor; cualquier
+ * otro cambio (pausa manual o reactivación) limpia esa marca.
  */
 export async function setConversacionPausada(
   sb: SupabaseClient,
   telefono: string,
   pausada: boolean,
   expedienteId?: string | null,
-  prospectoId?: string | null
+  prospectoId?: string | null,
+  automatica = false
 ): Promise<{ ok: boolean; pausada: boolean; error?: string }> {
   const tel10 = (normalizarTelefono(telefono) || telefono).replace(/\D/g, "").slice(-10);
   if (!tel10) {
@@ -69,22 +108,8 @@ export async function setConversacionPausada(
 
   // 1. Guardar en configuracion_agente (garantía de persistencia inmediata)
   try {
-    const { data: existente } = await sb
-      .from("configuracion_agente")
-      .select("clave")
-      .eq("clave", `ia_pausada:${tel10}`)
-      .maybeSingle();
-
-    if (existente) {
-      await sb
-        .from("configuracion_agente")
-        .update({ valor: valorStr, updated_at: new Date().toISOString() })
-        .eq("clave", `ia_pausada:${tel10}`);
-    } else {
-      await sb
-        .from("configuracion_agente")
-        .insert({ clave: `ia_pausada:${tel10}`, valor: valorStr });
-    }
+    await guardarClave(sb, `ia_pausada:${tel10}`, valorStr);
+    await guardarClave(sb, `ia_pausa_auto:${tel10}`, pausada && automatica ? "true" : "false");
   } catch (err) {
     console.error("Error al guardar estado de pausa en configuracion_agente:", err);
   }

@@ -24,6 +24,7 @@ import {
   corregirOrtografiaMensaje,
   alternarPausaIA,
   invocarSofia,
+  reanudarSofiaAlSalir,
 } from "@/app/actions/conversaciones";
 import { listarPlantillasWhatsApp } from "@/app/actions/whatsapp";
 import { obtenerUltimosDocumentosDeProspecto } from "@/app/actions/cotizaciones";
@@ -748,6 +749,26 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
     versionSelRef.current += 1;
     setSelEstado(tel);
   }, []);
+
+  // Al salir de un chat (cambiar a otro, cerrarlo, salir de la página o cerrar
+  // la pestaña) Sofía se reactiva si solo estaba pausada porque el asesor escribió.
+  // Se usa una clave normalizada: refrescar() puede re-seleccionar el mismo
+  // número con otro formato (521… / 52…) y eso no cuenta como salir del chat.
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  const selClave = sel ? sel.replace(/\D/g, "").slice(-10) || sel : null;
+  useEffect(() => {
+    if (!selClave || !selRef.current) return;
+    const tel = selRef.current;
+    const alSalirDePagina = () => {
+      reanudarSofiaAlSalir(tel).catch(() => {});
+    };
+    window.addEventListener("pagehide", alSalirDePagina);
+    return () => {
+      window.removeEventListener("pagehide", alSalirDePagina);
+      reanudarSofiaAlSalir(tel).catch(() => {});
+    };
+  }, [selClave]);
 
   // En celular el hilo abierto se muestra a pantalla completa: evitar que la
   // página de fondo se desplace mientras se escribe.

@@ -9,7 +9,7 @@ import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
-import { esConversacionPausada, setConversacionPausada } from "@/lib/ia/control-pausa";
+import { esConversacionPausada, esPausaAutomatica, setConversacionPausada } from "@/lib/ia/control-pausa";
 import type {
   ConversacionDetalle,
   ConversacionResumen,
@@ -842,7 +842,12 @@ export async function responderConversacion(
     if (r.ok) {
       // Cuando el asesor humano responde manualmente, pausar temporalmente a Sofía
       // para evitar que se cruce mientras el asesor atiende la conversación en vivo
-      await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId);
+      // Si ya estaba pausada a mano, se respeta (no se vuelve automática).
+      const yaPausada = await esConversacionPausada(sb, telefono, expedienteId);
+      const manual = yaPausada && !(await esPausaAutomatica(sb, telefono));
+      if (!manual) {
+        await setConversacionPausada(sb, telefono, true, expedienteId, prospectoId, true);
+      }
 
       // Si se envía con un asesor humano específico, sincronizar también el prospecto/expediente
       if (agente && agente !== "IA") {
@@ -1068,6 +1073,27 @@ export async function alternarPausaIA(
   }
 }
 
+/**
+ * El asesor salió de la conversación (cambió de chat o cerró el panel).
+ * Si Sofía estaba pausada solo porque el asesor escribió, se reactiva sola.
+ * Las pausas puestas con el botón se respetan.
+ */
+export async function reanudarSofiaAlSalir(
+  telefono: string,
+): Promise<{ ok: boolean; reactivada: boolean }> {
+  try {
+    await requireAdmin();
+    const sb = supabaseServidor();
+    if (!(await esPausaAutomatica(sb, telefono))) return { ok: true, reactivada: false };
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    await setConversacionPausada(sb, telefono, false, expedienteId, prospectoId);
+    await asignarAgente(telefono, "IA");
+    return { ok: true, reactivada: true };
+  } catch (err) {
+    console.error("Error al reactivar a Sofía al salir del chat:", err);
+    return { ok: false, reactivada: false };
+  }
+}
 
 /**
  * Botón "Que responda Sofía": el asesor vuelve a invocar a Sofía en cualquier
