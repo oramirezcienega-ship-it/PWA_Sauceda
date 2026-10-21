@@ -480,7 +480,7 @@ export async function obtenerOrdenesTrabajo(filtros?: {
     });
 
     return data.map((d: any) => {
-      const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
+      const totalCotizado = Number(d.cotizaciones?.precio_final || d.precio_cliente || 0);
       const totalPagado = pagosPorOT.get(d.id) || 0;
       const saldoRestante = Math.max(0, totalCotizado - totalPagado);
 
@@ -650,7 +650,7 @@ export async function obtenerOrdenTrabajoPorId(id: string): Promise<{
       updatedAt: r.updated_at,
     }));
 
-    const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
+    const totalCotizado = Number(d.cotizaciones?.precio_final || d.precio_cliente || 0);
     const totalPagado = recibos.reduce((acc, curr) => acc + curr.monto, 0);
     const saldoRestante = Math.max(0, totalCotizado - totalPagado);
 
@@ -1143,7 +1143,7 @@ export async function crearReciboPago(datos: {
     // sobre por qué fallan de forma intermitente en producción).
     const { data: ot, error: otErr } = await sb
       .from("ordenes_trabajo")
-      .select("id, expediente_id, cotizacion_id, prospecto_id, titulo")
+      .select("id, expediente_id, cotizacion_id, prospecto_id, titulo, precio_cliente")
       .eq("id", datos.ordenTrabajoId)
       .maybeSingle();
 
@@ -1163,7 +1163,7 @@ export async function crearReciboPago(datos: {
     const cotizacion = cotizacionRes.data as any;
     const recibosPrevios = recibosPreviosRes.data;
 
-    const totalCotizado = Number(cotizacion?.precio_final || 0);
+    const totalCotizado = Number(cotizacion?.precio_final || ot.precio_cliente || 0);
     const pagadoHastaAhora = (recibosPrevios || []).reduce(
       (acc: number, curr: any) => acc + Number(curr.monto || 0),
       0
@@ -1396,11 +1396,11 @@ async function reflejarCobrosEnFinanzas(ordenTrabajoId: string): Promise<void> {
 async function recalcularSaldosRecibosOT(sb: any, ordenTrabajoId: string): Promise<void> {
   const { data: ot } = await sb
     .from("ordenes_trabajo")
-    .select("cotizacion_id")
+    .select("cotizacion_id, precio_cliente")
     .eq("id", ordenTrabajoId)
     .maybeSingle();
 
-  let total = 0;
+  let total = Number(ot?.precio_cliente || 0);
   if (ot?.cotizacion_id) {
     const { data: cot } = await sb
       .from("cotizaciones")
@@ -2449,7 +2449,7 @@ export async function obtenerEntregaOrdenTrabajoPorToken(token: string): Promise
     }
     const { data: remData } = await queryRem.order("created_at", { ascending: false }).limit(1).maybeSingle();
 
-    const totalCotizado = Number(d.cotizaciones?.precio_final || 0);
+    const totalCotizado = Number(d.cotizaciones?.precio_final || d.precio_cliente || 0);
     const totalPagado = (recs || []).reduce((acc: number, r: any) => acc + Number(r.monto || 0), 0);
     const saldoRestante = Math.max(0, totalCotizado - totalPagado);
 

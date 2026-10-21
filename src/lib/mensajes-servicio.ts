@@ -17,8 +17,17 @@ export interface DatosMensajeServicio {
   linkMaps: string;
   ordenFolio: string | null;
   solicitudFolio: string;
+  /** Lo que cobra el proveedor: solo va en su mensaje. */
   costo: number | null;
+  /** Lo que paga el cliente: va en su mensaje y en la OT. */
+  precioCliente: number | null;
+  /** Teléfono del cliente (dígitos con lada) para el link de WhatsApp en el mensaje del proveedor. */
+  clienteTelefono: string;
   notas: string;
+}
+
+function pesosMx(n: number): string {
+  return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 }
 
 export function fechaServicioLegible(fecha: string): string {
@@ -51,6 +60,7 @@ export function mensajeServicioCliente(d: DatosMensajeServicio): string {
     `📅 *Fecha:* ${fechaServicioLegible(d.fecha)}\n` +
     `⏰ *Horario:* ${horario(d)}\n` +
     (d.direccion ? `📍 *Dirección:* ${d.direccion}\n` : "") +
+    (d.precioCliente ? `💰 *Costo del servicio:* ${pesosMx(d.precioCliente)}\n` : "") +
     `🧾 *Orden de trabajo:* ${d.ordenFolio || MARCA_FOLIO_OT}\n` +
     (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
     `\nNuestro técnico llegará en ese horario; por favor ten libre el acceso al área de trabajo. Si necesitas cambiar algo, respóndenos por aquí. 💚`
@@ -64,19 +74,19 @@ export function mensajeServicioProveedor(d: DatosMensajeServicio): string {
     `🔧 ${d.trabajo}\n` +
     `📅 *${fechaServicioLegible(d.fecha)}*\n` +
     `⏰ *${horario(d)}*\n` +
-    `👤 Cliente: ${d.clienteNombre.trim().split(/\s+/)[0] || "—"}\n` +
+    `👤 Cliente: ${d.clienteNombre.trim() || "—"}\n` +
+    (d.clienteTelefono ? `📱 WhatsApp del cliente: https://wa.me/${d.clienteTelefono}\n` : "") +
     (d.direccion ? `📍 ${d.direccion}\n` : "") +
     (d.linkMaps ? `🗺 ${d.linkMaps}\n` : "") +
-    (d.costo ? `💲 Costo acordado: ${d.costo.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 })}\n` : "") +
+    (d.costo ? `💲 Costo acordado: ${pesosMx(d.costo)}\n` : "") +
     (d.notas.trim() ? `📌 ${d.notas.trim()}\n` : "") +
     `\nPor favor confírmanos de recibido. ¡Gracias!`
   );
 }
 
-/** Para avisar si el mensaje al cliente trae un monto (no debe ver el costo del proveedor). */
-export function mencionaMonto(texto: string, costo: number | null): boolean {
-  if (/\$\s?\d/.test(texto)) return true;
-  if (!costo) return false;
+/** Para avisar si el mensaje al cliente trae el costo del proveedor (el precio del servicio sí puede ir). */
+export function mencionaMonto(texto: string, costo: number | null, precioCliente?: number | null): boolean {
+  if (!costo || costo === precioCliente) return false;
   const n = String(Math.round(costo));
   return new RegExp(`(^|[^\\d])${n.replace(/\B(?=(\d{3})+(?!\d))/g, ",?")}([^\\d]|$)`).test(texto);
 }

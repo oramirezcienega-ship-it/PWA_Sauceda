@@ -10,13 +10,27 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
-import { normalizarTelefono } from "@/lib/telefono";
+import { formatearTelefonoLegible, normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
-import { costosProveedoresDe, loCotizadoAlCliente } from "@/lib/costo-servicio";
+import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
 import { MARCA_FOLIO_OT, fechaDeTexto, horasDeTexto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
+
+export interface ProveedorProgramable {
+  id: string;
+  nombre: string;
+  /** Por dónde le llega la confirmación: "WhatsApp 477 123 4567", "Telegram" o "" si no hay cómo. */
+  destino: string;
+  canal: "whatsapp" | "telegram" | "";
+}
 
 export interface DatosProgramacionServicio {
   folio: string;
+  proveedorId: string | null;
+  proveedores: ProveedorProgramable[];
+  /** Costo de cada proveedor según lo cotizado al cliente. */
+  costosSugeridos: Record<string, number>;
+  /** Proveedores ligados en el catálogo al producto cotizado (preferido primero). */
+  relacionadosIds: string[];
   clienteNombre: string;
   direccion: string;
   linkMaps: string;
@@ -25,6 +39,10 @@ export interface DatosProgramacionServicio {
   costo: number | null;
   /** De dónde salió el costo cuando no venía acordado ("" si se acordó al coordinar). */
   origenCosto: string;
+  /** Lo que paga el cliente: lo ya guardado en la OT o lo que se le cotizó. */
+  precioCliente: number | null;
+  /** Teléfono del cliente con lada (para el link de WhatsApp al proveedor). */
+  clienteTelefono: string;
   ordenFolio: string | null;
   /** Sugeridos a partir de la opción elegida (solo si vino con día y franja). */
   fecha: string;
@@ -36,7 +54,7 @@ async function cargar(sb: ReturnType<typeof supabaseServidor>, solicitudId: stri
   const { data: sol } = await sb
     .from("solicitudes_proveedor")
     .select(
-      "id, folio, estado, descripcion, expediente_id, cotizacion_id, orden_trabajo_id, proveedor_asignado_id, costo_acordado, notas_internas, productos_servicios:producto_id ( nombre ), proveedores:proveedor_asignado_id ( nombre, contacto_nombre, whatsapp, telefono, telegram_chat_id, canal_preferido ), ordenes_trabajo:orden_trabajo_id ( folio )"
+      "id, folio, estado, descripcion, expediente_id, cotizacion_id, orden_trabajo_id, proveedor_asignado_id, costo_acordado, notas_internas, productos_servicios:producto_id ( nombre ), proveedores:proveedor_asignado_id ( nombre, contacto_nombre, whatsapp, telefono, telegram_chat_id, canal_preferido ), ordenes_trabajo:orden_trabajo_id ( folio, precio_cliente )"
     )
     .eq("id", solicitudId)
     .maybeSingle();
@@ -98,21 +116,34 @@ export async function prepararProgramacionServicio(
     }
 
     // Sin costo acordado: el del proveedor según lo que se le cotizó al cliente.
+    const cotizado = await loCotizadoAlCliente(sb, { expedienteId: sol.expediente_id, prospectoId: exp?.prospecto_id || null });
+    const costosSugeridos = cotizado ? await costosProveedoresDe(sb, cotizado) : {};
+    const relacionadosIds = cotizado ? await proveedoresDelProducto(sb, cotizado) : [];
     let costo = sol.costo_acordado === null ? null : Number(sol.costo_acordado);
     let origenCosto = "";
-    if (!costo && sol.proveedor_asignado_id) {
-      const cotizado = await loCotizadoAlCliente(sb, { expedienteId: sol.expediente_id, prospectoId: exp?.prospecto_id || null });
-      const sugerido = cotizado ? (await costosProveedoresDe(sb, cotizado))[sol.proveedor_asignado_id] : undefined;
-      if (sugerido) {
-        costo = sugerido;
-        origenCosto = cotizado!.origen;
-      }
+    if (!costo && sol.proveedor_asignado_id && costosSugeridos[sol.proveedor_asignado_id]) {
+      costo = costosSugeridos[sol.proveedor_asignado_id];
+      origenCosto = cotizado!.origen;
     }
+
+    const { data: provs } = await sb
+      .from("proveedores")
+      .select("id, nombre, whatsapp, telefono, telegram_chat_id, canal_preferido")
+      .eq("activo", true)
+      .order("nombre");
+    const proveedores: ProveedorProgramable[] = (provs || []).map((p: any) => {
+      const d = destinoProveedor(p);
+      return { id: p.id, nombre: p.nombre, destino: d.texto, canal: d.canal };
+    });
 
     return {
       ok: true,
       datos: {
         folio: sol.folio,
+        proveedorId: sol.proveedor_asignado_id || relacionadosIds[0] || null,
+        proveedores,
+        costosSugeridos,
+        relacionadosIds,
         clienteNombre: [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" "),
         direccion: exp?.direccion_propiedad || exp?.fraccionamiento || "",
         linkMaps: exp?.link_google_maps || "",
@@ -121,6 +152,11 @@ export async function prepararProgramacionServicio(
         costo,
         origenCosto,
         ordenFolio: sol.ordenes_trabajo?.folio || null,
+        precioCliente:
+          sol.ordenes_trabajo?.precio_cliente !== null && sol.ordenes_trabajo?.precio_cliente !== undefined
+            ? Number(sol.ordenes_trabajo.precio_cliente)
+            : cotizado?.precio ?? null,
+        clienteTelefono: normalizarTelefono(exp?.telefono || ""),
         fecha,
         horaInicio,
         horaFin,
@@ -154,6 +190,10 @@ export async function programarServicioSolicitud(input: {
   /** Textos revisados en la vista previa; si faltan se arman igual que la vista previa. */
   mensajeCliente?: string;
   mensajeProveedor?: string;
+  /** Si se cambió de proveedor al programar. */
+  proveedorId?: string;
+  /** Lo que paga el cliente: va en su mensaje y en la OT. */
+  precioCliente?: number | null;
 }): Promise<ResultadoProgramacionServicio> {
   try {
     await requireAdmin();
@@ -174,6 +214,13 @@ export async function programarServicioSolicitud(input: {
     if (input.costo && input.costo > 0) {
       await sb.from("solicitudes_proveedor").update({ costo_acordado: input.costo }).eq("id", input.solicitudId);
     }
+    // Cambio de proveedor al programar: queda asignado el elegido (la OT lo toma abajo).
+    if (input.proveedorId && input.proveedorId !== previo.sol.proveedor_asignado_id) {
+      await sb.from("solicitudes_proveedor").update({ proveedor_asignado_id: input.proveedorId }).eq("id", input.solicitudId);
+      if (previo.sol.orden_trabajo_id) {
+        await sb.from("ordenes_trabajo").update({ proveedor_id: input.proveedorId }).eq("id", previo.sol.orden_trabajo_id).neq("estatus", "completada");
+      }
+    }
     // 1. Confirmar la solicitud (aviso por Telegram si lo tiene y OT si viene de cotización).
     if (previo.sol.estado === "asignada") {
       const { confirmarSolicitudProveedor } = await import("@/app/actions/solicitudes-proveedor");
@@ -188,6 +235,7 @@ export async function programarServicioSolicitud(input: {
     const prov = sol.proveedores || {};
     const costo = input.costo && input.costo > 0 ? input.costo : sol.costo_acordado === null ? null : Number(sol.costo_acordado);
     const clienteNombre = [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" ") || "Cliente";
+    const precioCliente = input.precioCliente && input.precioCliente > 0 ? input.precioCliente : null;
     const direccion = exp?.direccion_propiedad || exp?.fraccionamiento || "";
     const concepto = `${trabajo} · ${sol.folio} · ${cuando}`;
     const descripcion = [
@@ -215,6 +263,7 @@ export async function programarServicioSolicitud(input: {
         costoProveedor: costo,
         proveedorConcepto: concepto,
       });
+      if (ot.ok && ot.id && precioCliente) await sb.from("ordenes_trabajo").update({ precio_cliente: precioCliente }).eq("id", ot.id);
       if (!ot.ok || !ot.id) return { ok: false, error: `Se confirmó con el proveedor, pero no se pudo crear la orden de trabajo: ${ot.error || "error desconocido"}` };
       otId = ot.id;
       otFolio = ot.folio || null;
@@ -226,6 +275,7 @@ export async function programarServicioSolicitud(input: {
           fecha_programada: input.fecha,
           proveedor_id: sol.proveedor_asignado_id,
           ...(costo ? { costo_proveedor: costo } : {}),
+          ...(precioCliente ? { precio_cliente: precioCliente } : {}),
           proveedor_concepto: concepto,
           descripcion,
           updated_at: new Date().toISOString(),
@@ -285,6 +335,8 @@ export async function programarServicioSolicitud(input: {
       ordenFolio: otFolio,
       solicitudFolio: sol.folio,
       costo,
+      precioCliente,
+      clienteTelefono: normalizarTelefono(input.telefono || exp?.telefono || ""),
       notas: input.notas,
     };
     const conFolio = (t: string) => t.split(MARCA_FOLIO_OT).join(otFolio || "por asignar");
@@ -323,6 +375,15 @@ export async function programarServicioSolicitud(input: {
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo programar el servicio." };
   }
+}
+
+/** Por dónde se le manda la confirmación (mismo orden que avisarProveedor). */
+function destinoProveedor(p: any): { texto: string; canal: "whatsapp" | "telegram" | "" } {
+  const telefono = normalizarTelefono(p.whatsapp || p.telefono || "");
+  if (telefono && p.canal_preferido !== "telegram") return { texto: `WhatsApp ${formatearTelefonoLegible(telefono)}`, canal: "whatsapp" };
+  if (p.telegram_chat_id) return { texto: "Telegram", canal: "telegram" };
+  if (telefono) return { texto: `WhatsApp ${formatearTelefonoLegible(telefono)}`, canal: "whatsapp" };
+  return { texto: "", canal: "" };
 }
 
 /** Proveedor: WhatsApp de la línea secundaria; si no, Telegram; si no, link wa.me para el asesor. */

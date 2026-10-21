@@ -209,13 +209,26 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                   <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Proveedor</span>
                   <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} className={campo}>
                     {datos.proveedores.length === 0 && <option value="">No hay proveedores activos</option>}
-                    {datos.proveedores.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre}
-                        {p.categoria ? ` · ${p.categoria}` : ""}
-                        {p.whatsapp ? "" : " (sin WhatsApp)"}
-                      </option>
-                    ))}
+                    {(() => {
+                      const opcion = (p: (typeof datos.proveedores)[number]) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre}
+                          {p.categoria ? ` · ${p.categoria}` : ""}
+                          {p.whatsapp ? "" : " (sin WhatsApp)"}
+                        </option>
+                      );
+                      const ligados = datos.relacionadosIds
+                        .map((id) => datos.proveedores.find((p) => p.id === id))
+                        .filter((p): p is (typeof datos.proveedores)[number] => Boolean(p));
+                      if (!ligados.length) return datos.proveedores.map(opcion);
+                      const otros = datos.proveedores.filter((p) => !datos.relacionadosIds.includes(p.id));
+                      return (
+                        <>
+                          <optgroup label="Del producto cotizado">{ligados.map(opcion)}</optgroup>
+                          {otros.length > 0 && <optgroup label="Otros proveedores">{otros.map(opcion)}</optgroup>}
+                        </>
+                      );
+                    })()}
                   </select>
                 </label>
                 <label className="block">

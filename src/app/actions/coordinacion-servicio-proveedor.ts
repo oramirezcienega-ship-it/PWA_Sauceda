@@ -12,7 +12,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
-import { costosProveedoresDe, loCotizadoAlCliente } from "@/lib/costo-servicio";
+import { costosProveedoresDe, loCotizadoAlCliente, proveedoresDelProducto } from "@/lib/costo-servicio";
 
 export type TipoCoordinacionProveedor = "servicio" | "instalacion";
 
@@ -32,8 +32,10 @@ export interface DatosCoordinacionServicio {
   linkMaps: string;
   trabajo: string;
   proveedores: ProveedorCoordinable[];
-  /** Proveedor sugerido: el último con el que se coordinó este cliente, o el plomero. */
+  /** Proveedor sugerido: el preferido del producto cotizado; si no hay, el último usado con el cliente o el plomero. */
   proveedorSugeridoId: string | null;
+  /** Proveedores ligados en el catálogo al producto cotizado (preferido primero). */
+  relacionadosIds: string[];
   /** Costo de cada proveedor según lo que ya se le cotizó al cliente (producto + variación). */
   costosSugeridos: Record<string, number>;
   /** De dónde salió el costo sugerido ("" si no hay). */
@@ -91,13 +93,12 @@ export async function prepararCoordinacionServicio(
       proveedores.find((p) => /clemente/i.test(p.nombre))?.id ??
       null;
 
+    // El predeterminado es el del producto cotizado (catálogo): el preferido, o el único ligado.
     const cotizado = await loCotizadoAlCliente(sb, { expedienteId, prospectoId });
-    // Si el producto cotizado lo ofrece un solo proveedor, ese es el sugerido.
-    if (cotizado && !sugerido) {
-      const costos = await costosProveedoresDe(sb, cotizado);
-      const ids = Object.keys(costos);
-      if (ids.length === 1 && proveedores.some((p) => p.id === ids[0])) sugerido = ids[0];
-    }
+    const relacionadosIds = cotizado
+      ? (await proveedoresDelProducto(sb, cotizado)).filter((id) => proveedores.some((p) => p.id === id))
+      : [];
+    if (relacionadosIds.length) sugerido = relacionadosIds[0];
 
     const nombre = [expediente?.cliente || prospecto?.nombre, expediente?.cliente ? expediente?.primer_apellido : prospecto?.primer_apellido]
       .filter(Boolean)
@@ -113,6 +114,7 @@ export async function prepararCoordinacionServicio(
         trabajo: expediente?.necesidad || "",
         proveedores,
         proveedorSugeridoId: sugerido,
+        relacionadosIds,
         costosSugeridos: cotizado ? await costosProveedoresDe(sb, cotizado) : {},
         origenCosto: cotizado?.origen || "",
       },
@@ -331,7 +333,7 @@ export async function registrarCotizacionExpress(
       prospectoId: prospecto?.id ?? null,
       tipo: "cotizacion_express",
       titulo: `Cotización Express · ${d.productoNombre}${d.variacion ? ` · ${d.variacion}` : ""} · ${pesos(d.total)}`,
-      detalle: `[producto:${d.productoId}]${d.cantidad ? `[cantidad:${d.cantidad}]` : ""}`,
+      detalle: `[producto:${d.productoId}]${d.cantidad ? `[cantidad:${d.cantidad}]` : ""}[precio:${d.total}]`,
     });
   } catch (err) {
     console.error("No se pudo registrar la cotización express:", err);

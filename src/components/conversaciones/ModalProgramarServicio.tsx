@@ -38,6 +38,8 @@ export function ModalProgramarServicio({
   const [horaInicio, setHoraInicio] = useState("");
   const [horaFin, setHoraFin] = useState("");
   const [costo, setCosto] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
+  const [precio, setPrecio] = useState("");
   const [notas, setNotas] = useState("");
   const [avisarCliente, setAvisarCliente] = useState(true);
   const [avisarProveedor, setAvisarProveedor] = useState(true);
@@ -47,6 +49,16 @@ export function ModalProgramarServicio({
   const [textoCliente, setTextoCliente] = useState<string | null>(null);
   const [textoProveedor, setTextoProveedor] = useState<string | null>(null);
   const costoNum = Number(costo.replace(/[^\d.]/g, "")) || null;
+  const precioNum = Number(precio.replace(/[^\d.]/g, "")) || null;
+  const proveedor = datos?.proveedores.find((p) => p.id === proveedorId) || null;
+  const proveedorNombre = proveedor?.nombre || datos?.proveedorNombre || "el proveedor";
+
+  function cambiarProveedor(id: string) {
+    setProveedorId(id);
+    // El costo pasa al del catálogo del nuevo proveedor (si lo tiene).
+    const sugerido = datos?.costosSugeridos[id];
+    setCosto(sugerido ? String(sugerido) : "");
+  }
   const datosMensaje = useMemo(
     () =>
       datos
@@ -61,14 +73,16 @@ export function ModalProgramarServicio({
             ordenFolio: datos.ordenFolio,
             solicitudFolio: datos.folio,
             costo: costoNum,
+            precioCliente: precioNum,
+            clienteTelefono: datos.clienteTelefono,
             notas,
           }
         : null,
-    [datos, fecha, horaInicio, horaFin, costoNum, notas]
+    [datos, fecha, horaInicio, horaFin, costoNum, precioNum, notas]
   );
   const previaCliente = textoCliente ?? (datosMensaje ? mensajeServicioCliente(datosMensaje) : "");
   const previaProveedor = textoProveedor ?? (datosMensaje ? mensajeServicioProveedor(datosMensaje) : "");
-  const clienteConMonto = avisarCliente && mencionaMonto(previaCliente, costoNum);
+  const clienteConMonto = avisarCliente && mencionaMonto(previaCliente, costoNum, precioNum);
 
   useEffect(() => {
     prepararProgramacionServicio(solicitudId, opcion).then((r) => {
@@ -79,6 +93,8 @@ export function ModalProgramarServicio({
       setHoraInicio(ini || r.datos.horaInicio);
       setHoraFin(fin || r.datos.horaFin);
       setCosto(r.datos.costo ? String(r.datos.costo) : "");
+      setProveedorId(r.datos.proveedorId || "");
+      setPrecio(r.datos.precioCliente ? String(r.datos.precioCliente) : "");
     });
   }, [solicitudId, opcion, fechaInicial, horarioInicial]);
 
@@ -105,6 +121,8 @@ export function ModalProgramarServicio({
         avisarProveedor,
         mensajeCliente: previaCliente,
         mensajeProveedor: previaProveedor,
+        proveedorId: proveedorId || undefined,
+        precioCliente: precioNum,
       });
       if (!r.ok) return setError(r.error || "No se pudo programar.");
       setResultado(r);
@@ -163,11 +181,11 @@ export function ModalProgramarServicio({
             {resultado.proveedor &&
               (resultado.proveedor.enviado ? (
                 <p className="text-emerald-800">
-                  📲 Confirmación enviada a {datos.proveedorNombre} por {resultado.proveedor.canal === "telegram" ? "Telegram" : "WhatsApp"}.
+                  📲 Confirmación enviada a {proveedorNombre} por {resultado.proveedor.canal === "telegram" ? "Telegram" : "WhatsApp"}.
                 </p>
               ) : resultado.proveedor.urlWhatsApp ? (
                 <p className="text-amber-800">
-                  No se pudo enviar en automático a {datos.proveedorNombre}.{" "}
+                  No se pudo enviar en automático a {proveedorNombre}.{" "}
                   <a href={resultado.proveedor.urlWhatsApp} target="_blank" rel="noopener noreferrer" className="font-bold underline">
                     Mandarla desde tu WhatsApp
                   </a>
@@ -186,7 +204,7 @@ export function ModalProgramarServicio({
             <div className="p-4 space-y-3 overflow-y-auto text-sm">
               <div className="rounded-lg bg-slate-50 border border-carbon/10 px-3 py-2 text-[12px] text-carbon/75 space-y-0.5">
                 <div>
-                  <b>{datos.trabajo}</b> · {datos.clienteNombre || "Cliente"} · con <b>{datos.proveedorNombre}</b>
+                  <b>{datos.trabajo}</b> · {datos.clienteNombre || "Cliente"}
                 </div>
                 {datos.direccion && <div>📍 {datos.direccion}</div>}
                 <div>
@@ -209,7 +227,34 @@ export function ModalProgramarServicio({
                 </label>
               </div>
               <label className="block">
-                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Costo acordado con el proveedor</span>
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Proveedor</span>
+                <select value={proveedorId} onChange={(e) => cambiarProveedor(e.target.value)} className={campo}>
+                  {!proveedorId && <option value="">Elige el proveedor</option>}
+                  {(() => {
+                    const opcion = (p: (typeof datos.proveedores)[number]) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                        {p.destino ? ` · ${p.destino}` : " · sin WhatsApp ni Telegram"}
+                      </option>
+                    );
+                    const ligados = datos.proveedores.filter((p) => datos.relacionadosIds.includes(p.id));
+                    if (!ligados.length) return datos.proveedores.map(opcion);
+                    const otros = datos.proveedores.filter((p) => !datos.relacionadosIds.includes(p.id));
+                    return (
+                      <>
+                        <optgroup label="Del producto cotizado">{ligados.map(opcion)}</optgroup>
+                        {otros.length > 0 && <optgroup label="Otros proveedores">{otros.map(opcion)}</optgroup>}
+                      </>
+                    );
+                  })()}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Precio del servicio al cliente (va en su mensaje y en la OT)</span>
+                <input type="text" inputMode="decimal" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="$" className={campo} />
+              </label>
+              <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Costo acordado con el proveedor (solo lo ve el proveedor)</span>
                 <input type="text" inputMode="decimal" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="$" className={campo} />
                 {datos.origenCosto && (
                   <span className="mt-0.5 block text-[10.5px] text-carbon/50">Del catálogo del proveedor, según {datos.origenCosto}</span>
@@ -248,7 +293,7 @@ export function ModalProgramarServicio({
                   )}
                   {clienteConMonto && (
                     <p className="text-[11px] rounded bg-amber-50 border border-amber-200 text-amber-900 px-2 py-1">
-                      ⚠️ El mensaje al cliente menciona un monto. El costo del proveedor no debe ir aquí.
+                      ⚠️ El mensaje al cliente trae el costo del proveedor. Quítalo: el cliente solo debe ver el precio del servicio.
                     </p>
                   )}
                 </div>
@@ -256,7 +301,7 @@ export function ModalProgramarServicio({
                   <div className="flex items-center justify-between gap-2">
                     <label className="flex items-center gap-2 text-[12px] font-bold">
                       <input type="checkbox" checked={avisarProveedor} onChange={(e) => setAvisarProveedor(e.target.checked)} />
-                      Mensaje a {datos.proveedorNombre} (incluye el costo acordado)
+                      Mensaje a {proveedorNombre} (incluye el costo acordado)
                     </label>
                     {textoProveedor !== null && (
                       <button type="button" onClick={() => setTextoProveedor(null)} className="text-[11px] text-sky-700 underline cursor-pointer">
@@ -264,6 +309,13 @@ export function ModalProgramarServicio({
                       </button>
                     )}
                   </div>
+                  {avisarProveedor && (
+                    <p className={`text-[11px] ${proveedor?.destino ? "text-carbon/60" : "text-amber-800"}`}>
+                      {proveedor?.destino
+                        ? `📤 Se envía por ${proveedor.destino}${proveedor.canal === "whatsapp" ? " (línea secundaria; si no sale, te damos el link para mandarlo tú)" : ""}.`
+                        : "⚠️ Este proveedor no tiene WhatsApp ni Telegram registrado: agrégalo en su ficha."}
+                    </p>
+                  )}
                   {avisarProveedor && (
                     <textarea
                       value={previaProveedor}
@@ -291,7 +343,7 @@ export function ModalProgramarServicio({
               <button
                 type="button"
                 onClick={() => void programar()}
-                disabled={guardando || !fecha || !horaInicio || clienteConMonto}
+                disabled={guardando || !fecha || !horaInicio || clienteConMonto || !proveedorId}
                 className="rounded bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
               >
                 {guardando ? "Programando…" : "📅 Programar y confirmar"}
