@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generarTokenCarga } from "@/lib/asesoria/aliados";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { normalizarCostosCapacidad } from "@/lib/tarifas-capacidad";
+import { generarFolioOT } from "@/lib/folio-ot";
 
 /**
  * Motor de solicitudes de servicio a proveedores (migración 0151).
@@ -337,6 +338,8 @@ export async function registrarRespuestaSolicitud(
         updated_at: ahora,
       })
       .eq("id", envioId);
+    // Con la aceptación del proveedor se abre la orden de trabajo (la fecha se programa después).
+    await abrirOrdenTrabajoSolicitud(sb, envio.solicitud_id);
     await sb
       .from("solicitudes_proveedor_envios")
       .update({ estado: "cancelada", tg_paso: null, updated_at: ahora })
@@ -368,4 +371,85 @@ Ofrécelas al cliente desde su conversación y confirma la que elija.`
     await avanzarSolicitud(sb, envio.solicitud_id);
   }
   return { ok: true, folio };
+}
+
+/**
+ * Abre (o liga) la orden de trabajo de una solicitud que el proveedor ya aceptó: con el
+ * proveedor, su costo y el trabajo; sin fecha hasta que se programe con el cliente. Si ya
+ * tiene OT, o la cotización ya tiene una abierta, se usa esa. Devuelve el folio.
+ */
+export async function abrirOrdenTrabajoSolicitud(sb: SupabaseClient, solicitudId: string): Promise<string | null> {
+  try {
+    const { data: sol } = await sb
+      .from("solicitudes_proveedor")
+      .select(
+        "id, folio, expediente_id, cotizacion_id, orden_trabajo_id, proveedor_asignado_id, costo_acordado, cantidad, producto_id, descripcion, productos_servicios:producto_id ( nombre ), proveedores:proveedor_asignado_id ( nombre ), ordenes_trabajo:orden_trabajo_id ( folio )"
+      )
+      .eq("id", solicitudId)
+      .maybeSingle();
+    if (!sol) return null;
+    const s: any = sol;
+    if (s.orden_trabajo_id) return s.ordenes_trabajo?.folio || null;
+
+    const { data: exp } = s.expediente_id
+      ? await sb.from("expedientes").select("prospecto_id, cliente, primer_apellido, tipo_negocio, necesidad").eq("id", s.expediente_id).maybeSingle()
+      : { data: null as any };
+    const trabajo =
+      s.productos_servicios?.nombre ||
+      String(exp?.necesidad || "").split(/[;.]/)[0].trim() ||
+      String(s.descripcion || "").split("\n")[0].replace(/^(Servicio|Instalación):\s*/i, "").split(/[;.]/)[0].trim() ||
+      "Servicio";
+    const concepto = `${trabajo} · ${s.folio}`;
+    const datosProveedor = {
+      proveedor_id: s.proveedor_asignado_id,
+      costo_proveedor: s.costo_acordado === null ? null : Number(s.costo_acordado),
+      proveedor_concepto: concepto,
+      ...(s.producto_id ? { producto_id: s.producto_id } : {}),
+      ...(s.cantidad ? { cantidad_servicio: s.cantidad } : {}),
+    };
+
+    // OT abierta de la misma cotización (o del cliente sin proveedor): se reutiliza.
+    let q = sb.from("ordenes_trabajo").select("id, folio, proveedor_id").in("estatus", ["pendiente", "en_proceso"]);
+    q = s.cotizacion_id ? q.eq("cotizacion_id", s.cotizacion_id) : q.eq("expediente_id", s.expediente_id).is("cotizacion_id", null);
+    const { data: abiertas } = s.cotizacion_id || s.expediente_id ? await q.order("created_at", { ascending: false }) : { data: [] as any[] };
+    const previa = (abiertas || []).find((o: any) => !o.proveedor_id || o.proveedor_id === s.proveedor_asignado_id);
+    let otId: string;
+    let folio: string;
+    if (previa) {
+      await sb.from("ordenes_trabajo").update({ ...datosProveedor, updated_at: new Date().toISOString() }).eq("id", previa.id);
+      otId = previa.id;
+      folio = previa.folio;
+    } else {
+      const clienteNombre = [exp?.cliente, exp?.primer_apellido].filter(Boolean).join(" ") || "Cliente";
+      folio = await generarFolioOT(sb);
+      const { data: nueva, error } = await sb
+        .from("ordenes_trabajo")
+        .insert({
+          folio,
+          token: crypto.randomUUID().replace(/-/g, ""),
+          expediente_id: s.expediente_id || null,
+          cotizacion_id: s.cotizacion_id || null,
+          prospecto_id: exp?.prospecto_id || null,
+          tipo_negocio: exp?.tipo_negocio || "construccion",
+          estatus: "pendiente",
+          titulo: `${trabajo} — ${clienteNombre}`,
+          descripcion: `Abierta al aceptar ${s.proveedores?.nombre || "el proveedor"} la solicitud ${s.folio}. Falta programar la fecha con el cliente.`,
+          fotos_evidencia: [],
+          ...datosProveedor,
+        })
+        .select("id, folio")
+        .single();
+      if (error || !nueva) {
+        console.error("[solicitudes-proveedor] No se pudo abrir la orden de trabajo:", error?.message);
+        return null;
+      }
+      otId = nueva.id;
+      folio = nueva.folio;
+    }
+    await sb.from("solicitudes_proveedor").update({ orden_trabajo_id: otId }).eq("id", solicitudId);
+    return folio;
+  } catch (err) {
+    console.error("[solicitudes-proveedor] Error al abrir la orden de trabajo:", err);
+    return null;
+  }
 }

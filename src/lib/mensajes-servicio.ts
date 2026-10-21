@@ -80,3 +80,64 @@ export function mencionaMonto(texto: string, costo: number | null): boolean {
   const n = String(Math.round(costo));
   return new RegExp(`(^|[^\\d])${n.replace(/\B(?=(\d{3})+(?!\d))/g, ",?")}([^\\d]|$)`).test(texto);
 }
+
+/** "24 de octubre", "23 oct", "5 de enero de 2027" */
+const RE_DIA_MES = /(\d{1,2})\s+(?:de\s+)?((?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-záéíóú]*)\.?(?:\s+(?:de\s+)?(\d{4}))?/;
+
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+/**
+ * Fecha de un horario escrito: "sábado, 24 de octubre · 14:30", "24/10", "2026-10-24".
+ * Sin año, el próximo que no haya pasado. "" si no se entiende.
+ */
+export function fechaDeTexto(texto: string, hoy: Date = new Date()): string {
+  const t = texto.toLowerCase();
+  const iso = t.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  let dia = 0;
+  let mes = -1;
+  let anio = 0;
+  const conMes = t.match(RE_DIA_MES);
+  if (conMes) {
+    dia = Number(conMes[1]);
+    mes = MESES.findIndex((m) => conMes[2].startsWith(m.slice(0, 3)));
+    anio = Number(conMes[3] || 0);
+  } else {
+    const num = t.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+    if (num) {
+      dia = Number(num[1]);
+      mes = Number(num[2]) - 1;
+      anio = num[3] ? Number(num[3].length === 2 ? `20${num[3]}` : num[3]) : 0;
+    }
+  }
+  if (!(dia >= 1 && dia <= 31) || mes < 0 || mes > 11) return "";
+  if (!anio) {
+    anio = hoy.getFullYear();
+    const hoySinHora = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    if (new Date(anio, mes, dia) < hoySinHora) anio += 1;
+  }
+  return `${anio}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+/** "2:30 a 3:00 pm" → ["14:30", "15:00"]; "por la mañana" → ["09:00", "13:00"]. Ignora el día del mes. */
+export function horasDeTexto(texto: string): [string, string] {
+  // Se quita la fecha para que el "24" de "24 de octubre" no cuente como hora.
+  const t = texto
+    .toLowerCase()
+    .replace(/\d{4}-\d{2}-\d{2}/g, " ")
+    .replace(new RegExp(RE_DIA_MES.source, "g"), " ")
+    .replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/g, " ");
+  const tarde = /p\.?\s*m|tarde|noche/.test(t);
+  const horas = Array.from(t.matchAll(/(\d{1,2})(?::(\d{2}))?\s*(h\b|hrs?\b|am|pm|a\.\s*m|p\.\s*m)?/g))
+    .filter((m) => m[2] || m[3] || /\d{1,2}\s*(a|-|–)\s*\d|\blas?\s+\d/.test(t))
+    .map((m) => {
+      let h = Number(m[1]);
+      if (tarde && h <= 9) h += 12;
+      return h <= 23 ? `${String(h).padStart(2, "0")}:${m[2] || "00"}` : "";
+    })
+    .filter(Boolean);
+  if (horas.length) return [horas[0], horas[1] && horas[1] > horas[0] ? horas[1] : ""];
+  if (/tarde/.test(t)) return ["14:00", "18:00"];
+  if (/ma[ñn]ana/.test(t)) return ["09:00", "13:00"];
+  return ["", ""];
+}

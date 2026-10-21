@@ -189,7 +189,7 @@ export async function registrarCoordinacionProveedor(input: {
 
     const que = input.tipo === "instalacion" ? "instalación" : "servicio";
 
-    // Con costo, el proveedor y lo que cobra quedan en la orden de trabajo del cliente.
+    // Con costo, si el cliente ya tiene OT abierta, queda ahí; si no, la abre la aceptación del proveedor.
     let ot: { folio: string; creada: boolean; error?: string } | null = null;
     if (input.costo && input.costo > 0) {
       ot = await guardarEnOrdenTrabajo(sb, {
@@ -204,7 +204,7 @@ export async function registrarCoordinacionProveedor(input: {
       });
     }
 
-    // Solicitud para que el proveedor acepte y proponga horarios desde su portal.
+    // Solicitud para que el proveedor acepte y proponga horarios desde su portal (al aceptar se abre la OT).
     const sol = expediente
       ? await registrarSolicitudDirecta(sb, {
           expedienteId: expediente.id,
@@ -304,6 +304,9 @@ export async function registrarAceptacionProveedor(input: {
       })
       .eq("id", r.solicitudId)
       .in("estado", ["abierta", "asignada"]);
+    // Aceptó: se abre la orden de trabajo.
+    const { abrirOrdenTrabajoSolicitud } = await import("@/lib/solicitudes-proveedor");
+    await abrirOrdenTrabajoSolicitud(sb, r.solicitudId);
     return { ok: true, solicitudId: r.solicitudId, opcion };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo registrar la aceptación." };
@@ -360,8 +363,10 @@ async function guardarEnOrdenTrabajo(
     costo: number;
     concepto: string;
     fechaProgramada: string | null;
+    /** Si no hay OT abierta, crear una (si no, se deja para cuando el proveedor acepte). */
+    crear?: boolean;
   }
-): Promise<{ folio: string; creada: boolean; error?: string }> {
+): Promise<{ folio: string; creada: boolean; error?: string } | null> {
   let q = sb
     .from("ordenes_trabajo")
     .select("id, folio, proveedor_id, fecha_programada")
@@ -390,6 +395,7 @@ async function guardarEnOrdenTrabajo(
     return error ? { folio: ot.folio, creada: false, error: error.message } : { folio: ot.folio, creada: false };
   }
 
+  if (!d.crear) return null;
   const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
   const r = await crearOrdenTrabajo({
     expedienteId: d.expedienteId,

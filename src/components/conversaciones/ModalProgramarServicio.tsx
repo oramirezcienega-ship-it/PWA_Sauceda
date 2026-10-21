@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { mencionaMonto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
+import { horasDeTexto, mencionaMonto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
 import {
   prepararProgramacionServicio,
   programarServicioSolicitud,
@@ -191,7 +191,7 @@ export function ModalProgramarServicio({
                 {datos.direccion && <div>📍 {datos.direccion}</div>}
                 <div>
                   Solicitud {datos.folio}
-                  {datos.ordenFolio ? ` · OT ${datos.ordenFolio}` : " · se creará la orden de trabajo"}
+                  {datos.ordenFolio ? ` · orden de trabajo ${datos.ordenFolio}` : " · se creará la orden de trabajo"}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -302,21 +302,4 @@ export function ModalProgramarServicio({
       </div>
     </div>
   );
-}
-
-/** "2:30 a 3:00 pm" → ["14:30", "15:00"]; "por la mañana" → ["09:00", "13:00"]. */
-function horasDeTexto(texto: string): [string, string] {
-  const t = texto.toLowerCase();
-  const tarde = /p\.?\s*m|tarde|noche/.test(t);
-  const horas = Array.from(t.matchAll(/(\d{1,2})(?::(\d{2}))?/g))
-    .map((m) => {
-      let h = Number(m[1]);
-      if (tarde && h <= 9) h += 12;
-      return h <= 23 ? `${String(h).padStart(2, "0")}:${m[2] || "00"}` : "";
-    })
-    .filter(Boolean);
-  if (horas.length) return [horas[0], horas[1] && horas[1] > horas[0] ? horas[1] : ""];
-  if (/tarde/.test(t)) return ["14:00", "18:00"];
-  if (/ma[ñn]ana/.test(t)) return ["09:00", "13:00"];
-  return ["", ""];
 }

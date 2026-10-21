@@ -13,7 +13,7 @@ import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
 import { costosProveedoresDe, loCotizadoAlCliente } from "@/lib/costo-servicio";
-import { MARCA_FOLIO_OT, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
+import { MARCA_FOLIO_OT, fechaDeTexto, horasDeTexto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
 
 export interface DatosProgramacionServicio {
   folio: string;
@@ -67,8 +67,13 @@ export async function prepararProgramacionServicio(
   try {
     await requireAdmin();
     const sb = supabaseServidor();
-    const c = await cargar(sb, solicitudId);
+    let c = await cargar(sb, solicitudId);
     if (!c) return { ok: false, error: "Solicitud no encontrada." };
+    // Aceptadas antes de que la aceptación abriera la OT: se abre ahora para mostrar su folio.
+    if (c.sol.estado === "asignada" && !c.sol.orden_trabajo_id) {
+      const { abrirOrdenTrabajoSolicitud } = await import("@/lib/solicitudes-proveedor");
+      if (await abrirOrdenTrabajoSolicitud(sb, solicitudId)) c = (await cargar(sb, solicitudId))!;
+    }
     const { sol, exp, trabajo } = c;
 
     // Si la opción vino de Telegram (código día + franja) se conoce la fecha y el horario.
@@ -86,6 +91,10 @@ export async function prepararProgramacionServicio(
     if (/^\d{8}[MT]$/.test(codigo)) {
       fecha = `${codigo.slice(0, 4)}-${codigo.slice(4, 6)}-${codigo.slice(6, 8)}`;
       [horaInicio, horaFin] = codigo.endsWith("M") ? ["09:00", "13:00"] : ["14:00", "18:00"];
+    } else {
+      // Horario escrito (portal o acordado por WhatsApp): "sábado, 24 de octubre · 14:30".
+      fecha = fechaDeTexto(opcion);
+      [horaInicio, horaFin] = horasDeTexto(opcion);
     }
 
     // Sin costo acordado: el del proveedor según lo que se le cotizó al cliente.
