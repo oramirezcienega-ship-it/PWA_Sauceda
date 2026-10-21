@@ -24,6 +24,7 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   const [direccion, setDireccion] = useState("");
   const [linkMaps, setLinkMaps] = useState("");
   const [trabajo, setTrabajo] = useState("");
+  const [costo, setCosto] = useState("");
   const [indicacion, setIndicacion] = useState("");
   const [texto, setTexto] = useState("");
   const [generando, setGenerando] = useState(false);
@@ -48,6 +49,9 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   }, [onCerrar]);
 
   const proveedor = datos?.proveedores.find((p) => p.id === proveedorId) || null;
+  // Si no hay link capturado, se arma uno de Google Maps con la dirección.
+  const linkFinal = linkMaps.trim() || linkMapsDeDireccion(direccion);
+  const costoNum = Number(costo.replace(/[^\d.]/g, "")) || null;
 
   // Primera versión en cuanto hay datos: Sofía saca la fecha y el trabajo de la conversación.
   const primeraRef = useRef(false);
@@ -71,10 +75,11 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
         tipo,
         clienteNombre: datos.clienteNombre,
         direccion,
-        linkMaps,
+        linkMaps: linkFinal,
         fecha,
         horario,
         trabajo,
+        costo: costoNum,
         indicacion,
       });
       if (version !== versionRef.current) return;
@@ -86,7 +91,17 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   }
 
   async function registrar() {
-    const r = await registrarCoordinacionProveedor({ telefono, proveedorId, tipo, direccion, linkMaps, fecha, horario, mensaje: texto });
+    const r = await registrarCoordinacionProveedor({
+      telefono,
+      proveedorId,
+      tipo,
+      direccion,
+      linkMaps: linkFinal,
+      fecha,
+      horario,
+      costo: costoNum,
+      mensaje: texto,
+    });
     if (!r.ok) setError(r.error || "No se pudo registrar en la bitácora.");
     return r.ok;
   }
@@ -174,6 +189,20 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                 </label>
               </div>
               <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Costo que cobra el proveedor</span>
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-carbon/50">$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={costo}
+                    onChange={(e) => setCosto(e.target.value)}
+                    placeholder="Ej. 850 — va en el mensaje para que lo confirme"
+                    className={`${campo} pl-5`}
+                  />
+                </div>
+              </label>
+              <label className="block">
                 <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Trabajo</span>
                 <input
                   type="text"
@@ -189,13 +218,20 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                 </span>
                 <textarea value={direccion} onChange={(e) => setDireccion(e.target.value)} rows={2} className={`${campo} resize-y`} />
               </label>
-              <input
-                type="url"
-                value={linkMaps}
-                onChange={(e) => setLinkMaps(e.target.value)}
-                placeholder="Link de Google Maps (opcional)"
-                className={campo}
-              />
+              <div>
+                <input
+                  type="url"
+                  value={linkMaps}
+                  onChange={(e) => setLinkMaps(e.target.value)}
+                  placeholder="Link de Google Maps (si lo dejas vacío se arma con la dirección)"
+                  className={campo}
+                />
+                {linkFinal && (
+                  <a href={linkFinal} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[11px] font-semibold text-sky-700 underline">
+                    📍 {linkMaps.trim() ? "Ver en Google Maps" : "Ver en Google Maps (generado con la dirección)"}
+                  </a>
+                )}
+              </div>
 
               <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-2.5 space-y-2">
                 <label className="block text-[11px] font-bold text-violet-900">Indicación para Sofía (opcional)</label>
@@ -263,4 +299,12 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
       </div>
     </div>
   );
+}
+
+/** Link de búsqueda de Google Maps para la dirección; si no menciona ciudad, se asume León. */
+function linkMapsDeDireccion(direccion: string): string {
+  const d = direccion.trim().replace(/\s+/g, " ");
+  if (!d) return "";
+  const conCiudad = /le[oó]n|gto|guanajuato|silao|irapuato|celaya|salamanca|lagos|san francisco del rinc[oó]n|purísima/i.test(d) ? d : `${d}, León, Gto.`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(conCiudad)}`;
 }

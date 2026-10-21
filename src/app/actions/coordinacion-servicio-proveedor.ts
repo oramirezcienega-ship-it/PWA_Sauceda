@@ -116,6 +116,7 @@ export async function redactarMensajeProveedorSofia(input: {
   fecha: string;
   horario: string;
   trabajo: string;
+  costo: number | null;
   indicacion?: string | null;
 }): Promise<{ ok: boolean; texto?: string; error?: string }> {
   try {
@@ -128,6 +129,7 @@ export async function redactarMensajeProveedorSofia(input: {
       ...input,
       proveedorNombre: prov.contacto_nombre || prov.nombre,
       fecha: fechaLegible(input.fecha),
+      costo: input.costo ? pesos(input.costo) : "",
     });
     if (!texto) return { ok: false, error: "Sofía no generó el mensaje (¿IA sin crédito o desactivada?)." };
     return { ok: true, texto };
@@ -145,6 +147,7 @@ export async function registrarCoordinacionProveedor(input: {
   linkMaps: string;
   fecha: string;
   horario: string;
+  costo: number | null;
   mensaje: string;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -173,7 +176,9 @@ export async function registrarCoordinacionProveedor(input: {
       detalle: [
         `Enviado por ${perfil?.nombre || "—"} desde su WhatsApp.`,
         input.fecha ? `Fecha que pide el cliente: ${fechaLegible(input.fecha)}${input.horario ? ` · ${input.horario}` : ""}` : "",
+        input.costo ? `Costo del proveedor: ${pesos(input.costo)}` : "",
         input.direccion ? `Dirección: ${input.direccion}` : "",
+        input.linkMaps ? `Maps: ${input.linkMaps}` : "",
         `Mensaje:\n${input.mensaje.trim()}`,
         `[proveedor:${input.proveedorId}]`,
       ]
@@ -190,4 +195,8 @@ export async function registrarCoordinacionProveedor(input: {
 function fechaLegible(fecha: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha;
   return new Date(`${fecha}T12:00:00`).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Mexico_City" });
+}
+
+function pesos(n: number): string {
+  return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 }

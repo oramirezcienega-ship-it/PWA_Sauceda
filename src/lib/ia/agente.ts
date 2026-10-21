@@ -2508,6 +2508,8 @@ export async function generarMensajeCoordinacionProveedor(
     fecha: string;
     horario: string;
     trabajo: string;
+    /** Lo que cobra el proveedor, ya formateado ("$850.00"); "" si no se capturó. */
+    costo: string;
     indicacion?: string | null;
   },
 ): Promise<string> {
@@ -2537,11 +2539,12 @@ El mensaje debe:
 - Decir en 1-2 frases qué hay que hacer, sacado de la conversación con el cliente y de los datos de abajo. Si el cliente mencionó detalles útiles para el proveedor (síntomas, medidas, material, acceso), inclúyelos breves.
 - Proponer la fecha y horario que pide el cliente y preguntar si le queda o qué opción tiene.
 - Incluir la dirección completa (y el link de Google Maps si hay) para que la confirme y pueda agendar la visita.
+- Si viene el costo del proveedor, mencionarlo como el costo acordado del trabajo y pedir que lo confirme.
 - Cerrar pidiendo que confirme.
 
 Reglas:
 - Español de México, máximo ~8 líneas. Puedes usar *negritas* de WhatsApp para fecha y dirección.
-- NO incluyas el teléfono del cliente ni precios. Usa solo el nombre de pila del cliente.
+- NO incluyas el teléfono del cliente ni el precio que paga el cliente; el único monto permitido es el costo del proveedor indicado abajo. Usa solo el nombre de pila del cliente.
 - No inventes fecha, horario ni dirección: si un dato viene vacío, pide al proveedor su disponibilidad o deja la dirección "por confirmar".
 - Escribe ÚNICAMENTE el texto del mensaje, sin comillas ni explicaciones.
 
@@ -2550,6 +2553,7 @@ Datos:
 - Trabajo: ${datos.trabajo || "(sácalo de la conversación)"}
 - Fecha que pide el cliente: ${datos.fecha || "(no indicada; búscala en la conversación, si no hay pide disponibilidad)"}
 - Horario: ${datos.horario || "(no indicado)"}
+- Costo que cobra el proveedor: ${datos.costo || "(no indicado; no menciones montos)"}
 - Dirección: ${datos.direccion || "(no registrada)"}
 - Google Maps: ${datos.linkMaps || "(sin link)"}${datos.indicacion?.trim() ? `\n\nIndicación del asesor (síguela): ${datos.indicacion.trim()}` : ""}`;
 
