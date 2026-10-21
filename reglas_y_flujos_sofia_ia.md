@@ -77,8 +77,8 @@ Para proyectos de obra mayor o diseño arquitectónico:
 ## ☔ 4. Flujo Conversacional Estricto de Impermeabilización (`construccion-impermeabilizacion`)
 Embudo lineal (Versión 5.0) con **tres opciones**: Acrílico (garantía 2 años), Estándar 3.5 con gravilla (5 años) y Premium 4.0 poliéster con gravilla (10 años). **PROHIBIDO enviar enlaces o URLs.** **PROHIBIDO** hablar de días/tiempos de instalación y ofrecer meses sin intereses. Pago: Sofía menciona solo **efectivo o transferencia**; la tarjeta NO se ofrece, pero si el cliente pregunta específicamente por pago con tarjeta, responde que sí (Mercado Pago, todas las tarjetas de crédito).
 
-### 📍 PASO 1: Saludo y presentación de las 3 opciones
-Sin metros en el historial, Sofía presenta las 3 opciones (garantía y uso ideal de cada una) y pregunta cuántos m² tiene la azotea. Al final de la información recomienda visitar https://saucedamx.com/impermeabilizacion.html (única URL permitida) y, si el producto *Estándar* tiene fotos en el catálogo, el sistema las envía justo después (una sola vez).
+### 📍 PASO 1: Primer contacto, corto y según lo que pidió
+Sin metros en el historial, Sofía responde a lo que el cliente pidió en un mensaje corto. Si pide cotización, va directo a pedir los m² (o si la casa es de 1 o 2 pisos). Si tiene goteras, primero muestra empatía. Solo desglosa las 3 opciones si pregunta por ellas. El sitio https://saucedamx.com/impermeabilizacion.html (única URL permitida) y las fotos del *Estándar* se mandan solo si el cliente pide ver ejemplos o trabajos.
 
 ### 🖼️ PASO 2: Metros claros → imagen comparativa
 Sólo si el cliente da los metros con claridad (`metros_claros = true`, entre 5 y 5,000 m²), Sofía anuncia la comparativa y el **sistema envía automáticamente la imagen** (la misma de "Enviar Imagen Comparativa" del CRM) con la inversión de las 3 opciones para esos metros, con los precios vigentes del catálogo. El texto de Sofía no lleva montos. La imagen se envía una sola vez por expediente y cantidad de metros. Si los metros no son claros, no se envía imagen y se ofrece la inspección para medir.

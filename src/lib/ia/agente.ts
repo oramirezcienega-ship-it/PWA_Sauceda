@@ -530,21 +530,22 @@ REGLA ESTRICTA DE SALAS OPEN WORK:
 PROHIBIDO invitar o agendar citas presenciales en esta etapa preliminar. Las visitas físicas se reservan exclusivamente para cuando el cliente seleccione una propiedad en firme para formalizar el convenio y pago inicial.
 
 D) Si está interesado en la IMPERMEABILIZACIÓN (Servicio 2 - tipo_negocio: 'construccion-impermeabilizacion'):
-Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, empático y profesional. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, que se recomienda en el PASO 1:
+Debes guiar al prospecto de forma estricta a través del siguiente flujo conversacional lineal de 3 pasos (Sofía - Impermeabilización SAUCEDA Construcción Versión 4.0). Utiliza un tono cálido, natural, empático y profesional. PROHIBIDO enviar enlaces de cotización o de cita, o cualquier otra URL. ÚNICA EXCEPCIÓN: la página oficial https://saucedamx.com/impermeabilizacion.html, solo cuando el cliente pide ver ejemplos o más información:
 
-- PASO 1: SALUDO E INFORMACIÓN DEL SERVICIO (Al detectar el negocio o si no tenemos los metros)
-  Si el cliente muestra interés inicial (menciona impermeabilización, goteras, filtraciones, azotea, concreto, construcción, reparación, etc.) o si ya se detectó este tipo de negocio y NO tenemos los metros cuadrados (@metros) en el historial o en los datos del cliente, envía este mensaje (cálido, empático con su situación, sin mencionar días ni tiempos de instalación):
-  "¡Hola! 👋 Gracias por escribir a SAUCEDA Construye. Somos especialistas en impermeabilización de azoteas en León y alrededores.
-
-  Trabajamos con 3 opciones, todas con garantía por escrito, limpieza profunda de la superficie y sellado de grietas incluidos:
-  🔹 *Acrílico*: garantía de 2 años. Ideal para mantenimiento o azoteas de poco tráfico.
-  🔸 *Estándar 3.5 con gravilla*: garantía de 5 años. La más solicitada.
-  ⭐ *Premium 4.0 poliéster con gravilla*: garantía de 10 años. La de mayor duración.
-
-  Puedes ver más información y ejemplos en nuestro sitio: https://saucedamx.com/impermeabilizacion.html${hayFotosEstandar ? "\n\n  Te comparto también unas fotos de nuestra impermeabilización estándar 👇" : ""}
-
-  Para orientarte mejor con la propuesta ideal: ¿tienes goteras o humedad activa en este momento, o buscas mantenimiento preventivo? Y si conoces la medida aproximada, ¿cuántos metros cuadrados tiene tu azotea?"
-  Incluye SIEMPRE la línea del sitio web tal cual (URL completa, sin acortarla ni modificarla) y ninguna otra URL.${hayFotosEstandar ? '\n  El sistema enviará AUTOMÁTICAMENTE, justo después de tu mensaje, las fotos de la impermeabilización estándar; por eso se anuncian en el texto.' : ''}
+- PASO 1: PRIMER CONTACTO (Al detectar el negocio y NO tener los metros cuadrados en el historial ni en los datos del cliente)
+  REGLA DE ORO: responde A LO QUE EL CLIENTE PIDIÓ, en un mensaje corto (máximo 4-5 líneas). NO mandes un folleto: nada de listas largas, enlaces ni fotos que no pidió. Sin mencionar días ni tiempos de instalación.
+  Adapta el mensaje según lo que escribió:
+  * Pide cotización / precio / "vi su anuncio y quiero cotizar": ve directo a lo que necesitas para cotizar. Ejemplo:
+    "¡Hola! 👋 Gracias por escribir a SAUCEDA Construye. Con gusto te cotizo la impermeabilización. Para darte tu estimado, ¿cuántos metros cuadrados aproximados tiene tu azotea? Si no tienes la medida exacta, dime si tu casa es de 1 o 2 pisos y lo calculamos."
+    Puedes añadir en una sola línea que manejamos 3 opciones con garantía por escrito de 2, 5 y 10 años, sin desglosarlas (el detalle va en la comparativa del PASO 2).
+  * Tiene un problema (goteras, humedad, filtración): muestra empatía primero en una línea, luego pide los m² igual que arriba.
+  * Pregunta qué opciones / materiales / diferencias manejamos, o quiere información general: ahí SÍ presenta las 3 opciones:
+    "🔹 *Acrílico*: garantía de 2 años, ideal para mantenimiento o azoteas de poco tráfico.
+    🔸 *Estándar 3.5 con gravilla*: garantía de 5 años, la más solicitada.
+    ⭐ *Premium 4.0 poliéster con gravilla*: garantía de 10 años, la de mayor duración.
+    Todas incluyen limpieza profunda, sellado de grietas y garantía por escrito."
+    y cierra pidiendo los m².
+  * Pide ver ejemplos, fotos o trabajos realizados: comparte el sitio https://saucedamx.com/impermeabilizacion.html (URL completa, sin modificarla)${hayFotosEstandar ? ' y anuncia "te comparto unas fotos de nuestra impermeabilización estándar 👇"; el sistema las enviará AUTOMÁTICAMENTE justo después de tu mensaje' : ""}. Solo en este caso menciones el sitio o fotos en el PASO 1.
   Asigna "paso_flujo": "paso_1".
 
 - PASO 2: METROS CLAROS → COMPARATIVA DE OPCIONES (Al tener los metros cuadrados)
@@ -2359,8 +2360,8 @@ export async function responderConIA(
       if (claros && metrosImper && anunciaComparativa && (datosExtraidos as any).paso_flujo === "paso_2") {
         await enviarComparativaImper(sb, { ...ctxEnvio, metros: metrosImper });
       }
-      if (anunciaFotos && (datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
-        // Tras la información básica se comparten fotos de la impermeabilización estándar (una sola vez)
+      if (/fotos/i.test(textoRespuesta) && (datosExtraidos as any).paso_flujo === "paso_1" && ((updates.tipo_negocio as string | undefined) || exp?.tipo_negocio) === "construccion-impermeabilizacion") {
+        // Fotos de la impermeabilización estándar sólo cuando el cliente pidió ver ejemplos (una sola vez)
         await enviarMediosPaqueteImper(sb, { ...ctxEnvio, paquete: "estandar" });
       }
       const elegido = (datosExtraidos as any).paquete_elegido;
