@@ -484,14 +484,18 @@ export async function coordinacionConversacion(
     : q.eq("expediente_id", expedienteId!);
   const { data: cots } = await q.order("created_at", { ascending: false }).limit(5);
   const ids = (cots || []).map((c: any) => c.id);
-  if (ids.length === 0) return { cotizaciones: [], solicitudes: [] };
+  // También las solicitudes directas (Coordinar Servicio), que cuelgan del expediente sin cotización.
+  const filtro = [ids.length ? `cotizacion_id.in.(${ids.join(",")})` : "", expedienteId ? `expediente_id.eq.${expedienteId}` : ""]
+    .filter(Boolean)
+    .join(",");
+  if (!filtro) return { cotizaciones: [], solicitudes: [] };
 
-  const { data: abiertas } = await sb.from("solicitudes_proveedor").select("id").in("cotizacion_id", ids).eq("estado", "abierta");
+  const { data: abiertas } = await sb.from("solicitudes_proveedor").select("id").or(filtro).eq("estado", "abierta");
   for (const a of abiertas || []) await avanzarSolicitud(sb, a.id);
   const { data } = await sb
     .from("solicitudes_proveedor")
     .select(SELECT_SOLICITUD)
-    .in("cotizacion_id", ids)
+    .or(filtro)
     .neq("estado", "cancelada")
     .order("created_at", { ascending: false });
   return {

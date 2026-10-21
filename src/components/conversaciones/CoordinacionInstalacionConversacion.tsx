@@ -48,7 +48,7 @@ export function CoordinacionInstalacionConversacion({
     return () => clearInterval(t);
   }, [cargar]);
 
-  if (!datos || datos.cotizaciones.length === 0) return null;
+  if (!datos || (datos.cotizaciones.length === 0 && datos.solicitudes.length === 0)) return null;
 
   const activas = datos.solicitudes.filter((s) => s.estado === "abierta" || s.estado === "asignada");
   const porConfirmar = datos.solicitudes.filter((s) => s.estado === "asignada");
@@ -81,7 +81,7 @@ export function CoordinacionInstalacionConversacion({
     <div className={`border-b px-3 py-1.5 text-xs ${porConfirmar.length ? "border-emerald-300 bg-emerald-50/60" : "border-carbon/10 bg-white/60"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" onClick={() => setAbierto((v) => !v)} className="flex items-center gap-1.5 font-semibold text-carbon/75">
-          🗓 Coordinar instalación
+          🗓 {datos.cotizaciones.length ? "Coordinar instalación" : "Coordinar servicio"}
           {activas.length > 0 && <span className="rounded-full bg-sauce px-1.5 py-0.5 text-[10px] font-bold text-white">{activas.length}</span>}
           {porConfirmar.length > 0 && (
             <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">

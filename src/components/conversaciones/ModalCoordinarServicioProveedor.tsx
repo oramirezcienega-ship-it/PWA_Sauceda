@@ -104,7 +104,15 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
       mensaje: texto,
     });
     if (!r.ok) setError(r.error || "No se pudo registrar en la bitácora.");
-    if (r.ok && r.ordenFolio) setOrden(`${r.ordenCreada ? "Se creó la orden de trabajo" : "Se actualizó la orden de trabajo"} ${r.ordenFolio} con el proveedor y su costo.`);
+    if (r.ok)
+      setOrden(
+        [
+          r.ordenFolio ? `${r.ordenCreada ? "Se creó la orden de trabajo" : "Se actualizó la orden de trabajo"} ${r.ordenFolio} con el proveedor y su costo.` : "",
+          r.solicitudFolio ? `Solicitud ${r.solicitudFolio}: cuando acepte y proponga horarios en su link, aparecerá arriba del chat para ofrecérselos al cliente.` : "",
+        ]
+          .filter(Boolean)
+          .join(" ") || null
+      );
     return r.ok;
   }
 

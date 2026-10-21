@@ -2510,6 +2510,8 @@ export async function generarMensajeCoordinacionProveedor(
     trabajo: string;
     /** Lo que cobra el proveedor, ya formateado ("$850.00"); "" si no se capturó. */
     costo: string;
+    /** Link de su portal para aceptar y proponer horarios; "" si no hay. */
+    linkRespuesta: string;
     indicacion?: string | null;
   },
 ): Promise<string> {
@@ -2540,7 +2542,7 @@ El mensaje debe:
 - Proponer la fecha y horario que pide el cliente y preguntar si le queda o qué opción tiene.
 - Incluir la dirección completa (y el link de Google Maps si hay) para que la confirme y pueda agendar la visita.
 - Si viene el costo del proveedor, mencionarlo como el costo acordado del trabajo y pedir que lo confirme.
-- Cerrar pidiendo que confirme.
+- Cerrar pidiendo que confirme si lo acepta y que proponga los horarios que puede; si viene el link de respuesta, pedirle que lo haga ahí (en una línea propia, tal cual).
 
 Reglas:
 - Español de México, máximo ~8 líneas. Puedes usar *negritas* de WhatsApp para fecha y dirección.
@@ -2554,6 +2556,7 @@ Datos:
 - Fecha que pide el cliente: ${datos.fecha || "(no indicada; búscala en la conversación, si no hay pide disponibilidad)"}
 - Horario: ${datos.horario || "(no indicado)"}
 - Costo que cobra el proveedor: ${datos.costo || "(no indicado; no menciones montos)"}
+- Link para aceptar y proponer horarios: ${datos.linkRespuesta || "(sin link; que responda por este WhatsApp)"}
 - Dirección: ${datos.direccion || "(no registrada)"}
 - Google Maps: ${datos.linkMaps || "(sin link)"}${datos.indicacion?.trim() ? `\n\nIndicación del asesor (síguela): ${datos.indicacion.trim()}` : ""}`;
 

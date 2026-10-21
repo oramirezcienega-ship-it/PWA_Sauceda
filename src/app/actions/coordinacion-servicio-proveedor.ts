@@ -7,6 +7,7 @@
  * Aquí solo se prepara, se redacta y se registra en la bitácora.
  */
 
+import { revalidatePath } from "next/cache";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono, variantesTelefono } from "@/lib/telefono";
@@ -124,12 +125,16 @@ export async function redactarMensajeProveedorSofia(input: {
     const sb = supabaseServidor();
     const { data: prov } = await sb.from("proveedores").select("nombre, contacto_nombre").eq("id", input.proveedorId).maybeSingle();
     if (!prov) return { ok: false, error: "Selecciona el proveedor." };
+    // Link de su portal: ahí acepta y propone horarios (la solicitud se registra al mandar el mensaje).
+    const { tokenProveedor, linkPortalProveedor } = await import("@/lib/solicitudes-proveedor");
+    const token = await tokenProveedor(sb, input.proveedorId);
     const { generarMensajeCoordinacionProveedor } = await import("@/lib/ia/agente");
     const texto = await generarMensajeCoordinacionProveedor(sb, {
       ...input,
       proveedorNombre: prov.contacto_nombre || prov.nombre,
       fecha: fechaLegible(input.fecha),
       costo: input.costo ? pesos(input.costo) : "",
+      linkRespuesta: token ? linkPortalProveedor(token) : "",
     });
     if (!texto) return { ok: false, error: "Sofía no generó el mensaje (¿IA sin crédito o desactivada?)." };
     return { ok: true, texto };
@@ -149,7 +154,7 @@ export async function registrarCoordinacionProveedor(input: {
   horario: string;
   costo: number | null;
   mensaje: string;
-}): Promise<{ ok: boolean; ordenFolio?: string; ordenCreada?: boolean; error?: string }> {
+}): Promise<{ ok: boolean; ordenFolio?: string; ordenCreada?: boolean; solicitudFolio?: string; error?: string }> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
@@ -184,6 +189,25 @@ export async function registrarCoordinacionProveedor(input: {
       });
     }
 
+    // Solicitud para que el proveedor acepte y proponga horarios desde su portal.
+    const sol = expediente
+      ? await registrarSolicitudDirecta(sb, {
+          expedienteId: expediente.id,
+          zona: expediente.fraccionamiento || "",
+          ordenTrabajoId: ot?.folio && !ot.error ? await idOrden(sb, ot.folio) : null,
+          proveedorId: input.proveedorId,
+          descripcion: [
+            `${que[0].toUpperCase()}${que.slice(1)}${expediente.necesidad ? `: ${expediente.necesidad}` : ""}`,
+            input.direccion ? `Dirección: ${input.direccion}` : "",
+            input.linkMaps ? `Maps: ${input.linkMaps}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          fechasSugeridas: input.fecha ? `${fechaLegible(input.fecha)}${input.horario ? ` · ${input.horario}` : ""}` : "",
+          costo: input.costo,
+        })
+      : null;
+
     await registrarActividad(sb, {
       expedienteId: expediente?.id ?? null,
       prospectoId: prospecto?.id ?? null,
@@ -195,6 +219,7 @@ export async function registrarCoordinacionProveedor(input: {
         input.costo ? `Costo del proveedor: ${pesos(input.costo)}` : "",
         ot?.folio ? `Orden de trabajo: ${ot.folio}${ot.creada ? " (creada)" : " (actualizada)"}` : "",
         ot?.error ? `No se pudo guardar en la orden de trabajo: ${ot.error}` : "",
+        sol?.folio ? `Solicitud ${sol.folio}: el proveedor acepta y propone horarios desde su portal.` : "",
         input.direccion ? `Dirección: ${input.direccion}` : "",
         input.linkMaps ? `Maps: ${input.linkMaps}` : "",
         `Mensaje:\n${input.mensaje.trim()}`,
@@ -204,7 +229,8 @@ export async function registrarCoordinacionProveedor(input: {
         .join("\n"),
     });
     if (ot?.error) return { ok: false, error: `Quedó en la bitácora, pero no en la orden de trabajo: ${ot.error}` };
-    return { ok: true, ordenFolio: ot?.folio, ordenCreada: ot?.creada };
+    revalidatePath("/conversaciones");
+    return { ok: true, ordenFolio: ot?.folio, ordenCreada: ot?.creada, solicitudFolio: sol?.folio };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo registrar la coordinación." };
   }
@@ -297,4 +323,97 @@ function fechaProgramada(fecha: string, horario: string): string | null {
   }
   if (hora > 23 || min > 59) return null;
   return `${fecha}T${String(hora).padStart(2, "0")}:${String(min).padStart(2, "0")}:00-06:00`;
+}
+
+async function idOrden(sb: ReturnType<typeof supabaseServidor>, folio: string): Promise<string | null> {
+  const { data } = await sb.from("ordenes_trabajo").select("id").eq("folio", folio).maybeSingle();
+  return data?.id ?? null;
+}
+
+/** Plazo para que el proveedor responda desde su portal; después se avisa al grupo. */
+const HORAS_RESPUESTA = 24;
+
+/**
+ * Solicitud directa a un solo proveedor (sin cascada ni aviso automático: el mensaje ya
+ * salió por el WhatsApp del asesor). Si ya hay una abierta para este cliente y proveedor,
+ * se actualiza en vez de duplicarla; si ya la aceptó, se deja como está.
+ */
+async function registrarSolicitudDirecta(
+  sb: ReturnType<typeof supabaseServidor>,
+  d: {
+    expedienteId: string;
+    zona: string;
+    ordenTrabajoId: string | null;
+    proveedorId: string;
+    descripcion: string;
+    fechasSugeridas: string;
+    costo: number | null;
+  }
+): Promise<{ folio: string } | null> {
+  const ahora = new Date();
+  const limite = new Date(ahora.getTime() + HORAS_RESPUESTA * 3600 * 1000).toISOString();
+  const { data: previas } = await sb
+    .from("solicitudes_proveedor")
+    .select("id, folio, estado, solicitudes_proveedor_envios ( id, proveedor_id, estado )")
+    .eq("expediente_id", d.expedienteId)
+    .is("cotizacion_id", null)
+    .in("estado", ["abierta", "asignada"])
+    .order("created_at", { ascending: false });
+  const previa = (previas || []).find((s: any) =>
+    (s.solicitudes_proveedor_envios || []).some((e: any) => e.proveedor_id === d.proveedorId)
+  ) as any;
+  if (previa?.estado === "asignada") return { folio: previa.folio };
+  if (previa) {
+    await sb
+      .from("solicitudes_proveedor")
+      .update({
+        descripcion: d.descripcion,
+        fechas_sugeridas: d.fechasSugeridas,
+        ...(d.ordenTrabajoId ? { orden_trabajo_id: d.ordenTrabajoId } : {}),
+        updated_at: ahora.toISOString(),
+      })
+      .eq("id", previa.id);
+    const envio = previa.solicitudes_proveedor_envios.find((e: any) => e.proveedor_id === d.proveedorId);
+    await sb
+      .from("solicitudes_proveedor_envios")
+      .update({ costo_referencia: d.costo, fecha_limite: limite, updated_at: ahora.toISOString() })
+      .eq("id", envio.id);
+    return { folio: previa.folio };
+  }
+
+  const { siguienteFolioSolicitud } = await import("@/lib/solicitudes-proveedor");
+  const yo = await usuarioActual();
+  const folio = await siguienteFolioSolicitud(sb);
+  const { data: sol, error } = await sb
+    .from("solicitudes_proveedor")
+    .insert({
+      folio,
+      expediente_id: d.expedienteId,
+      orden_trabajo_id: d.ordenTrabajoId,
+      descripcion: d.descripcion.slice(0, 4000),
+      zona: d.zona.slice(0, 300),
+      fechas_sugeridas: d.fechasSugeridas.slice(0, 500),
+      modo: "cascada",
+      horas_respuesta: HORAS_RESPUESTA,
+      notas_internas: "Coordinación de servicio desde la conversación del cliente.",
+      creado_por: yo?.id || null,
+    })
+    .select("id")
+    .single();
+  if (error || !sol) {
+    console.error("No se pudo crear la solicitud directa al proveedor:", error);
+    return null;
+  }
+  const { error: errEnv } = await sb.from("solicitudes_proveedor_envios").insert({
+    solicitud_id: sol.id,
+    proveedor_id: d.proveedorId,
+    orden: 0,
+    estado: "enviada",
+    enviada_at: ahora.toISOString(),
+    fecha_limite: limite,
+    notificado: true,
+    costo_referencia: d.costo,
+  });
+  if (errEnv) console.error("No se pudo crear el envío de la solicitud directa:", errEnv);
+  return { folio };
 }
