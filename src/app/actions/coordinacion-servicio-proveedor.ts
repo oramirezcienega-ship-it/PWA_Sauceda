@@ -149,7 +149,7 @@ export async function registrarCoordinacionProveedor(input: {
   horario: string;
   costo: number | null;
   mensaje: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; ordenFolio?: string; ordenCreada?: boolean; error?: string }> {
   try {
     await requireAdmin();
     const sb = supabaseServidor();
@@ -168,6 +168,22 @@ export async function registrarCoordinacionProveedor(input: {
     }
 
     const que = input.tipo === "instalacion" ? "instalación" : "servicio";
+
+    // Con costo, el proveedor y lo que cobra quedan en la orden de trabajo del cliente.
+    let ot: { folio: string; creada: boolean; error?: string } | null = null;
+    if (input.costo && input.costo > 0) {
+      ot = await guardarEnOrdenTrabajo(sb, {
+        expedienteId: expediente?.id ?? null,
+        prospectoId: prospecto?.id ?? null,
+        tipoNegocio: expediente?.tipo_negocio || "",
+        proveedorId: input.proveedorId,
+        proveedorNombre: prov?.nombre || "Proveedor",
+        costo: input.costo,
+        concepto: `${que[0].toUpperCase()}${que.slice(1)}${expediente?.necesidad ? ` · ${expediente.necesidad}` : ""}${input.fecha ? ` · ${fechaLegible(input.fecha)}` : ""}`,
+        fechaProgramada: fechaProgramada(input.fecha, input.horario),
+      });
+    }
+
     await registrarActividad(sb, {
       expedienteId: expediente?.id ?? null,
       prospectoId: prospecto?.id ?? null,
@@ -177,6 +193,8 @@ export async function registrarCoordinacionProveedor(input: {
         `Enviado por ${perfil?.nombre || "—"} desde su WhatsApp.`,
         input.fecha ? `Fecha que pide el cliente: ${fechaLegible(input.fecha)}${input.horario ? ` · ${input.horario}` : ""}` : "",
         input.costo ? `Costo del proveedor: ${pesos(input.costo)}` : "",
+        ot?.folio ? `Orden de trabajo: ${ot.folio}${ot.creada ? " (creada)" : " (actualizada)"}` : "",
+        ot?.error ? `No se pudo guardar en la orden de trabajo: ${ot.error}` : "",
         input.direccion ? `Dirección: ${input.direccion}` : "",
         input.linkMaps ? `Maps: ${input.linkMaps}` : "",
         `Mensaje:\n${input.mensaje.trim()}`,
@@ -185,7 +203,8 @@ export async function registrarCoordinacionProveedor(input: {
         .filter(Boolean)
         .join("\n"),
     });
-    return { ok: true };
+    if (ot?.error) return { ok: false, error: `Quedó en la bitácora, pero no en la orden de trabajo: ${ot.error}` };
+    return { ok: true, ordenFolio: ot?.folio, ordenCreada: ot?.creada };
   } catch (err: any) {
     return { ok: false, error: err?.message || "No se pudo registrar la coordinación." };
   }
@@ -199,4 +218,83 @@ function fechaLegible(fecha: string): string {
 
 function pesos(n: number): string {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
+}
+
+/**
+ * Orden de trabajo abierta del cliente para este proveedor: la que ya lo tiene, o una sin
+ * proveedor. Si no hay (o todas son de otro proveedor), se crea una nueva.
+ */
+async function guardarEnOrdenTrabajo(
+  sb: ReturnType<typeof supabaseServidor>,
+  d: {
+    expedienteId: string | null;
+    prospectoId: string | null;
+    tipoNegocio: string;
+    proveedorId: string;
+    proveedorNombre: string;
+    costo: number;
+    concepto: string;
+    fechaProgramada: string | null;
+  }
+): Promise<{ folio: string; creada: boolean; error?: string }> {
+  let q = sb
+    .from("ordenes_trabajo")
+    .select("id, folio, proveedor_id, fecha_programada")
+    .in("estatus", ["pendiente", "en_proceso"]);
+  q = d.expedienteId && d.prospectoId
+    ? q.or(`expediente_id.eq.${d.expedienteId},prospecto_id.eq.${d.prospectoId}`)
+    : d.expedienteId
+    ? q.eq("expediente_id", d.expedienteId)
+    : q.eq("prospecto_id", d.prospectoId!);
+  const { data: abiertas } = await q.order("created_at", { ascending: false });
+  const ot =
+    (abiertas || []).find((o: any) => o.proveedor_id === d.proveedorId) ||
+    (abiertas || []).find((o: any) => !o.proveedor_id);
+
+  if (ot) {
+    const { error } = await sb
+      .from("ordenes_trabajo")
+      .update({
+        proveedor_id: d.proveedorId,
+        costo_proveedor: d.costo,
+        proveedor_concepto: d.concepto,
+        ...(d.fechaProgramada && !ot.fecha_programada ? { fecha_programada: d.fechaProgramada } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ot.id);
+    return error ? { folio: ot.folio, creada: false, error: error.message } : { folio: ot.folio, creada: false };
+  }
+
+  const { crearOrdenTrabajo } = await import("@/app/actions/ordenes-trabajo");
+  const r = await crearOrdenTrabajo({
+    expedienteId: d.expedienteId,
+    prospectoId: d.prospectoId,
+    ...(d.tipoNegocio ? { tipoNegocio: d.tipoNegocio } : {}),
+    titulo: `${d.concepto} — ${d.proveedorNombre}`,
+    fechaProgramada: d.fechaProgramada || undefined,
+    proveedorId: d.proveedorId,
+    costoProveedor: d.costo,
+    proveedorConcepto: d.concepto,
+  });
+  if (!r.ok || !r.folio) return { folio: "", creada: false, error: r.error || "No se pudo crear la orden de trabajo." };
+  return { folio: r.folio, creada: true };
+}
+
+/** Fecha + horario a timestamp de México: "10:30", "4 pm", "mañana" (9 h) o "tarde" (14 h); 9 h si no se entiende. */
+function fechaProgramada(fecha: string, horario: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null;
+  const h = horario.toLowerCase();
+  let hora = 9;
+  let min = 0;
+  const m = h.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.\s*m\.|p\.\s*m\.)?/);
+  if (m) {
+    hora = Number(m[1]);
+    min = Number(m[2] || 0);
+    if (m[3]?.startsWith("p") && hora < 12) hora += 12;
+    if (m[3]?.startsWith("a") && hora === 12) hora = 0;
+  } else if (/tarde/.test(h)) {
+    hora = 14;
+  }
+  if (hora > 23 || min > 59) return null;
+  return `${fecha}T${String(hora).padStart(2, "0")}:${String(min).padStart(2, "0")}:00-06:00`;
 }

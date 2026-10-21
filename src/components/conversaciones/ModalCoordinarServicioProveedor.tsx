@@ -29,6 +29,7 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   const [texto, setTexto] = useState("");
   const [generando, setGenerando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [orden, setOrden] = useState<string | null>(null);
   const versionRef = useRef(0);
 
   useEffect(() => {
@@ -103,6 +104,7 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
       mensaje: texto,
     });
     if (!r.ok) setError(r.error || "No se pudo registrar en la bitácora.");
+    if (r.ok && r.ordenFolio) setOrden(`${r.ordenCreada ? "Se creó la orden de trabajo" : "Se actualizó la orden de trabajo"} ${r.ordenFolio} con el proveedor y su costo.`);
     return r.ok;
   }
 
@@ -197,7 +199,7 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                     inputMode="decimal"
                     value={costo}
                     onChange={(e) => setCosto(e.target.value)}
-                    placeholder="Ej. 850 — va en el mensaje para que lo confirme"
+                    placeholder="Ej. 850 — va en el mensaje y en la orden de trabajo"
                     className={`${campo} pl-5`}
                   />
                 </div>
@@ -272,7 +274,12 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
               </div>
 
               {error && <p className="text-[11px] rounded bg-rojo/10 text-rojo px-2 py-1.5">{error}</p>}
-              {aviso && <p className="text-[11px] rounded bg-emerald-50 border border-emerald-200 text-emerald-900 px-2 py-1.5">{aviso}</p>}
+              {aviso && (
+                <p className="text-[11px] rounded bg-emerald-50 border border-emerald-200 text-emerald-900 px-2 py-1.5">
+                  {aviso}
+                  {orden && <span className="block font-semibold">{orden}</span>}
+                </p>
+              )}
             </div>
 
             <div className="px-4 py-3 border-t border-carbon/10 flex flex-wrap items-center justify-end gap-2 bg-crema/20 shrink-0">
