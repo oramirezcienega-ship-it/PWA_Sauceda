@@ -66,6 +66,7 @@ import {
 } from "@/lib/plantillas-whatsapp";
 import { CotizacionesEspecialesConversacion } from "@/components/conversaciones/CotizacionesEspecialesConversacion";
 import { CoordinacionInstalacionConversacion } from "@/components/conversaciones/CoordinacionInstalacionConversacion";
+import { ModalCoordinarServicioProveedor } from "@/components/conversaciones/ModalCoordinarServicioProveedor";
 
 type TabPrincipal = "bandeja" | "documentos" | "respuestas";
 
@@ -875,6 +876,7 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [mostrarCotizacionExpress, setMostrarCotizacionExpress] = useState(false);
   const [menuCotizador, setMenuCotizador] = useState(false);
   const [mostrarCoordinacion, setMostrarCoordinacion] = useState(false);
+  const [mostrarServicioProveedor, setMostrarServicioProveedor] = useState(false);
   const [mostrarPasarLead, setMostrarPasarLead] = useState(false);
   const [mostrarRescateMovil, setMostrarRescateMovil] = useState(false);
   const [cambiandoEtapa, setCambiandoEtapa] = useState(false);
@@ -3123,6 +3125,18 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                           <span>Coordinar Inspección</span>
                         </button>
                       )}
+                      {/* Botón: Coordinar servicio/instalación con un proveedor (Sofía redacta el WhatsApp) */}
+                      {detalle?.telefono && (
+                        <button
+                          type="button"
+                          onClick={() => setMostrarServicioProveedor(true)}
+                          title="Sofía redacta el WhatsApp para el proveedor (p. ej. el plomero) con el trabajo, la fecha que pide el cliente y la dirección"
+                          className="flex items-center gap-1 rounded bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 px-2 py-1 text-[11px] font-bold transition shadow-xs cursor-pointer"
+                        >
+                          <span>🔧</span>
+                          <span>Coordinar Servicio</span>
+                        </button>
+                      )}
                       {/* Botón: Rescate Móvil (Estrategia de Doble Línea / Evolution API) */}
                       {detalle?.telefono && canalDe(detalle.telefono) === "whatsapp" && (
                         <button
@@ -3486,6 +3500,11 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
           prospectoId={detalle.prospectoId}
           alCerrar={() => setMostrarCoordinacion(false)}
         />
+      )}
+
+      {/* Modal: coordinar servicio/instalación con un proveedor (desde el chat) */}
+      {mostrarServicioProveedor && detalle?.telefono && (
+        <ModalCoordinarServicioProveedor telefono={detalle.telefono} onCerrar={() => setMostrarServicioProveedor(false)} />
       )}
 
       {/* Modal: pasar el lead a un asesor por Telegram */}

@@ -2494,3 +2494,73 @@ Datos del cliente para referencia:
   }
 }
 
+
+/**
+ * Sofía redacta el WhatsApp para coordinar un servicio o instalación con un proveedor
+ * (p. ej. el plomero): qué hay que hacer, la fecha que pide el cliente y la dirección.
+ * Lee la conversación del cliente para sacar lo que necesita; no envía nada.
+ */
+export async function generarMensajeCoordinacionProveedor(
+  sb: SupabaseClient,
+  datos: {
+    telefono: string;
+    proveedorNombre: string;
+    tipo: "servicio" | "instalacion";
+    clienteNombre: string;
+    direccion: string;
+    linkMaps: string;
+    fecha: string;
+    horario: string;
+    trabajo: string;
+    indicacion?: string | null;
+  },
+): Promise<string> {
+  const { data } = await sb
+    .from("mensajes_whatsapp")
+    .select("direccion, texto, agente, created_at")
+    .in("telefono", variantesTelefono(datos.telefono))
+    .order("created_at", { ascending: false })
+    .limit(40);
+  const historia = ((data as FilaMsg[]) ?? [])
+    .reverse()
+    .filter((m) => {
+      const txt = (m.texto || "").trim();
+      if (!txt || txt.startsWith("[Plantilla:") || txt.startsWith("[Secuencia]")) return false;
+      return m.agente !== "Sistema" && m.agente !== "Sistema (Secuencia)";
+    });
+  const conversacion = historia
+    .map((m) => `${m.direccion === "in" ? "Cliente" : "Nosotros"}: ${m.texto.replace(/^\[audio:[^\]]+\]\s*/, "(nota de voz) ")}`)
+    .join("\n")
+    .slice(-8000);
+
+  const que = datos.tipo === "instalacion" ? "una instalación" : "un servicio";
+  const system = `Eres Sofía, de SAUCEDA Construye (León, Guanajuato). Vas a escribir UN mensaje de WhatsApp para ${datos.proveedorNombre}, proveedor de confianza de la empresa, para coordinar ${que} en casa de un cliente.
+
+El mensaje debe:
+- Saludar por su nombre, en tono cordial y directo, como compañeros de trabajo (de tú).
+- Decir en 1-2 frases qué hay que hacer, sacado de la conversación con el cliente y de los datos de abajo. Si el cliente mencionó detalles útiles para el proveedor (síntomas, medidas, material, acceso), inclúyelos breves.
+- Proponer la fecha y horario que pide el cliente y preguntar si le queda o qué opción tiene.
+- Incluir la dirección completa (y el link de Google Maps si hay) para que la confirme y pueda agendar la visita.
+- Cerrar pidiendo que confirme.
+
+Reglas:
+- Español de México, máximo ~8 líneas. Puedes usar *negritas* de WhatsApp para fecha y dirección.
+- NO incluyas el teléfono del cliente ni precios. Usa solo el nombre de pila del cliente.
+- No inventes fecha, horario ni dirección: si un dato viene vacío, pide al proveedor su disponibilidad o deja la dirección "por confirmar".
+- Escribe ÚNICAMENTE el texto del mensaje, sin comillas ni explicaciones.
+
+Datos:
+- Cliente: ${datos.clienteNombre || "—"}
+- Trabajo: ${datos.trabajo || "(sácalo de la conversación)"}
+- Fecha que pide el cliente: ${datos.fecha || "(no indicada; búscala en la conversación, si no hay pide disponibilidad)"}
+- Horario: ${datos.horario || "(no indicado)"}
+- Dirección: ${datos.direccion || "(no registrada)"}
+- Google Maps: ${datos.linkMaps || "(sin link)"}${datos.indicacion?.trim() ? `\n\nIndicación del asesor (síguela): ${datos.indicacion.trim()}` : ""}`;
+
+  const texto = await generarRespuesta(
+    system,
+    [{ role: "user", content: conversacion ? `Conversación con el cliente:\n${conversacion}` : "(No hay conversación registrada con el cliente.)" }],
+    sb,
+  );
+  return texto.trim().replace(/^["“]|["”]$/g, "");
+}

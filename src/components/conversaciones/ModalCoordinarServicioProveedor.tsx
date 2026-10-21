@@ -1,0 +1,266 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  prepararCoordinacionServicio,
+  redactarMensajeProveedorSofia,
+  registrarCoordinacionProveedor,
+  type DatosCoordinacionServicio,
+  type TipoCoordinacionProveedor,
+} from "@/app/actions/coordinacion-servicio-proveedor";
+
+/**
+ * Coordinar un servicio o instalación con un proveedor (p. ej. el plomero): Sofía redacta
+ * el WhatsApp con el trabajo, la fecha que pide el cliente y la dirección a confirmar.
+ * El asesor lo revisa y lo manda desde su WhatsApp (wa.me); queda en la bitácora.
+ */
+export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefono: string; onCerrar: () => void }) {
+  const [datos, setDatos] = useState<DatosCoordinacionServicio | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tipo, setTipo] = useState<TipoCoordinacionProveedor>("servicio");
+  const [proveedorId, setProveedorId] = useState("");
+  const [fecha, setFecha] = useState("");
+  const [horario, setHorario] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [linkMaps, setLinkMaps] = useState("");
+  const [trabajo, setTrabajo] = useState("");
+  const [indicacion, setIndicacion] = useState("");
+  const [texto, setTexto] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const versionRef = useRef(0);
+
+  useEffect(() => {
+    prepararCoordinacionServicio(telefono).then((r) => {
+      if (!r.ok || !r.datos) return setError(r.error || "No se pudieron cargar los datos.");
+      setDatos(r.datos);
+      setProveedorId(r.datos.proveedorSugeridoId || r.datos.proveedores[0]?.id || "");
+      setDireccion(r.datos.direccion);
+      setLinkMaps(r.datos.linkMaps);
+      setTrabajo(r.datos.trabajo);
+    });
+  }, [telefono]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCerrar();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCerrar]);
+
+  const proveedor = datos?.proveedores.find((p) => p.id === proveedorId) || null;
+
+  // Primera versión en cuanto hay datos: Sofía saca la fecha y el trabajo de la conversación.
+  const primeraRef = useRef(false);
+  useEffect(() => {
+    if (datos && proveedorId && !primeraRef.current) {
+      primeraRef.current = true;
+      void redactar();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datos, proveedorId]);
+
+  async function redactar() {
+    if (!datos || !proveedorId) return;
+    const version = ++versionRef.current;
+    setGenerando(true);
+    setError(null);
+    try {
+      const r = await redactarMensajeProveedorSofia({
+        telefono,
+        proveedorId,
+        tipo,
+        clienteNombre: datos.clienteNombre,
+        direccion,
+        linkMaps,
+        fecha,
+        horario,
+        trabajo,
+        indicacion,
+      });
+      if (version !== versionRef.current) return;
+      if (r.ok && r.texto) setTexto(r.texto);
+      else setError(r.error || "Sofía no pudo redactar el mensaje.");
+    } finally {
+      if (version === versionRef.current) setGenerando(false);
+    }
+  }
+
+  async function registrar() {
+    const r = await registrarCoordinacionProveedor({ telefono, proveedorId, tipo, direccion, linkMaps, fecha, horario, mensaje: texto });
+    if (!r.ok) setError(r.error || "No se pudo registrar en la bitácora.");
+    return r.ok;
+  }
+
+  async function abrirWhatsApp() {
+    if (!proveedor?.whatsapp || !texto.trim()) return;
+    window.open(`https://wa.me/${proveedor.whatsapp}?text=${encodeURIComponent(texto.trim())}`, "_blank", "noopener");
+    if (await registrar()) setAviso(`Mensaje abierto en WhatsApp para ${proveedor.nombre} y registrado en la bitácora del cliente.`);
+  }
+
+  async function copiar() {
+    if (!texto.trim()) return;
+    await navigator.clipboard.writeText(texto.trim());
+    if (await registrar()) setAviso("Mensaje copiado y registrado en la bitácora del cliente.");
+  }
+
+  const campo = "w-full rounded border border-carbon/15 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-carbon/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-150"
+      onClick={onCerrar}
+    >
+      <div
+        className="w-full sm:max-w-xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-carbon/10 flex flex-col max-h-[92vh] overflow-hidden animate-in slide-in-from-bottom duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-4 py-3 border-b border-carbon/10 flex items-center justify-between bg-sky-50 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl p-1.5 bg-sky-100 rounded-lg shrink-0">🔧</span>
+            <div>
+              <h3 className="font-titular text-sm sm:text-base font-bold text-sky-900">Coordinar servicio con proveedor</h3>
+              <p className="text-[11px] text-carbon/50">Sofía redacta el WhatsApp para el proveedor; tú lo revisas y lo mandas.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCerrar}
+            className="text-carbon/40 hover:text-carbon p-1.5 rounded-lg hover:bg-carbon/5 transition text-lg leading-none cursor-pointer"
+            title="Cerrar (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+
+        {!datos ? (
+          <div className="p-6 text-center text-sm text-carbon/60">{error || "Cargando…"}</div>
+        ) : (
+          <>
+            <div className="p-4 space-y-3 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Tipo</span>
+                  <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoCoordinacionProveedor)} className={campo}>
+                    <option value="servicio">Servicio</option>
+                    <option value="instalacion">Instalación</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Proveedor</span>
+                  <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} className={campo}>
+                    {datos.proveedores.length === 0 && <option value="">No hay proveedores activos</option>}
+                    {datos.proveedores.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                        {p.categoria ? ` · ${p.categoria}` : ""}
+                        {p.whatsapp ? "" : " (sin WhatsApp)"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Fecha que pide el cliente</span>
+                  <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={campo} />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Horario</span>
+                  <input
+                    type="text"
+                    value={horario}
+                    onChange={(e) => setHorario(e.target.value)}
+                    placeholder="Ej. 10:00 am, por la tarde…"
+                    className={campo}
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">Trabajo</span>
+                <input
+                  type="text"
+                  value={trabajo}
+                  onChange={(e) => setTrabajo(e.target.value)}
+                  placeholder="Si lo dejas vacío, Sofía lo saca de la conversación"
+                  className={campo}
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[11px] font-bold text-carbon/70 mb-0.5">
+                  Dirección {datos.clienteNombre ? `de ${datos.clienteNombre}` : ""} (se guarda en el expediente)
+                </span>
+                <textarea value={direccion} onChange={(e) => setDireccion(e.target.value)} rows={2} className={`${campo} resize-y`} />
+              </label>
+              <input
+                type="url"
+                value={linkMaps}
+                onChange={(e) => setLinkMaps(e.target.value)}
+                placeholder="Link de Google Maps (opcional)"
+                className={campo}
+              />
+
+              <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-2.5 space-y-2">
+                <label className="block text-[11px] font-bold text-violet-900">Indicación para Sofía (opcional)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={indicacion}
+                    onChange={(e) => setIndicacion(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !generando && void redactar()}
+                    placeholder="Ej. que lleve material para cambiar la llave de paso"
+                    className="flex-1 min-w-0 rounded border border-carbon/15 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void redactar()}
+                    disabled={generando || !proveedorId}
+                    className="shrink-0 rounded bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
+                  >
+                    {texto ? "↻ Otra versión" : "✨ Redactar con Sofía"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <textarea
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  disabled={generando}
+                  rows={8}
+                  placeholder={generando ? "" : "Aquí aparece el mensaje de Sofía; puedes editarlo."}
+                  className="w-full rounded-lg border border-carbon/15 p-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-violet-300 disabled:bg-slate-50 resize-y"
+                />
+                {generando && (
+                  <div className="absolute inset-0 flex items-center justify-center text-sm text-violet-800 font-semibold">
+                    ⏳ Sofía está leyendo la conversación…
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="text-[11px] rounded bg-rojo/10 text-rojo px-2 py-1.5">{error}</p>}
+              {aviso && <p className="text-[11px] rounded bg-emerald-50 border border-emerald-200 text-emerald-900 px-2 py-1.5">{aviso}</p>}
+            </div>
+
+            <div className="px-4 py-3 border-t border-carbon/10 flex flex-wrap items-center justify-end gap-2 bg-crema/20 shrink-0">
+              <button
+                type="button"
+                onClick={() => void copiar()}
+                disabled={generando || !texto.trim()}
+                className="rounded border border-carbon/20 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
+              >
+                Copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => void abrirWhatsApp()}
+                disabled={generando || !texto.trim() || !proveedor?.whatsapp}
+                title={proveedor && !proveedor.whatsapp ? "El proveedor no tiene WhatsApp ni teléfono registrado" : undefined}
+                className="rounded bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
+              >
+                Abrir en WhatsApp{proveedor ? ` · ${proveedor.nombre}` : ""}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
