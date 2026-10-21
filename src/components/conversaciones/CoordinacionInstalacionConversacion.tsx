@@ -9,6 +9,7 @@ import {
   type SolicitudProveedor,
 } from "@/app/actions/solicitudes-proveedor";
 import { ModalNuevaSolicitud, TarjetaSolicitud } from "@/components/proveedores/PanelSolicitudesProveedor";
+import { ModalProgramarServicio } from "@/components/conversaciones/ModalProgramarServicio";
 
 /**
  * Coordinar la instalación de una cotización aceptada desde la conversación del cliente:
@@ -30,6 +31,7 @@ export function CoordinacionInstalacionConversacion({
   const [abierto, setAbierto] = useState(false);
   const [nuevaPara, setNuevaPara] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [programando, setProgramando] = useState<{ solicitudId: string; opcion: string } | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -112,11 +114,30 @@ export function CoordinacionInstalacionConversacion({
           ) : (
             datos.solicitudes.map((s) => (
               <div key={s.id} className="bg-white rounded-xl">
-                <TarjetaSolicitud s={s} onConfirmar={confirmar} onCancelar={cancelar} onOfrecer={ofrecer} />
+                <TarjetaSolicitud
+                  s={s}
+                  onConfirmar={confirmar}
+                  onCancelar={cancelar}
+                  onOfrecer={ofrecer}
+                  onProgramar={(sol, opcion) => setProgramando({ solicitudId: sol.id, opcion })}
+                />
               </div>
             ))
           )}
         </div>
+      )}
+
+      {programando && (
+        <ModalProgramarServicio
+          solicitudId={programando.solicitudId}
+          opcion={programando.opcion}
+          telefono={telefono}
+          onCerrar={() => setProgramando(null)}
+          onProgramado={async () => {
+            onEnviada();
+            await cargar();
+          }}
+        />
       )}
 
       {nuevaPara && (

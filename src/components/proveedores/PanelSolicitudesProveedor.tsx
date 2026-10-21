@@ -126,9 +126,12 @@ export function TarjetaSolicitud({
   onConfirmar,
   onCancelar,
   onOfrecer,
+  onProgramar,
 }: {
   s: SolicitudProveedor;
   onConfirmar: (s: SolicitudProveedor, fecha: string) => void;
+  /** Si se da, el horario elegido abre la programación del servicio en vez de confirmarlo directo. */
+  onProgramar?: (s: SolicitudProveedor, fecha: string) => void;
   onCancelar: (s: SolicitudProveedor) => void;
   /** Si se da, aparece "Ofrecer al cliente" (manda las opciones por su conversación). */
   onOfrecer?: (s: SolicitudProveedor) => void;
@@ -207,6 +210,7 @@ export function TarjetaSolicitud({
                   type="button"
                   disabled={confirmando !== null}
                   onClick={async () => {
+                    if (onProgramar) return onProgramar(s, f);
                     if (!confirm(`¿Confirmar "${f}"? Se avisa al proveedor y queda la orden de trabajo.`)) return;
                     setConfirmando(f);
                     try {
@@ -217,7 +221,7 @@ export function TarjetaSolicitud({
                   }}
                   className="rounded-md bg-emerald-600 px-2.5 py-1 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {confirmando === f ? "Confirmando…" : "✓ El cliente eligió esta"}
+                  {confirmando === f ? "Confirmando…" : onProgramar ? "📅 El cliente eligió esta: programar" : "✓ El cliente eligió esta"}
                 </button>
               </div>
             ))}
