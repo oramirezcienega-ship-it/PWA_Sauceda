@@ -254,6 +254,32 @@ export async function registrarCoordinacionProveedor(input: {
 }
 
 /**
+ * Manda el mensaje de coordinación al proveedor por la línea oficial (queda en su
+ * conversación) y lo registra igual que al mandarlo desde el WhatsApp del asesor.
+ */
+export async function enviarCoordinacionOficial(
+  input: Parameters<typeof registrarCoordinacionProveedor>[0] & { trabajo: string }
+): Promise<{ ok: boolean; via?: "texto" | "plantilla"; ordenFolio?: string; ordenCreada?: boolean; solicitudFolio?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    if (!input.mensaje.trim()) return { ok: false, error: "El mensaje está vacío." };
+    const sb = supabaseServidor();
+    const yo = await usuarioActual();
+    const { data: perfil } = yo ? await sb.from("perfiles").select("nombre").eq("id", yo.id).maybeSingle() : { data: null };
+    const { enviarWhatsAppProveedor } = await import("@/lib/whatsapp-proveedores");
+    const trabajo = input.trabajo.split(/[;.]/)[0].trim() || "un servicio";
+    const lugar = input.direccion.split(",").slice(0, 2).join(",").trim();
+    const resumen = `tenemos un servicio para ti: ${trabajo}${lugar ? ` en ${lugar}` : ""}${input.fecha ? `, ${fechaLegible(input.fecha)}${input.horario ? ` ${input.horario}` : ""}` : ""}. ¿Lo puedes tomar?`;
+    const env = await enviarWhatsAppProveedor(sb, { proveedorId: input.proveedorId, texto: input.mensaje, resumen, agente: perfil?.nombre || "" });
+    if (!env.ok) return { ok: false, error: env.error };
+    const r = await registrarCoordinacionProveedor({ ...input, mensaje: input.mensaje });
+    return { ...r, ok: true, via: env.via };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "No se pudo enviar." };
+  }
+}
+
+/**
  * El proveedor aceptó por fuera del sistema (por WhatsApp): se registra la coordinación y
  * su aceptación con el horario acordado, para programar el servicio enseguida.
  */

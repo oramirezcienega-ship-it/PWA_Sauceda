@@ -181,11 +181,16 @@ export function ModalProgramarServicio({
             {resultado.proveedor &&
               (resultado.proveedor.enviado ? (
                 <p className="text-emerald-800">
-                  📲 Confirmación enviada a {proveedorNombre} por {resultado.proveedor.canal === "telegram" ? "Telegram" : "WhatsApp"}.
+                  {resultado.proveedor.canal === "telegram"
+                    ? `📲 Confirmación enviada a ${proveedorNombre} por Telegram.`
+                    : resultado.proveedor.via === "plantilla"
+                    ? `📲 ${proveedorNombre} no ha escrito en 24 h: se le mandó el aviso y la confirmación completa sale en cuanto conteste. Síguelo en Conversaciones → Proveedores.`
+                    : `📲 Confirmación enviada a ${proveedorNombre} por WhatsApp. Síguela en Conversaciones → Proveedores.`}
                 </p>
               ) : resultado.proveedor.urlWhatsApp ? (
                 <p className="text-amber-800">
-                  No se pudo enviar en automático a {proveedorNombre}.{" "}
+                  No se pudo enviar en automático a {proveedorNombre}
+                  {resultado.proveedor.error ? ` (${resultado.proveedor.error})` : ""}.{" "}
                   <a href={resultado.proveedor.urlWhatsApp} target="_blank" rel="noopener noreferrer" className="font-bold underline">
                     Mandarla desde tu WhatsApp
                   </a>
@@ -312,7 +317,7 @@ export function ModalProgramarServicio({
                   {avisarProveedor && (
                     <p className={`text-[11px] ${proveedor?.destino ? "text-carbon/60" : "text-amber-800"}`}>
                       {proveedor?.destino
-                        ? `📤 Se envía por ${proveedor.destino}${proveedor.canal === "whatsapp" ? " (línea secundaria; si no sale, te damos el link para mandarlo tú)" : ""}.`
+                        ? `📤 Se envía por ${proveedor.destino}${proveedor.canal === "whatsapp" ? " desde la línea oficial: lo ves en Conversaciones → Proveedores con sus palomitas" : ""}.`
                         : "⚠️ Este proveedor no tiene WhatsApp ni Telegram registrado: agrégalo en su ficha."}
                     </p>
                   )}

@@ -145,9 +145,15 @@ async function notificarProveedor(sb: SupabaseClient, envioId: string) {
   const telefono = prov.whatsapp || prov.telefono;
   let enviado = false;
   if (telefono) {
+    // Línea oficial: queda en Conversaciones → Proveedores (fuera de 24 h sale el aviso por plantilla).
     try {
-      const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
-      const r = await enviarMensajeTextoEvolution(telefono, mensaje);
+      const { enviarWhatsAppProveedor } = await import("@/lib/whatsapp-proveedores");
+      const r = await enviarWhatsAppProveedor(sb, {
+        proveedorId: prov.id,
+        texto: mensaje,
+        resumen: `tenemos un servicio para ti (${sol?.folio || "solicitud"}): ${prod?.nombre || "servicio"}${sol?.zona ? ` en ${sol.zona}` : ""}. Revisa y responde antes del ${fechaLimiteTexto(envio.fecha_limite)}.`,
+        agente: "Sistema",
+      });
       enviado = r.ok;
     } catch {
       enviado = false;

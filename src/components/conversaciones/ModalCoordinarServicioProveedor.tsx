@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   prepararCoordinacionServicio,
+  enviarCoordinacionOficial,
   redactarMensajeProveedorSofia,
   registrarAceptacionProveedor,
   registrarCoordinacionProveedor,
@@ -125,6 +126,38 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
           .join(" ") || null
       );
     return r.ok;
+  }
+
+  const [enviandoOficial, setEnviandoOficial] = useState(false);
+  /** Por la línea oficial: queda en Conversaciones → Proveedores con sus palomitas. */
+  async function enviarOficial() {
+    if (!proveedor?.whatsapp || !texto.trim()) return;
+    setEnviandoOficial(true);
+    setError(null);
+    try {
+      const r = await enviarCoordinacionOficial({
+        telefono,
+        proveedorId,
+        tipo,
+        direccion,
+        linkMaps: linkFinal,
+        fecha,
+        horario,
+        costo: costoNum,
+        mensaje: texto,
+        trabajo,
+      });
+      if (!r.ok) return setError(r.error || "No se pudo enviar.");
+      setAviso(
+        r.via === "plantilla"
+          ? `${proveedor.nombre} no ha escrito en 24 h: se le mandó el aviso y tu mensaje completo sale en cuanto conteste. Síguelo en Conversaciones → Proveedores.`
+          : `Mensaje enviado a ${proveedor.nombre} por WhatsApp. Síguelo en Conversaciones → Proveedores.`
+      );
+      if (r.solicitudFolio)
+        setOrden(`Solicitud ${r.solicitudFolio}: cuando acepte y proponga horarios en su link, aparecerá arriba del chat para ofrecérselos al cliente.`);
+    } finally {
+      setEnviandoOficial(false);
+    }
   }
 
   async function abrirWhatsApp() {
@@ -378,10 +411,19 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
                 type="button"
                 onClick={() => void abrirWhatsApp()}
                 disabled={generando || !texto.trim() || !proveedor?.whatsapp}
-                title={proveedor && !proveedor.whatsapp ? "El proveedor no tiene WhatsApp ni teléfono registrado" : undefined}
+                title="Abre tu WhatsApp con el mensaje escrito (no queda en Conversaciones → Proveedores)"
+                className="rounded border border-carbon/20 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
+              >
+                Desde mi WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={() => void enviarOficial()}
+                disabled={enviandoOficial || generando || !texto.trim() || !proveedor?.whatsapp}
+                title={proveedor && !proveedor.whatsapp ? "El proveedor no tiene WhatsApp ni teléfono registrado" : "Se manda desde la línea oficial y se ve en Conversaciones → Proveedores"}
                 className="rounded bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
               >
-                Abrir en WhatsApp{proveedor ? ` · ${proveedor.nombre}` : ""}
+                {enviandoOficial ? "Enviando…" : `Enviar por WhatsApp${proveedor ? ` · ${proveedor.nombre}` : ""}`}
               </button>
             </div>
           </>

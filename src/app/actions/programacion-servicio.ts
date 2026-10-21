@@ -171,7 +171,7 @@ export interface ResultadoProgramacionServicio {
   ok: boolean;
   ordenFolio?: string;
   cliente?: { enviado: boolean; error?: string };
-  proveedor?: { enviado: boolean; canal?: "whatsapp" | "telegram"; urlWhatsApp?: string; error?: string };
+  proveedor?: { enviado: boolean; canal?: "whatsapp" | "telegram"; via?: "texto" | "plantilla"; urlWhatsApp?: string; error?: string };
   error?: string;
 }
 
@@ -348,7 +348,8 @@ export async function programarServicioSolicitud(input: {
     }
     if (input.avisarProveedor && sol.proveedor_asignado_id) {
       const texto = conFolio(input.mensajeProveedor?.trim() || mensajeServicioProveedor(datosMensaje));
-      resultado.proveedor = await avisarProveedor(sb, prov, texto);
+      const resumen = `tienes un servicio confirmado: ${trabajo}, ${fechaLeg} a las ${input.horaInicio} h${exp?.fraccionamiento ? ` en ${exp.fraccionamiento}` : ""}${otFolio ? ` (orden de trabajo ${otFolio})` : ""}.`;
+      resultado.proveedor = await avisarProveedor(sb, sol.proveedor_asignado_id, prov, texto, resumen);
     }
 
     // 5. Bitácora.
@@ -380,27 +381,31 @@ export async function programarServicioSolicitud(input: {
 /** Por dónde se le manda la confirmación (mismo orden que avisarProveedor). */
 function destinoProveedor(p: any): { texto: string; canal: "whatsapp" | "telegram" | "" } {
   const telefono = normalizarTelefono(p.whatsapp || p.telefono || "");
-  if (telefono && p.canal_preferido !== "telegram") return { texto: `WhatsApp ${formatearTelefonoLegible(telefono)}`, canal: "whatsapp" };
-  if (p.telegram_chat_id) return { texto: "Telegram", canal: "telegram" };
   if (telefono) return { texto: `WhatsApp ${formatearTelefonoLegible(telefono)}`, canal: "whatsapp" };
+  if (p.telegram_chat_id) return { texto: "Telegram", canal: "telegram" };
   return { texto: "", canal: "" };
 }
 
-/** Proveedor: WhatsApp de la línea secundaria; si no, Telegram; si no, link wa.me para el asesor. */
+/**
+ * Proveedor: WhatsApp de la línea oficial (queda en su conversación con palomitas); si no se
+ * puede, Telegram; si tampoco, link wa.me para que el asesor lo mande desde su WhatsApp.
+ */
 async function avisarProveedor(
   sb: ReturnType<typeof supabaseServidor>,
+  proveedorId: string,
   prov: any,
-  texto: string
+  texto: string,
+  resumen: string
 ): Promise<NonNullable<ResultadoProgramacionServicio["proveedor"]>> {
   const telefono = normalizarTelefono(prov.whatsapp || prov.telefono || "");
-  if (telefono && prov.canal_preferido !== "telegram") {
-    try {
-      const { enviarMensajeTextoEvolution } = await import("@/lib/evolution-api");
-      const r = await enviarMensajeTextoEvolution(telefono, texto);
-      if (r.ok) return { enviado: true, canal: "whatsapp" };
-    } catch {
-      // sigue con Telegram / wa.me
-    }
+  let errorOficial = "";
+  if (telefono) {
+    const u = await usuarioActual();
+    const { data: perfil } = u ? await sb.from("perfiles").select("nombre").eq("id", u.id).maybeSingle() : { data: null };
+    const { enviarWhatsAppProveedor } = await import("@/lib/whatsapp-proveedores");
+    const r = await enviarWhatsAppProveedor(sb, { proveedorId, texto, resumen, agente: perfil?.nombre || "" });
+    if (r.ok) return { enviado: true, canal: "whatsapp", via: r.via };
+    errorOficial = r.error || "";
   }
   if (prov.telegram_chat_id) {
     try {
@@ -415,7 +420,7 @@ async function avisarProveedor(
     }
   }
   return telefono
-    ? { enviado: false, canal: "whatsapp", urlWhatsApp: `https://wa.me/${telefono}?text=${encodeURIComponent(texto)}` }
+    ? { enviado: false, canal: "whatsapp", error: errorOficial, urlWhatsApp: `https://wa.me/${telefono}?text=${encodeURIComponent(texto)}` }
     : { enviado: false, error: "El proveedor no tiene WhatsApp ni Telegram registrado." };
 }
 

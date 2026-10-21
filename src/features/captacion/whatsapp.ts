@@ -602,6 +602,22 @@ export async function registrarLeadWhatsApp(
     console.error("[Retro WhatsApp] Error procesando retro del asesor:", err);
   }
 
+  // Proveedor escribiendo a la línea oficial: va a su conversación, sin prospecto ni Sofía.
+  try {
+    const { proveedorPorTelefono, registrarMensajeEntranteProveedor } = await import("@/lib/whatsapp-proveedores");
+    const proveedor = await proveedorPorTelefono(sb, lead.telefono);
+    if (proveedor) {
+      await registrarMensajeEntranteProveedor(sb, proveedor, {
+        telefono: lead.telefono,
+        texto: lead.mensaje ?? "",
+        waMessageId: lead.waMessageId,
+      });
+      return;
+    }
+  } catch (err) {
+    console.error("[WhatsApp proveedores] Error procesando mensaje de proveedor:", err);
+  }
+
   // Teléfono normalizado (canónico) y sus variantes para deduplicar.
   const telefono = normalizarTelefono(lead.telefono);
   const variantesTel = variantesTelefono(lead.telefono);
