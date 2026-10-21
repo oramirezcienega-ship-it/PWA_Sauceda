@@ -16,6 +16,8 @@ export function ModalProgramarServicio({
   solicitudId,
   opcion,
   telefono,
+  fechaInicial,
+  horarioInicial,
   onCerrar,
   onProgramado,
 }: {
@@ -23,6 +25,9 @@ export function ModalProgramarServicio({
   /** Horario que propuso el proveedor y eligió el cliente. */
   opcion: string;
   telefono: string;
+  /** Si ya se conoce (acordado por WhatsApp): YYYY-MM-DD y el horario en texto ("2:30 a 3 pm"). */
+  fechaInicial?: string;
+  horarioInicial?: string;
   onCerrar: () => void;
   onProgramado: () => void;
 }) {
@@ -42,12 +47,13 @@ export function ModalProgramarServicio({
     prepararProgramacionServicio(solicitudId, opcion).then((r) => {
       if (!r.ok || !r.datos) return setError(r.error || "No se pudieron cargar los datos.");
       setDatos(r.datos);
-      setFecha(r.datos.fecha);
-      setHoraInicio(r.datos.horaInicio);
-      setHoraFin(r.datos.horaFin);
+      const [ini, fin] = horarioInicial ? horasDeTexto(horarioInicial) : ["", ""];
+      setFecha(fechaInicial || r.datos.fecha);
+      setHoraInicio(ini || r.datos.horaInicio);
+      setHoraFin(fin || r.datos.horaFin);
       setCosto(r.datos.costo ? String(r.datos.costo) : "");
     });
-  }, [solicitudId, opcion]);
+  }, [solicitudId, opcion, fechaInicial, horarioInicial]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !guardando && onCerrar();
@@ -222,4 +228,21 @@ export function ModalProgramarServicio({
       </div>
     </div>
   );
+}
+
+/** "2:30 a 3:00 pm" → ["14:30", "15:00"]; "por la mañana" → ["09:00", "13:00"]. */
+function horasDeTexto(texto: string): [string, string] {
+  const t = texto.toLowerCase();
+  const tarde = /p\.?\s*m|tarde|noche/.test(t);
+  const horas = Array.from(t.matchAll(/(\d{1,2})(?::(\d{2}))?/g))
+    .map((m) => {
+      let h = Number(m[1]);
+      if (tarde && h <= 9) h += 12;
+      return h <= 23 ? `${String(h).padStart(2, "0")}:${m[2] || "00"}` : "";
+    })
+    .filter(Boolean);
+  if (horas.length) return [horas[0], horas[1] && horas[1] > horas[0] ? horas[1] : ""];
+  if (/tarde/.test(t)) return ["14:00", "18:00"];
+  if (/ma[ñn]ana/.test(t)) return ["09:00", "13:00"];
+  return ["", ""];
 }

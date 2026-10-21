@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   prepararCoordinacionServicio,
   redactarMensajeProveedorSofia,
+  registrarAceptacionProveedor,
   registrarCoordinacionProveedor,
   type DatosCoordinacionServicio,
   type TipoCoordinacionProveedor,
 } from "@/app/actions/coordinacion-servicio-proveedor";
+import { ModalProgramarServicio } from "@/components/conversaciones/ModalProgramarServicio";
 
 /**
  * Coordinar un servicio o instalación con un proveedor (p. ej. el plomero): Sofía redacta
@@ -30,6 +32,8 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
   const [generando, setGenerando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [orden, setOrden] = useState<string | null>(null);
+  const [programar, setProgramar] = useState<{ solicitudId: string; opcion: string } | null>(null);
+  const [aceptando, setAceptando] = useState(false);
   const versionRef = useRef(0);
 
   useEffect(() => {
@@ -120,6 +124,30 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
     if (!proveedor?.whatsapp || !texto.trim()) return;
     window.open(`https://wa.me/${proveedor.whatsapp}?text=${encodeURIComponent(texto.trim())}`, "_blank", "noopener");
     if (await registrar()) setAviso(`Mensaje abierto en WhatsApp para ${proveedor.nombre} y registrado en la bitácora del cliente.`);
+  }
+
+  /** El proveedor ya dijo que sí por WhatsApp: se registra y se pasa directo a programar. */
+  async function yaAcepto() {
+    if (!proveedorId || !fecha) return setError("Indica el proveedor y la fecha que acordaron.");
+    setAceptando(true);
+    setError(null);
+    try {
+      const r = await registrarAceptacionProveedor({
+        telefono,
+        proveedorId,
+        tipo,
+        direccion,
+        linkMaps: linkFinal,
+        fecha,
+        horario,
+        costo: costoNum,
+        mensaje: texto,
+      });
+      if (!r.ok || !r.solicitudId || !r.opcion) return setError(r.error || "No se pudo registrar la aceptación.");
+      setProgramar({ solicitudId: r.solicitudId, opcion: r.opcion });
+    } finally {
+      setAceptando(false);
+    }
   }
 
   async function copiar() {
@@ -293,6 +321,15 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
             <div className="px-4 py-3 border-t border-carbon/10 flex flex-wrap items-center justify-end gap-2 bg-crema/20 shrink-0">
               <button
                 type="button"
+                onClick={() => void yaAcepto()}
+                disabled={aceptando || generando || !proveedorId || !fecha}
+                title={!fecha ? "Pon la fecha (y el horario) que acordaron" : "El proveedor ya aceptó por WhatsApp: registrar y programar el servicio"}
+                className="mr-auto rounded border border-emerald-600 bg-white text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
+              >
+                {aceptando ? "Registrando…" : "✅ Ya aceptó · programar"}
+              </button>
+              <button
+                type="button"
                 onClick={() => void copiar()}
                 disabled={generando || !texto.trim()}
                 className="rounded border border-carbon/20 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
@@ -312,6 +349,20 @@ export function ModalCoordinarServicioProveedor({ telefono, onCerrar }: { telefo
           </>
         )}
       </div>
+      {programar && (
+        <ModalProgramarServicio
+          solicitudId={programar.solicitudId}
+          opcion={programar.opcion}
+          telefono={telefono}
+          fechaInicial={fecha}
+          horarioInicial={horario}
+          onCerrar={() => {
+            setProgramar(null);
+            onCerrar();
+          }}
+          onProgramado={() => {}}
+        />
+      )}
     </div>
   );
 }
