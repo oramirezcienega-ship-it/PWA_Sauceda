@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { mencionaMonto, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
 import {
   prepararProgramacionServicio,
   programarServicioSolicitud,
@@ -42,6 +43,32 @@ export function ModalProgramarServicio({
   const [avisarProveedor, setAvisarProveedor] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [resultado, setResultado] = useState<ResultadoProgramacionServicio | null>(null);
+  // Vista previa: se arma con los datos del formulario hasta que el asesor la edita.
+  const [textoCliente, setTextoCliente] = useState<string | null>(null);
+  const [textoProveedor, setTextoProveedor] = useState<string | null>(null);
+  const costoNum = Number(costo.replace(/[^\d.]/g, "")) || null;
+  const datosMensaje = useMemo(
+    () =>
+      datos
+        ? {
+            clienteNombre: datos.clienteNombre,
+            trabajo: datos.trabajo,
+            fecha,
+            horaInicio,
+            horaFin: horaFin && horaFin > horaInicio ? horaFin : "",
+            direccion: datos.direccion,
+            linkMaps: datos.linkMaps,
+            ordenFolio: datos.ordenFolio,
+            solicitudFolio: datos.folio,
+            costo: costoNum,
+            notas,
+          }
+        : null,
+    [datos, fecha, horaInicio, horaFin, costoNum, notas]
+  );
+  const previaCliente = textoCliente ?? (datosMensaje ? mensajeServicioCliente(datosMensaje) : "");
+  const previaProveedor = textoProveedor ?? (datosMensaje ? mensajeServicioProveedor(datosMensaje) : "");
+  const clienteConMonto = avisarCliente && mencionaMonto(previaCliente, costoNum);
 
   useEffect(() => {
     prepararProgramacionServicio(solicitudId, opcion).then((r) => {
@@ -72,10 +99,12 @@ export function ModalProgramarServicio({
         fecha,
         horaInicio,
         horaFin,
-        costo: Number(costo.replace(/[^\d.]/g, "")) || null,
+        costo: costoNum,
         notas,
         avisarCliente,
         avisarProveedor,
+        mensajeCliente: previaCliente,
+        mensajeProveedor: previaProveedor,
       });
       if (!r.ok) return setError(r.error || "No se pudo programar.");
       setResultado(r);
@@ -193,15 +222,57 @@ export function ModalProgramarServicio({
                   className={`${campo} resize-y`}
                 />
               </label>
-              <div className="space-y-1">
-                <label className="flex items-center gap-2 text-[12px]">
-                  <input type="checkbox" checked={avisarCliente} onChange={(e) => setAvisarCliente(e.target.checked)} />
-                  Mandar confirmación al cliente por WhatsApp (queda en su conversación)
-                </label>
-                <label className="flex items-center gap-2 text-[12px]">
-                  <input type="checkbox" checked={avisarProveedor} onChange={(e) => setAvisarProveedor(e.target.checked)} />
-                  Mandar confirmación a {datos.proveedorNombre}
-                </label>
+              <div className="space-y-3">
+                <div className="rounded-lg border border-carbon/10 p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-[12px] font-bold">
+                      <input type="checkbox" checked={avisarCliente} onChange={(e) => setAvisarCliente(e.target.checked)} />
+                      Mensaje al cliente (WhatsApp, queda en su conversación)
+                    </label>
+                    {textoCliente !== null && (
+                      <button type="button" onClick={() => setTextoCliente(null)} className="text-[11px] text-sky-700 underline cursor-pointer">
+                        ↺ Rehacer
+                      </button>
+                    )}
+                  </div>
+                  {avisarCliente && (
+                    <textarea
+                      value={previaCliente}
+                      onChange={(e) => setTextoCliente(e.target.value)}
+                      rows={9}
+                      className={`${campo} resize-y font-sans text-[12.5px] leading-relaxed bg-[#e7ffdb]/40`}
+                    />
+                  )}
+                  {clienteConMonto && (
+                    <p className="text-[11px] rounded bg-amber-50 border border-amber-200 text-amber-900 px-2 py-1">
+                      ⚠️ El mensaje al cliente menciona un monto. El costo del proveedor no debe ir aquí.
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-carbon/10 p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-[12px] font-bold">
+                      <input type="checkbox" checked={avisarProveedor} onChange={(e) => setAvisarProveedor(e.target.checked)} />
+                      Mensaje a {datos.proveedorNombre} (incluye el costo acordado)
+                    </label>
+                    {textoProveedor !== null && (
+                      <button type="button" onClick={() => setTextoProveedor(null)} className="text-[11px] text-sky-700 underline cursor-pointer">
+                        ↺ Rehacer
+                      </button>
+                    )}
+                  </div>
+                  {avisarProveedor && (
+                    <textarea
+                      value={previaProveedor}
+                      onChange={(e) => setTextoProveedor(e.target.value)}
+                      rows={11}
+                      className={`${campo} resize-y font-sans text-[12.5px] leading-relaxed`}
+                    />
+                  )}
+                </div>
+                {!datos.ordenFolio && (
+                  <p className="text-[11px] text-carbon/50">“[folio OT]” se cambia por el folio de la orden de trabajo al programar.</p>
+                )}
               </div>
               {error && <p className="text-[11px] rounded bg-rojo/10 text-rojo px-2 py-1.5">{error}</p>}
             </div>
@@ -217,7 +288,7 @@ export function ModalProgramarServicio({
               <button
                 type="button"
                 onClick={() => void programar()}
-                disabled={guardando || !fecha || !horaInicio}
+                disabled={guardando || !fecha || !horaInicio || clienteConMonto}
                 className="rounded bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
               >
                 {guardando ? "Programando…" : "📅 Programar y confirmar"}

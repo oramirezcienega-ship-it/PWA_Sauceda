@@ -12,6 +12,7 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { requireAdmin, usuarioActual } from "@/lib/supabase/cliente-sesion";
 import { normalizarTelefono } from "@/lib/telefono";
 import { registrarActividad } from "@/lib/actividades";
+import { MARCA_FOLIO_OT, mensajeServicioCliente, mensajeServicioProveedor } from "@/lib/mensajes-servicio";
 
 export interface DatosProgramacionServicio {
   folio: string;
@@ -46,10 +47,11 @@ async function cargar(sb: ReturnType<typeof supabaseServidor>, solicitudId: stri
           .maybeSingle()
       ).data
     : null;
+  // Solo lo que se va a hacer: la necesidad trae notas ("…; agua tibia. Solicita agendar…").
   const trabajo =
     (sol as any).productos_servicios?.nombre ||
-    exp?.necesidad ||
-    String(sol.descripcion || "").split("\n")[0].replace(/^(Servicio|Instalación):\s*/i, "") ||
+    String(exp?.necesidad || "").split(/[;.]/)[0].trim() ||
+    String(sol.descripcion || "").split("\n")[0].replace(/^(Servicio|Instalación):\s*/i, "").split(/[;.]/)[0].trim() ||
     "Servicio";
   return { sol: sol as any, exp: exp as any, trabajo };
 }
@@ -124,6 +126,9 @@ export async function programarServicioSolicitud(input: {
   notas: string;
   avisarCliente: boolean;
   avisarProveedor: boolean;
+  /** Textos revisados en la vista previa; si faltan se arman igual que la vista previa. */
+  mensajeCliente?: string;
+  mensajeProveedor?: string;
 }): Promise<ResultadoProgramacionServicio> {
   try {
     await requireAdmin();
@@ -244,33 +249,28 @@ export async function programarServicioSolicitud(input: {
 
     // 4. Confirmaciones por WhatsApp.
     const resultado: ResultadoProgramacionServicio = { ok: true, ordenFolio: otFolio || undefined };
+    const datosMensaje = {
+      clienteNombre: exp?.cliente || "",
+      trabajo,
+      fecha: input.fecha,
+      horaInicio: input.horaInicio,
+      horaFin,
+      direccion,
+      linkMaps: exp?.link_google_maps || "",
+      ordenFolio: otFolio,
+      solicitudFolio: sol.folio,
+      costo,
+      notas: input.notas,
+    };
+    const conFolio = (t: string) => t.split(MARCA_FOLIO_OT).join(otFolio || "por asignar");
     if (input.avisarCliente) {
-      const texto =
-        `¡Hola ${(exp?.cliente || "").split(" ")[0] || ""}! ✅ Te confirmamos tu servicio con SAUCEDA:\n\n` +
-        `🔧 *Servicio:* ${trabajo}\n` +
-        `📅 *Fecha:* ${fechaLeg}\n` +
-        `⏰ *Horario:* ${input.horaInicio} a ${horaFin} h\n` +
-        (direccion ? `📍 *Dirección:* ${direccion}\n` : "") +
-        (otFolio ? `🧾 *Orden de trabajo:* ${otFolio}\n` : "") +
-        (input.notas.trim() ? `📌 ${input.notas.trim()}\n` : "") +
-        `\nNuestro técnico llegará en ese horario; por favor ten libre el acceso al área de trabajo. Si necesitas cambiar algo, respóndenos por aquí. 💚`;
+      const texto = conFolio(input.mensajeCliente?.trim() || mensajeServicioCliente(datosMensaje));
       const { responderConversacion } = await import("@/app/actions/conversaciones");
-      const r = await responderConversacion(input.telefono, texto.replace("¡Hola ! ", "¡Hola! "));
+      const r = await responderConversacion(input.telefono, texto);
       resultado.cliente = r.ok ? { enviado: true } : { enviado: false, error: r.error || "No se pudo enviar." };
     }
     if (input.avisarProveedor && sol.proveedor_asignado_id) {
-      const texto =
-        `✅ *Servicio confirmado · SAUCEDA*\n\n` +
-        (otFolio ? `🧾 Orden de trabajo *${otFolio}* (solicitud ${sol.folio})\n` : `🧾 Solicitud ${sol.folio}\n`) +
-        `🔧 ${trabajo}\n` +
-        `📅 *${fechaLeg}*\n` +
-        `⏰ *${input.horaInicio} a ${horaFin} h*\n` +
-        `👤 Cliente: ${(exp?.cliente || "—").split(" ")[0]}\n` +
-        (direccion ? `📍 ${direccion}\n` : "") +
-        (exp?.link_google_maps ? `🗺 ${exp.link_google_maps}\n` : "") +
-        (costo ? `💲 Costo acordado: ${pesos(costo)}\n` : "") +
-        (input.notas.trim() ? `📌 ${input.notas.trim()}\n` : "") +
-        `\nPor favor confírmanos de recibido. ¡Gracias!`;
+      const texto = conFolio(input.mensajeProveedor?.trim() || mensajeServicioProveedor(datosMensaje));
       resultado.proveedor = await avisarProveedor(sb, prov, texto);
     }
 
