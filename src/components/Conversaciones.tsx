@@ -18,6 +18,8 @@ import {
   eliminarMensajeIndividual,
   editarMensajeIndividual,
   enviarStickerConversacion,
+  listarVideosCatalogoChat,
+  enviarVideoCatalogoConversacion,
   prepararSubidaAdjuntoConversacion,
   enviarAdjuntoSubidoConversacion,
   actualizarTipoNegocioConversacion,
@@ -864,6 +866,9 @@ export function Conversaciones({ inicial }: { inicial?: ConversacionResumen[] } 
   const [progresoVideo, setProgresoVideo] = useState<number | null>(null);
   const [mostrarStickers, setMostrarStickers] = useState(false);
   const [enviandoSticker, setEnviandoSticker] = useState(false);
+  const [mostrarVideosCatalogo, setMostrarVideosCatalogo] = useState(false);
+  const [videosCatalogo, setVideosCatalogo] = useState<Awaited<ReturnType<typeof listarVideosCatalogoChat>> | null>(null);
+  const [enviandoVideoUrl, setEnviandoVideoUrl] = useState<string | null>(null);
   const [corrigiendoOrtografia, setCorrigiendoOrtografia] = useState(false);
   const [exitoOrtografia, setExitoOrtografia] = useState(false);
   const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
@@ -1526,6 +1531,32 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
     } catch (err: any) {
       setAviso(humanizarError(err || "Error al enviar el sticker."));
       setEnviandoSticker(false);
+    }
+  }
+
+  async function abrirVideosCatalogo() {
+    const abrir = !mostrarVideosCatalogo;
+    setMostrarVideosCatalogo(abrir);
+    // Se recarga cada vez para ver los videos recién subidos al catálogo.
+    if (abrir) setVideosCatalogo(await listarVideosCatalogoChat().catch(() => []));
+  }
+
+  async function handleEnviarVideoCatalogo(productoId: string, url: string) {
+    if (!sel || enviandoVideoUrl) return;
+    setEnviandoVideoUrl(url);
+    setAviso(null);
+    try {
+      const r = await enviarVideoCatalogoConversacion(sel, productoId, url);
+      if (!r.ok) {
+        setAviso(humanizarError(r.error ?? "No se pudo enviar el video."));
+      } else {
+        setMostrarVideosCatalogo(false);
+        await refrescar(sel);
+      }
+    } catch (err: any) {
+      setAviso(humanizarError(err));
+    } finally {
+      setEnviandoVideoUrl(null);
     }
   }
 
@@ -3303,6 +3334,77 @@ Puedes responder a este mensaje indicándonos tu puntuación (ej. 5/5) o dejarno
                         </>
                       )}
                     </div>
+                    {/* Botón videos del catálogo (solo WhatsApp: se envían por link) */}
+                    {canalDe(detalle.telefono) === "whatsapp" && (
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => void abrirVideosCatalogo()}
+                        disabled={!!enviandoVideoUrl || !detalle.ventanaAbierta}
+                        title="Enviar videos de trabajos realizados del catálogo"
+                        className="flex h-[42px] w-[42px] items-center justify-center rounded-md border border-carbon/20 bg-white text-lg hover:bg-sauce/10 hover:border-sauce/40 transition disabled:opacity-50"
+                      >
+                        {enviandoVideoUrl ? <span className="text-sm animate-pulse">⏳</span> : "🎬"}
+                      </button>
+                      {mostrarVideosCatalogo && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                            onClick={() => setMostrarVideosCatalogo(false)}
+                          />
+                          <div className="fixed inset-x-3 bottom-20 sm:inset-auto sm:absolute sm:right-0 sm:bottom-full sm:mb-2 z-50 max-h-[75vh] sm:max-h-[420px] sm:w-80 overflow-y-auto rounded-xl border border-carbon/15 bg-white shadow-xl">
+                            <div className="sticky top-0 bg-white border-b border-carbon/10 px-3 py-2 flex items-center justify-between z-10">
+                              <span className="text-xs font-bold text-verde-profundo flex items-center gap-1">🎬 Videos del catálogo</span>
+                              <button
+                                type="button"
+                                onClick={() => setMostrarVideosCatalogo(false)}
+                                className="text-carbon/40 hover:text-carbon text-sm p-1 rounded hover:bg-carbon/5 transition cursor-pointer"
+                              >✕</button>
+                            </div>
+                            <div className="p-3 space-y-3">
+                              {videosCatalogo === null ? (
+                                <p className="text-xs text-carbon/50 text-center py-4 animate-pulse">Cargando videos…</p>
+                              ) : videosCatalogo.length === 0 ? (
+                                <p className="text-xs text-carbon/60 text-center py-4 leading-relaxed">
+                                  Aún no hay videos en el catálogo. Súbelos desde Productos y Servicios.
+                                </p>
+                              ) : (
+                                videosCatalogo.map((p) => (
+                                  <div key={p.id} className="space-y-1.5">
+                                    <p className="text-[10px] uppercase font-bold text-carbon/50 tracking-wider">{p.nombre}</p>
+                                    {p.videos.map((v) => (
+                                      <div key={v.url} className="flex items-center gap-2 rounded-lg border border-carbon/10 p-2 hover:bg-sauce/10 hover:border-sauce/40 transition">
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleEnviarVideoCatalogo(p.id, v.url)}
+                                          disabled={!!enviandoVideoUrl}
+                                          title="Enviar este video al cliente"
+                                          className="min-w-0 flex-1 flex items-center gap-2 text-left disabled:opacity-50 cursor-pointer"
+                                        >
+                                          <span className="text-lg shrink-0">{enviandoVideoUrl === v.url ? "⏳" : "▶️"}</span>
+                                          <span className="min-w-0 flex-1">
+                                            <span className="block text-xs font-semibold text-verde-profundo truncate">{v.titulo || p.nombre}</span>
+                                            {v.descripcion && <span className="block text-[10px] text-carbon/60 truncate">{v.descripcion}</span>}
+                                          </span>
+                                        </button>
+                                        <a
+                                          href={v.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="shrink-0 text-[10px] text-carbon/50 hover:text-sauce underline"
+                                          title="Ver el video antes de enviarlo"
+                                        >Ver</a>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    )}
                     {/* Botón enviar sticker */}
                     <div className="relative shrink-0">
                       <button

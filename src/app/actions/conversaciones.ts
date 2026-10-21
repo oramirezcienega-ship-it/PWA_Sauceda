@@ -9,6 +9,7 @@ import { enviarMessengerTexto } from "@/lib/messenger";
 import { enviarInstagramTexto } from "@/lib/instagram";
 import { variantesTelefono, normalizarTelefono } from "@/lib/telefono";
 import { diagnosticoIA } from "@/lib/ia/agente";
+import { cargarProductosConVideos, enviarUnVideoCatalogo, type ProductoConVideos } from "@/lib/ia/videos-catalogo";
 import { esConversacionPausada, esPausaAutomatica, setConversacionPausada } from "@/lib/ia/control-pausa";
 import type {
   ConversacionDetalle,
@@ -1678,3 +1679,51 @@ REGLAS ESTRICTAS:
   }
 }
 
+
+/** Productos del catálogo con videos de trabajos realizados, para el selector del chat. */
+export async function listarVideosCatalogoChat(): Promise<ProductoConVideos[]> {
+  await requireAdmin();
+  return cargarProductosConVideos(supabaseServidor(), { soloIA: false }).catch(() => []);
+}
+
+/** El asesor envía un video del catálogo (por link público, sin volver a subirlo). */
+export async function enviarVideoCatalogoConversacion(
+  telefono: string,
+  productoId: string,
+  url: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  if (!telefono) return { ok: false, error: "Falta el teléfono." };
+  if (esCanalSocial(telefono)) return { ok: false, error: "Los videos del catálogo solo se pueden enviar por WhatsApp." };
+
+  const sb = supabaseServidor();
+  try {
+    // Solo se envían videos que de verdad están en el catálogo.
+    const producto = (await cargarProductosConVideos(sb, { soloIA: false })).find((p) => p.id === productoId);
+    const video = producto?.videos.find((v) => v.url === url);
+    if (!producto || !video) return { ok: false, error: "Ese video ya no está en el catálogo." };
+
+    const { expedienteId, prospectoId } = await idsDeTelefono(sb, telefono);
+    const agente = await nombreAgenteActual(sb);
+    const r = await enviarUnVideoCatalogo(
+      sb,
+      { canal: telefono, telefono: normalizarTelefono(telefono), expedienteId, prospectoId, agente },
+      { ...video, producto: producto.nombre },
+    );
+    if (!r.ok) return { ok: false, error: r.error ?? "No se pudo enviar el video por WhatsApp." };
+
+    if (expedienteId) {
+      await registrarActividad(sb, {
+        expedienteId,
+        tipo: "mensaje",
+        titulo: "Video del catálogo enviado por WhatsApp",
+        detalle: `Se envió el video "${video.titulo || producto.nombre}" (${producto.nombre}).`,
+      });
+      await avanzarAContactoInicialPorRespuesta(sb, expedienteId, agente);
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("Error al enviar video del catálogo:", err);
+    return { ok: false, error: err.message || "Error al enviar el video." };
+  }
+}

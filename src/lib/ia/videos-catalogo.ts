@@ -26,8 +26,14 @@ export interface ProductoConVideos {
   videos: VideoCatalogo[];
 }
 
-/** Productos activos y aptos para IA que tienen al menos un video. */
-export async function cargarProductosConVideos(sb: SupabaseClient): Promise<ProductoConVideos[]> {
+/**
+ * Productos activos que tienen al menos un video. Por defecto sólo los aptos para IA
+ * (lo que Sofía puede ofrecer); el asesor en Conversaciones ve todos con `soloIA: false`.
+ */
+export async function cargarProductosConVideos(
+  sb: SupabaseClient,
+  { soloIA = true }: { soloIA?: boolean } = {}
+): Promise<ProductoConVideos[]> {
   const { data } = await sb
     .from("productos_servicios")
     .select("id, nombre, videos, activo, apto_para_ia")
@@ -35,7 +41,7 @@ export async function cargarProductosConVideos(sb: SupabaseClient): Promise<Prod
 
   const out: ProductoConVideos[] = [];
   for (const f of data || []) {
-    if (f.activo === false || f.apto_para_ia === false) continue;
+    if (f.activo === false || (soloIA && f.apto_para_ia === false)) continue;
     const videos: VideoCatalogo[] = (Array.isArray(f.videos) ? f.videos : [])
       .filter((v: any) => v && /^https?:\/\//i.test(v.url || ""))
       .map((v: any) => ({ url: v.url, titulo: v.titulo || "", descripcion: v.descripcion || "" }));
@@ -77,6 +83,28 @@ function elegirProductos(productos: ProductoConVideos[], videosDe: string, tipoN
   const patron = tipoNegocio ? CLAVE_TIPO_NEGOCIO[tipoNegocio] : undefined;
   const delServicio = patron ? productos.filter((p) => patron.test(p.nombre)) : [];
   return delServicio.length > 0 ? delServicio : productos;
+}
+
+/** Envía un video del catálogo por link y lo registra en el hilo (también si falla). */
+export async function enviarUnVideoCatalogo(
+  sb: SupabaseClient,
+  ctx: { canal: string; telefono: string; expedienteId?: string | null; prospectoId?: string | null; agente: string },
+  v: VideoCatalogo & { producto: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const caption = [v.titulo || v.producto, v.descripcion].filter(Boolean).join(" · ");
+  const nombre = `${(v.titulo || "video").replace(/[^\w áéíóúñÁÉÍÓÚÑ-]+/g, "_")}.mp4`;
+  const r = await enviarWhatsAppDocumento(ctx.canal, v.url, nombre, caption, "video/mp4");
+  await sb.from("mensajes_whatsapp").insert({
+    telefono: ctx.telefono,
+    texto: `[video:${v.url}] ${caption}`,
+    direccion: "out",
+    expediente_id: ctx.expedienteId ?? null,
+    ...(ctx.prospectoId ? { prospecto_id: ctx.prospectoId } : {}),
+    estado: r.ok ? "enviado" : `error:${r.error || "error"}`,
+    wa_message_id: r.messageId ?? null,
+    agente: ctx.agente,
+  });
+  return { ok: r.ok, error: r.error };
 }
 
 /**
@@ -126,18 +154,7 @@ export async function enviarVideosCatalogo(
 
     let enviados = 0;
     for (const v of aEnviar) {
-      const caption = [v.titulo || v.producto, v.descripcion].filter(Boolean).join(" · ");
-      const nombre = `${(v.titulo || "video").replace(/[^\w áéíóúñÁÉÍÓÚÑ-]+/g, "_")}.mp4`;
-      const r = await enviarWhatsAppDocumento(ctx.canal, v.url, nombre, caption, "video/mp4");
-      await sb.from("mensajes_whatsapp").insert({
-        telefono: ctx.telefono,
-        texto: `[video:${v.url}] ${caption}`,
-        direccion: "out",
-        expediente_id: ctx.expedienteId ?? null,
-        estado: r.ok ? "enviado" : `error:${r.error || "error"}`,
-        wa_message_id: r.messageId ?? null,
-        agente: ctx.agente,
-      });
+      const r = await enviarUnVideoCatalogo(sb, ctx, v);
       if (r.ok) enviados++;
       else console.warn(`[Videos] No se pudo enviar ${v.url}: ${r.error}`);
     }
