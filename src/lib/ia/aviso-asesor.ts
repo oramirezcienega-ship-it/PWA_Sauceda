@@ -7,7 +7,7 @@ import { obtenerConfiguracionTelegram, enviarMensajeTelegram } from "@/lib/teleg
  * motivo distinto en cada turno (antes se comparaba el texto exacto y pasaban todos).
  */
 const VENTANA_DEDUPE_MS = 4 * 60 * 60 * 1000;
-/** Urgentes y leads calientes sí pueden repetirse, pero no más de uno por hora por conversación. */
+/** Los urgentes sí pueden repetirse, pero no más de uno por hora por conversación. */
 const VENTANA_DEDUPE_URGENTE_MS = 60 * 60 * 1000;
 
 const PREFIJO_TITULO = "🙋 Sofía pide apoyo";
@@ -18,8 +18,7 @@ const RE_URGENTE = /molest|inconform|queja|reclam|no lleg|no asisti|cancel|liga 
 /** Avisos que ameritan Telegram; el resto se queda como notificación in-app. */
 function clasificarAviso(motivo: string): { urgente: boolean; telegram: boolean } {
   const urgente = RE_URGENTE.test(motivo);
-  const caliente = motivo.includes("LEAD CALIENTE");
-  return { urgente, telegram: urgente || caliente };
+  return { urgente, telegram: urgente };
 }
 
 /** Últimos 10 dígitos: el mismo chat llega a veces con y sin el 52. */
@@ -35,7 +34,7 @@ function escaparHtml(t: string): string {
 /**
  * Aviso de Sofía a un asesor humano ("transfiere a un asesor") sin pausar la IA:
  * notificación in-app (asesor del expediente + administradores), mensaje de
- * Telegram solo si es urgente o lead caliente (chat personal del asesor o, si
+ * Telegram solo si es urgente (chat personal del asesor o, si
  * no tiene, el grupo) y actividad en
  * la bitácora. Nunca lanza: un fallo aquí no debe frenar la respuesta al cliente.
  */

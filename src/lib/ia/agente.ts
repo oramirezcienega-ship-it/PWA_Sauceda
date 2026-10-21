@@ -2135,15 +2135,11 @@ export async function responderConIA(
         tieneDatosInfonavit
       );
 
-      // Solo en la transición a caliente: si ya lo era, no se vuelve a avisar.
+      // Solo se marca la calificación (queda en el CRM y la bitácora); ya no se avisa
+      // al asesor por esto (el aviso "LEAD CALIENTE DETECTADO" se quitó).
       const yaEraCaliente = exp?.calificacion === "caliente";
       if (esLeadCaliente && !yaEraCaliente && (datosExtraidos as any).descalificado !== true && exp?.calificacion !== "descalificado") {
         updates.calificacion = "caliente";
-        if (!datosExtraidos.avisar_asesor) {
-          datosExtraidos.avisar_asesor = tieneDatosInfonavit
-            ? `🔥 LEAD CALIENTE DETECTADO (INFONAVIT): Datos de precalificación capturados (${updates.necesidad || "Trámite"}). Dar seguimiento prioritario.`
-            : `🔥 LEAD CALIENTE DETECTADO: Perfilado con datos clave (${updates.tipo_negocio || exp?.tipo_negocio || "general"}). Dar seguimiento prioritario.`;
-        }
       }
 
       // Guardar actualizaciones de datos extraídos en base de datos
