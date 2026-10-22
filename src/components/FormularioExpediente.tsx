@@ -91,6 +91,7 @@ export function FormularioExpediente({
         primerApellido: datos.primerApellido.trim(),
         segundoApellido: datos.segundoApellido.trim(),
         nickname: (datos.nickname || "").trim(),
+        correo: (datos.correo || "").trim(),
         fraccionamiento: datos.fraccionamiento.trim(),
         calificacion: datos.calificacion || "frio",
         valorEstimado: Number(datos.valorEstimado) || 0,
@@ -156,6 +157,16 @@ export function FormularioExpediente({
           value={datos.nickname || ""}
           onChange={(e) => actualizar("nickname", e.target.value)}
           placeholder="Apodo o nombre corto (se comparte con el prospecto)"
+          className={INPUT}
+        />
+      </Campo>
+
+      <Campo etiqueta="Correo electrónico">
+        <input
+          type="email"
+          value={datos.correo || ""}
+          onChange={(e) => actualizar("correo", e.target.value)}
+          placeholder="cliente@correo.com (se comparte con el prospecto)"
           className={INPUT}
         />
       </Campo>

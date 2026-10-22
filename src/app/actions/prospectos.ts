@@ -237,6 +237,7 @@ export async function actualizarProspecto(
       primer_apellido: datos.primerApellido,
       segundo_apellido: datos.segundoApellido,
       nickname: (datos.nickname || "").trim(),
+      correo: (datos.correo || "").trim(),
       telefono: datos.telefono,
       direccion_propiedad: datos.direccion || "",
       ad_name: datos.adName,

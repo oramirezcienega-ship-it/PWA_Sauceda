@@ -314,6 +314,8 @@ export interface Expediente {
   segundoApellido: string;
   /** Apodo / nombre corto; se comparte con el prospecto enlazado. */
   nickname?: string;
+  /** Correo electrónico; se comparte con el prospecto enlazado. */
+  correo?: string;
   /** Nombre completo armado (solo lectura). */
   nombreCompleto: string;
   /** Fraccionamiento / zona en León, Gto. */

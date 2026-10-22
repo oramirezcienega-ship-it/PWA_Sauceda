@@ -39,6 +39,7 @@ export interface FilaExpediente {
   primer_apellido: string;
   segundo_apellido: string;
   nickname?: string | null;
+  correo?: string | null;
   fraccionamiento: string;
   etapa: EtapaId;
   situacion: string;
@@ -94,6 +95,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     primerApellido: fila.primer_apellido ?? "",
     segundoApellido: fila.segundo_apellido ?? "",
     nickname: fila.nickname ?? "",
+    correo: fila.correo || fila.prospectos?.correo || "",
     nombreCompleto: nombreCompleto(
       fila.cliente,
       fila.primer_apellido ?? "",
@@ -113,7 +115,7 @@ export function aExpediente(fila: FilaExpediente): Expediente {
     ultimoMovimiento: fila.ultimo_movimiento,
     prospectoId: fila.prospecto_id,
     origenProspecto: fila.prospectos?.origen || (fila as any).origen || null,
-    prospectoCorreo: fila.prospectos?.correo ?? null,
+    prospectoCorreo: fila.correo || fila.prospectos?.correo || null,
     prospectoDireccion: fila.prospectos?.direccion ?? null,
     tipoCredito: fila.tipo_credito ?? "",
     direccionPropiedad: fila.direccion_propiedad ?? "",
@@ -146,6 +148,7 @@ export function aFila(datos: DatosExpediente) {
     primer_apellido: datos.primerApellido || "",
     segundo_apellido: datos.segundoApellido || "",
     nickname: (datos.nickname || "").trim(),
+    ...(datos.correo !== undefined ? { correo: datos.correo.trim() } : {}),
     fraccionamiento: datos.fraccionamiento || "",
     etapa: datos.etapa,
     situacion: datos.situacion || "",
