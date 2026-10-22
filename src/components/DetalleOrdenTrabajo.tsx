@@ -1105,8 +1105,7 @@ export function DetalleOrdenTrabajo({
       <ModalRegistrarRecibo
         abierto={modalRecibo}
         alCerrar={() => setModalRecibo(false)}
-        alRegistrar={() => {
-          setModalRecibo(false);
+        alCrear={() => {
           recargarDetalle();
         }}
         ordenId={orden.id}
@@ -1114,6 +1113,7 @@ export function DetalleOrdenTrabajo({
         clienteNombre={orden.clienteNombre}
         clienteTelefono={orden.clienteTelefono}
         totalCotizado={orden.totalCotizado || 0}
+        totalPagado={orden.totalPagado || 0}
         saldoRestante={orden.saldoRestante || 0}
       />
 
