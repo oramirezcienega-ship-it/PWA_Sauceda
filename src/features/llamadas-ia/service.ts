@@ -205,8 +205,7 @@ async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> 
   for (const p of ["acrilico", "estandar", "premium"] as const) {
     const prod = productos[p];
     if (!prod || !prod.aptoParaIa || prod.precioM2 <= 0) continue;
-    // La acrílica dice 3 años en el catálogo y 2 en la comparativa y cotizaciones: no se afirma hasta confirmarla.
-    const garantia = p === "acrilico" ? undefined : prod.nombre.match(/garant[ií]a\s*(?:de\s*)?(\d+)\s*a[ñn]os?/i)?.[1];
+    const garantia = prod.nombre.match(/garant[ií]a\s*(?:de\s*)?(\d+)\s*a[ñn]os?/i)?.[1];
     const volumen = prod.preciosVolumen.length
       ? `; desde ${prod.preciosVolumen.map((t) => `${t.desde} m² baja a ${formatoPesosEnteros(t.precio)}`).join(", ")}`
       : "";
