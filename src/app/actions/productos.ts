@@ -10,6 +10,7 @@ import {
 } from "@/lib/costo-inspeccion";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { normalizarCostosVolumen, type CostoVolumen } from "@/lib/costos-volumen";
+import { normalizarPreciosVolumen, type PrecioVolumen } from "@/lib/precios-volumen";
 import { sincronizarVariantes } from "@/lib/variantes-servicio";
 import type { 
   ProductoServicio, 
@@ -55,6 +56,7 @@ function aProductoServicio(fila: any): ProductoServicio {
     tarifaMedida: fila.tarifa_medida === "tubos" ? "tubos" : "litros",
     cantidadMinima: Number(fila.cantidad_minima || 0),
     costosVolumen: normalizarCostosVolumen(fila.costos_volumen),
+    preciosVolumen: normalizarPreciosVolumen(fila.precios_volumen),
     estandarProceso: fila.estandar_proceso || "",
     estandarIncluye: fila.estandar_incluye || "",
     estandarGarantiaAnios: Number(fila.estandar_garantia_anios || 0),
@@ -278,6 +280,7 @@ export async function crearProductoServicio(datos: {
   tarifaMedida?: "litros" | "tubos";
   cantidadMinima?: number;
   costosVolumen?: CostoVolumen[];
+  preciosVolumen?: PrecioVolumen[];
   estandarProceso?: string;
   estandarIncluye?: string;
   estandarGarantiaAnios?: number;
@@ -327,6 +330,8 @@ export async function crearProductoServicio(datos: {
       tarifa_medida: datos.tarifaMedida === "tubos" ? "tubos" : "litros",
       cantidad_minima: Math.max(0, Number(datos.cantidadMinima || 0)),
       costos_volumen: normalizarCostosVolumen(datos.costosVolumen),
+      // Sólo si viene: así crear sigue funcionando aunque la columna aún no exista (migración 0171).
+      ...(datos.preciosVolumen?.length ? { precios_volumen: normalizarPreciosVolumen(datos.preciosVolumen) } : {}),
       ...estandarAFila(datos),
       es_servicio_especial: datos.esServicioEspecial === true,
       margen_objetivo_pct: margenValido(datos.margenObjetivoPct),
@@ -368,6 +373,7 @@ export async function editarProductoServicio(
     tarifaMedida?: "litros" | "tubos";
     cantidadMinima?: number;
     costosVolumen?: CostoVolumen[];
+  preciosVolumen?: PrecioVolumen[];
     estandarProceso?: string;
     estandarIncluye?: string;
     estandarGarantiaAnios?: number;
@@ -404,6 +410,9 @@ export async function editarProductoServicio(
   }
   if (datos.costosVolumen !== undefined) {
     updatePayload.costos_volumen = normalizarCostosVolumen(datos.costosVolumen);
+  }
+  if (datos.preciosVolumen !== undefined) {
+    updatePayload.precios_volumen = normalizarPreciosVolumen(datos.preciosVolumen);
   }
   if (datos.cantidadMinima !== undefined) {
     updatePayload.cantidad_minima = Math.max(0, Number(datos.cantidadMinima || 0));

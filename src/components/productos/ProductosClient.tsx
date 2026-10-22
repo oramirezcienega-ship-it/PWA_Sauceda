@@ -48,6 +48,7 @@ import {
 } from "@/app/actions/productos";
 import { convertirVideoParaWhatsApp, videoRequiereConversion } from "@/lib/convertir-video";
 import { supabaseNavegador } from "@/lib/supabase/cliente-navegador";
+import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { OfertasProveedorProducto } from "@/components/proveedores/OfertasProveedorProducto";
 import { CostosInspeccionPanel } from "@/components/productos/CostosInspeccionPanel";
 import { PanelProveedorEnFicha } from "@/components/productos/PanelProveedorEnFicha";
@@ -138,6 +139,7 @@ export function ProductosClient({
   const [formPrecioUnitario, setFormPrecioUnitario] = useState("");
   const [formCantidadMinima, setFormCantidadMinima] = useState("");
   const [formCostosVolumen, setFormCostosVolumen] = useState<{ hasta: string; costo: string }[]>([]);
+  const [formPreciosVolumen, setFormPreciosVolumen] = useState<{ desde: string; precio: string }[]>([]);
   const [formPorcentajeComision, setFormPorcentajeComision] = useState("5.0");
   const [formGama, setFormGama] = useState<"economica" | "media" | "premium" | "estandar">("estandar");
   const [formDescripcionValor, setFormDescripcionValor] = useState("");
@@ -237,6 +239,7 @@ export function ProductosClient({
     setFormTarifaMedida("litros");
     setFormCantidadMinima("");
     setFormCostosVolumen([]);
+    setFormPreciosVolumen([]);
     setFormComposicionApu([]);
     setTabModalProd("general");
     setErrorMsg("");
@@ -304,6 +307,7 @@ export function ProductosClient({
     setFormPrecioUnitario(String(p.precioUnitario));
     setFormCantidadMinima(p.cantidadMinima ? String(p.cantidadMinima) : "");
     setFormCostosVolumen((p.costosVolumen || []).map((r) => ({ hasta: String(r.hasta), costo: String(r.costo) })));
+    setFormPreciosVolumen((p.preciosVolumen || []).map((r) => ({ desde: String(r.desde), precio: String(r.precio) })));
     setFormPorcentajeComision(String(p.porcentajeComision ?? 5.0));
     setFormGama(p.gama || "estandar");
     setFormDescripcionValor(p.descripcionValor || "");
@@ -376,6 +380,9 @@ export function ProductosClient({
         costosVolumen: formCostosVolumen
           .filter((r) => Number(r.hasta) > 0 && r.costo.trim() !== "")
           .map((r) => ({ hasta: Number(r.hasta), costo: Number(r.costo) })),
+        preciosVolumen: formPreciosVolumen
+          .filter((r) => Number(r.desde) > 0 && Number(r.precio) > 0)
+          .map((r) => ({ desde: Number(r.desde), precio: Number(r.precio) })),
         porcentajeComision: Number(formPorcentajeComision || 5.0),
         gama: formGama,
         descripcionValor: formDescripcionValor.trim(),
@@ -1985,6 +1992,83 @@ export function ProductosClient({
                       .
                     </p>
                   </div>
+
+                  {formTarifas.length === 0 && (
+                  <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+                    <div>
+                      <span className="font-semibold text-carbon block">📉 Precio de venta por volumen</span>
+                      <p className="text-[11px] text-carbon/60 mt-0.5">
+                        Al llegar a la cantidad indicada, el precio por {formUnidad || "unidad"} baja para <strong>toda</strong> la
+                        cantidad (no sólo el excedente). Aplica el tramo más alto alcanzado. Lo usan la calculadora, la imagen
+                        comparativa, Sofía y las cotizaciones. Sin tramos se usa el precio de venta unitario.
+                      </p>
+                    </div>
+                    {formPreciosVolumen.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-carbon/50">
+                          <span className="w-16">Desde</span>
+                          <span className="w-24">Cantidad</span>
+                          <span className="w-32">Precio de venta</span>
+                          <span className="w-16">Margen</span>
+                        </div>
+                        {formPreciosVolumen.map((r, idx) => {
+                          const precio = Number(r.precio);
+                          const costo = costoUnitarioPorVolumen(
+                            formCostosVolumen
+                              .filter((c) => Number(c.hasta) > 0 && c.costo.trim() !== "")
+                              .map((c) => ({ hasta: Number(c.hasta), costo: Number(c.costo) })),
+                            Number(r.desde) || 0,
+                            Number(formCostoUnitario) || 0
+                          );
+                          const margen = precio > 0 && costo > 0 ? ((precio - costo) / precio) * 100 : null;
+                          return (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="text-[11px] text-carbon/60 w-16">Desde</span>
+                              <input
+                                type="number"
+                                min={1}
+                                step="0.01"
+                                placeholder="100"
+                                value={r.desde}
+                                onChange={(e) => setFormPreciosVolumen((prev) => prev.map((x, i) => (i === idx ? { ...x, desde: e.target.value } : x)))}
+                                className="w-24 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white font-mono"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                placeholder="$ por unidad"
+                                value={r.precio}
+                                onChange={(e) => setFormPreciosVolumen((prev) => prev.map((x, i) => (i === idx ? { ...x, precio: e.target.value } : x)))}
+                                className="w-32 px-2 py-1.5 rounded-lg border border-carbon/20 bg-white font-mono"
+                              />
+                              <span
+                                className={`w-16 text-[11px] font-bold ${margen === null ? "text-carbon/30" : margen < 0 ? "text-rojo" : "text-verde-profundo"}`}
+                                title="Margen contra el costo del proveedor para esa cantidad = (venta − costo) / venta"
+                              >
+                                {margen === null ? "—" : `${margen.toFixed(0)}%`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setFormPreciosVolumen((prev) => prev.filter((_, i) => i !== idx))}
+                                className="text-[11px] font-bold text-rojo hover:underline"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setFormPreciosVolumen((prev) => [...prev, { desde: "", precio: "" }])}
+                      className="text-[11px] font-bold text-sauce hover:underline"
+                    >
+                      + Agregar tramo
+                    </button>
+                  </div>
+                  )}
 
                   {formTarifas.length === 0 && (
                   <div className="p-4 rounded-xl bg-slate-50 border border-carbon/10 space-y-2">

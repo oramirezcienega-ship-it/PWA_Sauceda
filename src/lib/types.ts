@@ -1,4 +1,5 @@
 import type { CostoVolumen } from "@/lib/costos-volumen";
+import type { PrecioVolumen } from "@/lib/precios-volumen";
 /**
  * Tipos del dominio de traspasos INFONAVIT.
  * Incremento 1: solo lo necesario para el tablero de expedientes.
@@ -1232,6 +1233,8 @@ export interface ProductoServicio {
   cantidadMinima?: number;
   /** Costo del proveedor por rango de cantidad (interno). */
   costosVolumen?: CostoVolumen[];
+  /** Precio de venta a partir de cierta cantidad (aplica a toda la cantidad). */
+  preciosVolumen?: PrecioVolumen[];
   /** Estándar Sauceda del servicio: lo cumplen todos los proveedores (migración 0155). */
   estandarProceso?: string;
   estandarIncluye?: string;

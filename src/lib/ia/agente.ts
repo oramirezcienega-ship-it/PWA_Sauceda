@@ -12,6 +12,7 @@ import {
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
+import { precioUnitarioPorVolumen } from "@/lib/precios-volumen";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
 import {
@@ -364,6 +365,9 @@ async function instrucciones(exp: FilaExp | null, sb: SupabaseClient): Promise<s
     .map((p) => productosImper[p])
     .filter((p): p is NonNullable<typeof p> => Boolean(p && p.minimoM2 > 0))
     .map((p) => `${ETIQUETA_PAQUETE[p.paquete]}: mínimo ${p.minimoM2} m²`);
+  const umbralesVolumenImper = Array.from(
+    new Set((["acrilico", "estandar", "premium"] as const).flatMap((p) => (productosImper[p]?.preciosVolumen || []).map((t) => t.desde)))
+  ).sort((a, b) => a - b);
 
   // 1. Encontrar el operador asignado o el fallback a Alex
   let operadorId = exp?.asesor_id || exp?.operador_id;
@@ -564,6 +568,8 @@ Debes guiar al prospecto de forma estricta a través del siguiente flujo convers
     Si el cliente indica si es de 1 o 2 pisos o elige un rango, usa esa medida promedio aproximada para activar el PASO 2. Si dice expresamente que prefiere que alguien vaya a medir en persona, aplica la coordinación de visita técnica.
 ${minimosImper.length > 0 ? `  - MÍNIMO DE COBRO POR OPCIÓN (lo calcula el sistema; la imagen comparativa ya lo aplica): ${minimosImper.join("; ")}.
     Si los metros del cliente son MENORES al mínimo de alguna opción, agrega a tu mensaje una línea breve y amable explicando que para superficies pequeñas manejamos un mínimo de cobro (menciona solo los m² mínimos de esa(s) opción(es); el importe ya viene en la imagen comparativa, NO lo escribas), porque el material se adquiere en presentaciones mínimas. Nunca calcules ni cotices por debajo de ese mínimo.
+` : ""}${umbralesVolumenImper.length > 0 ? `  - PRECIO POR VOLUMEN (lo calcula el sistema; la imagen comparativa ya lo aplica): a partir de ${umbralesVolumenImper.map((u) => `${u} m²`).join(" / ")} el precio por m² baja en todo el trabajo.
+    Si los metros del cliente alcanzan ese volumen, puedes mencionar en una línea que por el tamaño de su superficie ya aplica precio preferencial por volumen (sin escribir cifras: vienen en la imagen). Si están cerca por debajo, NO lo menciones ni sugieras aumentar metros.
 ` : ""}  Asigna "paso_flujo": "paso_2".
 
 - PASO 2B: EL CLIENTE ELIGE UN PAQUETE O PRESENTA DUDAS / OBJECIONES
@@ -1930,6 +1936,8 @@ export async function responderConIA(
               const m2Cobrados = Math.max(Number(m), prodCat?.minimoM2 || 0);
               // Costo del proveedor según el rango de m² negociado (si está capturado)
               costoM2 = costoUnitarioPorVolumen(prodCat?.costosVolumen, m2Cobrados, costoM2);
+              // Precio de venta por volumen (al alcanzar un tramo aplica a todos los m²)
+              precioM2 = precioUnitarioPorVolumen(prodCat?.preciosVolumen, m2Cobrados, precioM2);
               const precioTotal = m2Cobrados * precioM2;
               const costoTotal = m2Cobrados * costoM2;
 
