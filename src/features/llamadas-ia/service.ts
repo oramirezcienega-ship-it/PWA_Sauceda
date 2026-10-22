@@ -480,20 +480,30 @@ function siguienteIntento(horas: number): string {
  * visita en la cotización, lista de no llamar, actividad del prospecto e historial
  * del conmutador. Idempotente: si ya se aplicó, no repite efectos.
  */
-export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: boolean; error?: string }> {
+export async function sincronizarConVapi(
+  vapiCallId: string,
+  opciones: { esperarFin?: boolean } = {},
+): Promise<{ ok: boolean; error?: string }> {
   const sb = supabaseServidor();
   const { data } = await sb.from("llamadas_campana").select("*").eq("vapi_call_id", vapiCallId).maybeSingle();
   const ll = data as LlamadaIA | null;
   if (!ll) return { ok: false, error: "La llamada no pertenece a una campaña." };
   if (ll.estado !== "en_curso") return { ok: true };
 
-  let call: LlamadaVapi;
-  try {
-    call = await vapi<LlamadaVapi>(`/call/${encodeURIComponent(vapiCallId)}`);
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "No se pudo consultar Vapi." };
+  // El aviso de fin de llamada puede llegar antes de que Vapi la marque como
+  // terminada: en ese caso se reintenta unos segundos.
+  let call: LlamadaVapi | null = null;
+  const intentos = opciones.esperarFin ? 6 : 1;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      call = await vapi<LlamadaVapi>(`/call/${encodeURIComponent(vapiCallId)}`);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "No se pudo consultar Vapi." };
+    }
+    if (call.status === "ended") break;
+    if (i < intentos - 1) await new Promise((r) => setTimeout(r, 2500));
   }
-  if (call.status !== "ended") return { ok: true };
+  if (!call || call.status !== "ended") return { ok: true };
 
   const datos = call.analysis?.structuredData ?? {};
   const motivo = call.endedReason || "";

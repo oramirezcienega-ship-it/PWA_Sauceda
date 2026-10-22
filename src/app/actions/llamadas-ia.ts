@@ -30,6 +30,16 @@ export async function obtenerConfiguracionLlamadasIA(): Promise<ConfiguracionLla
 
 export async function listarLlamadasIA(): Promise<LlamadaIA[]> {
   await requireAdmin();
+  // Respaldo del webhook: las que llevan más de 2 min "en curso" se consultan en Vapi.
+  const { data: atoradas } = await supabaseServidor()
+    .from("llamadas_campana")
+    .select("vapi_call_id")
+    .eq("estado", "en_curso")
+    .not("vapi_call_id", "is", null)
+    .lt("updated_at", new Date(Date.now() - 2 * 60 * 1000).toISOString())
+    .limit(10);
+  await Promise.all((atoradas ?? []).map((r) => sincronizarConVapi(r.vapi_call_id as string)));
+
   const { data, error } = await supabaseServidor()
     .from("llamadas_campana")
     .select("*")

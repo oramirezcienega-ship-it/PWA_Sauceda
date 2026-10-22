@@ -15,8 +15,9 @@ export async function POST(request: Request) {
     const tipo = body.message?.type || "";
     const callId = body.message?.call?.id || "";
 
+    console.log(`[webhook-campana] ${tipo || "sin tipo"} ${callId}`);
     if (tipo === "end-of-call-report" && callId) {
-      const r = await sincronizarConVapi(callId);
+      const r = await sincronizarConVapi(callId, { esperarFin: true });
       if (!r.ok) console.warn(`[webhook-campana] ${callId}: ${r.error}`);
     }
     return NextResponse.json({ ok: true });
