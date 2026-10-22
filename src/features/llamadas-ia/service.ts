@@ -17,7 +17,7 @@ import { conocimientoParaPrompt } from "@/features/llamadas-ia/conocimiento";
  *   VAPI_API_KEY             llave privada de Vapi
  *   VAPI_PHONE_NUMBER_ID     número de Twilio importado en Vapi (usar uno distinto
  *                            al del conmutador: importarlo cambia su webhook de voz)
- *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o-mini)
+ *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o)
  *   VAPI_CAMPANA_VOZ_PROVEEDOR / VAPI_CAMPANA_VOZ_ID   opcional (default azure es-MX-DaliaNeural)
  *   CAMPANA_VISITAS_MAX_DIA  opcional, tope de visitas por día que Sofía puede agendar (default 4)
  */
@@ -48,7 +48,7 @@ export interface ContextoLlamadaIA {
 }
 
 /** Versión del guion: se guarda con cada resultado para comparar versiones. */
-export const GUION_VERSION = "seguimiento-v4";
+export const GUION_VERSION = "seguimiento-v5";
 
 export interface LlamadaIA {
   id: string;
@@ -224,6 +224,20 @@ async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> 
   };
 }
 
+/**
+ * Texto apto para voz: el modelo y la voz leen mal "$310", "m²" o "3.5" (en la
+ * primera prueba dijo "13" y "three point five").
+ */
+function paraVoz(texto: string): string {
+  return texto
+    .replace(/\$\s?(\d[\d,]*)/g, "$1 pesos")
+    .replace(/por m²/g, "por metro cuadrado")
+    .replace(/m²|m2\b/g, "metros cuadrados")
+    .replace(/\b3\.5\b/g, "tres punto cinco")
+    .replace(/\b4\.0\b/g, "cuatro punto cero")
+    .replace(/(\d+)–(\d+)/g, "$1 a $2");
+}
+
 function promptReagendarVisita(
   ll: LlamadaIA,
   espacios: { iso: string; texto: string }[],
@@ -239,9 +253,9 @@ function promptReagendarVisita(
     ? `alrededor de ${formatoPesosEnteros(ll.contexto.monto)} sin factura${ll.contexto.paquete ? ` con la opción ${ll.contexto.paquete}` : ""}${ll.contexto.metros ? ` para ${ll.contexto.metros} m²` : ""}`
     : "";
 
-  return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
+  return paraVoz(`Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
 
-ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas.
+ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas. Escribe las cantidades como se dicen ("310 pesos por metro cuadrado", "alrededor de 12 mil 400 pesos"), nunca con signos ni abreviaturas, y todo en español.
 
 CONTEXTO: la mayoría de los clientes pidió precio por WhatsApp, recibió la comparativa y dejó de contestar. No es que no les interese: muchos se quedaron con dudas (cuál opción conviene, si incluye IVA, qué material es) o lo están platicando en casa. Tu trabajo es retomar esa conversación, resolver dudas y saber en qué punto está. NO es una llamada para cerrar ni para agendar a la fuerza.
 
@@ -257,16 +271,17 @@ ${k.esImper ? `${conocimientoParaPrompt()}\n\n` : ""}CÓMO LLEVAR LA LLAMADA (en
 1. DESCUBRIR: pregunta si pudo revisar la cotización y qué le pareció. Deja que hable.
 2. ORIENTAR: si no ha elegido opción, pregunta cómo está su azotea (¿ya tiene goteras o es preventivo?) y recomienda UNA opción en una frase según su respuesta.
 3. RESOLVER: responde dudas con DATOS OFICIALES y PREGUNTAS FRECUENTES. Los precios son sin factura; si necesita factura se agrega el IVA.
+   PRECIO: si pregunta cuánto cuesta y conoces sus metros, da el total aproximado de la opción de la que hablan: metros por precio por metro cuadrado (si son menos del mínimo de cobro, usa el mínimo), redondeado a cientos y diciendo "alrededor de". Si no conoces sus metros, da el precio por metro cuadrado y pregunta cuántos metros tiene su azotea para darle el aproximado.
 4. DETECTAR INTENCIÓN con las SEÑALES DE COMPRA.
    - Sin intención clara: no ofrezcas visita. Usa la respuesta de OBJECIONES que corresponda y pregunta qué le haría falta para decidirse.
    - Con intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?"
-5. SOLO SI ACEPTA la visita: ofrece dos horarios de esta lista. Si elige uno, repítelo y di que un asesor le confirma por WhatsApp. Si ninguno le queda, pregunta qué día y hora prefiere y di que el asesor se lo confirma.
-${horarios ? `   Horarios disponibles:\n${horarios}` : "   No hay horarios cargados: di que un asesor le propone fecha por WhatsApp."}
+5. SOLO SI ACEPTA la visita: primero pregunta qué día y horario le acomoda. Acepta cualquier horario de lunes a sábado entre 9 de la mañana y 6 de la tarde: NUNCA digas que el especialista no puede ni lo obligues a elegir entre opciones. Si no tiene preferencia, sugiérele dos de la lista de abajo. Repite el día y la hora que eligió y di que un asesor se lo confirma por WhatsApp.
+${horarios ? `   Sugerencias (solo si no tiene preferencia):\n${horarios}` : "   Sin sugerencias cargadas: si no tiene preferencia, di que el asesor le propone fecha por WhatsApp."}
 6. Si pregunta algo que no está en DATOS OFICIALES ni en PREGUNTAS FRECUENTES (incluidos los TEMAS SIN RESPUESTA CONFIRMADA): no lo inventes; ${sinRespuesta}.
 7. Si se molesta o pide hablar con una persona: ${hayAsesor ? "transfiérelo a un asesor" : "dile que un asesor le llama hoy"}.
 8. "Llámame después" o lo va a platicar: pregunta qué día le marcamos y despídete. "No me vuelvan a llamar": discúlpate, confirma que no se le llamará más y cuelga.
 9. Si contesta un buzón de voz, una grabación o un menú automático: cuelga de inmediato sin decir nada.
-10. Cierra con la herramienta para colgar. La llamada no debe pasar de 2 minutos.`;
+10. DESPEDIDA: cuando ya quedó claro el siguiente paso, despídete UNA sola vez con "Gracias, que tenga buen día" y usa de inmediato la herramienta para colgar. No respondas a más despedidas. La llamada no debe pasar de 2 minutos.`);
 }
 
 const ESQUEMA_RESULTADO = {
@@ -342,10 +357,13 @@ function asistenteReagendarVisita(
 
   return {
     name: "Sofia - Seguimiento de cotizacion",
-    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio}${ll.contexto.metros ? ` para sus ${ll.contexto.metros} metros` : ""} que le enviamos por WhatsApp, ¿pudo revisarla?`,
+    firstMessage: paraVoz(
+      `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio}${ll.contexto.metros ? ` para sus ${ll.contexto.metros} metros` : ""} que le enviamos por WhatsApp, ¿pudo revisarla?`,
+    ),
     model: {
       provider: "openai",
-      model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o-mini",
+      // gpt-4o-mini dijo mal un precio en la primera prueba; gpt-4o cuesta ~2 centavos más por llamada.
+      model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o",
       temperature: 0.3,
       maxTokens: 150,
       messages: [{ role: "system", content: promptReagendarVisita(ll, espacios, !!asesorTel, k) }],
@@ -360,6 +378,13 @@ function asistenteReagendarVisita(
     maxDurationSeconds: 180,
     silenceTimeoutSeconds: 10,
     voicemailDetection: { provider: "vapi" },
+    // Al decir la despedida se cuelga solo (evita el "hasta luego… adiós…").
+    endCallPhrases: ["que tenga buen día", "que tenga un buen día"],
+    // Responder antes: en la primera prueba cada turno tardaba 3–4 s.
+    startSpeakingPlan: {
+      waitSeconds: 0.3,
+      transcriptionEndpointingPlan: { onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 0.9, onNumberSeconds: 0.6 },
+    },
     analysisPlan: {
       summaryPlan: { enabled: true },
       structuredDataPlan: { enabled: true, schema: ESQUEMA_RESULTADO },
