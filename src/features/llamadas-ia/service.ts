@@ -2,6 +2,14 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { normalizarTelefono } from "@/lib/telefono";
 import { obtenerAgenteDisponible, registrarInicioLlamada } from "@/features/conmutador/service";
+import { cargarProductosImper, ETIQUETA_PAQUETE } from "@/lib/ia/catalogo-imper";
+import {
+  anticipoInspeccion,
+  cargarCostosInspeccion,
+  costoInspeccionPorTipo,
+  formatoPesosEnteros,
+} from "@/lib/costo-inspeccion";
+import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 
 /**
  * Llamadas IA salientes (Vapi + Twilio).
@@ -13,7 +21,7 @@ import { obtenerAgenteDisponible, registrarInicioLlamada } from "@/features/conm
  *   VAPI_API_KEY             llave privada de Vapi
  *   VAPI_PHONE_NUMBER_ID     número de Twilio importado en Vapi (usar uno distinto
  *                            al del conmutador: importarlo cambia su webhook de voz)
- *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o)
+ *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o-mini)
  *   VAPI_CAMPANA_VOZ_PROVEEDOR / VAPI_CAMPANA_VOZ_ID   opcional (default azure es-MX-DaliaNeural)
  *   CAMPANA_VISITAS_MAX_DIA  opcional, tope de visitas por día que Sofía puede agendar (default 4)
  */
@@ -33,8 +41,14 @@ export type ResultadoLlamadaIA =
 export interface ContextoLlamadaIA {
   servicio?: string;
   colonia?: string;
+  /** Estimado que ya recibió el cliente (precio_final de la cotización). */
   monto?: number;
+  /** tipo_negocio para el costo de la visita técnica. */
+  tipoNegocio?: string;
 }
+
+/** Versión del guion: se guarda con cada resultado para comparar versiones. */
+export const GUION_VERSION = "reagendar-v2";
 
 export interface LlamadaIA {
   id: string;
@@ -151,33 +165,120 @@ async function espaciosDeVisita(cuantos = 4): Promise<{ iso: string; texto: stri
   return espacios;
 }
 
+const TIPO_POR_SERVICIO: Record<string, string> = {
+  impermeabilizacion: "construccion-impermeabilizacion",
+  pintura: "construccion",
+  losa: "construccion",
+  remodelacion: "construccion-remodelacion",
+  otro: "construccion",
+};
+
+/** Qué revisa el especialista en la visita, por línea (mismo texto que usa Sofía en WhatsApp). */
+const QUE_REVISA: Record<string, string> = {
+  "construccion-impermeabilizacion": "el estado de la losa, grietas, humedad, filtraciones y desagües",
+  "construccion-remodelacion": "el espacio, las medidas y lo que hace falta para el proyecto",
+  construccion: "el lugar y el origen real del problema",
+};
+
+interface ConocimientoLlamada {
+  esImper: boolean;
+  precios: string;
+  minimo: string;
+  visita: string;
+  anticipo: string;
+  resto: string;
+  queRevisa: string;
+}
+
+/**
+ * Datos oficiales que Sofía puede decir: precios por m² del catálogo (Productos y
+ * Servicios) y costo de la visita técnica (configuracion_agente). Lo que no esté
+ * aquí, Sofía no lo afirma.
+ */
+async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> {
+  const sb = supabaseServidor();
+  const tipo =
+    ll.contexto.tipoNegocio ||
+    (/imper/i.test(ll.contexto.servicio || "") ? "construccion-impermeabilizacion" : "construccion");
+  const esImper = tipo === "construccion-impermeabilizacion";
+
+  const [costos, productos] = await Promise.all([
+    cargarCostosInspeccion(sb),
+    esImper ? cargarProductosImper(sb) : Promise.resolve({} as Awaited<ReturnType<typeof cargarProductosImper>>),
+  ]);
+  const costo = costoInspeccionPorTipo(costos, tipo);
+  const anticipo = anticipoInspeccion(costo);
+
+  const lineas: string[] = [];
+  const minimos: number[] = [];
+  for (const p of ["acrilico", "estandar", "premium"] as const) {
+    const prod = productos[p];
+    if (!prod || !prod.aptoParaIa || prod.precioM2 <= 0) continue;
+    const garantia = prod.nombre.match(/garant[ií]a\s*(?:de\s*)?(\d+)\s*a[ñn]os?/i)?.[1];
+    const volumen = prod.preciosVolumen.length
+      ? `; desde ${prod.preciosVolumen.map((t) => `${t.desde} m² baja a ${formatoPesosEnteros(t.precio)}`).join(", ")}`
+      : "";
+    lineas.push(
+      `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² más IVA${garantia ? `, garantía ${garantia} años` : ""}${volumen}`,
+    );
+    if (prod.minimoM2 > 0) minimos.push(prod.minimoM2);
+  }
+
+  return {
+    esImper,
+    precios: lineas.join("\n- "),
+    minimo: minimos.length ? `${Math.round(Math.min(...minimos))}–${Math.round(Math.max(...minimos))} m²` : "",
+    visita: formatoPesosEnteros(costo),
+    anticipo: formatoPesosEnteros(anticipo),
+    resto: formatoPesosEnteros(costo - anticipo),
+    queRevisa: QUE_REVISA[tipo] ?? QUE_REVISA.construccion,
+  };
+}
+
 function promptReagendarVisita(
   ll: LlamadaIA,
   espacios: { iso: string; texto: string }[],
   hayAsesor: boolean,
+  k: ConocimientoLlamada,
 ): string {
-  const servicio = ll.contexto.servicio || "el servicio que nos pidió";
-  const lista = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
-  return `Eres Sofía, asistente virtual de Sauceda (servicios de impermeabilización, remodelación, pisos y mantenimiento en el hogar). Hablas en español de México, cálida, breve y natural; frases cortas, una pregunta a la vez. Nunca inventes precios, descuentos ni garantías.
+  const servicio = ll.contexto.servicio || "su proyecto";
+  const horarios = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
+  const sinRespuesta = hayAsesor
+    ? "ofrece comunicarlo con un asesor ahora; si acepta, usa la herramienta de transferencia"
+    : "dile que un asesor le llama hoy para resolverlo";
 
-Contexto: hace unos días ${ll.nombre || "el cliente"} pidió una cotización de ${servicio}${ll.contexto.colonia ? ` para su domicilio en ${ll.contexto.colonia}` : ""} y quedó pendiente la visita técnica para medir y dar el precio final. La visita no tiene costo.
+  return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida y directa.
 
-Tu único objetivo: confirmar que sigue interesado y agendar la visita técnica.
+ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste.
 
-Espacios disponibles (ofrece dos a la vez, solo estos):
-${lista || "- No hay espacios disponibles: no agendes; ofrece que un asesor le llame para coordinar."}
+OBJETIVO: que el cliente acepte la visita técnica y elija horario. Después de resolver cualquier duda, vuelve a ofrecer la visita.
 
-Reglas:
-1. Ya te presentaste como asistente virtual y avisaste que la llamada se graba. Si preguntan, confírmalo.
-2. Si acepta un espacio, repítelo para confirmar ("Entonces le esperamos el ...") y despídete.
-3. Si ninguno le queda, pregunta qué día y horario prefiere; si cae dentro de los espacios, agéndalo; si no, dile que un asesor le confirmará y despídete.
-4. Si pregunta precios, garantías, formas de pago u otro detalle técnico: explica que el precio final se da en la visita${hayAsesor ? " y ofrece comunicarlo con un asesor; si acepta, usa la herramienta de transferencia" : " y que un asesor le llamará hoy para resolverlo"}.
-5. Si ya no le interesa o ya contrató a alguien, agradece, pregunta brevemente el motivo y despídete.
-6. Si pide que le llamen en otro momento, pregunta cuándo y despídete.
-7. Si pide que no le vuelvan a llamar, discúlpate, confirma que no se le volverá a llamar y termina.
-8. Si contesta un buzón de voz o una grabación, termina la llamada sin dejar mensaje.
-9. Si la persona se molesta o pide hablar con alguien, ${hayAsesor ? "transfiérela a un asesor" : "dile que un asesor le llamará hoy"}.
-10. Al terminar, usa la herramienta para colgar. No alargues la llamada más de 3 minutos.`;
+DATOS OFICIALES (lo ÚNICO que puedes afirmar):
+- Cliente: ${ll.nombre || "sin nombre"}. Pidió cotización de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}.
+${ll.contexto.monto ? `- Ya recibió su estimado: alrededor de ${formatoPesosEnteros(ll.contexto.monto)}. Es un estimado; el precio final se confirma en la visita.\n` : ""}${
+    k.precios
+      ? `- Precios por m² (catálogo):\n- ${k.precios}${k.minimo ? `\n- Para superficies pequeñas hay un mínimo de cobro de ${k.minimo}.` : ""}\n`
+      : "- No tienes precios de este servicio: si preguntan, el precio lo confirma un asesor.\n"
+  }- Visita técnica: un especialista revisa ${k.queRevisa} y le da el precio final. Cuesta ${k.visita} y se le descuenta completa si contrata (para el cliente termina costando $0).
+- Para apartarla: anticipo de ${k.anticipo} con una liga de Mercado Pago que le envía un asesor por WhatsApp; los ${k.resto} restantes se pagan al especialista al llegar.
+- Horarios disponibles (ofrece dos):
+${horarios || "- Ninguno: no ofrezcas horarios; dile que un asesor le propone fecha."}
+
+CÓMO LLEVAR LA LLAMADA:
+1. Si confirma que sigue interesado: en una frase di qué es la visita, cuánto cuesta y que se descuenta si contrata; ofrece dos horarios.
+2. Si elige horario: repítelo y explica que un asesor le manda por WhatsApp la liga del anticipo y le confirma la cita. Tú NO confirmas la cita. Despídete.
+3. Si ningún horario le queda: pregunta qué día y hora prefiere, anótalo y di que el asesor se lo confirma.
+4. Precio por m²: da el dato oficial en una frase (siempre "más IVA") y vuelve a ofrecer la visita.
+5. Objeciones:
+   - "Otros vienen gratis": nuestra visita deja el precio exacto, no un aproximado, y si contrata se la descontamos completa.
+   - "Está caro": ${k.esImper && k.precios ? "el acrílico es la opción más económica; " : ""}el precio exacto depende de lo que vea el especialista en la visita.
+   - "Lo pienso": sin presión; ofrece que un asesor le escriba por WhatsApp y despídete.
+   - "Ya contraté a alguien" o ya no le interesa: agradece, pregunta brevemente el motivo y despídete.
+6. Cualquier cosa que NO esté en DATOS OFICIALES (meses sin intereses, descuentos, tiempos de obra, marcas, otros paquetes, garantías distintas): no la inventes; ${sinRespuesta}.
+7. Si se molesta o pide hablar con una persona: ${hayAsesor ? "transfiérelo a un asesor" : "dile que un asesor le llama hoy"}.
+8. "Llámame después": pregunta cuándo y despídete. "No me vuelvan a llamar": discúlpate, confirma que no se le llamará más y cuelga.
+9. Si contesta un buzón de voz, una grabación o un menú automático: cuelga de inmediato sin decir nada.
+10. Cierra con la herramienta para colgar. La llamada no debe pasar de 2 minutos.`;
 }
 
 const ESQUEMA_RESULTADO = {
@@ -196,18 +297,26 @@ const ESQUEMA_RESULTADO = {
         "no_contesta",
       ],
       description:
-        "visita_agendada: aceptó un espacio. transferido: se pasó a un asesor. duda: tiene preguntas y un asesor debe llamarle. no_interesado: ya no quiere el servicio. llamar_despues: pidió otra hora. buzon: contestó un buzón. no_llamar: pidió no ser llamado. no_contesta: nadie habló.",
+        "visita_agendada: aceptó la visita técnica y dio un horario (falta el anticipo). transferido: se pasó a un asesor. duda: tiene preguntas o lo piensa y un asesor debe contactarlo. no_interesado: ya no quiere el servicio. llamar_despues: pidió otra hora. buzon: contestó un buzón o grabación. no_llamar: pidió no ser llamado. no_contesta: nadie habló.",
     },
     fecha_visita: {
       type: "string",
-      description: "Si se agendó, el valor exacto 'valor para fecha_visita' del espacio aceptado (ISO 8601).",
+      description: "Si eligió uno de los horarios ofrecidos, su 'valor para fecha_visita' exacto (ISO 8601).",
+    },
+    horario_cliente: {
+      type: "string",
+      description: "Si propuso otro día u horario, tal como lo dijo (ej. 'sábado en la mañana').",
     },
     llamar_despues: {
       type: "string",
       description: "Si pidió otra hora, fecha y hora en ISO 8601 con zona -06:00.",
     },
     interes: { type: "integer", minimum: 1, maximum: 5, description: "Nivel de interés del 1 al 5." },
-    objecion: { type: "string", description: "Motivo o duda principal del cliente, si la hubo." },
+    objecion: { type: "string", description: "Objeción o duda principal del cliente, si la hubo." },
+    pregunta_sin_respuesta: {
+      type: "string",
+      description: "Pregunta del cliente que Sofía no pudo responder con los datos oficiales, si la hubo.",
+    },
   },
   required: ["resultado"],
 };
@@ -216,9 +325,10 @@ function asistenteReagendarVisita(
   ll: LlamadaIA,
   espacios: { iso: string; texto: string }[],
   asesorTel: string | null,
+  k: ConocimientoLlamada,
 ) {
   const nombre = (ll.nombre || "").split(" ")[0];
-  const servicio = ll.contexto.servicio || "su cotización";
+  const servicio = ll.contexto.servicio || "su proyecto";
   const tools: Record<string, unknown>[] = [{ type: "endCall" }];
   if (asesorTel) {
     tools.push({
@@ -236,12 +346,13 @@ function asistenteReagendarVisita(
 
   return {
     name: "Sofia - Reagendar visita",
-    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio} que nos pidió: quedó pendiente la visita técnica, sin costo. ¿Le gustaría que la agendemos?`,
+    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio} que le enviamos. ¿Sigue interesado?`,
     model: {
       provider: "openai",
-      model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o",
-      temperature: 0.4,
-      messages: [{ role: "system", content: promptReagendarVisita(ll, espacios, !!asesorTel) }],
+      model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o-mini",
+      temperature: 0.3,
+      maxTokens: 150,
+      messages: [{ role: "system", content: promptReagendarVisita(ll, espacios, !!asesorTel, k) }],
       tools,
     },
     voice: {
@@ -249,16 +360,17 @@ function asistenteReagendarVisita(
       voiceId: process.env.VAPI_CAMPANA_VOZ_ID || "es-MX-DaliaNeural",
     },
     transcriber: { provider: "deepgram", model: "nova-2", language: "es" },
-    maxDurationSeconds: 300,
-    silenceTimeoutSeconds: 20,
-    voicemailMessage: "",
+    // Candados de costo: duración, silencio y buzón.
+    maxDurationSeconds: 180,
+    silenceTimeoutSeconds: 10,
+    voicemailDetection: { provider: "vapi" },
     analysisPlan: {
       summaryPlan: { enabled: true },
       structuredDataPlan: { enabled: true, schema: ESQUEMA_RESULTADO },
     },
     server: { url: `${baseUrl()}/api/conmutador/webhook-campana` },
     serverMessages: ["end-of-call-report"],
-    metadata: { llamadaCampanaId: ll.id, esPrueba: ll.es_prueba },
+    metadata: { llamadaCampanaId: ll.id, esPrueba: ll.es_prueba, guion: GUION_VERSION },
   };
 }
 
@@ -317,7 +429,11 @@ export async function despacharLlamada(id: string): Promise<{ ok: boolean; error
   const numero = e164(ll.telefono);
   if (!numero) return { ok: false, error: "Teléfono no válido." };
 
-  const [espacios, agente] = await Promise.all([espaciosDeVisita(), obtenerAgenteDisponible()]);
+  const [espacios, agente, conocimiento] = await Promise.all([
+    espaciosDeVisita(),
+    obtenerAgenteDisponible(),
+    conocimientoLlamada(ll),
+  ]);
   const asesorTel = agente?.telefono_desvio ? e164(agente.telefono_desvio) || null : null;
 
   // Se reserva el intento antes de marcar para que el cron no la tome dos veces.
@@ -328,7 +444,7 @@ export async function despacharLlamada(id: string): Promise<{ ok: boolean; error
       body: JSON.stringify({
         phoneNumberId,
         customer: { number: numero, ...(ll.nombre ? { name: ll.nombre.slice(0, 40) } : {}) },
-        assistant: asistenteReagendarVisita(ll, espacios, asesorTel),
+        assistant: asistenteReagendarVisita(ll, espacios, asesorTel, conocimiento),
       }),
     });
     await actualizar(id, { vapi_call_id: call.id });
@@ -428,7 +544,7 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
     grabacion_url: grabacion || null,
     duracion_seg: duracion,
     costo_usd: typeof call.cost === "number" ? call.cost : null,
-    datos: { ...datos, endedReason: motivo },
+    datos: { ...datos, endedReason: motivo, guion: GUION_VERSION },
     error: resultado === "error" ? motivo || "Error en la llamada" : null,
   });
 
@@ -438,13 +554,27 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
       .upsert({ telefono: normalizarTelefono(ll.telefono), motivo: "Lo pidió en llamada IA" }, { onConflict: "telefono" });
   }
 
-  if (resultado === "visita_agendada" && fechaVisita && ll.cotizacion_id && !ll.es_prueba) {
-    const { error } = await sb
-      .from("cotizaciones")
-      .update({ fecha_visita: fechaVisita })
-      .eq("id", ll.cotizacion_id)
-      .eq("estatus", "esperando_visita");
-    if (error) console.error("[llamadas-ia] No se pudo guardar la fecha de visita:", error);
+  // La cita no se confirma aquí: la confirma el asesor al validar el anticipo
+  // (misma regla que Sofía en WhatsApp). Se le avisa con lo que pidió el cliente.
+  const horarioCliente = typeof datos.horario_cliente === "string" ? datos.horario_cliente.trim() : "";
+  const preferencia = fechaVisita ? textoFecha(fechaVisita) : horarioCliente;
+  const avisos: Partial<Record<ResultadoLlamadaIA, string>> = {
+    visita_agendada: `Llamada IA: aceptó la visita técnica${preferencia ? ` (${preferencia})` : ""}. Enviar liga de anticipo y confirmar cita${ll.cotizacion_id ? ` · ${ll.cotizacion_id}` : ""}.`,
+    duda: `Llamada IA: tiene dudas, llamarle${typeof datos.objecion === "string" && datos.objecion ? ` · ${datos.objecion}` : ""}.`,
+  };
+  const aviso = avisos[resultado];
+  if (aviso && !ll.es_prueba) {
+    const { data: pros } = ll.prospecto_id
+      ? await sb.from("prospectos").select("asesor_id").eq("id", ll.prospecto_id).maybeSingle()
+      : { data: null };
+    await avisarAsesorDesdeIA(sb, {
+      telefono: ll.telefono,
+      motivo: aviso,
+      expedienteId: null,
+      prospectoId: ll.prospecto_id,
+      asesorId: (pros?.asesor_id as string | null) ?? null,
+      nombreCliente: ll.nombre,
+    });
   }
 
   // Historial del conmutador
@@ -463,7 +593,7 @@ export async function sincronizarConVapi(vapiCallId: string): Promise<{ ok: bool
 
   if (ll.prospecto_id && !ll.es_prueba) {
     const etiquetas: Record<ResultadoLlamadaIA, string> = {
-      visita_agendada: `Visita agendada${fechaVisita ? ` para ${textoFecha(fechaVisita)}` : ""}`,
+      visita_agendada: `Aceptó la visita${preferencia ? ` (${preferencia})` : ""}, falta anticipo`,
       transferido: "Transferido a un asesor",
       duda: "Tiene dudas: un asesor debe llamarle",
       no_interesado: "Ya no está interesado",
@@ -576,6 +706,7 @@ export async function generarListaReagendarVisitas(creadoPor?: string | null): P
       cotizacion_id: c.id,
       contexto: {
         servicio: NOMBRE_SERVICIO[c.servicio_tipo as string] ?? "su proyecto",
+        tipoNegocio: TIPO_POR_SERVICIO[c.servicio_tipo as string] ?? "construccion",
         colonia: p?.direccion || "",
         monto: Number(c.precio_final) || 0,
       },

@@ -24,7 +24,7 @@ const ESTADOS: Record<EstadoLlamadaIA, { label: string; clase: string }> = {
 };
 
 const RESULTADOS: Record<ResultadoLlamadaIA, string> = {
-  visita_agendada: "✅ Visita agendada",
+  visita_agendada: "✅ Aceptó visita (falta anticipo)",
   transferido: "📞 Transferido a asesor",
   duda: "❓ Tiene dudas",
   no_interesado: "✖ No interesado",
@@ -109,7 +109,7 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi titulo="En cola" valor={inicial.filter((l) => ["pendiente", "aprobada"].includes(l.estado)).length} />
         <Kpi titulo="Contestadas" valor={contestadas} />
-        <Kpi titulo="Visitas agendadas" valor={visitas} />
+        <Kpi titulo="Visitas aceptadas" valor={visitas} />
         <Kpi titulo="Costo Vapi" valor={`$${costo.toFixed(2)} USD`} />
       </div>
 
@@ -195,7 +195,7 @@ export function LlamadasIA({ inicial, config }: { inicial: LlamadaIA[]; config: 
               <Th>Estado</Th>
               <Th>Resultado</Th>
               <Th>Intentos</Th>
-              <Th>Visita</Th>
+              <Th>Horario pedido</Th>
               <Th>Acciones</Th>
             </tr>
           </thead>
