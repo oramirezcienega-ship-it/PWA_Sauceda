@@ -573,7 +573,10 @@ export async function listarProductosParaProveedor(): Promise<
 /**
  * Genera automáticamente la remisión de costo del proveedor asignado a una orden de
  * trabajo, estructurando el producto, cantidad de metros (m2), costo por m2 pactado,
- * y desglose de partidas. Se llama al concluir la orden de trabajo.
+ * y desglose de partidas. Se llama al asignar el proveedor, al programar la obra y
+ * al concluir la orden. Si la OT no trae costo pactado, se toma el costo de la
+ * cotización (cantidad × costo unitario de cada concepto). Si ya existe la remisión
+ * automática y cambió el proveedor o el costo, se actualiza en vez de duplicarse.
  */
 export async function generarDocumentoProveedorAutomatico(
   ordenTrabajoId: string
@@ -588,10 +591,6 @@ export async function generarDocumentoProveedorAutomatico(
     .eq("origen", "automatico")
     .maybeSingle();
 
-  if (existente) {
-    return { ok: true, documento: aDocumentoProveedor(existente as FilaDocumentoProveedor) };
-  }
-
   const { data: ot, error: errOt } = await sb
     .from("ordenes_trabajo")
     .select("id, folio, titulo, proveedor_id, costo_proveedor, proveedor_concepto, cotizacion_id, expediente_id, prospectos:prospecto_id(nombre)")
@@ -599,12 +598,73 @@ export async function generarDocumentoProveedorAutomatico(
     .maybeSingle();
 
   if (errOt || !ot) return { ok: false, error: "No se encontró la orden de trabajo." };
-  if (!ot.proveedor_id) return { ok: false, error: "La orden de trabajo no tiene un proveedor asignado." };
-  if (!ot.costo_proveedor || Number(ot.costo_proveedor) <= 0) {
-    return { ok: false, error: "La orden de trabajo no tiene un costo pactado con el proveedor." };
+  if (!ot.proveedor_id) {
+    if (existente) return { ok: true, documento: aDocumentoProveedor(existente as FilaDocumentoProveedor) };
+    return { ok: false, error: "La orden de trabajo no tiene un proveedor asignado." };
   }
 
-  const costoPactadoTotal = Number(ot.costo_proveedor);
+  const conceptos: any[] = [];
+  if (ot.cotizacion_id) {
+    const { data } = await sb
+      .from("cotizacion_conceptos")
+      .select("id, descripcion, cantidad, unidad, costo_unitario, producto_servicio_id")
+      .eq("cotizacion_id", ot.cotizacion_id);
+    conceptos.push(...(data || []));
+  }
+
+  // Costo pactado: el capturado en la OT o, si no hay, el costo de la cotización
+  let costoPactadoTotal = Number(ot.costo_proveedor || 0);
+  if (costoPactadoTotal <= 0) {
+    costoPactadoTotal =
+      Math.round(
+        conceptos.reduce((acc, c) => acc + (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0), 0) * 100
+      ) / 100;
+    if (costoPactadoTotal <= 0) {
+      return { ok: false, error: "La orden de trabajo no tiene un costo pactado con el proveedor." };
+    }
+    await sb
+      .from("ordenes_trabajo")
+      .update({ costo_proveedor: costoPactadoTotal, updated_at: new Date().toISOString() })
+      .eq("id", ot.id);
+  }
+
+  if (existente) {
+    const mismoProveedor = existente.proveedor_id === ot.proveedor_id;
+    const mismoMonto = Math.abs(Number(existente.monto || 0) - costoPactadoTotal) < 0.01;
+    if (mismoProveedor && mismoMonto) {
+      return { ok: true, documento: aDocumentoProveedor(existente as FilaDocumentoProveedor) };
+    }
+    const cantidadDoc = Number(existente.cantidad || 0);
+    const { data: actualizado, error: errUpd } = await sb
+      .from("documentos_proveedores")
+      .update({
+        proveedor_id: ot.proveedor_id,
+        monto: costoPactadoTotal,
+        costo_unitario:
+          cantidadDoc > 0 ? Math.round((costoPactadoTotal / cantidadDoc) * 100) / 100 : existente.costo_unitario,
+      })
+      .eq("id", existente.id)
+      .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")
+      .single();
+    if (errUpd || !actualizado) {
+      return { ok: false, error: errUpd?.message || "No se pudo actualizar el documento del proveedor." };
+    }
+    const documento = aDocumentoProveedor(actualizado as FilaDocumentoProveedor);
+    await sb
+      .from("transactions")
+      .update({
+        monto_total: costoPactadoTotal,
+        contraparte: documento.proveedorNombre || "Proveedor",
+        concepto: `Compra a Proveedor - ${documento.proveedorNombre || "Proveedor"} - ${documento.folioProveedor || documento.folio || "s/folio"}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("origen_modulo", "documento_proveedor")
+      .eq("origen_id", documento.id);
+    // Si la obra ya tiene remisión de venta, ésta manda sobre el costo del proveedor
+    const { sincronizarFinanzasPorOrdenTrabajo } = await import("@/app/actions/contabilidad-remisiones");
+    await sincronizarFinanzasPorOrdenTrabajo(ot.id);
+    return { ok: true, documento };
+  }
 
   // Jalar producto y cantidades estructuradas de la cotización, si existe
   let concepto = (ot.proveedor_concepto || "").trim();
@@ -615,48 +675,41 @@ export async function generarDocumentoProveedorAutomatico(
   let costoUnitario: number | null = null;
   let partidasEstructuradas: any[] = [];
 
-  if (ot.cotizacion_id) {
-    const { data: conceptos } = await sb
-      .from("cotizacion_conceptos")
-      .select("id, descripcion, cantidad, unidad, costo_unitario, producto_servicio_id")
-      .eq("cotizacion_id", ot.cotizacion_id);
+  if (conceptos.length > 0) {
+    partidasEstructuradas = conceptos.map((c: any) => ({
+      id: c.id,
+      productoId: c.producto_servicio_id || null,
+      descripcion: c.descripcion || "",
+      cantidad: Number(c.cantidad) || 0,
+      unidad: c.unidad || "m2",
+      costoUnitario: Number(c.costo_unitario) || 0,
+      importe: (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0),
+    }));
 
-    if (conceptos && conceptos.length > 0) {
-      partidasEstructuradas = conceptos.map((c: any) => ({
-        id: c.id,
-        productoId: c.producto_servicio_id || null,
-        descripcion: c.descripcion || "",
-        cantidad: Number(c.cantidad) || 0,
-        unidad: c.unidad || "m2",
-        costoUnitario: Number(c.costo_unitario) || 0,
-        importe: (Number(c.cantidad) || 0) * (Number(c.costo_unitario) || 0),
-      }));
+    const conceptoPrincipal = conceptos[0];
+    productoId = conceptoPrincipal.producto_servicio_id || null;
+    productoNombre = conceptoPrincipal.descripcion || null;
+    unidad = conceptoPrincipal.unidad || "m2";
 
-      const conceptoPrincipal = conceptos[0];
-      productoId = conceptoPrincipal.producto_servicio_id || null;
-      productoNombre = conceptoPrincipal.descripcion || null;
-      unidad = conceptoPrincipal.unidad || "m2";
+    const mismaUnidad = conceptos.every((c: any) => (c.unidad || "m2") === unidad);
+    if (mismaUnidad) {
+      cantidadTotal = conceptos.reduce((acc: number, c: any) => acc + (Number(c.cantidad) || 0), 0);
+    } else {
+      cantidadTotal = Number(conceptoPrincipal.cantidad) || null;
+    }
 
-      const mismaUnidad = conceptos.every((c: any) => (c.unidad || "m2") === unidad);
-      if (mismaUnidad) {
-        cantidadTotal = conceptos.reduce((acc: number, c: any) => acc + (Number(c.cantidad) || 0), 0);
-      } else {
-        cantidadTotal = Number(conceptoPrincipal.cantidad) || null;
-      }
+    // Costo por m2 real pactado con el proveedor
+    if (cantidadTotal && cantidadTotal > 0 && costoPactadoTotal > 0) {
+      costoUnitario = Math.round((costoPactadoTotal / cantidadTotal) * 100) / 100;
+    } else if (conceptoPrincipal.costo_unitario) {
+      costoUnitario = Number(conceptoPrincipal.costo_unitario);
+    }
 
-      // Costo por m2 real pactado con el proveedor
-      if (cantidadTotal && cantidadTotal > 0 && costoPactadoTotal > 0) {
-        costoUnitario = Math.round((costoPactadoTotal / cantidadTotal) * 100) / 100;
-      } else if (conceptoPrincipal.costo_unitario) {
-        costoUnitario = Number(conceptoPrincipal.costo_unitario);
-      }
-
-      if (!concepto) {
-        concepto = conceptos
-          .map((c: any) => `${c.cantidad ?? ""}${c.unidad ? ` ${c.unidad}` : ""} ${c.descripcion ?? ""}`.trim())
-          .filter(Boolean)
-          .join("; ");
-      }
+    if (!concepto) {
+      concepto = conceptos
+        .map((c: any) => `${c.cantidad ?? ""}${c.unidad ? ` ${c.unidad}` : ""} ${c.descripcion ?? ""}`.trim())
+        .filter(Boolean)
+        .join("; ");
     }
   }
 
@@ -684,7 +737,7 @@ export async function generarDocumentoProveedorAutomatico(
       partidas: partidasEstructuradas,
       fecha: new Date().toISOString().slice(0, 10),
       monto: costoPactadoTotal,
-      notas: `Generado automáticamente al concluir la orden de trabajo ${ot.folio} de ${clienteNombre}.`,
+      notas: `Generado automáticamente para la orden de trabajo ${ot.folio} de ${clienteNombre}.`,
       origen: "automatico",
     })
     .select("*, proveedores:proveedor_id(nombre), ordenes_trabajo:orden_trabajo_id(folio)")

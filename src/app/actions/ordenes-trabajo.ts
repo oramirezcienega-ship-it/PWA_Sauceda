@@ -272,6 +272,11 @@ export async function crearOrdenTrabajo(datos: {
       return { ok: false, error: error.message };
     }
 
+    if (proveedorId && tipoNegocio !== "asesoria_compra") {
+      const resDoc = await generarDocumentoProveedorAutomatico(nuevaOT.id);
+      if (!resDoc.ok) console.warn("No se generó el documento de proveedor automático:", resDoc.error);
+    }
+
     // Asesoría de compra: ficha, primera etapa y flujo BPM propios de la OT
     // (no lleva póliza de garantía ni documentos de obra).
     if (tipoNegocio === "asesoria_compra") {
@@ -357,7 +362,14 @@ export async function asignarProveedorOrdenTrabajo(
 
     if (error) return { ok: false, error: error.message };
 
+    // Con proveedor asignado, generar (o actualizar) en automático su remisión de costo
+    if (datos.proveedorId) {
+      const resDoc = await generarDocumentoProveedorAutomatico(ordenId);
+      if (!resDoc.ok) console.warn("No se generó el documento de proveedor automático:", resDoc.error);
+    }
+
     revalidatePath("/ordenes-trabajo");
+    revalidatePath("/proveedores");
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Error al asignar el proveedor." };
@@ -3380,8 +3392,8 @@ export async function programarInstalacionYDetonarOT(datos: {
       otFolio = nuevaOT.folio;
     }
 
-    // Si se asignó proveedor y costo, asegurar documento de proveedor
-    if (datos.proveedorId && datos.costoProveedor && datos.costoProveedor > 0) {
+    // Si se asignó proveedor, asegurar documento de proveedor (el costo sale de la cotización si no se capturó)
+    if (datos.proveedorId) {
       try {
         await generarDocumentoProveedorAutomatico(otId);
       } catch (errProvDoc) {
