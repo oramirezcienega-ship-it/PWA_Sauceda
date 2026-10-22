@@ -90,6 +90,7 @@ export function FormularioExpediente({
         cliente: datos.cliente.trim(),
         primerApellido: datos.primerApellido.trim(),
         segundoApellido: datos.segundoApellido.trim(),
+        nickname: (datos.nickname || "").trim(),
         fraccionamiento: datos.fraccionamiento.trim(),
         calificacion: datos.calificacion || "frio",
         valorEstimado: Number(datos.valorEstimado) || 0,
@@ -148,6 +149,16 @@ export function FormularioExpediente({
           />
         </Campo>
       </div>
+
+      <Campo etiqueta="Nickname">
+        <input
+          type="text"
+          value={datos.nickname || ""}
+          onChange={(e) => actualizar("nickname", e.target.value)}
+          placeholder="Apodo o nombre corto (se comparte con el prospecto)"
+          className={INPUT}
+        />
+      </Campo>
 
       <Campo etiqueta="Fraccionamiento" requerido>
         <input

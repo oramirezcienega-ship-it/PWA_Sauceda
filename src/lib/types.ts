@@ -312,6 +312,8 @@ export interface Expediente {
   primerApellido: string;
   /** Segundo apellido del cliente. */
   segundoApellido: string;
+  /** Apodo / nombre corto; se comparte con el prospecto enlazado. */
+  nickname?: string;
   /** Nombre completo armado (solo lectura). */
   nombreCompleto: string;
   /** Fraccionamiento / zona en León, Gto. */
@@ -442,6 +444,8 @@ export interface Prospecto {
   primerApellido: string;
   /** Segundo apellido. */
   segundoApellido: string;
+  /** Apodo / nombre corto; se comparte con sus expedientes. */
+  nickname?: string;
   /** Nombre completo armado (solo lectura). */
   nombreCompleto: string;
   telefono: string;
