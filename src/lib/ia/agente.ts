@@ -1031,16 +1031,70 @@ Contacto SAUCEDA: WhatsApp ${MARCA.whatsappTexto} · ${MARCA.web}`;
     .replace(/\[OPCION_3\]/g, finalSlots[2]?.texto || "");
 }
 
+/** Cotización express enviada al cliente (registrada como actividad, con su precio). */
+interface CotizacionExpressEnviada {
+  titulo: string;
+  created_at: string;
+}
+
+/**
+ * Cotizaciones express del cliente. La cotización llega al chat como imagen, así que el
+ * precio solo está en la actividad que se registra al enviarla.
+ */
+async function cotizacionesExpressDe(
+  sb: SupabaseClient,
+  expedienteId: string | null | undefined,
+  prospectoId: string | null | undefined,
+): Promise<CotizacionExpressEnviada[]> {
+  const filtros = [
+    expedienteId ? `expediente_id.eq.${expedienteId}` : null,
+    prospectoId ? `prospecto_id.eq.${prospectoId}` : null,
+  ].filter(Boolean);
+  if (filtros.length === 0) return [];
+  const { data } = await sb
+    .from("actividades")
+    .select("titulo, created_at")
+    .eq("tipo", "cotizacion_express")
+    .or(filtros.join(","))
+    .order("created_at", { ascending: true })
+    .limit(20);
+  return (data as CotizacionExpressEnviada[]) ?? [];
+}
+
+/**
+ * Imagen del chat → texto legible para el modelo. Una cotización express se describe con su
+ * precio para que Sofía sepa que el cliente YA la recibió.
+ */
+function describirImagen(f: FilaMsg, express: CotizacionExpressEnviada[]): string | null {
+  const m = f.texto.match(/^\[image:[^\]]*\]\s*([\s\S]*)$/);
+  if (!m) return null;
+  const pie = m[1].trim();
+  const cot = pie.match(/^Cotización express:\s*(.+?)(?:\s+—\s+SAUCEDA Construye)?$/i);
+  if (f.direccion === "out" && cot) {
+    const t = new Date(f.created_at).getTime();
+    // La actividad se registra justo después de enviar la imagen; se toma la más cercana
+    const reg = express
+      .map((e) => ({ e, dt: Math.abs(new Date(e.created_at).getTime() - t) }))
+      .filter((x) => x.dt < 30 * 60 * 1000)
+      .sort((a, b) => a.dt - b.dt)[0]?.e;
+    const detalle = reg ? reg.titulo.replace(/^Cotización Express\s*·\s*/i, "") : cot[1];
+    return `(Le enviamos al cliente su COTIZACIÓN EXPRESS en imagen: ${detalle}. El cliente YA TIENE su cotización con precio: no le digas que un asesor le va a compartir el precio; retoma desde ahí y resuelve sus dudas o avanza al siguiente paso.)`;
+  }
+  if (f.direccion === "out") return pie ? `(imagen enviada al cliente) ${pie}` : "(imagen enviada al cliente)";
+  return pie ? `(el cliente envió una imagen) ${pie}` : "(el cliente envió una imagen)";
+}
+
 /** Convierte el historial en mensajes para la API (roles alternados). */
 function aMensajes(
   historia: FilaMsg[],
+  express: CotizacionExpressEnviada[] = [],
 ): { role: "user" | "assistant"; content: string }[] {
   const msgs: { role: "user" | "assistant"; content: string }[] = [];
   for (const f of historia) {
     if (!f.texto?.trim()) continue;
     const role = f.direccion === "in" ? "user" : "assistant";
     // Notas de voz: "[audio:<id>] <transcripción>" → texto legible para el modelo.
-    const content = f.texto.replace(
+    const content = describirImagen(f, express) ?? f.texto.replace(
       /^\[audio:[^\]]+\]\s*([\s\S]*)$/,
       (_, t: string) => t && t !== "(mensaje de tipo audio)"
         ? `(nota de voz del cliente, transcrita) ${t}`
@@ -1395,7 +1449,8 @@ export async function responderConIA(
     }
 
     let system = await instrucciones(exp, sb);
-    const mensajes = aMensajes(historia);
+    const express = await cotizacionesExpressDe(sb, ctx.expedienteId, exp?.prospecto_id);
+    const mensajes = aMensajes(historia, express);
     if (forzar) {
       const indicacion = ctx.indicacion?.trim();
       if (indicacion) {
@@ -2496,7 +2551,8 @@ Datos del cliente para referencia:
 - Fraccionamiento/Zona: ${exp?.fraccionamiento || "No especificado"}
 - Necesidad reportada: ${exp?.necesidad || "No especificada"}`;
 
-    const mensajesInput = aMensajes(historiaConversacional);
+    const express = await cotizacionesExpressDe(sb, expedienteId, null);
+    const mensajesInput = aMensajes(historiaConversacional, express);
     if (mensajesInput.length === 0) return "";
 
     const respuestaRetoque = await generarRespuesta(systemPrompt, mensajesInput);
