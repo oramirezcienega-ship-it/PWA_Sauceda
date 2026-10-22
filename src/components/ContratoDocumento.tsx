@@ -16,14 +16,23 @@ interface Props {
   urlRegreso?: string;
 }
 
-const ESTILOS = `
-@page { size: letter; margin: 16mm 16mm 22mm 16mm; @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #555; } }
+/**
+ * Impresión compacta: el contrato cabe en una hoja carta y los anexos en otra.
+ * El pie (identidad, folio y rúbricas) va en el margen de cada página.
+ */
+const estilos = (pie: string) => `
+@page {
+  size: letter;
+  margin: 10mm 13mm 12mm 13mm;
+  @bottom-left { content: "${pie.replace(/"/g, "'")}"; font-size: 7pt; color: #666; }
+  @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 7pt; color: #666; }
+}
 @media print {
   body > *:not([data-contrato-root]) { display: none !important; }
   [data-contrato-barra] { display: none !important; }
   html, body { background: #fff !important; }
-  [data-contrato-hoja] { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: none !important; padding: 0 !important; }
-  [data-contrato-pie] { position: fixed; bottom: -14mm; left: 0; right: 0; }
+  [data-contrato-hoja] { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: none !important; padding: 0 !important; font-size: 9.3pt !important; line-height: 1.34 !important; }
+  [data-contrato-hoja] .clausula { margin-bottom: 0.2rem !important; }
   .salto { break-before: page; }
   .no-corte { break-inside: avoid; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -57,7 +66,7 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
   const servicio = etiquetaTipoServicio(d.tipoServicio).toLowerCase();
 
   const Clausula = ({ n, titulo, children }: { n: number; titulo: string; children: React.ReactNode }) => (
-    <p className="no-corte mb-2 text-justify">
+    <p className="clausula no-corte mb-2 text-justify hyphens-auto" lang="es">
       <strong className="text-verde-profundo">{n}. {titulo}. </strong>
       {children}
     </p>
@@ -65,7 +74,11 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
 
   const contenido = (
     <div data-contrato-root className="fixed inset-0 z-[100] overflow-y-auto bg-slate-100 print:static print:overflow-visible print:bg-white">
-      <style>{ESTILOS}</style>
+      <style>
+        {estilos(
+          `${MARCA.web.replace("https://", "")} · +52 ${MARCA.whatsappTexto} · ${d.folio} · Rúbrica cliente ______ / prestador ______`,
+        )}
+      </style>
 
       {/* Barra (no se imprime) */}
       <div data-contrato-barra className="sticky top-0 z-10 bg-verde-profundo text-crema px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] flex items-center justify-between gap-3">
@@ -96,36 +109,36 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
         className="mx-auto my-4 max-w-[8.5in] bg-white p-10 shadow-lg border border-carbon/10 font-cuerpo text-[10.5pt] leading-snug text-carbon"
       >
         {/* Encabezado */}
-        <div className="flex items-center justify-between border-b-2 border-verde-profundo pb-3 mb-4">
-          <MembreteMarca alto="h-11" />
-          <div className="text-right text-[9pt]">
+        <div className="flex items-center justify-between border-b-2 border-verde-profundo pb-2 mb-3 print:pb-1.5 print:mb-2">
+          <MembreteMarca alto="h-10 print:h-8" />
+          <div className="text-right text-[9pt] print:text-[7.5pt] leading-tight">
             <div className="font-bold text-verde-profundo">Folio {d.folio}</div>
             <div>Orden de Trabajo: {d.ordenFolio}</div>
             <div>Cotización: {d.cotizacionFolio}</div>
           </div>
         </div>
 
-        <h1 className={`${claseTitulos} text-center text-2xl font-bold text-verde-profundo tracking-wide mb-1`}>
+        <h1 className={`${claseTitulos} text-center text-2xl print:text-[15pt] font-bold text-verde-profundo tracking-wide mb-1`}>
           CONTRATO DE PRESTACIÓN DE SERVICIOS
         </h1>
-        <div className="mx-auto h-0.5 w-24 bg-dorado mb-4" />
+        <div className="mx-auto h-0.5 w-24 bg-dorado mb-3 print:mb-2" />
 
         {/* Declaraciones */}
-        <h2 className={`${claseTitulos} text-lg font-bold text-verde-profundo mb-1`}>Declaraciones</h2>
-        <p className="mb-1.5 text-justify">
+        <h2 className={`${claseTitulos} text-lg print:text-[11.5pt] font-bold text-verde-profundo mb-1 print:mb-0.5`}>Declaraciones</h2>
+        <p className="clausula mb-1.5 text-justify">
           <strong>I. El Prestador:</strong> {d.prestador.razonSocial}
           {d.prestador.rfc ? `, RFC ${d.prestador.rfc}` : ""}, con domicilio en {d.prestador.domicilio || "León, Guanajuato"}, León, Gto.
         </p>
-        <p className="mb-1.5 text-justify">
+        <p className="clausula mb-1.5 text-justify">
           <strong>II. El Cliente:</strong> {d.cliente.nombre}, con domicilio en {d.cliente.domicilio || "________________"}, teléfono{" "}
           {d.cliente.telefono || "________________"}.
         </p>
-        <p className="mb-3 text-justify">
+        <p className="mb-3 print:mb-1.5 text-justify">
           <strong>III.</strong> Ambas partes se reconocen capacidad legal para obligarse en los términos siguientes.
         </p>
 
         {/* Cláusulas */}
-        <h2 className={`${claseTitulos} text-lg font-bold text-verde-profundo mb-1`}>Cláusulas</h2>
+        <h2 className={`${claseTitulos} text-lg print:text-[11.5pt] font-bold text-verde-profundo mb-1 print:mb-0.5`}>Cláusulas</h2>
 
         <Clausula n={1} titulo="Objeto">
           El Prestador realizará los trabajos de {servicio} en el inmueble ubicado en {d.domicilioObra}, conforme a la
@@ -142,7 +155,7 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
         </Clausula>
         <Clausula n={5} titulo="Forma de pago">
           Anticipo de {d.anticipoPct}% ({dinero(d.anticipoMonto)}) a la firma de este contrato, y finiquito de{" "}
-          {dinero(d.finiquitoMonto)} contra entrega del trabajo. Forma de pago: {d.formaPago}. Cada pago se ampara con un
+          {dinero(d.finiquitoMonto)} contra entrega del trabajo. Forma de pago: {d.formaPago.trim().replace(/\.+$/, "")}. Cada pago se ampara con un
           recibo emitido por el Prestador.
         </Clausula>
         <Clausula n={6} titulo="Plazo">
@@ -162,9 +175,12 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
           adquirido y de los trabajos ya realizados, y reembolsará la diferencia.
         </Clausula>
         <Clausula n={10} titulo="Garantía">
-          El Prestador otorga una garantía de {d.garantiaTexto} a partir de la fecha de entrega, sobre {d.garantiaObjeto}. La
-          garantía no cubre: {d.garantiaExclusiones}. Las condiciones completas se detallan en el Certificado de Garantía
-          que se entrega al concluir el trabajo.
+          {/^\d/.test(d.garantiaTexto.trim())
+            ? `El Prestador otorga una garantía de ${d.garantiaTexto.trim()} a partir de la fecha de entrega`
+            : `${d.garantiaTexto.trim().replace(/\.$/, "")}. La garantía corre a partir de la fecha de entrega`}
+          {d.garantiaObjeto?.trim() ? `, sobre ${d.garantiaObjeto.trim().replace(/\.$/, "")}` : ""}.
+          {d.garantiaExclusiones?.trim() ? ` La garantía no cubre: ${d.garantiaExclusiones.trim().replace(/\.$/, "")}.` : ""} Las
+          condiciones completas se detallan en el Certificado de Garantía que se entrega al concluir el trabajo.
         </Clausula>
         <Clausula n={11} titulo="Entrega-recepción">
           El trabajo se tiene por recibido cuando el Cliente firma la remisión de entrega. En ese momento se liquida el
@@ -176,23 +192,35 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
         </Clausula>
 
         {/* Firmas */}
-        <div className="no-corte mt-6">
-          <p className="mb-8">León, Guanajuato, a ______ de ____________________ de ________.</p>
-          <div className="grid grid-cols-2 gap-16 text-center text-[9.5pt]">
+        <div className="no-corte mt-5 print:mt-3">
+          <p className="mb-8 print:mb-5">
+            León, Guanajuato, a{" "}
+            {fechaLarga(d.fechaGeneracion) || "______ de ____________________ de ________"}.
+          </p>
+          <div className="grid grid-cols-2 gap-16 text-center text-[9.5pt] print:text-[8.5pt] leading-tight">
             <div>
-              <div className="border-b border-carbon/60 mb-1 h-10" />
+              <div className="border-b border-carbon/60 mb-1 h-10 print:h-9" />
               <div className="font-bold">EL PRESTADOR</div>
-              <div>{d.prestador.razonSocial}</div>
-              <div className="text-[8pt] text-carbon/60">Nombre y firma</div>
+              {d.firmantePrestador ? (
+                <>
+                  <div>{d.firmantePrestador}</div>
+                  <div className="text-[8pt] text-carbon/60">En representación de {d.prestador.razonSocial}</div>
+                </>
+              ) : (
+                <>
+                  <div>{d.prestador.razonSocial}</div>
+                  <div className="text-[8pt] text-carbon/60">Nombre y firma</div>
+                </>
+              )}
             </div>
             <div>
-              <div className="border-b border-carbon/60 mb-1 h-10" />
+              <div className="border-b border-carbon/60 mb-1 h-10 print:h-9" />
               <div className="font-bold">EL CLIENTE</div>
               <div>{d.cliente.nombre}</div>
               <div className="text-[8pt] text-carbon/60">Nombre y firma</div>
             </div>
           </div>
-          <p className="mt-4 text-center text-[8.5pt] italic text-carbon/70">
+          <p className="mt-3 print:mt-2 text-center text-[8.5pt] print:text-[7.5pt] italic text-carbon/70">
             Se anexa copia de identificación oficial del Cliente.
           </p>
         </div>
@@ -240,8 +268,8 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
           <p className="mt-1 text-[8.5pt] italic text-carbon/70">{d.leyendaIva}</p>
         </div>
 
-        {/* Anexo B */}
-        <div className="salto pt-2">
+        {/* Anexo B (misma hoja que el Anexo A) */}
+        <div className="pt-4">
           <h2 className={`${claseTitulos} text-xl font-bold text-verde-profundo border-b-2 border-dorado pb-1 mb-3`}>
             Anexo B — Estado inicial del área de trabajo
           </h2>
@@ -268,13 +296,6 @@ export function ContratoDocumento({ datos: d, estado, claseTitulos = "", urlRegr
         </div>
       </div>
 
-      {/* Pie fijo en cada hoja impresa: identidad y rúbricas */}
-      <div data-contrato-pie className="hidden print:flex items-end justify-between text-[7.5pt] text-carbon/70 border-t border-carbon/20 pt-1">
-        <span>
-          {MARCA.web.replace("https://", "")} · +52 {MARCA.whatsappTexto} · {d.folio}
-        </span>
-        <span>Rúbrica cliente ______ / prestador ______</span>
-      </div>
     </div>
   );
 

@@ -51,6 +51,8 @@ export interface DatosContrato {
   tipoServicio: TipoServicioContrato;
 
   prestador: { razonSocial: string; rfc: string; domicilio: string };
+  /** Quien firma en representación del Prestador (por defecto, el asesor del expediente). */
+  firmantePrestador?: string;
   cliente: { nombre: string; domicilio: string; telefono: string; correo: string };
   domicilioObra: string;
 
@@ -95,6 +97,7 @@ export type OverridesContrato = Partial<
     | "garantiaObjeto"
     | "garantiaExclusiones"
     | "clausulaClima"
+    | "firmantePrestador"
   >
 >;
 
@@ -137,6 +140,11 @@ const MESES = [
 /** "29 de septiembre de 2026" a partir de AAAA-MM-DD o ISO. */
 export function fechaLarga(f: string | null | undefined): string {
   if (!f) return "";
+  // Un ISO con hora viene en UTC: se toma el día en León (de noche UTC ya es "mañana")
+  if (f.length > 10 && f.includes("T")) {
+    const t = new Date(f);
+    if (!Number.isNaN(t.getTime())) f = t.toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+  }
   const [y, m, d] = f.slice(0, 10).split("-").map((n) => parseInt(n, 10));
   if (!y || !m || !d) return f;
   return `${d} de ${MESES[m - 1]} de ${y}`;

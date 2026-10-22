@@ -275,6 +275,7 @@ function ModalRevisarContrato({
           garantiaObjeto: d.garantiaObjeto,
           garantiaExclusiones: d.garantiaExclusiones,
           clausulaClima: d.clausulaClima,
+          firmantePrestador: d.firmantePrestador || "",
         });
         setResumen({ cliente: d.cliente.nombre, cotizacion: d.cotizacionFolio, total: d.total });
       }
@@ -379,6 +380,11 @@ function ModalRevisarContrato({
                 <label className={etiqueta}>Garantía *</label>
                 <TextoAuto minRows={1} className={campo} value={f.garantiaTexto} onChange={(v) => set("garantiaTexto", v)} placeholder="Ej. 3 años" />
               </div>
+            </div>
+
+            <div>
+              <label className={etiqueta}>Firma por el Prestador</label>
+              <input type="text" className={campo} value={f.firmantePrestador} onChange={(e) => set("firmantePrestador", e.target.value)} placeholder="Nombre de quien firma (asesor)" />
             </div>
 
             <div>
