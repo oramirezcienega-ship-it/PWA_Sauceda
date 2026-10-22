@@ -12,7 +12,7 @@ import {
   ETIQUETA_PAQUETE,
 } from "@/lib/ia/imper-envios";
 import { cargarProductosImper, fichaProductosParaPrompt, paquetesConFicha } from "@/lib/ia/catalogo-imper";
-import { preguntasImperParaPrompt } from "@/features/llamadas-ia/conocimiento";
+import { preguntasImperParaPrompt } from "@/features/llamadas-ia/lineas/impermeabilizacion";
 import { precioUnitarioPorVolumen } from "@/lib/precios-volumen";
 import { costoUnitarioPorVolumen } from "@/lib/costos-volumen";
 import { cargarServiciosMantenimiento, fichaServicioParaPrompt, servicioDeTipoNegocio } from "@/lib/ia/catalogo-mantenimiento";
