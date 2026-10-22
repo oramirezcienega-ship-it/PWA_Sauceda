@@ -12,11 +12,10 @@ import {
  * Piso / concreto estampado. Sale del análisis de los 79 leads de WhatsApp
  * (oct 2026): ninguno ha cerrado; casi todos dieron área y medidas, preguntaron
  * el precio por m² y no recibieron seguimiento. Muchos son de fuera de León.
- * Las condiciones (35 m² mínimo, qué incluye, muestrario) son las mismas que usa
+ * Las condiciones (sin mínimo de metros, qué incluye, muestrario) son las mismas que usa
  * Sofía en WhatsApp (flujo G de agente.ts).
  */
 
-const MINIMO_M2 = 35;
 const CATALOGO_URL = "saucedamx.com/construye/concreto-estampado/catalogo-de-estampados";
 const MUNICIPIOS = "Silao, Irapuato, Guanajuato y Lagos de Moreno";
 
@@ -42,8 +41,8 @@ const PREGUNTAS_PISO: PreguntaFrecuente[] = [
       "Tenemos varias texturas, moldes y colores; puede verlos en el catálogo en línea que le compartimos por WhatsApp, y en la visita le llevamos el muestrario físico para que los vea en persona.",
   },
   {
-    pregunta: "Mi área es chica (menos de 35 metros)",
-    respuesta: `Para menos de ${MINIMO_M2} metros manejamos un paquete mínimo especial; el especialista se lo cotiza en la visita.`,
+    pregunta: "Mi área es chica / ¿Hacen espacios pequeños?",
+    respuesta: "Sí, también hacemos áreas chicas; el especialista le confirma el presupuesto exacto en la visita.",
   },
   {
     pregunta: "¿Tiene costo el presupuesto o la visita?",
@@ -128,7 +127,7 @@ async function precioPorM2(): Promise<number> {
 
 export const lineaPisoEstampado: LineaLlamada = {
   clave: "piso-estampado",
-  version: "piso-estampado-v2",
+  version: "piso-estampado-v3",
   tipos: ["construccion-piso-estampado"],
   reServicio: /estampad/i,
   contexto:
@@ -139,14 +138,14 @@ export const lineaPisoEstampado: LineaLlamada = {
     const precio = await precioPorM2();
     return `${
       precio
-        ? `- Concreto estampado: ${formatoPesosEnteros(precio)} por m² sin factura, para proyectos desde ${MINIMO_M2} m². Menos de ${MINIMO_M2} m² se cotiza como paquete mínimo especial en la visita.`
+        ? `- Concreto estampado: ${formatoPesosEnteros(precio)} por m² sin factura. No hay mínimo de metros: también se hacen áreas chicas.`
         : "- No tienes el precio cargado: si preguntan, el precio lo confirma un asesor."
     }
 - Catálogo de diseños en línea: ${CATALOGO_URL} (si lo quiere, dile que se lo compartimos por WhatsApp; no le dictes la dirección).`;
   },
   orientar:
     "pregunta para qué área es (cochera, patio, terraza…) y si ya tiene firme de concreto o es tierra. Si es cochera, confirma si la va a usar para autos (con 10 centímetros aguanta hasta dos vehículos).",
-  reglaPrecio: `da el precio por metro cuadrado. Si conoces sus metros y son ${MINIMO_M2} o más, da el total aproximado (metros por precio, redondeado a cientos, "alrededor de"). Si son menos de ${MINIMO_M2}, explica que se cotiza como paquete mínimo en la visita. Sobre tierra o sobre concreto se puede colocar; si hay que quitar un piso o nivelar, aclara que eso se revisa y cotiza en la visita. Siempre di que el precio exacto se confirma en la visita.`,
+  reglaPrecio: `da el precio por metro cuadrado. Si conoces sus metros, da el total aproximado (metros por precio, redondeado a cientos, "alrededor de"). Nunca le digas que su área es muy chica ni menciones mínimos. Sobre tierra o sobre concreto se puede colocar; si hay que quitar un piso o nivelar, aclara que eso se revisa y cotiza en la visita. Siempre di que el precio exacto se confirma en la visita.`,
   visita:
     "un especialista le lleva el muestrario físico de texturas y colores, mide el área, revisa la base y le deja el presupuesto exacto",
   propuestaVisita:

@@ -671,8 +671,8 @@ G) Si está interesado en PISO ESTAMPADO / CONCRETO ESTAMPADO (Servicio de Concr
   Debes enfocar la conversación de manera consultiva, ágil y atractiva para cocheras, patios, terrazas, pasillos o áreas comerciales.
   1. ¿En qué área o espacio deseas colocar el piso estampado (cochera, patio, terraza, pasillo, etc.)?
   2. Si el cliente pregunta por el precio o presupuesto:
-     - El precio oficial es de $1,200 MXN por m² (aplica para proyectos a partir de 35 m² e incluye material de alta resistencia, mano de obra especializada, estampado con textura a elegir, color y sellado de alta durabilidad).
-     - Si el proyecto es menor a 35 m², se cotiza por paquete mínimo especial en la visita técnica.
+     - El precio oficial es de $1,200 MXN por m² (incluye material de alta resistencia, mano de obra especializada, estampado con textura a elegir, color y sellado de alta durabilidad).
+     - NO hay mínimo de metros: también hacemos áreas chicas. Nunca le digas que su espacio es muy pequeño ni menciones mínimos o paquetes mínimos; el presupuesto exacto se confirma en la visita.
   3. Para el cálculo de metros cuadrados:
      - Pregunta: "¿Cuántos m² aproximados tiene tu área?".
      - Si el cliente NO sabe los metros exactos (por ejemplo, en cocheras), dale una referencia rápida para facilitarle el cálculo: "Si es cochera, normalmente para 1 auto son aprox. 15 a 20 m², y para 2 autos entre 30 y 40 m². ¿Más o menos de cuántos autos o qué medidas calculas?".
