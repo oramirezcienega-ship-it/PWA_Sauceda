@@ -1279,10 +1279,26 @@ export async function responderConIA(
     const historia = historiaDesc.reverse();
     if (historia.length === 0) return;
 
-    // Evitar responder si el último mensaje del hilo ya fue emitido por la IA (protección contra duplicados)
+    // Si el último mensaje del hilo ya es saliente (out), NO responder: el CRM o asesor ya contestó
+    // y se está a la espera de que el cliente escriba de vuelta.
     const ultimoMsg = historia[historia.length - 1];
-    if (!forzar && ultimoMsg && ultimoMsg.direccion === "out" && ultimoMsg.agente === NOMBRE_AGENTE) {
-      console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el último mensaje ya fue enviado por la IA.`);
+    if (!forzar && ultimoMsg && ultimoMsg.direccion === "out") {
+      console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque el último mensaje ya es saliente (agente: ${ultimoMsg.agente}).`);
+      return;
+    }
+
+    // Protección humana: si un asesor humano escribió en las últimas 4 horas, Sofía NO interviene automáticamente.
+    const ahoraMs = Date.now();
+    const humanoReciente = historia.some((m) => {
+      if (m.direccion !== "out" || !m.agente) return false;
+      const ag = m.agente.toLowerCase();
+      const esBot = ag === NOMBRE_AGENTE.toLowerCase() || ag === "ia" || ag === "bot" || ag.includes("mautic") || ag.includes("sin registro");
+      if (esBot) return false;
+      const t = m.created_at ? new Date(m.created_at).getTime() : 0;
+      return ahoraMs - t < 4 * 60 * 60 * 1000;
+    });
+    if (!forzar && humanoReciente) {
+      console.log(`IA: Ignorando respuesta para ${ctx.telefono} porque un asesor humano atendió la conversación recientemente (< 4h).`);
       return;
     }
 
