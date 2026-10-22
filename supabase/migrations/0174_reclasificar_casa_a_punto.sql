@@ -1,4 +1,4 @@
--- Migration 0135: Reclasificar leads de la campaña "Casa a Punto" (Mantenimiento del Hogar)
+-- Migration 0174: Reclasificar leads de la campaña "Casa a Punto" (Mantenimiento del Hogar)
 -- ============================================================
 -- detectarTipoNegocio no reconocía "Casa a Punto" en campaign/adset/ad, por lo que esos
 -- expedientes quedaron como 'otro'. Se reclasifican a Mantenimiento Postventa.
