@@ -14,8 +14,9 @@ function autorizado(request: NextRequest): boolean {
 
 /**
  * GET /api/conmutador/campana
- * Despachador de llamadas IA aprobadas (para un cron cada 5–10 min). Aún no está
- * programado: mientras no se programe, solo marcan las llamadas que se lancen a mano.
+ * Despachador de llamadas IA aprobadas. En Netlify lo corre la función programada
+ * netlify/functions/despachar-llamadas-ia.ts cada 5 min; esta ruta queda para
+ * dispararlo a mano o desde otro cron.
  */
 export async function GET(request: NextRequest) {
   if (!autorizado(request)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });

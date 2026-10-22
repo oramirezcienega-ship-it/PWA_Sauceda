@@ -6,6 +6,7 @@ import { ETIQUETA_PAQUETE, paqueteDeNombre } from "@/lib/ia/catalogo-imper";
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
 import { lineaDe } from "@/features/llamadas-ia/lineas";
 import type { LineaLlamada } from "@/features/llamadas-ia/lineas/tipos";
+import type { PrioridadLlamada, SugerenciaLlamada } from "@/features/llamadas-ia/sugerencias";
 
 /**
  * Llamadas IA salientes (Vapi + Twilio).
@@ -20,6 +21,7 @@ import type { LineaLlamada } from "@/features/llamadas-ia/lineas/tipos";
  *   VAPI_CAMPANA_MODELO      opcional, modelo de OpenAI (default gpt-4o)
  *   VAPI_CAMPANA_VOZ_PROVEEDOR / VAPI_CAMPANA_VOZ_ID   opcional (default azure es-MX-DaliaNeural)
  *   CAMPANA_VISITAS_MAX_DIA  opcional, tope de visitas por día que Sofía puede agendar (default 4)
+ *   CAMPANA_LLAMADAS_MAX_DIA opcional, tope de llamadas reales que el despachador marca al día (default 40)
  */
 
 export type EstadoLlamadaIA = "pendiente" | "aprobada" | "en_curso" | "completada" | "fallida" | "cancelada";
@@ -70,6 +72,12 @@ export interface LlamadaIA {
   duracion_seg: number | null;
   costo_usd: number | null;
   error: string | null;
+  /** Bandeja de sugeridas (ver sugerencias.ts). */
+  prioridad: PrioridadLlamada | null;
+  puntaje: number | null;
+  hora_sugerida: string | null;
+  sugerencia: SugerenciaLlamada | null;
+  analizada_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -91,7 +99,7 @@ function e164(tel: string): string {
 }
 
 /** Partes de una fecha en hora de México. */
-function partesMX(d: Date): { fecha: string; hora: number; diaSemana: number } {
+export function partesMX(d: Date): { fecha: string; hora: number; diaSemana: number } {
   const f = new Intl.DateTimeFormat("en-CA", {
     timeZone: ZONA,
     year: "numeric",
@@ -199,6 +207,15 @@ function promptLlamada(
 ): string {
   const servicio = ll.contexto.servicio || "su proyecto";
   const horarios = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
+  const sug = ll.sugerencia;
+  const previo = sug?.gancho && !/^sin dato concreto/i.test(sug.gancho)
+    ? `
+LO QUE SABEMOS DE ESTE CLIENTE (úsalo para retomar en DESCUBRIR, con tus palabras; no lo leas tal cual):
+- ${sug.gancho}${sug.punto ? `
+- Dónde se quedó: ${sug.punto}` : ""}${sug.objecion ? `
+- Freno probable: ${sug.objecion}` : ""}
+`
+    : "";
   const sinRespuesta = hayAsesor
     ? "dile que eso se lo confirma un asesor y ofrece comunicarlo ahora; si acepta, usa la herramienta de transferencia"
     : "dile que eso se lo confirma un asesor hoy por WhatsApp";
@@ -213,7 +230,7 @@ DATOS OFICIALES (lo ÚNICO que puedes afirmar):
 - Cliente: ${ll.nombre || "sin nombre"}. Pidió información de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}${ll.contexto.metros ? `, unos ${ll.contexto.metros} m²` : ""}.
 ${datosLinea}
 - Visita (SIN COSTO): ${linea.visita}.
-
+${previo}
 ${linea.conocimiento()}
 
 CÓMO LLEVAR LA LLAMADA (en este orden):
@@ -599,13 +616,26 @@ export async function sincronizarConVapi(
 export async function despacharPendientes(limite = 3): Promise<{ despachadas: number; errores: string[] }> {
   if (!enHorarioDeLlamadas()) return { despachadas: 0, errores: [] };
   const sb = supabaseServidor();
+
+  // Candado de costo: tope diario de llamadas reales.
+  const tope = Number(process.env.CAMPANA_LLAMADAS_MAX_DIA) || 40;
+  const inicioDia = new Date(`${partesMX(new Date()).fecha}T00:00:00${OFFSET_MX}`).toISOString();
+  const { count } = await sb
+    .from("llamadas_campana")
+    .select("id", { count: "exact", head: true })
+    .eq("es_prueba", false)
+    .not("vapi_call_id", "is", null)
+    .gte("updated_at", inicioDia);
+  const disponibles = Math.min(limite, tope - (count ?? 0));
+  if (disponibles <= 0) return { despachadas: 0, errores: [`Tope diario de ${tope} llamadas alcanzado.`] };
+
   const { data } = await sb
     .from("llamadas_campana")
     .select("id")
     .eq("estado", "aprobada")
     .or(`proximo_intento.is.null,proximo_intento.lte.${new Date().toISOString()}`)
-    .order("created_at", { ascending: true })
-    .limit(limite);
+    .order("proximo_intento", { ascending: true, nullsFirst: true })
+    .limit(disponibles);
 
   let despachadas = 0;
   const errores: string[] = [];
