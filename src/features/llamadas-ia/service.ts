@@ -2,9 +2,10 @@ import { supabaseServidor } from "@/lib/supabase/server";
 import { registrarActividad } from "@/lib/actividades";
 import { normalizarTelefono } from "@/lib/telefono";
 import { obtenerAgenteDisponible, registrarInicioLlamada } from "@/features/conmutador/service";
-import { cargarProductosImper, ETIQUETA_PAQUETE } from "@/lib/ia/catalogo-imper";
+import { cargarProductosImper, ETIQUETA_PAQUETE, paqueteDeNombre } from "@/lib/ia/catalogo-imper";
 import { formatoPesosEnteros } from "@/lib/costo-inspeccion";
 import { avisarAsesorDesdeIA } from "@/lib/ia/aviso-asesor";
+import { conocimientoParaPrompt } from "@/features/llamadas-ia/conocimiento";
 
 /**
  * Llamadas IA salientes (Vapi + Twilio).
@@ -41,10 +42,13 @@ export interface ContextoLlamadaIA {
   monto?: number;
   /** tipo_negocio de la cotización (define precios y qué revisa la visita). */
   tipoNegocio?: string;
+  /** m² y opción con que se armó su estimado (cotizacion_conceptos). */
+  metros?: number;
+  paquete?: string;
 }
 
 /** Versión del guion: se guarda con cada resultado para comparar versiones. */
-export const GUION_VERSION = "seguimiento-v3";
+export const GUION_VERSION = "seguimiento-v4";
 
 export interface LlamadaIA {
   id: string;
@@ -184,9 +188,9 @@ interface ConocimientoLlamada {
 }
 
 /**
- * Datos oficiales que Sofía puede decir: precios por m² del catálogo (Productos y
- * Servicios). Lo que no esté aquí, Sofía no lo afirma. En llamada la visita técnica
- * es sin costo y solo se ofrece cuando el cliente ya muestra intención.
+ * Datos oficiales que Sofía puede decir: precios por m², garantía y propuesta de
+ * valor de cada opción del catálogo (Productos y Servicios). Lo que no esté aquí ni
+ * en conocimiento.ts, Sofía no lo afirma.
  */
 async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> {
   const sb = supabaseServidor();
@@ -205,8 +209,9 @@ async function conocimientoLlamada(ll: LlamadaIA): Promise<ConocimientoLlamada> 
     const volumen = prod.preciosVolumen.length
       ? `; desde ${prod.preciosVolumen.map((t) => `${t.desde} m² baja a ${formatoPesosEnteros(t.precio)}`).join(", ")}`
       : "";
+    const valor = prod.descripcionValor.trim().split(/(?<=[.!?])\s/)[0];
     lineas.push(
-      `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² más IVA${garantia ? `, garantía ${garantia} años` : ""}${volumen}`,
+      `${ETIQUETA_PAQUETE[p]}: ${formatoPesosEnteros(prod.precioM2)} por m² más IVA${garantia ? `, garantía ${garantia} años por escrito` : ""}${volumen}${valor ? `. ${valor}` : ""}`,
     );
     if (prod.minimoM2 > 0) minimos.push(prod.minimoM2);
   }
@@ -228,38 +233,38 @@ function promptReagendarVisita(
   const servicio = ll.contexto.servicio || "su proyecto";
   const horarios = espacios.map((e) => `- ${e.texto} (valor para fecha_visita: ${e.iso})`).join("\n");
   const sinRespuesta = hayAsesor
-    ? "ofrece comunicarlo con un asesor ahora; si acepta, usa la herramienta de transferencia"
-    : "dile que un asesor le escribe hoy por WhatsApp para resolverlo";
+    ? "dile que eso se lo confirma un asesor y ofrece comunicarlo ahora; si acepta, usa la herramienta de transferencia"
+    : "dile que eso se lo confirma un asesor hoy por WhatsApp";
+  const estimado = ll.contexto.monto
+    ? `alrededor de ${formatoPesosEnteros(ll.contexto.monto)} más IVA${ll.contexto.paquete ? ` con la opción ${ll.contexto.paquete}` : ""}${ll.contexto.metros ? ` para ${ll.contexto.metros} m²` : ""}`
+    : "";
 
   return `Eres Sofía, asistente virtual de Sauceda, en una llamada telefónica. Español de México, cálida, natural y sin presión.
 
 ESTILO (obligatorio): máximo 2 frases cortas por turno y una sola pregunta. Nada de listas ni explicaciones largas. Si te interrumpen, no repitas lo que ya dijiste. Escucha más de lo que hablas.
 
-OBJETIVO: retomar la cotización que ya le enviamos, resolver sus dudas y saber qué tan interesado está. NO es una llamada para cerrar ni para agendar a la fuerza.
+CONTEXTO: la mayoría de los clientes pidió precio por WhatsApp, recibió la comparativa y dejó de contestar. No es que no les interese: muchos se quedaron con dudas (cuál opción conviene, si incluye IVA, qué material es) o lo están platicando en casa. Tu trabajo es retomar esa conversación, resolver dudas y saber en qué punto está. NO es una llamada para cerrar ni para agendar a la fuerza.
 
 DATOS OFICIALES (lo ÚNICO que puedes afirmar):
 - Cliente: ${ll.nombre || "sin nombre"}. Pidió cotización de ${servicio}${ll.contexto.colonia ? ` en ${ll.contexto.colonia}` : ""}.
-${ll.contexto.monto ? `- Ya recibió su estimado: alrededor de ${formatoPesosEnteros(ll.contexto.monto)}. Es un estimado con base en sus medidas.\n` : ""}${
+${estimado ? `- Su estimado: ${estimado}. Es un estimado con las medidas que nos dio.\n` : ""}${
     k.precios
-      ? `- Precios por m² (catálogo):\n- ${k.precios}${k.minimo ? `\n- Para superficies pequeñas hay un mínimo de cobro de ${k.minimo}.` : ""}\n`
+      ? `- Opciones (catálogo):\n- ${k.precios}${k.minimo ? `\n- Para superficies pequeñas hay un mínimo de cobro de ${k.minimo}.` : ""}\n`
       : "- No tienes precios de este servicio: si preguntan, el precio lo confirma un asesor.\n"
   }- Visita técnica (SIN COSTO): un especialista revisa ${k.queRevisa}, y deja el precio final.
 
-CÓMO LLEVAR LA LLAMADA (en este orden, sin saltarte pasos):
+${k.esImper ? `${conocimientoParaPrompt()}\n\n` : ""}CÓMO LLEVAR LA LLAMADA (en este orden):
 1. DESCUBRIR: pregunta si pudo revisar la cotización y qué le pareció. Deja que hable.
-2. RESOLVER: responde sus dudas solo con los DATOS OFICIALES. Si pregunta por precio, da el dato en una frase ("más IVA"). Pregunta qué opción le interesó o para cuándo lo necesita.
-3. DETECTAR INTENCIÓN. Hay intención clara SOLO si el cliente hace algo de esto: dice que le interesa hacerlo, pregunta cuándo pueden empezar o cuánto tardan, compara entre opciones para decidir, pregunta cómo se paga, o pide que alguien vaya a ver.
-   - Si NO hay intención clara: no ofrezcas visita. Pregunta qué le haría falta para decidirse y ofrece que un asesor le escriba por WhatsApp con lo que necesite.
-   - Si HAY intención clara: entonces propón el siguiente paso con suavidad: "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?"
-4. SOLO SI ACEPTA la visita: ofrece dos horarios de esta lista. Si elige uno, repítelo y di que un asesor le confirma por WhatsApp. Si ninguno le queda, pregunta qué día y hora prefiere y di que el asesor se lo confirma.
+2. ORIENTAR: si no ha elegido opción, pregunta cómo está su azotea (¿ya tiene goteras o es preventivo?) y recomienda UNA opción en una frase según su respuesta.
+3. RESOLVER: responde dudas con DATOS OFICIALES y PREGUNTAS FRECUENTES. Precios siempre "más IVA".
+4. DETECTAR INTENCIÓN con las SEÑALES DE COMPRA.
+   - Sin intención clara: no ofrezcas visita. Usa la respuesta de OBJECIONES que corresponda y pregunta qué le haría falta para decidirse.
+   - Con intención clara, o si duda de sus medidas y le interesa: propón con suavidad: "Si le parece, el siguiente paso es que un especialista pase a revisar y confirmar medidas, sin costo, para dejarle el precio final. ¿Le gustaría?"
+5. SOLO SI ACEPTA la visita: ofrece dos horarios de esta lista. Si elige uno, repítelo y di que un asesor le confirma por WhatsApp. Si ninguno le queda, pregunta qué día y hora prefiere y di que el asesor se lo confirma.
 ${horarios ? `   Horarios disponibles:\n${horarios}` : "   No hay horarios cargados: di que un asesor le propone fecha por WhatsApp."}
-5. Objeciones:
-   - "Está caro": ${k.esImper && k.precios ? "el acrílico es la opción más económica; " : ""}pregunta con qué lo está comparando y ofrece que un asesor revise opciones con él.
-   - "Lo pienso" / "ahorita no": sin presión; pregunta si prefiere que un asesor le escriba por WhatsApp o que le llamemos más adelante.
-   - "Ya contraté a alguien" o ya no le interesa: agradece, pregunta brevemente el motivo y despídete.
-6. Cualquier cosa que NO esté en DATOS OFICIALES (meses sin intereses, descuentos, tiempos de obra, marcas, otros paquetes, garantías distintas): no la inventes; ${sinRespuesta}.
+6. Si pregunta algo que no está en DATOS OFICIALES ni en PREGUNTAS FRECUENTES (incluidos los TEMAS SIN RESPUESTA CONFIRMADA): no lo inventes; ${sinRespuesta}.
 7. Si se molesta o pide hablar con una persona: ${hayAsesor ? "transfiérelo a un asesor" : "dile que un asesor le llama hoy"}.
-8. "Llámame después": pregunta cuándo y despídete. "No me vuelvan a llamar": discúlpate, confirma que no se le llamará más y cuelga.
+8. "Llámame después" o lo va a platicar: pregunta qué día le marcamos y despídete. "No me vuelvan a llamar": discúlpate, confirma que no se le llamará más y cuelga.
 9. Si contesta un buzón de voz, una grabación o un menú automático: cuelga de inmediato sin decir nada.
 10. Cierra con la herramienta para colgar. La llamada no debe pasar de 2 minutos.`;
 }
@@ -299,6 +304,11 @@ const ESQUEMA_RESULTADO = {
     opcion_interes: { type: "string", description: "Opción o paquete que le interesó, si lo dijo." },
     senal_compra: { type: "string", description: "La señal de intención que dio el cliente, si la hubo (ej. 'preguntó cuándo pueden empezar')." },
     objecion: { type: "string", description: "Objeción o duda principal del cliente, si la hubo." },
+    decide_con: { type: "string", description: "Si dijo que lo decide con alguien más (pareja, dueño, administración), con quién." },
+    motivo_perdida: {
+      type: "string",
+      description: "Si ya no le interesa o contrató a otro, el motivo que dio (precio, rapidez, ya lo resolvió, etc.).",
+    },
     pregunta_sin_respuesta: {
       type: "string",
       description: "Pregunta del cliente que Sofía no pudo responder con los datos oficiales, si la hubo.",
@@ -332,7 +342,7 @@ function asistenteReagendarVisita(
 
   return {
     name: "Sofia - Seguimiento de cotizacion",
-    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio} que le enviamos, ¿pudo revisarla?`,
+    firstMessage: `Hola${nombre ? ` ${nombre}` : ""}, le habla Sofía, asistente virtual de Sauceda; esta llamada se graba. Le llamo por la cotización de ${servicio}${ll.contexto.metros ? ` para sus ${ll.contexto.metros} metros` : ""} que le enviamos por WhatsApp, ¿pudo revisarla?`,
     model: {
       provider: "openai",
       model: process.env.VAPI_CAMPANA_MODELO || "gpt-4o-mini",
@@ -670,7 +680,9 @@ export async function generarListaReagendarVisitas(creadoPor?: string | null): P
   const [{ data: cots }, { data: enCola }, { data: bloqueados }] = await Promise.all([
     sb
       .from("cotizaciones")
-      .select("id, prospecto_id, servicio_tipo, precio_final, prospectos(nombre, telefono, direccion)")
+      .select(
+        "id, prospecto_id, servicio_tipo, precio_final, prospectos(nombre, telefono, direccion), cotizacion_conceptos(cantidad, unidad, descripcion)",
+      )
       .eq("estatus", "esperando_visita"),
     sb.from("llamadas_campana").select("cotizacion_id").not("cotizacion_id", "is", null).neq("estado", "cancelada"),
     sb.from("telefonos_no_llamar").select("telefono"),
@@ -687,6 +699,9 @@ export async function generarListaReagendarVisitas(creadoPor?: string | null): P
     const tel = normalizarTelefono(p?.telefono || "");
     if (!tel || tel.length < 12 || yaEnCola.has(c.id) || noLlamar.has(tel) || vistos.has(tel)) continue;
     vistos.add(tel);
+    const conceptos = (c.cotizacion_conceptos ?? []) as { cantidad: number; unidad: string; descripcion: string }[];
+    const concepto = conceptos.find((x) => x.unidad === "m2");
+    const paquete = concepto ? paqueteDeNombre(concepto.descripcion) : null;
     filas.push({
       telefono: tel,
       nombre: p?.nombre || "",
@@ -697,6 +712,8 @@ export async function generarListaReagendarVisitas(creadoPor?: string | null): P
         tipoNegocio: TIPO_POR_SERVICIO[c.servicio_tipo as string] ?? "construccion",
         colonia: p?.direccion || "",
         monto: Number(c.precio_final) || 0,
+        ...(concepto ? { metros: Number(concepto.cantidad) || undefined } : {}),
+        ...(paquete ? { paquete: ETIQUETA_PAQUETE[paquete] } : {}),
       },
       creado_por: creadoPor ?? null,
     });
